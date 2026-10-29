@@ -1,22 +1,22 @@
+import { isEncryptedChatUnavailableContent } from "../encrypted-chat-content";
 import type { SupportedProvider } from "../index";
-import { isLockedChatUnavailableContent } from "../locked-chat-content";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
+import AudioInteraction from "./llmProviders/audio";
 import AzureChatCompletionInteraction from "./llmProviders/azure";
+import AzureImagesInteraction from "./llmProviders/azure-images";
 import AzureResponsesInteraction from "./llmProviders/azure-responses";
 import BedrockConverseInteraction from "./llmProviders/bedrock";
 import CerebrasChatCompletionInteraction from "./llmProviders/cerebras";
 import CohereChatInteraction from "./llmProviders/cohere";
-import type {
-  DualLlmAnalysis,
-  Interaction,
-  InteractionUtils,
-} from "./llmProviders/common";
+import type { Interaction, InteractionUtils } from "./llmProviders/common";
 import DeepSeekChatCompletionInteraction from "./llmProviders/deepseek";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import GithubCopilotChatCompletionInteraction from "./llmProviders/github-copilot";
 import GithubCopilotResponsesInteraction from "./llmProviders/github-copilot-responses";
 import GroqChatCompletionInteraction from "./llmProviders/groq";
+import JevDecisionsInteraction from "./llmProviders/jev";
 import KimiChatCompletionInteraction from "./llmProviders/kimi";
+import KimiCodeChatCompletionInteraction from "./llmProviders/kimi-code";
 import Microsoft365CopilotChatCompletionInteraction from "./llmProviders/microsoft-365-copilot";
 import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
 import MistralChatCompletionInteraction from "./llmProviders/mistral";
@@ -64,6 +64,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "zhipuai:chatCompletions": (i) => new ZhipuaiChatCompletionInteraction(i),
   "deepseek:chatCompletions": (i) => new DeepSeekChatCompletionInteraction(i),
   "kimi:chatCompletions": (i) => new KimiChatCompletionInteraction(i),
+  "kimi-code:chatCompletions": (i) => new KimiCodeChatCompletionInteraction(i),
   "github-copilot:chatCompletions": (i) =>
     new GithubCopilotChatCompletionInteraction(i),
   "github-copilot:responses": (i) => new GithubCopilotResponsesInteraction(i),
@@ -73,7 +74,12 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "xai:chatCompletions": (i) => new XaiChatCompletionInteraction(i),
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),
   "azure:chatCompletions": (i) => new AzureChatCompletionInteraction(i),
+  "azure:realtime": (i) => new AzureChatCompletionInteraction(i),
+  "azure:images": (i) => new AzureImagesInteraction(i),
+  "azure:audio": (i) => new AudioInteraction(i),
+  "openai:audio": (i) => new AudioInteraction(i),
   "azure:responses": (i) => new AzureResponsesInteraction(i),
+  "jev:decisions": (i) => new JevDecisionsInteraction(i),
 };
 
 export interface CostSavingsInput {
@@ -148,7 +154,7 @@ export class DynamicInteraction implements InteractionUtils {
   private interactionClass: InteractionUtils;
   private interaction: Interaction;
   /**
-   * A locked-chat interaction stores a sentinel where the provider payload
+   * An encrypted-chat interaction stores a sentinel where the provider payload
    * would be. Every accessor below dereferences that payload unguarded
    * (`request.messages`, `response.choices`), so the check lives here once
    * rather than in each provider mapper, which would have to learn a shape it
@@ -161,7 +167,6 @@ export class DynamicInteraction implements InteractionUtils {
   profileId: string | null;
   externalAgentId: string | null;
   runId: string | null;
-  unsafeContextBoundary: Interaction["unsafeContextBoundary"];
   type: Interaction["type"];
   provider: SupportedProvider;
   endpoint: string;
@@ -173,13 +178,12 @@ export class DynamicInteraction implements InteractionUtils {
 
     this.interaction = interaction;
     this.contentUnavailable =
-      isLockedChatUnavailableContent(interaction.request) ||
-      isLockedChatUnavailableContent(interaction.response);
+      isEncryptedChatUnavailableContent(interaction.request) ||
+      isEncryptedChatUnavailableContent(interaction.response);
     this.id = interaction.id;
     this.profileId = interaction.profileId;
     this.externalAgentId = interaction.externalAgentId;
     this.runId = interaction.runId;
-    this.unsafeContextBoundary = interaction.unsafeContextBoundary;
     this.type = interaction.type;
     this.provider = provider as SupportedProvider;
     this.endpoint = endpoint;
@@ -232,14 +236,6 @@ export class DynamicInteraction implements InteractionUtils {
     return this.interactionClass.getLastToolCallId();
   }
 
-  getToolNamesRefused(): string[] {
-    if (this.contentUnavailable) return [];
-    if (this.getErrorResponseText() !== null) {
-      return [];
-    }
-    return this.interactionClass.getToolNamesRefused();
-  }
-
   getToolNamesRequested(): string[] {
     if (this.contentUnavailable) return [];
     if (this.getErrorResponseText() !== null) {
@@ -254,14 +250,6 @@ export class DynamicInteraction implements InteractionUtils {
       return [];
     }
     return this.interactionClass.getToolNamesUsed();
-  }
-
-  getToolRefusedCount(): number {
-    if (this.contentUnavailable) return 0;
-    if (this.getErrorResponseText() !== null) {
-      return 0;
-    }
-    return this.interactionClass.getToolRefusedCount();
   }
 
   getLastUserMessage(): string {
@@ -279,10 +267,10 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   /**
-   * Map request messages, combining tool calls with their results and dual LLM analysis
+   * Map request messages, combining tool calls with their results
    */
-  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
-    // A locked-chat interaction stores a sentinel where the provider payload
+  mapToUiMessages(): PartialUIMessage[] {
+    // An encrypted-chat interaction stores a sentinel where the provider payload
     // would be, so there is no conversation to render. Provider mappers read
     // fields off it unguarded (`request.messages.length`), so this has to stop
     // before delegating rather than relying on a mapper tolerating it. The
@@ -290,14 +278,14 @@ export class DynamicInteraction implements InteractionUtils {
     if (this.contentUnavailable) return [];
     const errorText = this.getErrorResponseText();
     if (errorText === null) {
-      return this.interactionClass.mapToUiMessages(dualLlmAnalyses);
+      return this.interactionClass.mapToUiMessages();
     }
     // Failed interaction: the response is `{ error }`, not a provider response.
     // Recover the request side when the provider mapper tolerates the missing
     // response fields, then surface the error as the assistant turn.
     let messages: PartialUIMessage[] = [];
     try {
-      messages = this.interactionClass.mapToUiMessages(dualLlmAnalyses);
+      messages = this.interactionClass.mapToUiMessages();
     } catch {
       messages = [];
     }

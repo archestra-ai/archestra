@@ -16,6 +16,7 @@ export const MessagingChannelIdSchema = z.enum([
   "slack",
   "ms-teams",
   "telegram",
+  "jira",
   "email",
   "a2a",
 ]);
@@ -25,6 +26,7 @@ export const MESSAGING_CHANNEL_LABELS: Record<MessagingChannelId, string> = {
   slack: "Slack",
   "ms-teams": "MS Teams",
   telegram: "Telegram",
+  jira: "Jira",
   email: "Email",
   a2a: "A2A",
 };
@@ -109,22 +111,31 @@ export const KnowledgeConnectorOverridesSchema = z.partialRecord(
   IntegrationToggleSchema,
 );
 
+const popularAgentOverrideShape = {
+  ...integrationToggleShape,
+  position: z.number().int().nonnegative().optional(),
+};
+const PopularAgentOverrideSchema = z.strictObject(popularAgentOverrideShape);
+
 // Explicit properties keep the generated OpenAPI/SDK request contract closed.
 // The satisfies check requires every maintained template to be represented.
 export const PopularAgentOverridesSchema = z.strictObject({
-  "claude-code": IntegrationToggleSchema.optional(),
-  codex: IntegrationToggleSchema.optional(),
-  opencode: IntegrationToggleSchema.optional(),
-  hermes: IntegrationToggleSchema.optional(),
-  openclaw: IntegrationToggleSchema.optional(),
+  "claude-code": PopularAgentOverrideSchema.optional(),
+  codex: PopularAgentOverrideSchema.optional(),
+  opencode: PopularAgentOverrideSchema.optional(),
+  hermes: PopularAgentOverrideSchema.optional(),
+  openclaw: PopularAgentOverrideSchema.optional(),
+  grok: PopularAgentOverrideSchema.optional(),
+  kimi: PopularAgentOverrideSchema.optional(),
+  copilot: PopularAgentOverrideSchema.optional(),
 } satisfies Record<
   AgentCatalogId,
-  z.ZodOptional<typeof IntegrationToggleSchema>
+  z.ZodOptional<typeof PopularAgentOverrideSchema>
 >);
 
 export const StoredPopularAgentOverridesSchema = z.partialRecord(
   PopularAgentIdSchema,
-  StoredIntegrationToggleSchema,
+  z.object(popularAgentOverrideShape),
 );
 export type PopularAgentOverrides = z.infer<
   typeof StoredPopularAgentOverridesSchema
@@ -256,4 +267,35 @@ export function withAllowedIntegrationIds<Id extends string>(
     };
   }
   return pruneIntegrationOverrides(next);
+}
+
+/** Saved positions precede unpositioned entries; ties keep the catalog order. */
+export function orderedPopularAgentIds(
+  overrides: PopularAgentOverrides | null,
+  catalog: readonly AgentCatalogId[],
+): AgentCatalogId[] {
+  return catalog
+    .filter((id) => !isIntegrationHidden(overrides, id))
+    .sort(
+      (a, b) =>
+        (overrides?.[a]?.position ?? Number.MAX_SAFE_INTEGER) -
+        (overrides?.[b]?.position ?? Number.MAX_SAFE_INTEGER),
+    );
+}
+
+/** Store both visibility and order in the existing catalog customization. */
+export function withOrderedPopularAgentIds(
+  overrides: PopularAgentOverrides | null,
+  catalog: readonly AgentCatalogId[],
+  allowed: readonly string[],
+): PopularAgentOverrides {
+  return Object.fromEntries(
+    catalog.map((id) => {
+      const position = allowed.indexOf(id);
+      return [
+        id,
+        position < 0 ? { ...overrides?.[id], hidden: true } : { position },
+      ];
+    }),
+  );
 }

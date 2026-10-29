@@ -135,7 +135,7 @@ export function CreateIdentityProviderDialog({
       activeSection={validActiveSection}
       navItems={navItems}
       onActiveSectionChange={setActiveSection}
-      onSubmit={form.handleSubmit(onSubmit)}
+      onSubmit={onSubmit}
       footer={
         <>
           <Button type="button" variant="outline" onClick={handleClose}>
@@ -160,7 +160,7 @@ export function CreateIdentityProviderDialog({
           activeSection={
             validActiveSection as Exclude<
               IdentityProviderDialogSection,
-              "enterprise-managed-credentials" | "token-debugger"
+              "enterprise-managed-credentials"
             >
           }
           hideProviderId={hideProviderId}

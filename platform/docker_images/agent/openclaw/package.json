@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "dependencies": {
+    "openclaw": "2026.10.5"
+  }
+}

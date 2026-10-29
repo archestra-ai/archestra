@@ -3,6 +3,7 @@ import type {
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
+import { getOpenRouterReportedCost } from "@/clients/openrouter-reported-cost";
 import { callAzureEmbedding } from "./azure";
 import { callBedrockEmbedding } from "./bedrock";
 import { callCohereEmbedding } from "./cohere";
@@ -59,6 +60,7 @@ const OPENROUTER_WIRE: EmbeddingAdapter = {
       ...params,
       apiKey: params.apiKey ?? KEYLESS_PLACEHOLDER,
       headers: openRouterAttributionHeaders(),
+      readReportedCost: getOpenRouterReportedCost,
     }),
   discriminator: "openai:embeddings",
 };
@@ -123,6 +125,7 @@ export const EMBEDDING_ADAPTERS: Record<
   // through the OpenAI-compatible `ollama` provider above, so reject here.
   "ollama-native": null,
   anthropic: null,
+  jev: null,
   cerebras: null,
   deepseek: null,
   groq: null,
@@ -130,6 +133,7 @@ export const EMBEDDING_ADAPTERS: Record<
   xai: null,
   minimax: null,
   kimi: null,
+  "kimi-code": null,
   "github-copilot": null,
   "microsoft-365-copilot": null,
   // Chat-only integration; embeddings are not wired for the Archestra provider.

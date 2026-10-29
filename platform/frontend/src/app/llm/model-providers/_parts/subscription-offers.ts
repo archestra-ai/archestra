@@ -32,6 +32,8 @@ export type SubscriptionOffer = {
 type MatchableCredential = Pick<LlmProviderApiKeyResponse, "provider"> & {
   scope?: LlmProviderApiKeyResponse["scope"];
   subscriptionKind?: SubscriptionCredentialKind | null;
+  /** An organization GitHub App key: a provider key, never a sign-in. */
+  isGithubAppKey?: boolean;
 };
 
 /**
@@ -43,7 +45,7 @@ type MatchableCredential = Pick<LlmProviderApiKeyResponse, "provider"> & {
 export function subscriptionKindOfCredential(
   credential: MatchableCredential,
 ): SubscriptionCredentialKind | null {
-  if (credential.scope !== "personal") return null;
+  if (credential.scope !== "personal" || credential.isGithubAppKey) return null;
   return (
     SUBSCRIPTION_CREDENTIAL_KINDS.find((kind) => {
       const { provider, marker } = SUBSCRIPTION_CREDENTIALS[kind];

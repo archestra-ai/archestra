@@ -4,6 +4,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -14,9 +15,11 @@ import type {
   BatteryCredentialBindings,
   BatteryInstallStatus,
   BatteryPackageFile,
+  BatteryTargetName,
 } from "@/types/openappa-batteries";
 import internalMcpCatalogTable from "./internal-mcp-catalog";
 import organizationsTable from "./organization";
+import usersTable from "./user";
 
 // A battery package an organization uploaded, content-addressed: a name may have several versions.
 export const openappaBatteryPackagesTable = pgTable(
@@ -69,6 +72,8 @@ export const openappaBatteryInstallsTable = pgTable(
       .$type<BatteryInstallStatus>()
       .notNull()
       .default("active" satisfies BatteryInstallStatus),
+    // The target the battery deploys as; null for its base alone.
+    target: text().$type<BatteryTargetName>(),
     // The package version the declaration spells; null for a bundled battery.
     packageHash: text("package_hash"),
     lastError: text("last_error"),
@@ -106,5 +111,33 @@ export const openappaEffectivePoliciesTable = pgTable(
     compiledAt: timestamp("compiled_at", { withTimezone: true }).notNull(),
     lastError: text("last_error"),
     lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+    // What `content` was composed from: its revision, time and battery
+    // statuses, or that it is the root text alone. Trusted only while its
+    // `contentHash` equals `content_hash`, so a build that does not write it
+    // leaves a value nobody reads. See src/openappa/composition-view.ts.
+    served: jsonb("served").$type<unknown>(),
   },
+);
+
+// Which runtime credential key fills a helper variable, organization-wide. A
+// `[credentials]` line in the root policy text wins over a row for the same variable.
+export const openappaCredentialBindingsTable = pgTable(
+  "openappa_credential_bindings",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    variable: text().notNull(),
+    credentialKey: text("credential_key").notNull(),
+    updatedBy: text("updated_by").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.organizationId, table.variable] })],
 );

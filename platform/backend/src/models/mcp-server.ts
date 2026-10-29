@@ -4,6 +4,7 @@ import {
   asc,
   desc,
   eq,
+  exists,
   inArray,
   isNotNull,
   isNull,
@@ -14,18 +15,19 @@ import {
   lt,
   // SPDX-SnippetEnd
   ne,
+  notExists,
   notInArray,
   or,
   type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
-import { isServiceAccountUserId } from "@/auth/utils";
-import mcpClient from "@/clients/mcp-client";
+import { alias } from "drizzle-orm/pg-core";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
-import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
@@ -96,6 +98,30 @@ export const MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS =
 export const MCP_DEMAND_HEARTBEAT_INTERVAL_MS =
   config.orchestrator.mcpIdleHibernation.demandHeartbeatIntervalMs;
 // SPDX-SnippetEnd
+
+/** Whose install visibility the registry's install questions are asked for. */
+export type RegistryInstallViewer = {
+  userId: string;
+  /** May manage every shared install (`isMcpInstallationAdmin`). */
+  isMcpServerAdmin: boolean;
+  /** The predefined Admin role, the only one that sees personal installs of others. */
+  isPredefinedAdmin: boolean;
+  /**
+   * `mcpServerInstallation:read`. Without it the viewer sees no installs, so
+   * every install question answers "none" (as GET /api/mcp_server's 403 does).
+   */
+  canReadInstalls: boolean;
+};
+
+export type RegistryInstallRow = {
+  id: string;
+  name: string;
+  catalogId: string;
+  scope: ResourceVisibilityScope;
+  ownerId: string | null;
+  createdAt: Date;
+  usable: boolean;
+};
 
 /**
  * Data-access layer for `mcp_server` — an installation of an
@@ -418,16 +444,58 @@ class McpServerModel {
   }
 
   /**
-   * When the first MCP server was connected; null when none exist. An
-   * activation signal for the feedback pop-up.
+   * Installations that have recorded no per-installation tool descriptions
+   * yet, in catalogs with more than one installation (only there can
+   * installations disagree). A random sample, so installations that keep
+   * failing cannot hold the rest back. Skips installations whose OAuth refresh
+   * failed and local installations that are not running.
    */
-  static async getFirstCreatedAt(): Promise<Date | null> {
-    const [row] = await db
-      .select({ createdAt: schema.mcpServersTable.createdAt })
+  static async findMissingToolDescriptions(params: {
+    limit: number;
+  }): Promise<McpServer[]> {
+    const sibling = alias(schema.mcpServersTable, "sibling");
+    return db
+      .select()
       .from(schema.mcpServersTable)
-      .orderBy(asc(schema.mcpServersTable.createdAt))
-      .limit(1);
-    return row?.createdAt ?? null;
+      .where(
+        and(
+          notDeleted(schema.mcpServersTable),
+          ne(schema.mcpServersTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          or(
+            eq(schema.mcpServersTable.serverType, "remote"),
+            and(
+              eq(schema.mcpServersTable.serverType, "local"),
+              eq(schema.mcpServersTable.localInstallationStatus, "success"),
+            ),
+          ),
+          isNull(schema.mcpServersTable.oauthRefreshError),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(schema.mcpServerToolDescriptionsTable)
+              .where(
+                eq(
+                  schema.mcpServerToolDescriptionsTable.mcpServerId,
+                  schema.mcpServersTable.id,
+                ),
+              ),
+          ),
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(sibling)
+              .where(
+                and(
+                  eq(sibling.catalogId, schema.mcpServersTable.catalogId),
+                  ne(sibling.id, schema.mcpServersTable.id),
+                  isNull(sibling.deletedAt),
+                ),
+              ),
+          ),
+        ),
+      )
+      .orderBy(sql`random()`)
+      .limit(params.limit);
   }
 
   /**
@@ -482,20 +550,15 @@ class McpServerModel {
       conditions.push(catalogBelongsToOrganization);
     }
 
-    if (!isPredefinedAdmin && isMcpServerAdmin) {
-      const sharedOrOwnedInstall = or(
-        ne(schema.mcpServersTable.scope, "personal"),
-        eq(schema.mcpServersTable.ownerId, userId),
-      );
-      if (sharedOrOwnedInstall) conditions.push(sharedOrOwnedInstall);
-    } else if (!isPredefinedAdmin) {
-      const accessibleMcpServerIds =
-        await McpServerModel.getUserAccessibleMcpServerIds(userId);
-      if (accessibleMcpServerIds.length === 0) return [];
-      conditions.push(
-        inArray(schema.mcpServersTable.id, accessibleMcpServerIds),
-      );
-    }
+    // The same visibility as the registry's issue index, so every local
+    // install the browser classifies has a status in the feed.
+    const visible = McpServerModel.visibleToViewerCondition({
+      userId,
+      isMcpServerAdmin,
+      isPredefinedAdmin,
+      canReadInstalls: true,
+    });
+    if (visible) conditions.push(visible);
 
     const rows = await db
       .select({ id: schema.mcpServersTable.id })
@@ -530,6 +593,20 @@ class McpServerModel {
      */
     filters?: {
       catalogId?: string;
+      /** Installs of any of these catalog items (the registry's visible page). */
+      catalogIds?: string[];
+      /**
+       * Installs of catalog items whose name, slugified the way tool names
+       * carry it ({@link slugifyMcpServerName}), is this: a tool's server
+       * prefix, resolved without the caller seeing the catalog item.
+       */
+      catalogSlug?: string;
+      /**
+       * Attach per-install agent usage (`assignedAgents`). Off unless asked:
+       * it looks up the agents of every listed install, and only the server
+       * list API returns it. Without it `assignedAgents` is empty.
+       */
+      includeAssignedAgents?: boolean;
       excludeServerTypes?: InternalMcpCatalogServerType[];
     },
   ): Promise<McpServer[]> {
@@ -546,7 +623,6 @@ class McpServerModel {
         catalogName: schema.internalMcpCatalogTable.name,
         teamName: schema.teamsTable.name,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -574,6 +650,19 @@ class McpServerModel {
 
     if (filters?.catalogId) {
       conditions.push(eq(schema.mcpServersTable.catalogId, filters.catalogId));
+    }
+    if (filters?.catalogIds) {
+      if (filters.catalogIds.length === 0) return [];
+      conditions.push(
+        inArray(schema.mcpServersTable.catalogId, filters.catalogIds),
+      );
+    }
+    if (filters?.catalogSlug !== undefined) {
+      // slugifyMcpServerName in SQL: lowercase, whitespace runs to "_",
+      // anything but [a-z0-9_-] removed.
+      conditions.push(
+        sql`regexp_replace(regexp_replace(lower(${schema.internalMcpCatalogTable.name}), '[[:space:]]+', '_', 'g'), '[^a-z0-9_-]', '', 'g') = ${filters.catalogSlug}`,
+      );
     }
 
     if (filters?.excludeServerTypes?.length) {
@@ -610,6 +699,17 @@ class McpServerModel {
         eq(schema.mcpServersTable.ownerId, userId),
       );
       if (sharedOrOwnedInstall) conditions.push(sharedOrOwnedInstall);
+    } else if (userId && !isPredefinedAdmin && filters?.catalogIds) {
+      // A bounded page of catalog items (the registry): the same visibility as
+      // below, as one condition in this query instead of three id lists read
+      // first — one of them every org-scoped install in the organization.
+      const visible = McpServerModel.visibleToViewerCondition({
+        userId,
+        isMcpServerAdmin: false,
+        isPredefinedAdmin: false,
+        canReadInstalls: true,
+      });
+      if (visible) conditions.push(visible);
     } else if (userId && !isPredefinedAdmin) {
       // Get MCP servers accessible through:
       // 1. Team membership (servers assigned to user's teams)
@@ -647,7 +747,6 @@ class McpServerModel {
       const secretStorageType = computeSecretStorageType(
         row.server.secretId,
         row.secretIsVault,
-        row.secretIsByosVault,
       );
 
       serversMap.set(row.server.id, {
@@ -664,7 +763,11 @@ class McpServerModel {
     const serverIds = [...serversMap.keys()];
     const [assignedUsersByServer, assignedAgentsByServer] = await Promise.all([
       McpServerUserModel.getUserDetailsForMcpServers(serverIds),
-      AgentToolModel.getAssignedAgentDetailsForMcpServers(serverIds),
+      filters?.includeAssignedAgents
+        ? AgentToolModel.getAssignedAgentDetailsForMcpServers(serverIds)
+        : Promise.resolve(
+            new Map<string, NonNullable<McpServer["assignedAgents"]>>(),
+          ),
     ]);
 
     for (const [serverId, assigned] of assignedUsersByServer) {
@@ -684,6 +787,217 @@ class McpServerModel {
       ...server,
       assignedAgents: assignedAgentsByServer.get(server.id) ?? [],
     }));
+  }
+
+  /**
+   * SQL form of the install visibility {@link findAll} applies to one viewer,
+   * for queries that ask about installs inside a larger statement (the
+   * registry's "installed" filter and sort) instead of listing them.
+   * Undefined when the viewer sees every install.
+   */
+  static visibleToViewerCondition(
+    viewer: RegistryInstallViewer,
+  ): SQL | undefined {
+    const server = schema.mcpServersTable;
+    if (viewer.isPredefinedAdmin) return undefined;
+    if (viewer.isMcpServerAdmin) {
+      return or(
+        ne(server.scope, "personal"),
+        eq(server.ownerId, viewer.userId),
+      );
+    }
+    return or(
+      and(
+        eq(server.scope, "team"),
+        TeamModel.effectiveMembershipCondition({
+          userId: viewer.userId,
+          teamIdColumn: server.teamId,
+        }),
+      ),
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(schema.mcpServerUsersTable)
+          .where(
+            and(
+              eq(schema.mcpServerUsersTable.mcpServerId, server.id),
+              eq(schema.mcpServerUsersTable.userId, viewer.userId),
+            ),
+          ),
+      ),
+      eq(server.scope, "org"),
+    );
+  }
+
+  /**
+   * SQL form of {@link getCredentialUsableServerIds}: the install is one the
+   * user may present the credential of.
+   */
+  static credentialUsableCondition(userId: string): SQL {
+    const server = schema.mcpServersTable;
+    // A nullable owner or team makes the bare OR NULL instead of false.
+    return sql`coalesce(${or(
+      eq(server.ownerId, userId),
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(schema.mcpServerUsersTable)
+          .where(
+            and(
+              eq(schema.mcpServerUsersTable.mcpServerId, server.id),
+              eq(schema.mcpServerUsersTable.userId, userId),
+            ),
+          ),
+      ),
+      and(
+        eq(server.scope, "team"),
+        TeamModel.effectiveMembershipCondition({
+          userId,
+          teamIdColumn: server.teamId,
+        }),
+      ),
+      eq(server.scope, "org"),
+    )}, false)`;
+  }
+
+  /**
+   * True for a catalog item (correlated on `catalogIdColumn`) that has any
+   * install the viewer can see — a row a registry bulk action can select.
+   */
+  static visibleInstallExistsCondition(params: {
+    viewer: RegistryInstallViewer;
+    catalogIdColumn: SQLWrapper;
+  }): SQL {
+    if (!params.viewer.canReadInstalls) return sql`false`;
+    const server = schema.mcpServersTable;
+    return exists(
+      db
+        .select({ one: sql`1` })
+        .from(server)
+        .where(
+          and(
+            sql`${server.catalogId} = ${params.catalogIdColumn}`,
+            notDeleted(server),
+            ne(server.serverType, "app"),
+            McpServerModel.visibleToViewerCondition(params.viewer),
+          ),
+        ),
+    );
+  }
+
+  /**
+   * True for a catalog item (correlated on `catalogIdColumn`) that has an
+   * install the viewer can both see and use: the registry's "installed for
+   * me" rule as an `EXISTS`, so filtering and ordering by it stay in SQL.
+   */
+  static installedForViewerCondition(params: {
+    viewer: RegistryInstallViewer;
+    catalogIdColumn: SQLWrapper;
+  }): SQL {
+    if (!params.viewer.canReadInstalls) return sql`false`;
+    const server = schema.mcpServersTable;
+    return exists(
+      db
+        .select({ one: sql`1` })
+        .from(server)
+        .where(
+          and(
+            sql`${server.catalogId} = ${params.catalogIdColumn}`,
+            notDeleted(server),
+            ne(server.serverType, "app"),
+            McpServerModel.visibleToViewerCondition(params.viewer),
+            McpServerModel.credentialUsableCondition(params.viewer.userId),
+          ),
+        ),
+    );
+  }
+
+  /**
+   * The installs of `catalogIds` the viewer can see, reduced to what the
+   * registry list needs to summarize them per catalog item: how many there
+   * are, whether one is usable by the viewer, and which one stands in for the
+   * item (the same priority the registry's cards use).
+   */
+  static async findRegistryInstallRows(params: {
+    viewer: RegistryInstallViewer;
+    catalogIds: string[];
+  }): Promise<RegistryInstallRow[]> {
+    if (params.catalogIds.length === 0 || !params.viewer.canReadInstalls) {
+      return [];
+    }
+    const server = schema.mcpServersTable;
+    const rows = await db
+      .select({
+        id: server.id,
+        name: server.name,
+        catalogId: server.catalogId,
+        scope: server.scope,
+        ownerId: server.ownerId,
+        createdAt: server.createdAt,
+        usable: sql<boolean>`${McpServerModel.credentialUsableCondition(params.viewer.userId)}`,
+      })
+      .from(server)
+      .where(
+        and(
+          inArray(server.catalogId, params.catalogIds),
+          notDeleted(server),
+          ne(server.serverType, "app"),
+          McpServerModel.visibleToViewerCondition(params.viewer),
+        ),
+      )
+      .orderBy(asc(server.createdAt), asc(server.id));
+    return rows.filter(
+      (row): row is RegistryInstallRow => row.catalogId !== null,
+    );
+  }
+
+  /**
+   * Every install the viewer can see, reduced to the fields the issue rule
+   * (`computeMcpServerIssues` in the frontend) reads. Feeds the registry's
+   * slim issue index, which the sidebar count reads on every page, so it
+   * carries no configuration, users or agents.
+   */
+  static async findIssueIndexRows(params: {
+    viewer: RegistryInstallViewer;
+    organizationId: string;
+  }) {
+    if (!params.viewer.canReadInstalls) return [];
+    const server = schema.mcpServersTable;
+    const catalog = schema.internalMcpCatalogTable;
+    return db
+      .select({
+        id: server.id,
+        // The install's own name, for pickers that list installs by name.
+        name: server.name,
+        catalogId: server.catalogId,
+        ownerId: server.ownerId,
+        scope: server.scope,
+        teamId: server.teamId,
+        localInstallationStatus: server.localInstallationStatus,
+        localInstallationError: server.localInstallationError,
+        oauthRefreshError: server.oauthRefreshError,
+        oauthRefreshErrorMessage: server.oauthRefreshErrorMessage,
+        oauthRefreshErrorDescription: server.oauthRefreshErrorDescription,
+        oauthRefreshFailedAt: server.oauthRefreshFailedAt,
+        updatedAt: server.updatedAt,
+        canUseCredential: sql<boolean>`${McpServerModel.credentialUsableCondition(params.viewer.userId)}`,
+      })
+      .from(server)
+      .leftJoin(catalog, eq(server.catalogId, catalog.id))
+      .where(
+        and(
+          notDeleted(server),
+          ne(server.serverType, "app"),
+          // The column is NOT NULL today; the guard keeps a future nullable
+          // catalog link from slipping past the organization check below.
+          isNotNull(server.catalogId),
+          or(
+            isNull(catalog.organizationId),
+            eq(catalog.organizationId, params.organizationId),
+          ),
+          McpServerModel.visibleToViewerCondition(params.viewer),
+        ),
+      );
   }
 
   /**
@@ -1156,6 +1470,32 @@ class McpServerModel {
     return null;
   }
 
+  static async hasSecretReference(secretId: string): Promise<boolean> {
+    const [reference] = await db
+      .select({ id: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.secretId, secretId))
+      .limit(1);
+    return reference !== undefined;
+  }
+
+  static async hasOtherSecretReference(params: {
+    secretId: string;
+    mcpServerId: string;
+  }): Promise<boolean> {
+    const [reference] = await db
+      .select({ id: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          eq(schema.mcpServersTable.secretId, params.secretId),
+          ne(schema.mcpServersTable.id, params.mcpServerId),
+        ),
+      )
+      .limit(1);
+    return reference !== undefined;
+  }
+
   static async findById(
     id: string,
     userId?: string,
@@ -1181,7 +1521,6 @@ class McpServerModel {
         ownerEmail: schema.usersTable.email,
         teamName: schema.teamsTable.name,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -1225,7 +1564,6 @@ class McpServerModel {
     const secretStorageType = computeSecretStorageType(
       result.server.secretId,
       result.secretIsVault,
-      result.secretIsByosVault,
     );
 
     return {
@@ -1655,7 +1993,14 @@ class McpServerModel {
     return updatedServer || null;
   }
 
-  static async delete(id: string, opts?: { at?: Date }): Promise<boolean> {
+  static async delete(
+    id: string,
+    opts?: {
+      at?: Date;
+      strictCleanup?: boolean;
+      requirePlaywrightDisabled?: boolean;
+    },
+  ): Promise<boolean> {
     // Fetch the (active) server for teardown context. Idempotent: an
     // already-soft-deleted server is not found (findById filters notDeleted),
     // so a repeat delete is a no-op and returns false.
@@ -1674,6 +2019,7 @@ class McpServerModel {
         { err: error },
         `Failed to clean up MCP HTTP sessions for MCP server ${mcpServer.name}:`,
       );
+      if (opts?.strictCleanup) throw error;
       // Continue with deletion even if session cleanup fails
     }
 
@@ -1686,8 +2032,20 @@ class McpServerModel {
 
     // For local servers, stop and remove the K8s deployment
     if (mcpServer.serverType === "local") {
+      // Lazy (here and for `mcp-client` below): the runtime and client import
+      // the service layer, which would otherwise load with every model.
+      const { McpServerRuntimeManager } = await import(
+        "@/k8s/mcp-server-runtime"
+      );
       try {
-        await McpServerRuntimeManager.removeMcpServer(id);
+        if (opts?.strictCleanup) {
+          await McpServerRuntimeManager.removeMcpServer(id, {
+            strictCleanup: true,
+            requirePlaywrightDisabled: opts.requirePlaywrightDisabled,
+          });
+        } else {
+          await McpServerRuntimeManager.removeMcpServer(id);
+        }
         logger.info(
           `Cleaned up K8s deployment for MCP server: ${mcpServer.name}`,
         );
@@ -1696,6 +2054,7 @@ class McpServerModel {
           { err: error },
           `Failed to clean up K8s deployment for MCP server ${mcpServer.name}:`,
         );
+        if (opts?.strictCleanup) throw error;
         // Continue with deletion even if pod cleanup fails
       }
     }
@@ -1706,12 +2065,29 @@ class McpServerModel {
     // secret. `opts.at` lets a catalog cascade stamp this install (with its
     // siblings and tools) with one shared timestamp — the restore correlation key.
     logger.info(`Soft-deleting MCP server: ${mcpServer.name} with id: ${id}`);
-    const count = await softDelete(
-      db,
-      schema.mcpServersTable,
-      eq(schema.mcpServersTable.id, id),
-      opts?.at,
-    );
+    const count = opts?.requirePlaywrightDisabled
+      ? await withDbTransaction(async (tx) => {
+          // Serialize final retirement with enable/provision transactions. A
+          // late cleanup cannot soft-delete a runtime that was just revived.
+          const [organization] = await tx
+            .select({ enabled: schema.organizationsTable.playwrightMcpEnabled })
+            .from(schema.organizationsTable)
+            .limit(1)
+            .for("update");
+          if (organization?.enabled !== false) return 0;
+          return softDelete(
+            tx,
+            schema.mcpServersTable,
+            eq(schema.mcpServersTable.id, id),
+            opts.at,
+          );
+        })
+      : await softDelete(
+          db,
+          schema.mcpServersTable,
+          eq(schema.mcpServersTable.id, id),
+          opts?.at,
+        );
     return count > 0;
   }
 
@@ -1800,18 +2176,7 @@ class McpServerModel {
    * Best-effort per install: a failed K8s teardown or secret delete is logged
    * and the purge continues, so one wedged install can't block the deletion.
    */
-  /**
-   * Transaction-scoped variant of {@link purgePersonalServersForUser} for
-   * callers already inside a database transaction (temp-user cleanup in auth
-   * flows). SQL only, on the caller's executor: base-db queries under an open
-   * transaction deadlock the single-connection test database, and the full
-   * purge's runtime/secret-manager side effects cannot join a transaction
-   * anyway. Mirrors the backfill migration's semantics — install rows go,
-   * plain secret rows go with them, Vault/BYOS secret rows are RETAINED (SQL
-   * cannot reach the backing store; the row is the only pointer left for a
-   * manual sweep). No K8s teardown: these auth-flow shell users cannot have
-   * running local installs.
-   */
+
   static async purgePersonalServersForUserInTransaction(
     userId: string,
     tx: Transaction,
@@ -1821,7 +2186,6 @@ class McpServerModel {
         id: schema.mcpServersTable.id,
         secretId: schema.mcpServersTable.secretId,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -1849,10 +2213,7 @@ class McpServerModel {
     );
 
     const plainSecretIds = servers
-      .filter(
-        (server) =>
-          server.secretId && !server.secretIsVault && !server.secretIsByosVault,
-      )
+      .filter((server) => server.secretId && !server.secretIsVault)
       .map((server) => server.secretId as string);
     if (plainSecretIds.length > 0) {
       await tx
@@ -1936,6 +2297,10 @@ class McpServerModel {
       .select({ server: schema.mcpServersTable })
       .from(schema.mcpServersTable)
       .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .leftJoin(
         schema.teamsTable,
         eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
       )
@@ -1950,6 +2315,10 @@ class McpServerModel {
         and(
           eq(schema.mcpServersTable.id, id),
           isNotNull(schema.mcpServersTable.deletedAt),
+          or(
+            isNull(schema.internalMcpCatalogTable.organizationId),
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+          ),
           or(
             eq(schema.teamsTable.organizationId, organizationId),
             isNotNull(schema.membersTable.id),
@@ -2011,6 +2380,7 @@ class McpServerModel {
       inputSchema: Record<string, unknown>;
       _meta?: Record<string, unknown>;
       annotations?: Record<string, unknown>;
+      outputSchema?: Record<string, unknown>;
     }>
   > {
     // Get catalog information if this server was installed from a catalog
@@ -2035,6 +2405,7 @@ class McpServerModel {
       }
     }
 
+    const { default: mcpClient } = await import("@/clients/mcp-client");
     try {
       // Use the new structured API for all server types
       const tools = await mcpClient.connectAndGetTools({
@@ -2051,6 +2422,7 @@ class McpServerModel {
         inputSchema: tool.inputSchema,
         _meta: tool._meta,
         annotations: tool.annotations,
+        outputSchema: tool.outputSchema,
       }));
     } catch (error) {
       logger.error(
@@ -2239,6 +2611,7 @@ class McpServerModel {
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
 
         if (catalogItem?.serverType === "remote") {
+          const { default: mcpClient } = await import("@/clients/mcp-client");
           // Use a temporary ID for validation (we don't have a real server ID yet)
           const tools = await mcpClient.connectAndGetTools({
             catalogItem,
@@ -2401,6 +2774,10 @@ class McpServerModel {
       .where(
         and(
           isNotNull(schema.mcpServersTable.deletedAt),
+          or(
+            isNull(schema.internalMcpCatalogTable.organizationId),
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+          ),
           ne(schema.mcpServersTable.serverType, "app"),
           or(
             eq(schema.teamsTable.organizationId, organizationId),
@@ -2428,13 +2805,6 @@ class McpServerModel {
     }));
   }
 
-  /**
-   * Shared body of the personal-install purges: tear down the K8s deployment
-   * for local installs, hard-delete each row, and delete its credential secret
-   * through the secret manager (so Vault/BYOS-backed material is removed from
-   * the backing store too). Best-effort per install — a wedged deployment or
-   * secret must not block the rest of the purge.
-   */
   private static async purgeInstallRows(
     userId: string,
     servers: {
@@ -2453,6 +2823,9 @@ class McpServerModel {
       // Tear the deployment (and its live K8s Secret) down before dropping the
       // row — `removeMcpServer` resolves the deployment through the DB row.
       if (server.serverType === "local") {
+        const { McpServerRuntimeManager } = await import(
+          "@/k8s/mcp-server-runtime"
+        );
         try {
           await McpServerRuntimeManager.removeMcpServer(server.id);
         } catch (error) {
@@ -2466,12 +2839,15 @@ class McpServerModel {
       await McpServerModel.hardDelete(server.id);
       purgedIds.push(server.id);
 
-      if (server.secretId) {
+      if (
+        server.secretId &&
+        !(await McpServerModel.hasSecretReference(server.secretId))
+      ) {
         try {
           await secretManager().deleteSecret(server.secretId);
         } catch (error) {
-          // The install is already gone, so nothing points at this secret
-          // anymore. Log the id loudly — it needs a manual sweep.
+          // The install is already gone, so nothing points at this secret.
+          // Log the id loudly — it needs a manual sweep.
           logger.error(
             { err: error, userId, secretId: server.secretId },
             "McpServerModel.purgeInstallRows: failed to delete credential secret; it is now orphaned",

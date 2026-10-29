@@ -9,12 +9,11 @@ import {
 import Link from "next/link";
 import type { ComponentProps } from "react";
 import { Badge } from "@/components/ui/badge";
-import type { PolicyBattery } from "@/lib/openappa-batteries.query";
 import { cn } from "@/lib/utils/tailwind";
 import { batteryDisplayName } from "./battery-display-name";
-import { BATTERY_STATUS } from "./battery-status";
+import { BATTERY_STATUS, type EnforcedStatus } from "./battery-status";
 
-type BatteryStatus = PolicyBattery["status"];
+type BatteryStatus = EnforcedStatus;
 
 /**
  * Policy source tone for the tool breakdown in an entity's Details dialog.
@@ -27,7 +26,8 @@ type CoverageTone = "critical" | "warning" | "ok";
 type GovernedBy =
   | { source: "battery"; name: string; status: BatteryStatus }
   | { source: "root" }
-  | { source: "catchall" };
+  | { source: "catchall" }
+  | { source: "not_covered" };
 
 export function GovernedByPill({
   governedBy,
@@ -55,7 +55,9 @@ export function GovernedByPill({
       ? batteryDisplayName(governedBy.name)
       : governedBy.source === "root"
         ? "Custom rule"
-        : "No rule";
+        : governedBy.source === "catchall"
+          ? "Catch-all rule"
+          : "No rule";
   const content = (
     <>
       <Icon aria-hidden="true" />
@@ -72,7 +74,7 @@ export function GovernedByPill({
       variant={tone ? TONE_VARIANTS[tone] : "outline"}
       className={cn(
         tone ? TONE_CLASSES[tone] : null,
-        governedBy.source === "catchall" && "text-muted-foreground",
+        governedBy.source === "not_covered" && "text-muted-foreground",
         href && "cursor-pointer",
         className,
       )}

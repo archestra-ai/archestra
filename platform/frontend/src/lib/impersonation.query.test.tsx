@@ -100,10 +100,10 @@ describe("impersonation cache boundaries", () => {
     const assign = mockNavigation(() => {
       expectRestoredAuthSnapshot(undefined, undefined);
     });
-    vi.mocked(authClient.admin.impersonateUser).mockResolvedValue({
+    vi.mocked(authClient.$fetch).mockResolvedValue({
       data: {},
       error: null,
-    } as Awaited<ReturnType<typeof authClient.admin.impersonateUser>>);
+    } as never);
 
     const { result } = renderMutation(() => useImpersonateUser());
     await act(async () => {
@@ -111,15 +111,19 @@ describe("impersonation cache boundaries", () => {
     });
 
     expect(assign).toHaveBeenCalledWith("/");
+    expect(authClient.$fetch).toHaveBeenCalledWith("/admin/impersonate-user", {
+      method: "POST",
+      body: { userId: "member-1" },
+    });
   });
 
   it("keeps persisted auth when impersonation fails", async () => {
     await seedPersistedAuthSnapshot();
     mockNavigation();
-    vi.mocked(authClient.admin.impersonateUser).mockResolvedValue({
+    vi.mocked(authClient.$fetch).mockResolvedValue({
       data: null,
       error: new Error("Impersonation denied"),
-    } as Awaited<ReturnType<typeof authClient.admin.impersonateUser>>);
+    } as never);
 
     const { result } = renderMutation(() => useImpersonateUser());
     await act(async () => {
@@ -136,10 +140,10 @@ describe("impersonation cache boundaries", () => {
     const assign = mockNavigation(() => {
       expectRestoredAuthSnapshot(undefined, undefined);
     });
-    vi.mocked(authClient.admin.stopImpersonating).mockResolvedValue({
+    vi.mocked(authClient.$fetch).mockResolvedValue({
       data: {},
       error: null,
-    } as Awaited<ReturnType<typeof authClient.admin.stopImpersonating>>);
+    } as never);
 
     const { result } = renderMutation(() => useStopImpersonating());
     await act(async () => {
@@ -152,10 +156,10 @@ describe("impersonation cache boundaries", () => {
   it("keeps persisted auth when returning to the admin session fails", async () => {
     await seedPersistedAuthSnapshot();
     mockNavigation();
-    vi.mocked(authClient.admin.stopImpersonating).mockResolvedValue({
+    vi.mocked(authClient.$fetch).mockResolvedValue({
       data: null,
       error: new Error("Return denied"),
-    } as Awaited<ReturnType<typeof authClient.admin.stopImpersonating>>);
+    } as never);
 
     const { result } = renderMutation(() => useStopImpersonating());
     await act(async () => {

@@ -8,9 +8,6 @@ import LlmOauthClientModel from "@/models/llm-oauth-client";
 import MemberModel from "@/models/member";
 import OrganizationRoleModel from "@/models/organization-role";
 import TeamTokenModel from "@/models/team-token";
-import ToolModel from "@/models/tool";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
-import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { describe, expect, test } from "@/test";
@@ -309,58 +306,6 @@ const CASES: ScopeCase[] = [
     },
     fetch: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
   },
-  {
-    name: "ToolInvocationPolicyModel.findByIdForAudit",
-    setup: async ({
-      makeOrganization,
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-      makeToolPolicy,
-    }) => {
-      const orgA = await makeOrganization();
-      const orgB = await makeOrganization();
-      // Tool is global (tools have no organizationId column); tenancy is
-      // resolved through any agent in the org that is assigned the tool.
-      const tool = await makeTool();
-      const agentB = await makeAgent({ organizationId: orgB.id });
-      await makeAgentTool(agentB.id, tool.id);
-      const policy = await makeToolPolicy(tool.id);
-      return { id: policy.id, orgA: orgA.id };
-    },
-    fetch: (id, orgId) => ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-  {
-    name: "ToolModel.findByIdForAudit",
-    setup: async ({ makeOrganization, makeAgent, makeTool, makeAgentTool }) => {
-      const orgA = await makeOrganization();
-      const orgB = await makeOrganization();
-      const tool = await makeTool();
-      const agentB = await makeAgent({ organizationId: orgB.id });
-      await makeAgentTool(agentB.id, tool.id);
-      return { id: tool.id, orgA: orgA.id };
-    },
-    fetch: (id, orgId) => ToolModel.findByIdForAudit(id, orgId),
-  },
-  {
-    name: "TrustedDataPolicyModel.findByIdForAudit",
-    setup: async ({
-      makeOrganization,
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-      makeTrustedDataPolicy,
-    }) => {
-      const orgA = await makeOrganization();
-      const orgB = await makeOrganization();
-      const tool = await makeTool();
-      const agentB = await makeAgent({ organizationId: orgB.id });
-      await makeAgentTool(agentB.id, tool.id);
-      const policy = await makeTrustedDataPolicy(tool.id);
-      return { id: policy.id, orgA: orgA.id };
-    },
-    fetch: (id, orgId) => TrustedDataPolicyModel.findByIdForAudit(id, orgId),
-  },
 ];
 
 describe("audit snapshot scope invariant — cross-org returns null", () => {
@@ -380,8 +325,6 @@ describe("audit snapshot scope invariant — cross-org returns null", () => {
     makeAgent,
     makeTool,
     makeAgentTool,
-    makeToolPolicy,
-    makeTrustedDataPolicy,
   }) => {
     const { id, orgA } = await caseDef.setup({
       makeOrganization,
@@ -397,8 +340,6 @@ describe("audit snapshot scope invariant — cross-org returns null", () => {
       makeAgent,
       makeTool,
       makeAgentTool,
-      makeToolPolicy,
-      makeTrustedDataPolicy,
     });
     expect(await caseDef.fetch(id, orgA)).toBeNull();
   });
@@ -425,26 +366,6 @@ describe("audit snapshot scope invariant — deleted agent targets return null",
 
     await expect(
       LimitModel.findByIdForAudit(limit.id, org.id),
-    ).resolves.toBeNull();
-  });
-
-  test("ToolInvocationPolicyModel.findByIdForAudit returns null when only deleted agents assign the tool", async ({
-    makeAgent,
-    makeAgentTool,
-    makeOrganization,
-    makeTool,
-    makeToolPolicy,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeAgent({ organizationId: org.id });
-    const tool = await makeTool();
-    await makeAgentTool(agent.id, tool.id);
-    const policy = await makeToolPolicy(tool.id);
-
-    await AgentModel.delete(agent.id);
-
-    await expect(
-      ToolInvocationPolicyModel.findByIdForAudit(policy.id, org.id),
     ).resolves.toBeNull();
   });
 });

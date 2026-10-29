@@ -15,6 +15,8 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   AgentModel,
@@ -26,7 +28,13 @@ import {
   OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ServiceAccountModel from "@/models/service-account";
+import {
+  type AppaDelegationMarker,
+  mintDelegationMarker,
+} from "@/openappa/delegation";
 import authRoutes from "@/routes/auth";
+import { collectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import {
   accessGrants,
@@ -36,6 +44,7 @@ import {
   expect,
   test,
 } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   type AnthropicStubOptions,
   createAnthropicTestClient,
@@ -46,6 +55,7 @@ import { ApiError } from "@/types";
 import {
   anthropicAdapterFactory,
   azureAdapterFactory,
+  azureResponsesAdapterFactory,
   bedrockAdapterFactory,
   cerebrasAdapterFactory,
   cohereAdapterFactory,
@@ -55,6 +65,8 @@ import {
   githubCopilotAdapterFactory,
   githubCopilotResponsesAdapterFactory,
   groqAdapterFactory,
+  kimiAdapterFactory,
+  kimiCodeAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
   ollamaAdapterFactory,
@@ -67,6 +79,8 @@ import {
   zhipuaiAdapterFactory,
 } from "../adapters";
 import modelRouterProxyRoutes from "./model-router";
+
+setupTestCacheManager();
 
 function createFastifyApp() {
   const app = Fastify().withTypeProvider<ZodTypeProvider>();
@@ -190,6 +204,113 @@ async function createModelRouterVirtualKey(params: {
   });
 }
 
+/**
+ * One OpenAI-compatible server: its own key, base URL, and the models it
+ * hosts — the shape of a self-hosted gateway per model.
+ */
+async function makeVllmEndpoint(params: {
+  organizationId: string;
+  name: string;
+  apiKey: string;
+  baseUrl: string;
+  modelIds: string[];
+  /** Set to host embedding models instead of chat models. */
+  embeddingDimensions?: 1536;
+  isPrimary?: boolean;
+  userId?: string;
+  makeSecret: (params: { secret: Record<string, unknown> }) => Promise<{
+    id: string;
+  }>;
+  makeLlmProviderApiKey: (
+    organizationId: string,
+    secretId: string,
+    overrides?: {
+      name?: string;
+      provider?: SupportedProvider;
+      baseUrl?: string | null;
+      isPrimary?: boolean;
+      userId?: string | null;
+    },
+  ) => Promise<{ id: string }>;
+}) {
+  const modelDbIds = [];
+  for (const modelId of params.modelIds) {
+    await upsertModel({
+      provider: "vllm",
+      modelId,
+      embeddingDimensions: params.embeddingDimensions,
+    });
+    const model = await ModelModel.findByProviderAndModelId("vllm", modelId);
+    if (!model) throw new Error(`model ${modelId} was not upserted`);
+    modelDbIds.push(model.id);
+  }
+  const secret = await params.makeSecret({
+    secret: { apiKey: params.apiKey },
+  });
+  const apiKey = await params.makeLlmProviderApiKey(
+    params.organizationId,
+    secret.id,
+    {
+      name: params.name,
+      provider: "vllm",
+      baseUrl: params.baseUrl,
+      isPrimary: params.isPrimary,
+      userId: params.userId,
+    },
+  );
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+    apiKey.id,
+    modelDbIds,
+  );
+  return apiKey;
+}
+
+/**
+ * Two OpenAI-compatible gateways, each hosting one model, behind one Model
+ * Router virtual key — the self-hosted layout the multi-endpoint mapping is for.
+ */
+async function makeTwoVllmEndpointVirtualKey(params: {
+  organizationId: string;
+  modelIds: { glm: string; deepseek: string };
+  embeddingDimensions?: 1536;
+  makeSecret: Parameters<typeof makeVllmEndpoint>[0]["makeSecret"];
+  makeLlmProviderApiKey: Parameters<
+    typeof makeVllmEndpoint
+  >[0]["makeLlmProviderApiKey"];
+}): Promise<string> {
+  const keys = [];
+  for (const name of ["glm", "deepseek"] as const) {
+    keys.push(
+      await makeVllmEndpoint({
+        organizationId: params.organizationId,
+        name: `${name} gateway`,
+        apiKey: `sk-${name}`,
+        baseUrl: `https://${name}.gateway.test/v1`,
+        modelIds: [params.modelIds[name]],
+        embeddingDimensions: params.embeddingDimensions,
+        makeSecret: params.makeSecret,
+        makeLlmProviderApiKey: params.makeLlmProviderApiKey,
+      }),
+    );
+  }
+  const { value } = await VirtualApiKeyModel.create({
+    name: "two-vllm-endpoints-vk",
+    providerApiKeys: keys.map((key) => ({
+      provider: "vllm" as const,
+      providerApiKeyId: key.id,
+    })),
+    ...accessGrants("org"),
+  });
+  return value;
+}
+
+/** `[apiKey, baseUrl]` of every vLLM client the router built, in order. */
+function vllmClientCalls() {
+  return vi
+    .mocked(vllmAdapterFactory.createClient)
+    .mock.calls.map(([apiKey, options]) => [apiKey, options.baseUrl]);
+}
+
 async function linkAllProviderModelsToApiKey(
   provider: SupportedProvider,
   apiKeyId: string,
@@ -204,6 +325,8 @@ async function linkAllProviderModelsToApiKey(
 const ROUTABLE_PROVIDER_CASES: Array<{
   provider: SupportedProvider;
   modelId: string;
+  /** `false` when the router serves the provider over Chat Completions only. */
+  responses?: false;
 }> = [
   { provider: "anthropic", modelId: "claude-opus-4-6-20250918" },
   { provider: "azure", modelId: "gpt-4.1" },
@@ -217,6 +340,11 @@ const ROUTABLE_PROVIDER_CASES: Array<{
   // separately below.
   { provider: "github-copilot", modelId: "gpt-4o" },
   { provider: "groq", modelId: "llama-3.1-8b-instant" },
+  // Kimi's platform and Kimi Code plan ids, served over the same chat
+  // completions wire. The Responses translation cannot replay Kimi's
+  // reasoning, so that surface is refused; see the dedicated test below.
+  { provider: "kimi", modelId: "kimi-k3.1-pro", responses: false },
+  { provider: "kimi-code", modelId: "k3.1-pro", responses: false },
   { provider: "minimax", modelId: "MiniMax-M1" },
   { provider: "mistral", modelId: "mistral-large-latest" },
   { provider: "ollama", modelId: "llama3.1" },
@@ -499,6 +627,8 @@ describe("model router proxy routes", () => {
       cerebrasAdapterFactory,
       deepseekAdapterFactory,
       groqAdapterFactory,
+      kimiAdapterFactory,
+      kimiCodeAdapterFactory,
       minimaxAdapterFactory,
       mistralAdapterFactory,
       ollamaAdapterFactory,
@@ -518,6 +648,9 @@ describe("model router proxy routes", () => {
       "createClient",
     ).mockImplementation(() => createResponsesTestClient() as never);
     vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () => createResponsesTestClient() as never,
+    );
+    vi.spyOn(azureResponsesAdapterFactory, "createClient").mockImplementation(
       () => createResponsesTestClient() as never,
     );
     vi.spyOn(azureAdapterFactory, "createClient").mockImplementation(
@@ -547,7 +680,7 @@ describe("model router proxy routes", () => {
     vi.restoreAllMocks();
   });
 
-  for (const { provider, modelId } of ROUTABLE_PROVIDER_CASES) {
+  for (const { provider, modelId, responses } of ROUTABLE_PROVIDER_CASES) {
     test(`routes ${provider} models through chat completions`, async ({
       makeAgent,
       makeOrganization,
@@ -592,52 +725,59 @@ describe("model router proxy routes", () => {
       });
     });
 
-    test(`routes ${provider} models through responses`, async ({
-      makeAgent,
-      makeOrganization,
-      makeUser,
-      makeSecret,
-      makeLlmProviderApiKey,
-    }) => {
-      const app = createFastifyApp();
-      await app.register(modelRouterProxyRoutes);
-      await upsertModel({ provider, modelId });
-      const organization = await makeOrganization();
-      const { value } = await createModelRouterVirtualKey({
-        organizationId: organization.id,
-        provider,
+    if (responses !== false) {
+      test(`routes ${provider} models through responses`, async ({
+        makeAgent,
+        makeOrganization,
         makeUser,
         makeSecret,
         makeLlmProviderApiKey,
-      });
-      const agent = await makeAgent({
-        organizationId: organization.id,
-        name: `${provider} Model Router Agent`,
-        agentType: "llm_proxy",
-      });
+      }) => {
+        const app = createFastifyApp();
+        await app.register(modelRouterProxyRoutes);
+        await upsertModel({ provider, modelId });
+        const organization = await makeOrganization();
+        const { value } = await createModelRouterVirtualKey({
+          organizationId: organization.id,
+          provider,
+          makeUser,
+          makeSecret,
+          makeLlmProviderApiKey,
+        });
+        const agent = await makeAgent({
+          organizationId: organization.id,
+          name: `${provider} Model Router Agent`,
+          agentType: "llm_proxy",
+        });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/model-router/${agent.id}/responses`,
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${value}`,
-          "user-agent": "test-client",
-        },
-        payload: {
-          model: `${provider}:${modelId}`,
-          input: "Hello",
-        },
-      });
+        const response = await app.inject({
+          method: "POST",
+          url: `/v1/model-router/${agent.id}/responses`,
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${value}`,
+            "user-agent": "test-client",
+          },
+          payload: {
+            model: `${provider}:${modelId}`,
+            input: "Hello",
+          },
+        });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
-        object: "response",
-        model: provider === "openai" ? modelId : `${provider}:${modelId}`,
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({
+          object: "response",
+          // OpenAI and Azure OpenAI deployments use native Responses, which
+          // reports the upstream model rather than the router alias.
+          model:
+            provider === "openai" || provider === "azure"
+              ? modelId
+              : `${provider}:${modelId}`,
+        });
       });
-    });
+    }
 
-    test(`streams ${provider} models through chat completions and responses`, async ({
+    test(`streams ${provider} models through chat completions${responses === false ? "" : " and responses"}`, async ({
       makeAgent,
       makeOrganization,
       makeUser,
@@ -675,6 +815,15 @@ describe("model router proxy routes", () => {
           messages: [{ role: "user", content: "Hello" }],
         },
       });
+      expect(chatResponse.statusCode, chatResponse.body).toBe(200);
+      expect(chatResponse.headers["content-type"]).toContain(
+        "text/event-stream",
+      );
+      expect(chatResponse.body).toContain("data: [DONE]");
+
+      // A Chat Completions-only provider is refused on Responses; the
+      // dedicated test below covers that refusal.
+      if (responses === false) return;
       const responsesResponse = await app.inject({
         method: "POST",
         url: `/v1/model-router/${agent.id}/responses`,
@@ -690,12 +839,6 @@ describe("model router proxy routes", () => {
         },
       });
 
-      expect(chatResponse.statusCode, chatResponse.body).toBe(200);
-      expect(chatResponse.headers["content-type"]).toContain(
-        "text/event-stream",
-      );
-      expect(chatResponse.body).toContain("data: [DONE]");
-
       expect(responsesResponse.statusCode, responsesResponse.body).toBe(200);
       expect(responsesResponse.headers["content-type"]).toContain(
         "text/event-stream",
@@ -706,6 +849,143 @@ describe("model router proxy routes", () => {
       );
     });
   }
+
+  test.for([
+    ["kimi", "kimi-k3.1-pro"],
+    ["kimi-code", "k3.1-pro"],
+  ] as const)("refuses %s on the Responses endpoint, which cannot replay its reasoning", async ([
+    provider,
+    modelId,
+  ], {
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider, modelId });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Kimi Responses Agent",
+      agentType: "llm_proxy",
+    });
+    const headers = {
+      "content-type": "application/json",
+      authorization: `Bearer ${value}`,
+      "user-agent": "test-client",
+    };
+
+    const refused = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/responses`,
+      headers,
+      payload: { model: `${provider}:${modelId}`, input: "Hello" },
+    });
+
+    expect(refused.statusCode).toBe(501);
+    expect(refused.json().error.message).toContain(
+      "Chat Completions endpoint only",
+    );
+
+    // The same model still answers on the surface Kimi supports.
+    const served = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers,
+      payload: {
+        model: `${provider}:${modelId}`,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(served.statusCode).toBe(200);
+  });
+
+  test("collects a delegation marker from the Responses wire before flattening a two-part prompt", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "anthropic", modelId: "claude-test" });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "anthropic",
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Anthropic Model Router Agent",
+      agentType: "llm_proxy",
+    });
+    const previousSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = "model-router-delegation-secret";
+    let collected: AppaDelegationMarker[] | undefined;
+    app.addHook("onSend", async (request) => {
+      collected = collectedDelegationMarkers(request);
+    });
+    try {
+      const prompt = "CHILD-MARKER: reply with exactly child-done";
+      const marker = mintDelegationMarker({
+        organizationId: organization.id,
+        callerId: "user:test",
+        parentId: "ses_parent",
+        spawnerNativeId: "ses_parent",
+        prompt,
+        spawnCallId: "toolu_spawn",
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/responses`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "Kilo-Code/7.8.8 ai-sdk/provider-utils/4.0.46",
+        },
+        payload: {
+          model: "anthropic:claude-test",
+          input: [
+            {
+              role: "user",
+              content: [
+                // Kilo Code hands the child its prompt, marker last, and then
+                // appends an environment block as a part of its own. The
+                // translation to Chat Completions joins both parts, so the
+                // marker no longer ends the text the handler sees.
+                { type: "input_text", text: `${prompt}\n\n${marker}` },
+                {
+                  type: "input_text",
+                  text: "\n\n<environment_details>\nWorking directory: /tmp\n</environment_details>",
+                },
+              ],
+            },
+          ],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(collected?.map((m) => [m.parentId, m.spawnCallId])).toEqual([
+        ["ses_parent", "toolu_spawn"],
+      ]);
+    } finally {
+      config.openappa.offerSigningSecret = previousSecret;
+    }
+  });
 
   test("routes an internal Agent through the model router for Agent Runtime attribution", async ({
     makeAgent,
@@ -1394,6 +1674,98 @@ describe("model router proxy routes", () => {
     ]);
     expect(chatResponse.statusCode).toBe(404);
     expect(chatResponse.json().error.message).toContain("not available");
+  });
+
+  test.for([
+    "oauth",
+    "virtual_key",
+  ] as const)("attributes %s Model Router spend to its account and rejects disabled accounts", async (credentialKind, {
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeServiceAccount,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(authRoutes);
+    await app.register(modelRouterProxyRoutes);
+    const provider = "openai";
+    const modelId = "gpt-5.4";
+    await upsertModel({ provider, modelId });
+    const org = await makeOrganization();
+    const account = await makeServiceAccount(org.id);
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, { provider });
+    await linkAllProviderModelsToApiKey(provider, key.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+    });
+    const mappings: {
+      provider: SupportedProvider;
+      providerApiKeyId: string;
+    }[] = [{ provider, providerApiKeyId: key.id }];
+    let credential: string;
+    if (credentialKind === "oauth") {
+      const client = await LlmOauthClientModel.create({
+        organizationId: org.id,
+        authorId: crypto.randomUUID(),
+        name: "worker",
+        serviceAccountId: account.id,
+        providerApiKeys: mappings,
+      });
+      const minted = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/token",
+        payload: {
+          grant_type: "client_credentials",
+          client_id: client.oauthClient.clientId,
+          client_secret: client.clientSecret,
+          scope: LLM_PROXY_OAUTH_SCOPE,
+        },
+      });
+      expect(minted.statusCode, minted.body).toBe(200);
+      credential = minted.json().access_token;
+    } else {
+      credential = (
+        await VirtualApiKeyModel.create({
+          organizationId: org.id,
+          name: "worker",
+          authorId: serviceAccountUserId(account.id),
+          ...accessGrants("personal"),
+          providerApiKeys: mappings,
+        })
+      ).value;
+    }
+    const call = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: { authorization: `Bearer ${credential}` },
+        payload: {
+          model: `${provider}:${modelId}`,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+    const accepted = await call();
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    const rows = await InteractionModel.findAllPaginated({
+      limit: 10,
+      offset: 0,
+    });
+    expect(rows.data).toEqual([
+      expect.objectContaining({ serviceAccountId: account.id, userId: null }),
+    ]);
+    await ServiceAccountModel.update(account.id, org.id, { disabled: true });
+    const rejected = await call();
+    expect(rejected.statusCode, rejected.body).toBe(401);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/v1/model-router/models",
+      headers: { authorization: `Bearer ${credential}` },
+    });
+    expect(listed.statusCode, listed.body).toBe(401);
+    await app.close();
   });
 
   test("routes requests authenticated with an LLM OAuth client access token issued from client credentials", async ({
@@ -2142,6 +2514,148 @@ describe("model router proxy routes", () => {
     expect(capturedApiKey).toBeUndefined();
   });
 
+  test.for([
+    {
+      label: "a call the client declared",
+      tools: ["inventory__read"],
+      clientCallName: "inventory__read",
+    },
+    {
+      label: "a call the dispatch repair re-addressed to run_tool",
+      tools: ["archestra__search_tools", "archestra__run_tool"],
+      clientCallName: "archestra__run_tool",
+    },
+  ])("streams $label over Responses with a call_id that keeps Gemini's thought signature", async ({
+    tools,
+    clientCallName,
+  }, { makeAgent, makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "gemini", modelId: "gemini-3.7-flash" });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "gemini",
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Gemini Responses Agent",
+      agentType: "llm_proxy",
+    });
+
+    type GeminiStreamRequest = {
+      contents: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+    };
+    const providerRequests: GeminiStreamRequest[] = [];
+    vi.mocked(geminiAdapterFactory.createClient).mockImplementation(
+      () =>
+        ({
+          models: {
+            generateContentStream: async (request: GeminiStreamRequest) => {
+              providerRequests.push(request);
+              const parts =
+                providerRequests.length === 1
+                  ? [
+                      {
+                        functionCall: {
+                          id: "call_read",
+                          name: "inventory__read",
+                          args: { itemId: "item-1" },
+                        },
+                        thoughtSignature: "opaque-thought-signature",
+                      },
+                    ]
+                  : [{ text: "Done" }];
+              return (async function* () {
+                yield {
+                  candidates: [
+                    {
+                      content: { role: "model", parts },
+                      finishReason: "STOP",
+                      index: 0,
+                    },
+                  ],
+                  usageMetadata: {
+                    promptTokenCount: 12,
+                    candidatesTokenCount: 10,
+                    totalTokenCount: 22,
+                  },
+                  modelVersion: "gemini-3.7-flash",
+                };
+              })();
+            },
+          },
+        }) as never,
+    );
+
+    const sendTurn = (input: unknown[]) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/responses`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gemini:gemini-3.7-flash",
+          stream: true,
+          input,
+          tools: tools.map((name) => ({
+            type: "function",
+            name,
+            parameters: { type: "object", properties: {} },
+          })),
+        },
+      });
+    const prompt = { role: "user", content: "Read item 1" };
+
+    const firstResponse = await sendTurn([prompt]);
+
+    expect(firstResponse.statusCode, firstResponse.body).toBe(200);
+    // The client reads calls from the item frames and from the completed
+    // envelope; both must name the call_id it will echo back.
+    const clientCalls = firstResponse.body
+      .split("\n")
+      .filter((line) => line.startsWith("data: ") && line !== "data: [DONE]")
+      .map((line) => JSON.parse(line.slice("data: ".length)))
+      .flatMap((event) => [event.item, ...(event.response?.output ?? [])])
+      .filter((item) => item?.type === "function_call");
+    expect(clientCalls.length).toBeGreaterThan(0);
+    const [clientCall] = clientCalls;
+    expect(clientCall.name).toBe(clientCallName);
+    expect(new Set(clientCalls.map((call) => call.call_id))).toEqual(
+      new Set([clientCall.call_id]),
+    );
+
+    const secondResponse = await sendTurn([
+      prompt,
+      {
+        type: "function_call",
+        call_id: clientCall.call_id,
+        name: clientCall.name,
+        arguments: clientCall.arguments,
+      },
+      {
+        type: "function_call_output",
+        call_id: clientCall.call_id,
+        output: "available",
+      },
+    ]);
+
+    expect(secondResponse.statusCode, secondResponse.body).toBe(200);
+    expect(secondResponse.body).toContain("Done");
+    const replayedCall = providerRequests[1]?.contents
+      .find((content) => content.role === "model")
+      ?.parts.find((part) => part.functionCall);
+    expect(replayedCall).toMatchObject({
+      functionCall: { id: "call_read", name: clientCallName },
+      thoughtSignature: "opaque-thought-signature",
+    });
+  });
+
   test("routes provider-qualified model ids to their provider", async ({
     makeAgent,
     makeOrganization,
@@ -2295,6 +2809,436 @@ describe("model router proxy routes", () => {
     expect(groqResponse.statusCode).toBe(200);
     expect(openaiAdapterFactory.createClient).toHaveBeenCalledOnce();
     expect(groqAdapterFactory.createClient).toHaveBeenCalledOnce();
+  });
+
+  test("routes each model to the OpenAI-compatible endpoint that serves it", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const organization = await makeOrganization();
+    const glm = await makeVllmEndpoint({
+      organizationId: organization.id,
+      name: "GLM gateway",
+      apiKey: "sk-glm",
+      baseUrl: "https://glm.gateway.test/v1",
+      modelIds: ["glm-5.3"],
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const deepseek = await makeVllmEndpoint({
+      organizationId: organization.id,
+      name: "DeepSeek gateway",
+      apiKey: "sk-deepseek",
+      baseUrl: "https://deepseek.gateway.test/v1",
+      modelIds: ["deepseek-v4.1-flash"],
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      name: "two-vllm-endpoints-vk",
+      providerApiKeys: [
+        { provider: "vllm", providerApiKeyId: glm.id },
+        { provider: "vllm", providerApiKeyId: deepseek.id },
+      ],
+      ...accessGrants("org"),
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Two endpoint Model Router Agent",
+      agentType: "llm_proxy",
+    });
+    const send = (model: string) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+        payload: { model, messages: [{ role: "user", content: "Hello" }] },
+      });
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: `/v1/model-router/${agent.id}/models`,
+      headers: { authorization: `Bearer ${value}` },
+    });
+    expect(listResponse.statusCode).toBe(200);
+    expect(
+      listResponse.json().data.map((model: { id: string }) => model.id),
+    ).toEqual(["vllm:deepseek-v4.1-flash", "vllm:glm-5.3"]);
+
+    // Qualified and bare slugs both resolve: every mapped key is one provider.
+    for (const model of [
+      "vllm:glm-5.3",
+      "deepseek-v4.1-flash",
+      "glm-5.3",
+      "vllm:deepseek-v4.1-flash",
+    ]) {
+      expect((await send(model)).statusCode).toBe(200);
+    }
+
+    expect(vllmClientCalls()).toEqual([
+      ["sk-glm", "https://glm.gateway.test/v1"],
+      ["sk-deepseek", "https://deepseek.gateway.test/v1"],
+      ["sk-glm", "https://glm.gateway.test/v1"],
+      ["sk-deepseek", "https://deepseek.gateway.test/v1"],
+    ]);
+  });
+
+  test("prefers the primary endpoint when several serve the model", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const organization = await makeOrganization();
+    const older = await makeVllmEndpoint({
+      organizationId: organization.id,
+      name: "Older gateway",
+      apiKey: "sk-older",
+      baseUrl: "https://older.gateway.test/v1",
+      modelIds: ["shared-model", "older-only-model"],
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const primary = await makeVllmEndpoint({
+      organizationId: organization.id,
+      name: "Primary gateway",
+      apiKey: "sk-primary",
+      baseUrl: "https://primary.gateway.test/v1",
+      modelIds: ["shared-model"],
+      isPrimary: true,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      name: "overlapping-endpoints-vk",
+      providerApiKeys: [older, primary].map((key) => ({
+        provider: "vllm" as const,
+        providerApiKeyId: key.id,
+      })),
+      ...accessGrants("org"),
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Overlapping endpoint Agent",
+      agentType: "llm_proxy",
+    });
+
+    for (const model of ["vllm:shared-model", "vllm:older-only-model"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+        },
+        payload: { model, messages: [{ role: "user", content: "Hello" }] },
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    expect(vllmClientCalls()).toEqual([
+      ["sk-primary", "https://primary.gateway.test/v1"],
+      ["sk-older", "https://older.gateway.test/v1"],
+    ]);
+  });
+
+  test("routes each model to its endpoint for LLM OAuth client credentials", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(authRoutes);
+    await app.register(modelRouterProxyRoutes);
+    const organization = await makeOrganization();
+    const endpoints = [];
+    for (const [name, modelId] of [
+      ["glm", "glm-5.3"],
+      ["deepseek", "deepseek-v4.1-flash"],
+    ]) {
+      endpoints.push(
+        await makeVllmEndpoint({
+          organizationId: organization.id,
+          name,
+          apiKey: `sk-${name}`,
+          baseUrl: `https://${name}.gateway.test/v1`,
+          modelIds: [modelId],
+          makeSecret,
+          makeLlmProviderApiKey,
+        }),
+      );
+    }
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "OAuth two endpoint Agent",
+      agentType: "llm_proxy",
+    });
+    const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      authorId: crypto.randomUUID(),
+      name: "Two Endpoint Service",
+      providerApiKeys: endpoints.map((key) => ({
+        provider: "vllm" as const,
+        providerApiKeyId: key.id,
+      })),
+    });
+    const tokenResponse = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: clientSecret,
+        scope: LLM_PROXY_OAUTH_SCOPE,
+      },
+    });
+    const { access_token: accessToken } = tokenResponse.json();
+
+    for (const model of ["vllm:deepseek-v4.1-flash", "vllm:glm-5.3"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: { model, messages: [{ role: "user", content: "Hello" }] },
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    expect(vllmClientCalls()).toEqual([
+      ["sk-deepseek", "https://deepseek.gateway.test/v1"],
+      ["sk-glm", "https://glm.gateway.test/v1"],
+    ]);
+  });
+
+  test("routes each model to its endpoint for an OAuth user", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeSecret,
+    makeUser,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const organization = await makeOrganization();
+    const user = await makeUser({ email: "two-endpoint-user@example.com" });
+    await makeMember(user.id, organization.id);
+    for (const [name, modelId] of [
+      ["glm", "glm-5.3"],
+      ["deepseek", "deepseek-v4.1-flash"],
+    ]) {
+      await makeVllmEndpoint({
+        organizationId: organization.id,
+        name,
+        apiKey: `sk-${name}`,
+        baseUrl: `https://${name}.gateway.test/v1`,
+        modelIds: [modelId],
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+    }
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "OAuth user two endpoint Agent",
+      agentType: "llm_proxy",
+    });
+    const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
+    await OAuthClientModel.upsertFromCimd({
+      id: crypto.randomUUID(),
+      clientId,
+      name: "Two Endpoint App",
+      redirectUris: ["http://localhost:3107/callback"],
+      grantTypes: ["authorization_code"],
+      responseTypes: ["code"],
+      scopes: ["mcp"],
+      tokenEndpointAuthMethod: "none",
+      isPublic: true,
+      metadata: {},
+    });
+    const rawAccessToken = `user-oauth-token-${crypto.randomUUID()}`;
+    await OAuthAccessTokenModel.create({
+      tokenHash: createHash("sha256")
+        .update(rawAccessToken)
+        .digest("base64url"),
+      clientId,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 60_000),
+      scopes: [LLM_PROXY_OAUTH_SCOPE],
+    });
+    const send = (model: string) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${rawAccessToken}`,
+        },
+        payload: { model, messages: [{ role: "user", content: "Hello" }] },
+      });
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: `/v1/model-router/${agent.id}/models`,
+      headers: { authorization: `Bearer ${rawAccessToken}` },
+    });
+    expect(
+      listResponse.json().data.map((model: { id: string }) => model.id),
+    ).toEqual(["vllm:deepseek-v4.1-flash", "vllm:glm-5.3"]);
+    expect((await send("vllm:deepseek-v4.1-flash")).statusCode).toBe(200);
+    expect((await send("vllm:glm-5.3")).statusCode).toBe(200);
+
+    expect(vllmClientCalls()).toEqual([
+      ["sk-deepseek", "https://deepseek.gateway.test/v1"],
+      ["sk-glm", "https://glm.gateway.test/v1"],
+    ]);
+  });
+
+  test("routes each model to its endpoint on the Responses surface", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const organization = await makeOrganization();
+    const virtualKey = await makeTwoVllmEndpointVirtualKey({
+      organizationId: organization.id,
+      modelIds: { glm: "glm-5.3", deepseek: "deepseek-v4.1-flash" },
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Two endpoint Responses Agent",
+      agentType: "llm_proxy",
+    });
+
+    for (const model of ["vllm:deepseek-v4.1-flash", "glm-5.3"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/responses`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${virtualKey}`,
+        },
+        payload: { model, input: "Hello" },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({ object: "response" });
+    }
+
+    expect(vllmClientCalls()).toEqual([
+      ["sk-deepseek", "https://deepseek.gateway.test/v1"],
+      ["sk-glm", "https://glm.gateway.test/v1"],
+    ]);
+  });
+
+  test("streams each model from the endpoint that serves it", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const organization = await makeOrganization();
+    const virtualKey = await makeTwoVllmEndpointVirtualKey({
+      organizationId: organization.id,
+      modelIds: { glm: "glm-5.3", deepseek: "deepseek-v4.1-flash" },
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Two endpoint streaming Agent",
+      agentType: "llm_proxy",
+    });
+
+    for (const model of ["vllm:glm-5.3", "vllm:deepseek-v4.1-flash"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${virtualKey}`,
+        },
+        payload: {
+          model,
+          stream: true,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.headers["content-type"]).toContain("text/event-stream");
+      expect(response.body).toContain("data: [DONE]");
+    }
+
+    expect(vllmClientCalls()).toEqual([
+      ["sk-glm", "https://glm.gateway.test/v1"],
+      ["sk-deepseek", "https://deepseek.gateway.test/v1"],
+    ]);
+  });
+
+  test("routes each embedding model to the endpoint that serves it", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const organization = await makeOrganization();
+    const virtualKey = await makeTwoVllmEndpointVirtualKey({
+      organizationId: organization.id,
+      modelIds: { glm: "glm-embedding-3", deepseek: "deepseek-embed" },
+      embeddingDimensions: 1536,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Two endpoint embeddings Agent",
+      agentType: "llm_proxy",
+    });
+
+    for (const model of ["vllm:deepseek-embed", "vllm:glm-embedding-3"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/embeddings`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${virtualKey}`,
+        },
+        payload: { model, input: ["first"] },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    }
+
+    // OpenAI-compatible embeddings build their client with the OpenAI factory,
+    // pointed at the selected endpoint.
+    expect(
+      vi
+        .mocked(openaiAdapterFactory.createClient)
+        .mock.calls.map(([apiKey, options]) => [apiKey, options.baseUrl]),
+    ).toEqual([
+      ["sk-deepseek", "https://deepseek.gateway.test/v1"],
+      ["sk-glm", "https://glm.gateway.test/v1"],
+    ]);
   });
 
   test("routes an unqualified model id when the key maps one provider", async ({

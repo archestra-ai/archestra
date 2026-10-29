@@ -14,11 +14,27 @@ import {
   chatCompletionToResponses,
   type OpenaiResponsesContext,
 } from "./openai-responses-translator";
-import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import {
+  carriesResponsesTerminal,
+  formatResponsesStreamErrorFrame,
+} from "./responses-stream-error-frame";
 import { formatResponsesFunctionCallFrames } from "./responses-tool-call-rewrite";
 import { toResponsesUsage } from "./responses-usage";
 
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
+
+// The wrapped adapter keeps its own provider's stop reason, so a finished
+// answer reads "stop" from Chat Completions, "end_turn" or "stop_sequence"
+// from Claude (Anthropic, Bedrock), "STOP" from Gemini and "COMPLETE" or
+// "STOP_SEQUENCE" from Cohere.
+const COMPLETED_STOP_REASONS = new Set([
+  "stop",
+  "end_turn",
+  "stop_sequence",
+  "STOP",
+  "COMPLETE",
+  "STOP_SEQUENCE",
+]);
 
 class ResponsesFromChatAdapter<TResponse>
   implements LLMResponseAdapter<TResponse>
@@ -156,6 +172,10 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     return this.inner.state;
   }
 
+  get clientResponse() {
+    return { id: this.ctx.responseId, model: this.ctx.requestedModel };
+  }
+
   setTextSuffix(getSuffix: (completedText: string) => string): void {
     this.getTextSuffix = getSuffix;
   }
@@ -190,10 +210,6 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       });
     }
 
-    if (result.isFinal && !this.getTextSuffix) {
-      sseData += this.completeOutput();
-    }
-
     return {
       ...result,
       sseData: sseData || null,
@@ -224,11 +240,11 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   }
 
   getRawToolCallEvents(): string[] {
-    return this.state.toolCalls.flatMap((toolCall, index) => {
+    return this.withWireIds(this.state.toolCalls).flatMap((toolCall, index) => {
       const itemId = `fc_${toolCall.id}`;
       const item = {
         id: itemId,
-        call_id: toolCall.id,
+        call_id: toolCall.wireId ?? toolCall.id,
         type: "function_call",
         name: toolCall.name,
         arguments: toolCall.arguments,
@@ -262,6 +278,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 
   formatCompleteTextSSE(text: string): string[] {
     this.replacedText = text;
+    this.inner.formatCompleteTextSSE(text);
     return [
       this.ensureOutputStarted(),
       this.toSse({
@@ -286,15 +303,9 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   }
 
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
-    // completeOutput() has already written a `response.completed` naming the
-    // calls the model made directly (it fires on the inner stream's final
-    // chunk, before the gate decides). The client keeps the LAST completed
-    // envelope, so the repair ends by re-issuing one that names the rewritten
-    // calls. Text keeps output index 0 (the message item), so the calls start
-    // at 1 — the same layout getRawToolCallEvents produces.
     this.inner.formatToolCallsSSE?.(toolCalls);
     const frames = formatResponsesFunctionCallFrames({
-      toolCalls,
+      toolCalls: this.withWireIds(toolCalls),
       firstOutputIndex: 1,
       nextSequenceNumber: () => this.nextSequenceNumber(),
     });
@@ -304,7 +315,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         sequence_number: this.nextSequenceNumber(),
         response: {
           ...this.buildResponsesResponse(toolCalls),
-          usage: toResponsesUsage(this.state.usage),
+          usage: this.getResponsesUsage(),
         },
       }),
     );
@@ -312,24 +323,31 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     return frames;
   }
 
+  // The handler calls this after the policy verdict, so blocked calls never
+  // appear in a terminal envelope and each response completes exactly once.
   formatEndSSE(): string {
-    if (!this.getTextSuffix || this.outputCompleted) {
+    if (this.outputCompleted) {
       return "data: [DONE]\n\n";
     }
-    const suffix =
+    const footer =
       this.replacedText === null &&
       this.state.toolCalls.length === 0 &&
-      this.state.stopReason === "stop" &&
+      COMPLETED_STOP_REASONS.has(this.state.stopReason ?? "") &&
       this.state.text
-        ? this.getTextSuffix(this.state.text)
+        ? (this.getTextSuffix?.(this.state.text) ?? "")
         : "";
+    // The footer's mark spans two lines, so it starts on its own after a blank
+    // line, as the providers that place it first keep it apart from the answer.
+    const suffix = footer ? `\n\n${footer}` : "";
     const text = `${this.state.text}${suffix}`;
     const suffixDelta = suffix ? this.formatTextDeltaSSE(suffix) : "";
     return `${suffixDelta}${this.completeOutput(text)}data: [DONE]\n\n`;
   }
 
   toProviderResponse(): TResponse {
-    return this.buildResponsesResponse() as unknown as TResponse;
+    // Logging and policy hooks consume the provider-native response. The
+    // client-facing Responses envelope is built by the SSE methods above.
+    return this.inner.toProviderResponse();
   }
 
   private ensureOutputStarted(): string {
@@ -434,7 +452,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
         // without numeric usage is silently dropped by the Responses parser.
         response: {
           ...this.buildResponsesResponse(undefined, text),
-          usage: toResponsesUsage(this.state.usage),
+          usage: this.getResponsesUsage(),
         },
       }),
     ].join("");
@@ -468,19 +486,19 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 
     if (this.replacedText === null) {
       output.push(
-        ...(toolCallsOverride ?? this.state.toolCalls).map((toolCall) => ({
-          id: toolCall.id,
-          call_id: toolCall.wireId ?? toolCall.id,
-          type: "function_call",
-          name: toolCall.name,
-          arguments: toolCall.arguments,
-          status: "completed",
-        })),
+        ...this.withWireIds(toolCallsOverride ?? this.state.toolCalls).map(
+          (toolCall) => ({
+            id: toolCall.id,
+            call_id: toolCall.wireId ?? toolCall.id,
+            type: "function_call",
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+            status: "completed",
+          }),
+        ),
       );
     }
 
-    const inputTokens = this.state.usage?.inputTokens ?? 0;
-    const outputTokens = this.state.usage?.outputTokens ?? 0;
     return {
       id: this.ctx.responseId,
       object: "response",
@@ -488,19 +506,44 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       model: this.ctx.requestedModel,
       status: "completed",
       output,
-      usage: this.state.usage
-        ? {
-            input_tokens: inputTokens,
-            output_tokens: outputTokens,
-            total_tokens: inputTokens + outputTokens,
-          }
-        : undefined,
+      usage: this.state.usage ? this.getResponsesUsage() : undefined,
     };
+  }
+
+  private getResponsesUsage() {
+    const usage = this.state.usage;
+    // Gemini counts thinking separately; Responses includes it in output tokens.
+    return toResponsesUsage(
+      usage && this.provider === "gemini"
+        ? {
+            ...usage,
+            outputTokens: usage.outputTokens + (usage.reasoningTokens ?? 0),
+          }
+        : usage,
+    );
   }
 
   private nextSequenceNumber(): number {
     this.sequenceNumber += 1;
     return this.sequenceNumber;
+  }
+
+  // The client echoes `call_id` on its next request. When the wrapped adapter
+  // packs more into that id (Gemini's thought signature), it wraps the id the
+  // client would echo anyway, so an OpenAPPA stamp survives inside it.
+  private withWireIds<
+    TToolCall extends { id: string; name: string; wireId?: string },
+  >(toolCalls: TToolCall[]): TToolCall[] {
+    if (!this.inner.wireToolCallId) {
+      return toolCalls;
+    }
+    return toolCalls.map((toolCall, index) => ({
+      ...toolCall,
+      wireId: this.inner.wireToolCallId?.({
+        toolCall: { id: toolCall.wireId ?? toolCall.id, name: toolCall.name },
+        index,
+      }),
+    }));
   }
 
   private toSse(event: unknown): string {
@@ -525,6 +568,7 @@ export function makeResponsesFromChatAdapterFactory<
     // shaped too, or the client parses it as an unknown chunk and the failure
     // reaches the user as a blank turn.
     formatStreamErrorFrame: formatResponsesStreamErrorFrame,
+    carriesStreamTerminal: carriesResponsesTerminal,
     createResponseAdapter(response) {
       return new ResponsesFromChatAdapter(
         provider.createResponseAdapter(response),

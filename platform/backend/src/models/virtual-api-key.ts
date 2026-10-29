@@ -7,31 +7,48 @@ import {
 } from "@archestra/shared";
 import {
   and,
+  asc,
   count,
+  desc,
   eq,
+  getTableColumns,
   ilike,
   inArray,
   isNull,
   lt,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
-import db, { schema, withDbTransaction } from "@/database";
+import type { SelectedFields } from "drizzle-orm/pg-core";
+import db, { type getDb, schema, withDbTransaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { PaginatedResult } from "@/database/utils/pagination";
 import { createPaginatedResult } from "@/database/utils/pagination";
+import { qualified } from "@/database/utils/qualified-column";
+import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { secretManager } from "@/secrets-manager";
 import type {
+  CredentialBilling,
   InteractionVirtualKey,
   ResourceVisibilityScope,
   SelectVirtualApiKey,
   VirtualApiKeyType,
   VirtualApiKeyWithParentInfo,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import { VirtualApiKeyLabelModel } from "./entity-labels";
+import { gatewayAgentSelection } from "./gateway-agent-selection";
+import LimitModel from "./limit";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type ResourceAccessFilter,
+} from "./resource-permission-subject";
 
 /** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
 const TOKEN_RANDOM_LENGTH = 32;
@@ -39,7 +56,6 @@ const TOKEN_RANDOM_LENGTH = 32;
 /** Length of token start to store (for display) */
 const TOKEN_START_LENGTH = 14;
 
-/** Always use DB storage (not BYOS Vault compatible) */
 const FORCE_DB = true;
 
 /**
@@ -50,6 +66,12 @@ const FORCE_DB = true;
  * burst into at most one write.
  */
 const LAST_USED_REFRESH_INTERVAL_MS = 60_000;
+const recentLastUsedRefreshes = registerProcessLocalCache(
+  new LRUCacheManager<true>({
+    maxSize: 10_000,
+    defaultTtl: LAST_USED_REFRESH_INTERVAL_MS,
+  }),
+);
 
 type TeamInfo = { id: string; name: string };
 type ProviderApiKeyInput = {
@@ -60,6 +82,8 @@ type ProviderApiKeyInfo = ProviderApiKeyInput & {
   providerApiKeyName: string;
 };
 type ProviderApiKeyRoutingInfo = ProviderApiKeyInfo & {
+  organizationId: string;
+  providerApiKeyProvider: SupportedProvider;
   secretId: string | null;
   baseUrl: string | null;
   scope: ResourceVisibilityScope;
@@ -72,6 +96,7 @@ type VirtualApiKeyAccessContext = {
   keyType: VirtualApiKeyType;
   scope: ResourceVisibilityScope;
   authorId: string | null;
+  billingTeamId: string | null;
   teamIds: string[];
 };
 
@@ -89,10 +114,13 @@ class VirtualApiKeyModel {
     authorId?: string | null;
     teamIds?: string[];
     providerApiKeys?: ProviderApiKeyInput[];
+    includeFutureProviders?: boolean;
     /** Explicit starting audience; omitted derives one from the scope. */
     initialPermissionGrants?: ResourcePermissionGrant[];
     /** Publish to the whole organization; for system callers only. */
     publishToOrganization?: boolean;
+    /** Team the key's spend is charged to. */
+    billingTeamId?: string | null;
   }): Promise<{
     virtualKey: SelectVirtualApiKey;
     value: string;
@@ -138,11 +166,13 @@ class VirtualApiKeyModel {
               organizationId: resolvedOrganizationId,
               name,
               keyType,
+              includeFutureProviders: params.includeFutureProviders ?? false,
               secretId: secret.id,
               tokenStart,
               scope,
               authorId,
               expiresAt: expiresAt ?? null,
+              billingTeamId: params.billingTeamId ?? null,
             },
             userIdField: "authorId",
             transaction: tx,
@@ -213,6 +243,9 @@ class VirtualApiKeyModel {
     authorId: string | null;
     teamIds: string[];
     providerApiKeys: ProviderApiKeyInput[];
+    includeFutureProviders?: boolean;
+    /** Omit to keep the current billing team. */
+    billingTeamId?: string | null;
   }): Promise<SelectVirtualApiKey | null> {
     const { id, name, expiresAt, scope, authorId, teamIds, providerApiKeys } =
       params;
@@ -222,9 +255,15 @@ class VirtualApiKeyModel {
         .update(schema.virtualApiKeysTable)
         .set({
           name,
+          ...(params.includeFutureProviders !== undefined
+            ? { includeFutureProviders: params.includeFutureProviders }
+            : {}),
           expiresAt: expiresAt ?? null,
           scope,
           authorId,
+          ...(params.billingTeamId !== undefined
+            ? { billingTeamId: params.billingTeamId }
+            : {}),
         })
         .where(eq(schema.virtualApiKeysTable.id, id))
         .returning();
@@ -292,7 +331,7 @@ class VirtualApiKeyModel {
   }
 
   /**
-   * Upsert a single provider mapping on the (virtualApiKeyId, provider) PK.
+   * Make `providerApiKeyId` the virtual key's only mapping for `provider`.
    * Replaces a stale same-provider mapping with the newly resolved key while
    * leaving other providers' mappings untouched — unlike update(), whose
    * syncProviderApiKeys deletes all mappings first.
@@ -302,20 +341,34 @@ class VirtualApiKeyModel {
     provider: SupportedProvider;
     providerApiKeyId: string;
   }): Promise<void> {
-    await db
-      .insert(schema.virtualApiKeyProviderApiKeysTable)
-      .values({
-        virtualApiKeyId: params.virtualApiKeyId,
-        provider: params.provider,
-        providerApiKeyId: params.providerApiKeyId,
-      })
-      .onConflictDoUpdate({
-        target: [
-          schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
-          schema.virtualApiKeyProviderApiKeysTable.provider,
-        ],
-        set: { providerApiKeyId: params.providerApiKeyId },
-      });
+    await withDbTransaction(async (tx) => {
+      await tx
+        .delete(schema.virtualApiKeyProviderApiKeysTable)
+        .where(
+          and(
+            eq(
+              schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+              params.virtualApiKeyId,
+            ),
+            eq(
+              schema.virtualApiKeyProviderApiKeysTable.provider,
+              params.provider,
+            ),
+            ne(
+              schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+              params.providerApiKeyId,
+            ),
+          ),
+        );
+      await tx
+        .insert(schema.virtualApiKeyProviderApiKeysTable)
+        .values({
+          virtualApiKeyId: params.virtualApiKeyId,
+          provider: params.provider,
+          providerApiKeyId: params.providerApiKeyId,
+        })
+        .onConflictDoNothing();
+    });
   }
 
   /**
@@ -339,6 +392,8 @@ class VirtualApiKeyModel {
           organizationId: schema.virtualApiKeysTable.organizationId,
           name: schema.virtualApiKeysTable.name,
           keyType: schema.virtualApiKeysTable.keyType,
+          includeFutureProviders:
+            schema.virtualApiKeysTable.includeFutureProviders,
           secretId: schema.virtualApiKeysTable.secretId,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           scope: schema.virtualApiKeysTable.scope,
@@ -346,6 +401,7 @@ class VirtualApiKeyModel {
           createdByServiceAccountId:
             schema.virtualApiKeysTable.createdByServiceAccountId,
           expiresAt: schema.virtualApiKeysTable.expiresAt,
+          billingTeamId: schema.virtualApiKeysTable.billingTeamId,
           createdAt: schema.virtualApiKeysTable.createdAt,
           lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
         })
@@ -423,6 +479,8 @@ class VirtualApiKeyModel {
           name: schema.virtualApiKeysTable.name,
           scope: schema.virtualApiKeysTable.scope,
           keyType: schema.virtualApiKeysTable.keyType,
+          includeFutureProviders:
+            schema.virtualApiKeysTable.includeFutureProviders,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           authorId: schema.virtualApiKeysTable.authorId,
           createdByServiceAccountId:
@@ -479,6 +537,7 @@ class VirtualApiKeyModel {
           name: row.name,
           scope: row.scope,
           keyType: row.keyType,
+          includeFutureProviders: row.includeFutureProviders,
           tokenStart: row.tokenStart,
           // Only a personal key attributes traffic to its author. On a shared
           // key the author is reported as `createdByUserName` instead, so the
@@ -489,6 +548,45 @@ class VirtualApiKeyModel {
           ownerUserName: row.scope === "personal" ? row.authorName : null,
           teams: row.scope === "team" ? (teamsByKeyId.get(row.id) ?? []) : [],
           createdByUserName: row.authorName,
+        },
+      ]),
+    );
+  }
+
+  /**
+   * The billing team and spend cap of each key. A key's spend cap is its
+   * all-models `token_cost` limit (see {@link LimitModel.findSpendCaps}).
+   */
+  static async getBillingMetadata(
+    keys: Array<{ id: string; billingTeamId: string | null }>,
+  ): Promise<Map<string, CredentialBilling>> {
+    const teamIds = [
+      ...new Set(keys.flatMap((key) => key.billingTeamId ?? [])),
+    ];
+    const [teams, caps] = await Promise.all([
+      teamIds.length > 0
+        ? db
+            .select({
+              id: schema.teamsTable.id,
+              name: schema.teamsTable.name,
+            })
+            .from(schema.teamsTable)
+            .where(inArray(schema.teamsTable.id, teamIds))
+        : [],
+      LimitModel.findSpendCaps({
+        entityType: "virtual_key",
+        entityIds: keys.map((key) => key.id),
+      }),
+    ]);
+    const teamsById = new Map(teams.map((team) => [team.id, team]));
+    return new Map(
+      keys.map((key) => [
+        key.id,
+        {
+          billingTeam: key.billingTeamId
+            ? (teamsById.get(key.billingTeamId) ?? null)
+            : null,
+          spendCap: caps.get(key.id) ?? null,
         },
       ]),
     );
@@ -507,14 +605,16 @@ class VirtualApiKeyModel {
       return null;
     }
 
-    const [metadata, mappings, labels] = await Promise.all([
+    const [metadata, mappings, labels, billing] = await Promise.all([
       VirtualApiKeyModel.getVisibilityMetadata([id]),
       VirtualApiKeyModel.getProviderApiKeys(id),
       VirtualApiKeyLabelModel.getLabelsFor(id),
+      VirtualApiKeyModel.getBillingMetadata([virtualKey]),
     ]);
 
     return {
       ...virtualKey,
+      ...billingFor(billing, id),
       teams: metadata.teams.get(id) ?? [],
       authorName: metadata.authorName.get(id) ?? null,
       createdBy: await CreatedByModel.resolveOne(
@@ -570,6 +670,7 @@ class VirtualApiKeyModel {
         keyType: schema.virtualApiKeysTable.keyType,
         scope: schema.virtualApiKeysTable.scope,
         authorId: schema.virtualApiKeysTable.authorId,
+        billingTeamId: schema.virtualApiKeysTable.billingTeamId,
         createdByServiceAccountId:
           schema.virtualApiKeysTable.createdByServiceAccountId,
       })
@@ -695,6 +796,15 @@ class VirtualApiKeyModel {
       await tx
         .delete(schema.virtualApiKeysTable)
         .where(eq(schema.virtualApiKeysTable.id, id));
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["llmVirtualKey"],
+        scope: id,
+      });
+      // SPDX-SnippetEnd
     });
 
     try {
@@ -761,6 +871,8 @@ class VirtualApiKeyModel {
     keyType?: VirtualApiKeyType;
     scope?: ResourceVisibilityScope;
     labels?: Record<string, string[]>;
+    /** The list's `access`, `sharedWith`, and `owner` filters. */
+    access?: ResourceAccessFilter;
   }): Promise<PaginatedResult<VirtualApiKeyWithParentInfo>> {
     const {
       organizationId,
@@ -771,6 +883,7 @@ class VirtualApiKeyModel {
       keyType,
       scope,
       labels,
+      access,
     } = params;
 
     // Resolved before the page query so a filter that matches nothing short
@@ -821,6 +934,21 @@ class VirtualApiKeyModel {
       );
     }
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const accessCondition =
+      access &&
+      ResourcePermissionPolicyModel.accessRelationCondition({
+        ...access,
+        organizationId,
+        resource: "llmVirtualKey",
+        scopeColumn: schema.virtualApiKeysTable.id,
+        ownerColumn: schema.virtualApiKeysTable.authorId,
+      });
+    if (accessCondition) whereConditions.push(accessCondition);
+    // SPDX-SnippetEnd
+
     const whereClause = and(...whereConditions);
 
     const [rows, [{ total }]] = await Promise.all([
@@ -830,6 +958,8 @@ class VirtualApiKeyModel {
           organizationId: schema.virtualApiKeysTable.organizationId,
           name: schema.virtualApiKeysTable.name,
           keyType: schema.virtualApiKeysTable.keyType,
+          includeFutureProviders:
+            schema.virtualApiKeysTable.includeFutureProviders,
           secretId: schema.virtualApiKeysTable.secretId,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           scope: schema.virtualApiKeysTable.scope,
@@ -837,6 +967,7 @@ class VirtualApiKeyModel {
           createdByServiceAccountId:
             schema.virtualApiKeysTable.createdByServiceAccountId,
           expiresAt: schema.virtualApiKeysTable.expiresAt,
+          billingTeamId: schema.virtualApiKeysTable.billingTeamId,
           lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
           createdAt: schema.virtualApiKeysTable.createdAt,
         })
@@ -852,15 +983,17 @@ class VirtualApiKeyModel {
     ]);
 
     const rowIds = rows.map((row) => row.id);
-    const [metadata, mappings, labelsByKey] = await Promise.all([
+    const [metadata, mappings, labelsByKey, billing] = await Promise.all([
       VirtualApiKeyModel.getVisibilityMetadata(rowIds),
       VirtualApiKeyModel.getProviderApiKeysForVirtualKeys(rowIds),
       VirtualApiKeyLabelModel.getLabelsForMany(rowIds),
+      VirtualApiKeyModel.getBillingMetadata(rows),
     ]);
 
     const data = await CreatedByModel.attach(
       rows.map((row) => ({
         ...row,
+        ...billingFor(billing, row.id),
         teams: metadata.teams.get(row.id) ?? [],
         authorName: metadata.authorName.get(row.id) ?? null,
         providerApiKeys: mappings.get(row.id) ?? [],
@@ -903,12 +1036,68 @@ class VirtualApiKeyModel {
     virtualKey: SelectVirtualApiKey;
   } | null> {
     const tokenStart = getTokenStart(tokenValue);
-    const candidates = await db
-      .select()
-      .from(schema.virtualApiKeysTable)
-      .where(eq(schema.virtualApiKeysTable.tokenStart, tokenStart));
+    const candidates = await VirtualApiKeyModel.byTokenStart
+      .get()
+      .execute({ tokenStart });
 
-    for (const virtualKey of candidates) {
+    return VirtualApiKeyModel.validateCandidates(
+      tokenValue,
+      candidates.map((virtualKey) => ({ virtualKey })),
+    );
+  }
+
+  /** Read only; credential and access validation still happen after rate limiting. */
+  /** The non-secret prefix a credential lookup is keyed by. */
+  static tokenStartOf(tokenValue: string): string {
+    return getTokenStart(tokenValue);
+  }
+
+  static async readDeploymentProxyAndTokenOwner(
+    tokenValue: string,
+    oauthTokenHash?: string,
+  ) {
+    const tokenStart = getTokenStart(tokenValue);
+    const rows = await VirtualApiKeyModel.withDeploymentProxy.get().execute({
+      tokenStart,
+      oauthTokenHash: oauthTokenHash ?? null,
+    });
+    const agent = rows[0]?.deploymentProxy;
+    if (!agent) return undefined;
+    return {
+      agent,
+      tokenStart,
+      oauthTokenHash,
+      candidates: rows.map(
+        ({ deploymentProxy: _agent, ...candidate }) => candidate,
+      ),
+    };
+  }
+
+  /** Read a passthrough credential and its current owner's membership together. */
+  static async validateTokenWithOwner(
+    tokenValue: string,
+    oauthTokenHash?: string,
+    snapshot?: Awaited<
+      ReturnType<typeof VirtualApiKeyModel.readDeploymentProxyAndTokenOwner>
+    >,
+  ) {
+    const tokenStart = getTokenStart(tokenValue);
+    const candidates =
+      snapshot?.tokenStart === tokenStart &&
+      snapshot.oauthTokenHash === oauthTokenHash
+        ? snapshot.candidates
+        : await VirtualApiKeyModel.byTokenStartWithOwner.get().execute({
+            tokenStart,
+            oauthTokenHash: oauthTokenHash ?? null,
+          });
+    return VirtualApiKeyModel.validateCandidates(tokenValue, candidates);
+  }
+
+  private static async validateCandidates<
+    T extends { virtualKey: SelectVirtualApiKey },
+  >(tokenValue: string, candidates: T[]): Promise<T | null> {
+    for (const candidate of candidates) {
+      const { virtualKey } = candidate;
       const secret = await secretManager().getSecret(virtualKey.secretId);
       if (!secret) {
         logger.warn(
@@ -923,14 +1112,27 @@ class VirtualApiKeyModel {
 
       const storedToken = (secret.secret as { token?: string })?.token;
       if (storedToken && constantTimeEqual(storedToken, tokenValue)) {
-        VirtualApiKeyModel.updateLastUsed(virtualKey.id).catch((error) => {
-          logger.warn(
-            { virtualKeyId: virtualKey.id, error: String(error) },
-            "Failed to update virtual key lastUsedAt",
+        // The row we just read already tells us when the conditional UPDATE
+        // would be a no-op. Avoid occupying a pool connection for that no-op.
+        // Cached rows keep an old timestamp, so also remember refreshes here.
+        if (
+          (!virtualKey.lastUsedAt ||
+            virtualKey.lastUsedAt.getTime() <
+              Date.now() - LAST_USED_REFRESH_INTERVAL_MS) &&
+          !recentLastUsedRefreshes.has(virtualKey.id)
+        ) {
+          recentLastUsedRefreshes.set(virtualKey.id, true);
+          trackBackgroundWork(
+            VirtualApiKeyModel.updateLastUsed(virtualKey.id).catch((error) => {
+              logger.warn(
+                { virtualKeyId: virtualKey.id, error: String(error) },
+                "Failed to update virtual key lastUsedAt",
+              );
+            }),
           );
-        });
+        }
 
-        return { virtualKey };
+        return candidate;
       }
     }
 
@@ -946,6 +1148,8 @@ class VirtualApiKeyModel {
         providerApiKeyId:
           schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
         providerApiKeyName: schema.llmProviderApiKeysTable.name,
+        organizationId: schema.llmProviderApiKeysTable.organizationId,
+        providerApiKeyProvider: schema.llmProviderApiKeysTable.provider,
         secretId: schema.llmProviderApiKeysTable.secretId,
         scope: schema.llmProviderApiKeysTable.scope,
         userId: schema.llmProviderApiKeysTable.userId,
@@ -967,7 +1171,7 @@ class VirtualApiKeyModel {
           virtualApiKeyId,
         ),
       )
-      .orderBy(schema.virtualApiKeyProviderApiKeysTable.provider);
+      .orderBy(...providerKeyPreferenceOrder());
 
     return rows;
   }
@@ -1012,7 +1216,7 @@ class VirtualApiKeyModel {
           virtualApiKeyIds,
         ),
       )
-      .orderBy(schema.virtualApiKeyProviderApiKeysTable.provider);
+      .orderBy(...providerKeyPreferenceOrder());
 
     for (const row of rows) {
       const existing = result.get(row.virtualApiKeyId) ?? [];
@@ -1047,7 +1251,7 @@ class VirtualApiKeyModel {
     const row = await VirtualApiKeyModel.findById(id);
     if (!row || row.organizationId !== organizationId) return null;
 
-    const [teamIds, providerKeyRows] = await Promise.all([
+    const [teamIds, providerKeyRows, spendCaps] = await Promise.all([
       VirtualApiKeyModel.getTeamIdsForVirtualApiKey(id),
       db
         .select({
@@ -1058,7 +1262,9 @@ class VirtualApiKeyModel {
         .where(
           eq(schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId, id),
         ),
+      LimitModel.findSpendCaps({ entityType: "virtual_key", entityIds: [id] }),
     ]);
+    const spendCap = spendCaps.get(id);
 
     return {
       id: row.id,
@@ -1066,11 +1272,19 @@ class VirtualApiKeyModel {
       name: row.name,
       scope: row.scope,
       keyType: row.keyType,
+      includeFutureProviders: row.includeFutureProviders,
       authorId: row.authorId,
       teamIds: [...teamIds].sort(),
       providerApiKeyIds: providerKeyRows.map((r) => r.providerApiKeyId).sort(),
       tokenStart: row.tokenStart,
       expiresAt: row.expiresAt?.toISOString() ?? null,
+      billingTeamId: row.billingTeamId,
+      spendCap: spendCap
+        ? {
+            limitValue: spendCap.limitValue,
+            cleanupInterval: spendCap.cleanupInterval,
+          }
+        : null,
       createdAt: row.createdAt.toISOString(),
     };
   }
@@ -1112,24 +1326,27 @@ class VirtualApiKeyModel {
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   private static async getAccessibleIds(params: {
-    organizationId: string | null;
+    organizationId: string;
     userId: string;
     providerApiKeyId?: string;
   }): Promise<string[]> {
     const { organizationId, userId, providerApiKeyId } = params;
 
     const table = schema.virtualApiKeysTable;
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      organizationId,
+      userId,
+    });
     const rows = await db
       .select({ id: table.id })
       .from(table)
       .where(
         and(
-          organizationId ? eq(table.organizationId, organizationId) : undefined,
+          eq(table.organizationId, organizationId),
           ResourcePermissionPolicyModel.grantCondition({
-            organizationId: organizationId ?? table.organizationId,
+            ...principal,
             resource: "llmVirtualKey",
             scopeColumn: table.id,
-            userId,
             action: "read",
           }),
           providerApiKeyId
@@ -1206,6 +1423,103 @@ class VirtualApiKeyModel {
       authorName: authorNameByVirtualApiKeyId,
     };
   }
+
+  private static ownerQuery<T extends SelectedFields>(
+    database: ReturnType<typeof getDb>,
+    extra: T,
+  ) {
+    const keys = schema.virtualApiKeysTable;
+    const members = schema.membersTable;
+    const users = schema.usersTable;
+    const membership = database
+      .select()
+      .from(members)
+      .where(
+        and(
+          eq(members.userId, keys.authorId),
+          eq(members.organizationId, keys.organizationId),
+        ),
+      )
+      .orderBy(members.createdAt, members.id)
+      .limit(1)
+      .as("proxy_key_owner_membership");
+    return database
+      .select({
+        ...extra,
+        virtualKey: getTableColumns(keys),
+        // Only a negative result is reused. Present OAuth tokens still take
+        // their existing fresh lookup and full validation path.
+        oauthTokenAbsent: sql<boolean>`CASE WHEN ${sql.placeholder("oauthTokenHash")}::text IS NOT NULL THEN
+          NOT EXISTS (SELECT 1 FROM ${schema.oauthAccessTokensTable}
+            WHERE ${qualified(schema.oauthAccessTokensTable.token)} = ${sql.placeholder("oauthTokenHash")})
+          ELSE false END`,
+        user: { id: users.id, email: users.email, name: users.name },
+        membership: {
+          id: membership.id,
+          organizationId: membership.organizationId,
+          userId: membership.userId,
+          role: membership.role,
+          createdAt: membership.createdAt,
+          defaultAgentId: membership.defaultAgentId,
+          defaultModelId: membership.defaultModelId,
+          defaultChatApiKeyId: membership.defaultChatApiKeyId,
+        },
+      })
+      .from(keys)
+      .leftJoin(users, eq(users.id, keys.authorId))
+      .leftJoinLateral(membership, sql`true`)
+      .where(eq(keys.tokenStart, sql.placeholder("tokenStart")));
+  }
+
+  private static readonly byTokenStartWithOwner = new PreparedQuery(
+    (database) =>
+      VirtualApiKeyModel.ownerQuery(database, {}).prepare(
+        "archestra_virtual_key_with_owner_by_token_start",
+      ),
+  );
+
+  private static readonly withDeploymentProxy = new PreparedQuery(
+    (database) => {
+      const agents = schema.agentsTable;
+      const proxyId = database
+        .select({ id: agents.id })
+        .from(agents)
+        .where(
+          and(
+            eq(
+              agents.organizationId,
+              database
+                .select({ id: schema.organizationsTable.id })
+                .from(schema.organizationsTable)
+                .orderBy(asc(schema.organizationsTable.createdAt))
+                .limit(1),
+            ),
+            eq(agents.agentType, "llm_proxy"),
+            eq(agents.isDefault, true),
+            notDeleted(agents),
+          ),
+        )
+        .limit(1);
+      return VirtualApiKeyModel.ownerQuery(database, {
+        deploymentProxy: gatewayAgentSelection(),
+      })
+        .leftJoin(agents, eq(agents.id, proxyId))
+        .prepare("archestra_proxy_and_virtual_key_owner");
+    },
+  );
+
+  private static readonly byTokenStart = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.virtualApiKeysTable)
+      .where(
+        eq(
+          schema.virtualApiKeysTable.tokenStart,
+          sql.placeholder("tokenStart"),
+        ),
+      )
+      .prepare("archestra_virtual_key_by_token_start"),
+  );
 }
 
 export default VirtualApiKeyModel;
@@ -1273,6 +1587,20 @@ async function syncVirtualApiKeyTeams(params: {
   );
 }
 
+/**
+ * Order of a virtual key's mappings: by provider, then — among several keys of
+ * one provider — the order requests fall back to when no key is known to serve
+ * the model: the primary key first, then the oldest.
+ */
+function providerKeyPreferenceOrder() {
+  return [
+    asc(schema.virtualApiKeyProviderApiKeysTable.provider),
+    desc(schema.llmProviderApiKeysTable.isPrimary),
+    asc(schema.llmProviderApiKeysTable.createdAt),
+    asc(schema.llmProviderApiKeysTable.id),
+  ];
+}
+
 async function syncProviderApiKeys(params: {
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0];
   virtualApiKeyId: string;
@@ -1300,4 +1628,11 @@ async function syncProviderApiKeys(params: {
       providerApiKeyId: mapping.providerApiKeyId,
     })),
   );
+}
+
+function billingFor(
+  billing: Map<string, CredentialBilling>,
+  id: string,
+): CredentialBilling {
+  return billing.get(id) ?? { billingTeam: null, spendCap: null };
 }

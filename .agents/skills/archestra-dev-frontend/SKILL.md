@@ -21,6 +21,10 @@ pnpm test
 pnpm knip   # flags unused exports; part of frontend check:ci
 ```
 
+## File and folder naming
+
+`platform/frontend/AGENTS.md`, "Conventions", holds the table: `_parts/` for route-private folders, `use-<thing>.ts` hooks beside their feature, kebab-case names, and the closed list of dot suffixes. Biome enforces it, so a misnamed file fails `pnpm lint`.
+
 ## Data fetching
 
 - Use TanStack Query for data fetching.
@@ -51,7 +55,23 @@ pnpm knip   # flags unused exports; part of frontend check:ci
 - Use shadcn/ui components only.
 - Add shadcn/ui components with `npx shadcn@latest add <component>`.
 - Prefer components from `frontend/src/components/ui` over plain HTML elements when a component exists.
-- Use `Button` over raw `<button>`, `Input` over raw `<input>`, and the matching UI component for selects and other controls.
+- Use `Input` over raw `<input>`, and the matching UI component for selects and other controls.
+
+## Buttons
+
+Never use a raw `<button>`; use `Button` with a standard size. `tools/biome-plugins/no-raw-button.grit` fails the build on a raw `<button>` outside `components/ui/`, and its diagnostics cannot be suppressed.
+
+Pick the size by where the button sits:
+
+- `sm` / `icon-sm` (32px) — the standard. Page and detail-page header actions, card and section actions, sticky save rows on a page, toolbars, filter bars, empty states, table row actions, pagination.
+- `default` / `icon` (36px) — dialog and sheet footers, and buttons sharing a row with form inputs (inputs are 36px).
+- `xs` / `icon-xs` (28px) — dense controls inside content: table cells, list items, chat messages, code blocks, notices.
+
+Do not resize a `Button` with `className` (`h-*`, `size-*`, `px-*`, `py-*`, `text-xs`). Change the `size` prop instead. Layout, position and colour classes are fine. `h-auto` is fine on `link` buttons and multi-line content.
+
+Selects and toggles that sit beside buttons take the same height: `SelectTrigger size="sm"` and `Toggle size="sm"` next to `sm` buttons.
+
+A clickable surface that does not look like a button — a whole row, card, tile, listbox option, or a glyph inside a chip — uses `UnstyledButton` from `components/ui/unstyled-button.tsx`. Do not use it to dodge `Button`'s sizes.
 - Keep components small and focused, with extracted business logic where it improves clarity.
 - Keep frontend files flat where practical and avoid barrel files.
 - Import helpers from focused `@/lib/utils/*` modules (`tailwind` for `cn`, `api` for API errors, `date-time` for dates). The `@/lib/utils` barrel eagerly loads unrelated modules, including `date-fns`, in every test or server module that imports it. Biome rejects that barrel path.
@@ -92,7 +112,7 @@ when a palette moves.
 
 Chrome page-translate re-parents bare text nodes into `<font>` wrappers. React still holds the original nodes, so deleting one — or inserting an element before it — throws `NotFoundError` and crashes the page (facebook/react#11538, no upstream fix). Never let React add, remove, or replace a **bare** text node: wrap conditional text in an element so only elements move.
 
-`biome-plugins/no-conditional-bare-jsx-text.grit` fails the build on the shapes below, and its diagnostics cannot be suppressed with `biome-ignore` — write them wrapped in the first place:
+`tools/biome-plugins/no-conditional-bare-jsx-text.grit` fails the build on the shapes below, and its diagnostics cannot be suppressed with `biome-ignore` — write them wrapped in the first place:
 
 - `{cond ? <Icon /> : "More"}` → `{cond ? <Icon /> : <span>More</span>}`.
 - `{cond ? (<><Loader2 />Loading…</>) : ("Load more")}` → wrap both branches; the fragment's own bare text is deleted when the branch flips, so `<span>Loading…</span>` inside it and `<span>Load more</span>` for the string.

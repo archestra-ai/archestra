@@ -35,6 +35,14 @@ describe("mcp gateway tool execution", () => {
     );
 
     expect(result.isError).toBe(false);
+    const created = await AgentModel.findById(
+      extractCreatedId(result),
+      mockContext.userId,
+      true,
+    );
+    expect(created?.accessAllTools).toBe(false);
+    expect(created?.toolExposureMode).toBe("search_and_run_only");
+
     expect((result.content[0] as any).text).toContain(
       "Successfully created mcp gateway",
     );

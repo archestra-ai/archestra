@@ -1,18 +1,10 @@
 import { vi } from "vitest";
+import { betterAuth } from "@/auth";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    enterpriseFeatures: { core: true },
-  }),
-);
 
 type LabelInput = { key: string; value: string };
 
@@ -20,6 +12,8 @@ describe("team label routes", () => {
   let app: FastifyInstanceWithZod;
   let adminUser: User;
   let organizationId: string;
+  // Permission checks resolve this user's member role.
+  let sessionUser: User;
 
   const buildApp = (user: User) => {
     const instance = createFastifyInstance();
@@ -38,10 +32,13 @@ describe("team label routes", () => {
   };
 
   beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
-    vi.clearAllMocks();
-    vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
+    config.enterpriseFeatures.core = true;
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: sessionUser.id } }) as never,
+    );
 
     adminUser = await makeAdmin();
+    sessionUser = adminUser;
     const organization = await makeOrganization();
     organizationId = organization.id;
     await makeMember(adminUser.id, organizationId, { role: "admin" });
@@ -213,10 +210,7 @@ describe("team label routes", () => {
       const { default: teamRoutes } = await import("./team");
       await memberApp.register(teamRoutes);
       // Member lacks organization-level team-management permission.
-      vi.mocked(hasPermission).mockResolvedValue({
-        success: false,
-        error: null,
-      });
+      sessionUser = memberUser;
 
       const response = await memberApp.inject({
         method: "GET",

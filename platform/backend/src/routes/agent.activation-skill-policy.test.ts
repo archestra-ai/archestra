@@ -8,6 +8,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   AgentActivationSkillRuleModel,
+  AgentModel,
   AgentVersionModel,
   OrganizationModel,
   PluginModel,
@@ -91,6 +92,50 @@ describe("agent activation-skill policy routes", () => {
     return skill;
   }
 
+  test.for([
+    "all",
+    "manual",
+  ] as const)("reads an empty %s policy even while the plugin permission provider is unavailable", async (mode, {
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      agentType: "agent",
+      organizationId,
+    });
+    await AgentModel.setActivationSkillPolicyState({
+      id: agent.id,
+      mode,
+      revision: 7,
+    });
+    mockUserHasPermission.mockImplementation(
+      async (_userId, _organizationId, resource) => {
+        if (resource === "plugin")
+          throw new Error("Plugin permission provider unavailable");
+        return true;
+      },
+    );
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/activation-skill-policy`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      mode,
+      revision: 7,
+      allowedReferences: [],
+      excludedReferences: [],
+      allowedSkills: [],
+      excludedSkills: [],
+      hiddenAllowedCount: 0,
+      hiddenExcludedCount: 0,
+    });
+    const eligible = await app.inject({
+      method: "GET",
+      url: "/api/agents/activation-skills?view=eligible&limit=1",
+    });
+    expect(eligible.statusCode).toBe(500);
+  });
+
   test("defaults to All and round-trips independent allow and exclusion rules", async ({
     makeAgent,
   }) => {
@@ -157,8 +202,8 @@ describe("agent activation-skill policy routes", () => {
   test("keeps collision-projected names stable across the editor and runtime policy", async ({
     makeAgent,
   }) => {
-    const previousPluginsEnabled = config.plugins.enabled;
-    config.plugins.enabled = true;
+    const previousPluginsEnabled = config.beta;
+    config.beta = false;
     try {
       const name = `shared-${crypto.randomUUID().slice(0, 8)}`;
       await makeSkill({ name });
@@ -234,7 +279,7 @@ describe("agent activation-skill policy routes", () => {
       });
       expect(runtime.skills).toEqual([projectedPlugin]);
     } finally {
-      config.plugins.enabled = previousPluginsEnabled;
+      config.beta = previousPluginsEnabled;
     }
   });
 

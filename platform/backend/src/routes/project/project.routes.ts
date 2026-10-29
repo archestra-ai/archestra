@@ -1,16 +1,23 @@
 import { randomUUID } from "node:crypto";
 import {
+  calculatePaginationMeta,
+  createPaginatedResponseSchema,
   MAX_PROJECT_UPLOAD_BYTES,
+  PaginationQuerySchema,
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { ProjectLabelModel, ProjectModel } from "@/models";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { projectService } from "@/services/project";
 import { transferResourceOwnership } from "@/services/resource-ownership";
@@ -19,6 +26,7 @@ import {
   constructResponseSchema,
   GetAgentRunResponseSchema,
   LabelWithDetailsSchema,
+  ProjectAppListItemSchema,
   ProjectConversationItemSchema,
   ProjectDetailSchema,
   ProjectLifecycleSchema,
@@ -247,9 +255,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "`excludeAuthorIds` (ignored for non-admins). `search` matches name + " +
           "description. `status=deleted` returns the org-wide soft-deleted " +
           "projects for a project admin (empty for everyone else); the other " +
-          "filters do not apply to that slice.",
+          "filters do not apply to that slice. Paginated: owner-first, then " +
+          "newest, then id.",
         tags: ["Projects"],
-        querystring: z.object({
+        querystring: PaginationQuerySchema.extend({
           scope: ProjectListScopeSchema.optional(),
           search: z.string().optional(),
           labels: z
@@ -271,8 +280,24 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Lifecycle slice: `active` (default) or `deleted` (project admins " +
               "only; org-wide soft-deleted projects for the restore view).",
           ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
+          pinned: z
+            .preprocess(
+              (value) =>
+                value === "false" ? false : value === "true" ? true : value,
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Only return projects the current user has pinned (true) or " +
+                "has not pinned (false). Omit for both.",
+            ),
         }),
-        response: constructResponseSchema(z.array(ProjectListItemSchema)),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(ProjectListItemSchema),
+        ),
       },
     },
     async ({ query, organizationId, user }) => {
@@ -287,7 +312,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const labelFilteredIds = parsedLabels
         ? await ProjectLabelModel.getIdsMatchingLabels(parsedLabels)
         : undefined;
-      return projectService.list({
+      const { data, total } = await projectService.list({
         organizationId,
         userId: user.id,
         isProjectAdmin,
@@ -299,7 +324,18 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         search: query.search,
         status: query.status,
         labelFilteredIds,
+        access: resourceAccessSelection(query),
+        pinned: query.pinned,
+        limit: query.limit,
+        offset: query.offset,
       });
+      return {
+        data,
+        pagination: calculatePaginationMeta(total, {
+          limit: query.limit,
+          offset: query.offset,
+        }),
+      };
     },
   );
 
@@ -701,6 +737,70 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, organizationId, user }) => {
       await projectService.unpin({ id, organizationId, userId: user.id });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.get(
+    "/api/projects/:id/apps",
+    {
+      schema: {
+        operationId: RouteId.GetProjectApps,
+        description:
+          "Apps linked into the project. Each member sees only the linked " +
+          "apps they can read themselves.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.array(ProjectAppListItemSchema)),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) =>
+      projectService.listApps({ id, organizationId, userId: user.id }),
+  );
+
+  fastify.put(
+    "/api/projects/:id/apps/:appId",
+    {
+      schema: {
+        operationId: RouteId.LinkProjectApp,
+        description:
+          "Link an app into the project. Any project member who can read the " +
+          "app may link it; the app keeps its own permissions. Idempotent.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid(), appId: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id, appId }, organizationId, user }) => {
+      await projectService.linkApp({
+        id,
+        appId,
+        organizationId,
+        userId: user.id,
+      });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.delete(
+    "/api/projects/:id/apps/:appId",
+    {
+      schema: {
+        operationId: RouteId.UnlinkProjectApp,
+        description:
+          "Unlink an app from the project. The app itself is not changed.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid(), appId: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id, appId }, organizationId, user }) => {
+      await projectService.unlinkApp({
+        id,
+        appId,
+        organizationId,
+        userId: user.id,
+      });
       return { ok: true as const };
     },
   );

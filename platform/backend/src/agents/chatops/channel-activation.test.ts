@@ -42,10 +42,7 @@ import {
   resolveChannelGateAction,
 } from "./channel-activation";
 import { chatOpsRunRegistry } from "./chatops-run-registry";
-import {
-  buildThreadMutedNotice,
-  CHATOPS_CHANNEL_AUTO_REPLY,
-} from "./constants";
+import { CHATOPS_CHANNEL_AUTO_REPLY } from "./constants";
 
 const CHANNEL = "19:abc@thread.tacv2";
 const THREAD = "1700000000000";
@@ -448,21 +445,6 @@ describe("mightBeAddressedMuteCommand", () => {
   });
 });
 
-describe("buildThreadMutedNotice", () => {
-  test("always confirms the mute and how to un-mute, with a varied lead-in", () => {
-    const notices = new Set<string>();
-    for (let i = 0; i < 50; i++) {
-      const notice = buildThreadMutedNotice();
-      expect(notice.startsWith("🔇 ")).toBe(true);
-      // The reassurance (how to bring the bot back) is always present.
-      expect(notice).toContain("@mention me to bring me back.");
-      notices.add(notice);
-    }
-    // The lead-in is randomized, so 50 draws should surface more than one.
-    expect(notices.size).toBeGreaterThan(1);
-  });
-});
-
 describe("resolveChannelGateAction", () => {
   test.each([
     // botMentioned, wantsMute, isActive -> action
@@ -603,6 +585,36 @@ describe("isChannelAnswerAllEnabled", () => {
     } as never);
     expect(await isChannelAnswerAllEnabled(CHANNEL_PARAMS)).toBe(true);
     expect(ChatOpsChannelBindingModel.findByChannel).toHaveBeenCalledTimes(2);
+  });
+
+  test("only one bot answers everything in a channel shared by the router and agent bots", async () => {
+    vi.mocked(ChatOpsChannelBindingModel.findByChannel).mockResolvedValue({
+      answerAllMessages: true,
+      agentId: "agent-owner",
+    } as never);
+    const params = { ...CHANNEL_PARAMS, channelId: "C-shared" };
+
+    // The owning agent's own bot answers everything; another agent's does not.
+    expect(
+      await isChannelAnswerAllEnabled({ ...params, agentId: "agent-owner" }),
+    ).toBe(true);
+    expect(
+      await isChannelAnswerAllEnabled({ ...params, agentId: "agent-other" }),
+    ).toBe(false);
+    // The router leaves it to that bot...
+    expect(
+      await isChannelAnswerAllEnabled({
+        ...params,
+        agentsWithOwnBot: new Set(["agent-owner", "agent-other"]),
+      }),
+    ).toBe(false);
+    // ...and answers everything itself when the owning agent has no bot.
+    expect(
+      await isChannelAnswerAllEnabled({
+        ...params,
+        agentsWithOwnBot: new Set(["agent-other"]),
+      }),
+    ).toBe(true);
   });
 });
 

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 
 function hasReservedChars(value: string): boolean {
   return LABEL_RESERVED_CHARS.some((c) => value.includes(c));
@@ -25,6 +26,7 @@ interface ProfileLabelsProps {
   onLabelsChange: (labels: ProfileLabel[]) => void;
   showLabel?: boolean;
   showDescription?: boolean;
+  description?: string;
 }
 
 export interface ProfileLabelsRef {
@@ -33,7 +35,13 @@ export interface ProfileLabelsRef {
 
 export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
   function ProfileLabels(
-    { labels, onLabelsChange, showLabel = true, showDescription = true },
+    {
+      labels,
+      onLabelsChange,
+      showLabel = true,
+      showDescription = true,
+      description = "Use key-value labels to organize and filter this resource.",
+    },
     ref,
   ) {
     const [newLabelKey, setNewLabelKey] = useState("");
@@ -129,11 +137,7 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
     return (
       <div className="grid gap-2">
         {showLabel && <Label>Labels</Label>}
-        {showDescription && (
-          <FieldDescription>
-            Use key-value labels to organize and filter this resource.
-          </FieldDescription>
-        )}
+        {showDescription && <FieldDescription>{description}</FieldDescription>}
 
         <div className="flex gap-2 items-end">
           <div className="flex-1">
@@ -197,14 +201,14 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
               >
                 <span className="font-semibold">{label.key}:</span>
                 <span>{label.value}</span>
-                <button
+                <UnstyledButton
                   type="button"
                   onClick={() => handleRemoveLabel(label.key)}
                   className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                   aria-label="Remove label"
                 >
                   <X className="h-3 w-3" />
-                </button>
+                </UnstyledButton>
               </Badge>
             ))}
           </div>

@@ -53,6 +53,7 @@ interface SearchableSelectProps {
    */
   pinnedItems?: Array<SearchableSelectItem>;
   className?: string;
+  size?: "default" | "sm";
   disabled?: boolean;
   allowCustom?: boolean;
   showSearchIcon?: boolean;
@@ -76,6 +77,8 @@ interface SearchableSelectProps {
   contentAlign?: PopoverContentProps["align"];
   contentAvoidCollisions?: PopoverContentProps["avoidCollisions"];
   listClassName?: string;
+  /** Called when the popover opens or closes, e.g. to load options lazily. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function SearchableSelect({
@@ -91,6 +94,7 @@ export function SearchableSelect({
   items,
   pinnedItems,
   className,
+  size = "default",
   disabled = false,
   allowCustom = false,
   showSearchIcon = true,
@@ -104,8 +108,16 @@ export function SearchableSelect({
   contentAlign,
   contentAvoidCollisions,
   listClassName,
+  onOpenChange,
 }: SearchableSelectProps) {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpenState] = React.useState(false);
+  const setOpen = React.useCallback(
+    (next: boolean) => {
+      setOpenState(next);
+      onOpenChange?.(next);
+    },
+    [onOpenChange],
+  );
   const [searchQuery, setSearchQuery] = React.useState("");
 
   const filteredItems = React.useMemo(() => {
@@ -207,6 +219,7 @@ export function SearchableSelect({
         <Button
           id={id}
           variant="outline"
+          size={size}
           role="combobox"
           aria-expanded={open}
           aria-label={ariaLabel}
@@ -218,7 +231,7 @@ export function SearchableSelect({
           className={cn(
             multiline
               ? "border-input h-auto min-h-9 w-[200px] justify-between bg-transparent py-2 font-normal shadow-xs hover:bg-transparent hover:text-foreground"
-              : "border-input h-9 w-[200px] justify-between bg-transparent font-normal shadow-xs hover:bg-transparent hover:text-foreground",
+              : "border-input w-[200px] justify-between bg-transparent font-normal shadow-xs hover:bg-transparent hover:text-foreground",
             !value && "text-muted-foreground",
             className,
           )}

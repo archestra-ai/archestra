@@ -1,0 +1,3 @@
+CREATE INDEX "agents_org_created_at_type_live_idx" ON "agents" USING btree ("organization_id","created_at","id","agent_type","built_in") WHERE "agents"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "agents_org_name_c_live_idx" ON "agents" USING btree ("organization_id","name" COLLATE "C","id") WHERE "agents"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "resource_permission_policies_agent_grants_idx" ON "resource_permission_policies" USING gin ("grants" jsonb_path_ops) WHERE "resource_permission_policies"."resource" IN ('agent', 'mcpGateway');

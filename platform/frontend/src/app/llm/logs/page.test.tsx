@@ -7,7 +7,7 @@ import LlmProxyLogsPageServer from "./page";
 // and later the whole agent roster for a filter dropdown the client refetches
 // anyway. It pins the server component to prefetching nothing at all.
 
-const getAllAgents = vi.hoisted(() => vi.fn());
+const getAgents = vi.hoisted(() => vi.fn());
 const getInteractions = vi.hoisted(() => vi.fn());
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -15,7 +15,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
     ...actual,
     archestraApiSdk: {
       ...actual.archestraApiSdk,
-      getAllAgents,
+      getAgents,
       getInteractions,
     },
   };
@@ -31,12 +31,12 @@ vi.mock("./page.client", () => ({
 
 describe("LlmProxyLogsPageServer (T-1015)", () => {
   it("prefetches nothing server-side — no interactions, no agent roster", async () => {
-    getAllAgents.mockResolvedValue({ data: [] });
+    getAgents.mockResolvedValue({ data: [] });
     getInteractions.mockResolvedValue({ data: { data: [] } });
 
     LlmProxyLogsPageServer();
 
-    expect(getAllAgents).not.toHaveBeenCalled();
+    expect(getAgents).not.toHaveBeenCalled();
     expect(getInteractions).not.toHaveBeenCalled();
   });
 });

@@ -60,6 +60,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import {
@@ -630,6 +631,15 @@ function EnvironmentEditorDialog({
   const [showConfirm, setShowConfirm] = useState(false);
   const [activeSection, setActiveSection] =
     useState<EnvironmentDialogSection>("general");
+  // The permissions section keeps its edits in its own form. This dialog's
+  // Save is the only Save on screen, so it commits them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
   const syncNetworkPolicyDraft = useCallback((policy: NetworkPolicy) => {
     setEgressMode(policy.egressMode);
     setDomainPreset(policy.domainPreset);
@@ -776,7 +786,13 @@ function EnvironmentEditorDialog({
     environment.assignedCatalogCount > 0 &&
     trimmedNamespace !== (environment.namespace ?? "");
 
-  const doSave = () => {
+  const doSave = async () => {
+    try {
+      await permissionsSave.current?.();
+    } catch {
+      // The permissions mutation already reported the failure.
+      return;
+    }
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const namespaceValue = trimmedNamespace === "" ? null : trimmedNamespace;
     const descriptionValue =
@@ -836,7 +852,7 @@ function EnvironmentEditorDialog({
     if (willRestart) {
       setShowConfirm(true);
     } else {
-      doSave();
+      void doSave();
     }
   };
 
@@ -856,11 +872,6 @@ function EnvironmentEditorDialog({
   const navItems: Array<{ id: EnvironmentDialogSection; label: string }> = [
     { id: "general", label: "General" },
     { id: "egress", label: "Network Egress Policy" },
-    // Only a saved environment has an id to hang grants on. The Default
-    // environment is org configuration rather than a row, and is open to all.
-    ...(mode === "edit" && environment
-      ? [{ id: "permissions" as const, label: "Permissions" }]
-      : []),
   ];
 
   return (
@@ -898,7 +909,7 @@ function EnvironmentEditorDialog({
             affectedServerCount={environment?.assignedCatalogCount ?? 0}
             isSubmitting={isPending}
             onCancel={() => setShowConfirm(false)}
-            onConfirm={doSave}
+            onConfirm={() => void doSave()}
           />
         ) : (
           <>
@@ -1058,7 +1069,7 @@ function EnvironmentEditorDialog({
                           className="gap-1 font-mono"
                         >
                           {registry}
-                          <button
+                          <UnstyledButton
                             type="button"
                             onClick={() => removeTrustedRegistry(registry)}
                             disabled={isPending}
@@ -1066,7 +1077,7 @@ function EnvironmentEditorDialog({
                             className="rounded-full text-muted-foreground hover:text-foreground"
                           >
                             <X className="h-3 w-3" />
-                          </button>
+                          </UnstyledButton>
                         </Badge>
                       ))}
                     </div>
@@ -1083,6 +1094,16 @@ function EnvironmentEditorDialog({
             </AccordionContent>
           </AccordionItem>
         </Accordion>
+        {/* Only a saved environment has an id to hang grants on. The Default
+            environment is org configuration rather than a row, and is open to
+            all. */}
+        {mode === "edit" && environment && (
+          <ResourceAccessSection
+            resource="environment"
+            id={environment.id}
+            registerSave={registerPermissionsSave}
+          />
+        )}
       </div>
       <div hidden={activeSection !== "egress"} className="space-y-4">
         <p className="text-sm text-muted-foreground">
@@ -1117,20 +1138,11 @@ function EnvironmentEditorDialog({
           disabled={isPending || !egressBaselineLoaded}
         />
       </div>
-      {mode === "edit" && environment && (
-        <div hidden={activeSection !== "permissions"}>
-          <ResourceAccessSection
-            resource="environment"
-            id={environment.id}
-            standalone
-          />
-        </div>
-      )}
     </TabbedDialogShell>
   );
 }
 
-type EnvironmentDialogSection = "general" | "egress" | "permissions";
+type EnvironmentDialogSection = "general" | "egress";
 
 export function NetworkPolicyFields({
   egressMode,

@@ -62,7 +62,11 @@ export function resolveSkillDetailSection(
 /** Repository identity of a GitHub skill, including its Enterprise origin. */
 export function skillGithubSourceRepo(skill: SkillDetail): string | null {
   return skill.sourceType === "github"
-    ? parseRepoFromSourceRef(skill.sourceRef, skill.sourceOrigin)
+    ? parseRepoFromSourceRef(
+        skill.sourceRef,
+        skill.sourceOrigin,
+        skill.sourceProvider,
+      )
     : null;
 }
 

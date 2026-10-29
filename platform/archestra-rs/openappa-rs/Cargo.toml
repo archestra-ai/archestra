@@ -9,12 +9,27 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Pinned to OpenAPPA main at 05c04872, including the wildcard fallback fix (#515).
-# The embedded reporting helper currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd" }
+# OpenAPPA v0.35.1: conditional publication (#685), the replay-only
+# appa/do_something call (#670), the [aliases]
+# table (#666), void returns for marked spawns (#665), typed refusal classes
+# (#681), live policy revisions with snapshot views (#677); then on main,
+# replay steps without `expect` (#688) and the deployment targets each
+# battery lists (#691), loopback requests staying local (#692),
+# parallel subagent spawns waiting for the earlier bind (#694), and plain
+# errors for tool names that identify no tool (#698), `[aliases.tool]` (#696)
+# and the generic coding battery (#697); then v0.37.0 and libpq TLS
+# parameters (`sslmode=verify-full`, `sslrootcert`) in the PostgreSQL URL (#710),
+# the attestation offered only where the parent covers its rank (#713),
+# and the archestra battery's agent-run rules (#716); then explicit
+# no-remedy refusal feedback (#720), a failed subagent reported as stopped
+# (#722), and plaintext receipts that hold U+0000 stored under the plaintext
+# escape (#724).
+# Pin #725's atomic remedy claim fix directly until it lands upstream.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
@@ -25,16 +40,17 @@ toml = "1.1"
 # The runtime's own editor speaks this document type; reading a root's declarations
 # with their spans needs the same version the runtime holds.
 toml_edit = "0.25"
-tokio = { version = "1", features = ["sync", "time"] }
+tokio = { version = "1", features = ["sync", "time", "rt", "net", "io-util"] }
 futures-util = "0.3"
+# Stream bounded receipt lookups through the store's existing PostgreSQL client.
+postgres = "0.19"
+# The owner id a dispatch leases its receipts under; tests also build consult records with it.
+uuid = { version = "1", features = ["v7"] }
 
 [dev-dependencies]
 # A paused clock: the connection-wait test does not spend its thirty seconds.
 tokio = { version = "1", features = ["rt", "test-util"] }
 proptest = "1"
-# Building a consult record by hand: the runtime's own id and clock types.
-uuid = { version = "1", features = ["v7"] }
-chrono = { version = "0.4", default-features = false, features = ["std"] }
 
 [target.'cfg(target_env = "musl")'.dependencies]
 # Cross-builds need OpenSSL compiled for musl. The Docker builder uses its

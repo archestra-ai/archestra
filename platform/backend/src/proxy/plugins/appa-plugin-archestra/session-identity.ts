@@ -1,13 +1,25 @@
+import type { OpenAppaSession } from "@/openappa/service";
 import {
   type AppaSessionIdentity,
   type AppaWireFamily,
   appaSessionIdentity,
 } from "@/openappa/wire";
 import { AppaChatAdapter } from "./adapters/chat";
-import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
+import {
+  AppaClaudeCodeAdapter,
+  AppaClaudeDesktopAdapter,
+} from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
-import { AppaOpenCodeAdapter } from "./adapters/opencode";
-import type { AppaClientAdapter } from "./types";
+import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
+import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
+import { AppaPiAdapter } from "./adapters/pi";
+import type {
+  AppaChildTrajectory,
+  AppaClientAdapter,
+  AppaMatchContext,
+  AppaTrustedContext,
+} from "./types";
+import { withCallerScope } from "./utils";
 
 /**
  * Client adapters in match order: external client protocols first,
@@ -15,8 +27,14 @@ import type { AppaClientAdapter } from "./types";
  */
 export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
   [
+    new AppaPiAdapter(),
+    new AppaKimiCodeAdapter(),
+    // Before Claude Code: Desktop's Code and Cowork tabs also send Claude Code's UA and session header.
+    new AppaClaudeDesktopAdapter(),
     new AppaClaudeCodeAdapter(),
     new AppaCodexAdapter(),
+    // Before OpenCode: Kilo's setup also sends OpenCode's session header.
+    new AppaKiloAdapter(),
     new AppaOpenCodeAdapter(),
     new AppaChatAdapter(),
   ],
@@ -27,28 +45,31 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
  *
  * Precedence:
  * 1. An explicit `X-Appa-Session-ID` header.
- * 2. Native client signals (Claude Code header, Codex metadata, OpenCode headers).
+ * 2. Native client signals (Claude Code header, Codex metadata, OpenCode
+ *    headers, Kimi Code's prompt cache key).
  * 3. Generic wire-family fallbacks.
  *
  * When provided, `X-Appa-Parent-ID` overrides any native parent ID.
  */
 export function extractAppaSessionIdentity(params: {
-  family: AppaWireFamily;
+  /**
+   * Undefined for a wire OpenAPPA does not read. The session then comes from
+   * headers only: the client adapters read no body of that wire.
+   */
+  family: AppaWireFamily | undefined;
   body: unknown;
   headers: Readonly<Record<string, string | string[] | undefined>>;
 }): AppaSessionIdentity {
   const generic = appaSessionIdentity(params);
   if (generic.provenance === "appa-header") return generic;
-  const adapter = APPA_CLIENT_ADAPTERS.find((candidate) =>
-    candidate.matches({
-      headers: params.headers,
-      requestBody: params.body,
-    }),
-  );
-  const native = adapter?.extractSessionIdentity?.({
+  const matchContext = {
     headers: params.headers,
-    requestBody: params.body,
-  });
+    requestBody: params.family ? params.body : undefined,
+  };
+  const adapter = APPA_CLIENT_ADAPTERS.find((candidate) =>
+    candidate.matches(matchContext),
+  );
+  const native = adapter?.extractSessionIdentity?.(matchContext);
   if (!native?.sessionId) return generic;
   return {
     ...native,
@@ -75,4 +96,49 @@ export function nativeSpawnParentId(params: {
     candidate.matches(context),
   );
   return adapter?.nativeSpawnParentId?.(context, params.sessionId);
+}
+
+/**
+ * The runtime session of a request: the session the proxy derived, or the
+ * child trajectory that the client's adapter binds the request to. A child is
+ * not a client fork, so it drops a fork source the proxy derived first.
+ * Throws when the child's correlation is missing, reused, or contradictory.
+ */
+export function appaTrajectory(params: {
+  adapters: readonly AppaClientAdapter[];
+  headers: AppaMatchContext["headers"];
+  requestBody: unknown;
+  trustedContext: AppaTrustedContext;
+}): {
+  session: OpenAppaSession;
+  adapter: AppaClientAdapter | undefined;
+  child: AppaChildTrajectory | undefined;
+  matchContext: AppaMatchContext;
+} {
+  const trusted = params.trustedContext;
+  // A copy, so no adapter can change the proxy's own context.
+  const matchContext: AppaMatchContext = {
+    headers: params.headers,
+    requestBody: params.requestBody,
+    trustedContext: { ...trusted, session: { ...trusted.session } },
+  };
+  const adapter = params.adapters.find((candidate) =>
+    candidate.matches(matchContext),
+  );
+  const child = adapter?.bindChildTrajectory(matchContext);
+  if (!child) {
+    return { session: trusted.session, adapter, child, matchContext };
+  }
+  // `parent_id` and `fork_of` name runtime openings that exclude each other.
+  const { fork_of: _forkOf, ...session } = trusted.session;
+  return {
+    session: {
+      ...session,
+      session_id: withCallerScope(trusted.session, child.sessionId),
+      parent_id: withCallerScope(trusted.session, child.parentId),
+    },
+    adapter,
+    child,
+    matchContext,
+  };
 }

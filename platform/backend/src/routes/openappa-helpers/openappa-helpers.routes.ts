@@ -1,6 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { openappaDeclarations } from "@/openappa/declarations";
 import {
   type HelperConsultOutcome,
   type HelperDiagnostics,
@@ -55,7 +56,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             "The helper bridge serves the local runtime only",
           );
         if (
-          !openappaHelperBridge.presentsBridgeToken(
+          !openappaDeclarations.presentsBridgeToken(
             request.headers.authorization,
           )
         )

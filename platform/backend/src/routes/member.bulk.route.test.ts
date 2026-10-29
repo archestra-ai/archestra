@@ -7,13 +7,23 @@ import {
 import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { MemberModel, UserModel } from "@/models";
+import {
+  MemberModel,
+  RuntimeCredentialConnectionModel,
+  UserModel,
+} from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import {
+  deployGithubWithRoster,
+  storedHostMembers,
+} from "@/test/openappa-github-roster";
+import { GitHubUserIdSchema, type User } from "@/types";
 import memberRoutes from "./member";
 
 describe("DELETE /api/members/bulk", () => {
@@ -166,6 +176,55 @@ describe("DELETE /api/members/bulk", () => {
         after: { members: [] },
       },
     ]);
+  });
+
+  test("the member roster ends with the members a batch leaves", async ({
+    makeAccount,
+    makeMember,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const openappa = { ...config.openappa };
+    const sandbox = config.daggerRuntime.enabled;
+    try {
+      await deployGithubWithRoster({
+        organizationId,
+        userId: user.id,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      const connected = async (email: string, githubId: number) => {
+        const member = await makeUser({ email });
+        await makeAccount(member.id);
+        const membership = await makeMember(member.id, organizationId);
+        await RuntimeCredentialConnectionModel.upsert({
+          organizationId,
+          scope: "personal",
+          userId: member.id,
+          credentialId: "github-user",
+          value: "token",
+          githubId: GitHubUserIdSchema.parse(githubId),
+        });
+        return membership.id;
+      };
+      const ana = await connected("ana@corp.example", 1001);
+      const bob = await connected("bob@corp.example", 1002);
+      await connected("carol@corp.example", 1003);
+      await openappaBatteriesService.recompile(organizationId);
+
+      const response = await bulkDelete([
+        { kind: "member", id: ana },
+        { kind: "member", id: bob },
+      ]);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(await storedHostMembers(organizationId)).toEqual({
+        "github:1003": "carol@corp.example",
+      });
+    } finally {
+      config.openappa = openappa;
+      config.daggerRuntime.enabled = sandbox;
+    }
   });
 
   test("requires member delete permission", () => {

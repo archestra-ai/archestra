@@ -1,61 +1,49 @@
 "use client";
 
 import type { Column, ColumnDef, SortingState } from "@tanstack/react-table";
-import { Bot, ChevronDown, ChevronUp, MessageCircle } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
-import { AgentIcon } from "@/components/agent-icon";
+import { Bot, ChevronDown, ChevronUp, TriangleAlert, X } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   CollectionFilters,
   FilterBar,
-  FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DEFAULT_FILTER_ALL } from "@/consts";
+import { DialogClose } from "@/components/ui/dialog";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import {
   type CoverageEntity,
   useCoverageEntities,
 } from "@/lib/openappa-coverage.query";
-import { OpenAppaChatButton } from "./openappa-chat-button";
+import { cn } from "@/lib/utils/tailwind";
 import { RuleCoverageBar } from "./rule-coverage-bar";
+import { TargetChatActions } from "./target-chat-actions";
 import { ToolTable } from "./tool-table";
 
 const PARAM_NAMES = {
   page: "entitiesPage",
   pageSize: "entitiesPageSize",
   search: "entitiesSearch",
-  type: "entitiesType",
   sortBy: "entitiesSortBy",
   sortDirection: "entitiesSortDirection",
 } as const;
 
 /** The columns the table sorts by, named as the API sorts. */
-const SORTABLE = ["name", "type", "tools"] as const;
+const SORTABLE = ["name", "tools"] as const;
 type SortColumn = (typeof SORTABLE)[number];
-/** MCP servers first, then gateways, each by name. */
+/** MCP servers by name. */
 const DEFAULT_SORT: { id: SortColumn; desc: boolean } = {
-  id: "type",
+  id: "name",
   desc: false,
 };
 
-const TYPE_OPTIONS = [
-  { value: DEFAULT_FILTER_ALL, label: "All types" },
-  { value: "mcp_gateway", label: "MCP gateway" },
-  { value: "mcp_server", label: "MCP server" },
-] as const;
-
-/**
- * Every MCP server and MCP gateway, sortable by name, type and tool count, each
- * with a chat that reviews its rules.
- */
+/** Every visible MCP server, with a chat that reviews its rules. */
 export function EntitiesTable() {
   const [selected, setSelected] = useState<CoverageEntity | null>(null);
   const queryParamsAdapter = useQueryParamsAdapter({ paramNames: PARAM_NAMES });
@@ -68,9 +56,6 @@ export function EntitiesTable() {
   } = useDataTableQueryParams({ queryParamsAdapter });
   const limit = Math.min(pageSize, 100);
   const search = searchParams.get("search") || undefined;
-  const rawType = searchParams.get("type");
-  const type =
-    rawType === "mcp_gateway" || rawType === "mcp_server" ? rawType : undefined;
   const rawSortBy = searchParams.get("sortBy");
   const sort = SORTABLE.some((column) => column === rawSortBy)
     ? {
@@ -96,15 +81,15 @@ export function EntitiesTable() {
   );
   const entities = useCoverageEntities({
     search,
-    type,
+    type: "mcp_server",
     sortBy: sort.id,
     sortDirection: sort.desc ? "desc" : "asc",
     limit,
     offset: pageIndex * limit,
   });
-  const hasActiveFilters = !!search || !!type;
+  const hasActiveFilters = !!search;
   const clearFilters = useCallback(
-    () => updateQueryParams({ search: null, type: null, page: "1" }),
+    () => updateQueryParams({ search: null, page: "1" }),
     [updateQueryParams],
   );
 
@@ -114,7 +99,7 @@ export function EntitiesTable() {
         id: "name",
         accessorFn: (row) => row.name,
         header: ({ column }) => <SortHeader column={column} label="Name" />,
-        size: 260,
+        size: 300,
         cell: ({ row }) => (
           <Button
             variant="ghost"
@@ -130,22 +115,6 @@ export function EntitiesTable() {
         ),
       },
       {
-        id: "type",
-        accessorFn: (row) => row.type,
-        header: ({ column }) => <SortHeader column={column} label="Type" />,
-        size: 210,
-        cell: ({ row }) => (
-          <span className="flex items-center gap-2">
-            <span>{entityTypeLabel(row.original.type)}</span>
-            {row.original.autoMode && (
-              <Badge variant="outline" className="font-normal">
-                Auto mode
-              </Badge>
-            )}
-          </span>
-        ),
-      },
-      {
         id: "tools",
         accessorFn: (row) => row.toolCount,
         header: ({ column }) => (
@@ -153,45 +122,32 @@ export function EntitiesTable() {
         ),
         cell: ({ row }) => (
           <div className="flex items-center gap-3">
-            {/* Capped, so a wide screen leaves room after it, not a longer bar. */}
             <RuleCoverageBar
               counts={row.original.rules}
               total={row.original.toolCount}
-              className="h-1.5 min-w-0 max-w-48 flex-1"
+              className="h-1.5 min-w-20 flex-1"
             />
-            <span className="text-muted-foreground w-28 shrink-0 whitespace-nowrap text-right text-xs tabular-nums">
-              {`${(row.original.rules.root + row.original.rules.battery).toLocaleString()} of ${row.original.toolCount.toLocaleString()} covered`}
-            </span>
+            <CoverageCount
+              covered={
+                row.original.rules.root +
+                row.original.rules.battery +
+                row.original.rules.catchAll
+              }
+              total={row.original.toolCount}
+            />
           </div>
         ),
       },
       {
         id: "actions",
-        header: "Actions",
-        size: 100,
+        // Buttons label themselves, so the title is for screen readers. Cells pad
+        // less on the right; the cell's pr-2 evens that edge with the left.
+        header: () => <span className="sr-only">Actions</span>,
+        size: 216,
         cell: ({ row }) => (
-          <OpenAppaChatButton
-            permissions={
-              row.original.type === "mcp_server"
-                ? { mcpRegistry: ["read"] }
-                : {}
-            }
-            variant="outline"
-            size="sm"
-            className="h-7"
-            // On the button, so a refused one, which drops the link, keeps it.
-            aria-label={`Ask in chat: ${row.original.name}`}
-            promptKey="reviewCoverage"
-            target={{
-              kind: row.original.type,
-              id: row.original.id,
-              name: row.original.name,
-            }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <MessageCircle />
-            <span>Ask</span>
-          </OpenAppaChatButton>
+          <div className="pr-2">
+            <TargetChatActions size="xs" target={targetOf(row.original)} />
+          </div>
         ),
       },
     ],
@@ -205,7 +161,7 @@ export function EntitiesTable() {
           search={
             <SearchInput
               queryParamsAdapter={queryParamsAdapter}
-              placeholder="Search servers and gateways"
+              placeholder="Search MCP servers"
               isLoading={entities.isFetching}
               className={filterSearchClass}
             />
@@ -214,29 +170,16 @@ export function EntitiesTable() {
           actions={
             entities.data ? (
               <span className="text-sm text-muted-foreground tabular-nums">
-                {`${entities.data.pagination.total} servers and gateways`}
+                {`${entities.data.pagination.total} MCP servers`}
               </span>
             ) : null
           }
-        >
-          <FilterSelect
-            value={type ?? DEFAULT_FILTER_ALL}
-            onValueChange={(value) =>
-              updateQueryParams({
-                type: value === DEFAULT_FILTER_ALL ? null : value,
-                page: "1",
-              })
-            }
-            placeholder="Type"
-            ariaLabel="Type"
-            showSearch={false}
-            items={[...TYPE_OPTIONS]}
-          />
-        </FilterBar>
+        />
       </CollectionFilters>
       {entities.isLoadingError ? (
         <QueryLoadError
-          title="Could not load servers and gateways"
+          title="Could not load MCP servers"
+          error={entities.error}
           onRetry={() => entities.refetch()}
           className="rounded-md border py-10"
         />
@@ -253,8 +196,8 @@ export function EntitiesTable() {
             total: entities.data?.pagination.total ?? 0,
           }}
           onPaginationChange={setPagination}
-          // Name and type keep their width; coverage takes what is left.
-          fixedWidthColumnIds={["name", "type"]}
+          // Name and actions keep their width; coverage takes what is left.
+          fixedWidthColumnIds={["name", "actions"]}
           flexibleColumnIds={["tools"]}
           tableClassName="min-w-3xl"
           manualSorting
@@ -262,10 +205,10 @@ export function EntitiesTable() {
           onSortingChange={setSorting}
           isLoading={entities.isFetching}
           emptyIcon={Bot}
-          emptyMessage="No servers or gateways"
-          emptyDescription="MCP gateways and MCP servers appear here when available."
+          emptyMessage="No MCP servers"
+          emptyDescription="MCP servers appear here when available."
           hasActiveFilters={hasActiveFilters}
-          filteredEmptyMessage="No server or gateway matches these filters."
+          filteredEmptyMessage="No MCP server matches these filters."
           onClearFilters={clearFilters}
         />
       )}
@@ -312,11 +255,19 @@ function PolicyTargetDialog({
   target: CoverageEntity | null;
   onClose: () => void;
 }) {
+  const toolsRef = useRef<HTMLDivElement>(null);
   return (
     <StandardDialog
       open={selected !== null}
       onOpenChange={(open) => !open && onClose()}
       size="large"
+      // As tall as its rows, up to the large dialog's height.
+      className="h-auto max-h-[90vh]"
+      // The table's pagination already leaves a gap below it.
+      bodyClassName="pb-0"
+      headerClassName="pr-72"
+      // Focus the tools, not the close button, so nothing opens ringed.
+      initialFocusRef={toolsRef}
       title={
         selected ? (
           <span className="flex items-center gap-2.5">
@@ -328,28 +279,34 @@ function PolicyTargetDialog({
         )
       }
       description={selected ? <EntitySummary entity={selected} /> : undefined}
+      headerAction={
+        selected ? (
+          <div className="flex items-center gap-1">
+            <TargetChatActions size="sm" target={targetOf(selected)} />
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon-sm" aria-label="Close">
+                <X />
+              </Button>
+            </DialogClose>
+          </div>
+        ) : undefined
+      }
     >
       {selected && (
-        <ToolTable
-          key={selected.id}
-          catalogId={selected.type === "mcp_server" ? selected.id : undefined}
-          entityId={selected.type === "mcp_server" ? undefined : selected.id}
-          autoMode={selected.autoMode}
-        />
+        <div ref={toolsRef} tabIndex={-1} className="outline-none">
+          <ToolTable
+            key={selected.id}
+            catalogId={selected.id}
+            target={targetOf(selected)}
+          />
+        </div>
       )}
     </StandardDialog>
   );
 }
 
-function entityTypeLabel(type: CoverageEntity["type"]): string {
-  switch (type) {
-    case "agent":
-      return "Agent";
-    case "mcp_gateway":
-      return "MCP gateway";
-    case "mcp_server":
-      return "MCP server";
-  }
+function targetOf(entity: CoverageEntity) {
+  return { kind: entity.type, id: entity.id, name: entity.name };
 }
 
 function EntityIcon({
@@ -359,52 +316,58 @@ function EntityIcon({
   entity: CoverageEntity;
   size: number;
 }) {
-  return entity.type === "mcp_server" ? (
+  return (
     <McpCatalogIcon icon={entity.icon} catalogId={entity.id} size={size} />
-  ) : (
-    <AgentIcon icon={entity.icon} fallbackType={entity.type} size={size} />
   );
 }
 
 // Rendered inside the dialog's description paragraph, so it sticks to inline
 // elements.
 function EntitySummary({ entity }: { entity: CoverageEntity }) {
-  const toolLabel =
-    entity.type === "mcp_server"
-      ? "synced tools"
-      : entity.autoMode
-        ? "tools reachable for you"
-        : "assigned tools";
   const stats = [
-    { value: entity.toolCount, label: toolLabel },
-    { value: entity.rules.root + entity.rules.battery, label: "with a rule" },
+    { value: entity.toolCount, label: "synced tools" },
     {
-      value: entity.rules.catchAll + entity.rules.builtInFallback,
-      label: "with no rule",
+      value: entity.rules.root + entity.rules.battery + entity.rules.catchAll,
+      label: "covered",
     },
-    ...(entity.builtInCount > 0
-      ? [
-          {
-            value: entity.builtInCount,
-            label:
-              entity.builtInCount === 1 ? "built-in tool" : "built-in tools",
-          },
-        ]
-      : []),
+    {
+      value: entity.rules.notCovered,
+      label: "no rule",
+    },
   ];
 
   return (
-    <span className="flex flex-col gap-3">
-      <span>{entityTypeLabel(entity.type)}</span>
-      <span className="flex flex-wrap gap-x-6 gap-y-2">
-        {stats.map((stat) => (
-          <span key={stat.label} className="flex items-baseline gap-1.5">
-            <span className="font-medium text-foreground tabular-nums">
-              {stat.value}
-            </span>
-            <span>{stat.label}</span>
+    <span className="flex flex-wrap items-baseline gap-x-1.5">
+      <span>MCP server</span>
+      {stats.map((stat) => (
+        <span key={stat.label} className="flex items-baseline gap-1.5">
+          <span aria-hidden>·</span>
+          <span className="font-medium text-foreground tabular-nums">
+            {stat.value}
           </span>
-        ))}
+          <span>{stat.label}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * "N of M covered", turned to a warning when fewer than half of the tools
+ * have a rule: those calls run with any data.
+ */
+function CoverageCount({ covered, total }: { covered: number; total: number }) {
+  const low = total > 0 && covered * 2 < total;
+  return (
+    <span
+      className={cn(
+        "flex w-32 shrink-0 items-center gap-1.5 whitespace-nowrap text-xs tabular-nums",
+        low ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
+      )}
+    >
+      {low && <TriangleAlert aria-hidden className="size-3.5" />}
+      <span>
+        {`${covered.toLocaleString()} of ${total.toLocaleString()}${low ? (covered === 0 ? " · no rules" : " · low") : " covered"}`}
       </span>
     </span>
   );

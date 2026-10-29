@@ -1,0 +1,364 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "anthropic" ]]; then
+  echo "archestra: Claude Code requires an Agent configured with an Anthropic model" >&2
+  exit 78
+fi
+
+if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+fi
+
+# Claude Code treats ANTHROPIC_API_KEY as a user-supplied custom key and asks
+# for first-run confirmation. The same short-lived platform credential is also
+# provided in ANTHROPIC_AUTH_TOKEN, which is its non-interactive gateway path.
+# Prefer that alias so a fresh pod opens directly into the native TUI.
+unset ANTHROPIC_API_KEY
+
+# Keep every tool declared on each request: with tool search on, Guardrails
+# refuse a call to a tool that Claude Code has not loaded yet.
+if [[ "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" == "1" ]]; then
+  export ENABLE_TOOL_SEARCH=false
+  : "${ARCHESTRA_AGENT_RUNTIME_BINDING:?OpenAPPA runtime binding is required}"
+fi
+
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH:-}" == "subscription" ]]; then
+  # The personal setup-token is injected from the configured secrets backend.
+  # Keep the proxy URL and personal passthrough key; the native OAuth token
+  # remains the provider credential on each request.
+  unset ANTHROPIC_AUTH_TOKEN
+  : "${CLAUDE_CODE_OAUTH_TOKEN:?Reconnect your Claude Code account}"
+  : "${ANTHROPIC_BASE_URL:?Claude Code requires the Agent LLM proxy}"
+  : "${ANTHROPIC_CUSTOM_HEADERS:?Claude Code requires proxy authentication}"
+  unset CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY
+  unset AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BEDROCK_BASE_URL
+else
+  unset CLAUDE_CODE_OAUTH_TOKEN
+fi
+
+# One conversation, one session: the workspace outlives a follow-up's new task
+# ID, so the proxy logs and OpenAPPA keep every turn together.
+session="${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}"
+export ANTHROPIC_CUSTOM_HEADERS="${ANTHROPIC_CUSTOM_HEADERS:+${ANTHROPIC_CUSTOM_HEADERS}
+}X-Archestra-Session-Id: ${session}
+X-Appa-Session-ID: ${session}${ARCHESTRA_AGENT_RUNTIME_BINDING:+
+X-Archestra-Runtime-Binding: ${ARCHESTRA_AGENT_RUNTIME_BINDING}}"
+
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+# The runtime directory outlives the pod. A killed run must not leave a held
+# turn behind for a later continuation.
+rm -f "${runtime_dir}/turn-waiting-background"
+rm -f "${runtime_dir}/claude-background.json" "${runtime_dir}/claude-background.unavailable"
+mcp_config="${runtime_dir}/claude-mcp.json"
+jq -n \
+  --arg url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
+  --arg token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
+  --arg task_id "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" \
+  --arg session "${session}" \
+  --arg binding "${ARCHESTRA_AGENT_RUNTIME_BINDING:-}" \
+  '{mcpServers:{archestra:{
+    type:"http",
+    alwaysLoad:true,
+    discoveryCache:false,
+    url:$url,
+    headers:({
+      Authorization:("Bearer " + $token),
+      "X-Archestra-Run-Id":$task_id,
+      "X-Archestra-Session-Id":$session,
+      "X-Appa-Session-ID":$session
+    } + (if $binding == "" then {} else {"X-Archestra-Runtime-Binding":$binding} end))
+  }}}' \
+  > "${mcp_config}"
+chmod 0600 "${mcp_config}"
+
+# Pre-accept the workspace trust prompt. Claude Code asks "is this a project
+# you trust?" the first time it opens a directory, and --dangerously-skip-
+# permissions does NOT cover it. Print mode never renders the prompt, so this
+# was invisible until delegated runs started using the TUI — and then the
+# session sat on the dialog with nobody able to answer, burning the whole run.
+# Merged rather than written, because Claude Code rewrites this file as it runs.
+claude_json="${CLAUDE_CONFIG_DIR:-${HOME}}/.claude.json"
+mkdir -p "$(dirname "${claude_json}")"
+workspace="$(pwd)"
+trust_patch="$(jq -n --arg dir "${workspace}" \
+  '{hasCompletedOnboarding:true,bypassPermissionsModeAccepted:true,
+    projects:{($dir):{hasTrustDialogAccepted:true}}}')"
+if [[ -s "${claude_json}" ]] && jq -e . "${claude_json}" >/dev/null 2>&1; then
+  merged="$(jq --argjson patch "${trust_patch}" '. * $patch' "${claude_json}")"
+else
+  merged="${trust_patch}"
+fi
+printf '%s\n' "${merged}" > "${claude_json}"
+chmod 0600 "${claude_json}"
+
+args=(
+  --model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
+  --permission-mode bypassPermissions
+  --mcp-config "${mcp_config}"
+  --strict-mcp-config
+)
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+  if [[ -s "${runtime_dir}/claude-session-id" ]]; then
+    args+=(--resume "$(cat "${runtime_dir}/claude-session-id")")
+  else
+    echo "archestra: Cannot resume the saved Claude Code session: its session ID is missing. The workspace is preserved; no new session was started." >&2
+    exit 78
+  fi
+fi
+system_prompt="$("$(dirname "${BASH_SOURCE[0]}")/archestra-agent-instructions")"
+if [[ -n "${system_prompt}" ]]; then
+  args+=(--append-system-prompt "${system_prompt}")
+fi
+
+# Claude Code knows when it is waiting for a person. Reflect its native hook
+# events in tmux rather than guessing from terminal contents. The platform's
+# tmux status-left format reads these user options for every attached client.
+attention_hook="${runtime_dir}/attention-hook.sh"
+settings_file="${runtime_dir}/claude-settings.json"
+cat > "${attention_hook}" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+payload="$(cat)"
+event="$(jq -r '.hook_event_name // empty' <<<"${payload}")"
+notification="$(jq -r '.notification_type // empty' <<<"${payload}")"
+attention_command="${ARCHESTRA_AGENT_ATTENTION_COMMAND:-archestra-agent-attention}"
+
+case "${event}:${notification}" in
+  Notification:permission_prompt)
+    label="Permission needed"
+    ;;
+  Notification:idle_prompt)
+    # Waiting for background work or a scheduled wakeup needs no input.
+    if [[ -f "${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}/turn-waiting-background" ]]; then
+      "${attention_command}" clear
+      exit 0
+    fi
+    label="Waiting for input"
+    ;;
+  Notification:elicitation_dialog)
+    label="Input requested"
+    ;;
+  *)
+    "${attention_command}" clear
+    exit 0
+    ;;
+esac
+
+"${attention_command}" set "${label}"
+HOOK
+chmod 0700 "${attention_hook}"
+transcript_hook="${runtime_dir}/transcript-hook.sh"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+printf '#!/usr/bin/env bash\nfailure_command=%q\n' "${script_dir}/archestra-agent-failure" > "${transcript_hook}"
+printf 'background_command=%q\n' "${script_dir}/archestra-claude-background" >> "${transcript_hook}"
+cat >> "${transcript_hook}" <<'HOOK'
+set -euo pipefail
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+payload="$(cat)"
+native_session_id="$(jq -r '.session_id // empty' <<<"${payload}")"
+session_file="${runtime_dir}/claude-session-id"
+if [[ -n "${native_session_id}" ]]; then
+  if [[ -s "${session_file}" && "${native_session_id}" != "$(cat "${session_file}")" ]]; then
+    printf '{}\n'
+    exit 0
+  fi
+  printf '%s\n' "${native_session_id}" > "${session_file}"
+fi
+if [[ "$(jq -r '.hook_event_name // empty' <<<"${payload}")" == "SessionStart" ]]; then
+  printf '{}\n'
+  exit 0
+fi
+event="$(jq -r '.hook_event_name // empty' <<<"${payload}")"
+if [[ "${event}" == "PostToolUse" || "${event}" == "UserPromptSubmit" || "${event}" == "SubagentStop" ]]; then
+  if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "one_shot" ]]; then
+    printf '%s' "${payload}" | "${background_command}" >/dev/null
+  fi
+  exit 0
+fi
+# API failures fire StopFailure instead of Stop. Without this hook a delegated
+# TUI stays open forever, even though the provider has already rejected the turn.
+if [[ "$(jq -r '.hook_event_name // empty' <<<"${payload}")" == "StopFailure" ]]; then
+  if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" != "one_shot" ]]; then
+    "${ARCHESTRA_AGENT_ATTENTION_COMMAND:-archestra-agent-attention}" set "API error: check terminal" || true
+    exit 0
+  fi
+  case "$(jq -r '.error // empty' <<<"${payload}")" in
+    authentication_failed|cloud_credential_error) code=claude_authentication; message="Claude Code authentication failed. Reconnect your Claude Code account for subscription runs, or check the configured provider credential." ;;
+    oauth_org_not_allowed|account_on_hold|billing_error) code=claude_billing; message="Claude Code could not use the account. Check its billing status and organization access." ;;
+    rate_limit) code=claude_rate_limit; message="Claude Code reached a rate limit. Retry when account capacity is available." ;;
+    overloaded|server_error) code=claude_unavailable; message="Claude Code could not complete the API request. The provider may be temporarily unavailable; retry later." ;;
+    invalid_request|model_not_found|max_output_tokens) code=claude_request; message="Claude Code rejected the request. Check the configured model and account access." ;;
+    *) code=claude_api_error; message="Claude Code ended the turn after an API error. Inspect the run terminal for details." ;;
+  esac
+  # The image owns this safe summary. Never forward raw provider error details
+  # or credentials into the generic Runtime failure envelope.
+  if [[ -n "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ]]; then
+    jq -n --arg code "$code" --arg message "$message" '{version:1,code:$code,message:$message}' > "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp"
+    mv "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure.tmp" "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure"
+  fi
+  printf '%s\n' "$message" > "${runtime_dir}/final-answer.txt"
+  touch "${runtime_dir}/turn-complete.failed"
+  touch "${runtime_dir}/turn-complete"
+  exit 0
+fi
+transcript="$(jq -r '.transcript_path // empty' <<<"${payload}")"
+last_assistant_message="$(jq -r '.last_assistant_message | strings // empty' <<<"${payload}")"
+printf '%s\n' '{"hook_event_name":"Stop"}' \
+  | "${runtime_dir}/attention-hook.sh" \
+  >/dev/null 2>&1 || true
+
+if [[ -n "${transcript}" && -r "${transcript}" ]]; then
+  readable_tmp="${runtime_dir}/readable-transcript.tmp.json"
+  if jq -s --arg final "${last_assistant_message}" '
+    def timestamp($entry):
+      if ($entry.timestamp | type) == "string"
+      then {timestamp:$entry.timestamp}
+      else {}
+      end;
+    def content_text:
+      if . == null then ""
+      elif type == "string" then .
+      elif type == "array" then
+        [ .[]
+          | if type == "string" then .
+            elif type == "object" and .type == "text" and (.text | type) == "string" then .text
+            else empty
+            end
+        ] | join("\n")
+      else tostring
+      end;
+    {
+      version:1,
+      provider:"claude-code",
+      entries:[
+        .[] as $entry
+        | select($entry.type == "user" or $entry.type == "assistant")
+        | ($entry.message.content // empty) as $content
+        | if ($content | type) == "string" then
+            select($content != "")
+            | ({type:"message", role:$entry.type, text:$content} + timestamp($entry))
+          elif ($content | type) == "array" then
+            $content[]
+            | if .type == "text" and (.text | type) == "string" and .text != "" then
+                ({type:"message", role:$entry.type, text:.text} + timestamp($entry))
+              elif .type == "tool_use" and (.name | type) == "string" then
+                ({type:"tool_call", name:.name} + timestamp($entry)
+                  + (if (.id | type) == "string" then {toolCallId:.id} else {} end)
+                  + (if .input != null then {input:(.input | tojson)} else {} end))
+              elif .type == "tool_result" then
+                (.content | content_text) as $text
+                | ({type:"tool_result", text:(if $text == "" then "[Non-text result omitted]" else $text end)}
+                  + timestamp($entry)
+                  + (if (.tool_use_id | type) == "string" then {toolCallId:.tool_use_id} else {} end)
+                  + (if .is_error == true then {isError:true} else {} end))
+              else empty
+              end
+          else empty
+          end
+      ]
+    }
+    | if $final != "" and
+        (.entries[-1] | .type != "message" or .role != "assistant" or .text != $final)
+      then .entries += [{type:"message", role:"assistant", text:$final}]
+      else . end
+  ' "${transcript}" > "${readable_tmp}" 2>/dev/null; then
+    mv "${readable_tmp}" "${runtime_dir}/readable-transcript.json"
+  else
+    rm -f "${readable_tmp}"
+  fi
+fi
+
+if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "one_shot" && ! -f "${runtime_dir}/turn-complete" ]]; then
+  # Stop can fire before the final response is flushed to the JSONL file.
+  if [[ -z "${last_assistant_message}" && -n "${transcript}" && -r "${transcript}" ]]; then
+    last_assistant_message="$(jq -rs '[.[]
+        | select(.type == "assistant")
+        | .message.content
+        | if type == "array" then (map(select(.type == "text") | .text) | join("")) else . end
+        | select(. != null and . != "")
+      ] | last // ""' "${transcript}" 2>/dev/null || true)"
+  fi
+  # A finished shell can leave the native inventory before its notification
+  # reaches the agent. Include launched work awaiting native result delivery.
+  pending="$(printf '%s' "${payload}" | "${background_command}")"
+  case "${pending}" in
+    true)
+      touch "${runtime_dir}/turn-waiting-background"
+      exit 0
+      ;;
+    false) ;;
+    *)
+      last_assistant_message="The agent could not determine whether background work is pending. Resume the session to check its work."
+      "${failure_command}" background_state_unavailable "${last_assistant_message}"
+      touch "${runtime_dir}/turn-complete.failed"
+      ;;
+  esac
+  rm -f "${runtime_dir}/turn-waiting-background"
+  # The supervisor observes this marker; publish the answer or failure first.
+  printf '%s\n' "${last_assistant_message}" > "${runtime_dir}/final-answer.txt"
+  touch "${runtime_dir}/turn-complete"
+fi
+HOOK
+chmod 0700 "${transcript_hook}"
+
+# A question nobody answers would otherwise hold the run until its hard stop.
+# Claude's own timer ends it after 10 minutes, the same wait the MCP gateway
+# gives other clients' forms. tmux does not pass focus events, so the timer
+# runs whether or not the live terminal is open.
+jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript_hook}" '{skipDangerousModePermissionPrompt:true,askUserQuestionTimeout:"10m",hooks:{
+  Notification:[{
+    matcher:"permission_prompt|idle_prompt|elicitation_dialog|elicitation_complete|elicitation_response|auth_success",
+    hooks:[{type:"command",command:$attention_cmd}]
+  }],
+  SessionStart:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}],
+  UserPromptSubmit:[{matcher:"",hooks:[{type:"command",command:$attention_cmd},{type:"command",command:$transcript_cmd}]}],
+  PostToolUse:[{matcher:"",hooks:[{type:"command",command:$attention_cmd},{type:"command",command:$transcript_cmd}]}],
+  SubagentStop:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}],
+  Stop:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}],
+  StopFailure:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}]
+}}' > "${settings_file}"
+args+=(--settings "${settings_file}")
+
+tui_start=(python3 "${script_dir}/archestra-claude-tui-start")
+
+case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
+  interactive)
+    # The same native TUI discovers tools before receiving a task. An empty
+    # prompt restores the session for input without submitting a model turn.
+    exec "${tui_start[@]}" claude "${args[@]}"
+    ;;
+  one_shot)
+    # Delegation has nobody attached to exit a TUI, which is why this mode
+    # exists — but `--print` draws NOTHING until the final answer, so the
+    # execution's live terminal sits blank for the whole run and a person who
+    # attaches cannot tell a working session from a wedged one.
+    #
+    # Run the real TUI instead, and give it the completion contract print mode
+    # provided for free: a Stop hook fires when the turn ends, writes the final
+    # assistant message out of the transcript, and drops a marker. A watchdog
+    # sees the marker, ends the session, and prints the answer behind the
+    # platform's fence — so the task still settles on one clean terminal
+    # result while the pane shows the native interface throughout.
+    #
+    # ARCHESTRA_AGENT_RUNTIME_PLAIN=1 forces the old print mode.
+    if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]] \
+      || ! command -v jq >/dev/null 2>&1; then
+      exec claude --print "${args[@]}" "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+    fi
+
+    answer_file="${runtime_dir}/final-answer.txt"
+    done_marker="${runtime_dir}/turn-complete"
+    rm -f "${answer_file}" "${done_marker}"
+
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    exec "${script_dir}/archestra-tui-run" \
+      "${done_marker}" \
+      "${answer_file}" \
+      "${tui_start[@]}" claude "${args[@]}"
+    ;;
+  *)
+    echo "archestra: unknown Agent Runtime mode" >&2
+    exit 78
+    ;;
+esac

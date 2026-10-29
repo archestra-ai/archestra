@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useExternalMcpSkills } from "@/lib/skills/skill.query";
@@ -41,6 +42,7 @@ vi.mock("@/components/mcp-catalog-icon", () => ({
 }));
 
 import { CompactToolGroup } from "./compact-tool-call";
+import { identifyRemedyChains } from "./openappa-remedy-chains";
 
 const LOAD_SKILL_TOOL_NAME = "archestra__load_skill";
 
@@ -69,11 +71,12 @@ describe("CompactToolGroup", () => {
     // the default code path. Tests that exercise the SkillPill branch can
     // override per-call.
     mockGetToolShortName.mockReturnValue(null);
+    vi.mocked(useSession).mockReturnValue({ data: undefined } as never);
     vi.mocked(useHasPermissions).mockReturnValue({ data: false } as never);
     vi.mocked(useExternalMcpSkills).mockReturnValue({ data: [] } as never);
   });
 
-  it("shows the confirmed policy return action while tool details remain collapsed", () => {
+  it("opens a saved policy's circle on its one-line result, with no diff", () => {
     mockGetToolShortName.mockImplementation((name: string) =>
       name === "archestra__update_guardrails_policy"
         ? "update_guardrails_policy"
@@ -115,7 +118,88 @@ describe("CompactToolGroup", () => {
     ).toHaveAttribute("href", "/openappa");
     expect(
       screen.getByRole("button", { name: "update guardrails policy" }),
-    ).toHaveAttribute("aria-expanded", "false");
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+  });
+
+  it("keeps saved validations visible without claiming a run or policy activation", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const client = new QueryClient();
+    const publication = {
+      delivery: "revision",
+      revision: 2,
+      version: "specs-v2",
+      policyChanged: false,
+      validation: { valid: true, errors: [], warnings: [] },
+    };
+    const show = (output: unknown) => (
+      <QueryClientProvider client={client}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "publish",
+              toolName: "archestra__update_guardrails_validation",
+              part: {
+                type: "tool-archestra__update_guardrails_validation",
+                state: "output-available",
+                toolCallId: "publish",
+                input: {},
+                output,
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(show({ structuredContent: publication }));
+    expect(screen.getByText("Saved validations")).toBeInTheDocument();
+    expect(screen.getByText(/not run yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/draft replay/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View Validations" }),
+    ).toHaveAttribute("href", "/openappa/validation");
+    expect(
+      screen.getByRole("button", {
+        name: "update guardrails validation",
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByText(/Enforcement confirmed/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Saved revision/)).not.toBeInTheDocument();
+    rerender(show({ content: JSON.stringify(publication) }));
+    expect(screen.getByText("Saved validations")).toBeInTheDocument();
+    rerender(
+      show({
+        structuredContent: {
+          ...publication,
+          delivery: "pull_request",
+          number: 17,
+          url: "https://github.com/example/policies/pull/17",
+          before: "unchanged policy",
+          after: "unchanged policy",
+        },
+      }),
+    );
+    expect(
+      screen.getByRole("link", { name: "Review pull request" }),
+    ).toHaveAttribute("href", "https://github.com/example/policies/pull/17");
+    expect(screen.getByText(/merge it to apply/)).toBeInTheDocument();
+    expect(screen.queryByText("Saved validations")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "update guardrails validation",
+      }),
+    );
+    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+    rerender(show({ structuredContent: publication, isError: true }));
+    expect(
+      screen.queryByRole("link", { name: "View Validations" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the native credential dialog for a completed compact chat tool call", () => {
@@ -152,6 +236,129 @@ describe("CompactToolGroup", () => {
     expect(screen.getByRole("dialog", { name: "" })).toHaveTextContent(
       "Add credential",
     );
+  });
+
+  it.each([
+    { turnActive: true, name: "read file (running)", dot: "bg-blue-500" },
+    { turnActive: false, name: "read file (blocked)", dot: "bg-orange-500" },
+  ])("shows a negotiating guarded call as running while its turn is active ($turnActive)", ({
+    turnActive,
+    name,
+    dot,
+  }) => {
+    mockGetToolShortName.mockImplementation((toolName: string) =>
+      toolName.startsWith("archestra__")
+        ? toolName.replace("archestra__", "")
+        : null,
+    );
+    const ruling =
+      '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "0d0d0d0d0d0d0d0d")';
+    const notice = {
+      type: "tool-archestra__get_remedy_plans",
+      state: "output-available",
+      toolCallId: "call-notice",
+      input: {
+        tool: "fs__read_file",
+        arguments: {},
+        ruling,
+        notice: { v: 1, call_id: "call-notice" },
+      },
+      output: ruling,
+    };
+    const [chain] = identifyRemedyChains([notice], {
+      getToolShortName: mockGetToolShortName,
+    });
+
+    render(
+      <CompactToolGroup
+        turnActive={turnActive}
+        tools={[
+          {
+            kind: "tool",
+            key: "chain-1",
+            toolName: "archestra__get_remedy_plans",
+            part: notice as never,
+            toolResultPart: null,
+            errorText: undefined,
+            remedyChain: chain,
+          },
+        ]}
+      />,
+    );
+
+    const circle = screen.getByRole("button", { name });
+    const statusDot = circle.querySelector("span.absolute");
+    expect(statusDot?.className).toContain(dot);
+    expect(statusDot?.className.includes("animate-pulse")).toBe(turnActive);
+  });
+
+  it.each([
+    { released: false, dialogs: 0 },
+    { released: true, dialogs: 1 },
+  ])("opens a guarded credential setup's dialog only once it is released (released: $released)", ({
+    released,
+    dialogs,
+  }) => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.startsWith("archestra__") ? name.replace("archestra__", "") : null,
+    );
+    const target = "archestra__request_runtime_credential_setup";
+    const ruling =
+      '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "0c0c0c0c0c0c0c0c")';
+    const notice = {
+      type: "tool-archestra__get_remedy_plans",
+      state: "output-available",
+      toolCallId: "call-notice",
+      input: {
+        tool: target,
+        arguments: { kind: "github_app" },
+        ruling,
+        notice: { v: 1, call_id: "call-notice" },
+      },
+      output: ruling,
+    };
+    const parts: unknown[] = [
+      notice,
+      {
+        type: "tool-archestra__execute_remedy_plan",
+        state: "output-available",
+        toolCallId: "call-remedy",
+        input: { offer_id: "0c0c0c0c0c0c0c0c" },
+        output: "[appa] Authorized.",
+      },
+    ];
+    if (released) {
+      parts.push({
+        type: `tool-${target}`,
+        state: "output-available",
+        toolCallId: "call-retry",
+        input: { kind: "github_app" },
+        output: { action: "open_credential_dialog", kind: "github_app" },
+      });
+    }
+    const [chain] = identifyRemedyChains(parts, {
+      getToolShortName: mockGetToolShortName,
+    });
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "chain-1",
+              toolName: "archestra__get_remedy_plans",
+              part: notice as never,
+              toolResultPart: null,
+              errorText: undefined,
+              remedyChain: chain,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryAllByRole("dialog", { name: "" })).toHaveLength(dialogs);
   });
 
   it("shows a denial notice's arguments as the object they hold", async () => {
@@ -209,6 +416,13 @@ describe("CompactToolGroup", () => {
       circle: "execute remedy plan (approved by you)",
       header: "Approved by you",
     },
+    {
+      // The reviewer approved, but a policy publish retired the offer first.
+      ruling: "superseded",
+      text: "[appa] this offer no longer stands; re-propose the call",
+      circle: "execute remedy plan (policy changed, the agent will ask again)",
+      header: "Policy changed, the agent will ask again",
+    },
   ])("says the viewer's own ruling on a reviewed remedy ($ruling)", ({
     ruling,
     text,
@@ -249,6 +463,85 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByText("Completed")).not.toBeInTheDocument();
   });
 
+  it.each([
+    { humanRuling: undefined, label: "Blocked" },
+    { humanRuling: "deny", label: "Denied by you" },
+  ])("names a guarded call by its target until it is released ($label)", ({
+    humanRuling,
+    label,
+  }) => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.startsWith("archestra__") ? name.replace("archestra__", "") : null,
+    );
+    const ruling =
+      '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "0b0b0b0b0b0b0b0b", plan: "Accept")';
+    const notice = {
+      type: "tool-archestra__get_remedy_plans",
+      state: "output-available",
+      toolCallId: "call-notice",
+      input: {
+        tool: "fs__read_file",
+        arguments: { path: "/notes.md" },
+        ruling,
+        notice: { v: 1, call_id: "call-notice" },
+      },
+      output: ruling,
+    };
+    const [chain] = identifyRemedyChains(
+      [
+        notice,
+        {
+          type: "tool-archestra__execute_remedy_plan",
+          state: "output-available",
+          toolCallId: "call-remedy",
+          input: { offer_id: "0b0b0b0b0b0b0b0b", plan: "Accept" },
+          output: {
+            content: [{ type: "text", text: "[appa] Not authorized." }],
+            ...(humanRuling
+              ? { _meta: { archestraHumanRuling: humanRuling } }
+              : {}),
+          },
+        },
+      ],
+      { getToolShortName: mockGetToolShortName },
+    );
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "chain-1",
+              toolName: "archestra__get_remedy_plans",
+              part: notice as never,
+              toolResultPart: null,
+              errorText: undefined,
+              remedyChain: chain,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `read file (${label.toLowerCase()})`,
+      }),
+    );
+
+    expect(screen.getByText("fs__read_file")).toBeInTheDocument();
+    expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    expect(screen.getByText("Guardrails")).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByText(/^archestra__(get_remedy_plans|execute_remedy_plan)$/)
+        .map((node) => node.textContent),
+    ).toEqual([
+      "archestra__get_remedy_plans",
+      "archestra__execute_remedy_plan",
+    ]);
+  });
+
   it("renders a compact Skill marker for a load_skill activation (no path)", () => {
     mockGetToolShortName.mockReturnValue(TOOL_LOAD_SKILL_SHORT_NAME);
 
@@ -258,6 +551,36 @@ describe("CompactToolGroup", () => {
 
     expect(screen.queryByText("Skill:")).not.toBeInTheDocument();
     expect(screen.getByText("Build App")).toBeInTheDocument();
+  });
+
+  it("explains a skill pill on hover only when the tooltip adds to its name", async () => {
+    mockGetToolShortName.mockReturnValue(TOOL_LOAD_SKILL_SHORT_NAME);
+    const user = userEvent.setup();
+    const entry = loadSkillEntry({ name: "Build App" });
+    const { rerender } = render(<CompactToolGroup tools={[entry]} />);
+
+    await user.hover(screen.getByRole("status", { name: "Build App" }));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    rerender(
+      <CompactToolGroup
+        tools={[
+          {
+            ...entry,
+            part: {
+              ...(entry.part as object),
+              state: "input-available",
+              output: undefined,
+            } as never,
+          },
+        ]}
+      />,
+    );
+    await user.hover(screen.getByRole("status", { name: "Loading Build App" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Loading Build App",
+    );
   });
 
   it("hides external installation qualifiers from the Skill marker", () => {

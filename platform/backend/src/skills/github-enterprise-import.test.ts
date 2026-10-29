@@ -1,9 +1,18 @@
+import { gitHostFromUrl } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
+import type { GitAccess } from "@/git-hosts/git-access";
 import { stubSkillManifest as manifest } from "@/test/github-skills-stub";
 import { useMswServer as setupMswServer } from "@/test/msw";
 import { discoverSkills, importSkills } from "./github-import";
 import { githubSkillSourceFromApiUrl } from "./github-source";
+
+function enterpriseAccess(apiUrl: string): GitAccess {
+  return {
+    host: gitHostFromUrl({ provider: "github", url: apiUrl }),
+    token: githubToken,
+  };
+}
 
 const server = setupMswServer();
 const githubToken = "enterprise-installation-token";
@@ -92,16 +101,14 @@ describe("Enterprise skill imports", () => {
     });
     const discovered = await discoverSkills({
       repoUrl,
-      githubToken,
-      githubSource,
+      access: enterpriseAccess(githubSource.apiBaseUrl),
     });
     expect(discovered.skills.map((skill) => skill.name)).toEqual([
       "enterprise-skill",
     ]);
     const [imported] = await importSkills({
       repoUrl,
-      githubToken,
-      githubSource,
+      access: enterpriseAccess(githubSource.apiBaseUrl),
       skillPaths: ["nested/skill"],
     });
     expect(imported).toMatchObject({
@@ -143,10 +150,7 @@ describe("Enterprise skill imports", () => {
     await expect(
       discoverSkills({
         repoUrl,
-        githubToken,
-        githubSource: githubSkillSourceFromApiUrl(
-          "https://git.example.test/api/v3",
-        ),
+        access: enterpriseAccess("https://git.example.test/api/v3"),
       }),
     ).rejects.toThrow("Repository URL must belong to https://git.example.test");
     expect(requests).toHaveLength(0);
@@ -174,8 +178,7 @@ describe("Enterprise skill imports", () => {
     await expect(
       discoverSkills({
         repoUrl: "redirect-api/skills",
-        githubToken,
-        githubSource,
+        access: enterpriseAccess(githubSource.apiBaseUrl),
       }),
     ).rejects.toThrow("Could not resolve ref");
     expect(destinationRequests).toHaveLength(0);
@@ -210,8 +213,7 @@ describe("Enterprise skill imports", () => {
     );
     const [imported] = await importSkills({
       repoUrl: "resource-limits/skills",
-      githubSource,
-      githubToken,
+      access: enterpriseAccess(githubSource.apiBaseUrl),
       skillPaths: ["nested/skill"],
     });
     expect(imported.files).toEqual([]);

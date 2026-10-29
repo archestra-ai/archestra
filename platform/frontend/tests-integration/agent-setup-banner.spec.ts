@@ -48,7 +48,7 @@ const READY: Preflight = {
   incompatible: null,
 };
 
-test("spaces the setup banner like the rest of the agent page, and lets a ready agent dismiss it", async ({
+test("spaces the setup track like the rest of the agent overview, and clears it once the account is connected", async ({
   page,
   mswControl,
   request,
@@ -56,26 +56,35 @@ test("spaces the setup banner like the rest of the agent page, and lets a ready 
   await mockAgentPage({ mswControl, request });
   await page.goto(`/agents/${AGENT.id}?section=general`);
 
-  await expect(
-    page.getByRole("alert").filter({ hasText: "Before this agent can run" }),
-  ).toBeVisible();
-  await connectClaudeAccount(page, mswControl);
+  // A missing Claude account is one requirement of the setup track.
+  const notice = page.getByRole("status").filter({ hasText: "Before it runs" });
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("Claude subscription");
 
-  const banner = page.getByRole("alert").filter({ hasText: "Ready to run." });
-  const form = page.locator("form").first();
-  await expect(banner).toBeVisible();
-  await expect(form.getByLabel(/^Name/)).toBeVisible();
-
-  // Compare against a gap the form already keeps, not a number from the CSS.
-  const standardGap = await verticalGap(
-    form.getByLabel(/^Name/),
-    form.locator("label").filter({ hasText: /^Authentication$/ }),
-  );
+  // The checklist is followed by where the agent gets its work, then its
+  // instructions. Compare against a gap the page already keeps, not a number
+  // from the CSS.
+  const workSources = page.getByRole("region", { name: "Give it work" });
+  const instructions = page.getByRole("region", { name: "Instructions" });
+  const standardGap = await verticalGap(workSources, instructions);
   expect(standardGap).toBeGreaterThan(0);
-  expect(await verticalGap(banner, form)).toBeCloseTo(standardGap, 0);
+  expect(await verticalGap(notice, workSources)).toBeCloseTo(standardGap, 0);
 
-  await page.getByRole("button", { name: "Dismiss" }).click();
-  await expect(banner).toHaveCount(0);
+  await connectClaudeAccount(page, mswControl);
+  // Setup is done, so the checklist goes and the work sources are usable.
+  await expect(notice).toHaveCount(0);
+  await expect(workSources).not.toContainText(
+    "Runs start once setup above is done.",
+  );
+
+  await page.goto(`/agents/${AGENT.id}/edit`);
+  await expect(
+    page.getByRole("status").filter({ hasText: "Signed in for you" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Signed in for you" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Opus$/ })).toBeVisible();
 });
 
 async function mockAgentPage({
@@ -103,10 +112,45 @@ async function mockAgentPage({
     url: `/api/agents/${AGENT.id}/subagent-exclusions`,
     body: { excludedSubagentIds: [] },
   });
+  await mswControl.registerMany([
+    {
+      method: "get",
+      url: `/api/agents/${AGENT.id}/tool-exclusions`,
+      body: { excludedToolIds: [] },
+    },
+    {
+      method: "get",
+      url: `/api/agents/${AGENT.id}/knowledge-source-exclusions`,
+      body: { excludedConnectorIds: [] },
+    },
+    {
+      method: "get",
+      url: `/api/agents/${AGENT.id}/activation-skill-policy`,
+      body: {
+        mode: "all",
+        revision: 0,
+        allowedReferences: [],
+        excludedReferences: [],
+        hiddenAllowedCount: 0,
+        hiddenExcludedCount: 0,
+        allowedSkills: [],
+        excludedSkills: [],
+      },
+    },
+  ]);
   await mswControl.use({
     method: "get",
     url: `/api/agents/${AGENT.id}/runtime/claude-code/models`,
-    body: { models: [] },
+    body: {
+      models: [
+        { value: "opus", displayName: "Opus", description: "Runtime default" },
+      ],
+    },
+  });
+  await mswControl.use({
+    method: "get",
+    url: `/api/agents/${AGENT.id}/runs`,
+    body: [],
   });
   await setAccountState({
     mswControl,
@@ -136,22 +180,33 @@ async function setAccountState({
   });
 }
 
-/** Signing in from the banner's own action is how it reaches "Ready to run.". */
+/**
+ * Opens sign-in from the checklist row's own action, which starts Claude's
+ * flow at once. Once the account connects the agent is ready, and the dialog
+ * it opened goes away.
+ */
 async function connectClaudeAccount(page: Page, mswControl: MswControl) {
+  await mswControl.use({
+    method: "post",
+    url: `/api/agents/${AGENT.id}/runtime/claude-code/account`,
+    body: {
+      state: "awaiting_code",
+      flowId: "00000000-0000-4000-8000-000000000001",
+      authorizationUrl: "https://claude.example.test/oauth/authorize",
+    },
+  });
   await page
-    .getByRole("alert")
-    .getByRole("button", { name: "Sign in" })
+    .getByRole("status")
+    .getByRole("button", { name: "Sign in with Claude" })
     .click();
+  // One click starts Claude's sign-in: the dialog opens on its steps.
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("link", { name: "Open Claude" })).toBeVisible();
   await setAccountState({
     mswControl,
     account: { state: "connected" },
     preflight: READY,
   });
-  // The dialog polls while it is open, so let the banner settle before closing.
-  await expect(
-    page.getByRole("alert").filter({ hasText: "Ready to run." }),
-  ).toBeAttached();
-  await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 

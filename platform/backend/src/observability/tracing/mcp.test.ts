@@ -43,8 +43,7 @@ describe("recordBlockedToolSpans", () => {
   test("creates spans for each blocked tool call with correct attributes", () => {
     recordBlockedToolSpans({
       toolCallNames: ["github__list_repos", "slack__send_message"],
-      blockedReason:
-        "Tool invocation blocked: policy is configured to always block tool call",
+      blockedReason: "OpenAPPA refused this tool call",
       agent: { id: "agent-123", name: "test-agent" },
     });
 
@@ -70,7 +69,7 @@ describe("recordBlockedToolSpans", () => {
     expect(githubSpan?.attributes["gen_ai.agent.name"]).toBe("test-agent");
     expect(githubSpan?.attributes["mcp.blocked"]).toBe(true);
     expect(githubSpan?.attributes["mcp.blocked_reason"]).toBe(
-      "Tool invocation blocked: policy is configured to always block tool call",
+      "OpenAPPA refused this tool call",
     );
     expect(githubSpan?.status.code).toBe(SpanStatusCode.ERROR);
 

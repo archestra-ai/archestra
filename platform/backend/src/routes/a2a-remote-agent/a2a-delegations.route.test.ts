@@ -1,4 +1,8 @@
-import { ADMIN_ROLE_NAME, AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
+import {
+  AGENT_TOOL_PREFIX,
+  MEMBER_ROLE_NAME,
+  slugify,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { getAgentTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
@@ -47,6 +51,16 @@ describe("outbound A2A subagent assignments", () => {
       "External Researcher",
     );
     const second = await createRemoteAgent(ctx.organizationId, "Second Remote");
+    // The count reads only rows without a pinned MCP server, so the
+    // delegation path must never pin one.
+    const assignmentCount = async (remoteAgentId: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/a2a/remote-agents/${remoteAgentId}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json().assignmentCount;
+    };
 
     const initial = await ctx.app.inject({
       method: "POST",
@@ -59,6 +73,7 @@ describe("outbound A2A subagent assignments", () => {
       removed: [],
     });
     expect(await assignedToolIds(parent.id)).toEqual([first.toolId]);
+    expect(await assignmentCount(first.id)).toBe(1);
 
     const listed = await ctx.app.inject({
       method: "GET",
@@ -87,6 +102,8 @@ describe("outbound A2A subagent assignments", () => {
       removed: [first.connection.id],
     });
     expect(await assignedToolIds(parent.id)).toEqual([second.toolId]);
+    expect(await assignmentCount(first.id)).toBe(0);
+    expect(await assignmentCount(second.id)).toBe(1);
 
     const removed = await ctx.app.inject({
       method: "POST",
@@ -355,7 +372,10 @@ describe("outbound A2A subagent assignments", () => {
     });
     expect(response.statusCode).toBe(200);
 
-    await AgentToolModel.assignDelegation(parent.id, localTarget.id);
+    await AgentToolModel.assignDelegation({
+      agentId: parent.id,
+      targetAgentId: localTarget.id,
+    });
     expect(new Set(await assignedToolIds(parent.id))).toEqual(
       new Set([
         remote.toolId,
@@ -434,7 +454,7 @@ describe("outbound A2A subagent assignments", () => {
     const viewer = await makeUser();
     await makeMember(owner.id, ctx.organizationId);
     await makeMember(viewer.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
+      role: MEMBER_ROLE_NAME,
     });
     const parent = await makeAgent({
       organizationId: ctx.organizationId,
@@ -449,7 +469,6 @@ describe("outbound A2A subagent assignments", () => {
         name: "Private external target",
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
     ctx.user = viewer;
@@ -464,7 +483,7 @@ describe("outbound A2A subagent assignments", () => {
     expect(await assignedToolIds(parent.id)).toEqual([]);
   });
 
-  test("preserves hidden assignments when a settings manager replaces visible assignments", async ({
+  test("preserves hidden assignments when a member replaces visible assignments", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -473,7 +492,7 @@ describe("outbound A2A subagent assignments", () => {
     const manager = await makeUser();
     await makeMember(owner.id, ctx.organizationId);
     await makeMember(manager.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
+      role: MEMBER_ROLE_NAME,
     });
     const parent = await makeAgent({
       organizationId: ctx.organizationId,
@@ -488,7 +507,6 @@ describe("outbound A2A subagent assignments", () => {
         name: "Hidden existing target",
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
     const previousVisible = await createRemoteAgent(

@@ -1,7 +1,9 @@
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   MarketplaceRepoRef,
+  ReplayRevision,
+  RevisionHead,
   RevisionPayload,
   SkillShareLinkRevision,
 } from "@/types/skill-share-link-revision";
@@ -18,11 +20,19 @@ interface AppendRevisionParams {
 }
 
 class SkillShareLinkRevisionModel {
-  static async getLatest(
+  /**
+   * The newest revision's head, without its payload: every git request reads
+   * this, so it must not drag the full file list along.
+   */
+  static async getLatestHead(
     ref: MarketplaceRepoRef,
-  ): Promise<SkillShareLinkRevision | null> {
+  ): Promise<RevisionHead | null> {
     const [row] = await db
-      .select()
+      .select({
+        sequence: schema.skillShareLinkRevisionsTable.sequence,
+        contentHash: schema.skillShareLinkRevisionsTable.contentHash,
+        commitSha: schema.skillShareLinkRevisionsTable.commitSha,
+      })
       .from(schema.skillShareLinkRevisionsTable)
       .where(ownerFilter(ref))
       .orderBy(desc(schema.skillShareLinkRevisionsTable.sequence))
@@ -40,9 +50,54 @@ class SkillShareLinkRevisionModel {
       .orderBy(asc(schema.skillShareLinkRevisionsTable.sequence));
   }
 
+  /** `commitSha` of the revisions at the given sequences, no payload. */
+  static async listCommitShas(
+    ref: MarketplaceRepoRef,
+    sequences: number[],
+  ): Promise<Array<{ sequence: number; commitSha: string }>> {
+    if (sequences.length === 0) return [];
+    return db
+      .select({
+        sequence: schema.skillShareLinkRevisionsTable.sequence,
+        commitSha: schema.skillShareLinkRevisionsTable.commitSha,
+      })
+      .from(schema.skillShareLinkRevisionsTable)
+      .where(
+        and(
+          ownerFilter(ref),
+          inArray(schema.skillShareLinkRevisionsTable.sequence, sequences),
+        ),
+      );
+  }
+
+  /** Up to `limit` revisions strictly after `sequence`, oldest first. */
+  static async listAfter(
+    ref: MarketplaceRepoRef,
+    sequence: number,
+    limit: number,
+  ): Promise<ReplayRevision[]> {
+    return db
+      .select({
+        sequence: schema.skillShareLinkRevisionsTable.sequence,
+        contentHash: schema.skillShareLinkRevisionsTable.contentHash,
+        commitSha: schema.skillShareLinkRevisionsTable.commitSha,
+        createdAt: schema.skillShareLinkRevisionsTable.createdAt,
+        payload: schema.skillShareLinkRevisionsTable.payload,
+      })
+      .from(schema.skillShareLinkRevisionsTable)
+      .where(
+        and(
+          ownerFilter(ref),
+          gt(schema.skillShareLinkRevisionsTable.sequence, sequence),
+        ),
+      )
+      .orderBy(asc(schema.skillShareLinkRevisionsTable.sequence))
+      .limit(limit);
+  }
+
   /**
    * Appends a new revision. Caller owns deriving `sequence`/`parentSha`
-   * from `getLatest`; the in-memory per-repo mutex in the materializer
+   * from `getLatestHead`; the in-memory per-repo mutex in the materializer
    * keeps concurrent appends serialized within a single process. The unique
    * index on (owner, sequence) is the backstop.
    */

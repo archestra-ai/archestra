@@ -14,12 +14,15 @@ import {
   test,
   vi,
 } from "vitest";
+import { authClient } from "@/lib/clients/auth/auth-client";
 import { invalidatePolicyViews } from "@/lib/openappa-policy-views";
+import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
 import { GuardrailsPolicyEditor } from "./guardrails-policy-editor";
 
 vi.mock("@/components/editor");
 vi.mock("next/navigation");
 vi.mock("sonner");
+vi.mock("@/lib/clients/auth/auth-client");
 const mockRouterPush = vi.fn();
 const origin = "http://localhost:9000";
 const url = `${origin}/api/guardrails-policy`;
@@ -34,13 +37,21 @@ const policy = {
 };
 const declarationsUrl = `${origin}/api/openappa/policy-declarations`;
 const effectiveUrl = `${origin}/api/openappa/effective-policy`;
+const current = {
+  served: {
+    kind: "current",
+    rootRevision: 1,
+    composedAt: "2026-01-01T00:00:00.000Z",
+  },
+  refusal: null,
+};
 const declarations = {
   batteries: [],
   unusedAliases: [],
   rootRevision: 1,
   lastError: null,
+  composition: current,
   managedInGithub: false,
-  heldPull: null,
 };
 function battery(
   name: string,
@@ -59,6 +70,7 @@ function battery(
     servers: [],
     credentials: [],
     helpers: [],
+    served: { status, composed },
   };
 }
 const effective = {
@@ -70,11 +82,16 @@ const effective = {
   compiledAt: "2026-01-01T00:00:00.000Z",
   lastError: null,
   lastErrorAt: null,
+  composition: current,
 };
 let effectiveRequests = 0;
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  vi.mocked(authClient.getSession).mockResolvedValue({
+    data: makeSession(),
+    error: null,
+  } as Awaited<ReturnType<typeof authClient.getSession>>);
   archestraApiClient.setConfig({ baseUrl: origin });
   vi.mocked(useRouter).mockReturnValue({
     push: mockRouterPush,
@@ -82,6 +99,9 @@ beforeEach(() => {
   mockRouterPush.mockClear();
   effectiveRequests = 0;
   server.use(
+    http.get(`${origin}/api/user/permissions`, () =>
+      HttpResponse.json(makeUserPermissions()),
+    ),
     http.get(url, () => HttpResponse.json(policy)),
     http.get(`${origin}/api/openappa/github-sync`, () =>
       HttpResponse.json({ enabled: true, source: null, hasPolicy: false }),
@@ -149,9 +169,9 @@ test("the Policy page selects an included battery source and searches its status
   );
   await userEvent.type(
     await screen.findByPlaceholderText("Search included batteries"),
-    "active",
+    "enforced",
   );
-  expect(screen.getByRole("option", { name: /GitHubActive/ })).toBeVisible();
+  expect(screen.getByRole("option", { name: /GitHubEnforced/ })).toBeVisible();
   expect(
     screen.queryByRole("option", { name: /pendingNeeds a credential/ }),
   ).not.toBeInTheDocument();
@@ -225,22 +245,65 @@ test("the editor footer counts the composed batteries and the unenforced ones", 
   expect(summary).not.toHaveAttribute("data-failed");
   expect(
     within(summary).getByRole("link", { name: "1 not enforced" }),
-  ).toHaveAttribute("href", "/openappa/batteries?status=broken");
+  ).toHaveAttribute("href", "/openappa/batteries?status=attention");
 });
 
-test("a failed composition says so instead of counting batteries", async () => {
+test("a refusal that keeps an earlier composition says which one stays enforced", async () => {
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({
+        ...declarations,
+        batteries: [battery("acme", "active", 3)],
+        rootRevision: 2,
+        lastError: "acme: unknown trust rank",
+        composition: {
+          served: {
+            kind: "previous",
+            rootRevision: 1,
+            composedAt: "2026-01-01T00:00:00.000Z",
+            batteries: [{ name: "acme", status: "active", composed: true }],
+          },
+          refusal: {
+            message: "acme: unknown trust rank",
+            at: "2026-01-02T00:00:00.000Z",
+            rootRevision: 2,
+          },
+        },
+      }),
+    ),
+  );
+  mount();
+  const summary = await screen.findByTestId("composition-summary");
+  await waitFor(() => expect(summary).toHaveAttribute("data-stale", "true"));
+  expect(summary).not.toHaveAttribute("data-failed");
+  expect(summary).toHaveAttribute("data-not-enforced", "0");
+  expect(summary).toHaveTextContent(
+    "Revision 2 was refused · an earlier composition stays enforced",
+  );
+});
+
+test("a refusal with no earlier composition says nothing is enforced instead of counting batteries", async () => {
   server.use(
     http.get(declarationsUrl, () =>
       HttpResponse.json({
         ...declarations,
         batteries: [battery("acme", "active", 3)],
         lastError: "acme: unknown trust rank",
+        composition: {
+          served: { kind: "root_only" },
+          refusal: {
+            message: "acme: unknown trust rank",
+            at: "2026-01-02T00:00:00.000Z",
+            rootRevision: 1,
+          },
+        },
       }),
     ),
   );
   mount();
   const summary = await screen.findByTestId("composition-summary");
   await waitFor(() => expect(summary).toHaveAttribute("data-failed", "true"));
+  expect(summary).toHaveTextContent("Composition failed: nothing is enforced");
   expect(summary).not.toHaveAttribute("data-batteries");
 });
 
@@ -250,7 +313,21 @@ test("the effective policy is fetched only once its view is selected", async () 
       effectiveRequests += 1;
       return HttpResponse.json({
         ...effective,
+        rootRevision: 2,
         lastError: "acme: unknown trust rank",
+        composition: {
+          served: {
+            kind: "previous",
+            rootRevision: 1,
+            composedAt: "2026-01-01T00:00:00.000Z",
+            batteries: [],
+          },
+          refusal: {
+            message: "acme: unknown trust rank",
+            at: "2026-01-02T00:00:00.000Z",
+            rootRevision: 2,
+          },
+        },
       });
     }),
   );
@@ -272,10 +349,13 @@ test("the effective policy is fetched only once its view is selected", async () 
     "acme: unknown trust rank",
   );
   expect(screen.getByTestId("effective-policy")).toHaveAttribute(
-    "data-refused",
-    "true",
+    "data-composition",
+    "refused-serving-previous",
   );
-  expect(screen.getByText("Last composed policy")).toBeVisible();
+  expect(screen.getByTestId("effective-policy-error")).toHaveTextContent(
+    "Revision 2 was refused. The runtime still enforces this document, composed from revision 1.",
+  );
+  expect(screen.getByText("Still enforced: revision 1")).toBeVisible();
   expect(
     screen.getByRole("textbox", { name: "Effective guardrails policy" }),
   ).toHaveAttribute("readonly");

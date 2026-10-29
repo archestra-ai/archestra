@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { classifyChatSubmitAction } from "@/lib/chat/chat-submit-action";
 
@@ -11,6 +12,18 @@ describe("classifyChatSubmitAction", () => {
         isCompacting: false,
       }),
     ).toBe("send");
+  });
+
+  it("queues a send made before the conversation's session exists", () => {
+    expect(
+      classifyChatSubmitAction({
+        status: "ready",
+        queueEnabled: true,
+        directSendPending: false,
+        isCompacting: false,
+        sessionPending: true,
+      }),
+    ).toBe("queue");
   });
 
   it("queues a submit made while a turn is streaming", () => {

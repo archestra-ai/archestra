@@ -11,16 +11,10 @@ import {
 import McpDeploymentLeaseModel, {
   ClusterLeaseHeldError,
 } from "@/models/mcp-deployment-lease";
-import { isByosEnabled } from "@/secrets-manager";
-import { ApiError } from "@/types";
+import { ApiError, GITHUB_COM_API_URL, GitHubUserIdSchema } from "@/types";
 
 class GitHubUserConnectionManager {
   async start(owner: Owner) {
-    if (isByosEnabled())
-      throw new ApiError(
-        400,
-        "GitHub sign-in requires writable secret storage",
-      );
     const app = await this.app(owner);
     return this.lock(owner, async () => {
       const state = `${owner.credentialId}:${randomBytes(32).toString("base64url")}`;
@@ -121,6 +115,7 @@ class GitHubUserConnectionManager {
           githubId: identity.data.id,
           login: identity.data.login,
         }),
+        githubId: identity.data.id,
       });
       const after = await RuntimeCredentialConnectionModel.findForAudit({
         ...owner,
@@ -158,6 +153,7 @@ class GitHubUserConnectionManager {
         ...owner,
         scope: "personal",
         value: JSON.stringify({ ...token, ...next }),
+        githubId: token.githubId,
       });
       return { value: next.accessToken, expiresAt: next.expiresAt };
     });
@@ -195,7 +191,7 @@ class GitHubUserConnectionManager {
     if (
       app?.kind !== "github_app" ||
       !app.allowOrganization ||
-      app.githubUrl !== "https://api.github.com" ||
+      app.githubUrl !== GITHUB_COM_API_URL ||
       !app.githubClientId
     )
       throw new ApiError(
@@ -274,7 +270,7 @@ export const githubUserConnectionManager = new GitHubUserConnectionManager();
 
 type Owner = { organizationId: string; userId: string; credentialId: string };
 const IdentitySchema = z.object({
-  id: z.number().int().positive(),
+  id: GitHubUserIdSchema,
   login: z.string().regex(/^[a-zA-Z0-9-]+$/),
 });
 const FlowSchema = z.object({
@@ -294,7 +290,7 @@ const StoredTokenSchema = z.object({
   expiresAt: z.number(),
   refreshExpiresAt: z.number(),
   clientId: z.string(),
-  githubId: z.number(),
+  githubId: GitHubUserIdSchema,
   login: z.string(),
 });
 function hash(value: string) {

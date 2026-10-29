@@ -1,0 +1,26 @@
+// Project-specific Biome (GritQL) lint plugin — button consistency guard.
+//
+// Flags raw `<button>` elements in frontend app code. Hand-rolled buttons each
+// picked their own height, padding, and font size, which is how the app ended
+// up with a dozen button sizes side by side. Use the shared `Button` from
+// `@/components/ui/button` with a standard size instead (`sm` / `icon-sm` for
+// page, card, and toolbar actions; `default` / `icon` for dialog footers and
+// rows with form inputs; `xs` / `icon-xs` for dense controls inside content).
+//
+// A clickable surface that does not look like a button at all — a whole row,
+// card, tile, listbox option, or a glyph inside a chip — uses `UnstyledButton`
+// from `@/components/ui/unstyled-button`.
+//
+// Scoped in biome.json to `frontend/src`, excluding `components/ui/` (the
+// primitives that wrap the native element) and tests. Plugin diagnostics are
+// not suppressible via biome-ignore.
+language js
+
+or {
+  `<button $props>$children</button>` where {
+    register_diagnostic(span = $props, message = "Use <Button> from @/components/ui/button with a standard size instead of a raw <button>. For a clickable row, card, or tile that is not a button visually, use <UnstyledButton> from @/components/ui/unstyled-button.")
+  },
+  `<button $props />` where {
+    register_diagnostic(span = $props, message = "Use <Button> from @/components/ui/button with a standard size instead of a raw <button>. For a clickable row, card, or tile that is not a button visually, use <UnstyledButton> from @/components/ui/unstyled-button.")
+  }
+}

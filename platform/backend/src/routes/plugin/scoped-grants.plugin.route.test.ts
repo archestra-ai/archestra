@@ -18,7 +18,7 @@ describe("scoped plugin grants", () => {
   const ctx = useRouteTestApp(pluginRoutes);
 
   beforeEach(async ({ makeMember }) => {
-    config.plugins.enabled = true;
+    config.beta = false;
     await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
   });
 

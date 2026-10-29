@@ -50,14 +50,6 @@ vi.mock("@/lib/role.query", () => ({
   })),
 }));
 
-vi.mock("@/lib/teams/team-token.query", () => ({
-  useTokens: vi.fn(() => ({
-    data: { tokens: [] },
-    isLoading: false,
-    error: null,
-  })),
-}));
-
 import { useSearchParams } from "next/navigation";
 import {
   useAllPermissions,
@@ -118,6 +110,7 @@ describe("AuthSettingsPage", () => {
     );
     vi.mocked(useUpdateAuthSettings).mockReturnValue({
       mutateAsync,
+      reset: vi.fn(),
       isPending: false,
     } as unknown as ReturnType<typeof useUpdateAuthSettings>);
     vi.mocked(useEnterpriseFeature).mockReturnValue(true);

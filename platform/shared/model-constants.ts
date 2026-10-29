@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { ThinkingEffort } from "./thinking-effort";
 
+/** Claude Code's stable alias follows the current Opus release. */
+export const DEFAULT_CLAUDE_CODE_MODEL = "opus";
+
 /**
  * Supported LLM providers
  */
@@ -23,11 +26,13 @@ export const SupportedProvidersSchema = z.enum([
   "deepseek",
   "minimax",
   "kimi",
+  "kimi-code",
   "azure",
   "github-copilot",
   "microsoft-365-copilot",
   "archestra",
   "voyage",
+  "jev",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -62,13 +67,19 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "deepseek:chatCompletions",
   "minimax:chatCompletions",
   "kimi:chatCompletions",
+  "kimi-code:chatCompletions",
   "azure:chatCompletions",
   "azure:responses",
+  "azure:images",
+  "azure:audio",
+  "openai:audio",
+  "azure:realtime",
   "github-copilot:chatCompletions",
   "github-copilot:responses",
   "microsoft-365-copilot:chatCompletions",
   "archestra:chatCompletions",
   "voyage:embeddings",
+  "jev:decisions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -93,6 +104,47 @@ export const OCR_PDF_INPUT_PROVIDERS: readonly SupportedProvider[] = [
   "vllm",
 ];
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
+
+/**
+ * Providers whose shared keys can be model pool members. Per-user providers
+ * (Copilot) and subscription-only ones are left out: their credential belongs
+ * to one user. Gemini and Cohere have no translator to or from the wires
+ * pooled clients speak.
+ */
+export const MODEL_POOL_PROVIDERS = [
+  "anthropic",
+  "bedrock",
+  "openai",
+  "azure",
+  "cerebras",
+  "deepseek",
+  "groq",
+  "minimax",
+  "mistral",
+  "ollama",
+  "openrouter",
+  "perplexity",
+  "vllm",
+  "xai",
+  "zhipuai",
+] as const satisfies readonly SupportedProvider[];
+export type ModelPoolProvider = (typeof MODEL_POOL_PROVIDERS)[number];
+
+export function isModelPoolProvider(
+  provider: SupportedProvider,
+): provider is ModelPoolProvider {
+  return (MODEL_POOL_PROVIDERS as readonly string[]).includes(provider);
+}
+
+/**
+ * Whether a Bedrock model id names a Claude model, which Bedrock also serves
+ * in Anthropic's own Messages format. Covers plain ids, cross-region profiles
+ * (`us.anthropic.claude-…`) and their ARNs; an application inference profile
+ * ARN does not say which model it wraps.
+ */
+export function isClaudeOnBedrock(modelId: string): boolean {
+  return /(?:^|[./])anthropic\.claude-/.test(modelId.trim());
+}
 
 /**
  * The wire formats a single provider can serve one model catalog over, spelled
@@ -184,12 +236,14 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   deepseek: "DeepSeek",
   minimax: "MiniMax",
   kimi: "Moonshot (Kimi)",
+  "kimi-code": "Kimi Code",
   azure: "Azure AI Foundry",
   "github-copilot": "GitHub Copilot",
   "microsoft-365-copilot": "Microsoft 365 Copilot",
   // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
   archestra: "Archestra",
   voyage: "Voyage AI",
+  jev: "Jev",
 };
 
 /**
@@ -257,23 +311,47 @@ export type EmbeddingOnlyProvider =
   (typeof EMBEDDING_ONLY_PROVIDER_LIST)[number];
 
 /**
- * The providers that can actually hold a conversation — `SupportedProvider`
- * minus the embeddings-only ones. Chat-shaped exhaustive maps key off this so
- * adding a *chat* provider still breaks them (the point of those maps), while
- * an embeddings-only provider is not forced to invent a chat implementation it
- * does not have.
+ * Providers that serve classification decisions only: a model answers typed
+ * questions (choice, yes/no, score) about a piece of state, with probabilities,
+ * instead of holding a conversation. Jev is TypeSafe's tool-call classifier;
+ * OpenRouter serves the same wire format at `/api/alpha/decisions`, so a Jev key
+ * pointed at that endpoint works unchanged. The LLM proxy forwards decisions
+ * requests (`/v1/jev`), and no chat or embedding surface offers these providers.
  */
-export type ChatProvider = Exclude<SupportedProvider, EmbeddingOnlyProvider>;
+const DECISIONS_ONLY_PROVIDER_LIST = [
+  "jev",
+] as const satisfies ReadonlyArray<SupportedProvider>;
+
+const DECISIONS_ONLY_PROVIDERS = new Set<SupportedProvider>(
+  DECISIONS_ONLY_PROVIDER_LIST,
+);
+
+type DecisionsOnlyProvider = (typeof DECISIONS_ONLY_PROVIDER_LIST)[number];
+
+/**
+ * The providers that can actually hold a conversation — `SupportedProvider`
+ * minus the embeddings-only and decisions-only ones. Chat-shaped exhaustive
+ * maps key off this so adding a *chat* provider still breaks them (the point of
+ * those maps), while a non-chat provider is not forced to invent a chat
+ * implementation it does not have.
+ */
+export type ChatProvider = Exclude<
+  SupportedProvider,
+  EmbeddingOnlyProvider | DecisionsOnlyProvider
+>;
 
 /**
  * True when the provider publishes a chat/completion API. Chat-only surfaces
- * gate on this so an embeddings-only provider is never offered for a
- * conversation, a proxy endpoint, or a model-router mapping.
+ * gate on this so a non-chat provider is never offered for a conversation, a
+ * chat proxy endpoint, or a model-router mapping.
  */
 export function providerSupportsChat(
   provider: SupportedProvider,
 ): provider is ChatProvider {
-  return !EMBEDDING_ONLY_PROVIDERS.has(provider);
+  return (
+    !EMBEDDING_ONLY_PROVIDERS.has(provider) &&
+    !DECISIONS_ONLY_PROVIDERS.has(provider)
+  );
 }
 
 /**
@@ -453,6 +531,8 @@ export const MODEL_ROUTER_SUPPORTED_PROVIDERS = [
   "cerebras",
   "deepseek",
   "groq",
+  "kimi",
+  "kimi-code",
   "minimax",
   "mistral",
   "ollama",
@@ -481,6 +561,28 @@ export function isModelRouterSupportedProvider(
   );
 }
 
+/**
+ * Router providers served over Chat Completions only. Their thinking models
+ * return `reasoning_content` that must be sent back on every tool-call turn,
+ * and the router's Responses translation keeps neither the reasoning in the
+ * output nor the field on the replayed assistant message, so a tool loop
+ * breaks on its second turn. The router refuses them on `/responses`, and the
+ * runtime compatibility checks below refuse them for Responses images, so the
+ * picker, the launch preflight and the router agree.
+ */
+export const CHAT_COMPLETIONS_ONLY_ROUTER_PROVIDERS = [
+  "kimi",
+  "kimi-code",
+] as const satisfies ReadonlyArray<SupportedProvider>;
+
+export function isChatCompletionsOnlyRouterProvider(
+  provider: SupportedProvider,
+): boolean {
+  return (CHAT_COMPLETIONS_ONLY_ROUTER_PROVIDERS as readonly string[]).includes(
+    provider,
+  );
+}
+
 /** Protocols supported by the maintained runtime entrypoint, or all for custom images. */
 export function getAgentRuntimeAllowedProtocols(
   runtimeCommand?: readonly string[] | null,
@@ -490,6 +592,11 @@ export function getAgentRuntimeAllowedProtocols(
       return ["anthropic"];
     case "archestra-codex":
       return ["openai_responses", "openai_chat"];
+    // These wrappers use Chat Completions on a custom model endpoint.
+    case "archestra-grok":
+    case "archestra-kimi":
+    case "archestra-copilot":
+      return ["openai_chat"];
     default:
       return ["openai_responses", "openai_chat", "anthropic"];
   }
@@ -533,6 +640,12 @@ export function getAgentRuntimeProviderCompatibility(params: {
       message: `The maintained Codex runtime requires an OpenAI model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
     };
   }
+  if (runtimeCommand === "archestra-kimi" && params.provider !== "kimi-code") {
+    return {
+      compatible: false,
+      message: `The maintained Kimi Code runtime requires a Kimi Code model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
+    };
+  }
   if (
     params.inferenceProtocol === "anthropic" &&
     params.provider !== "anthropic"
@@ -549,6 +662,15 @@ export function getAgentRuntimeProviderCompatibility(params: {
     return {
       compatible: false,
       message: `${providerDisplayNames[params.provider]} models are not available through the OpenAI-compatible model router used by this Agent Runtime image.`,
+    };
+  }
+  if (
+    params.inferenceProtocol === "openai_responses" &&
+    isChatCompletionsOnlyRouterProvider(params.provider)
+  ) {
+    return {
+      compatible: false,
+      message: `${providerDisplayNames[params.provider]} models are available through the model router's Chat Completions endpoint only. Choose an Agent Runtime image that uses OpenAI Chat Completions.`,
     };
   }
   return { compatible: true };
@@ -574,7 +696,7 @@ export function getAgentRuntimeModelCompatibility(params: {
     params.runtimeCommand?.[0] === "archestra-claude-code" &&
     params.provider === "bedrock" &&
     params.modelId &&
-    !/(?:^|[./])anthropic\.claude-/.test(params.modelId)
+    !isClaudeOnBedrock(params.modelId)
   ) {
     return {
       compatible: false,
@@ -794,12 +916,17 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
   kimi: "https://api.moonshot.ai/v1",
+  "kimi-code": "https://api.kimi.ai/coding/v1",
   azure: "https://<resource>.openai.azure.com/openai",
   "github-copilot": "https://api.githubcopilot.com",
   "microsoft-365-copilot": "https://graph.microsoft.com/beta",
   // No default: the upstream is another Archestra instance's proxy endpoint,
   // supplied per key (e.g. https://your-archestra/v1/proxy/openai/<agentId>).
   archestra: "",
+  // The full decisions endpoint, not a root: TypeSafe and OpenRouter
+  // (https://openrouter.ai/api/alpha/decisions) serve the format at different
+  // paths, so a key stores the whole URL and the proxy posts to it as is.
+  jev: "https://api.typesafe.ai/v1/systemone",
 };
 
 /**
@@ -822,153 +949,109 @@ export const OPENROUTER_FREE_MODEL_ID = "openrouter/free";
 export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
 
 /**
- * Pattern-based model markers per provider.
- * Patterns are substrings that model IDs must contain (case-insensitive).
- * Used to identify "best" (highest quality) models.
- *
- * Patterns are checked in array order (first match wins), so list each
- * provider's ids most- to least-preferred (more specific before general). The
- * first listed id present in the account is the one marked best.
+ * Model tier a forked subagent runs on. `normal` is the parent's own model;
+ * `smart` and `fast` stay on the parent's key and resolve to the agent's trio,
+ * then the organization's, then PROVIDER_MODEL_TIERS.
  */
-export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
-  anthropic: ["opus-4-8", "opus-4-7", "opus", "sonnet"],
-  openai: [
-    // Luna is deliberately absent so a smaller tier is never marked best.
-    "gpt-6-astra",
-    "gpt-6-sol",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.5-pro",
-    "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.3",
-    "gpt-5",
-    "gpt-4.1",
-    "gpt-4o",
-  ],
-  gemini: [
-    "gemini-3.5-pro",
-    "gemini-3.6-flash",
-    "gemini-3.1-pro-preview",
-    "gemini-3-pro",
-    "gemini-3.5-flash",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
-  ],
-  cerebras: ["zai-glm-4.7"],
-  cohere: ["command-a-plus", "command-a", "command-r-plus", "command-r"],
-  mistral: [
-    "mistral-medium-2604",
-    "mistral-large",
-    "mistral-medium",
-    "mistral-small",
-  ],
-  // The bare `sonar*` chat-completions family leads so the provider's default
-  // stays a Sonar model; the vendor-prefixed Agent API entries trail it,
-  // mirroring the cross-vendor shape of `archestra` below.
-  perplexity: [
-    "sonar-deep-research",
-    "sonar-reasoning-pro",
-    "sonar-pro",
-    "sonar",
-    "anthropic/claude-opus-5",
-    "anthropic/claude-sonnet-5",
-    "perplexity/glm-5.2",
-  ],
-  groq: ["openai/gpt-oss-120b", "gpt-oss", "llama-4", "llama-3.3"],
-  xai: ["grok-4.3", "grok-4", "grok-3"],
-  openrouter: [
-    "anthropic/claude-opus-4.8",
-    "anthropic/claude-opus-4.7",
-    "openai/gpt-5.5-pro",
-    "openai/gpt-5.5",
-    "google/gemini-3.1-pro-preview",
-    "x-ai/grok-4.3",
-    "deepseek/deepseek-v4-pro",
-  ],
-  ollama: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
-  "ollama-native": [
-    "gpt-oss:120b",
-    "llama4:maverick",
-    "llama4:scout",
-    "qwen3:235b",
-  ],
-  vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
-  zhipuai: ["glm-5.1", "glm-5", "glm-4.7", "glm-4"],
-  deepseek: ["deepseek-v4-pro", "deepseek-v4", "deepseek-v3", "deepseek-chat"],
-  minimax: ["minimax-m3", "minimax-m2.7"],
-  kimi: [
-    "kimi-k2-thinking",
-    "kimi-k2-turbo",
-    "kimi-k2",
-    "kimi-latest",
-    "moonshot-v1-128k",
-    "kimi",
-  ],
-  azure: [
-    "gpt-5.5-pro",
-    "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.3",
-    "gpt-5",
-    "gpt-4.1",
-    "gpt-4o",
-  ],
-  bedrock: [
-    "anthropic.claude-opus-4-8",
-    "anthropic.claude-opus-4-7",
-    "claude-opus",
-    "claude-sonnet",
-    "amazon.nova-pro",
-  ],
-  "github-copilot": [
-    "claude-opus",
-    "claude-sonnet",
-    "gpt-5",
-    "gpt-4.1",
-    "gpt-4o",
-  ],
-  "microsoft-365-copilot": [MICROSOFT_365_COPILOT_MODELS[0].id],
-  // The upstream Archestra can front any provider, so match common flagship
-  // families across vendors (most- to least-preferred).
-  archestra: ["opus", "sonnet", "gpt-5", "gemini-3", "grok-4"],
-  // Embeddings-only, so these mark the best *embedding* model rather than a
-  // chat one — the retrieval-quality flagship first.
-  voyage: ["voyage-4-large", "voyage-multimodal-3.5", "voyage-4"],
+export const SubagentModelTierSchema = z.enum(["fast", "normal", "smart"]);
+export type SubagentModelTier = z.infer<typeof SubagentModelTierSchema>;
+
+interface ProviderModelTiers {
+  normal: string;
+  smart?: string;
+  fast?: string;
+}
+
+/**
+ * Fast-tier models per provider, most- to least-preferred, matched as
+ * substrings of a key's synced model ids; a `pro` variant never matches. For
+ * short, latency-bound internal calls such as guardrail annotation. A provider
+ * without an entry has no fast default and keeps its usual model.
+ */
+export const PROVIDER_FAST_MODEL_PATTERNS: Partial<
+  Record<SupportedProvider, string[]>
+> = {
+  anthropic: ["claude-haiku-5-5"],
+  bedrock: ["claude-haiku-5-5"],
+  openai: ["gpt-6-luna", "gpt-5.6-luna"],
+  openrouter: ["anthropic/claude-haiku-5.5", "openai/gpt-6-luna"],
+  gemini: ["gemini-3.5-flash-lite"],
 };
 
 /**
- * Default model for each provider when no synced "best" model is available.
- * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
+ * The default trio per provider: what runs when no agent, organization or
+ * conversation picked a model. Matched as a substring of a key's model ids
+ * (see findTierDefault); a key that serves none of them falls back to its first
+ * model, and an unset or unmatched `smart` / `fast` runs the parent's model.
  */
-export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
+export const PROVIDER_MODEL_TIERS: Record<
+  SupportedProvider,
+  ProviderModelTiers
+> = {
   // Embeddings-only: never used to start a conversation, only as the fallback
   // embedding model when no synced "best" row exists.
-  voyage: "voyage-4",
-  anthropic: "claude-opus-4-8",
-  openai: "gpt-5.5",
-  openrouter: "openrouter/auto",
-  gemini: "gemini-3.6-flash",
-  cohere: "command-a-plus-05-2026",
-  groq: "openai/gpt-oss-120b",
-  xai: "grok-4.3",
-  ollama: "llama3.2",
-  "ollama-native": "llama3.2",
-  vllm: "default",
-  cerebras: "zai-glm-4.7",
-  mistral: "mistral-medium-2604",
-  perplexity: "sonar-pro",
-  zhipuai: "glm-5.1",
-  deepseek: "deepseek-v4-pro",
-  bedrock: "anthropic.claude-opus-4-8",
-  minimax: "MiniMax-M3",
-  kimi: "kimi-k2-0711-preview",
-  azure: "gpt-5.5",
-  "github-copilot": "gpt-4o",
-  "microsoft-365-copilot": MICROSOFT_365_COPILOT_MODELS[0].id,
+  voyage: { normal: "voyage-4" },
+  jev: { normal: "jev-1.13.0" },
+  anthropic: {
+    fast: "claude-haiku-5-5",
+    normal: "claude-sonnet-5-5",
+    smart: "claude-opus-5-5",
+  },
+  openai: { fast: "gpt-6-luna", normal: "gpt-6.1-sol", smart: "gpt-6-astra" },
+  openrouter: {
+    fast: "anthropic/claude-haiku-5.5",
+    normal: "anthropic/claude-sonnet-5.5",
+    smart: "anthropic/claude-opus-5.5",
+  },
+  gemini: {
+    fast: "gemini-3.5-flash-lite",
+    normal: "gemini-3.8-flash",
+    // Gemini 4 Argon has no public API yet; switch `smart` to it once it ships.
+    smart: "gemini-3.8-flash",
+  },
+  cohere: { normal: "command-a-plus-05-2026" },
+  groq: { normal: "openai/gpt-oss-120b" },
+  xai: { normal: "grok-4.3" },
+  ollama: { normal: "llama3.2" },
+  "ollama-native": { normal: "llama3.2" },
+  vllm: { normal: "default" },
+  cerebras: { normal: "zai-glm-4.7" },
+  mistral: { normal: "mistral-medium-2604" },
+  perplexity: { normal: "sonar-pro" },
+  zhipuai: { normal: "glm-5.1" },
+  deepseek: { normal: "deepseek-v4-pro" },
+  bedrock: {
+    fast: "claude-haiku-5-5",
+    normal: "anthropic.claude-sonnet-5-5",
+    smart: "claude-opus-5-5",
+  },
+  minimax: { normal: "MiniMax-M3" },
+  kimi: { normal: "kimi-k3.1-pro" },
+  "kimi-code": { normal: "k3.1-pro" },
+  azure: { normal: "gpt-5.5" },
+  "github-copilot": {
+    // Copilot has no Haiku 5.5 yet, and older Claude is not worth defaulting to.
+    fast: "gpt-6-luna",
+    normal: "claude-sonnet-5.5",
+    smart: "claude-opus-5.5",
+  },
+  "microsoft-365-copilot": { normal: MICROSOFT_365_COPILOT_MODELS[0].id },
   // Fallback only; users pick from the upstream's fetched model list.
-  archestra: "gpt-4o",
+  archestra: { normal: "gpt-4o" },
 };
+
+/** The provider's default-trio model for `tier` among `models`, if any. */
+export function findTierDefault<T extends { modelId: string }>(
+  models: T[],
+  provider: SupportedProvider,
+  tier: SubagentModelTier,
+): T | undefined {
+  const pattern = PROVIDER_MODEL_TIERS[provider][tier]?.toLowerCase();
+  if (!pattern) return undefined;
+  return [...models]
+    .sort((a, b) => a.modelId.localeCompare(b.modelId))
+    .find((m) => m.modelId.toLowerCase().includes(pattern));
+}
 
 /**
  * Cache token price as a multiple of the model's per-token INPUT price.
@@ -1049,12 +1132,14 @@ export function stripClaudeContextVariantSuffix(modelId: string): string {
  * - "pro" reasoning models: `/chat/completions` returns `api_not_found_error`
  *   ("not a chat model"). "pro" is matched as a hyphen/slash-delimited token,
  *   so dated snapshots (`gpt-5.5-pro-2026-01-01`) are covered.
- * - the gpt-5.6 family (sol/terra/luna): reasoning is on by default and
- *   `/chat/completions` rejects function tools with any reasoning effort
- *   (400 api_validation_error: "use /v1/responses or set reasoning_effort to
- *   'none'"). Disabling reasoning would degrade the model, so route the whole
- *   family to Responses. "gpt-5.6" is matched up to a `-`/`.`/end boundary so
- *   tiers and dated snapshots are covered without matching e.g. `gpt-5.61`.
+ * - every gpt-5.6 and gpt-6 model (sol/terra/luna/astra and any other
+ *   variant): reasoning is on by default and `/chat/completions` rejects
+ *   function tools with any reasoning effort (400 api_validation_error: "use
+ *   /v1/responses or set reasoning_effort to 'none'"). Disabling reasoning
+ *   would degrade the model, so route both whole families to Responses,
+ *   including calls without tools. "gpt-5.6" and "gpt-6" are matched up to a
+ *   `-`/`.`/end boundary so tiers, point releases (`gpt-6.1-sol`) and dated
+ *   snapshots are covered without matching e.g. `gpt-5.61` or `gpt-60`.
  * - Codex models: OpenAI serves the coding-specialized `gpt-*-codex` family
  *   through Responses rather than Chat Completions. The suffix boundary also
  *   covers variants such as `-mini`, `-max`, and dated snapshots.
@@ -1062,7 +1147,7 @@ export function stripClaudeContextVariantSuffix(modelId: string): string {
 export function requiresOpenAiResponsesApi(modelId: string): boolean {
   return (
     /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId) ||
-    /(?:^|\/)gpt-5\.6(?:$|[-.])/i.test(modelId) ||
+    /(?:^|\/)gpt-(?:5\.6|6)(?:$|[-.])/i.test(modelId) ||
     /(?:^|\/)gpt-[^/]+-codex(?:$|[-.])/i.test(modelId)
   );
 }
@@ -1128,22 +1213,6 @@ const ANTHROPIC_DEFAULT_THINKING_MODEL_MARKERS = [
 ];
 
 /**
- * True when a thinks-by-default Anthropic model accepts
- * `thinking: {type: "disabled"}`. Opus 5 and Sonnet 5 do (Opus 5 only at
- * effort high or below, which is the request default); the Fable/Mythos
- * class thinks unconditionally and 400s on `disabled` at any effort — the
- * only lever there is `output_config.effort`. Models that don't think by
- * default never need the field, so callers should gate on
- * {@link anthropicThinksByDefault} first.
- */
-export function anthropicSupportsThinkingDisabled(modelId: string): boolean {
-  const id = modelId.toLowerCase();
-  return !ANTHROPIC_UNCONDITIONAL_THINKING_MODEL_MARKERS.some((marker) =>
-    id.includes(marker),
-  );
-}
-
-/**
  * True when a chosen reasoning depth is worth offering for an Anthropic model.
  *
  * Deliberately the same set as {@link anthropicThinksByDefault}, and delegating
@@ -1203,6 +1272,10 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     llama: "openai",
     deepseek: "deepseek",
     moonshotai: "kimi",
+    // Kimi Code membership plans list their model ids (k3.1-pro,
+    // kimi-for-coding, ...) at $0; both regions list the same ids.
+    "kimi-code-plan-global": "kimi-code",
+    "kimi-code-plan-cn": "kimi-code",
     groq: "groq",
     "fireworks-ai": "openai",
     togetherai: "openai",

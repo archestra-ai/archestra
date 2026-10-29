@@ -75,8 +75,7 @@ export function BrowserPanel({
         <>
           <Button
             variant="ghost"
-            size="icon"
-            className="h-6 w-6"
+            size="icon-xs"
             onClick={handleOpenInNewWindow}
             title="Open in new window"
           >
@@ -85,8 +84,7 @@ export function BrowserPanel({
           {!hideHeader && (
             <Button
               variant="ghost"
-              size="icon"
-              className="h-6 w-6"
+              size="icon-xs"
               onClick={onClose}
               title="Close"
             >

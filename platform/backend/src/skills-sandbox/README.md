@@ -146,6 +146,11 @@ this and fails such a `run_command` with a terminal, per-sandbox
 `ARCHESTRA_SANDBOX_HISTORY_LIMIT` error telling the model to start a fresh
 sandbox — rather than the opaque mount failure it would otherwise surface.
 
+When the engine is up but cannot pull the sandbox base image (for example, a
+network egress policy blocks the registry), the core fails with
+`ARCHESTRA_SANDBOX_IMAGE_PULL_FAILED`, naming the image and registry host. It is
+not an engine outage: the session is kept and the runtime stays ready.
+
 The sandbox always runs as the non-root user from `runtime-image.ts`, with no
 host mounts and no backend env exposed inside the container. Network access is
 enabled because npm/uv/npx require it.
@@ -153,8 +158,8 @@ enabled because npm/uv/npx require it.
 ## RBAC
 
 The execution MCP tools (`run_command`, `upload_file`, `download_file`) are
-gated by `sandbox:execute`; the file tools (`search_files`, `read_file`,
-`save_file`, `edit_file`, `delete_file`) by `file:manage`
+gated by `agent:read`; the file tools (`search_files`, `read_file`,
+`save_file`, `edit_file`, `delete_file`) by `agent:read` too
 (`backend/src/archestra-mcp-server/rbac.ts`). Sandboxes are scoped to the
 caller's organization + user + **conversation**: a `target: { id }` referencing
 a sandbox outside that scope is rejected.

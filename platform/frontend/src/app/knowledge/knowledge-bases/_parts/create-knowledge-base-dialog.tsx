@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
-import { Database } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -33,13 +32,6 @@ export function CreateKnowledgeBaseDialog({
   const createKnowledgeBase = useCreateKnowledgeBase();
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
-    "general",
-  );
-
-  useEffect(() => {
-    if (open) setActiveSection("general");
-  }, [open]);
 
   const form = useForm<KnowledgeBaseFormValues>({
     defaultValues: {
@@ -68,40 +60,31 @@ export function CreateKnowledgeBaseDialog({
   };
 
   return (
-    <TabbedDialogShell
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Create Knowledge Base"
-      description="Create a searchable collection of content."
-      sidebarLabel={form.watch("name") || "New knowledge base"}
-      sidebarDescription="Knowledge base"
-      sidebarIcon={<Database className="h-4 w-4 text-muted-foreground" />}
-      activeSection={activeSection}
-      navItems={[
-        { id: "general", label: "General" },
-        { id: "permissions", label: "Permissions" },
-      ]}
-      onActiveSectionChange={setActiveSection}
-      onSubmit={form.handleSubmit(handleSubmit)}
-      wrapForm={(content) => <Form {...form}>{content}</Form>}
-      footer={
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={createKnowledgeBase.isPending}>
-            {createKnowledgeBase.isPending
-              ? "Creating..."
-              : "Create Knowledge Base"}
-          </Button>
-        </>
-      }
-    >
-      <div hidden={activeSection !== "general"} className="space-y-4">
+    <Form {...form}>
+      <StandardFormDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Create Knowledge Base"
+        description="Create a searchable collection of content."
+        onSubmit={form.handleSubmit(handleSubmit)}
+        bodyClassName="space-y-4"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={createKnowledgeBase.isPending}>
+              {createKnowledgeBase.isPending
+                ? "Creating..."
+                : "Create Knowledge Base"}
+            </Button>
+          </>
+        }
+      >
         <FormField
           control={form.control}
           name="name"
@@ -134,15 +117,13 @@ export function CreateKnowledgeBaseDialog({
           )}
         />
 
+        <KnowledgeBaseAccessFields form={form} />
         <AdvancedLabelsSection
           ref={labelsRef}
           labels={labels}
           onLabelsChange={setLabels}
         />
-      </div>
-      <div hidden={activeSection !== "permissions"}>
-        <KnowledgeBaseAccessFields form={form} standalone />
-      </div>
-    </TabbedDialogShell>
+      </StandardFormDialog>
+    </Form>
   );
 }

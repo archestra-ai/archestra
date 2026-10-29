@@ -1,0 +1,120 @@
+# Published dagger-sdk 0.21.9 from https://crates.io/api/v1/crates/dagger-sdk/0.21.9/download
+# Archive SHA-256: b064828d6089ee9805d34be1a853b9a28f51212c46c97ac8cd20a16643d55537
+# All src/ files, README.md and LICENSE are byte-identical to that archive.
+# This normalized manifest backports only the dependency changes from
+# https://github.com/dagger/dagger/commit/6ae7fda32bda243b61f0e079a724df11072e99dc
+# (PR #13495): graphql_client 0.16 and reqwest 0.12 with explicit JSON support.
+# Remove this vendor directory and workspace patch when a published SDK with
+# this HTTP-stack fix is compatible with our pinned Dagger engine/generated API.
+
+[package]
+edition = "2021"
+name = "dagger-sdk"
+version = "0.21.9"
+authors = [
+    "kjuulh <contact@kasperhermansen.com>",
+    "Dagger <hello@dagger.io>",
+]
+publish = true
+description = "A dagger sdk for rust, written in rust"
+readme = "README.md"
+license-file = "LICENSE"
+repository = "https://github.com/dagger/dagger"
+
+[dependencies.async-trait]
+version = "0.1.77"
+
+[dependencies.base64]
+version = "0.21.6"
+
+[dependencies.derive_builder]
+version = "0.12.0"
+
+[dependencies.dirs]
+version = "5.0.1"
+
+[dependencies.eyre]
+version = "0.6.9"
+
+[dependencies.flate2]
+version = "1.0.28"
+features = ["rust_backend"]
+
+[dependencies.futures]
+version = "0.3.30"
+
+[dependencies.graphql_client]
+version = "0.16.0"
+features = [
+    "reqwest-rustls",
+    "graphql_query_derive",
+]
+default-features = false
+
+[dependencies.hex]
+version = "0.4.3"
+
+[dependencies.hex-literal]
+version = "0.4.1"
+
+[dependencies.platform-info]
+version = "2.0.2"
+
+[dependencies.reqwest]
+version = "0.12.23"
+features = [
+    "stream",
+    "json",
+    "rustls-tls",
+]
+default-features = false
+
+[dependencies.serde]
+version = "1.0.195"
+features = ["derive"]
+
+[dependencies.serde_graphql_input]
+version = "0.1.1"
+
+[dependencies.serde_json]
+version = "1.0.111"
+
+[dependencies.sha2]
+version = "0.10.8"
+
+[dependencies.tar]
+version = "0.4.40"
+
+[dependencies.tempfile]
+version = "3.9.0"
+
+[dependencies.thiserror]
+version = "1.0.56"
+
+[dependencies.tokio]
+version = "1.35.1"
+features = ["full"]
+
+[dependencies.tracing]
+version = "0.1.40"
+features = ["log"]
+
+[dependencies.tracing-subscriber]
+version = "0.3.18"
+features = [
+    "tracing-log",
+    "tracing",
+]
+
+[dev-dependencies.pretty_assertions]
+version = "1.4.0"
+
+[dev-dependencies.rand]
+version = "0.8.5"
+
+[dev-dependencies.tracing-test]
+version = "0.2.4"
+
+[features]
+default = ["gen"]
+gen = []

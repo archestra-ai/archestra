@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+# All callers use this image-owned message. Never expose upstream diagnostics.
+message="The Agent could not load its MCP gateway tools. Check gateway availability and access, then retry."
+"$(dirname "$0")/archestra-agent-failure" mcp_startup "$message"
+printf 'archestra: %s\n' "$message" >&2
+if [ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" = one_shot ]; then
+  runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+  printf '%s\n' "$message" > "${runtime_dir}/final-answer.txt"
+  touch "${runtime_dir}/turn-complete.failed" "${runtime_dir}/turn-complete"
+else
+  "${ARCHESTRA_AGENT_ATTENTION_COMMAND:-archestra-agent-attention}" \
+    set "MCP error: check terminal" >/dev/null 2>&1 || true
+fi

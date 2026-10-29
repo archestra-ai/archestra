@@ -37,7 +37,8 @@ const SUBAGENT_PAYLOAD_CAP = 10_000;
 
 export function createSubagentToolStreamBridge(): SubagentToolStreamBridge {
   let writer: SubagentToolStreamWriter | null = null;
-  const parts: ChatMessagePart[] = [];
+  // A call is emitted live and again as it settles; persist its latest state.
+  const parts = new Map<string, ChatMessagePart>();
 
   return {
     setWriter(nextWriter) {
@@ -58,7 +59,10 @@ export function createSubagentToolStreamBridge(): SubagentToolStreamBridge {
           ? { errorText: capString(data.errorText) }
           : {}),
       };
-      parts.push({ type: SUBAGENT_TOOL_CALL_PART_TYPE, data: capped });
+      parts.set(data.toolCallId, {
+        type: SUBAGENT_TOOL_CALL_PART_TYPE,
+        data: capped,
+      });
       // Setting the chunk id to the child toolCallId lets the client reconcile
       // and dedupe the part across stream resumes.
       writer?.write({
@@ -69,7 +73,7 @@ export function createSubagentToolStreamBridge(): SubagentToolStreamBridge {
     },
 
     collected() {
-      return parts;
+      return [...parts.values()];
     },
   };
 }

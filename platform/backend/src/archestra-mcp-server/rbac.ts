@@ -4,7 +4,11 @@ import type {
   ResourcePermissionAction,
   ScopedResource,
 } from "@archestra/shared";
-import { roleActionResourceFor } from "@archestra/shared/access-control";
+import {
+  allAvailableActions,
+  roleActionResourceFor,
+} from "@archestra/shared/access-control";
+import type { RequestLookups } from "@/auth/request-lookups";
 import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
@@ -33,21 +37,59 @@ export const TOOL_PERMISSIONS: Record<
   execute_remedy_plan: null,
   yell: null,
   get_remedy_plans: null,
+  list_peer_messages: null,
+  read_peer_message: null,
   get_openappa_yell: { resource: "log", action: "read" },
-  get_guardrails_policy: { resource: "toolPolicy", action: "read" },
-  list_guardrails_battery_fits: { resource: "toolPolicy", action: "read" },
-  inspect_guardrails_server: { resource: "toolPolicy", action: "read" },
-  validate_guardrails_policy: { resource: "toolPolicy", action: "update" },
+  resolve_openappa_yell: {
+    resource: "log",
+    action: "read",
+  },
+  list_openappa_yells: { resource: "log", action: "read" },
+  list_openappa_consults: { resource: "log", action: "read" },
+  get_guardrails_policy: { resource: "guardrailsPolicy", action: "read" },
+  get_openappa_policy_tests: { resource: "guardrailsPolicy", action: "read" },
+  run_openappa_policy_tests: { resource: "guardrailsPolicy", action: "update" },
+  preview_guardrails_validation_change: {
+    resource: "guardrailsPolicy",
+    action: "read",
+  },
+  update_guardrails_validation: {
+    resource: "guardrailsPolicy",
+    action: "update",
+  },
+  list_guardrails_battery_fits: {
+    resource: "guardrailsPolicy",
+    action: "read",
+  },
+  inspect_guardrails_server: { resource: "guardrailsPolicy", action: "read" },
+  validate_guardrails_policy: { resource: "guardrailsPolicy", action: "read" },
   preview_guardrails_policy_change: {
-    resource: "toolPolicy",
+    resource: "guardrailsPolicy",
     action: "read",
   },
-  update_guardrails_policy: { resource: "toolPolicy", action: "update" },
+  update_guardrails_policy: { resource: "guardrailsPolicy", action: "update" },
+  // The handler also requires credential:update, as the REST route does.
+  bind_guardrails_credential: {
+    resource: "guardrailsPolicy",
+    action: "update",
+  },
   get_guardrails_policy_change_status: {
-    resource: "toolPolicy",
+    resource: "guardrailsPolicy",
     action: "read",
   },
-  create_guardrails_repository: { resource: "toolPolicy", action: "update" },
+  create_guardrails_repository: {
+    resource: "organizationSettings",
+    action: "update",
+  },
+  connect_guardrails_repository: {
+    resource: "organizationSettings",
+    action: "update",
+  },
+  // Same permission as the REST route's sync action.
+  sync_guardrails_repository: {
+    resource: "organizationSettings",
+    action: "update",
+  },
   list_runtime_credentials: { resource: "credential", action: "read" },
   get_runtime_credential: { resource: "credential", action: "read" },
   create_runtime_credential: { resource: "credential", action: "create" },
@@ -57,11 +99,13 @@ export const TOOL_PERMISSIONS: Record<
     resource: "credential",
     action: "create",
   },
+  request_battery_credentials: { resource: "credential", action: "create" },
 
   // Agents
   create_agent: { resource: "agent", action: "create" },
   get_agent: { resource: "agent", action: "read" },
   list_agents: { resource: "agent", action: "read" },
+  list_llm_models: { resource: "llmModel", action: "read" },
   edit_agent: { resource: "agent", action: "update" },
 
   // Agent lifecycle hooks — mirror the REST hook routes' permissions
@@ -85,7 +129,11 @@ export const TOOL_PERMISSIONS: Record<
   deploy_mcp_server: { resource: "mcpRegistry", action: "update" },
   list_mcp_server_deployments: { resource: "mcpRegistry", action: "read" },
   get_mcp_server_logs: { resource: "mcpRegistry", action: "read" },
-  reload_mcp_server_tools: { resource: "mcpRegistry", action: "update" },
+  // Same gate as the ReloadMcpServerTools route: a subset of reinstalling.
+  reload_mcp_server_tools: {
+    resource: "mcpServerInstallation",
+    action: "create",
+  },
 
   // Teams
   create_team: { resource: "team", action: "create" },
@@ -117,19 +165,6 @@ export const TOOL_PERMISSIONS: Record<
   delete_limit: { resource: "llmLimit", action: "delete" },
   get_agent_token_usage: { resource: "llmLimit", action: "read" },
   get_llm_proxy_token_usage: { resource: "llmLimit", action: "read" },
-
-  // Policies
-  get_autonomy_policy_operators: { resource: "toolPolicy", action: "read" },
-  get_tool_invocation_policies: { resource: "toolPolicy", action: "read" },
-  create_tool_invocation_policy: { resource: "toolPolicy", action: "create" },
-  get_tool_invocation_policy: { resource: "toolPolicy", action: "read" },
-  update_tool_invocation_policy: { resource: "toolPolicy", action: "update" },
-  delete_tool_invocation_policy: { resource: "toolPolicy", action: "delete" },
-  get_trusted_data_policies: { resource: "toolPolicy", action: "read" },
-  create_trusted_data_policy: { resource: "toolPolicy", action: "create" },
-  get_trusted_data_policy: { resource: "toolPolicy", action: "read" },
-  update_trusted_data_policy: { resource: "toolPolicy", action: "update" },
-  delete_trusted_data_policy: { resource: "toolPolicy", action: "delete" },
 
   // Tool Assignment
   bulk_assign_tools_to_agents: { resource: "agent", action: "update" },
@@ -185,23 +220,28 @@ export const TOOL_PERMISSIONS: Record<
   // shared-with), so `project:read` never widens visibility past their own set.
   list_projects: { resource: "project", action: "read" },
   get_project: { resource: "project", action: "read" },
+  // Mirror the LinkProjectApp/UnlinkProjectApp routes: project membership is
+  // the floor, and the handler re-checks the caller's read access to the app.
+  link_app_to_project: { resource: "project", action: "read" },
+  unlink_app_from_project: { resource: "project", action: "read" },
 
   // Scheduled tasks — mirror the /api/schedule-triggers routes. As with the
   // project reads the permission is only the floor: every handler runs the
-  // same owner / `scheduledTask:*` / project-member gate the REST routes use
-  // (services/schedule-trigger-access.ts), so `scheduledTask:read` never
+  // same owner / `project:*` / project-member gate the REST routes use
+  // (services/schedule-trigger-access.ts), so `project:read` never
   // widens visibility past the caller's own schedules.
-  create_schedule_trigger: { resource: "scheduledTask", action: "create" },
-  update_schedule_trigger: { resource: "scheduledTask", action: "update" },
-  delete_schedule_trigger: { resource: "scheduledTask", action: "delete" },
-  list_schedule_triggers: { resource: "scheduledTask", action: "read" },
-  get_schedule_trigger: { resource: "scheduledTask", action: "read" },
-  list_schedule_trigger_runs: { resource: "scheduledTask", action: "read" },
-  get_schedule_trigger_run: { resource: "scheduledTask", action: "read" },
-  enable_schedule_trigger: { resource: "scheduledTask", action: "update" },
-  disable_schedule_trigger: { resource: "scheduledTask", action: "update" },
+  create_schedule_trigger: { resource: "project", action: "create" },
+  update_schedule_trigger: { resource: "project", action: "update" },
+  delete_schedule_trigger: { resource: "project", action: "delete" },
+  list_schedule_triggers: { resource: "project", action: "read" },
+  get_schedule_trigger: { resource: "project", action: "read" },
+  list_schedule_trigger_runs: { resource: "project", action: "read" },
+  get_schedule_trigger_run: { resource: "project", action: "read" },
+  get_schedule_trigger_run_transcript: { resource: "project", action: "read" },
+  enable_schedule_trigger: { resource: "project", action: "update" },
+  disable_schedule_trigger: { resource: "project", action: "update" },
   // Starting a run creates a run row, matching RunScheduleTriggerNow.
-  run_schedule_trigger_now: { resource: "scheduledTask", action: "create" },
+  run_schedule_trigger_now: { resource: "project", action: "create" },
 
   // Meta — permission is enforced on the target tool, not on run_tool itself
   search_tools: null,
@@ -225,23 +265,23 @@ export const TOOL_PERMISSIONS: Record<
   update_plugin: { resource: "plugin", action: "update" },
   edit_plugin: { resource: "plugin", action: "update" },
   delete_plugin: { resource: "plugin", action: "delete" },
-  // Code execution sandbox — gated by `sandbox:execute` and per-agent tool
-  // assignment. The implicit per-conversation sandbox is created lazily; the
-  // create step is not a tool. load_skill (skill:read) mounts a skill into
-  // the sandbox when the caller also has sandbox:execute.
-  run_command: { resource: "sandbox", action: "execute" },
-  download_file: { resource: "sandbox", action: "execute" },
-  upload_file: { resource: "sandbox", action: "execute" },
+  // Code execution sandbox — part of using an agent (`agent:read`) plus
+  // per-agent tool assignment. The implicit per-conversation sandbox is
+  // created lazily; the create step is not a tool. load_skill (skill:read)
+  // mounts a skill into the sandbox when the caller also has agent:read.
+  run_command: { resource: "agent", action: "read" },
+  download_file: { resource: "agent", action: "read" },
+  upload_file: { resource: "agent", action: "read" },
 
   // Runs are an Agent capability, including when an Agent opts into
   // Agent Runtime. Per-run ownership stays in the handlers.
-  start_run: { resource: "agent", action: "read" },
-  get_run: { resource: "agent", action: "read" },
-  list_runs: { resource: "agent", action: "read" },
+  start_agent_run: { resource: "agent", action: "read" },
+  get_agent_run: { resource: "agent", action: "read" },
   list_agent_runs: { resource: "agent", action: "read" },
-  steer_run: { resource: "agent", action: "read" },
-  cancel_run: { resource: "agent", action: "read" },
-  post_run_file: { resource: "agent", action: "read" },
+  steer_agent_run: { resource: "agent", action: "read" },
+  cancel_agent_run: { resource: "agent", action: "read" },
+  post_agent_run_file: { resource: "agent", action: "read" },
+  post_agent_run_message: { resource: "agent", action: "read" },
   read_workspace_file: { resource: "agent", action: "read" },
   write_workspace_file: { resource: "agent", action: "read" },
   transfer_workspace_file: { resource: "agent", action: "read" },
@@ -250,19 +290,18 @@ export const TOOL_PERMISSIONS: Record<
   // permission; the handler additionally requires access to the target Agent
   // and refuses keys declared at organization scope.
   transfer_credential: { resource: "credential", action: "create" },
-  // Persistent file store — these operate on `skill_sandbox_files`, not the
-  // sandbox itself, so they gate on `file:manage`. Per-file authorization
+  // Persistent file store (`skill_sandbox_files`) — part of using an agent,
+  // like the sandbox itself, so `agent:read`. Per-file authorization
   // (authorship, project membership) stays in the handlers.
-  search_files: { resource: "file", action: "manage" },
-  read_file: { resource: "file", action: "manage" },
-  // Agent-side exchange with the chat's open app — pure PFS↔PFS, so file
-  // permission, not sandbox execution.
-  copy_file: { resource: "file", action: "manage" },
+  search_files: { resource: "agent", action: "read" },
+  read_file: { resource: "agent", action: "read" },
+  // Agent-side exchange with the chat's open app — pure PFS↔PFS.
+  copy_file: { resource: "agent", action: "read" },
   // App-runtime only (never seeded/agent-visible); still viewer-RBAC-checked.
-  read_file_raw: { resource: "file", action: "manage" },
-  save_file: { resource: "file", action: "manage" },
-  edit_file: { resource: "file", action: "manage" },
-  delete_file: { resource: "file", action: "manage" },
+  read_file_raw: { resource: "agent", action: "read" },
+  save_file: { resource: "agent", action: "read" },
+  edit_file: { resource: "agent", action: "read" },
+  delete_file: { resource: "agent", action: "read" },
 
   // MCP Apps. The data-store tools gate on app:read/update; the running app's
   // appId is route-bound (set by the app MCP proxy), so the permission check
@@ -346,7 +385,9 @@ export async function checkToolPermission(
   }
 
   const allowed =
-    perm.action === "manage-permissions" || perm.action === "use"
+    perm.action === "manage-permissions" ||
+    perm.action === "use" ||
+    perm.action === "configure-deployment-spec"
       ? false
       : await userHasPermission(
           context.userId,
@@ -359,6 +400,20 @@ export async function checkToolPermission(
         );
 
   const scopedAction = SCOPED_CATALOG_TOOLS[typedShortName];
+  // People can edit what they create, so a role that can create the resource
+  // reaches its per-item tools before it owns any item. The handler still
+  // checks the specific item.
+  if (
+    !allowed &&
+    isToolGrantGated(typedShortName) &&
+    (await userHasPermission(
+      context.userId,
+      context.organizationId,
+      roleActionResourceFor(perm.resource),
+      "create",
+    ))
+  )
+    return null;
   if (
     !allowed &&
     scopedAction &&
@@ -401,8 +456,11 @@ export async function checkToolPermission(
       },
       "[ArchestraMCP] rbac denied tool execution",
     );
+    const resource = roleActionResourceFor(perm.resource);
     return errorResult(
-      `You do not have permission to perform this action (requires ${perm.resource}:${perm.action}).`,
+      allAvailableActions[resource]?.includes(perm.action as never)
+        ? `You do not have permission to perform this action (requires ${perm.resource}:${perm.action}).`
+        : `You do not have permission to perform this action (requires the ${perm.action} grant on the item).`,
     );
   }
 
@@ -417,6 +475,7 @@ export async function filterToolNamesByPermission(
   toolNames: string[],
   userId: string | undefined,
   organizationId: string | undefined,
+  lookups?: RequestLookups,
 ): Promise<Set<string>> {
   if (!userId || !organizationId) {
     // No user context — include tools with no permission requirement, plus
@@ -434,10 +493,9 @@ export async function filterToolNamesByPermission(
     );
   }
 
-  const permissions = await getPermissionsForUserContext({
-    userId,
-    organizationId,
-  });
+  const permissions = lookups
+    ? await lookups.permissions({ userId, organizationId })
+    : await getPermissionsForUserContext({ userId, organizationId });
   const scopedActions = new Set<ResourcePermissionAction>();
   const neededScopedActions = new Set(
     toolNames
@@ -458,6 +516,7 @@ export async function filterToolNamesByPermission(
           userId,
           organizationId,
           action,
+          lookups,
         })
       )
         scopedActions.add(action);
@@ -475,7 +534,9 @@ export async function filterToolNamesByPermission(
       if (!permResults.has(key)) {
         permResults.set(
           key,
-          perm.action === "manage-permissions" || perm.action === "use"
+          perm.action === "manage-permissions" ||
+            perm.action === "use" ||
+            perm.action === "configure-deployment-spec"
             ? false
             : (permissions[roleActionResourceFor(perm.resource)]?.includes(
                 perm.action,
@@ -494,7 +555,7 @@ export async function filterToolNamesByPermission(
         archestraMcpBranding.getToolShortName(name) as ArchestraToolShortName
       ],
   )
-    ? await ResourcePermissions.resolveAll({ userId, organizationId })
+    ? await ResourcePermissions.resolveAll({ userId, organizationId, lookups })
     : [];
   // SPDX-SnippetEnd
 
@@ -515,6 +576,12 @@ export async function filterToolNamesByPermission(
       SCOPED_CATALOG_TOOLS[shortName as ArchestraToolShortName];
     if (
       permResults.get(`${perm.resource}:${perm.action}`) ||
+      // Same rule as checkToolPermission: creators reach per-item tools.
+      (isToolGrantGated(shortName as ArchestraToolShortName) &&
+        (permissions[roleActionResourceFor(perm.resource)]?.includes(
+          "create",
+        ) ??
+          false)) ||
       (scopedAction && scopedActions.has(scopedAction)) ||
       resourceGrants.some(
         (grant) =>
@@ -530,6 +597,16 @@ export async function filterToolNamesByPermission(
   }
 
   return allowed;
+}
+
+/**
+ * Whether a per-object grant can open this tool, independently of the role.
+ * @public — the coverage test uses it to prove every tool stays reachable.
+ */
+export function isToolGrantGated(shortName: ArchestraToolShortName): boolean {
+  return Boolean(
+    SCOPED_CATALOG_TOOLS[shortName] || SCOPED_RESOURCE_TOOLS[shortName],
+  );
 }
 
 // Only handlers that enforce the exact object action or filter their list in
@@ -590,4 +667,6 @@ const SCOPED_RESOURCE_TOOLS: Partial<
   edit_agent: { resource: "agent", action: "update" },
   get_mcp_gateway: { resource: "mcpGateway", action: "read" },
   edit_mcp_gateway: { resource: "mcpGateway", action: "update" },
+  update_runtime_credential: { resource: "credential", action: "update" },
+  delete_runtime_credential: { resource: "credential", action: "delete" },
 };

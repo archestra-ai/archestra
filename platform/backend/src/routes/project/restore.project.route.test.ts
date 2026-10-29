@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { ProjectModel, ScheduleTriggerModel } from "@/models";
 import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
@@ -103,6 +104,11 @@ describe("projectService.restore (decided by the project delete grant)", () => {
       actorUserId: owner.id,
       projectId: project.id,
     });
+    // Keep the restore assertion within one cron minute, even if real time
+    // crosses a minute boundary while the database operations are running.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-01T12:34:30.000Z"));
+
     // A baseline well in the past makes an every-minute trigger overdue: without
     // the forward-only bump, restore would fire it once to "catch up".
     await ScheduleTriggerModel.markExecuted(
@@ -136,6 +142,9 @@ describe("projectService.restore (decided by the project delete grant)", () => {
     // the trigger itself is unchanged/retained (still enabled, still its cron).
     const after = await ScheduleTriggerModel.findById(trigger.id);
     expect(after?.enabled).toBe(true);
+    // The next ordinary cron slot still fires; only missed slots stay skipped.
+    vi.setSystemTime(new Date("2026-01-01T12:35:00.000Z"));
+    expect(await isDue()).toBe(true);
   });
 
   test("restore does NOT re-attach detached chats — the project comes back with zero conversations", async ({

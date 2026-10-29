@@ -13,6 +13,7 @@ import { authModuleMock } from "@/test/mocks/auth";
 
 const mock = authModuleMock();
 export const {
+  getAgentTypeListPermissionChecker,
   getAgentTypePermissionChecker,
   hasAnyAgentTypeAdminPermission,
   hasAnyAgentTypeReadPermission,

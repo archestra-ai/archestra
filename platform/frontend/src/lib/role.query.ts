@@ -2,7 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { handleApiError, throwOnApiError } from "@/lib/utils/api";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const {
   getRoles,
@@ -113,12 +113,11 @@ export function useCreateRole() {
       const response = await createRole({ body: data });
       if (response.error) {
         handleApiError(response.error);
-        return null;
+        throw toApiError(response.error);
       }
       return response.data;
     },
-    onSuccess: (data) => {
-      if (!data) return;
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
     },
@@ -144,12 +143,11 @@ export function useUpdateRole() {
       });
       if (response.error) {
         handleApiError(response.error);
-        return null;
+        throw toApiError(response.error);
       }
       return response.data;
     },
-    onSuccess: (data, variables) => {
-      if (!data) return;
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
       queryClient.invalidateQueries({

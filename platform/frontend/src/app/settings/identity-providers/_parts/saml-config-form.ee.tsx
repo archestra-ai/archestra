@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { AllowedEmailDomainsField } from "./allowed-email-domains-field.ee";
+import { IdentityProviderSectionHeader } from "./identity-provider-section-header.ee";
 import { RoleMappingForm } from "./role-mapping-form.ee";
 import { SsoLoginEnabledField } from "./sso-login-enabled-field.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
@@ -40,7 +41,12 @@ export function SamlConfigForm({
   return (
     <div className="space-y-6">
       {(!activeSection || activeSection === "general") && (
-        <div className="grid gap-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <IdentityProviderSectionHeader title="Provider Details">
+              Identify this provider and choose who can sign in.
+            </IdentityProviderSectionHeader>
+          </div>
           {!hideProviderId && (
             <FormField
               control={form.control}
@@ -78,13 +84,19 @@ export function SamlConfigForm({
             )}
           />
 
-          <SsoLoginEnabledField form={form} />
-          <AllowedEmailDomainsField form={form} />
+          <div className="md:col-span-2">
+            <AllowedEmailDomainsField form={form} />
+          </div>
+          <div className="md:col-span-2">
+            <SsoLoginEnabledField form={form} />
+          </div>
 
-          <Separator />
+          <Separator className="md:col-span-2" />
 
-          <div>
-            <h4 className="text-md font-medium mb-4">SAML Settings</h4>
+          <div className="md:col-span-2">
+            <IdentityProviderSectionHeader title="SAML Settings">
+              Connect using your provider&apos;s SAML endpoints and certificate.
+            </IdentityProviderSectionHeader>
           </div>
 
           <FormField
@@ -113,10 +125,7 @@ export function SamlConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>SSO Entry Point URL</FormLabel>
-                <FormDescription>
-                  The Single Sign-On URL where users are redirected to
-                  authenticate.
-                </FormDescription>
+                <FormDescription>URL users visit to sign in.</FormDescription>
                 <FormControl>
                   <Input
                     placeholder="https://idp.company.com/saml/sso"
@@ -132,7 +141,7 @@ export function SamlConfigForm({
             control={form.control}
             name="samlConfig.cert"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="md:col-span-2">
                 <FormLabel>IdP Certificate</FormLabel>
                 <FormDescription>
                   The X.509 certificate from your Identity Provider for
@@ -154,7 +163,7 @@ export function SamlConfigForm({
             control={form.control}
             name="samlConfig.idpMetadata.metadata"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="md:col-span-2">
                 <FormLabel>IdP Metadata XML (Recommended)</FormLabel>
                 <FormDescription>
                   The full IdP metadata XML from your Identity Provider. This is
@@ -215,14 +224,19 @@ export function SamlConfigForm({
 
       {!activeSection && <Separator />}
 
-      {(!activeSection || activeSection === "service-provider-metadata") && (
-        <div>
-          <div className="grid gap-4">
+      {(!activeSection ||
+        activeSection === "general" ||
+        activeSection === "service-provider-metadata") && (
+        <section className="space-y-4 border-t pt-4">
+          <IdentityProviderSectionHeader title="Service Provider Metadata">
+            Your application&apos;s SAML identity and metadata.
+          </IdentityProviderSectionHeader>
+          <div className="grid gap-4 md:grid-cols-2">
             <FormField
               control={form.control}
               name="samlConfig.spMetadata.entityID"
               render={({ field }) => (
-                <FormItem>
+                <FormItem className="md:col-span-2">
                   <FormLabel>SP Entity ID</FormLabel>
                   <FormDescription>
                     Your application's Entity ID for SAML.
@@ -239,7 +253,7 @@ export function SamlConfigForm({
               control={form.control}
               name="samlConfig.spMetadata.metadata"
               render={({ field }) => (
-                <FormItem>
+                <FormItem className="md:col-span-2">
                   <FormLabel>SP Metadata XML (Optional)</FormLabel>
                   <FormDescription>
                     Your Service Provider metadata XML document.
@@ -256,14 +270,17 @@ export function SamlConfigForm({
               )}
             />
           </div>
-        </div>
+        </section>
       )}
 
       {!activeSection && <Separator />}
 
       {(!activeSection || activeSection === "attribute-mapping") && (
-        <div>
-          <div className="grid gap-4">
+        <div className="space-y-4">
+          <IdentityProviderSectionHeader title="Attribute Mapping">
+            Choose which provider attributes supply each user’s profile.
+          </IdentityProviderSectionHeader>
+          <div className="grid gap-4 md:grid-cols-2">
             <FormField
               control={form.control}
               name="samlConfig.mapping.id"

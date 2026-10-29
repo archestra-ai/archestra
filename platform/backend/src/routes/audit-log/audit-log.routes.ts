@@ -5,9 +5,9 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { isServiceAccountUserId } from "@/auth/utils";
+import { userHasPermission } from "@/auth";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { AuditLogModel } from "@/models";
-import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   AuditActorTypeSchema,
@@ -84,13 +84,12 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       // auditLog:read scopes the view to the caller's own actions;
       // auditLog:admin lifts it to the whole organization.
-      const canSeeAllAuditLogs = await ResourcePermissions.allows({
-        userId: user.id,
-        organizationId: organizationId,
-        resource: "auditLog",
-        scope: "*",
-        action: "read",
-      });
+      const canSeeAllAuditLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "auditLog",
+        "admin",
+      );
 
       const result = await AuditLogModel.findCursorPaginated({
         organizationId,
@@ -107,6 +106,70 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return reply.send(result);
+    },
+  );
+
+  fastify.get(
+    "/api/audit-logs/resources",
+    {
+      schema: {
+        operationId: RouteId.GetAuditLogResources,
+        description:
+          "Get the resources that have audit events, for the log's resource filter. Covers agents, apps, environments, MCP servers, roles, skills and teams. Each resource has the name from its latest named event. Requires auditLog:read. Without auditLog:admin, only resources from the caller's own events are listed.",
+        tags: ["Audit Log"],
+        querystring: z.object({
+          search: z
+            .string()
+            .trim()
+            .max(200)
+            .optional()
+            .describe("Case-insensitive substring of the resource name"),
+          resourceId: z
+            .string()
+            .optional()
+            .describe(
+              "Return only this resource, e.g. to label a preselected filter",
+            ),
+          limit: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .default(50)
+            .describe("Maximum number of resources to return"),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            data: z.array(
+              z.object({
+                resourceType: z.string(),
+                resourceId: z.string(),
+                name: z.string(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async (
+      { query: { search, resourceId, limit }, user, organizationId },
+      reply,
+    ) => {
+      const canSeeAllAuditLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "auditLog",
+        "admin",
+      );
+      const data = await AuditLogModel.findResourceOptions({
+        organizationId,
+        resourceTypes: RESOURCE_FILTER_TYPES,
+        actorId: canSeeAllAuditLogs ? undefined : user.id,
+        search: search || undefined,
+        resourceId,
+        limit,
+      });
+      return reply.send({ data });
     },
   );
 
@@ -130,13 +193,12 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Own-actions view: an event someone else caused does not exist for
       // this caller — 404, not 403, so existence is not disclosed.
       if (auditLog) {
-        const canSeeAllAuditLogs = await ResourcePermissions.allows({
-          userId: user.id,
-          organizationId: organizationId,
-          resource: "auditLog",
-          scope: "*",
-          action: "read",
-        });
+        const canSeeAllAuditLogs = await userHasPermission(
+          user.id,
+          organizationId,
+          "auditLog",
+          "admin",
+        );
         const belongsToCaller = isServiceAccountUserId(user.id)
           ? auditLog.actorType === "service_account" &&
             auditLog.actorEmail === user.email
@@ -156,3 +218,16 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default auditLogRoutes;
+
+// === Internal helpers
+
+/** Resource types that the log's resource filter lists by name. */
+const RESOURCE_FILTER_TYPES = [
+  "agent",
+  "app",
+  "environment",
+  "mcpServer",
+  "role",
+  "skill",
+  "team",
+] as const;

@@ -121,7 +121,7 @@ describe("Authnz", () => {
       }
     });
 
-    test("skips session auth for the OAuth callback so state is validated in-route", async () => {
+    test("requires authentication for the MCP installation OAuth callback", async () => {
       const request = {
         url: OAUTH_CALLBACK_PATH,
         method: "POST",
@@ -132,10 +132,9 @@ describe("Authnz", () => {
         send: vi.fn(),
       } as unknown as FastifyReply;
 
-      await authnz.handle(request, reply);
-
-      expect(reply.status).not.toHaveBeenCalled();
-      expect(reply.send).not.toHaveBeenCalled();
+      await expect(authnz.handle(request, reply)).rejects.toMatchObject({
+        statusCode: 401,
+      });
     });
 
     test("should skip auth for all supported LLM provider routes", async () => {

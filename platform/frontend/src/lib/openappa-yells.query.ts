@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { readFileAsBase64 } from "@/lib/files/file-upload";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
@@ -15,6 +16,29 @@ export function useOpenAppaYells(
       const { data, error } = await archestraApiSdk.getOpenAppaYells({ query });
       throwOnApiError(error, { toastOnError: false });
       return data;
+    },
+  });
+}
+/** The yells raised in one LLM session, oldest last (the trace's markers). */
+export function useSessionYells({
+  llmSessionId,
+  enabled,
+}: {
+  llmSessionId: string;
+  enabled: boolean;
+}) {
+  return useOpenAppaYells({ status: "all", llmSessionId, limit: 100 }, enabled);
+}
+/** One yell, for its detail page. */
+export function useOpenAppaYell(id: string) {
+  return useQuery({
+    queryKey: ["openappa-yells", "detail", id],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getOpenAppaYell({
+        path: { id },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
     },
   });
 }
@@ -44,7 +68,10 @@ export function useResolveOpenAppaYell() {
       }
       return data;
     },
-    onSuccess: () => client.invalidateQueries({ queryKey: ["openappa-yells"] }),
+    onSuccess: (_data, { resolved }) => {
+      toast.success(resolved ? "Yell marked resolved" : "Yell reopened");
+      return client.invalidateQueries({ queryKey: ["openappa-yells"] });
+    },
   });
 }
 

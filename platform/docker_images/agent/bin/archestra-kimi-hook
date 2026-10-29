@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Kimi Code lifecycle hooks: hold each prompt until the gateway catalog is
+# loaded, report input waits
+# to Agent Runtime, remember the main session for follow-ups, and settle the
+# turn with the readable transcript. Kimi runs the turn whatever this script
+# returns, except that exit 2 blocks a prompt.
+set -uo pipefail
+
+event="${1:-}"
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+attention="${ARCHESTRA_AGENT_ATTENTION_COMMAND:-${script_dir}/archestra-agent-attention}"
+payload="$(cat)"
+session_id="$(jq -r '.session_id // empty' <<<"${payload}" 2>/dev/null)"
+session_file="${runtime_dir}/kimi-main-session"
+interactive=false
+[[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "interactive" ]] && interactive=true
+plain=false
+[[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]] && plain=true
+# Kimi's own MCP startup timeout is 30 seconds.
+GATEWAY_WAIT_SECONDS=40
+
+main_session() {
+  [[ -n "${session_id}" && -s "${session_file}" && "${session_id}" == "$(cat "${session_file}")" ]]
+}
+
+case "${event}" in
+  SessionStart)
+    if [[ -n "${session_id}" && ! -s "${session_file}" ]]; then
+      printf '%s\n' "${session_id}" > "${session_file}"
+    fi
+    "${attention}" clear
+    ;;
+  UserPromptSubmit)
+    # Kimi waits for its MCP catalog before the first model request but goes on
+    # without the gateway when the catalog fails. The bridge recorded what
+    # Kimi's own request received; only a loaded catalog lets the prompt run.
+    state="$("${script_dir}/archestra-kimi-gateway-state" --wait "${GATEWAY_WAIT_SECONDS}")"
+    ready=false
+    if [[ "${state}" == ready\ * ]]; then
+      ready=true
+      # OpenAPPA always lists its recovery tools; an empty catalog is a
+      # failure. Without OpenAPPA an Agent may have no tools.
+      if [[ "${state}" == "ready 0" && "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" == "1" ]]; then
+        ready=false
+      fi
+    fi
+    if [[ "${ready}" != true ]]; then
+      if [[ "${plain}" == true ]]; then
+        # The print-mode driver publishes the failure once Kimi exits.
+        touch "${runtime_dir}/kimi-gateway-blocked"
+      else
+        "${script_dir}/archestra-mcp-startup-failure" 2>/dev/null || true
+      fi
+      echo "The Agent could not load its MCP gateway tools, so this prompt was not sent." >&2
+      exit 2
+    fi
+    "${attention}" clear
+    ;;
+  TurnStarted)
+    # The terminal starter steers queued runtime messages only mid-turn.
+    touch "${runtime_dir}/kimi-turn-running"
+    "${attention}" clear
+    ;;
+  PostToolUse|PostToolUseFailure|PermissionResult)
+    "${attention}" clear
+    ;;
+  PreToolUse)
+    "${attention}" set "Input requested"
+    ;;
+  PermissionRequest)
+    "${attention}" set "Permission needed"
+    ;;
+  Stop|StopFailure|Interrupt)
+    main_session || exit 0
+    rm -f "${runtime_dir}/kimi-turn-running"
+    if [[ "${interactive}" == true ]]; then
+      "${script_dir}/archestra-kimi-transcript" "${session_id}" >/dev/null || true
+      "${attention}" set "Waiting for input"
+      exit 0
+    fi
+    "${attention}" clear
+    # Without a terminal the print-mode driver exports and settles the turn.
+    [[ "${plain}" == true ]] && exit 0
+    case "${event}" in
+      Stop)
+        # Kimi awaits this hook before it records the turn's end, so only the
+        # last step's finish reason is on record: Kimi ends a turn cut off by
+        # the output limit as completed.
+        failure="$("${script_dir}/archestra-kimi-transcript" "${session_id}" --answer "${runtime_dir}/final-answer.txt" --failure stop || true)"
+        if [[ -n "${failure}" && "${failure}" != "none" ]]; then
+          "${script_dir}/archestra-kimi-turn-failure" "${failure}" 2>/dev/null
+          exit 0
+        fi
+        rm -f "${runtime_dir}/turn-complete.failed"
+        # archestra-tui-run publishes the turn when this marker changes.
+        touch "${runtime_dir}/turn-complete"
+        exit 0
+        ;;
+      StopFailure)
+        # Kimi fires this hook without waiting for it and records the turn's
+        # end, with its error code, a moment later. The code decides whether
+        # the platform may retry; the payload's error name does not.
+        failure=pending
+        for _ in $(seq 1 50); do
+          failure="$("${script_dir}/archestra-kimi-transcript" "${session_id}" --failure end 2>/dev/null || true)"
+          [[ -n "${failure}" && "${failure}" != "pending" ]] && break
+          sleep 0.2
+        done
+        if [[ -z "${failure}" || "${failure}" == "pending" || "${failure}" == "none" ]]; then
+          case "$(jq -r '.error_type // empty' <<<"${payload}" 2>/dev/null)" in
+            *Filtered*) failure=refusal ;;
+            *) failure=unavailable ;;
+          esac
+        fi
+        ;;
+      Interrupt)
+        "${script_dir}/archestra-kimi-transcript" "${session_id}" >/dev/null || true
+        failure=cancelled
+        ;;
+    esac
+    "${script_dir}/archestra-kimi-turn-failure" "${failure}" 2>/dev/null
+    ;;
+esac
+exit 0

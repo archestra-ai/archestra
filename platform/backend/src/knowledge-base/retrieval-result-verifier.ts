@@ -1,5 +1,6 @@
 import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
+import type { GrantPrincipal } from "@/models/resource-permission-subject";
 import type { AclEntry, KbDocumentMetadataFilter } from "@/types";
 import type { FindNeighborsParams, NeighborChunk } from "./retrieval-backend";
 
@@ -13,6 +14,7 @@ export async function verifyExternalRetrievalResults(params: {
   candidates: VectorSearchResult[];
   connectorIds: string[];
   userAcl: AclEntry[];
+  grantPrincipals?: GrantPrincipal[] | null;
   bypassAcl?: boolean;
   environmentId?: string | null;
   metadataFilter?: KbDocumentMetadataFilter;

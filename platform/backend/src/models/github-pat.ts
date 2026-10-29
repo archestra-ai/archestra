@@ -1,3 +1,4 @@
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import type { GithubPat, InsertGithubPat, UpdateGithubPat } from "@/types";
 import {
   createSharedCredential,
@@ -20,10 +21,18 @@ export default class GithubPatModel {
     const [credential] = await GithubPatModel.findShared(params);
     return credential ?? null;
   }
-  static async create(data: InsertGithubPat): Promise<GithubPat> {
+  static async create(
+    data: InsertGithubPat & {
+      /** Who reaches it besides its author; omitted, the organization does. */
+      initialPermissionGrants?: ResourcePermissionGrant[];
+    },
+    /** The user or `service-account:` actor creating it; becomes its author. */
+    createdBy: string | null = null,
+  ): Promise<GithubPat> {
     const definition = await createSharedCredential({
       ...data,
       kind: "secret",
+      createdBy,
     });
     return {
       id: definition.id,

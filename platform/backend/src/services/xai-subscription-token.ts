@@ -28,7 +28,6 @@ import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
-import SecretModel from "@/models/secret";
 import {
   getSecretValueForLlmProviderApiKey,
   secretManager,
@@ -42,6 +41,11 @@ import {
   encodeXaiSubscriptionCredential,
   type XaiSubscriptionCredential,
 } from "./xai-subscription-credentials";
+
+// xAI's CLI chat proxy rejects a Grok CLI version below its minimum with
+// HTTP 426, and xAI raises that minimum without notice. An hourly workflow
+// proposes updates from the stable Grok CLI release channel.
+const GROK_CLI_CLIENT_VERSION = "1.0.70";
 
 const MAX_CACHED_TOKENS = 1000;
 
@@ -309,21 +313,6 @@ class XaiSubscriptionTokenManager {
     if (!keyRow?.secretId) {
       return;
     }
-    // Inspect the secret ROW's storage flags before resolving the value:
-    // resolution dereferences BYOS Vault references, so a value-based
-    // isVaultReference() check on the resolved credential never fires and
-    // rotation would overwrite the stored reference with raw OAuth material.
-    const secretRow = await SecretModel.findById(keyRow.secretId);
-    if (!secretRow) {
-      return;
-    }
-    if (secretRow.isByosVault) {
-      logger.warn(
-        { providerApiKeyId },
-        "[XaiSubscription] skipping rotated refresh token persistence for vault-referenced key",
-      );
-      return;
-    }
     const storedValue = await getSecretValueForLlmProviderApiKey(
       keyRow.secretId,
     );
@@ -574,7 +563,8 @@ function isXaiSubscriptionBearerOrigin(url: string): boolean {
 export function xaiSubscriptionSessionHeaders(
   credential: XaiSubscriptionCredential,
 ): Record<string, string> {
-  const { clientVersion } = config.llm.xai.subscription;
+  const clientVersion =
+    config.llm.xai.subscription.clientVersion ?? GROK_CLI_CLIENT_VERSION;
   return {
     "X-XAI-Token-Auth": "xai-grok-cli",
     "x-userid": credential.userId,

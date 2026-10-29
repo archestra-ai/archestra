@@ -9,20 +9,12 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
-import { AgentSelector } from "@/components/agent-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ResourceListActions } from "@/components/resource-list-actions";
-import {
-  DEFAULT_FORM_STATE,
-  isValidCronExpression,
-  type ScheduleTriggerFormState,
-} from "@/components/scheduled-tasks/schedule-trigger.utils";
-import { ScheduleTriggerPicker } from "@/components/scheduled-tasks/schedule-trigger-picker";
+import { ScheduleDialog } from "@/components/scheduled-tasks/schedule-dialog";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import { useStartScheduleRun } from "@/components/scheduled-tasks/use-start-schedule-run";
-import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,10 +23,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { useProfiles } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -43,14 +31,12 @@ import {
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   type ScheduleTrigger,
-  useCreateScheduleTrigger,
   useDeleteScheduleTrigger,
   useDisableScheduleTrigger,
   useEnableScheduleTrigger,
   useScheduleTrigger,
   useScheduleTriggerRuns,
   useScheduleTriggers,
-  useUpdateScheduleTrigger,
 } from "@/lib/schedule-trigger.query";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
 import { cn } from "@/lib/utils/tailwind";
@@ -75,29 +61,10 @@ export function ProjectSchedulesSection({
   canCreate?: boolean;
   defaultAgentId?: string | null;
 }) {
-  // The schedule query requires the role action and polls, so never mount it
-  // for a caller with only a scoped wildcard grant. That grant still reaches
-  // the organization-level permissions editor through the section header.
   const { data: canReadSchedules } = useHasPermissions({
-    scheduledTask: ["read"],
+    project: ["read"],
   });
-  const { data: capabilities } = useScopedCapabilities();
-  const canReadAllPermissions = capabilities?.some(
-    (grant) =>
-      grant.resource === "scheduledTask" &&
-      grant.scope === "*" &&
-      grant.action === "read",
-  );
-  if (canReadSchedules !== true) {
-    return canReadAllPermissions ? (
-      <section>
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">Schedules</h2>
-          <ResourceListActions resource="scheduledTask" />
-        </div>
-      </section>
-    ) : null;
-  }
+  if (canReadSchedules !== true) return null;
 
   return (
     <ProjectSchedulesSectionContent
@@ -122,8 +89,17 @@ function ProjectSchedulesSectionContent({
     refetchInterval: 10000,
   });
   const { data: canCreateSchedules } = useHasPermissions({
-    scheduledTask: ["create"],
+    project: ["create"],
   });
+  const { data: session } = useSession();
+  const { data: capabilities } = useScopedCapabilities();
+  const hasOversight = (action: "update" | "delete" | "use") =>
+    capabilities?.some(
+      (grant) =>
+        grant.resource === "project" &&
+        grant.scope === "*" &&
+        grant.action === action,
+    ) === true;
   const [createOpen, setCreateOpen] = useState(false);
   const searchParams = useSearchParams();
   const scheduleId = searchParams.get("schedule");
@@ -138,10 +114,10 @@ function ProjectSchedulesSectionContent({
   });
   const schedules = data?.data ?? [];
   const { data: canUpdateSchedules } = useHasPermissions({
-    scheduledTask: ["update"],
+    project: ["update"],
   });
   const { data: canDeleteSchedules } = useHasPermissions({
-    scheduledTask: ["delete"],
+    project: ["delete"],
   });
 
   return (
@@ -160,14 +136,12 @@ function ProjectSchedulesSectionContent({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 gap-1 text-xs has-[>svg]:px-2"
               onClick={() => setCreateOpen(true)}
             >
               <Plus className="size-3.5" />
               <span>New schedule</span>
             </Button>
           )}
-          <ResourceListActions resource="scheduledTask" />
         </div>
       </div>
 
@@ -212,8 +186,24 @@ function ProjectSchedulesSectionContent({
               projectId={projectId}
               schedule={schedule}
               onEdit={openEditDialog}
-              canEdit={canUpdateSchedules === true}
-              canDelete={canDeleteSchedules === true}
+              canEdit={
+                canUpdateSchedules === true &&
+                (schedule.actorUserId === session?.user.id ||
+                  hasOversight("update"))
+              }
+              canDelete={
+                canDeleteSchedules === true &&
+                (schedule.actorUserId === session?.user.id ||
+                  hasOversight("delete"))
+              }
+              runBlockedReason={
+                canCreateSchedules !== true
+                  ? "You can't run schedules. Ask an admin if you need to."
+                  : schedule.actorUserId === session?.user.id ||
+                      hasOversight("use")
+                    ? null
+                    : `Set up by ${schedule.actor?.name ?? "someone else"}. Only they or an admin can run it.`
+              }
             />
           ))}
         </div>
@@ -230,12 +220,15 @@ function ScheduleRow({
   onEdit,
   canEdit,
   canDelete,
+  runBlockedReason,
 }: {
   projectId: string;
   schedule: ScheduleTrigger;
   onEdit: (schedule: ScheduleTrigger) => void;
   canEdit: boolean;
   canDelete: boolean;
+  /** Why this person may not start the schedule now, or null when they may. */
+  runBlockedReason: string | null;
 }) {
   const enableSchedule = useEnableScheduleTrigger();
   const disableSchedule = useDisableScheduleTrigger();
@@ -295,8 +288,7 @@ function ScheduleRow({
       <div className="mt-2 flex items-center gap-1 border-t pt-2">
         <Button
           variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
+          size="xs"
           aria-label={`View runs for ${schedule.name}`}
           onClick={openRuns}
           disabled={loadingRuns || isResolving}
@@ -306,8 +298,7 @@ function ScheduleRow({
         {canEdit && (
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
+            size="xs"
             onClick={() => onEdit(schedule)}
             aria-label={`Edit ${schedule.name}`}
           >
@@ -317,8 +308,7 @@ function ScheduleRow({
         {canEdit && (
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
+            size="xs"
             disabled={enableSchedule.isPending || disableSchedule.isPending}
             onClick={() =>
               (schedule.enabled ? disableSchedule : enableSchedule).mutate(
@@ -340,8 +330,8 @@ function ScheduleRow({
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-7 w-7 shrink-0"
+              size="icon-xs"
+              className="shrink-0"
               aria-label={`Actions for ${schedule.name}`}
             >
               <MoreHorizontal className="h-4 w-4" />
@@ -349,11 +339,20 @@ function ScheduleRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              disabled={runNow.isPending}
+              disabled={runBlockedReason !== null || runNow.isPending}
               onSelect={runNow.start}
             >
               <Play className="h-4 w-4" />
-              Run now
+              {runBlockedReason ? (
+                <span className="flex flex-col items-start gap-0.5">
+                  <span>Run now</span>
+                  <span className="text-xs text-muted-foreground">
+                    {runBlockedReason}
+                  </span>
+                </span>
+              ) : (
+                <span>Run now</span>
+              )}
             </DropdownMenuItem>
             {canDelete && (
               <DropdownMenuItem
@@ -385,173 +384,5 @@ function ScheduleRow({
         />
       )}
     </div>
-  );
-}
-
-function ScheduleDialog({
-  projectId,
-  schedule,
-  defaultAgentId = null,
-  open,
-  onOpenChange,
-}: {
-  projectId: string;
-  /** Present in edit mode; absent when creating. */
-  schedule?: ScheduleTrigger;
-  /** The project's pinned agent; seeds a new schedule, never an edit. */
-  defaultAgentId?: string | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const isEditing = !!schedule;
-  // The agent picker is a management capability; without `agent:read` the
-  // dropdown is hidden and the run implicitly uses the org's default agent.
-  const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
-  const { data: agents = [] } = useProfiles({
-    filters: { agentType: "agent" },
-    enabled: canReadAgents === true,
-  });
-  const createSchedule = useCreateScheduleTrigger();
-  const updateSchedule = useUpdateScheduleTrigger();
-  const [enabled, setEnabled] = useState(schedule?.enabled ?? false);
-  const [form, setForm] = useState<ScheduleTriggerFormState>(() =>
-    schedule
-      ? {
-          name: schedule.name,
-          agentId: schedule.agentId,
-          cronExpression: schedule.cronExpression,
-          timezone: schedule.timezone,
-          messageTemplate: schedule.messageTemplate,
-        }
-      : { ...DEFAULT_FORM_STATE(), agentId: defaultAgentId ?? "" },
-  );
-
-  // Hide other people's personal agents, like the standalone scheduled page.
-  const selectableAgents = useMemo(
-    () =>
-      agents.filter(
-        (agent) =>
-          agent.scope !== "personal" || agent.authorId === currentUserId,
-      ),
-    [agents, currentUserId],
-  );
-
-  const update = (patch: Partial<ScheduleTriggerFormState>) =>
-    setForm((current) => ({ ...current, ...patch }));
-
-  const isValid =
-    form.name.trim().length > 0 &&
-    form.messageTemplate.trim().length > 0 &&
-    isValidCronExpression(form.cronExpression) &&
-    (canReadAgents !== true || form.agentId.length > 0);
-  const isPending = createSchedule.isPending || updateSchedule.isPending;
-
-  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!isValid) return;
-    // Only send agentId when the user can pick one; otherwise leave it to the
-    // org default (create) or unchanged (edit).
-    const agentFields =
-      canReadAgents === true && form.agentId ? { agentId: form.agentId } : {};
-    const fields = {
-      name: form.name.trim(),
-      enabled,
-      messageTemplate: form.messageTemplate.trim(),
-      cronExpression: form.cronExpression.trim(),
-      timezone: form.timezone.trim(),
-      ...agentFields,
-    };
-
-    const result =
-      schedule !== undefined
-        ? await updateSchedule.mutateAsync({ id: schedule.id, body: fields })
-        : await createSchedule.mutateAsync({ ...fields, projectId });
-    if (result) {
-      if (!isEditing)
-        setForm({ ...DEFAULT_FORM_STATE(), agentId: defaultAgentId ?? "" });
-      onOpenChange(false);
-    }
-  };
-
-  return (
-    <StandardFormDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={isEditing ? "Edit schedule" : "New schedule"}
-      description="Run an agent manually or on a recurring schedule in this project."
-      size="medium"
-      onSubmit={onSubmit}
-      bodyClassName="space-y-3"
-      footer={
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={isPending || !isValid}>
-            {isEditing ? "Save" : "Create"}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-1.5">
-        <Label htmlFor="schedule-name">Name</Label>
-        <Input
-          id="schedule-name"
-          value={form.name}
-          onChange={(e) => update({ name: e.target.value })}
-          placeholder="Weekly summary"
-          maxLength={256}
-        />
-      </div>
-
-      {canReadAgents === true && (
-        <div className="space-y-1.5">
-          <Label>Agent</Label>
-          <AgentSelector
-            mode="single"
-            flat
-            agents={selectableAgents}
-            value={form.agentId}
-            onValueChange={(value) => update({ agentId: value })}
-            placeholder="Select an agent"
-            className="w-full"
-          />
-        </div>
-      )}
-
-      <div className="space-y-1.5">
-        <Label htmlFor="schedule-prompt">Task prompt</Label>
-        <Textarea
-          id="schedule-prompt"
-          value={form.messageTemplate}
-          onChange={(e) => update({ messageTemplate: e.target.value })}
-          placeholder="What should the agent do on each run?"
-          rows={6}
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <ScheduleTriggerPicker
-          value={{
-            enabled,
-            cronExpression: form.cronExpression,
-            timezone: form.timezone,
-          }}
-          onChange={(next) => {
-            setEnabled(next.enabled);
-            update({
-              cronExpression: next.cronExpression,
-              timezone: next.timezone,
-            });
-          }}
-        />
-      </div>
-    </StandardFormDialog>
   );
 }

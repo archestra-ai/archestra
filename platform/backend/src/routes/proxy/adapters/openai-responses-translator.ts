@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { ApiError } from "@archestra/shared/types";
 import type { Azure, OpenAi } from "@/types";
+import { CacheControlSchema } from "@/types/llm-providers/openai/messages";
+import { toResponsesUsage } from "./responses-usage";
 
 type ResponsesRequest = Azure.Types.ResponsesRequest;
 type ResponsesResponse = Azure.Types.ResponsesResponse;
@@ -14,7 +17,10 @@ export interface OpenaiResponsesContext {
   requestedModel: string;
 }
 
-export function responsesToOpenaiChat(req: ResponsesRequest): {
+export function responsesToOpenaiChat(
+  req: ResponsesRequest,
+  options?: { preserveContentParts: boolean },
+): {
   chatBody: OpenAiRequest;
   responsesContext: OpenaiResponsesContext;
 } {
@@ -30,6 +36,7 @@ export function responsesToOpenaiChat(req: ResponsesRequest): {
     messages.push(
       ...responseInputToChatMessages(
         req.input as unknown as LooseResponseItem[],
+        options?.preserveContentParts,
       ),
     );
   }
@@ -39,6 +46,18 @@ export function responsesToOpenaiChat(req: ResponsesRequest): {
     messages,
     stream: req.stream === true ? true : undefined,
   };
+
+  const extensions = req as ResponsesRequest & Record<string, unknown>;
+  for (const field of [
+    "cache_control",
+    "cachedContent",
+    "prompt_cache_key",
+    "prompt_cache_retention",
+    "prompt_cache_options",
+  ] as const) {
+    if (extensions[field] !== undefined)
+      Object.assign(chatBody, { [field]: extensions[field] });
+  }
 
   if (req.temperature !== undefined) {
     chatBody.temperature = req.temperature;
@@ -51,11 +70,23 @@ export function responsesToOpenaiChat(req: ResponsesRequest): {
   if (req.tools) {
     chatBody.tools = req.tools.flatMap((tool) => {
       if (tool.type !== "function" || !("name" in tool)) {
+        if (
+          options?.preserveContentParts &&
+          "cache_control" in tool &&
+          tool.cache_control !== undefined
+        )
+          throw new ApiError(
+            400,
+            "Unsupported Responses tool with cache_control",
+          );
         return [];
       }
       return [
         {
           type: "function" as const,
+          ...(options?.preserveContentParts && "cache_control" in tool
+            ? cacheControlFields(tool.cache_control)
+            : {}),
           function: {
             name: tool.name as string,
             description:
@@ -90,6 +121,13 @@ export function chatCompletionToResponses(
   response: OpenAiResponse,
   ctx: OpenaiResponsesContext,
 ): ResponsesResponse {
+  const wireUsage = response.usage as typeof response.usage & {
+    prompt_tokens_details?: {
+      cached_tokens?: number;
+      cache_write_tokens?: number;
+      cache_write_1h_tokens?: number;
+    };
+  };
   const choice = response.choices[0];
   const output: ResponsesResponse["output"] = [];
 
@@ -138,19 +176,30 @@ export function chatCompletionToResponses(
     status: "completed",
     output,
     usage: response.usage
-      ? {
-          input_tokens: response.usage.prompt_tokens,
-          output_tokens: response.usage.completion_tokens,
-          total_tokens: response.usage.total_tokens,
-        }
+      ? toResponsesUsage({
+          inputTokens:
+            response.usage.prompt_tokens -
+            (wireUsage?.prompt_tokens_details?.cached_tokens ?? 0) -
+            (wireUsage?.prompt_tokens_details?.cache_write_tokens ?? 0),
+          outputTokens: response.usage.completion_tokens,
+          reasoningTokens:
+            response.usage.completion_tokens_details?.reasoning_tokens ?? 0,
+          cacheReadTokens: wireUsage?.prompt_tokens_details?.cached_tokens ?? 0,
+          cacheWriteTokens:
+            wireUsage?.prompt_tokens_details?.cache_write_tokens ?? 0,
+          cacheWrite1hTokens:
+            wireUsage?.prompt_tokens_details?.cache_write_1h_tokens,
+        })
       : undefined,
   } as ResponsesResponse;
 }
 
 function responseInputToChatMessages(
   input: LooseResponseItem[],
+  preserveContentParts = false,
 ): OpenAiRequest["messages"] {
-  return input.flatMap((item) => {
+  return input.flatMap((item): OpenAiRequest["messages"] => {
+    if (!item || typeof item !== "object") return [];
     if (
       item.type === "message" ||
       item.role === "user" ||
@@ -167,7 +216,12 @@ function responseInputToChatMessages(
       return [
         {
           role,
-          content: stringifyResponseContent(item.content),
+          content: preserveContentParts
+            ? responseContentToChat(item.content)
+            : stringifyResponseContent(item.content),
+          ...(preserveContentParts
+            ? cacheControlFields(item.cache_control)
+            : {}),
         } as OpenAiRequest["messages"][number],
       ];
     }
@@ -176,6 +230,9 @@ function responseInputToChatMessages(
       return [
         {
           role: "assistant",
+          ...(preserveContentParts
+            ? cacheControlFields(item.cache_control)
+            : {}),
           content: null,
           tool_calls: [
             {
@@ -201,12 +258,52 @@ function responseInputToChatMessages(
           role: "tool",
           tool_call_id:
             typeof item.call_id === "string" ? item.call_id : "unknown",
-          content: typeof item.output === "string" ? item.output : "",
-        },
+          content: preserveContentParts
+            ? responseContentToChat(item.output)
+            : typeof item.output === "string"
+              ? item.output
+              : "",
+          ...(preserveContentParts
+            ? cacheControlFields(item.cache_control)
+            : {}),
+        } as OpenAiRequest["messages"][number],
       ];
     }
 
+    if (preserveContentParts && item.cache_control !== undefined)
+      throw new ApiError(
+        400,
+        "Unsupported Responses input item with cache_control",
+      );
     return [];
+  });
+}
+
+function responseContentToChat(content: unknown): unknown {
+  if (!Array.isArray(content)) return content;
+  return content.map((part: LooseResponseItem) => {
+    if (!part || typeof part !== "object") return part;
+    const marker = cacheControlFields(part.cache_control);
+    if (part.type === "input_text" || part.type === "output_text")
+      return { type: "text", text: part.text, ...marker };
+    if (part.type === "input_image")
+      return {
+        type: "image_url",
+        image_url: { url: part.image_url, detail: part.detail },
+        ...marker,
+      };
+    if (part.type === "input_file")
+      return {
+        type: "file",
+        file: {
+          file_data: part.file_data,
+          file_id: part.file_id,
+          file_url: part.file_url,
+          filename: part.filename,
+        },
+        ...marker,
+      };
+    return part;
   });
 }
 
@@ -236,4 +333,15 @@ function responseToolChoiceToChatToolChoice(
   if (toolChoice === "none") return "none";
   if (toolChoice === "required") return "required";
   return "auto";
+}
+
+function cacheControlFields(value: unknown) {
+  if (value === undefined) return {};
+  const parsed = CacheControlSchema.safeParse(value);
+  if (!parsed.success)
+    throw new ApiError(
+      400,
+      "Invalid cache_control: expected ephemeral with optional 5m or 1h ttl",
+    );
+  return { cache_control: parsed.data };
 }

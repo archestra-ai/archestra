@@ -1,3 +1,4 @@
+// @vitest-environment node
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type McpDeploymentStatusEntry,
@@ -5,11 +6,14 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   attentionCatalogIds,
+  attentionKindCounts,
   attentionSortRank,
   bucketOf,
   type CatalogItemForIssues,
   canFixInstall,
+  canReinstallInstall,
   computeMcpServerIssues,
+  describeOtherConnectionsReauth,
   facetIssues,
   type InstalledServerForIssues,
   type IssueViewer,
@@ -24,6 +28,7 @@ function item(
   return {
     serverType: "local",
     multitenant: false,
+    dynamicConnectionMcpServerId: null,
     ...overrides,
   };
 }
@@ -38,6 +43,9 @@ function server(
   // API sends null when there is nothing to report; the cast mirrors reality.
   return {
     ownerId: ME,
+    scope: "personal",
+    teamId: null,
+    canUseCredential: true,
     localInstallationStatus: "success",
     localInstallationError: null,
     oauthRefreshError: null,
@@ -56,7 +64,10 @@ function reauthMute({
 }: {
   catalogId: string;
   serverId: string;
-}): InstalledServerForIssues["alertMutes"][number] {
+}): NonNullable<InstalledServerForIssues["alertMutes"]>[number] & {
+  catalogId: string;
+  mutedAt: string;
+} {
   return {
     catalogId,
     mcpServerId: serverId,
@@ -81,9 +92,10 @@ const member: IssueViewer = {
   canReauthenticate: (s) => s.ownerId === ME,
   canManageInstalls: false,
 };
+// Re-authenticating a personal connection is its owner's alone, admin or not.
 const admin: IssueViewer = {
   userId: ME,
-  canReauthenticate: () => true,
+  canReauthenticate: (s) => s.scope !== "personal" || s.ownerId === ME,
   canManageInstalls: true,
 };
 
@@ -339,25 +351,18 @@ describe("computeMcpServerIssues", () => {
     expect(issues.size).toBe(0);
   });
 
-  it("reports every connection needing re-authentication, owned by you or by others, with since", () => {
-    const servers = [
-      server({
-        id: "mine",
-        catalogId: "r",
-        oauthRefreshError: "refresh_failed",
-        oauthRefreshErrorMessage: "invalid_grant",
-        oauthRefreshFailedAt: "2026-08-18T10:00:00.000Z",
-      }),
-      server({
-        id: "theirs",
-        catalogId: "r",
-        ownerId: OTHER,
-        oauthRefreshError: "no_refresh_token",
-      }),
-    ];
+  it("reports a lapsed sign-in on the viewer's own connection as theirs to fix, with since", () => {
     const issues = computeMcpServerIssues({
       items: [item({ id: "r", serverType: "remote" })],
-      servers,
+      servers: [
+        server({
+          id: "mine",
+          catalogId: "r",
+          oauthRefreshError: "refresh_failed",
+          oauthRefreshErrorMessage: "invalid_grant",
+          oauthRefreshFailedAt: "2026-08-18T10:00:00.000Z",
+        }),
+      ],
       deploymentStatuses: {},
       viewer: member,
     });
@@ -365,26 +370,175 @@ describe("computeMcpServerIssues", () => {
       expect.objectContaining({
         kind: "needs-reauth",
         audience: "you",
+        onViewerConnection: true,
         serverId: "mine",
         detail: "invalid_grant",
         since: "2026-08-18T10:00:00.000Z",
       }),
-      expect.objectContaining({
-        kind: "needs-reauth",
-        audience: "others",
-        serverId: "theirs",
-      }),
     ]);
-    expect(
+  });
+
+  describe("when only a colleague's personal connection lost its sign-in", () => {
+    const fleet = (viewer: IssueViewer) =>
       computeMcpServerIssues({
         items: [item({ id: "r", serverType: "remote" })],
-        servers,
+        servers: [
+          server({ id: "mine", catalogId: "r" }),
+          server({
+            id: "theirs",
+            catalogId: "r",
+            ownerId: OTHER,
+            canUseCredential: false,
+            oauthRefreshError: "no_refresh_token",
+          }),
+        ],
+        deploymentStatuses: {},
+        viewer,
+      });
+
+    it("raises nothing for a member, who can neither use nor fix it", () => {
+      expect(fleet(member).has("r")).toBe(false);
+    });
+
+    it("gives an admin a neutral count instead of telling them to sign in again", () => {
+      const issues = fleet(admin).get("r") ?? [];
+      expect(issues).toEqual([
+        expect.objectContaining({
+          kind: "needs-reauth",
+          audience: "others",
+          onViewerConnection: false,
+          serverId: "theirs",
+        }),
+      ]);
+      expect(attentionCatalogIds(fleet(admin), { audience: "you" })).toEqual(
+        [],
+      );
+      expect(describeOtherConnectionsReauth(issues)).toBe(
+        "1 other connection needs re-authentication. Its owner has to sign in to the provider again; the connections list marks it.",
+      );
+    });
+  });
+
+  it("counts several colleagues' lapsed connections in one admin notice", () => {
+    const issues =
+      computeMcpServerIssues({
+        items: [item({ id: "r", serverType: "remote" })],
+        servers: ["a", "b"].map((id) =>
+          server({
+            id,
+            catalogId: "r",
+            ownerId: `${OTHER}-${id}`,
+            canUseCredential: false,
+            oauthRefreshError: "refresh_failed",
+          }),
+        ),
         deploymentStatuses: {},
         viewer: admin,
-      })
-        .get("r")
-        ?.every((issue) => issue.audience === "you"),
-    ).toBe(true);
+      }).get("r") ?? [];
+    expect(describeOtherConnectionsReauth(issues)).toMatch(
+      /^2 other connections need re-authentication\./,
+    );
+  });
+
+  it("treats the team connection the viewer's calls fall back to as theirs", () => {
+    const teamManager: IssueViewer = {
+      ...member,
+      canReauthenticate: (s) => s.ownerId === ME || s.teamId === "team-1",
+    };
+    const issues = computeMcpServerIssues({
+      items: [item({ id: "r", serverType: "remote" })],
+      servers: [
+        server({
+          id: "team-conn",
+          catalogId: "r",
+          ownerId: OTHER,
+          scope: "team",
+          teamId: "team-1",
+          oauthRefreshError: "refresh_failed",
+        }),
+      ],
+      deploymentStatuses: {},
+      viewer: teamManager,
+    });
+    expect(issues.get("r")).toEqual([
+      expect.objectContaining({ audience: "you", onViewerConnection: true }),
+    ]);
+  });
+
+  it("does not blame the viewer for a broken team connection their own personal one overrides", () => {
+    const issues = computeMcpServerIssues({
+      items: [item({ id: "r", serverType: "remote" })],
+      servers: [
+        server({ id: "mine", catalogId: "r" }),
+        server({
+          id: "team-conn",
+          catalogId: "r",
+          ownerId: OTHER,
+          scope: "team",
+          teamId: "team-1",
+          oauthRefreshError: "refresh_failed",
+        }),
+      ],
+      deploymentStatuses: {},
+      viewer: admin,
+    });
+    expect(issues.get("r")).toEqual([
+      expect.objectContaining({
+        audience: "others",
+        onViewerConnection: false,
+      }),
+    ]);
+  });
+
+  it("still shows a member their own broken connection when only someone else can fix it", () => {
+    // An org-wide connection the member's calls use, which only its managers
+    // can re-authenticate: the member's tools fail, so it is not hidden.
+    const issues = computeMcpServerIssues({
+      items: [item({ id: "r", serverType: "remote" })],
+      servers: [
+        server({
+          id: "org-conn",
+          catalogId: "r",
+          ownerId: OTHER,
+          scope: "org",
+          oauthRefreshError: "refresh_failed",
+        }),
+      ],
+      deploymentStatuses: {},
+      viewer: member,
+    });
+    const reported = issues.get("r") ?? [];
+    expect(reported).toEqual([
+      expect.objectContaining({ audience: "others", onViewerConnection: true }),
+    ]);
+    expect(describeOtherConnectionsReauth(reported)).toBeNull();
+  });
+
+  it("follows a catalog-pinned connection, which serves every caller", () => {
+    const issues = computeMcpServerIssues({
+      items: [
+        item({
+          id: "r",
+          serverType: "remote",
+          dynamicConnectionMcpServerId: "service",
+        }),
+      ],
+      servers: [
+        server({ id: "mine", catalogId: "r" }),
+        server({
+          id: "service",
+          catalogId: "r",
+          ownerId: OTHER,
+          scope: "org",
+          oauthRefreshError: "refresh_failed",
+        }),
+      ],
+      deploymentStatuses: {},
+      viewer: admin,
+    });
+    expect(issues.get("r")).toEqual([
+      expect.objectContaining({ audience: "you", onViewerConnection: true }),
+    ]);
   });
 });
 
@@ -400,7 +554,7 @@ describe("facets", () => {
       items: [
         item({ id: "mine" }),
         item({ id: "theirs", serverType: "remote" }),
-        item({ id: "both", serverType: "remote" }),
+        item({ id: "both" }),
         item({ id: "healthy" }),
         item({ id: ARCHESTRA_MCP_CATALOG_ID }),
       ],
@@ -410,14 +564,18 @@ describe("facets", () => {
           catalogId: "mine",
           localInstallationStatus: "error",
         }),
+        // A team connection the viewer's calls use but only its managers can
+        // re-authenticate.
         server({
           id: "s-theirs",
           catalogId: "theirs",
           ownerId: OTHER,
+          scope: "team",
+          teamId: "team-1",
           oauthRefreshError: "refresh_failed",
         }),
         // One connection of "both" is the viewer's to re-authenticate and one
-        // is a colleague's: the item belongs to "you" and to nothing else.
+        // is a colleague's failed install: the item belongs to "you" only.
         server({
           id: "s-both-mine",
           catalogId: "both",
@@ -427,7 +585,9 @@ describe("facets", () => {
           id: "s-both-theirs",
           catalogId: "both",
           ownerId: OTHER,
-          oauthRefreshError: "refresh_failed",
+          scope: "team",
+          teamId: "team-1",
+          localInstallationStatus: "error",
         }),
         server({ id: "s-healthy", catalogId: "healthy" }),
         server({
@@ -447,6 +607,16 @@ describe("facets", () => {
     ]);
     expect(attentionCatalogIds(mixedFleet(), { audience: "others" })).toEqual([
       "theirs",
+    ]);
+  });
+
+  it("breaks a facet's items down by issue kind, counting only that facet", () => {
+    expect(attentionKindCounts(mixedFleet(), { audience: "you" })).toEqual([
+      { kind: "failed-to-start", count: 1 },
+      { kind: "needs-reauth", count: 1 },
+    ]);
+    expect(attentionKindCounts(mixedFleet(), { audience: "others" })).toEqual([
+      { kind: "needs-reauth", count: 1 },
     ]);
   });
 
@@ -621,6 +791,48 @@ describe("canFixInstall", () => {
       canFixInstall({
         server: server({ id: "s2", catalogId: "a" }),
         viewer: member,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("canReinstallInstall", () => {
+  const personal = (
+    ownerId: string,
+    reinstallReason: "new-input" | "restart",
+  ) => ({ ownerId, scope: "personal", teamId: null, reinstallReason }) as const;
+
+  it("leaves a personal install that owes new values to its owner", () => {
+    expect(
+      canReinstallInstall({
+        server: personal(OTHER, "new-input"),
+        viewer: admin,
+      }),
+    ).toBe(false);
+    expect(
+      canReinstallInstall({
+        server: personal(ME, "new-input"),
+        viewer: member,
+      }),
+    ).toBe(true);
+  });
+
+  it("lets an installs admin restart others' installs and fix team ones", () => {
+    expect(
+      canReinstallInstall({
+        server: personal(OTHER, "restart"),
+        viewer: admin,
+      }),
+    ).toBe(true);
+    expect(
+      canReinstallInstall({
+        server: {
+          ownerId: OTHER,
+          scope: "team",
+          teamId: "team-1",
+          reinstallReason: "new-input",
+        },
+        viewer: admin,
       }),
     ).toBe(true);
   });

@@ -1,5 +1,5 @@
 import { E2eTestId } from "@archestra/shared";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,6 +23,43 @@ beforeEach(() => {
 });
 
 describe("LlmProviderApiKeyDropdown", () => {
+  it("lists keys without legacy scope or team indicators", async () => {
+    const user = userEvent.setup();
+    const onSelectKey = vi.fn();
+    renderDropdown({
+      availableKeys: [
+        {
+          id: "personal-key",
+          name: "First key",
+          provider: "openai",
+          scope: "personal",
+        },
+        {
+          id: "team-key",
+          name: "Second key",
+          provider: "openai",
+          scope: "team",
+          teamName: "Engineering",
+        },
+        { id: "org-key", name: "Third key", provider: "openai", scope: "org" },
+      ] as LlmProviderApiKey[],
+      selectedApiKeyId: null,
+      onSelectKey,
+      triggerVariant: "button",
+    });
+    await user.click(screen.getByRole("button"));
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(3);
+    for (const option of options) {
+      expect(within(option).queryByRole("img")).not.toBeInTheDocument();
+      expect(option).not.toHaveTextContent(
+        /Personal|Team|Organization|Engineering/,
+      );
+    }
+    await user.click(screen.getByRole("option", { name: "Second key" }));
+    expect(onSelectKey).toHaveBeenCalledWith("team-key");
+  });
+
   it("renders chat selector test ids and provider groups", async () => {
     const user = userEvent.setup();
 

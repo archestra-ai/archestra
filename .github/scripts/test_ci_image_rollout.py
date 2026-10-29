@@ -22,14 +22,15 @@ class ImageReuseTests(unittest.TestCase):
         self.bin.mkdir()
         self.output = self.root / "output"
         self.marker = self.root / "tagged"
+        self.gcloud_calls = self.root / "gcloud-calls"
 
         self.git("init", "-q")
         self.git("config", "user.email", "ci@example.test")
         self.git("config", "user.name", "CI")
-        context = self.repo / "platform/p4_shim_docker_image"
+        context = self.repo / "platform/docker_images/p4_shim"
         context.mkdir(parents=True)
         (context / "Dockerfile").write_text("FROM scratch\n")
-        agent = self.repo / "platform/agent_images"
+        agent = self.repo / "platform/docker_images/agent"
         agent.mkdir()
         (agent / "Dockerfile").write_text("FROM scratch AS agent-test\n")
         shared = self.repo / "platform/backend/src/static/workspace-files.py"
@@ -46,6 +47,7 @@ class ImageReuseTests(unittest.TestCase):
 
         (self.bin / "docker").write_text(
             "#!/bin/bash\n"
+            "if [[ \"$3\" == create ]]; then touch \"$FAKE_TAG_MARKER\"; exit 0; fi\n"
             "if [[ \"$4\" == *\":${SOURCE_VERSION}\" && \"${FAKE_SOURCE_MISSING:-}\" == 1 ]]; then exit 1; fi\n"
             "if [[ \"$4\" == *\":${VERSION}\" && \"${FAKE_TARGET_MISMATCH:-}\" == 1 ]]; then\n"
             "  printf '{\"digest\":\"sha256:%064d\"}\\n' 2\n"
@@ -53,21 +55,39 @@ class ImageReuseTests(unittest.TestCase):
             "  printf '{\"digest\":\"sha256:%064d\"}\\n' 1\n"
             "fi\n"
         )
-        (self.bin / "gcloud").write_text(
-            "#!/bin/bash\n"
-            "if [[ \"$3\" == images ]]; then\n"
-            "  [[ \"${FAKE_METADATA_MISSING:-}\" != 1 ]] || exit 1\n"
-            "  if [[ \"${FAKE_OLD_IMAGE:-}\" == 1 ]]; then\n"
-            "    echo 2000-01-01T00:00:00Z\n"
-            "  else\n"
-            "    python3 -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())'\n"
-            "  fi\n"
-            "  exit 0\n"
-            "fi\n"
-            "touch \"$FAKE_TAG_MARKER\"\n"
-            "[[ \"${FAKE_TAG_FAIL:-}\" != 1 ]]\n"
+        (self.bin / "gh").write_text(
+            "#!/usr/bin/env python3\n"
+            "import datetime, json, os, sys\n"
+            "assert sys.argv[1:2] == ['api']\n"
+            "assert 'container/ci%2Fp4-shim/versions?' in sys.argv[2]\n"
+            "if os.environ.get('FAKE_METADATA_MISSING') == '1': sys.exit(1)\n"
+            "created = '2000-01-01T00:00:00Z' if os.environ.get('FAKE_OLD_IMAGE') == '1' else datetime.datetime.now(datetime.timezone.utc).isoformat()\n"
+            "print(json.dumps([{'name': 'sha256:' + '1'.zfill(64), 'created_at': created}]))\n"
         )
-        for command in ("docker", "gcloud"):
+        (self.bin / "gcloud").write_text(
+            "#!/usr/bin/env python3\n"
+            "import datetime, json, os, pathlib, sys\n"
+            "args = sys.argv[1:]\n"
+            "with open(os.environ['FAKE_GCLOUD_CALLS'], 'a') as calls:\n"
+            "    calls.write(json.dumps(args) + '\\n')\n"
+            "now = datetime.datetime.now(datetime.timezone.utc).isoformat()\n"
+            "if args[:4] == ['artifacts', 'docker', 'images', 'describe']:\n"
+            "    # The real command returns an analysis summary, without uploadTime.\n"
+            "    metadata = {'image_summary': {'digest': 'sha256:' + '1'.zfill(64)}}\n"
+            "elif args[:3] == ['artifacts', 'versions', 'describe']:\n"
+            "    if os.environ.get('FAKE_METADATA_MISSING') == '1': sys.exit(1)\n"
+            "    created = '2000-01-01T00:00:00Z' if os.environ.get('FAKE_OLD_IMAGE') == '1' else now\n"
+            "    metadata = {'createTime': os.environ.get('FAKE_CREATION_TIME', created), 'updateTime': now}\n"
+            "elif args[:4] == ['artifacts', 'docker', 'tags', 'add']:\n"
+            "    pathlib.Path(os.environ['FAKE_TAG_MARKER']).touch()\n"
+            "    sys.exit(1 if os.environ.get('FAKE_TAG_FAIL') == '1' else 0)\n"
+            "else:\n"
+            "    sys.exit(64)\n"
+            "projection = next(arg for arg in args if arg.startswith('--format='))\n"
+            "field = projection.removeprefix('--format=value(').removesuffix(')')\n"
+            "print(metadata.get(field, ''))\n"
+        )
+        for command in ("docker", "gcloud", "gh"):
             (self.bin / command).chmod(0o755)
 
     def git(self, *args):
@@ -78,18 +98,19 @@ class ImageReuseTests(unittest.TestCase):
     def reuse(self, paths=None, **overrides):
         env = os.environ | {
             "PATH": f"{self.bin}:{os.environ['PATH']}",
-            "IMAGE": "example.invalid/p4-shim",
+            "IMAGE": "us-central1-docker.pkg.dev/example-project/images/p4-shim",
             "SOURCE_VERSION": self.previous_sha,
             "VERSION": self.current_sha,
             "REUSE_PATHS": json.dumps(
-                paths or ["platform/p4_shim_docker_image"]
+                paths or ["platform/docker_images/p4_shim"]
             ),
             "MAX_AGE_DAYS": "7",
             "GITHUB_OUTPUT": str(self.output),
             "FAKE_TAG_MARKER": str(self.marker),
+            "FAKE_GCLOUD_CALLS": str(self.gcloud_calls),
         } | overrides
         return subprocess.run(
-            ["bash", str(SCRIPTS / "reuse-unchanged-gar-image.sh")],
+            ["bash", str(SCRIPTS / "reuse-unchanged-image.sh")],
             cwd=self.repo,
             env=env,
             text=True,
@@ -102,21 +123,57 @@ class ImageReuseTests(unittest.TestCase):
         self.assertTrue(self.marker.exists())
         self.assertEqual(self.output.read_text(), "reused=true\n")
 
+    def test_ghcr_retags_exact_digest_without_google_access(self):
+        self.reuse(IMAGE="ghcr.io/archestra-ai/ci/p4-shim")
+        self.assertEqual(self.output.read_text(), "reused=true\n")
+        self.assertTrue(self.marker.exists())
+        self.assertFalse(self.gcloud_calls.exists())
+
+    def test_ghcr_old_or_inaccessible_metadata_rebuilds(self):
+        for flag in ("FAKE_OLD_IMAGE", "FAKE_METADATA_MISSING"):
+            with self.subTest(flag=flag):
+                self.reuse(IMAGE="ghcr.io/archestra-ai/ci/p4-shim", **{flag: "1"})
+                self.assertFalse(self.output.exists())
+                self.assertFalse(self.marker.exists())
+
     def test_release_tag_reuses_the_same_source_commit(self):
         self.reuse(VERSION="1.4.0-rc.7")
         self.assertEqual(self.output.read_text(), "reused=true\n")
+
+    def test_nested_package_reads_immutable_version_from_the_images_own_registry(self):
+        self.reuse(IMAGE="asia-east1-docker.pkg.dev/another-project/another-repo/team/p4-shim")
+        self.assertEqual(self.output.read_text(), "reused=true\n")
+        lookup = json.loads(self.gcloud_calls.read_text().splitlines()[0])
+        self.assertEqual(lookup[:4], ["artifacts", "versions", "describe", "sha256:" + "1".zfill(64)])
+        for argument in (
+            "--project=another-project", "--location=asia-east1",
+            "--repository=another-repo", "--package=team/p4-shim",
+        ):
+            self.assertIn(argument, lookup)
+
+    def test_missing_invalid_or_future_creation_time_builds_instead(self):
+        for timestamp in ("", "not-a-date", "2026-01-01T00:00:00", "2999-01-01T00:00:00Z"):
+            with self.subTest(timestamp=timestamp):
+                self.reuse(FAKE_CREATION_TIME=timestamp)
+                self.assertFalse(self.marker.exists())
+                self.assertFalse(self.output.exists())
+
+    def test_non_gar_registry_builds_instead(self):
+        self.reuse(IMAGE="docker.io/example/p4-shim")
+        self.assertFalse(self.marker.exists())
+        self.assertFalse(self.output.exists())
 
     def test_agent_helper_is_a_build_dependency(self):
         helper = self.repo / "platform/backend/src/static/workspace-files.py"
         helper.write_text("print('changed agent helper')\n")
         self.git("add", ".")
         self.git("commit", "-qm", "change shared agent helper")
-        self.reuse(paths=["platform/agent_images", "platform/backend/src/static/workspace-files.py"])
+        self.reuse(paths=["platform/docker_images/agent", "platform/backend/src/static/workspace-files.py"])
         self.assertFalse(self.marker.exists())
         self.assertFalse(self.output.exists())
 
     def test_changed_context_builds_instead(self):
-        context_file = self.repo / "platform/p4_shim_docker_image/Dockerfile"
+        context_file = self.repo / "platform/docker_images/p4_shim/Dockerfile"
         context_file.write_text("FROM scratch\nCOPY changed /changed\n")
         self.git("add", ".")
         self.git("commit", "-qm", "change image")

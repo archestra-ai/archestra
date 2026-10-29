@@ -58,24 +58,74 @@ test.describe("LLM logs — Client filter", () => {
     await llmLogsPage.goto();
     await llmLogsPage.clientFilter.click();
 
-    // Options carry the Anthropic
-    // logo's alt text alongside the label, so match the label as a substring.
+    // App and request-source options share a search but remain distinct groups.
     await expect(
       page.getByRole("option", { name: "Claude Code" }),
     ).toBeVisible();
     await expect(
       page.getByRole("option", { name: "Claude Desktop" }),
     ).toBeVisible();
-    await expect(page.getByRole("option", { name: "OpenCode" })).toBeVisible();
-    await expect(page.getByRole("option")).toHaveText([
-      "All Clients",
+    await expect(
+      page.getByRole("option", { name: "OpenCode", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("group", { name: "Client apps", exact: true })
+        .getByRole("option"),
+    ).toHaveText([
+      "All client apps",
       "Claude Code",
       "Claude Desktop",
       "Cursor",
       "Codex",
       "OpenCode",
+      "Kilo Code",
+      "Pi",
+      "Kimi Code",
       "Copilot CLI",
     ]);
+  });
+
+  test("finds Claude by partial search, applies it with the keyboard, and clears all filters", async ({
+    page,
+    llmLogsPage,
+  }) => {
+    await llmLogsPage.goto();
+    await llmLogsPage.clientFilter.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("dialog")).toHaveAttribute(
+      "id",
+      (await llmLogsPage.clientFilter.getAttribute("aria-controls")) ?? "",
+    );
+    const search = page.getByRole("combobox", {
+      name: "Search apps and sources",
+    });
+    await search.fill("Cla");
+    await expect(
+      page.getByRole("option", { name: "Claude Code", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("option", { name: "Claude Desktop", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("option", { name: "API", exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByRole("option")).toHaveCount(2);
+    await search.fill("Claude Code");
+    await search.press("ArrowDown");
+    await search.press("Enter");
+    await expect(page).toHaveURL(/client=claude-code/);
+    await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toBeVisible();
+    await expect(llmLogsPage.rowForText(API_TITLE)).toHaveCount(0);
+    await expect(llmLogsPage.clientFilter).toBeFocused();
+    await llmLogsPage.clientFilter.click();
+    await search.fill("no-matching-app");
+    await expect(page.getByText("No apps or sources found.")).toBeVisible();
+    await search.press("Escape");
+    await expect(llmLogsPage.clientFilter).toBeFocused();
+    await page.getByRole("button", { name: "Clear", exact: true }).click();
+    await expect(page).not.toHaveURL(/client=|source=/);
+    await expect(llmLogsPage.rowForText(API_TITLE)).toBeVisible();
   });
 
   test("narrows the list to OpenCode traffic and reflects it in the URL", async ({
@@ -113,8 +163,8 @@ test.describe("LLM logs — Client filter", () => {
     await expect(llmLogsPage.rowForText(CLAUDE_DESKTOP_TITLE)).toBeVisible();
     await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toHaveCount(0);
 
-    // Clearing back to "All Clients" drops the param and restores the list.
-    await llmLogsPage.selectClient("All Clients");
+    // Clearing the client dimension drops its param and restores the list.
+    await llmLogsPage.selectClient("All client apps");
 
     await expect(page).not.toHaveURL(/client=/);
     await expect(llmLogsPage.rowForText(API_TITLE)).toBeVisible();
@@ -126,8 +176,8 @@ test.describe("LLM logs — Client filter", () => {
   }) => {
     await llmLogsPage.goto();
 
-    // Source filter is the 3rd combobox; pick "API".
-    await page.getByRole("combobox").nth(2).click();
+    // Choose a request source from the same picker.
+    await llmLogsPage.clientFilter.click();
     await page.getByRole("option", { name: "API", exact: true }).click();
     await expect(page).toHaveURL(/source=api/);
 
@@ -140,11 +190,16 @@ test.describe("LLM logs — Client filter", () => {
     await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toBeVisible();
     await expect(llmLogsPage.rowForText(CLAUDE_DESKTOP_TITLE)).toHaveCount(0);
     await expect(llmLogsPage.rowForText(API_TITLE)).toHaveCount(0);
+    await llmLogsPage.selectClient("All request sources");
+    await expect(page).not.toHaveURL(/source=/);
+    await expect(page).toHaveURL(/client=claude-code/);
+    await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toBeVisible();
+    await expect(llmLogsPage.rowForText(API_TITLE)).toHaveCount(0);
   });
 });
 
 test.describe("LLM logs — session detail inline conversation", () => {
-  test("renders the latest conversation above the interactions table and drops the View button", async ({
+  test("shows the latest conversation in the details pane under the request list", async ({
     page,
     llmLogsPage,
     mswControl,
@@ -170,19 +225,21 @@ test.describe("LLM logs — session detail inline conversation", () => {
 
     await llmLogsPage.gotoSession("s1");
 
-    await expect(llmLogsPage.latestConversationHeading).toBeVisible();
-    // Assistant answer only appears in the conversation (not the table).
+    // The latest request is selected, and its answer only appears in the
+    // conversation (the list carries no message text).
     await expect(
-      page.getByText("The capital of France is Paris."),
+      llmLogsPage.requestList.getByRole("button", { name: /^Test Agent, / }),
+    ).toHaveAttribute("aria-current", "true");
+    await expect(
+      llmLogsPage.conversationPane.getByText("The capital of France is Paris."),
     ).toBeVisible();
 
-    // The conversation block sits above the interactions table.
-    const headingBox =
-      await llmLogsPage.latestConversationHeading.boundingBox();
-    const tableBox = await llmLogsPage.table.boundingBox();
-    expect(headingBox).not.toBeNull();
-    expect(tableBox).not.toBeNull();
-    expect(headingBox?.y ?? 0).toBeLessThan(tableBox?.y ?? 0);
+    // The details sit below the request list they describe.
+    const listBox = await llmLogsPage.requestList.boundingBox();
+    const conversationBox = await llmLogsPage.conversationPane.boundingBox();
+    expect(listBox).not.toBeNull();
+    expect(conversationBox).not.toBeNull();
+    expect(listBox?.y ?? 0).toBeLessThan(conversationBox?.y ?? 0);
 
     // The old "View" affordance is gone.
     await expect(
@@ -191,7 +248,6 @@ test.describe("LLM logs — session detail inline conversation", () => {
   });
 
   test("shows the latest MAIN interaction when the session mixes main and subagent requests", async ({
-    page,
     llmLogsPage,
     mswControl,
   }) => {
@@ -228,18 +284,21 @@ test.describe("LLM logs — session detail inline conversation", () => {
 
     await llmLogsPage.gotoSession("s2");
 
-    await expect(llmLogsPage.latestConversationHeading).toBeVisible();
     // The main interaction's assistant answer renders...
-    await expect(page.getByText("Main answer")).toBeVisible();
-    // ...and the subagent's assistant answer does not (its thread isn't shown).
-    await expect(page.getByText("Subagent answer")).toHaveCount(0);
-    await expect(page.getByText("Sub-agent", { exact: true })).toBeVisible();
     await expect(
-      llmLogsPage.table.getByText("Test Agent", { exact: true }),
+      llmLogsPage.conversationPane.getByText("Main answer"),
+    ).toBeVisible();
+    // ...and the subagent's assistant answer does not (its thread isn't shown).
+    await expect(llmLogsPage.page.getByText("Subagent answer")).toHaveCount(0);
+    await expect(
+      llmLogsPage.requestList.getByRole("button", { name: /^Sub-agent, / }),
+    ).toBeVisible();
+    await expect(
+      llmLogsPage.requestList.getByRole("button", { name: /^Test Agent, / }),
     ).toBeVisible();
   });
 
-  test("omits the conversation block and shows the empty state for a session with no interactions", async ({
+  test("omits the conversation and shows the empty state for a session with no interactions", async ({
     page,
     llmLogsPage,
     mswControl,
@@ -258,8 +317,8 @@ test.describe("LLM logs — session detail inline conversation", () => {
     await llmLogsPage.gotoSession("s3");
 
     await expect(
-      page.getByText("No interactions found for this session"),
+      page.getByText("No requests recorded for this session yet."),
     ).toBeVisible();
-    await expect(llmLogsPage.latestConversationHeading).toHaveCount(0);
+    await expect(llmLogsPage.conversationPane).toHaveCount(0);
   });
 });

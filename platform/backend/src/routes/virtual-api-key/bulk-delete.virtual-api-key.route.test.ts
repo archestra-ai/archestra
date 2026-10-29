@@ -1,5 +1,4 @@
 import { and, eq } from "drizzle-orm";
-import { vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -7,12 +6,6 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { userHasPermission } from "@/auth";
-
-const mockUserHasPermission = vi.mocked(userHasPermission);
 
 describe("DELETE /api/llm-virtual-keys/bulk", () => {
   let app: FastifyInstanceWithZod;
@@ -24,8 +17,6 @@ describe("DELETE /api/llm-virtual-keys/bulk", () => {
     organizationId = organization.id;
     user = await makeUser();
     await makeMember(user.id, organizationId);
-    mockUserHasPermission.mockReset();
-    mockUserHasPermission.mockResolvedValue(false);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

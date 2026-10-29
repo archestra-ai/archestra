@@ -39,6 +39,21 @@ class ProjectPinModel {
       );
   }
 
+  /**
+   * Every pin of one user, as `pinnedAt` per project id. Bounded by how many
+   * projects that user pinned, so it needs no id list from the caller.
+   */
+  static async getPinnedAtForUser(userId: string): Promise<Map<string, Date>> {
+    const rows = await db
+      .select({
+        projectId: schema.projectPinsTable.projectId,
+        pinnedAt: schema.projectPinsTable.pinnedAt,
+      })
+      .from(schema.projectPinsTable)
+      .where(eq(schema.projectPinsTable.userId, userId));
+    return new Map(rows.map((r) => [r.projectId, r.pinnedAt]));
+  }
+
   /** `pinnedAt` per project for one user, in a single query (no N+1). */
   static async getPinnedAtForProjects(params: {
     userId: string;

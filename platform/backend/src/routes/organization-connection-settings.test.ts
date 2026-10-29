@@ -1,19 +1,11 @@
 import { vi } from "vitest";
+import { betterAuth } from "@/auth";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { OrganizationModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-import { OrganizationModel } from "@/models";
-
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    enterpriseFeatures: { core: true },
-  }),
-);
 
 describe("PATCH /api/organization/connection-settings", () => {
   let app: FastifyInstanceWithZod;
@@ -21,8 +13,10 @@ describe("PATCH /api/organization/connection-settings", () => {
   let organizationId: string;
 
   beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
-    vi.clearAllMocks();
-    vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
+    config.enterpriseFeatures.core = true;
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: adminUser.id } }) as never,
+    );
 
     adminUser = await makeAdmin();
     const organization = await makeOrganization();
@@ -75,6 +69,92 @@ describe("PATCH /api/organization/connection-settings", () => {
     const body = response.json();
     expect(body.connectionDefaultMcpGatewayId).toBe(gateway.id);
     expect(body.connectionShownClientIds).toEqual(["claude-code"]);
+  });
+
+  test("refuses a personal gateway as the new default but keeps one already saved", async ({
+    makeAgent,
+  }) => {
+    const personal = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+      agentType: "mcp_gateway",
+      isPersonalGateway: true,
+    });
+    const refused = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: { connectionDefaultMcpGatewayId: personal.id },
+    });
+    expect(refused.statusCode).toBe(400);
+
+    await OrganizationModel.patch(organizationId, {
+      connectionDefaultMcpGatewayId: personal.id,
+    });
+    const unchanged = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: {
+        connectionDefaultMcpGatewayId: personal.id,
+        connectionShownClientIds: ["cursor"],
+      },
+    });
+    expect(unchanged.statusCode, unchanged.body).toBe(200);
+  });
+
+  test("persists order independently of visibility, retains it on unrelated saves, and clears it", async () => {
+    const order = ["codex", "cursor", "claude-code"];
+    const save = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: { connectionClientOrder: order },
+    });
+    expect(save.statusCode).toBe(200);
+    expect(save.json().connectionClientOrder).toEqual(order);
+    expect(save.json().connectionShownClientIds).toBeNull();
+    const reload = await app.inject({
+      method: "GET",
+      url: "/api/organization",
+    });
+    expect(reload.statusCode).toBe(200);
+    expect(reload.json().connectionClientOrder).toEqual(order);
+
+    const otherSave = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: { connectionShownClientIds: ["cursor"] },
+    });
+    expect(otherSave.statusCode).toBe(200);
+    expect(otherSave.json().connectionClientOrder).toEqual(order);
+
+    const clear = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: { connectionClientOrder: null },
+    });
+    expect(clear.statusCode).toBe(200);
+    expect(clear.json().connectionClientOrder).toBeNull();
+    expect(clear.json().connectionShownClientIds).toEqual(["cursor"]);
+  });
+
+  test("rejects repeated order IDs", async () => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: { connectionClientOrder: ["codex", "codex"] },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("supports ordering a growing catalogue when all agents are visible", async () => {
+    const order = Array.from({ length: 51 }, (_, index) => `agent-${index}`);
+    const save = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: { connectionClientOrder: order },
+    });
+    expect(save.statusCode).toBe(200);
+    expect(save.json().connectionClientOrder).toEqual(order);
+    expect(save.json().connectionShownClientIds).toBeNull();
   });
 
   test("refuses the retired connect-page provider list", async () => {

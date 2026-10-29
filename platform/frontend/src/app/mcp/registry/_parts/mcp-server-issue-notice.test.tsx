@@ -36,6 +36,11 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
     isPending: false,
   }),
   useDeleteMcpServer: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useMcpServersAssignedAgents: () => ({
+    agentsByServerId: new Map(),
+    isPending: false,
+    isError: false,
+  }),
 }));
 
 type Props = Parameters<typeof McpServerIssueNotice>[0];
@@ -425,7 +430,7 @@ describe("McpServerIssueNotice", () => {
     expect(screen.getByText(/at main/)).toBeTruthy();
   });
 
-  it("panel: keeps the pill, the fix prose and both verbs", () => {
+  it("panel: keeps the fix prose and both verbs, without a status pill", async () => {
     renderWithQuery(
       <McpServerIssueNotice
         item={item}
@@ -435,12 +440,42 @@ describe("McpServerIssueNotice", () => {
       />,
     );
 
-    expect(screen.getByText("Failed to start")).toBeTruthy();
+    // The message already says what failed, so the panel carries no pill.
+    expect(screen.queryByText("Failed to start")).toBeNull();
     expect(screen.getByText(/Check the logs for the error/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "View logs" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Edit configuration" }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show details" })).toBeTruthy();
+    // The raw message stays collapsed until asked for.
+    expect(screen.queryByText("exit code 1")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(screen.getByText("exit code 1")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Hide details" }));
+    expect(screen.queryByText("exit code 1")).toBeNull();
+  });
+  it("panel: reports a colleague's lapsed sign-in as a count, not as the viewer's to fix", () => {
+    renderWithQuery(
+      <McpServerIssueNotice
+        item={item}
+        issues={[
+          needsReauth({ audience: "others", onViewerConnection: false }),
+        ]}
+        servers={[otherOwnerServer]}
+        hideName
+        panelActions="dismiss-only"
+      />,
+    );
+
+    expect(
+      screen.getByText(/^1 other connection needs re-authentication\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/rejected the stored token/)).toBeNull();
+    expect(screen.queryByText(/Sign in to the provider again/)).toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "Dismiss alert for crashy-test-server",
+      }),
+    ).toBeInTheDocument();
   });
 });

@@ -1,18 +1,27 @@
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "./consts";
 
 export function formatSecretStorageType(
-  storageType: "vault" | "external_vault" | "database" | "none" | undefined,
+  storageType: "vault" | "database" | "none" | undefined,
 ): string {
   switch (storageType) {
     case "vault":
       return "Vault";
-    case "external_vault":
-      return "External Vault";
     case "database":
       return "Database";
     default:
       return "None";
   }
+}
+
+/**
+ * An MCP server's name as tool names carry it before the separator:
+ * lowercased, whitespace runs as `_`, anything but `[a-z0-9_-]` removed.
+ */
+export function slugifyMcpServerName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_-]/g, "");
 }
 
 /**
@@ -98,7 +107,15 @@ export function collapseWhitespace(raw: string): string {
  * quotes inside the text are part of the text.
  */
 export function stripWrappingQuotes(value: string): string {
-  return value.replace(/^["'`]+|["'`]+$/g, "").trim();
+  let start = 0;
+  let end = value.length;
+  while (start < end && isWrappingQuote(value[start])) start++;
+  while (end > start && isWrappingQuote(value[end - 1])) end--;
+  return value.slice(start, end).trim();
+}
+
+function isWrappingQuote(char: string | undefined): boolean {
+  return char === '"' || char === "'" || char === "`";
 }
 
 /**

@@ -1,22 +1,23 @@
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
-import { type Mock, vi } from "vitest";
-import { hasPermission } from "@/auth";
-import { beforeEach, describe, expect, test } from "@/test";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
-
-vi.mock("@/auth");
-
-const mockHasPermission = hasPermission as Mock;
 
 type CatalogToolReference = { id: string; name: string; catalogId: string };
 
 describe("GET /api/internal_mcp_catalog/tools", () => {
   const ctx = useRouteTestApp(internalMcpCatalogRoutes);
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(async ({ makeMember }) => {
-    vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: ctx.user.id } }) as never,
+    );
     await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
   });
 
@@ -117,7 +118,6 @@ describe("GET /api/internal_mcp_catalog/tools", () => {
     const member = await makeUser();
     await makeMember(member.id, ctx.organizationId, { role: "member" });
     ctx.user = member;
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
 
     expect(
       (await getBatch()).some((tool) => tool.catalogId === personal.id),
@@ -156,9 +156,14 @@ describe("GET /api/internal_mcp_catalog/tools", () => {
 describe("catalog list toolCount", () => {
   const ctx = useRouteTestApp(internalMcpCatalogRoutes);
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(async ({ makeMember }) => {
-    vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: ctx.user.id } }) as never,
+    );
     await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
   });
 

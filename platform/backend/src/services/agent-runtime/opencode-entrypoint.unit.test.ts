@@ -15,7 +15,7 @@ import { describe, expect, test } from "vitest";
 const execFileAsync = promisify(execFile);
 const ENTRYPOINT = path.resolve(
   import.meta.dirname,
-  "../../../../agent_images/bin/archestra-opencode",
+  "../../../../docker_images/agent/bin/archestra-opencode",
 );
 
 describe("OpenCode image entrypoint", () => {
@@ -246,7 +246,7 @@ globalThis.Bun = {
 (async () => {
   const mod = await import(pathToFileURL(process.argv[1]).href);
   const plugin = Object.values(mod).find((value) => typeof value === "function");
-  const hooks = await plugin();
+  const hooks = await plugin({ client: {} });
   const send = (event) => hooks.event({ event });
   await send({ type: "session.status", properties: { sessionID: "main", status: { type: "busy" } } });
   await send({ type: "question.asked", properties: { sessionID: "main" } });
@@ -271,6 +271,8 @@ globalThis.Bun = {
         );
       }
     } finally {
+      // The image owns read-only config directories; restore fixture cleanup access.
+      await execFileAsync("chmod", ["-R", "u+w", root]);
       await rm(root, { recursive: true, force: true });
     }
   });

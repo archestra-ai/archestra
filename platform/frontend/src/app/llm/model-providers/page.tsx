@@ -2,17 +2,17 @@
 
 import {
   type archestraApiTypes,
+  DEFAULT_CREDENTIAL_GRANTS,
   E2eTestId,
   formatSecretStorageType,
   isProviderApiKeyOptional,
+  isSupportedProvider,
   SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
-  AlertTriangle,
   Boxes,
   CheckCircle2,
-  KeyRound,
   Loader2,
   Pencil,
   Plus,
@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -45,12 +46,17 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { PageLayout } from "@/components/page-layout";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { ResourceListActions } from "@/components/resource-list-actions";
+import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
+import { SettingsLink } from "@/components/settings-link";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -66,7 +72,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
+import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -78,7 +89,6 @@ import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import {
   useBulkDeleteLlmProviderApiKeys,
   useDeleteLlmProviderApiKey,
@@ -86,8 +96,11 @@ import {
   useLlmProviderApiKeys,
   useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
+import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
+import { CopilotOrganizationConnectDialog } from "./_parts/copilot-organization-connect-dialog";
+import { OrganizationSubscriptionCards } from "./_parts/organization-subscription-cards";
 import {
   buildSubscriptionOffers,
   type SubscriptionOffer,
@@ -107,9 +120,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   inferenceBaseUrl: null,
   extraHeaders: [],
   shared: false,
-  teamId: null,
-  vaultSecretPath: null,
-  vaultSecretKey: null,
+
   isPrimary: false,
   bedrockAuthMethod: "api-key",
   awsAccessKeyId: null,
@@ -119,7 +130,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
 };
 
 export default function ApiKeysPage() {
-  const docsUrl = getFrontendDocsUrl("platform-supported-llm-providers");
+  const docsUrl = getFrontendDocsUrl("llm-proxy/providers");
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
@@ -133,9 +144,26 @@ export default function ApiKeysPage() {
     useLlmProviderApiKeys({
       enabled: apiKeyQueriesEnabled,
     });
+  const { hasActiveScopeFilters, access, sharedWith, owner } =
+    useScopeFilterParams();
+  const hasActiveFilters = Boolean(
+    search || providerFilter !== "all" || labelsFilter || hasActiveScopeFilters,
+  );
+  const clearFilters = () =>
+    updateQueryParams({
+      search: null,
+      provider: null,
+      labels: null,
+      ...Object.fromEntries(
+        RESOURCE_ACCESS_FILTER_PARAMS.map((param) => [param, null]),
+      ),
+    });
   const { data: queriedApiKeys = [], isFetching } = useLlmProviderApiKeys({
     search: search || undefined,
     labels: labelsFilter,
+    access,
+    sharedWith,
+    owner,
     provider:
       providerFilter === "all"
         ? undefined
@@ -143,20 +171,46 @@ export default function ApiKeysPage() {
     enabled: apiKeyQueriesEnabled,
   });
   const { data: organization } = useOrganization();
-  const providerCatalog = useModelProviderCatalog();
+  const providerCatalog = useModelProviderCatalog({ fresh: true });
   // Read defensively: suites that render this page mock the auth query module
   // wholesale, and the Access column should fall back to the scope label
   // rather than crash the table (same convention as `user-share-field.tsx`).
   const currentUserId = useSession()?.data?.user?.id;
+  const { data: scopedGrants } = useScopedCapabilities();
+  const isOwnSubscriptionCredential = useCallback(
+    (credential: LlmProviderApiKeyResponse) =>
+      credential.scope === "personal" &&
+      credential.userId === currentUserId &&
+      subscriptionKindOfCredential(credential) !== null,
+    [currentUserId],
+  );
   const updateMutation = useUpdateLlmProviderApiKey();
   const deleteMutation = useDeleteLlmProviderApiKey();
   const bulkDeleteMutation = useBulkDeleteLlmProviderApiKeys();
-  const byosEnabled = useFeature("byosEnabled");
+
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  // `?create=<provider>&access=organization` opens the create dialog shared org-wide, which background callers (the auto-routing scorer) need.
+  const createProvider = searchParams.get("create");
+  const createShared = searchParams.get("access") === "organization";
+  const linkedCreate = useMemo(
+    (): Partial<LlmProviderApiKeyFormValues> | undefined =>
+      isSupportedProvider(createProvider)
+        ? {
+            provider: createProvider,
+            initialGrants: createShared
+              ? DEFAULT_CREDENTIAL_GRANTS.map((grant) => ({
+                  ...grant,
+                  name: "Everyone in the organization",
+                }))
+              : [],
+          }
+        : undefined,
+    [createProvider, createShared],
+  );
   const [subscriptionToConnect, setSubscriptionToConnect] =
     useState<SubscriptionOffer | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -186,7 +240,8 @@ export default function ApiKeysPage() {
       enabled: !!selectedApiKeyId && isDeleteDialogOpen,
     });
   const { data: blockingOauthClientsData, isPending: isLoadingOauthClients } =
-    useLlmOauthClients({
+    useOauthClients({
+      capability: "llm:proxy",
       providerApiKeyId: selectedApiKeyId ?? undefined,
       limit: 100,
       offset: 0,
@@ -197,16 +252,12 @@ export default function ApiKeysPage() {
   // says "disconnect" rather than talking about deleting an API key.
   const deletingSubscription =
     selectedApiKey !== null &&
-    subscriptionKindOfCredential(selectedApiKey) !== null;
+    (subscriptionKindOfCredential(selectedApiKey) !== null ||
+      selectedApiKey.isGithubAppKey === true);
 
   const getKeyUsage = useCallback(
     (keyId: string): string | null => {
-      if (!organization) return null;
-      const usages: string[] = [];
-      if (organization.embeddingChatApiKeyId === keyId)
-        usages.push("embedding");
-      if (organization.rerankerChatApiKeyId === keyId) usages.push("reranking");
-      if (organization.ocrChatApiKeyId === keyId) usages.push("OCR");
+      const usages = knowledgeBaseUsagesOf(organization, keyId);
       return usages.length > 0
         ? `Used for knowledge base ${usages.join(" and ")}`
         : null;
@@ -219,15 +270,21 @@ export default function ApiKeysPage() {
     defaultValues: DEFAULT_FORM_VALUES,
   });
   const [editLabels, setEditLabels] = useState<ProfileLabel[]>([]);
-  const [editSection, setEditSection] = useState<
-    "general" | "connectivity" | "permissions"
-  >("general");
+  // The permissions section keeps its edits in its own form. This dialog's
+  // Test & Save is the only Save on screen, so it commits them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
   const editLabelsRef = useRef<ProfileLabelsRef>(null);
 
   // Reset edit form with selected key values when dialog opens
   useEffect(() => {
     if (editingApiKey) {
-      setEditSection("general");
       editForm.reset({
         name: editingApiKey.name,
         provider: editingApiKey.provider,
@@ -236,9 +293,7 @@ export default function ApiKeysPage() {
         inferenceBaseUrl: editingApiKey.inferenceBaseUrl ?? null,
         extraHeaders: deserializeExtraHeaders(editingApiKey.extraHeaders),
         shared: editingApiKey.userId === null,
-        teamId: null,
-        vaultSecretPath: editingApiKey.vaultSecretPath ?? null,
-        vaultSecretKey: editingApiKey.vaultSecretKey ?? null,
+
         isPrimary: editingApiKey.isPrimary ?? false,
         bedrockAuthMethod: "api-key",
         awsAccessKeyId: null,
@@ -272,10 +327,11 @@ export default function ApiKeysPage() {
     );
 
     try {
+      await permissionsSave.current?.();
       await updateMutation.mutateAsync({
         id: editingApiKey.id,
         data: {
-          name: values.name || undefined,
+          name: values.name.trim() || undefined,
           apiKey:
             !isBedrockSigV4 && apiKeyChanged
               ? (values.apiKey ?? undefined)
@@ -284,16 +340,9 @@ export default function ApiKeysPage() {
           inferenceBaseUrl: values.inferenceBaseUrl || null,
           extraHeaders: serializeExtraHeaders(values.extraHeaders),
           // The update route no longer accepts the retired `scope`/`teamId`
-          // fields; sharing is edited on the key's Permissions tab.
+          // fields; sharing is edited in the key's permissions section.
           isPrimary: values.isPrimary,
-          vaultSecretPath:
-            !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
-              ? values.vaultSecretPath
-              : undefined,
-          vaultSecretKey:
-            !isBedrockSigV4 && byosEnabled && values.vaultSecretKey
-              ? values.vaultSecretKey
-              : undefined,
+
           awsAccessKeyId: sigV4Provided
             ? (values.awsAccessKeyId ?? undefined)
             : undefined,
@@ -313,25 +362,27 @@ export default function ApiKeysPage() {
     }
   });
 
+  // Nothing that maps the key blocks deletion: the dialog lists what goes with
+  // it, and the confirm waits only for those lists to load.
+  const deleteBlocked = isLoadingVirtualKeys || isLoadingOauthClients;
+
   const handleDelete = useCallback(async () => {
-    if (!selectedApiKey) return;
-    const hasBlockingAssociations =
-      (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
-      (blockingOauthClientsData?.pagination.total ?? 0) > 0;
-    if (hasBlockingAssociations) return;
+    if (!selectedApiKey || deleteBlocked) return;
     try {
-      await deleteMutation.mutateAsync(selectedApiKey.id);
+      await deleteMutation.mutateAsync({
+        id: selectedApiKey.id,
+        kind: selectedApiKey.isGithubAppKey
+          ? "plan"
+          : deletingSubscription
+            ? "subscription"
+            : "key",
+      });
       setIsDeleteDialogOpen(false);
       setSelectedApiKey(null);
     } catch {
       // Error already handled by mutation's handleApiError
     }
-  }, [
-    selectedApiKey,
-    blockingVirtualKeys,
-    blockingOauthClientsData,
-    deleteMutation,
-  ]);
+  }, [selectedApiKey, deleteBlocked, deletingSubscription, deleteMutation]);
 
   const openDeleteDialog = useCallback((apiKey: LlmProviderApiKeyResponse) => {
     setSelectedApiKey(apiKey);
@@ -348,6 +399,7 @@ export default function ApiKeysPage() {
   const addApiKeyButton = (
     <div className="flex items-center gap-2">
       <Button
+        size="sm"
         onClick={() => setIsCreateDialogOpen(true)}
         data-testid={E2eTestId.AddChatApiKeyButton}
       >
@@ -403,15 +455,30 @@ export default function ApiKeysPage() {
     updateQueryParams,
   ]);
 
+  /** The organization's GitHub Copilot subscriptions (GitHub App keys). */
+  const organizationSubscriptions = useMemo(
+    () => allApiKeys.filter((key) => key.isGithubAppKey),
+    [allApiKeys],
+  );
+  const [copilotConnect, setCopilotConnect] = useState<{
+    manage: {
+      id: string;
+      name: string;
+      organization: string | null;
+      reconnect: boolean;
+    } | null;
+  } | null>(null);
+
   /** Keys the cards already stand for, so the table never repeats them. */
   const connectedSubscriptionIds = useMemo(
     () =>
-      new Set(
-        subscriptionOffers.flatMap(({ credential }) =>
+      new Set([
+        ...subscriptionOffers.flatMap(({ credential }) =>
           credential ? [credential.id] : [],
         ),
-      ),
-    [subscriptionOffers],
+        ...organizationSubscriptions.map((key) => key.id),
+      ]),
+    [subscriptionOffers, organizationSubscriptions],
   );
 
   const rows = useMemo(
@@ -449,13 +516,30 @@ export default function ApiKeysPage() {
     rows,
     getId: (row) => row.id,
     canSelect: (row) => !row.isSystem && getKeyUsage(row.id) === null,
-    filterSignature: `${search}\u0000${providerFilter}\u0000${labelsFilter ?? ""}`,
+    filterSignature: [
+      search,
+      providerFilter,
+      labelsFilter ?? "",
+      access.join(","),
+      sharedWith?.join(",") ?? "",
+      owner?.join(",") ?? "",
+    ].join("\u0000"),
     matchDescription:
       search || providerFilter !== "all"
         ? "match the current filters"
         : "are configured",
   });
   const selectedApiKeys = selected;
+  const canDeleteSelected = selectedApiKeys.every(
+    (credential) =>
+      isOwnSubscriptionCredential(credential) ||
+      holdsItemGrant({
+        grants: scopedGrants,
+        resource: "llmProviderApiKey",
+        action: "delete",
+        id: credential.id,
+      }),
+  );
 
   const columns: ColumnDef<LlmProviderApiKeyResponse>[] = useMemo(
     () => [
@@ -581,6 +665,7 @@ export default function ApiKeysPage() {
           return (
             <TableRowActions
               itemName={credential.name}
+              permissionScope={credential.id}
               actions={[
                 {
                   icon: <Pencil className="h-4 w-4" />,
@@ -599,12 +684,9 @@ export default function ApiKeysPage() {
                   variant: "destructive",
                   // Hidden providers keep their subscriptions in this table.
                   // Owners must still be able to disconnect those credentials.
-                  permissions:
-                    credential.scope === "personal" &&
-                    credential.userId === currentUserId &&
-                    subscriptionKindOfCredential(credential) !== null
-                      ? {}
-                      : { llmProviderApiKey: ["delete"] },
+                  permissions: isOwnSubscriptionCredential(credential)
+                    ? {}
+                    : { llmProviderApiKey: ["delete"] },
                   disabled: isSystem || isInUse,
                   disabledTooltip: isInUse
                     ? `${keyUsage}. Remove it from Settings > Knowledge before deleting.`
@@ -626,7 +708,7 @@ export default function ApiKeysPage() {
       azureOpenAiEntraIdEnabled,
       anthropicKeylessAuthEnabled,
       providerCatalog,
-      currentUserId,
+      isOwnSubscriptionCredential,
     ],
   );
 
@@ -657,6 +739,44 @@ export default function ApiKeysPage() {
           }}
         />
 
+        {/* Turned off by an admin: no enterprise plan is offered either. */}
+        {providerCatalog.isHidden("github-copilot") ? null : (
+          <OrganizationSubscriptionCards
+            credentials={organizationSubscriptions}
+            isLoading={
+              permissionsPending || (apiKeyQueriesEnabled && allApiKeysPending)
+            }
+            onConnect={() => setCopilotConnect({ manage: null })}
+            onReconnect={(credential) =>
+              setCopilotConnect({
+                manage: {
+                  id: credential.id,
+                  name: credential.name,
+                  organization: credential.githubOrganization ?? null,
+                  reconnect: true,
+                },
+              })
+            }
+            onManage={openEditDialog}
+            onDisconnect={openDeleteDialog}
+            disconnectBlockedReason={(credential) => {
+              const usage = getKeyUsage(credential.id);
+              return usage
+                ? `${usage}. Remove it from Settings > Knowledge before disconnecting.`
+                : null;
+            }}
+          />
+        )}
+        {copilotConnect !== null && (
+          <CopilotOrganizationConnectDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) setCopilotConnect(null);
+            }}
+            manage={copilotConnect.manage}
+          />
+        )}
+
         <div className="space-y-1 pt-1">
           <h2 className="text-sm font-medium">Provider API keys</h2>
           <p className="text-sm text-muted-foreground">
@@ -669,14 +789,7 @@ export default function ApiKeysPage() {
           <CollectionFilters>
             <FilterBar
               onClearFilters={
-                search || providerFilter !== "all" || labelsFilter
-                  ? () =>
-                      updateQueryParams({
-                        search: null,
-                        provider: null,
-                        labels: null,
-                      })
-                  : undefined
+                hasActiveFilters ? () => clearFilters() : undefined
               }
               search={
                 <SearchInput
@@ -688,6 +801,10 @@ export default function ApiKeysPage() {
                 />
               }
             >
+              <ResourceAccessFilter
+                resource="llmProviderApiKey"
+                noun="credentials"
+              />
               <Select
                 value={providerFilter}
                 onValueChange={(value) =>
@@ -720,19 +837,6 @@ export default function ApiKeysPage() {
             </FilterBar>
           </CollectionFilters>
 
-          {byosEnabled &&
-            apiKeys.some((key) => key.secretStorageType === "database") && (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Database-stored API keys detected</AlertTitle>
-                <AlertDescription>
-                  External Vault storage is enabled, but some of your API keys
-                  are still stored in the database. To migrate them to the
-                  vault, delete them and create new ones with vault references.
-                </AlertDescription>
-              </Alert>
-            )}
-
           <div data-testid={E2eTestId.ChatApiKeysTable}>
             <BulkActions
               count={selectedApiKeys.length}
@@ -742,7 +846,13 @@ export default function ApiKeysPage() {
               selectAllMatching={selectAllMatching}
             >
               <PermissionButton
-                permissions={{ llmProviderApiKey: ["delete"] }}
+                permissions={{}}
+                disabled={!canDeleteSelected}
+                tooltip={
+                  canDeleteSelected
+                    ? undefined
+                    : "You can't delete every selected API key"
+                }
                 variant="destructive"
                 size="sm"
                 onClick={() => setIsBulkDeleteDialogOpen(true)}
@@ -762,25 +872,21 @@ export default function ApiKeysPage() {
               isLoading={permissionsPending || isFetching}
               emptyIcon={Boxes}
               emptyMessage="No credentials configured"
-              hasActiveFilters={Boolean(
-                search || providerFilter !== "all" || labelsFilter,
-              )}
+              hasActiveFilters={hasActiveFilters}
               filteredEmptyMessage="No LLM provider credentials match your filters"
-              onClearFilters={() =>
-                updateQueryParams({
-                  search: null,
-                  provider: null,
-                  labels: null,
-                })
-              }
+              onClearFilters={clearFilters}
             />
           </div>
         </BulkActionsScope>
 
         {/* Create Dialog */}
         <CreateLlmProviderApiKeyDialog
-          open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
+          open={isCreateDialogOpen || linkedCreate !== undefined}
+          onOpenChange={(open) => {
+            setIsCreateDialogOpen(open);
+            if (!open) updateQueryParams({ create: null, access: null });
+          }}
+          defaultValues={linkedCreate}
           title="Add API Key"
           description="Add a new LLM provider API key for use in Chat and LLM Proxy"
         />
@@ -808,23 +914,29 @@ export default function ApiKeysPage() {
         )}
 
         {/* Edit Dialog */}
-        <TabbedDialogShell
-          open={!!editingApiKey}
+        {/* An organization's GitHub Copilot plan is managed in the wizard
+            that connected it. */}
+        {editingApiKey?.isGithubAppKey ? (
+          <CopilotOrganizationConnectDialog
+            key={editingApiKey.id}
+            open
+            onOpenChange={(open) => {
+              if (!open) closeEditDialog();
+            }}
+            manage={{
+              id: editingApiKey.id,
+              name: editingApiKey.name,
+              organization: editingApiKey.githubOrganization ?? null,
+            }}
+          />
+        ) : null}
+        <StandardFormDialog
+          open={!!editingApiKey && !editingApiKey.isGithubAppKey}
           onOpenChange={(open) => {
             if (!open) closeEditDialog();
           }}
           title="Edit API Key"
           description="Update the name, the API key value, or who can reach it"
-          sidebarLabel={editForm.watch("name") || "Provider key"}
-          sidebarDescription="Model provider"
-          sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
-          activeSection={editSection}
-          navItems={[
-            { id: "general", label: "General" },
-            { id: "connectivity", label: "Connectivity" },
-            { id: "permissions", label: "Permissions" },
-          ]}
-          onActiveSectionChange={setEditSection}
           onSubmit={handleEdit}
           footer={
             <>
@@ -842,12 +954,22 @@ export default function ApiKeysPage() {
           }
           isDirty={
             editForm.formState.isDirty ||
+            permissionsDirty ||
             JSON.stringify(editLabels) !==
               JSON.stringify(editingApiKey?.labels ?? [])
           }
         >
-          <div hidden={editSection === "permissions"}>
-            {editingApiKey && (
+          {editingApiKey && !editingApiKey.isGithubAppKey && (
+            <div className="space-y-4">
+              {editingApiKey.createdBy && (
+                <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="shrink-0">Created by</span>
+                  <CreatedByCell
+                    createdBy={editingApiKey.createdBy}
+                    className="max-w-48"
+                  />
+                </span>
+              )}
               <LlmProviderApiKeyForm
                 mode="full"
                 showConsoleLink={false}
@@ -856,26 +978,20 @@ export default function ApiKeysPage() {
                 form={editForm}
                 isPending={updateMutation.isPending}
                 progressive
-                activeSection={
-                  editSection === "connectivity" ? "connectivity" : "general"
-                }
                 hidePermissions
                 labels={editLabels}
                 onLabelsChange={setEditLabels}
                 labelsRef={editLabelsRef}
               />
-            )}
-          </div>
-          <div hidden={editSection !== "permissions"}>
-            {editingApiKey && (
               <ResourceAccessSection
                 resource="llmProviderApiKey"
                 id={editingApiKey.id}
-                standalone
+                registerSave={registerPermissionsSave}
+                onDirtyChange={setPermissionsDirty}
               />
-            )}
-          </div>
-        </TabbedDialogShell>
+            </div>
+          )}
+        </StandardFormDialog>
 
         {/* Delete Confirmation Dialog */}
         <DeleteConfirmDialog
@@ -888,23 +1004,25 @@ export default function ApiKeysPage() {
             <DeleteApiKeyDescription
               apiKey={selectedApiKey}
               isSubscription={deletingSubscription}
-              virtualKeys={blockingVirtualKeys?.data ?? []}
-              totalVirtualKeys={blockingVirtualKeys?.pagination.total ?? 0}
-              oauthClients={blockingOauthClients}
-              totalOauthClients={
-                blockingOauthClientsData?.pagination.total ?? 0
+              githubAppOrganization={
+                selectedApiKey?.isGithubAppKey
+                  ? (selectedApiKey.githubOrganization ?? "the organization")
+                  : null
               }
+              knowledgeBaseUsages={
+                selectedApiKey
+                  ? knowledgeBaseUsagesOf(organization, selectedApiKey.id)
+                  : []
+              }
+              virtualKeys={blockingVirtualKeys?.data ?? []}
+              oauthClients={blockingOauthClients}
               isLoading={isLoadingVirtualKeys || isLoadingOauthClients}
             />
           }
           isPending={deleteMutation.isPending}
           onConfirm={handleDelete}
-          confirmDisabled={
-            isLoadingVirtualKeys ||
-            isLoadingOauthClients ||
-            (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
-            (blockingOauthClientsData?.pagination.total ?? 0) > 0
-          }
+          confirmDisabled={deleteBlocked}
+          confirmDelayMs={CONFIRM_DELAY_MS}
           confirmLabel={deletingSubscription ? "Disconnect" : "Delete API Key"}
           pendingLabel={
             deletingSubscription ? "Disconnecting..." : "Deleting..."
@@ -916,8 +1034,9 @@ export default function ApiKeysPage() {
           title="Delete API keys"
           description={`Delete ${selectedApiKeys.length} ${
             selectedApiKeys.length === 1 ? "API key" : "API keys"
-          }? This cannot be undone.`}
+          }? This cannot be undone. Virtual keys and OAuth clients that use only these keys will be deleted too. Knowledge base jobs that use them stop until you choose another key.`}
           isPending={bulkDeleteMutation.isPending}
+          confirmDelayMs={CONFIRM_DELAY_MS}
           onConfirm={() => {
             bulkDeleteMutation.mutate(selectedApiKeys, {
               onSuccess: (outcome) => {
@@ -943,34 +1062,52 @@ export default function ApiKeysPage() {
 function DeleteApiKeyDescription({
   apiKey,
   isSubscription,
+  githubAppOrganization,
+  knowledgeBaseUsages,
   virtualKeys,
-  totalVirtualKeys,
   oauthClients,
-  totalOauthClients,
   isLoading,
 }: {
   apiKey: LlmProviderApiKeyResponse | null;
   isSubscription: boolean;
-  virtualKeys: archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"];
-  totalVirtualKeys: number;
-  oauthClients: archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"];
-  totalOauthClients: number;
+  /** For an organization subscription: where its GitHub App stays installed. */
+  githubAppOrganization: string | null;
+  /** Knowledge base jobs ("embedding", "OCR") configured with this key. */
+  knowledgeBaseUsages: string[];
+  virtualKeys: MappedVirtualKey[];
+  oauthClients: MappedOauthClient[];
   isLoading: boolean;
 }) {
   if (!apiKey) {
     return null;
   }
 
-  const hasBlockingAssociations = totalVirtualKeys > 0 || totalOauthClients > 0;
+  // Credentials that mapped only this key are deleted with it; the rest keep
+  // their other providers and need no notice. The lists come from what the
+  // dialog fetched, which covers what a key maps in practice.
+  const deletedVirtualKeys = virtualKeys.filter(virtualKeyGoesWithProviderKey);
+  const deletedOauthClients = oauthClients.filter(
+    oauthClientGoesWithProviderKey,
+  );
+  const sentences = [
+    deletionSentence({
+      virtualKeys: deletedVirtualKeys.length,
+      oauthClients: deletedOauthClients.length,
+    }),
+    knowledgeBaseSentence(knowledgeBaseUsages),
+  ].filter((sentence) => sentence !== "");
+  const appSentence = githubAppOrganization
+    ? ` The GitHub App stays installed on ${githubAppOrganization}. Uninstall it on GitHub if you no longer need it.`
+    : "";
 
-  if (!hasBlockingAssociations) {
+  if (sentences.length === 0 && !isLoading) {
     // Distinct keys: the two branches share a tag, so without them React would
     // reconcile the element in place and remove its bare text nodes, which
     // crashes a machine-translated page.
     return isSubscription ? (
       <span key="disconnect">
         Disconnect "{apiKey.name}"? Anything using it stops working until you
-        sign in again.
+        sign in again.{appSentence}
       </span>
     ) : (
       <span key="delete">
@@ -980,18 +1117,30 @@ function DeleteApiKeyDescription({
     );
   }
 
+  const lead = [
+    ...sentences,
+    isSubscription ? "" : "This cannot be undone.",
+    appSentence.trim(),
+  ]
+    .filter((sentence) => sentence !== "")
+    .join(" ");
+  const shownVirtualKeys = deletedVirtualKeys.slice(0, 5);
+  const moreVirtualKeys = deletedVirtualKeys.length - shownVirtualKeys.length;
+  const shownOauthClients = deletedOauthClients.slice(0, 5);
+  const moreOauthClients =
+    deletedOauthClients.length - shownOauthClients.length;
+
   return (
     <div className="space-y-4 text-sm">
       <p>
-        "{apiKey.name}" cannot be {isSubscription ? "disconnected" : "deleted"}{" "}
-        until it is removed from the credentials below.
+        <span>{lead}</span>
       </p>
 
       {isLoading && (
         <p className="text-muted-foreground">Checking credential mappings...</p>
       )}
 
-      {totalVirtualKeys > 0 && (
+      {shownVirtualKeys.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <p className="font-medium">Virtual API keys</p>
@@ -1003,7 +1152,7 @@ function DeleteApiKeyDescription({
             </Link>
           </div>
           <ul className="space-y-2">
-            {virtualKeys.slice(0, 5).map((key) => (
+            {shownVirtualKeys.map((key) => (
               <li
                 key={key.id}
                 className="rounded-md border bg-muted/30 px-3 py-2"
@@ -1015,33 +1164,27 @@ function DeleteApiKeyDescription({
               </li>
             ))}
           </ul>
-          {totalVirtualKeys > virtualKeys.length && (
+          {moreVirtualKeys > 0 && (
             <p className="text-muted-foreground">
-              <span>
-                {totalVirtualKeys - virtualKeys.length} more virtual API key
-              </span>
-              {totalVirtualKeys - virtualKeys.length === 1 ? null : (
-                <span>s</span>
-              )}
-              <span> matched.</span>
+              <span>{`${moreVirtualKeys} more will be deleted.`}</span>
             </p>
           )}
         </div>
       )}
-
-      {oauthClients.length > 0 && (
+      {shownOauthClients.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <p className="font-medium">OAuth clients</p>
-            <Link
+            <SettingsLink
               className="text-primary underline-offset-4 hover:underline"
               href={`/settings/oauth-clients?type=llm&providerApiKeyId=${apiKey.id}`}
+              fallback={null}
             >
               View all
-            </Link>
+            </SettingsLink>
           </div>
           <ul className="space-y-2">
-            {oauthClients.slice(0, 5).map((client) => (
+            {shownOauthClients.map((client) => (
               <li
                 key={client.id}
                 className="rounded-md border bg-muted/30 px-3 py-2"
@@ -1053,15 +1196,71 @@ function DeleteApiKeyDescription({
               </li>
             ))}
           </ul>
-          {totalOauthClients > 5 && (
+          {moreOauthClients > 0 && (
             <p className="text-muted-foreground">
-              <span>{totalOauthClients - 5} more OAuth client</span>
-              {totalOauthClients - 5 === 1 ? null : <span>s</span>}
-              <span> matched.</span>
+              <span>{`${moreOauthClients} more will be deleted.`}</span>
             </p>
           )}
         </div>
       )}
     </div>
   );
+}
+
+/** Time a delete or disconnect dialog stays unconfirmable, so its notice gets read. */
+const CONFIRM_DELAY_MS = 3000;
+
+type MappedVirtualKey =
+  archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
+type MappedOauthClient =
+  archestraApiTypes.GetOauthClientsResponses["200"]["data"][number];
+
+/** True when nothing is left to route to once this provider key is gone. */
+function virtualKeyGoesWithProviderKey(key: MappedVirtualKey): boolean {
+  return !key.includeFutureProviders && key.providerApiKeys.length <= 1;
+}
+
+function oauthClientGoesWithProviderKey(client: MappedOauthClient): boolean {
+  return !client.includeFutureProviders && client.providerApiKeys.length <= 1;
+}
+
+function deletionSentence(params: {
+  virtualKeys: number;
+  oauthClients: number;
+}): string {
+  const parts: string[] = [];
+  if (params.virtualKeys === 1) parts.push("virtual key");
+  if (params.virtualKeys > 1) parts.push(`${params.virtualKeys} virtual keys`);
+  if (params.oauthClients === 1) parts.push("OAuth client");
+  if (params.oauthClients > 1) {
+    parts.push(`${params.oauthClients} OAuth clients`);
+  }
+  if (parts.length === 0) return "";
+  return `The ${parts.join(" and ")} below will be deleted too.`;
+}
+
+function knowledgeBaseSentence(usages: string[]): string {
+  if (usages.length === 0) return "";
+  const jobs = usages.join(" and ");
+  const label = jobs.charAt(0).toUpperCase() + jobs.slice(1);
+  return `${label} for knowledge bases ${usages.length === 1 ? "stops" : "stop"} until you choose another key in Settings → Knowledge.`;
+}
+
+function knowledgeBaseUsagesOf(
+  organization:
+    | {
+        embeddingChatApiKeyId?: string | null;
+        rerankerChatApiKeyId?: string | null;
+        ocrChatApiKeyId?: string | null;
+      }
+    | null
+    | undefined,
+  keyId: string,
+): string[] {
+  if (!organization) return [];
+  const usages: string[] = [];
+  if (organization.embeddingChatApiKeyId === keyId) usages.push("embedding");
+  if (organization.rerankerChatApiKeyId === keyId) usages.push("reranking");
+  if (organization.ocrChatApiKeyId === keyId) usages.push("OCR");
+  return usages;
 }

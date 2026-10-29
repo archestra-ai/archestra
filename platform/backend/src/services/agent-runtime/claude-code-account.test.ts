@@ -449,8 +449,13 @@ test("uses provider expiry and keeps model discovery outside sign-in", async ({
 const TOKEN = `sk-ant-oat01-${"example".repeat(8)}`;
 const MODELS = [
   {
+    value: "opus",
+    displayName: "Opus",
+    description: "Default for new Claude Code runs",
+  },
+  {
     value: "default",
-    displayName: "Default",
+    displayName: "Claude account default",
     description: "Claude Code's default model for your account",
   },
   { value: "test-model", displayName: "Test model", description: "" },

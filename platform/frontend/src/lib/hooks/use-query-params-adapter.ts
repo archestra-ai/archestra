@@ -7,12 +7,22 @@ export type QueryParamUpdates = Record<string, string | null | undefined>;
 
 export type QueryParamsReader = URLSearchParams;
 
+interface QueryParamUpdateOptions {
+  history?: "push" | "replace";
+  /**
+   * Change the URL in place, without re-rendering the server page. Use it
+   * for client-side list filters whose server page ignores search params, so
+   * a click does not wait on a server round trip.
+   */
+  shallow?: boolean;
+}
+
 export interface QueryParamsAdapter {
   pathname: string;
   searchParams: QueryParamsReader;
   updateQueryParams: (
     updates: QueryParamUpdates,
-    options?: { history?: "push" | "replace" },
+    options?: QueryParamUpdateOptions,
   ) => void;
 }
 
@@ -37,10 +47,7 @@ export function useQueryParamsController(): QueryParamsController {
   }
 
   const updateQueryParams = useCallback(
-    (
-      updates: QueryParamUpdates,
-      updateOptions?: { history?: "push" | "replace" },
-    ) => {
+    (updates: QueryParamUpdates, updateOptions?: QueryParamUpdateOptions) => {
       const nextParams = new URLSearchParams(stagedQueryStringRef.current);
       applyUpdates(nextParams, updates);
 
@@ -50,6 +57,15 @@ export function useQueryParamsController(): QueryParamsController {
         nextQueryString ? `${pathname}?${nextQueryString}` : pathname
       }${window.location.hash}`;
       const history = updateOptions?.history ?? "push";
+      if (updateOptions?.shallow) {
+        // Next.js syncs `useSearchParams` with native history updates.
+        window.history[history === "push" ? "pushState" : "replaceState"](
+          null,
+          "",
+          href,
+        );
+        return;
+      }
       router[history](href, { scroll: false });
     },
     [pathname, router],
@@ -98,10 +114,7 @@ export function useQueryParamsAdapter(options?: {
   }, [currentQueryString, paramNames, searchParams]);
 
   const updateQueryParams = useCallback(
-    (
-      updates: QueryParamUpdates,
-      updateOptions?: { history?: "push" | "replace" },
-    ) => {
+    (updates: QueryParamUpdates, updateOptions?: QueryParamUpdateOptions) => {
       const mappedUpdates: QueryParamUpdates = {};
       for (const [logicalName, value] of Object.entries(updates)) {
         mappedUpdates[resolveName(logicalName)] = value;

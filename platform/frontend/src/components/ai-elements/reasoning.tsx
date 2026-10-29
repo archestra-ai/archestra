@@ -57,7 +57,6 @@ export type ReasoningProps = ComponentProps<typeof Collapsible> & {
   keepOpen?: boolean;
 };
 
-const AUTO_CLOSE_DELAY = 1000;
 const MS_IN_S = 1000;
 
 export const Reasoning = memo(
@@ -65,10 +64,9 @@ export const Reasoning = memo(
     className,
     isStreaming = false,
     open,
-    // A block that mounts mid-stream starts open; a persisted block (a
-    // reopened conversation) mounts collapsed, so loading a chat doesn't flash
-    // every thinking accordion open and then auto-close it one second later.
-    defaultOpen = isStreaming,
+    // Collapsed even while streaming: the header already reads "Thinking…",
+    // and opening then auto-closing every block reads as flicker.
+    defaultOpen = false,
     onOpenChange,
     duration: durationProp,
     keepOpen = false,
@@ -90,8 +88,6 @@ export const Reasoning = memo(
       defaultProp: undefined,
     });
 
-    const [hasAutoClosed, setHasAutoClosed] = useState(false);
-    const [hasStreamed, setHasStreamed] = useState(isStreaming);
     const [startTime, setStartTime] = useState<number | null>(null);
     // A merged run of thinking blocks streams in several bursts, one per block,
     // with the tool calls it swallowed in between. Accumulate the streaming
@@ -103,7 +99,6 @@ export const Reasoning = memo(
     // Track duration when streaming starts and ends
     useEffect(() => {
       if (isStreaming) {
-        setHasStreamed(true);
         if (startTime === null) {
           setStartTime(Date.now());
         }
@@ -113,31 +108,6 @@ export const Reasoning = memo(
         setStartTime(null);
       }
     }, [isStreaming, startTime, setDuration]);
-
-    // Auto-close once, shortly after a live block finishes streaming. Gated on
-    // hasStreamed rather than defaultOpen — defaultOpen tracks isStreaming and
-    // is already false again on the render where streaming ends — and so that
-    // persisted blocks, which never streamed in this mount, stay put instead of
-    // flicker-closing on conversation load. `keepOpen` defers it while more
-    // thinking may still join a merged run, so the row opens and closes exactly
-    // once across the run rather than flickering between blocks.
-    useEffect(() => {
-      if (
-        hasStreamed &&
-        !isStreaming &&
-        !keepOpen &&
-        isOpen &&
-        !hasAutoClosed
-      ) {
-        // Add a small delay before closing to allow user to see the content
-        const timer = setTimeout(() => {
-          setIsOpen(false);
-          setHasAutoClosed(true);
-        }, AUTO_CLOSE_DELAY);
-
-        return () => clearTimeout(timer);
-      }
-    }, [isStreaming, isOpen, hasStreamed, setIsOpen, hasAutoClosed, keepOpen]);
 
     const handleOpenChange = (newOpen: boolean) => {
       setIsOpen(newOpen);
@@ -169,7 +139,9 @@ const getThinkingMessage = (isStreaming: boolean, duration?: number) => {
   if (duration === undefined) {
     return <p>Thought for a few seconds</p>;
   }
-  return <p>Thought for {duration} seconds</p>;
+  return (
+    <p>{`Thought for ${duration} ${duration === 1 ? "second" : "seconds"}`}</p>
+  );
 };
 
 export const ReasoningTrigger = memo(

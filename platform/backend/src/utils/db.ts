@@ -1,3 +1,5 @@
+import { DrizzleQueryError } from "drizzle-orm/errors";
+
 /**
  * Check if an error (or its cause) is a PostgreSQL unique constraint violation.
  * Drizzle wraps database errors, so we need to check the cause chain.
@@ -87,3 +89,34 @@ export function isForeignKeyConstraintError(error: unknown): boolean {
 // ===== Internal =====
 
 const BULK_STATEMENT_MAX_ROWS = 1000;
+
+/** How the ORM begins the message of a failed query. */
+const FAILED_QUERY_PREFIX = "Failed query:";
+
+/** What a client sees in place of a failed query's text. */
+export const FAILED_QUERY_CLIENT_MESSAGE =
+  "A database query failed. Ask an administrator to check the server logs.";
+
+/**
+ * Whether an error's own message holds a failed query's text. The ORM's
+ * message for one is "Failed query: <sql> params: <values>", and the values
+ * can include ids and stored data. A wrapper that copies that text into its
+ * message holds it too. A wrapper that keeps the query error only as `cause`
+ * does not, so its own message is safe to show.
+ */
+export function hasFailedQueryText(error: unknown): boolean {
+  return (
+    error instanceof DrizzleQueryError ||
+    (error instanceof Error && error.message.includes(FAILED_QUERY_PREFIX))
+  );
+}
+
+/**
+ * The message to send a client for an error: its own message, unless that
+ * holds a failed query's text.
+ */
+export function clientErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback;
+  if (hasFailedQueryText(error)) return FAILED_QUERY_CLIENT_MESSAGE;
+  return error.message || fallback;
+}

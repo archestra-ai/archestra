@@ -1,8 +1,8 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
-  BUILT_IN_AGENT_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
@@ -11,9 +11,9 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
-  AgentExcludedSubagentModel,
   AgentModel,
   AgentToolModel,
   LlmProviderApiKeyModelLinkModel,
@@ -22,14 +22,7 @@ import {
   ToolModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import {
-  accessGrants,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/observability");
@@ -152,6 +145,79 @@ describe("agent routes", () => {
     expect(emptyResponse.json().pagination.total).toBe(0);
   });
 
+  test("includeTools=false lists the agents without their tools", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, name: "Picker Agent" });
+    const tool = await makeTool({ name: "picker_tool", parameters: {} });
+    await makeAgentTool(agent.id, tool.id);
+    const toolsOf = async (query: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents?name=Picker%20Agent${query}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response
+        .json()
+        .data.map((listed: { tools: Array<{ id: string }> }) =>
+          listed.tools.map((ref) => ref.id),
+        );
+    };
+
+    expect(await toolsOf("")).toEqual([expect.arrayContaining([tool.id])]);
+    expect(await toolsOf("&includeTools=false")).toEqual([[]]);
+  });
+
+  test("lists tool and subagent counts with or without the tools", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTool,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      name: "Counted Gateway",
+      agentType: "mcp_gateway",
+    });
+    const subagent = await makeAgent({
+      organizationId,
+      name: "Counted Helper",
+    });
+    for (const name of ["counted_one", "counted_two"]) {
+      const tool = await makeTool({ name, parameters: {} });
+      await makeAgentTool(gateway.id, tool.id);
+    }
+    await AgentToolModel.assignDelegation({
+      agentId: gateway.id,
+      targetAgentId: subagent.id,
+    });
+    const listed = async (query: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents?name=Counted%20Gateway&agentTypes=mcp_gateway${query}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const [row] = response.json().data;
+      return {
+        toolsCount: row.toolsCount,
+        subagentsCount: row.subagentsCount,
+        tools: row.tools.length,
+      };
+    };
+
+    expect(await listed("")).toEqual({
+      toolsCount: 2,
+      subagentsCount: 1,
+      tools: 3,
+    });
+    expect(await listed("&includeTools=false")).toEqual({
+      toolsCount: 2,
+      subagentsCount: 1,
+      tools: 0,
+    });
+  });
+
   async function expectAgentTypeSoftDelete(
     agentType: "mcp_gateway",
     makeAgent: (overrides: {
@@ -204,13 +270,13 @@ describe("agent routes", () => {
 
     const allResponse = await app.inject({
       method: "GET",
-      url: `/api/agents/all?agentType=${agentType}`,
+      url: `/api/agents?agentType=${agentType}`,
     });
     expect(allResponse.statusCode).toBe(200);
     expect(
       allResponse
         .json()
-        .some((agent: { id: string }) => agent.id === created.id),
+        .data.some((agent: { id: string }) => agent.id === created.id),
     ).toBe(false);
   }
 
@@ -255,8 +321,9 @@ describe("agent routes", () => {
     });
 
     test("persists Agent Runtime on an Agent", async () => {
-      const previous = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = true;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
       const runtime = {
         image: "example.com/coding-agent:latest",
         command: null,
@@ -286,7 +353,7 @@ describe("agent routes", () => {
         expect(response.statusCode).toBe(200);
         expect(response.json().runtime).toEqual(runtime);
       } finally {
-        config.agentRuntime.enabled = previous;
+        sandboxInstalled.mockRestore();
       }
     });
 
@@ -295,8 +362,9 @@ describe("agent routes", () => {
       makeLlmProviderApiKey,
       makeSecret,
     }) => {
-      const previous = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = true;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
       try {
         const secret = await makeSecret({ secret: { apiKey: "test-key" } });
         const providerKey = await makeLlmProviderApiKey(
@@ -353,7 +421,7 @@ describe("agent routes", () => {
         );
         expect((await AgentModel.findById(agent.id))?.runtime).toBeNull();
       } finally {
-        config.agentRuntime.enabled = previous;
+        sandboxInstalled.mockRestore();
       }
     });
 
@@ -361,8 +429,9 @@ describe("agent routes", () => {
       makeLlmProviderApiKey,
       makeSecret,
     }) => {
-      const previous = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = true;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
       try {
         const secret = await makeSecret({ secret: { apiKey: "test-key" } });
         const providerKey = await makeLlmProviderApiKey(
@@ -414,7 +483,7 @@ describe("agent routes", () => {
           "Codex runtime requires an OpenAI",
         );
       } finally {
-        config.agentRuntime.enabled = previous;
+        sandboxInstalled.mockRestore();
       }
     });
 
@@ -423,8 +492,9 @@ describe("agent routes", () => {
       makeLlmProviderApiKey,
       makeSecret,
     }) => {
-      const previous = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = true;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
       try {
         const secret = await makeSecret({ secret: { apiKey: "test-key" } });
         const providerKey = await makeLlmProviderApiKey(
@@ -474,13 +544,14 @@ describe("agent routes", () => {
         expect(response.statusCode).toBe(400);
         expect(response.json().error.message).toContain("linked and available");
       } finally {
-        config.agentRuntime.enabled = previous;
+        sandboxInstalled.mockRestore();
       }
     });
 
-    test("rejects Agent Runtime configuration while the feature flag is disabled", async () => {
-      const previous = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = false;
+    test("rejects Agent Runtime configuration when the Agent Sandbox controller is not installed", async () => {
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(false);
       try {
         const response = await app.inject({
           method: "POST",
@@ -506,16 +577,17 @@ describe("agent routes", () => {
 
         expect(response.statusCode).toBe(400);
         expect(response.json().error.message).toBe(
-          "Agent Runtime is not enabled",
+          "Agent Runtime is unavailable: this cluster does not have the Agent Sandbox controller installed",
         );
       } finally {
-        config.agentRuntime.enabled = previous;
+        sandboxInstalled.mockRestore();
       }
     });
 
     test("rejects Agent Runtime on an MCP Gateway", async () => {
-      const previous = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = true;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
       try {
         const response = await app.inject({
           method: "POST",
@@ -544,14 +616,15 @@ describe("agent routes", () => {
           "can only be configured for Agents",
         );
       } finally {
-        config.agentRuntime.enabled = previous;
+        sandboxInstalled.mockRestore();
       }
     });
 
     test("requires deployment-operator approval for privileged Agent Runtime", async () => {
-      const previousEnabled = config.agentRuntime.enabled;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
       const previousAllowPrivileged = config.agentRuntime.allowPrivileged;
-      config.agentRuntime.enabled = true;
       config.agentRuntime.allowPrivileged = false;
       try {
         const response = await app.inject({
@@ -581,7 +654,7 @@ describe("agent routes", () => {
           "disabled by the deployment operator",
         );
       } finally {
-        config.agentRuntime.enabled = previousEnabled;
+        sandboxInstalled.mockRestore();
         config.agentRuntime.allowPrivileged = previousAllowPrivileged;
       }
     });
@@ -612,6 +685,60 @@ describe("agent routes", () => {
       });
 
       expect(response.statusCode).toBe(400);
+    });
+
+    test.for([
+      "agent",
+      "mcp_gateway",
+    ] as const)("defaults new Manual %s to progressive loading and preserves explicit choices", async (agentType) => {
+      for (const toolExposureMode of [
+        undefined,
+        "full",
+        "search_and_run_only",
+      ] as const) {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: `Manual ${agentType} ${crypto.randomUUID().slice(0, 8)}`,
+            agentType,
+            accessAllTools: false,
+            ...(toolExposureMode ? { toolExposureMode } : {}),
+          },
+        });
+        expect(response.statusCode).toBe(200);
+        const agent = response.json();
+        expect(agent.accessAllTools).toBe(false);
+        expect(agent.toolExposureMode).toBe(
+          toolExposureMode ?? "search_and_run_only",
+        );
+
+        // Unrelated edits must not reset a deliberate Manual-mode opt-out.
+        const updated = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: { description: "Updated description" },
+        });
+        expect(updated.statusCode).toBe(200);
+        expect(updated.json().toolExposureMode).toBe(agent.toolExposureMode);
+
+        const disabled = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: { toolExposureMode: "full" },
+        });
+        expect(disabled.statusCode).toBe(200);
+        expect(disabled.json().toolExposureMode).toBe("full");
+
+        // All mode still requires the search/run surface, even with an opt-out.
+        const all = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: { accessAllTools: true, toolExposureMode: "full" },
+        });
+        expect(all.statusCode).toBe(200);
+        expect(all.json().toolExposureMode).toBe("search_and_run_only");
+      }
     });
 
     test("should create an agent with load-tools-when-needed exposure", async () => {
@@ -702,157 +829,6 @@ describe("agent routes", () => {
     });
   });
 
-  describe("advisor delegation default", () => {
-    /** The org-wide Advisor row, as the seeder writes it. */
-    async function seedAdvisor() {
-      return AgentModel.create(
-        {
-          name: BUILT_IN_AGENT_NAMES.ADVISOR,
-          organizationId,
-          agentType: "agent",
-          description: "Answers questions from other agents",
-          systemPrompt: "You are the advisor.",
-          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-          teams: [],
-          labels: [],
-          knowledgeBaseIds: [],
-          connectorIds: [],
-        },
-        undefined,
-        accessGrants("org"),
-      );
-    }
-
-    async function createAgent(payload: Record<string, unknown>) {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/agents",
-        payload: {
-          name: `Advisor Default ${crypto.randomUUID().slice(0, 8)}`,
-          agentType: "agent",
-          ...payload,
-        },
-      });
-      expect(response.statusCode).toBe(200);
-      return response.json();
-    }
-
-    async function getExclusions(agentId: string): Promise<string[]> {
-      const response = await app.inject({
-        method: "GET",
-        url: `/api/agents/${agentId}/subagent-exclusions`,
-      });
-      expect(response.statusCode).toBe(200);
-      return response.json().excludedSubagentIds;
-    }
-
-    test("excludes the advisor from a new agent in Auto subagent mode, in version 1", async () => {
-      const advisor = await seedAdvisor();
-
-      const agent = await createAgent({ accessAllSubagents: true });
-
-      expect(await getExclusions(agent.id)).toEqual([advisor.id]);
-
-      // Version 1 must already carry it: a follow-up write would fork a
-      // second version whose only change is the default.
-      const versionResponse = await app.inject({
-        method: "GET",
-        url: `/api/agents/${agent.id}/versions/1`,
-      });
-      expect(versionResponse.statusCode).toBe(200);
-      expect(versionResponse.json().snapshot.excludedSubagents).toEqual([
-        { agentId: advisor.id, name: BUILT_IN_AGENT_NAMES.ADVISOR },
-      ]);
-      expect(agent.latestVersion).toBe(1);
-    });
-
-    test("excludes nothing in Custom subagent mode", async () => {
-      await seedAdvisor();
-
-      const agent = await createAgent({ accessAllSubagents: false });
-
-      expect(await getExclusions(agent.id)).toEqual([]);
-    });
-
-    test("creates normally when the organization has no advisor", async () => {
-      const agent = await createAgent({ accessAllSubagents: true });
-
-      expect(await getExclusions(agent.id)).toEqual([]);
-    });
-
-    test("a clone copies the source's exclusions and gains none", async ({
-      makeInternalAgent,
-    }) => {
-      await seedAdvisor();
-      const source = await makeInternalAgent({
-        organizationId,
-        authorId: user.id,
-        accessAllSubagents: true,
-      });
-      expect(await getExclusions(source.id)).toEqual([]);
-
-      const cloneResponse = await app.inject({
-        method: "POST",
-        url: `/api/agents/${source.id}/clone`,
-      });
-      expect(cloneResponse.statusCode).toBe(200);
-
-      expect(await getExclusions(cloneResponse.json().id)).toEqual([]);
-    });
-
-    test("a profile record gets the same default", async () => {
-      const advisor = await seedAdvisor();
-
-      const profile = await createAgent({
-        agentType: "profile",
-        accessAllSubagents: true,
-      });
-
-      expect(await getExclusions(profile.id)).toEqual([advisor.id]);
-    });
-
-    test("the create still succeeds when seeding the exclusion fails", async () => {
-      await seedAdvisor();
-      const write = vi
-        .spyOn(AgentExcludedSubagentModel, "replaceForAgent")
-        .mockRejectedValue(new Error("exclusion write rejected"));
-
-      // Nothing rolls back a create, so a failed default must not fail it:
-      // the caller would be left with a half-made agent it never heard about.
-      const agent = await createAgent({ accessAllSubagents: true });
-
-      expect(write).toHaveBeenCalled();
-      expect(agent.id).toBeTruthy();
-      // Degraded, not broken — the agent simply starts with the Advisor
-      // reachable.
-      expect(await getExclusions(agent.id)).toEqual([]);
-    });
-
-    test("the seeded personal assistant never asks for the default", async () => {
-      await seedAdvisor();
-      const create = vi.spyOn(AgentModel, "create");
-
-      const assistantId = await AgentModel.ensurePersonalChatAgent({
-        userId: user.id,
-        organizationId,
-      });
-      expect(assistantId).toBeTruthy();
-
-      // Seeding never opts into the rule at all. Asserting only "no
-      // exclusions" would pass for the wrong reason: the assistant is created
-      // in Custom subagent mode, where the rule yields nothing anyway.
-      expect(create).toHaveBeenCalled();
-      for (const call of create.mock.calls) {
-        expect(call[2]?.defaultExcludedSubagentIds).toBeUndefined();
-      }
-      expect(
-        await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
-          assistantId as string,
-        ),
-      ).toEqual([]);
-    });
-  });
-
   describe("GET /api/agents/:id", () => {
     test("should get agent by ID", async ({ makeAgent }) => {
       const name = `Agent for Get By ID ${crypto.randomUUID().slice(0, 8)}`;
@@ -931,7 +907,39 @@ describe("agent routes", () => {
       expect(agent.name).toBe(updatedName);
     });
 
-    test("drops a client-supplied builtInAgentConfig so an ordinary agent cannot be promoted to the advisor", async ({
+    test("keeps the last value when a label key repeats", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Labels ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        access: "personal",
+        authorId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${created.id}`,
+        payload: {
+          labels: [
+            { key: "env", value: "dev" },
+            { key: "env", value: "prod" },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        response
+          .json()
+          .labels.map(({ key, value }: { key: string; value: string }) => ({
+            key,
+            value,
+          })),
+      ).toEqual([{ key: "env", value: "prod" }]);
+    });
+
+    test("drops a client-supplied builtInAgentConfig so an ordinary agent cannot be promoted to a built-in", async ({
       makeAgent,
     }) => {
       const created = await makeAgent({
@@ -944,7 +952,9 @@ describe("agent routes", () => {
       const response = await app.inject({
         method: "PUT",
         url: `/api/agents/${created.id}`,
-        payload: { builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR } },
+        payload: {
+          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
+        },
       });
 
       expect(response.statusCode).toBe(200);
@@ -1038,7 +1048,10 @@ describe("agent routes", () => {
         authorId: user.id,
         agentType: "agent",
       });
-      await AgentToolModel.assignDelegation(sourceAgent.id, targetAgent.id);
+      await AgentToolModel.assignDelegation({
+        agentId: sourceAgent.id,
+        targetAgentId: targetAgent.id,
+      });
 
       const response = await app.inject({
         method: "PUT",
@@ -1254,13 +1267,13 @@ describe("agent routes", () => {
 
       const allResponse = await app.inject({
         method: "GET",
-        url: "/api/agents/all",
+        url: "/api/agents",
       });
       expect(allResponse.statusCode).toBe(200);
       expect(
         allResponse
           .json()
-          .some((agent: { id: string }) => agent.id === created.id),
+          .data.some((agent: { id: string }) => agent.id === created.id),
       ).toBe(false);
     });
 
@@ -1348,16 +1361,14 @@ describe("agent routes", () => {
       expect(created.isPersonalGateway).toBe(false);
     });
 
-    test("drops a client-supplied builtInAgentConfig so an ordinary agent cannot self-declare as the advisor", async () => {
-      // builtInAgentConfig is a trust attribute — the advisor discriminator
-      // drives the cross-environment delegation exception — so only the seeder
-      // may set it.
+    test("drops a client-supplied builtInAgentConfig so an ordinary agent cannot self-declare as a built-in", async () => {
+      // Built-in identity is server-owned, so only the seeder may set it.
       const response = await app.inject({
         method: "POST",
         url: "/api/agents",
         payload: {
           name: `Impostor ${crypto.randomUUID().slice(0, 8)}`,
-          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
         },
       });
       expect(response.statusCode).toBe(200);
@@ -1589,6 +1600,28 @@ describe("agent routes", () => {
       expect(result.data[0].name).toContain(suffix);
     });
 
+    test("matches name search wildcards literally", async ({ makeAgent }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      for (const name of [`${suffix}_a`, `${suffix}Xa`, `${suffix}%b`]) {
+        await makeAgent({ name, organizationId, authorId: user.id });
+      }
+
+      const cases: Array<[query: string, expected: string[]]> = [
+        [`${suffix}_a`, [`${suffix}_a`]],
+        [`${suffix}%`, [`${suffix}%b`]],
+      ];
+      for (const [query, expected] of cases) {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/agents?limit=10&offset=0&name=${encodeURIComponent(query)}`,
+        });
+        expect(response.statusCode).toBe(200);
+        expect(
+          response.json().data.map((agent: { name: string }) => agent.name),
+        ).toEqual(expected);
+      }
+    });
+
     test("should return personal agent first in paginated list", async ({
       makeAgent,
     }) => {
@@ -1660,9 +1693,161 @@ describe("agent routes", () => {
       expect(names).toContain(`Other Personal ${suffix}`);
     });
 
+    test("access filter splits rows by how the caller reaches them, ignoring wildcard grants", async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const otherUser = await makeUser();
+      await makeMember(otherUser.id, organizationId, { role: "member" });
+      const myTeam = await makeTeam(organizationId, user.id);
+      await makeTeamMember(myTeam.id, user.id);
+      const otherTeam = await makeTeam(organizationId, otherUser.id);
+
+      await makeAgent({
+        name: `Mine ${suffix}`,
+        organizationId,
+        access: "personal",
+        authorId: user.id,
+      });
+      await makeAgent({
+        name: `Other Personal ${suffix}`,
+        organizationId,
+        access: "personal",
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Org ${suffix}`,
+        organizationId,
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `My Team ${suffix}`,
+        organizationId,
+        access: { teams: [myTeam.id] },
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Other Team ${suffix}`,
+        organizationId,
+        access: { teams: [otherTeam.id] },
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Shared With Me ${suffix}`,
+        organizationId,
+        access: { users: [user.id] },
+        authorId: otherUser.id,
+      });
+
+      const list = async (access?: string) => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/agents?limit=50&offset=0&sortBy=name&sortDirection=asc&name=${suffix}${access ? `&access=${access}` : ""}`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return response
+          .json()
+          .data.map((agent: { name: string }) =>
+            agent.name.replace(` ${suffix}`, ""),
+          );
+      };
+
+      // The admin reads every agent through a `*` grant, which the filter
+      // must not count as "shared".
+      expect(await list()).toEqual([
+        "Mine",
+        "My Team",
+        "Org",
+        "Other Personal",
+        "Other Team",
+        "Shared With Me",
+      ]);
+      expect(await list("mine,shared,org")).toEqual([
+        "Mine",
+        "My Team",
+        "Org",
+        "Shared With Me",
+      ]);
+      expect(await list("others")).toEqual(["Other Personal", "Other Team"]);
+      expect(await list("mine")).toEqual(["Mine"]);
+      expect(await list("shared")).toEqual(["My Team", "Shared With Me"]);
+      expect(await list("org")).toEqual(["Org"]);
+    });
+
+    test("sharedWith and owner narrow the list by an agent's own grants and author", async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+      makeTeam,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const otherUser = await makeUser();
+      await makeMember(otherUser.id, organizationId, { role: "member" });
+      const team = await makeTeam(organizationId, user.id);
+
+      await makeAgent({
+        name: `Mine ${suffix}`,
+        organizationId,
+        access: "personal",
+        authorId: user.id,
+      });
+      await makeAgent({
+        name: `Org ${suffix}`,
+        organizationId,
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Team ${suffix}`,
+        organizationId,
+        access: { teams: [team.id] },
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Mine For Team ${suffix}`,
+        organizationId,
+        access: { teams: [team.id] },
+        authorId: user.id,
+      });
+
+      const list = async (params: string) => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/agents?limit=50&offset=0&sortBy=name&sortDirection=asc&name=${suffix}&${params}`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return response
+          .json()
+          .data.map((agent: { name: string }) =>
+            agent.name.replace(` ${suffix}`, ""),
+          );
+      };
+
+      expect(await list(`sharedWith=team:${team.id}`)).toEqual([
+        "Mine For Team",
+        "Team",
+      ]);
+      expect(await list("sharedWith=org")).toEqual(["Org"]);
+      expect(await list(`owner=${otherUser.id}`)).toEqual(["Org", "Team"]);
+      expect(await list(`sharedWith=team:${team.id}&owner=${user.id}`)).toEqual(
+        ["Mine For Team"],
+      );
+      expect(await list(`access=mine&sharedWith=org`)).toEqual([]);
+
+      const invalid = await app.inject({
+        method: "GET",
+        url: "/api/agents?limit=50&offset=0&sharedWith=group:1",
+      });
+      expect(invalid.statusCode).toBe(400);
+    });
+
     test("hides the default knowledge query tool when an agent has no knowledge sources", async ({
       makeAgent,
     }) => {
+      config.openappa.enabled = true;
       const suffix = crypto.randomUUID().slice(0, 8);
       const agent = await makeAgent({
         name: `No Knowledge ${suffix}`,
@@ -1689,148 +1874,43 @@ describe("agent routes", () => {
       });
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME);
       expect(toolNames).toHaveLength(
-        DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.length - 1,
+        DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.length +
+          REQUIRED_OPENAPPA_TOOL_SHORT_NAMES.length -
+          1,
       );
     });
   });
 
-  describe("GET /api/agents/all", () => {
-    test("embeds tools as slim refs without parameter schemas", async ({
+  describe("GET /api/agents", () => {
+    test("returns the full agent row, icon and system prompt included", async ({
       makeAgent,
-      makeTool,
-      makeAgentTool,
     }) => {
+      const embeddedIcon = `data:image/png;base64,${"A".repeat(2_048)}`;
+      const systemPrompt = "Follow the configured operating instructions.";
       const agent = await makeAgent({
-        name: `Tool Ref Agent ${crypto.randomUUID().slice(0, 8)}`,
+        name: `Full Row Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
         authorId: user.id,
+        icon: embeddedIcon,
+        systemPrompt,
       });
-      const tool = await makeTool({
-        parameters: {
-          type: "object",
-          properties: { q: { type: "string", description: "query" } },
-        },
-      });
-      await makeAgentTool(agent.id, tool.id);
 
       const response = await app.inject({
         method: "GET",
-        url: "/api/agents/all?excludeBuiltIn=true",
+        url: `/api/agents?ids=${agent.id}`,
       });
 
       expect(response.statusCode).toBe(200);
       const returned = response
         .json()
-        .find((a: { id: string }) => a.id === agent.id);
-      expect(returned).toBeDefined();
-      expect(returned.tools).toHaveLength(1);
-      expect(returned.tools[0]).toMatchObject({
-        id: tool.id,
-        name: tool.name,
-        rawName: tool.rawName,
-        catalogId: tool.catalogId,
-        delegateToAgentId: null,
-        description: tool.description,
-      });
-      // The whole point of the slim ref: no parameter JSON schemas or policy
-      // bookkeeping duplicated into every agent list response.
-      expect(returned.tools[0]).not.toHaveProperty("parameters");
-      expect(returned.tools[0]).not.toHaveProperty(
-        "policiesAutoConfiguredReasoning",
-      );
-      expect(returned.tools[0]).not.toHaveProperty("meta");
-    });
-
-    test("leaves the tools off when the caller asks for the roster alone", async ({
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-    }) => {
-      // Even as slim refs the tools carry a name and a description each, which
-      // on a real organization is the great majority of this response — and the
-      // new-chat screen, whose first paint waits on this list, draws none of
-      // them. Callers opt out; every other caller keeps today's response.
-      const agent = await makeAgent({
-        name: `Roster Only Agent ${crypto.randomUUID().slice(0, 8)}`,
-        organizationId,
-        authorId: user.id,
-      });
-      const tool = await makeTool({});
-      await makeAgentTool(agent.id, tool.id);
-
-      const findAgent = async (query: string) => {
-        const response = await app.inject({
-          method: "GET",
-          url: `/api/agents/all?excludeBuiltIn=true${query}`,
-        });
-        expect(response.statusCode).toBe(200);
-        return response.json().find((a: { id: string }) => a.id === agent.id);
-      };
-
-      const withoutTools = await findAgent("&includeTools=false");
-      expect(withoutTools).toBeDefined();
-      expect(withoutTools.name).toBe(agent.name);
-      expect(withoutTools.tools).toEqual([]);
-
-      // Opting out is the only thing that drops them.
-      expect((await findAgent("")).tools).toHaveLength(1);
-      expect((await findAgent("&includeTools=true")).tools).toHaveLength(1);
-    });
-
-    test("returns a compact roster for chat without changing the default response", async ({
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-    }) => {
-      const embeddedIcon = `data:image/png;base64,${"A".repeat(2_048)}`;
-      const systemPrompt = "Follow the configured operating instructions.";
-      const agent = await makeAgent({
-        name: `Compact Chat Agent ${crypto.randomUUID().slice(0, 8)}`,
-        organizationId,
-        authorId: user.id,
+        .data.find((a: { id: string }) => a.id === agent.id);
+      expect(returned).toMatchObject({
         icon: embeddedIcon,
         systemPrompt,
       });
-      const tool = await makeTool({});
-      await makeAgentTool(agent.id, tool.id);
-
-      const chatResponse = await app.inject({
-        method: "GET",
-        url: "/api/agents/all?excludeBuiltIn=true&view=chat",
-      });
-
-      expect(chatResponse.statusCode).toBe(200);
-      const chatAgent = chatResponse
-        .json()
-        .find((candidate: { id: string }) => candidate.id === agent.id);
-      expect(chatAgent).toMatchObject({
-        id: agent.id,
-        name: agent.name,
-        icon: null,
-        systemPrompt: null,
-        tools: [],
-        teams: [],
-        users: [],
-        labels: [],
-      });
-
-      const defaultResponse = await app.inject({
-        method: "GET",
-        url: "/api/agents/all?excludeBuiltIn=true",
-      });
-
-      expect(defaultResponse.statusCode).toBe(200);
-      const fullAgent = defaultResponse
-        .json()
-        .find((candidate: { id: string }) => candidate.id === agent.id);
-      expect(fullAgent).toMatchObject({
-        icon: embeddedIcon,
-        systemPrompt,
-      });
-      expect(fullAgent.tools).toHaveLength(1);
     });
 
-    test("should exclude built-in agents when excludeBuiltIn=true", async ({
+    test("should exclude built-in agents by default", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -1844,11 +1924,11 @@ describe("agent routes", () => {
 
       const response = await app.inject({
         method: "GET",
-        url: "/api/agents/all?excludeBuiltIn=true",
+        url: "/api/agents",
       });
 
       expect(response.statusCode).toBe(200);
-      const agents = response.json();
+      const agents = response.json().data;
       expect(Array.isArray(agents)).toBe(true);
       expect(agents.length).toBeGreaterThan(0);
 
@@ -1858,19 +1938,18 @@ describe("agent routes", () => {
       expect(builtInAgents).toHaveLength(0);
     });
 
-    test("should include built-in agents when excludeBuiltIn is not set", async ({
+    test("should include built-in agents when includeBuiltIn=true", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
       // Create a built-in agent
       await makeAgent({
-        name: "Policy Configuration Subagent",
+        name: "Context Compaction Subagent",
         organizationId,
         agentType: "agent",
         authorId: user.id,
         builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: true,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         },
       });
       // Also create a regular agent with tools
@@ -1883,11 +1962,11 @@ describe("agent routes", () => {
 
       const response = await app.inject({
         method: "GET",
-        url: "/api/agents/all",
+        url: "/api/agents?includeBuiltIn=true",
       });
 
       expect(response.statusCode).toBe(200);
-      const agents = response.json();
+      const agents = response.json().data;
       expect(Array.isArray(agents)).toBe(true);
       expect(agents.length).toBeGreaterThan(0);
 
@@ -1895,6 +1974,44 @@ describe("agent routes", () => {
         (a: { builtInAgentConfig?: unknown }) => a.builtInAgentConfig != null,
       );
       expect(builtInAgents.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("GET /api/agents/chat-roster", () => {
+    test("lists and resolves another member's personal agent for an admin, never another organization's", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const owner = await makeUser();
+      const personal = await makeAgent({
+        organizationId,
+        authorId: owner.id,
+        agentType: "agent",
+        access: "personal",
+      });
+      const otherOrganization = await makeOrganization();
+      const outside = await makeAgent({
+        organizationId: otherOrganization.id,
+        authorId: owner.id,
+        agentType: "agent",
+      });
+      const roster = await app.inject({
+        method: "GET",
+        url: "/api/agents/chat-roster",
+      });
+      const retained = await app.inject({
+        method: "GET",
+        url: `/api/agents/chat-roster?ids=${personal.id},${outside.id}`,
+      });
+      expect(roster.statusCode).toBe(200);
+      expect(retained.statusCode).toBe(200);
+      const rosterIds = roster.json().map((row: { id: string }) => row.id);
+      expect(rosterIds).toContain(personal.id);
+      expect(rosterIds).not.toContain(outside.id);
+      expect(retained.json().map((row: { id: string }) => row.id)).toEqual([
+        personal.id,
+      ]);
     });
   });
 
@@ -2065,11 +2182,11 @@ describe("agent routes", () => {
         paginated.json().data.some((a: { id: string }) => a.id === proxy.id),
       ).toBe(false);
 
-      const all = await app.inject({ method: "GET", url: "/api/agents/all" });
+      const all = await app.inject({ method: "GET", url: "/api/agents" });
       expect(all.statusCode).toBe(200);
-      expect(all.json().some((a: { id: string }) => a.id === proxy.id)).toBe(
-        false,
-      );
+      expect(
+        all.json().data.some((a: { id: string }) => a.id === proxy.id),
+      ).toBe(false);
     });
   });
 
@@ -2263,6 +2380,7 @@ describe("agent routes", () => {
     test("does not export the default knowledge query tool without knowledge sources", async ({
       makeAgent,
     }) => {
+      config.openappa.enabled = true;
       const created = await makeAgent({
         name: `Export No Knowledge ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
@@ -2287,19 +2405,20 @@ describe("agent routes", () => {
         });
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME);
       expect(toolNames).toHaveLength(
-        DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.length - 1,
+        DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.length +
+          REQUIRED_OPENAPPA_TOOL_SHORT_NAMES.length -
+          1,
       );
     });
 
     test("should return 400 for built-in agents", async ({ makeAgent }) => {
       const created = await makeAgent({
-        name: "Policy Configuration Subagent",
+        name: "Context Compaction Subagent",
         organizationId,
         authorId: user.id,
         agentType: "agent",
         builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: true,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         },
       });
 
@@ -2349,7 +2468,6 @@ describe("agent routes", () => {
         systemPrompt: "Hello",
         icon: null,
         scope: "personal",
-        considerContextUntrusted: false,
         toolExposureMode: "full",
         llmModel: null,
         incomingEmailEnabled: false,
@@ -2411,44 +2529,6 @@ describe("agent routes", () => {
       });
 
       expect(response.statusCode).toBe(400);
-    });
-  });
-
-  describe("PUT /api/members/default-model", () => {
-    test("allows clearing both the model and key together", async () => {
-      const response = await app.inject({
-        method: "PUT",
-        url: "/api/members/default-model",
-        payload: { modelId: null, chatApiKeyId: null },
-      });
-
-      expect(response.statusCode).toBe(200);
-    });
-
-    test("rejects a model with no API key", async () => {
-      const response = await app.inject({
-        method: "PUT",
-        url: "/api/members/default-model",
-        payload: { modelId: crypto.randomUUID(), chatApiKeyId: null },
-      });
-
-      expect(response.statusCode).toBe(400);
-    });
-
-    test("returns 400 when the referenced model or API key no longer exists", async () => {
-      // The model/key can be deleted between the client loading its options
-      // and saving — the foreign-key violation must surface as a 400, not 500.
-      const response = await app.inject({
-        method: "PUT",
-        url: "/api/members/default-model",
-        payload: {
-          modelId: crypto.randomUUID(),
-          chatApiKeyId: crypto.randomUUID(),
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.message).toContain("no longer exists");
     });
   });
 });

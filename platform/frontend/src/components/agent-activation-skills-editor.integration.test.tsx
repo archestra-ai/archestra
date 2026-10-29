@@ -110,7 +110,7 @@ describe("AgentActivationSkillsEditor", () => {
     expect(
       await screen.findByRole("button", { name: /^Remove incident-response/ }),
     ).toBeVisible();
-    await user.click(screen.getByRole("tab", { name: "Manual" }));
+    await user.click(screen.getByRole("radio", { name: /^Manual/ }));
     expect(
       screen.getByRole("button", { name: /^Remove research/ }),
     ).toBeVisible();
@@ -123,11 +123,11 @@ describe("AgentActivationSkillsEditor", () => {
     ).toBeVisible();
     expect(screen.queryByText("Organization · skill-1")).toBeNull();
 
-    await user.click(screen.getByRole("tab", { name: "All" }));
+    await user.click(screen.getByRole("radio", { name: /^All skills/ }));
     expect(
       screen.getByRole("button", { name: /^Remove incident-response/ }),
     ).toBeVisible();
-    await user.click(screen.getByRole("tab", { name: "Manual" }));
+    await user.click(screen.getByRole("radio", { name: /^Manual/ }));
     await user.click(screen.getByRole("button", { name: "Save skills" }));
 
     await waitFor(() =>
@@ -177,14 +177,12 @@ describe("AgentActivationSkillsEditor", () => {
     const dialog = screen.getByRole("dialog");
     expect(
       within(dialog).getByRole("heading", {
-        name: "Skills available in All mode",
+        name: "Skills this agent can load",
       }),
     ).toBeVisible();
-    expect(
-      within(dialog).queryByRole("columnheader", { name: "Visibility" }),
-    ).toBeNull();
-    expect(within(dialog).queryByText("incident-response")).toBeNull();
-    expect(within(dialog).getByText("Research Server")).toBeVisible();
+    const list = within(dialog).getByRole("list", { name: "Skills" });
+    expect(within(list).queryByText("incident-response")).toBeNull();
+    expect(within(list).getByText("Research Server · MCP")).toBeVisible();
   });
 
   it("distinguishes same-named skill-library choices by scope and exact identity", async () => {
@@ -277,7 +275,7 @@ describe("AgentActivationSkillsEditor", () => {
     renderEditor();
 
     expect(await screen.findByText("Loading agent skills…")).toBeVisible();
-    expect(screen.queryByRole("tab", { name: "All" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: /^All skills/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
   });
 
@@ -305,7 +303,7 @@ describe("AgentActivationSkillsEditor", () => {
     expect(
       await screen.findByText(/Skill discovery is not enabled/i),
     ).toBeVisible();
-    expect(screen.getByRole("tab", { name: "All" })).toBeVisible();
+    expect(screen.getByRole("radio", { name: /^All skills/ })).toBeVisible();
     expect(screen.getByRole("button", { name: "Disable Skill" })).toBeVisible();
   });
 
@@ -343,7 +341,7 @@ describe("AgentActivationSkillsEditor", () => {
 
     const user = userEvent.setup();
     renderEditor();
-    await user.click(await screen.findByRole("tab", { name: "Manual" }));
+    await user.click(await screen.findByRole("radio", { name: /^Manual/ }));
     await user.click(screen.getByRole("button", { name: "Add" }));
     await user.click(await screen.findByText("incident-response"));
     await user.click(screen.getByRole("button", { name: "Save skills" }));
@@ -485,7 +483,7 @@ describe("AgentActivationSkillsEditor", () => {
         <CreateEnvironmentHarness />
       </QueryClientProvider>,
     );
-    await user.click(await screen.findByRole("tab", { name: "Manual" }));
+    await user.click(await screen.findByRole("radio", { name: /^Manual/ }));
     await user.click(screen.getByRole("button", { name: "Add" }));
     await user.click(await screen.findByText("incident-response"));
     await user.click(
@@ -626,7 +624,7 @@ describe("AgentActivationSkillsEditor", () => {
     expect(
       await screen.findByText(/Could not load the agent's skills/i),
     ).toBeVisible();
-    expect(screen.queryByRole("tab", { name: "All" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: /^All skills/ })).toBeNull();
   });
 });
 

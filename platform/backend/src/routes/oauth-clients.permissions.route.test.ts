@@ -19,15 +19,15 @@ import type { User } from "@/types";
 describe.each([
   {
     kind: "MCP",
-    resource: "mcpOauthClient",
+    resource: "oauthClient",
     path: "/api/mcp-oauth-clients",
-    notFound: "MCP OAuth client not found",
+    notFound: "OAuth client not found",
   },
   {
     kind: "LLM",
-    resource: "llmOauthClient",
+    resource: "oauthClient",
     path: "/api/llm-oauth-clients",
-    notFound: "LLM OAuth client not found",
+    notFound: "OAuth client not found",
   },
 ] as const)("$kind OAuth client grants", ({ resource, path, notFound }) => {
   let app: FastifyInstanceWithZod;
@@ -43,7 +43,7 @@ describe.each([
         organizationId;
     });
     const { default: routes } = await import(
-      resource === "mcpOauthClient"
+      path === "/api/mcp-oauth-clients"
         ? "./mcp-oauth-clients"
         : "./llm-oauth-clients"
     );

@@ -23,7 +23,7 @@ export function IdentityProviderIcon({
   if (providerId === IDENTITY_PROVIDER_ID.GOOGLE) {
     return (
       <Image
-        src="/icons/google.png"
+        src="/icons/google.svg"
         alt="Google"
         width={size}
         height={size}

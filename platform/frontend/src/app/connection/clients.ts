@@ -1,13 +1,29 @@
 import {
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CLAUDE_DESKTOP_CLIENT_ID,
+  type ClientMark,
   EXTERNAL_AGENT_ID_HEADER,
-  OPENCODE_CLIENT_ID,
+  KIMI_MARK,
+  OPENCODE_FAMILY,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  type OpenCodeFamilyDescriptor,
   openCodePassthroughBaseUrl,
+  openCodePassthroughProviders,
+  PI_MARK,
   type SupportedProvider,
 } from "@archestra/shared";
-import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
+import {
+  INSTALLER_CLIENT_KEY_PROVIDERS,
+  NATIVE_SESSION_CLIENT_LABELS,
+} from "@archestra/shared/connection-setup";
+import {
+  CLAUDE_MARK,
+  COPILOT_MARK,
+  GROK_MARK,
+  HERMES_AGENT_MARK,
+  OPENAI_MARK,
+  OPENCLAW_MARK,
+} from "@/components/client-marks";
 
 const [ANTHROPIC_BASE_URL_KEY] = CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
 const [CLAUDE_USE_BEDROCK_KEY, AWS_REGION_KEY, BEDROCK_BASE_URL_KEY] =
@@ -177,6 +193,9 @@ export interface ConnectClient {
    * can't carry (e.g. OpenCode's lighter inner block).
    */
   svgAccent?: { path: string; color: string };
+  /** viewBox for `svg` when it isn't drawn in the default 24×24 box. */
+  svgViewBox?: string;
+  svgFillRule?: "evenodd";
   iconColor?: string;
   tileBg?: string;
   iconOverride?: { bg: string; fg: string; glyph: string };
@@ -184,28 +203,125 @@ export interface ConnectClient {
   proxy: ProxySupport;
 }
 
-const CLAUDE_PATH =
-  "m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z";
-const OPENAI_PATH =
-  "M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z";
 const CURSOR_PATH =
   "M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23";
 const N8N_PATH =
   "M21.4737 5.6842c-1.1772 0-2.1663.8051-2.4468 1.8947h-2.8955c-1.235 0-2.289.893-2.492 2.111l-.1038.623a1.263 1.263 0 0 1-1.246 1.0555H11.289c-.2805-1.0896-1.2696-1.8947-2.4468-1.8947s-2.1663.8051-2.4467 1.8947H4.973c-.2805-1.0896-1.2696-1.8947-2.4468-1.8947C1.1311 9.4737 0 10.6047 0 12s1.131 2.5263 2.5263 2.5263c1.1772 0 2.1663-.8051 2.4468-1.8947h1.4223c.2804 1.0896 1.2696 1.8947 2.4467 1.8947 1.1772 0 2.1663-.8051 2.4468-1.8947h1.0008a1.263 1.263 0 0 1 1.2459 1.0555l.1038.623c.203 1.218 1.257 2.111 2.492 2.111h.3692c.2804 1.0895 1.2696 1.8947 2.4468 1.8947 1.3952 0 2.5263-1.131 2.5263-2.5263s-1.131-2.5263-2.5263-2.5263c-1.1772 0-2.1664.805-2.4468 1.8947h-.3692a1.263 1.263 0 0 1-1.246-1.0555l-.1037-.623A2.52 2.52 0 0 0 13.9607 12a2.52 2.52 0 0 0 .821-1.4794l.1038-.623a1.263 1.263 0 0 1 1.2459-1.0555h2.8955c.2805 1.0896 1.2696 1.8947 2.4468 1.8947 1.3952 0 2.5263-1.131 2.5263-2.5263s-1.131-2.5263-2.5263-2.5263m0 1.2632a1.263 1.263 0 0 1 1.2631 1.2631 1.263 1.263 0 0 1-1.2631 1.2632 1.263 1.263 0 0 1-1.2632-1.2632 1.263 1.263 0 0 1 1.2632-1.2631M2.5263 10.7368A1.263 1.263 0 0 1 3.7895 12a1.263 1.263 0 0 1-1.2632 1.2632A1.263 1.263 0 0 1 1.2632 12a1.263 1.263 0 0 1 1.2631-1.2632m6.3158 0A1.263 1.263 0 0 1 10.1053 12a1.263 1.263 0 0 1-1.2632 1.2632A1.263 1.263 0 0 1 7.579 12a1.263 1.263 0 0 1 1.2632-1.2632m10.1053 3.7895a1.263 1.263 0 0 1 1.2631 1.2632 1.263 1.263 0 0 1-1.2631 1.2631 1.263 1.263 0 0 1-1.2632-1.2631 1.263 1.263 0 0 1 1.2632-1.2632";
-const COPILOT_PATH =
-  "M19.245 5.364c1.322 1.36 1.877 3.216 2.11 5.817.622 0 1.2.135 1.592.654l.73.964c.21.278.323.61.323.955v2.62c0 .339-.173.669-.453.868C20.239 19.602 16.157 21.5 12 21.5c-4.6 0-9.205-2.583-11.547-4.258-.28-.2-.452-.53-.453-.868v-2.62c0-.345.113-.679.321-.956l.73-.963c.392-.517.974-.654 1.593-.654l.029-.297c.25-2.446.81-4.213 2.082-5.52 2.461-2.54 5.71-2.851 7.146-2.864h.198c1.436.013 4.685.323 7.146 2.864zm-7.244 4.328c-.284 0-.613.016-.962.05-.123.447-.305.85-.57 1.108-1.05 1.023-2.316 1.18-2.994 1.18-.638 0-1.306-.13-1.851-.464-.516.165-1.012.403-1.044.996a65.882 65.882 0 0 0-.063 2.884l-.002.48c-.002.563-.005 1.126-.013 1.69.002.326.204.63.51.765 2.482 1.102 4.83 1.657 6.99 1.657 2.156 0 4.504-.555 6.985-1.657a.854.854 0 0 0 .51-.766c.03-1.682.006-3.372-.076-5.053-.031-.596-.528-.83-1.046-.996-.546.333-1.212.464-1.85.464-.677 0-1.942-.157-2.993-1.18-.266-.258-.447-.661-.57-1.108-.32-.032-.64-.049-.96-.05zm-2.525 4.013c.539 0 .976.426.976.95v1.753c0 .525-.437.95-.976.95a.964.964 0 0 1-.976-.95v-1.752c0-.525.437-.951.976-.951zm5 0c.539 0 .976.426.976.95v1.753c0 .525-.437.95-.976.95a.964.964 0 0 1-.976-.95v-1.752c0-.525.437-.951.976-.951zM7.635 5.087c-1.05.102-1.935.438-2.385.906-.975 1.037-.765 3.668-.21 4.224.405.394 1.17.657 1.995.657h.09c.649-.013 1.785-.176 2.73-1.11.435-.41.705-1.433.675-2.47-.03-.834-.27-1.52-.63-1.813-.39-.336-1.275-.482-2.265-.394zm6.465.394c-.36.292-.6.98-.63 1.813-.03 1.037.24 2.06.675 2.47.968.957 2.136 1.104 2.776 1.11h.044c.825 0 1.59-.263 1.995-.657.555-.556.765-3.187-.21-4.224-.45-.468-1.335-.804-2.385-.906-.99-.088-1.875.058-2.265.394zM12 7.615c-.24 0-.525.015-.84.044.03.16.045.336.06.526l-.001.159a2.94 2.94 0 0 1-.014.25c.225-.022.425-.027.612-.028h.366c.187 0 .387.006.612.028-.015-.146-.015-.277-.015-.409.015-.19.03-.365.06-.526a9.29 9.29 0 0 0-.84-.044z";
-// OpenCode's 240×300 mark scaled into the 24×24 box: the dark frame (its inner
-// cut-out wound the other way so it stays empty) and the lighter lower block.
-const OPENCODE_PATH = "M16.8 4.8H7.2v14.4h9.6ZM21.6 24H2.4V0h19.2Z";
-const OPENCODE_ACCENT_PATH = "M16.8 19.2H7.2V9.6h9.6Z";
+
+/**
+ * A tile's glyph fields for a shared client mark. Clients that are also in
+ * the agent catalog take their mark from `@/components/client-marks`, so the
+ * Connect page and the agent pages draw the same logo.
+ */
+function markFields(mark: ClientMark) {
+  return {
+    svg: mark.path,
+    svgAccent: mark.accent,
+    svgViewBox: mark.viewBox,
+    svgFillRule: mark.fillRule,
+    iconColor: mark.color,
+    tileBg: mark.background,
+  };
+}
+
+// Marks for the popular agents below, from LobeHub Icons (factory.ai's own
+// favicon for Droid). All but Droid's use the 24×24 box with even-odd fills.
+const AMP_PATH =
+  "M15.087 23.18L12.03 24l-2.097-7.823-5.738 5.738-2.251-2.251 5.718-5.719-7.769-2.082.82-3.057 11.294 3.08 3.08 11.295zM19.505 18.762l-3.057.82-2.564-9.573-9.572-2.564.819-3.057 11.295 3.079 3.08 11.295zM23.893 14.374l-3.057.82-2.565-9.572L8.7 3.057 9.52 0l11.295 3.08 3.079 11.294z";
+const ANTIGRAVITY_PATH =
+  "M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z";
+const KIRO_PATH =
+  "M4.594 6.677C6.67-2.226 18.746-2.211 21.16 6.632c.353 1.297 1.725 7.582-1.673 13.747-1.545 2.797-5.841 5.49-6.99 1.883C8.6 25.477 3.315 24.1 5.789 18.609l-.318.143c-3.57 1.305-3.863-1.208-3.173-2.513.45-.84.727-1.335.937-1.897.353-.975.458-1.568.593-2.498.27-1.837.277-3.607.765-5.167zm8.37.01a.92.92 0 00-.81.428c-.217.323-.33.825-.33 1.462 0 .705.15 1.89 1.14 1.89h.008c.757 0 1.214-.705 1.214-1.89 0-.622-.127-1.125-.367-1.455a1.014 1.014 0 00-.855-.435zm4.08 0a.92.92 0 00-.81.428c-.217.323-.33.825-.33 1.462 0 .705.15 1.89 1.14 1.89h.008c.757 0 1.215-.705 1.215-1.89 0-.622-.128-1.125-.368-1.455a1.014 1.014 0 00-.855-.435z";
+const FACTORY_PATH =
+  "M321.997 150.712C321.401 150.568 320.844 150.299 320.363 149.925C319.883 149.551 319.491 149.08 319.215 148.544C318.938 148.008 318.783 147.42 318.76 146.821C318.738 146.22 318.848 145.624 319.084 145.07C327.226 125.716 330.819 110.23 325.021 103.747C309.666 86.5471 248.085 120.749 228.451 132.333C227.925 132.642 227.337 132.837 226.728 132.903C226.118 132.969 225.501 132.906 224.918 132.719C224.336 132.531 223.801 132.223 223.351 131.815C222.902 131.407 222.548 130.909 222.313 130.356C214.06 111.043 205.384 97.6094 196.589 97.0268C173.279 95.4688 154.491 162.187 148.991 183.932C148.844 184.515 148.57 185.06 148.188 185.528C147.805 185.998 147.323 186.381 146.775 186.651C146.227 186.921 145.626 187.072 145.012 187.094C144.399 187.116 143.788 187.009 143.221 186.778C123.406 178.825 107.545 175.316 100.914 180.98C83.305 195.978 118.315 256.126 130.175 275.304C130.492 275.816 130.692 276.391 130.76 276.987C130.829 277.582 130.765 278.186 130.573 278.755C130.381 279.325 130.065 279.847 129.647 280.286C129.228 280.725 128.718 281.07 128.15 281.298C108.384 289.359 94.6306 297.834 94.0272 306.424C92.439 329.192 160.74 347.544 183.01 352.916C183.605 353.061 184.16 353.33 184.64 353.704C185.118 354.077 185.509 354.548 185.785 355.083C186.061 355.618 186.215 356.205 186.237 356.803C186.26 357.402 186.151 357.998 185.916 358.551C177.773 377.905 174.181 393.398 179.979 399.874C195.334 417.074 256.921 382.877 276.556 371.293C277.081 370.984 277.67 370.789 278.28 370.722C278.889 370.655 279.507 370.717 280.09 370.905C280.673 371.093 281.207 371.402 281.657 371.81C282.106 372.219 282.46 372.717 282.694 373.271C290.947 392.578 299.616 406.012 308.417 406.601C331.728 408.153 350.516 341.44 356.009 319.688C356.157 319.106 356.432 318.562 356.816 318.094C357.2 317.625 357.682 317.243 358.231 316.974C358.779 316.705 359.381 316.554 359.995 316.533C360.608 316.511 361.219 316.619 361.786 316.85C381.601 324.803 397.455 328.304 404.093 322.648C421.702 307.65 386.684 247.495 374.825 228.317C374.51 227.804 374.312 227.229 374.245 226.634C374.177 226.039 374.242 225.436 374.434 224.868C374.626 224.299 374.941 223.777 375.358 223.338C375.775 222.899 376.284 222.552 376.85 222.323C396.623 214.261 410.376 205.786 410.973 197.196C412.568 174.428 344.26 156.078 321.997 150.712ZM295.254 128.885C299.734 136.73 276.646 189 259.474 225.561C259.186 226.172 258.715 226.682 258.121 227.024C257.528 227.365 256.842 227.521 256.155 227.47C255.468 227.419 254.814 227.164 254.28 226.739C253.746 226.314 253.358 225.739 253.169 225.093C246.234 201.322 238.306 173.392 229.824 149.683C229.491 148.752 229.508 147.736 229.871 146.817C230.235 145.897 230.921 145.133 231.808 144.662C252.989 133.363 289.234 118.358 295.254 128.885ZM193.746 135.355C202.589 137.807 224.103 190.714 238.424 228.426C238.664 229.056 238.699 229.742 238.527 230.393C238.354 231.044 237.983 231.627 237.461 232.065C236.939 232.503 236.292 232.775 235.608 232.844C234.923 232.913 234.234 232.775 233.632 232.45C211.501 220.453 185.694 206.159 162.529 195.253C161.622 194.823 160.901 194.093 160.493 193.192C160.085 192.292 160.018 191.279 160.303 190.335C167.12 167.736 181.865 132.069 193.746 135.355ZM126.652 210.04C134.676 205.664 188.197 228.216 225.621 244.989C226.248 245.269 226.771 245.73 227.12 246.31C227.47 246.889 227.629 247.56 227.577 248.23C227.524 248.901 227.264 249.54 226.828 250.062C226.393 250.582 225.805 250.962 225.143 251.147C200.813 257.921 172.211 265.664 147.937 273.949C146.985 274.272 145.946 274.255 145.007 273.9C144.067 273.545 143.286 272.876 142.805 272.011C131.257 251.322 115.867 215.92 126.652 210.04ZM133.275 309.188C135.779 300.551 189.952 279.537 228.562 265.548C229.207 265.315 229.91 265.28 230.576 265.448C231.243 265.617 231.84 265.98 232.288 266.49C232.736 266.999 233.015 267.631 233.085 268.299C233.155 268.968 233.015 269.641 232.682 270.23C220.392 291.846 205.758 317.053 194.592 339.672C194.156 340.561 193.409 341.269 192.486 341.668C191.563 342.068 190.525 342.134 189.557 341.853C166.42 335.235 129.905 320.792 133.275 309.188ZM209.739 374.722C205.252 366.884 228.347 314.608 245.519 278.054C245.806 277.442 246.279 276.931 246.872 276.59C247.465 276.249 248.151 276.093 248.838 276.144C249.525 276.194 250.179 276.45 250.713 276.875C251.247 277.3 251.634 277.874 251.824 278.521C258.759 302.285 266.686 330.222 275.169 353.932C275.499 354.862 275.481 355.877 275.117 356.795C274.752 357.713 274.064 358.475 273.178 358.945C252.004 370.223 215.752 385.256 209.76 374.722H209.739ZM311.247 368.252C302.397 365.807 280.883 312.894 266.562 275.182C266.322 274.55 266.285 273.862 266.458 273.21C266.63 272.559 267.003 271.974 267.526 271.536C268.049 271.097 268.697 270.826 269.382 270.758C270.068 270.69 270.759 270.83 271.361 271.157C293.485 283.154 319.299 297.455 342.457 308.362C343.366 308.789 344.089 309.519 344.497 310.42C344.905 311.321 344.971 312.335 344.683 313.28C337.872 335.912 323.128 371.544 311.247 368.252ZM378.341 293.566C370.31 297.949 316.795 275.391 279.365 258.618C278.738 258.338 278.215 257.877 277.866 257.297C277.516 256.718 277.357 256.047 277.409 255.377C277.461 254.706 277.722 254.067 278.158 253.546C278.593 253.025 279.181 252.646 279.843 252.461C304.18 245.687 332.775 237.943 357.049 229.658C358.003 229.335 359.043 229.353 359.984 229.709C360.925 230.065 361.706 230.737 362.188 231.603C373.729 252.285 389.119 287.693 378.341 293.566ZM371.718 194.419C369.207 203.063 315.041 224.077 276.431 238.066C275.784 238.3 275.08 238.335 274.413 238.167C273.746 237.999 273.148 237.635 272.698 237.124C272.249 236.613 271.972 235.98 271.903 235.31C271.833 234.641 271.975 233.966 272.311 233.377C284.594 211.768 299.228 186.554 310.394 163.935C310.833 163.048 311.58 162.343 312.502 161.945C313.425 161.546 314.462 161.481 315.429 161.76C338.566 168.413 375.081 182.815 371.718 194.419Z";
+
+/**
+ * Popular agents without tailored steps. Listing them lets people find their
+ * app by name; picking one shows the generic instructions under its label.
+ */
+const POPULAR_GENERIC_CLIENTS: (Pick<
+  ConnectClient,
+  | "id"
+  | "label"
+  | "sub"
+  | "svg"
+  | "svgViewBox"
+  | "svgFillRule"
+  | "svgAccent"
+  | "iconColor"
+  | "tileBg"
+> & { proxy?: ProxySupport })[] = [
+  {
+    id: "amp",
+    label: "Amp",
+    sub: "Sourcegraph coding agent",
+    svg: AMP_PATH,
+    iconColor: "#f34e3f",
+    tileBg: "#fff1ef",
+    proxy: {
+      kind: "unsupported",
+      reason: "Amp sends its model requests to its own service.",
+    },
+  },
+  {
+    id: "antigravity",
+    label: "Antigravity",
+    sub: "Google agentic IDE",
+    svg: ANTIGRAVITY_PATH,
+    iconColor: "#3186ff",
+    tileBg: "#eef4ff",
+    proxy: {
+      kind: "unsupported",
+      reason: "Antigravity sends its model requests to its own service.",
+    },
+  },
+  {
+    id: "droid",
+    label: "Droid",
+    sub: "Factory coding agent",
+    svg: FACTORY_PATH,
+    svgViewBox: "84 84 340 340",
+    iconColor: "#020202",
+    tileBg: "#f6f6f6",
+  },
+  {
+    id: "grok-build",
+    label: "Grok Build",
+    sub: "xAI coding agent",
+    ...markFields(GROK_MARK),
+  },
+  {
+    id: "hermes-agent",
+    label: "Hermes Agent",
+    sub: "Nous Research agent",
+    ...markFields(HERMES_AGENT_MARK),
+  },
+  {
+    id: "kiro",
+    label: "Kiro",
+    sub: "AWS agentic IDE",
+    svg: KIRO_PATH,
+    iconColor: "#9046ff",
+    tileBg: "#f4eeff",
+    proxy: {
+      kind: "unsupported",
+      reason: "Kiro sends its model requests to its own service.",
+    },
+  },
+  {
+    id: "openclaw",
+    label: "OpenClaw",
+    sub: "Personal AI assistant",
+    ...markFields(OPENCLAW_MARK),
+  },
+];
+
 export const CONNECT_CLIENTS: ConnectClient[] = [
   {
     id: "claude-code",
     label: NATIVE_SESSION_CLIENT_LABELS["claude-code"],
     sub: "Anthropic CLI",
-    svg: CLAUDE_PATH,
-    iconColor: "#D97757",
-    tileBg: "#fff1ea",
+    ...markFields(CLAUDE_MARK),
     mcp: {
       kind: "custom",
       supportedAuth: "oauth",
@@ -292,11 +408,9 @@ claude`,
   },
   {
     id: "claude-desktop",
-    label: "Claude Desktop",
+    label: NATIVE_SESSION_CLIENT_LABELS["claude-desktop"],
     sub: "Anthropic desktop app",
-    svg: CLAUDE_PATH,
-    iconColor: "#D97757",
-    tileBg: "#fff1ea",
+    ...markFields(CLAUDE_MARK),
     mcp: {
       kind: "custom",
       supportedAuth: "oauth",
@@ -432,9 +546,7 @@ claude`,
     id: "codex",
     label: NATIVE_SESSION_CLIENT_LABELS.codex,
     sub: "OpenAI CLI",
-    svg: OPENAI_PATH,
-    iconColor: "#10a37f",
-    tileBg: "#eaf7f1",
+    ...markFields(OPENAI_MARK),
     mcp: {
       kind: "custom",
       supportedAuth: "oauth",
@@ -464,125 +576,19 @@ claude`,
       }),
     },
   },
-  {
-    id: "opencode",
-    label: NATIVE_SESSION_CLIENT_LABELS.opencode,
-    sub: "Open-source CLI",
-    svg: OPENCODE_PATH,
-    svgAccent: { path: OPENCODE_ACCENT_PATH, color: "#CFCECD" },
-    iconColor: "#211E1E",
-    tileBg: "#f7f7f6",
-    mcp: {
-      kind: "custom",
-      supportedAuth: "both",
-      preferredAuth: "oauth",
-      configFile: "terminal",
-      language: "bash",
-      steps: ({ token }) => {
-        const verifyServer: ClientStep = {
-          title: "Check the connection",
-          body: 'The gateway should be listed as "connected".',
-          terminalTitle: "terminal",
-          buildCommand: () => "opencode mcp list",
-        };
-        if (token) {
-          return [
-            {
-              title: "Add the gateway",
-              body: "Use the static token when you want OpenCode to call the MCP gateway without an OAuth browser flow. Needs OpenCode 1.17 or later.",
-              terminalTitle: "terminal",
-              buildCommand: ({ url, serverName, token }) =>
-                `opencode mcp add ${shellArg(serverName)} --url ${shellArg(url)} --header ${shellArg(`Authorization=Bearer ${token}`)}`,
-            },
-            verifyServer,
-          ];
-        }
-        return [
-          {
-            title: "Add the gateway",
-            body: "Registers the gateway in your global OpenCode config. Needs OpenCode 1.17 or later.",
-            terminalTitle: "terminal",
-            buildCommand: ({ url, serverName }) =>
-              `opencode mcp add ${shellArg(serverName)} --url ${shellArg(url)}`,
-          },
-          {
-            title: "Start the OAuth flow",
-            body: "Check with opencode mcp list first. Run this only if authentication is needed; OpenCode does not start OAuth on its own.",
-            terminalTitle: "terminal",
-            buildCommand: ({ serverName }) =>
-              `opencode mcp auth ${shellArg(serverName)}`,
-          },
-          {
-            title: FINISH_OAUTH_FLOW_TITLE,
-            body: "OpenCode opens your browser and prints the sign-in link. Sign in and approve the gateway — it grants tool access per user, so its tools stay unavailable until you complete this one-time sign-in.",
-          },
-          verifyServer,
-        ];
-      },
-    },
-    proxy: {
-      kind: "custom",
-      supportedProviders: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
-        ({ provider }) => provider,
-      ),
-      build: ({ provider, url, appName }) => {
-        const openConfig: ProxyStep = {
-          title: "Open ~/.config/opencode/opencode.json",
-          body: "Create it if it doesn't exist. If you have opencode.jsonc there instead, edit that file.",
-        };
-        const rootUrl = url.replace(new RegExp(`/${provider}$`), "");
-        const selectedRoute = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.find(
-          (route) => route.provider === provider,
-        );
-        const selectedProviderId =
-          selectedRoute?.openCodeProviderId ?? provider;
-        const selectedBaseUrl = selectedRoute
-          ? openCodePassthroughBaseUrl(rootUrl, selectedRoute)
-          : url;
-        return {
-          kind: "steps",
-          steps: [
-            openConfig,
-            {
-              title: `Route ${selectedProviderId} through ${appName}`,
-              body: "Merge this snippet into the file. It keeps the native provider and model ids and uses the credential already configured for this provider.",
-              language: "json",
-              code: JSON.stringify(
-                {
-                  enabled_providers: [selectedProviderId],
-                  provider: {
-                    [selectedProviderId]: {
-                      options: {
-                        baseURL: selectedBaseUrl,
-                        headers: {
-                          [EXTERNAL_AGENT_ID_HEADER]: OPENCODE_CLIENT_ID,
-                        },
-                      },
-                    },
-                  },
-                },
-                null,
-                2,
-              ),
-            },
-            {
-              title: "Verify the proxy",
-              body: `Pick an existing model under ${selectedProviderId}. The request must appear in the ${appName} LLM logs with an OpenCode badge.`,
-              language: "bash",
-              code: `opencode run -m ${selectedProviderId}/<model-id> "Reply with exactly: opencode-proxy-ok"`,
-            },
-          ],
-        };
-      },
-    },
-  },
+  openCodeFamilyTile(OPENCODE_FAMILY.opencode, {
+    mcpAddNote: " Needs OpenCode 1.17 or later.",
+  }),
+
+  openCodeFamilyTile(OPENCODE_FAMILY.kilo),
+
   {
     id: "copilot-cli",
     label: "Copilot CLI",
     sub: "GitHub coding CLI",
-    svg: COPILOT_PATH,
-    iconColor: "#24292f",
-    tileBg: "#f6f8fa",
+    svg: COPILOT_MARK.path,
+    iconColor: COPILOT_MARK.color,
+    tileBg: COPILOT_MARK.background,
     mcp: {
       kind: "custom",
       supportedAuth: "both",
@@ -880,8 +886,129 @@ export COPILOT_MODEL="<model-name>"`,
     },
   },
   {
+    id: "pi",
+    label: "Pi",
+    sub: "Open-source coding CLI",
+    ...markFields(PI_MARK),
+    mcp: {
+      kind: "custom",
+      supportedAuth: "oauth",
+      configFile: "~/.pi/agent/mcp.json",
+      language: "json",
+      steps: [
+        {
+          title: "Install Pi 1.4 or later",
+          body: "Install @earendil-works/pi-coding-agent with pnpm, then use the setup command on this page. Include both tools and the LLM proxy.",
+          buildCommand: () => "pnpm add -g @earendil-works/pi-coding-agent",
+          language: "bash",
+        },
+        {
+          title: "Sign in to the gateway",
+          body: "The installer adds direct MCP tools and the native guardrails extension. Complete the browser sign-in before starting Pi.",
+          buildCommand: ({ serverName }) =>
+            `pi mcp login ${shellArg(serverName)}`,
+          language: "bash",
+        },
+      ],
+    },
+    proxy: {
+      kind: "custom",
+      supportedProviders: [...INSTALLER_CLIENT_KEY_PROVIDERS.pi],
+      build: () => ({
+        kind: "steps",
+        steps: [
+          {
+            title: "Run the connection setup",
+            body: "Keep tools and the LLM proxy selected. The installer saves your authorized provider catalog and installs the native guardrails extension, shared skills and arcpi launcher.",
+          },
+          {
+            title: "Start Pi with guardrails",
+            code: "arcpi",
+            language: "bash",
+            body: "Native tools and compaction use the same policy session as model requests. Tree navigation and summaries retain the policy session. Nested tool execution remains blocked. Use Pi’s /model picker to switch among the connected providers and models. Providers outside this connection remain blocked.",
+          },
+        ],
+      }),
+    },
+  },
+  {
+    id: "kimi-code",
+    label: "Kimi Code",
+    sub: "Moonshot coding CLI",
+    ...markFields(KIMI_MARK),
+    mcp: {
+      kind: "custom",
+      supportedAuth: "oauth",
+      configFile: "~/.kimi-code/mcp.json",
+      language: "json",
+      steps: [
+        {
+          title: "Add the gateway to ~/.kimi-code/mcp.json",
+          body: "Merge this entry into mcpServers and keep your other servers.",
+          buildCommand: ({ url, serverName }) =>
+            JSON.stringify(
+              { mcpServers: { [serverName]: { url, toolTimeoutMs: 600000 } } },
+              null,
+              2,
+            ),
+          language: "json",
+        },
+        {
+          title: FINISH_OAUTH_FLOW_TITLE,
+          body: "Start kimi and run /mcp-config login with the gateway's name. Kimi Code opens your browser. Sign in and approve the gateway; its tools stay unavailable until you do.",
+          buildCommand: ({ serverName }) => `/mcp-config login ${serverName}`,
+          language: "bash",
+        },
+      ],
+    },
+    proxy: {
+      kind: "custom",
+      supportedProviders: [...INSTALLER_CLIENT_KEY_PROVIDERS["kimi-code"]],
+      build: ({ provider, url }) => ({
+        kind: "steps",
+        steps: [
+          {
+            title: "Add the provider and model to ~/.kimi-code/config.toml",
+            body: 'Add these tables, and put default_model = "archestra" before the first table to use it in new sessions.',
+            language: "toml",
+            code: [
+              "[providers.archestra]",
+              'type = "kimi"',
+              `base_url = "${url}"`,
+              `api_key_env = "${provider === "kimi" ? "MOONSHOT_API_KEY" : "KIMI_API_KEY"}"`,
+              "",
+              "[providers.archestra.custom_headers]",
+              `"${EXTERNAL_AGENT_ID_HEADER}" = "kimi-code"`,
+              "",
+              "[models.archestra]",
+              'provider = "archestra"',
+              `model = "${provider === "kimi" ? "kimi-k3.1-pro" : "k3.1-pro"}"`,
+              "max_context_size = 131072",
+              'capabilities = ["tool_use", "thinking", "always_thinking"]',
+            ].join("\n"),
+          },
+          {
+            title: "Export your key and start Kimi Code",
+            body: "Kimi Code reads the key from the environment on each request.",
+            language: "bash",
+            code: `export ${provider === "kimi" ? "MOONSHOT_API_KEY" : "KIMI_API_KEY"}="<your key>"\nkimi`,
+          },
+        ],
+      }),
+    },
+  },
+  ...POPULAR_GENERIC_CLIENTS.map(
+    (client): ConnectClient => ({
+      ...client,
+      svgFillRule:
+        client.svgFillRule ?? (client.svgViewBox ? undefined : "evenodd"),
+      mcp: { kind: "generic", supportedAuth: "both" },
+      proxy: client.proxy ?? { kind: "generic" },
+    }),
+  ),
+  {
     id: "generic",
-    label: "Any Client",
+    label: "Generic client",
     sub: "Generic instructions",
     tileBg: "#f1f1fa",
     iconOverride: { bg: "#1e1b4b", fg: "#fff", glyph: "⌘" },
@@ -889,6 +1016,44 @@ export COPILOT_MODEL="<model-name>"`,
     proxy: { kind: "generic" },
   },
 ];
+
+export function orderedClients(
+  order: readonly string[] | null | undefined,
+): ConnectClient[] {
+  const remaining = new Map(
+    CONNECT_CLIENTS.map((client) => [client.id, client]),
+  );
+  const clients: ConnectClient[] = [];
+  for (const id of order ?? []) {
+    const client = remaining.get(id);
+    if (!client || id === "generic") continue;
+    clients.push(client);
+    remaining.delete(id);
+  }
+  return [...clients, ...remaining.values()];
+}
+
+/** Null visibility shows all clients; Generic client is always included. */
+export function visibleClients(
+  shownIds: readonly string[] | null | undefined,
+  order?: readonly string[] | null,
+): ConnectClient[] {
+  const clients = orderedClients(order);
+  if (!shownIds) return clients;
+  const shown = new Set(shownIds);
+  return clients.filter((c) => c.id === "generic" || shown.has(c.id));
+}
+
+export function usesGenericInstructions(client: ConnectClient): boolean {
+  return client.mcp.kind === "generic";
+}
+
+// Apps with an installer: the one shared list the installer, connect.md and
+// disconnect.md read too.
+export {
+  type InstallerClientId,
+  isInstallerClientId,
+} from "@archestra/shared/connection-setup";
 
 // === Internal helpers ===
 
@@ -900,4 +1065,124 @@ export COPILOT_MODEL="<model-name>"`,
  */
 function shellArg(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * OpenCode and Kilo Code share one tile: the same `mcp` commands, the same
+ * manual proxy snippet and the mark, from the family descriptor. Only a
+ * version note differs.
+ */
+function openCodeFamilyTile(
+  client: OpenCodeFamilyDescriptor,
+  { mcpAddNote = "" }: { mcpAddNote?: string } = {},
+): ConnectClient {
+  const { binary, label, mark } = client;
+  const siblingConfigFile =
+    client.manualConfigFile === client.configFile
+      ? client.commentedConfigFile
+      : client.configFile;
+  return {
+    id: client.id,
+    label,
+    sub: "Open-source CLI",
+    ...markFields(mark),
+    mcp: {
+      kind: "custom",
+      supportedAuth: "both",
+      preferredAuth: "oauth",
+      configFile: "terminal",
+      language: "bash",
+      steps: ({ token }) => {
+        const verifyServer: ClientStep = {
+          title: "Check the connection",
+          body: 'The gateway should be listed as "connected".',
+          terminalTitle: "terminal",
+          buildCommand: () => `${binary} mcp list`,
+        };
+        if (token) {
+          return [
+            {
+              title: "Add the gateway",
+              body: `Use the static token when you want ${label} to call the MCP gateway without an OAuth browser flow.${mcpAddNote}`,
+              terminalTitle: "terminal",
+              buildCommand: ({ url, serverName, token }) =>
+                `${binary} mcp add ${shellArg(serverName)} --url ${shellArg(url)} --header ${shellArg(`Authorization=Bearer ${token}`)}`,
+            },
+            verifyServer,
+          ];
+        }
+        return [
+          {
+            title: "Add the gateway",
+            body: `Registers the gateway in your global ${label} config.${mcpAddNote}`,
+            terminalTitle: "terminal",
+            buildCommand: ({ url, serverName }) =>
+              `${binary} mcp add ${shellArg(serverName)} --url ${shellArg(url)}`,
+          },
+          {
+            title: "Start the OAuth flow",
+            body: `Check with ${binary} mcp list first. Run this only if authentication is needed; ${label} does not start OAuth on its own.`,
+            terminalTitle: "terminal",
+            buildCommand: ({ serverName }) =>
+              `${binary} mcp auth ${shellArg(serverName)}`,
+          },
+          {
+            title: FINISH_OAUTH_FLOW_TITLE,
+            body: `${label} opens your browser and prints the sign-in link. Sign in and approve the gateway — it grants tool access per user, so its tools stay unavailable until you complete this one-time sign-in.`,
+          },
+          verifyServer,
+        ];
+      },
+    },
+    proxy: {
+      kind: "custom",
+      supportedProviders: openCodePassthroughProviders(),
+      build: ({ provider, url, appName }) => {
+        const rootUrl = url.replace(new RegExp(`/${provider}$`), "");
+        const selectedRoute = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.find(
+          (route) => route.provider === provider,
+        );
+        const selectedProviderId =
+          selectedRoute?.openCodeProviderId ?? provider;
+        const selectedBaseUrl = selectedRoute
+          ? openCodePassthroughBaseUrl(rootUrl, selectedRoute)
+          : url;
+        return {
+          kind: "steps",
+          steps: [
+            {
+              title: `Open ~/.config/${client.dir}/${client.manualConfigFile}`,
+              body: `Create it if it doesn't exist. If you have ${siblingConfigFile} there instead, edit that file.`,
+            },
+            {
+              title: `Route ${selectedProviderId} through ${appName}`,
+              body: `Merge this snippet into the file. It keeps the native provider and model ids and uses the credential already configured for this provider. ${label} then offers only this provider, so no request skips ${appName}.`,
+              language: "json",
+              code: JSON.stringify(
+                {
+                  enabled_providers: [selectedProviderId],
+                  provider: {
+                    [selectedProviderId]: {
+                      options: {
+                        baseURL: selectedBaseUrl,
+                        headers: { [EXTERNAL_AGENT_ID_HEADER]: client.id },
+                      },
+                    },
+                  },
+                },
+                null,
+                2,
+              ),
+            },
+            {
+              title: "Verify the proxy",
+              body: `Pick an existing model under ${selectedProviderId}. The request must appear in the ${appName} LLM logs with the ${label} badge.`,
+              language: "bash",
+              code: `${binary} run -m ${selectedProviderId}/<model-id> "Reply with exactly: ${client.id}-proxy-ok"`,
+            },
+          ],
+        };
+      },
+    },
+  };
 }

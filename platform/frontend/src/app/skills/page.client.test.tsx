@@ -520,6 +520,24 @@ describe("SkillsPage rows", () => {
     );
   });
 
+  it("lists skills without their SKILL.md bodies in both the complete and paged views", () => {
+    mockUseFeature.mockImplementation(
+      (name: string) => name === "mcpGatewaySkillsEnabled",
+    );
+
+    render(<SkillsPage />);
+
+    // The default view walks every page; the table never shows a body.
+    expect(vi.mocked(useSkillsList)).toHaveBeenCalledWith(
+      expect.objectContaining({ includeContent: false }),
+      expect.objectContaining({ enabled: true }),
+    );
+    expect(vi.mocked(useSkillsPaginated)).toHaveBeenCalledWith(
+      expect.objectContaining({ includeContent: false }),
+      expect.anything(),
+    );
+  });
+
   it("uses one server page and its total for a standalone-only active view", () => {
     mockUseFeature.mockImplementation(
       (name: string) => name === "mcpGatewaySkillsEnabled",
@@ -618,27 +636,6 @@ describe("SkillsPage rows", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(push).toHaveBeenCalledWith("/skills?page=1", { scroll: false });
-  });
-
-  it("keeps the OpenAPPA source badge unqualified", () => {
-    mockUseFeature.mockImplementation((name: string) => name === "plugins");
-    vi.mocked(usePluginSkills).mockReturnValue({
-      data: [
-        {
-          ...PLUGIN_SKILL,
-          pluginName: "OpenAPPA",
-          sourceRepo: "archestra-ai/OpenAPPA",
-          sourceMarketplaceRepo: "archestra-ai/OpenAPPA",
-        },
-      ],
-      isFetching: false,
-      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
-    } as any);
-
-    render(<SkillsPage />);
-
-    expect(screen.getByTitle("OpenAPPA")).toHaveTextContent(/^OpenAPPA$/);
-    expect(screen.queryByTitle("OpenAPPA · Plugin")).not.toBeInTheDocument();
   });
 
   it("refuses Edit and Delete on somebody else's skill, with the reason", async () => {

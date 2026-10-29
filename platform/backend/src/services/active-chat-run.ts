@@ -1,18 +1,28 @@
 import type { UIMessageChunk } from "ai";
 import config from "@/config";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import logger from "@/logging";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import {
   type ActiveChatRunNotifier,
   createActiveChatRunNotifier,
 } from "@/services/active-chat-run-notifier";
+import { ApiError } from "@/types";
 import type { ChatActiveRunStatus } from "@/types/chat-active-run";
 
 const EVENT_FLUSH_INTERVAL_MS = 500;
 const EVENT_BATCH_SIZE = 256;
-const RUN_TOUCH_INTERVAL_MS = 30 * 1000;
-const STALE_RUNNING_MS = 10 * 60 * 1000;
+// Liveness: a draining run refreshes its row's `updatedAt` at least every
+// RUN_TOUCH_INTERVAL_MS, checked every LIVENESS_CHECK_INTERVAL_MS even while
+// the stream is silent, so a live run's row is never older than ~20s. A run
+// untouched for STALE_RUNNING_MS has lost its owning process (hard kill, OOM,
+// crashed pod) and is failed by the reaper or by a Stop request.
+const RUN_TOUCH_INTERVAL_MS = 15 * 1000;
+const LIVENESS_CHECK_INTERVAL_MS = 5 * 1000;
+const STALE_RUNNING_MS = 60 * 1000;
+// Upper bound on how long Stop waits for the run to leave `running`, so the
+// request always resolves even when the owner neither finishes nor goes stale.
+const STOP_WAIT_TIMEOUT_MS = 15 * 1000;
 const TERMINAL_CLEANUP_INTERVAL_MS = 60 * 1000;
 const ACTIVE_CHAT_RUN_TERMINAL_RETENTION_MS = 60 * 60 * 1000;
 export const ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS = 2 * 60 * 1000;
@@ -146,11 +156,57 @@ export class ActiveChatRunService {
     return run;
   }
 
-  async waitForTerminal(runId: string): Promise<void> {
+  /**
+   * Stop's hand-off barrier: resolves once the run has left `running`.
+   *
+   * A live owner (on any replica) aborts on the stop request and marks the run
+   * terminal within moments. An owner that died without graceful shutdown
+   * never will, so a run whose liveness touch is older than the stale window
+   * is failed here instead of waiting for the reaper — the user asked to stop
+   * it, and a live owner keeps its row fresh, so only an ownerless run
+   * qualifies. Bounded by `timeoutMs`; a run still `running` at the deadline
+   * rejects the hand-off so the client keeps waiting rather than sending an
+   * overlapping turn. Its owner or the reaper still owns terminalization.
+   */
+  async waitForTerminal(
+    runId: string,
+    options: { timeoutMs?: number } = {},
+  ): Promise<void> {
+    const deadline = Date.now() + (options.timeoutMs ?? STOP_WAIT_TIMEOUT_MS);
+
     while (true) {
       const run = await ActiveChatRunModel.findById(runId);
       if (!run || run.status !== "running") {
         return;
+      }
+
+      if (Date.now() - run.updatedAt.getTime() > STALE_RUNNING_MS) {
+        const failed = await ActiveChatRunModel.markRunAsFailedIfStale({
+          runId,
+          staleMs: STALE_RUNNING_MS,
+        });
+        if (failed) {
+          logger.info(
+            { runId, conversationId: run.conversationId },
+            "Failed ownerless active chat run on stop request",
+          );
+          await this.notifyEvent(runId);
+          return;
+        }
+        // A liveness touch landed first: the owner is alive, keep waiting.
+        continue;
+      }
+
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        logger.warn(
+          { runId, conversationId: run.conversationId },
+          "Active chat run still running after stop wait deadline",
+        );
+        throw new ApiError(
+          409,
+          "The response is still stopping. Queued messages will wait until it finishes.",
+        );
       }
 
       // Terminal transitions publish on the event channel. The timeout is a
@@ -158,7 +214,7 @@ export class ActiveChatRunService {
       // wake re-reads the durable row before Stop is allowed to return.
       await this.notifier.waitForEvent({
         runId,
-        timeoutMs: this.replayPollIntervalMs,
+        timeoutMs: Math.min(this.replayPollIntervalMs, remainingMs),
       });
     }
   }
@@ -169,8 +225,8 @@ export class ActiveChatRunService {
    * survives, unlike the old hard delete's cascade); a stream that still owns
    * the row observes that within a poll and marks the run terminal itself, but
    * when nothing owns it — the backend restarted mid-run, the pod was
-   * rescheduled — the row stays `running` until the stale reaper catches it ten
-   * minutes later, and `running` blocks the next turn on the restored chat via
+   * rescheduled — the row stays `running` until the stale reaper catches it,
+   * and `running` blocks the next turn on the restored chat via
    * the one-running-run-per-conversation unique index.
    *
    * Restore never resurrects a stream, so the run is finished by definition:
@@ -204,12 +260,12 @@ export class ActiveChatRunService {
     }>;
     abortController?: AbortController;
     /**
-     * Locked chats: replay event payloads are raw stream chunks, so
+     * Encrypted chats: replay event payloads are raw stream chunks, so
      * they are stored encrypted under the conversation key.
      */
-    lockedChatAudit?: LockedChatAuditContext | null;
+    encryptedChatAudit?: EncryptedChatAuditContext | null;
     /**
-     * LockedChat with no key to encrypt under (no escrow record): payload
+     * EncryptedChat with no key to encrypt under (no escrow record): payload
      * persistence is suppressed rather than written in plaintext. The run row
      * still tracks liveness (flushes touch it), but reconnect replay is
      * unavailable for that run.
@@ -233,11 +289,11 @@ export class ActiveChatRunService {
       const writer = new ActiveChatRunEventBatcher({
         runId: params.runId,
         suppressPayloads: params.suppressEventPayloads ?? false,
-        lockedChatAudit: params.lockedChatAudit ?? null,
+        encryptedChatAudit: params.encryptedChatAudit ?? null,
         onFlush: () => this.notifyEvent(params.runId),
-        onAsyncFailure: () => {
+        onAsyncFailure: (error) => {
           if (!params.abortController?.signal.aborted) {
-            params.abortController?.abort();
+            params.abortController?.abort(persistenceAbortReason(error));
           }
           void reader.cancel().catch((cancelError) => {
             logger.warn(
@@ -247,6 +303,7 @@ export class ActiveChatRunService {
           });
         },
       });
+      const stopLivenessTouches = writer.startLivenessTouches();
 
       try {
         while (true) {
@@ -282,7 +339,7 @@ export class ActiveChatRunService {
         });
       } catch (error) {
         if (!params.abortController?.signal.aborted) {
-          params.abortController?.abort();
+          params.abortController?.abort(persistenceAbortReason(error));
         }
         await reader.cancel().catch((cancelError) => {
           logger.warn(
@@ -317,6 +374,8 @@ export class ActiveChatRunService {
           status: "failed",
           error: error instanceof Error ? error.message : String(error),
         });
+      } finally {
+        stopLivenessTouches();
       }
     })()
       .catch((error) => {
@@ -337,12 +396,12 @@ export class ActiveChatRunService {
 
   createReplayStream(
     runId: string,
-    lockedChatAudit?: LockedChatAuditContext | null,
+    encryptedChatAudit?: EncryptedChatAuditContext | null,
   ): ReadableStream<UIMessageChunk> {
     let isCancelled = false;
     const notifier = this.notifier;
     const replayPollIntervalMs = this.replayPollIntervalMs;
-    const audit = lockedChatAudit ?? null;
+    const audit = encryptedChatAudit ?? null;
 
     return new ReadableStream<UIMessageChunk>({
       async start(controller) {
@@ -357,7 +416,7 @@ export class ActiveChatRunService {
             const snapshot = await ActiveChatRunModel.readStatusAndEventsAfter({
               runId,
               seq: lastSeq,
-              lockedChatAudit: audit,
+              encryptedChatAudit: audit,
             });
 
             // Run row gone: its conversation was hard-deleted and cascaded,
@@ -529,20 +588,20 @@ class ActiveChatRunEventBatcher {
   private asyncFailure: unknown = null;
   private readonly runId: string;
   private readonly suppressPayloads: boolean;
-  private readonly lockedChatAudit: LockedChatAuditContext | null;
+  private readonly encryptedChatAudit: EncryptedChatAuditContext | null;
   private readonly onFlush: () => Promise<void>;
   private readonly onAsyncFailure: (error: unknown) => void;
 
   constructor(params: {
     runId: string;
     suppressPayloads: boolean;
-    lockedChatAudit: LockedChatAuditContext | null;
+    encryptedChatAudit: EncryptedChatAuditContext | null;
     onFlush: () => Promise<void>;
     onAsyncFailure: (error: unknown) => void;
   }) {
     this.runId = params.runId;
     this.suppressPayloads = params.suppressPayloads;
-    this.lockedChatAudit = params.lockedChatAudit;
+    this.encryptedChatAudit = params.encryptedChatAudit;
     this.onFlush = params.onFlush;
     this.onAsyncFailure = params.onAsyncFailure;
   }
@@ -589,7 +648,7 @@ class ActiveChatRunEventBatcher {
       return;
     }
 
-    // Suppression is now only for a locked-chat run with no key to encrypt
+    // Suppression is now only for an encrypted-chat run with no key to encrypt
     // under; the appendEvents call below still runs when a liveness touch is
     // due, so a long silent stream is not reaped as stale.
     const payloads = this.suppressPayloads
@@ -603,7 +662,7 @@ class ActiveChatRunEventBatcher {
     this.flushPromise = this.flushPromise.then(async () => {
       const result = await ActiveChatRunModel.appendEvents({
         runId: this.runId,
-        lockedChatAudit: this.lockedChatAudit,
+        encryptedChatAudit: this.encryptedChatAudit,
         seq,
         payloads,
         touchRun,
@@ -615,6 +674,51 @@ class ActiveChatRunEventBatcher {
     });
 
     await this.flushPromise;
+  }
+
+  /**
+   * Flushes touch the run only when they happen, and a silent stream (a long
+   * tool call or reasoning step, or a scheduled run that emits nothing for
+   * minutes) does not flush. Check on a timer too, so a live run's liveness
+   * never depends on how chatty its stream is. Returns the stop function.
+   */
+  startLivenessTouches(): () => void {
+    const timer = setInterval(() => {
+      void this.touchIfDue().catch((error) => {
+        this.asyncFailure ??= error;
+        this.onAsyncFailure(error);
+      });
+    }, LIVENESS_CHECK_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }
+
+  private async touchIfDue(): Promise<void> {
+    if (this.asyncFailure || !this.shouldTouchRun()) {
+      return;
+    }
+
+    let result: Awaited<ReturnType<typeof ActiveChatRunModel.appendEvents>>;
+    try {
+      result = await ActiveChatRunModel.appendEvents({
+        runId: this.runId,
+        seq: this.nextSeq,
+        payloads: [],
+        touchRun: true,
+      });
+    } catch (error) {
+      // A transient DB error must not kill a live chat: retry on the next
+      // check, well inside the stale window.
+      this.lastRunTouchAt = 0;
+      logger.warn(
+        { error, runId: this.runId },
+        "Failed to touch active chat run liveness",
+      );
+      return;
+    }
+
+    if (result === "run_missing") {
+      throw new ActiveChatRunGoneError(this.runId);
+    }
   }
 
   private shouldTouchRun(): boolean {
@@ -629,6 +733,26 @@ class ActiveChatRunEventBatcher {
     this.lastRunTouchAt = now;
     return true;
   }
+}
+
+/**
+ * The reason a chat is aborted with when its events can no longer be
+ * persisted, so the response can report the failure instead of ending as if
+ * the user had pressed Stop.
+ */
+export class ActiveChatRunPersistenceError extends Error {
+  constructor(cause: unknown) {
+    super("The chat run could not be saved, so it was stopped.", { cause });
+    this.name = "ActiveChatRunPersistenceError";
+  }
+}
+
+function persistenceAbortReason(
+  error: unknown,
+): ActiveChatRunPersistenceError | undefined {
+  return error instanceof ActiveChatRunGoneError
+    ? undefined
+    : new ActiveChatRunPersistenceError(error);
 }
 
 // Signals that the run row was deleted out from under an in-flight drain, so

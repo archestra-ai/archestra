@@ -43,7 +43,9 @@ const baseStats: MyStatistics = {
   inputTokens: 800,
   outputTokens: 200,
   cacheReadTokens: 50,
-  totalTokens: 1000,
+  cacheWriteTokens: 20,
+  // Uncached input + output + cache write. Cache reads stay out of the total.
+  totalTokens: 1020,
   billedCost: 1.5,
   subscriptionCost: 0,
   activeDays: 3,
@@ -84,19 +86,32 @@ describe("MyUsageSummary", () => {
   });
 
   it("does not present subscription-covered usage as money spent", () => {
-    mockStats({ ...baseStats, billedCost: 2, subscriptionCost: 40 });
+    mockStats({
+      ...baseStats,
+      billedCost: 43.9675,
+      subscriptionCost: 2054.4463,
+    });
 
     render(<MyUsageSummary timeframe="30d" />);
 
-    // The billed figure stands alone, flagged as partly subscription-covered;
-    // the $42 list price is never shown as spend.
-    expect(screen.getByText("$2.0000")).toBeInTheDocument();
+    // The billed figure stands alone, rounded to cents and flagged as partly
+    // subscription-covered; the $2,098.41 list price is never shown as spend.
+    expect(screen.getByText("$43.97")).toBeInTheDocument();
     expect(screen.getByText("Subscription")).toBeInTheDocument();
-    expect(screen.queryByText("$42.0000")).not.toBeInTheDocument();
+    expect(screen.queryByText("$2,098.41")).not.toBeInTheDocument();
   });
 
   it("says so plainly when the timeframe holds no activity", () => {
-    mockStats({ ...baseStats, requests: 0, totalTokens: 0, billedCost: 0 });
+    mockStats({
+      ...baseStats,
+      requests: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 0,
+      billedCost: 0,
+    });
 
     render(<MyUsageSummary timeframe="30d" />);
 

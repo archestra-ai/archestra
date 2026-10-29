@@ -4,16 +4,12 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { type Mock, vi } from "vitest";
-import { hasPermission } from "@/auth";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
-
-vi.mock("@/auth");
-
-const mockHasPermission = hasPermission as Mock;
 
 describe("GET /api/k8s/image-pull-secrets", () => {
   let app: FastifyInstance;
@@ -23,7 +19,9 @@ describe("GET /api/k8s/image-pull-secrets", () => {
 
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
     listSecretsSpy = vi
       .spyOn(mcpServerRuntimeManager, "listDockerRegistrySecrets")
       .mockResolvedValue([
@@ -60,6 +58,7 @@ describe("GET /api/k8s/image-pull-secrets", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     listSecretsSpy.mockRestore();
     await app.close();
   });
@@ -88,7 +87,6 @@ describe("GET /api/k8s/image-pull-secrets", () => {
     const team = await makeTeam(organizationId, member.id, { name: "core" });
     await makeTeamMember(team.id, member.id);
     user = member;
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
 
     const response = await app.inject({
       method: "GET",

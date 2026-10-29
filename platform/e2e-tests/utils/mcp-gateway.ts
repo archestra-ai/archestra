@@ -1,6 +1,8 @@
 import {
+  ADMIN_ROLE_NAME,
   archestraApiSdk,
   getManageCredentialsButtonTestId,
+  MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import {
   type APIRequestContext,
@@ -62,18 +64,20 @@ export async function verifyToolCallResultViaApi({
   // win the race against the assignment mutation and get the "not enabled"
   // recovery text instead of the tool result. On the lite harness
   // (frontend/backend/DB in one container, sub-ms latency) the call wins
-  // deterministically. Wait until the gateway itself lists the tool, which is
-  // the same assignment set the invocation policy checks. Skipped for "Error"
+  // deterministically. Wait until the gateway exposes or discovers the tool,
+  // using search_tools when progressive loading hides it from tools/list.
+  // Skipped for "Error"
   // expectations: there the tool may legitimately never appear for this token.
   if (expectedResult !== "Error") {
     await expect
       .poll(
         async () => {
-          const tools = await listMcpTools(request, {
+          const tool = await findAvailableMcpTool(request, {
             profileId: effectiveProfileId,
             token,
-          }).catch(() => [] as McpTool[]);
-          return tools.some((tool) => tool.name === toolName);
+            toolName,
+          }).catch(() => undefined);
+          return tool !== undefined;
         },
         { timeout: 30_000, intervals: [250, 500, 1000, 2000, 4000] },
       )
@@ -173,29 +177,14 @@ export async function makeApiRequest(params: {
   return response;
 }
 
+/**
+ * A gateway key that reaches every agent the organization may use, the way the
+ * retired organization token did: an admin service account's key.
+ */
 export async function getOrgTokenForProfile(
   request: APIRequestContext,
 ): Promise<string> {
-  const tokensResponse = await makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: "/api/tokens",
-  });
-  const tokensData = await tokensResponse.json();
-  const orgToken = tokensData.tokens.find(
-    (token: { isOrganizationToken: boolean }) => token.isOrganizationToken,
-  );
-
-  if (!orgToken) {
-    throw new Error("No organization token found");
-  }
-
-  const valueResponse = await makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: `/api/tokens/${orgToken.id}/value`,
-  });
-  return (await valueResponse.json()).value;
+  return await getServiceAccountKey(request, { teamName: null });
 }
 
 export async function initializeMcpSession(
@@ -306,31 +295,61 @@ export async function callMcpTool(
   return callResult.result;
 }
 
+/**
+ * A gateway key that acts for one team, the way the retired team token did: a
+ * member service account linked to that team.
+ */
 export async function getTeamTokenForProfile(
   request: APIRequestContext,
   teamName: string,
 ): Promise<string> {
-  const tokensResponse = await makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: "/api/tokens",
-  });
-  const tokensData = await tokensResponse.json();
-  const teamToken = tokensData.tokens.find(
-    (token: { isOrganizationToken: boolean; team?: { name: string } }) =>
-      !token.isOrganizationToken && token.team?.name === teamName,
-  );
+  return await getServiceAccountKey(request, { teamName });
+}
 
-  if (!teamToken) {
-    throw new Error(`No team token found for team ${teamName}`);
+/**
+ * A fresh service account (linked to the named team, or an admin account for
+ * the organization) and one key for it.
+ */
+async function getServiceAccountKey(
+  request: APIRequestContext,
+  params: { teamName: string | null },
+): Promise<string> {
+  let teamId: string | null = null;
+  if (params.teamName) {
+    const teamsResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/teams",
+    });
+    const body = await teamsResponse.json();
+    const teams: { id: string; name: string }[] = Array.isArray(body)
+      ? body
+      : body.data;
+    const team = teams.find((t) => t.name === params.teamName);
+    if (!team) throw new Error(`Team '${params.teamName}' not found`);
+    teamId = team.id;
   }
 
-  const valueResponse = await makeApiRequest({
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const accountResponse = await makeApiRequest({
     request,
-    method: "get",
-    urlSuffix: `/api/tokens/${teamToken.id}/value`,
+    method: "post",
+    urlSuffix: "/api/service-accounts",
+    data: {
+      name: `e2e ${params.teamName ?? "organization"} ${suffix}`,
+      role: teamId ? MEMBER_ROLE_NAME : ADMIN_ROLE_NAME,
+      teamId,
+    },
   });
-  return (await valueResponse.json()).value;
+  const account = await accountResponse.json();
+
+  const tokenResponse = await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `/api/service-accounts/${account.id}/tokens`,
+    data: { name: "e2e gateway key" },
+  });
+  return (await tokenResponse.json()).token;
 }
 
 type McpTool = {
@@ -389,12 +408,24 @@ export async function waitForMcpGatewayJwtReady(params: {
         token: params.token,
       });
 
+      const expectedTool = params.expectedToolName
+        ? await findAvailableMcpTool(params.request, {
+            profileId: params.profileId,
+            token: params.token,
+            toolName: params.expectedToolName,
+            listedTools: tools,
+          })
+        : undefined;
       const matches = params.expectedToolName
-        ? tools.some((tool) => tool.name === params.expectedToolName)
+        ? expectedTool !== undefined
         : tools.length > 0;
 
       if (matches) {
-        return tools;
+        // Include the discovered target in the readiness result even when
+        // progressive loading keeps it out of the initial tools/list surface.
+        return expectedTool && !tools.some((t) => t.name === expectedTool.name)
+          ? [...tools, expectedTool]
+          : tools;
       }
 
       const stateKey = params.expectedToolName
@@ -529,6 +560,50 @@ export async function listMcpTools(
   }
 
   return listResult.result.tools;
+}
+
+/** Finds an executable tool through either full or progressive exposure. */
+async function findAvailableMcpTool(
+  request: APIRequestContext,
+  options: {
+    profileId: string;
+    token: string;
+    toolName: string;
+    listedTools?: McpTool[];
+  },
+): Promise<McpTool | undefined> {
+  const listedTools =
+    options.listedTools ?? (await listMcpTools(request, options));
+  const listedTool = listedTools.find((tool) => tool.name === options.toolName);
+  if (listedTool) return listedTool;
+
+  const searchTool = listedTools.find((tool) =>
+    tool.name.endsWith("__search_tools"),
+  );
+  if (!searchTool) return undefined;
+
+  // An exact regex avoids ranking/limit ambiguity and escapes server prefixes.
+  const escapedName = options.toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const result = await callMcpTool(request, {
+    ...options,
+    toolName: searchTool.name,
+    arguments: { query: `^${escapedName}$`, mode: "regex", limit: 1 },
+  });
+  const text = result.content.find((content) => content.type === "text")?.text;
+  if (!text) throw new Error("Tool discovery returned no search result");
+  const searchResult = JSON.parse(text) as {
+    tools: Array<{
+      toolName: string;
+      available: boolean;
+      description?: string;
+    }>;
+  };
+  const found = searchResult.tools.find(
+    (tool) => tool.toolName === options.toolName && tool.available,
+  );
+  return found
+    ? { name: found.toolName, description: found.description }
+    : undefined;
 }
 
 export async function assignWhoamiToolToProfile(

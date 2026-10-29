@@ -102,12 +102,6 @@ export function useAgentAccess(
      */
     canUpdate: actions.includes("update"),
     canEdit: actions.includes("update"),
-    // Ownership transfer changes who the creator grant belongs to, so it is
-    // gated on managing the object's permissions, never on update alone.
-    canTransferOwnership:
-      !isBuiltIn &&
-      actions.includes("update") &&
-      actions.includes("manage-permissions"),
     canCreate: !!canCreate,
     canDelete: !isBuiltIn && actions.includes("delete"),
     isBuiltIn,

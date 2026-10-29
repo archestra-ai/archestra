@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# This is a build optimization, never a source of truth. Missing history,
+# registry metadata, or a failed retag falls through to the normal build.
+if [[ ! "$SOURCE_VERSION" =~ ^[0-9a-f]{40}$ ]] ||
+  [[ ! "$MAX_AGE_DAYS" =~ ^[0-9]+$ ]]; then
+  echo "Invalid reuse inputs; building $IMAGE normally."
+  exit 0
+fi
+
+paths_json=$(jq -ce '
+  if type == "array" and length > 0 and all(.[];
+    type == "string" and
+    test("^(platform|\\.github)/[A-Za-z0-9_./-]+$") and
+    (contains("..") | not)
+  ) then . else error("invalid image paths") end
+' <<< "$REUSE_PATHS" 2>/dev/null) || {
+  echo "Invalid image dependency paths; building $IMAGE normally."
+  exit 0
+}
+mapfile -t paths < <(jq -r '.[]' <<< "$paths_json")
+
+if ! git cat-file -e "${SOURCE_VERSION}^{commit}" 2>/dev/null ||
+  ! git diff --quiet "$SOURCE_VERSION" HEAD -- \
+    "${paths[@]}" \
+    .github/workflows/build-native-multi-arch-image.yml \
+    .github/actions/build-docker-image \
+    .github/actions/setup-docker-builder; then
+  echo "Image inputs changed or source commit unavailable; building $IMAGE normally."
+  exit 0
+fi
+
+source_image="${IMAGE}:${SOURCE_VERSION}"
+target_image="${IMAGE}:${VERSION}"
+
+get_digest() {
+  docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' 2>/dev/null \
+    | jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))'
+}
+
+if ! source_digest=$(get_digest "$source_image"); then
+  echo "Source image unavailable; building $IMAGE normally."
+  exit 0
+fi
+
+# Registry version creation time survives retagging. Fail closed when metadata
+# cannot establish freshness, so unchanged inputs still rebuild at least weekly.
+# Only the maintained flat CI namespace is eligible for GHCR reuse. Other
+# packages fall through to a normal build rather than broadening token access.
+if [[ "$IMAGE" =~ ^ghcr\.io/archestra-ai/(ci/[a-z0-9-]+)$ ]]; then
+  package="${BASH_REMATCH[1]//\//%2F}"
+  uploaded=""
+  # Bound metadata work. An older/missing version simply takes the normal build.
+  for page in {1..10}; do
+    if ! versions=$(gh api "orgs/archestra-ai/packages/container/${package}/versions?per_page=100&page=${page}" 2>/dev/null); then
+      break
+    fi
+    uploaded=$(jq -er --arg digest "$source_digest" '.[] | select(.name == $digest) | .created_at' <<< "$versions") || true
+    if [ -n "$uploaded" ] || [ "$(jq 'length' <<< "$versions")" -lt 100 ]; then break; fi
+  done
+elif [[ "$IMAGE" =~ ^([a-z0-9-]+)-docker\.pkg\.dev/([^/]+)/([^/]+)/(.+)$ ]]; then
+  location="${BASH_REMATCH[1]}"
+  project="${BASH_REMATCH[2]}"
+  repository="${BASH_REMATCH[3]}"
+  package="${BASH_REMATCH[4]}"
+  uploaded=$(gcloud artifacts versions describe "$source_digest" \
+    --project="$project" --location="$location" --repository="$repository" \
+    --package="$package" --format='value(createTime)' 2>/dev/null) || uploaded=""
+else
+  echo "Not a supported registry image reference; building $IMAGE normally."
+  exit 0
+fi
+if ! uploaded_epoch=$(python3 -c '
+import datetime, sys
+timestamp = datetime.datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00"))
+assert timestamp.tzinfo is not None
+print(int(timestamp.timestamp()))
+' "$uploaded" 2>/dev/null); then
+  echo "Image creation time unavailable; building $IMAGE normally."
+  exit 0
+fi
+age_seconds=$(($(date -u +%s) - uploaded_epoch))
+if ((age_seconds < 0 || age_seconds > MAX_AGE_DAYS * 86400)); then
+  echo "Source image is older than ${MAX_AGE_DAYS} days; rebuilding $IMAGE."
+  exit 0
+fi
+
+retag() {
+  if [[ "$IMAGE" == ghcr.io/* ]]; then
+    docker buildx imagetools create --tag "$target_image" "${IMAGE}@${source_digest}"
+  else
+    gcloud artifacts docker tags add "$source_image" "$target_image" --quiet
+  fi
+}
+if ! retag; then
+  echo "Could not retag source image; building $IMAGE normally."
+  exit 0
+fi
+if ! target_digest=$(get_digest "$target_image") ||
+  [ "$target_digest" != "$source_digest" ]; then
+  echo "Could not verify target digest; building $IMAGE normally."
+  exit 0
+fi
+
+echo "Reused $IMAGE digest $source_digest for $VERSION."
+echo "reused=true" >> "$GITHUB_OUTPUT"

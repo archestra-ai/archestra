@@ -20,7 +20,7 @@ import logger from "@/logging";
 import { constructResponseSchema, OllamaNative, UuidIdSchema } from "@/types";
 import { ollamaNativeAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
-import { authenticatePassthroughProxyRequest } from "../llm-proxy-auth";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -80,12 +80,14 @@ const ollamaNativeProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * `/api/generate`, `/api/embed` and the model-management endpoints
    * (`/api/pull`, `/api/create`, `/api/delete`) would reach the Ollama server
    * with no credential at all, and the upstream defaults to a local Ollama that
-   * requires none of its own.
+   * requires none of its own. Like every catch-all, it honors the
+   * organization's `allowUnauthenticatedLlmProxyRequests` setting.
    */
+  const authenticateOllamaNative =
+    createPassthroughAuthenticator("ollama-native");
   async function authenticatePassthrough(request: FastifyRequest) {
-    await authenticatePassthroughProxyRequest({
+    await authenticateOllamaNative({
       request,
-      provider: "ollama-native",
       agentId: extractAgentId(request.url, API_PREFIX),
     });
   }

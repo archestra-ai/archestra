@@ -3,20 +3,16 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import config from "@/config";
 import logger from "@/logging";
+import { infrastructureSpansEnabled } from "@/observability/tracing/infrastructure-spans";
 import {
   installDbErrorSafetyNet,
   withTransactionRetry,
   wrapPoolWithRetry,
 } from "./retry";
 import * as schema from "./schemas";
-import {
-  DATABASE_URL_VAULT_REF_ENV,
-  getDatabaseUrlFromVault,
-  isReadonlyVaultEnabled,
-} from "./vault-database-url";
 
 let nativeDatabaseConnectionString: string | undefined;
-/** Resolved database URL for embedded storage, including Vault-backed setups. */
+/** Database URL for embedded storage. */
 export function getDatabaseConnectionString(): string {
   if (!nativeDatabaseConnectionString)
     throw new Error("Database not initialized");
@@ -31,12 +27,6 @@ export type Transaction = Parameters<
 /**
  * Initialize the database connection pool.
  * This must be called before any database operations.
- *
- * The function:
- * 1. Checks if ARCHESTRA_DATABASE_URL_VAULT_REF is set AND READONLY_VAULT is enabled
- * 2. If so, reads database URL from Vault
- * 3. Otherwise falls back to ARCHESTRA_DATABASE_URL or DATABASE_URL env vars
- * 4. Creates the connection pool with keepalive settings
  *
  * @throws Error if database URL is not configured anywhere
  */
@@ -184,44 +174,22 @@ let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 let initPromise: Promise<void> | null = null;
 
 async function doInitializeDatabase(): Promise<void> {
-  let connectionString: string;
-
-  const vaultRef = process.env[DATABASE_URL_VAULT_REF_ENV];
-  if (vaultRef && isReadonlyVaultEnabled()) {
-    // READONLY_VAULT is enabled and vault ref is set - read from Vault
-    const vaultUrl = await getDatabaseUrlFromVault(vaultRef);
-    if (vaultUrl) {
-      logger.info(
-        { connectionStringPrefix: vaultUrl.slice(0, 10) },
-        "Database URL successfully loaded from Vault",
-      );
-      connectionString = vaultUrl;
-    } else {
-      logger.info("Database URL not found in Vault, falling back to env var");
-      connectionString = config.database.url;
-    }
-  } else {
-    // Use env var
-    logger.debug(
-      "ARCHESTRA_DATABASE_URL_VAULT_REF is not set or READONLY_VAULT is not enabled, falling back to env var",
-    );
-    connectionString = config.database.url;
-  }
-
   // Assign the globals only once everything has succeeded: a throw from the
   // instrumentation below must not leave a half-initialized db that makes
   // the next initializeDatabase() call return early instead of retrying.
-  const newPool = createPool(connectionString);
+  const newPool = createPool(config.database.url);
   try {
     const newDb = drizzle({
       client: newPool,
       schema,
     });
 
-    instrumentDrizzleClient(newDb, { dbSystem: "postgresql" });
+    // Query spans are infrastructure spans, like the pg instrumentation.
+    if (infrastructureSpansEnabled())
+      instrumentDrizzleClient(newDb, { dbSystem: "postgresql" });
     installDbErrorSafetyNet();
 
-    nativeDatabaseConnectionString = connectionString;
+    nativeDatabaseConnectionString = config.database.url;
     pool = newPool;
     db = newDb;
   } catch (error) {

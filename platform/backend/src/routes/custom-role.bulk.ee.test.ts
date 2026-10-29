@@ -1,14 +1,10 @@
 import { vi } from "vitest";
-import { hasPermission } from "@/auth";
+import { betterAuth } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import OrganizationRoleModel from "@/models/organization-role";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-const hasPermissionMock = vi.mocked(hasPermission);
 
 describe("DELETE /api/roles/bulk", () => {
   let app: FastifyInstanceWithZod;
@@ -26,13 +22,16 @@ describe("DELETE /api/roles/bulk", () => {
     app.addHook("onRequest", async (request) => {
       Object.assign(request, { user, organizationId });
     });
-    hasPermissionMock.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
     const { default: customRoleRoutes } = await import("./custom-role.ee");
     await app.register(customRoleRoutes);
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 

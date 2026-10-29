@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { vi } from "vitest";
-import { betterAuth, hasPermission, userHasPermission } from "@/auth";
+import { betterAuth } from "@/auth";
 import { authPlugin } from "@/auth/fastify-plugin";
 import { createFastifyInstance } from "@/fastify-instance";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
-import { expect, test } from "@/test";
+import { expect, onTestFinished, test } from "@/test";
 import providerRoutes from "./llm-provider-api-keys";
 import virtualRoutes from "./virtual-api-key/virtual-api-key.routes";
-
-vi.mock("@/auth");
 
 test("real middleware admits scoped editors without role update permission and rejects viewers", async ({
   makeOrganization,
@@ -53,18 +51,16 @@ test("real middleware admits scoped editors without role update permission and r
     providerApiKeys: [{ provider: "openai", providerApiKeyId: provider.id }],
     initialPermissionGrants: grants,
   });
-  vi.mocked(hasPermission).mockResolvedValue({
-    success: false,
-    error: new Error("Role cannot update keys"),
-  });
-  vi.mocked(userHasPermission).mockResolvedValue(false);
+  // Plain members: their role reads keys but cannot update them.
+  const getSession = vi.spyOn(betterAuth.api, "getSession");
+  onTestFinished(() => getSession.mockRestore());
   const app = createFastifyInstance();
   await app.register(authPlugin);
   await app.register(providerRoutes);
   await app.register(virtualRoutes);
   try {
     for (const actor of [editor, viewer]) {
-      vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+      getSession.mockResolvedValue({
         response: {
           user: { id: actor.id },
           session: { activeOrganizationId: org.id },

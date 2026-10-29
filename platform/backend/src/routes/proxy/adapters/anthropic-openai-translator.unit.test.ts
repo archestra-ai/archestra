@@ -12,6 +12,18 @@ function req(overrides: Partial<OpenAiRequest> = {}): OpenAiRequest {
   } as OpenAiRequest;
 }
 
+describe("openaiToAnthropic — output cap", () => {
+  test("a client cap under either OpenAI name reaches Anthropic unchanged", () => {
+    expect(
+      openaiToAnthropic(req({ max_tokens: 1_234 })).anthropicBody.max_tokens,
+    ).toBe(1_234);
+    expect(
+      openaiToAnthropic(req({ max_completion_tokens: 2_345 })).anthropicBody
+        .max_tokens,
+    ).toBe(2_345);
+  });
+});
+
 describe("openaiToAnthropic — multimodal user content", () => {
   test("forwards a base64 image as an image block instead of dropping it", () => {
     const request = req({

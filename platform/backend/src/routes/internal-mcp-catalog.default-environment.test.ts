@@ -1,20 +1,15 @@
-import { type Mock, vi } from "vitest";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { EnvironmentResourceDefaultModel } from "@/models";
+import { createEnvironment } from "@/services/environments/environment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createRestrictedEnvironment,
   grantEnvironmentUse,
 } from "@/test/environments";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-import { createEnvironment } from "@/services/environments/environment";
-
-const mockHasPermission = hasPermission as Mock;
 
 /**
  * POST /api/internal_mcp_catalog binds a new catalog item to the org's
@@ -30,7 +25,9 @@ describe("Internal MCP Catalog - configured default environment", () => {
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
     user = await makeUser();
     const organization = await makeOrganization();

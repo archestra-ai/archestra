@@ -30,11 +30,9 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from contracts import (
-    ConditionOperator,
     ContractError,
     HookEvent,
     JsonValue,
-    PolicyAction,
     Provider,
     Scope,
     ServerType,
@@ -119,21 +117,6 @@ class LlmKeyCreate:
     baseUrl: str | None = None
     isPrimary: bool | None = None
     teamId: str | None = None
-
-
-@dataclass(frozen=True)
-class PolicyCondition:
-    key: str
-    operator: ConditionOperator
-    value: str
-
-
-@dataclass(frozen=True)
-class ToolInvocationPolicyCreate:
-    toolId: str
-    conditions: list[PolicyCondition]
-    action: PolicyAction
-    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -331,7 +314,7 @@ class ArchestraClient:
         return require_dict(self._request("POST", "/api/llm-provider-api-keys", json_body=to_payload(payload)),
                             ctx="POST /api/llm-provider-api-keys")
 
-    # --- tools & policies ------------------------------------------------------------------
+    # --- tools ------------------------------------------------------------------
 
     def list_tools(self, search: str | None = None) -> list[dict[str, JsonValue]]:
         params = {"search": search} if search else {}
@@ -341,16 +324,6 @@ class ArchestraClient:
         return require_dict(
             self._request("POST", "/api/agents/tools/bulk-assign", json_body={"assignments": assignments}),
             ctx="POST /api/agents/tools/bulk-assign",
-        )
-
-    def list_tool_invocation_policies(self, tool_id: str | None = None) -> list[dict[str, JsonValue]]:
-        items = _items(self._request("GET", "/api/autonomy-policies/tool-invocation"))
-        return [p for p in items if tool_id is None or p.get("toolId") == tool_id]
-
-    def create_tool_invocation_policy(self, payload: ToolInvocationPolicyCreate) -> dict[str, JsonValue]:
-        return require_dict(
-            self._request("POST", "/api/autonomy-policies/tool-invocation", json_body=to_payload(payload)),
-            ctx="POST /api/autonomy-policies/tool-invocation",
         )
 
     # --- lifecycle hooks -------------------------------------------------------------------

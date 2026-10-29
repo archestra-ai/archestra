@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "github_actions_access" jsonb;

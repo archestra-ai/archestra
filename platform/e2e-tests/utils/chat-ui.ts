@@ -2,6 +2,7 @@ import {
   E2eTestId,
   getChatApiKeySelectorOptionTestId,
   getChatApiKeySelectorProviderGroupTestId,
+  getChatModelOptionTestId,
 } from "@archestra/shared";
 import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 import {
@@ -138,124 +139,72 @@ export async function selectApiKeyForProvider(
   page: Page,
   provider: string,
 ): Promise<void> {
-  const trigger = page.getByTestId(E2eTestId.ChatApiKeySelectorTrigger).first();
-  await expect(trigger).toBeVisible({ timeout: 10_000 });
-  await trigger.click();
-
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
-
-  const providerGroup = page.getByTestId(
+  const menu = await openSetupMenuTab(page, /^Key:/);
+  const providerGroup = menu.getByTestId(
     getChatApiKeySelectorProviderGroupTestId(provider),
   );
   await expect(providerGroup).toBeVisible({ timeout: 10_000 });
-
   const keyOption = providerGroup.getByRole("option").first();
   await expect(keyOption).toBeVisible({ timeout: 10_000 });
   await keyOption.click();
-
-  await expect(dialog).not.toBeVisible({ timeout: 5_000 });
+  await closeSetupMenu(page);
 }
 
 export async function selectApiKeyById(
   page: Page,
   apiKeyId: string,
 ): Promise<void> {
-  const trigger = page.getByTestId(E2eTestId.ChatApiKeySelectorTrigger).first();
-  await expect(trigger).toBeVisible({ timeout: 10_000 });
-  await trigger.click();
-
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
-
-  const keyOption = page.getByTestId(
+  const menu = await openSetupMenuTab(page, /^Key:/);
+  const keyOption = menu.getByTestId(
     getChatApiKeySelectorOptionTestId(apiKeyId),
   );
   await expect(keyOption).toBeVisible({ timeout: 10_000 });
   await keyOption.click();
-
-  await expect(dialog).not.toBeVisible({ timeout: 5_000 });
+  await closeSetupMenu(page);
 }
 
+/** Picks a model in the composer's setup menu, which must already be open. */
 export async function selectRuntimeModelFromDialog(
   page: Page,
   runtimeModel: RuntimeChatModel,
 ): Promise<void> {
-  const dialog = page.getByRole("dialog", { name: "Select Model" });
-  const modelOptionPattern = buildModelOptionPattern(runtimeModel);
-  const searchInput = dialog.getByPlaceholder("Search models...");
-  const emptyState = dialog.getByText("No models found.");
-  const refreshButton = dialog.getByRole("button", {
-    name: /refresh models/i,
-  });
-  const exactModelOption = dialog
-    .getByRole("option")
-    .filter({ hasText: `(${runtimeModel.id})` });
-  const displayNameModelOption = dialog
-    .getByRole("option")
-    .filter({ hasText: modelOptionPattern });
+  const menu = page.getByTestId(E2eTestId.ChatSetupMenu);
+  await expect(menu).toBeVisible({ timeout: 5_000 });
+  const modelTab = menu.getByRole("tab", { name: /^Model:/ });
+  if ((await modelTab.getAttribute("aria-selected")) !== "true") {
+    await modelTab.click();
+  }
+  const searchInput = menu.getByPlaceholder("Search models…");
+  const modelOption = menu
+    .getByTestId(getChatModelOptionTestId(runtimeModel.id))
+    .first();
 
+  // Models load per key, so the option can trail the key switch.
   await expect(async () => {
-    if (await searchInput.isVisible().catch(() => false)) {
-      await searchInput.fill(runtimeModel.id);
-    }
-
-    if (
-      (await exactModelOption
-        .first()
-        .isVisible()
-        .catch(() => false)) ||
-      (await displayNameModelOption
-        .first()
-        .isVisible()
-        .catch(() => false))
-    ) {
-      return;
-    }
-
-    if (await emptyState.isVisible().catch(() => false)) {
-      if (await refreshButton.isVisible().catch(() => false)) {
-        await refreshButton.click();
-      }
-      if (await searchInput.isVisible().catch(() => false)) {
-        await searchInput.clear();
-      }
-    }
-
-    await expect(
-      exactModelOption.or(displayNameModelOption).first(),
-    ).toBeVisible();
+    await searchInput.fill(runtimeModel.id);
+    await expect(modelOption).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 25_000, intervals: [500, 1000, 2000, 5000] });
 
-  if (
-    await exactModelOption
-      .first()
-      .isVisible()
-      .catch(() => false)
-  ) {
-    await exactModelOption.first().click();
-  } else {
-    await displayNameModelOption.first().click();
-  }
-
-  await expect(dialog)
-    .not.toBeVisible({ timeout: 2_000 })
-    .catch(async () => {
-      await page.keyboard.press("Escape");
-      await expect(dialog).not.toBeVisible({ timeout: 5_000 });
-    });
+  await modelOption.click();
+  await expect(menu).not.toBeVisible({ timeout: 5_000 });
 }
 
-function buildModelOptionPattern(model: RuntimeChatModel): RegExp {
-  const displayName = escapeRegExp(model.displayName);
-  const modelId = escapeRegExp(model.id);
-  // Lone-name alternatives use (?![-\w]) so e.g. id "sonar" does not match a
-  // sibling option's "sonar-deep-research". Without this guard the click-time
-  // fallback could land on the wrong model.
-  return new RegExp(
-    `${displayName}\\s*\\(${modelId}\\)|${modelId}(?![-\\w])|${displayName}(?![-\\w])`,
-    "i",
-  );
+async function openSetupMenuTab(page: Page, tabName: RegExp) {
+  const trigger = page.getByTestId(E2eTestId.ChatModelSelectorTrigger).first();
+  await expect(trigger).toBeVisible({ timeout: 10_000 });
+  await trigger.click();
+  const menu = page.getByTestId(E2eTestId.ChatSetupMenu);
+  await expect(menu).toBeVisible({ timeout: 5_000 });
+  await menu.getByRole("tab", { name: tabName }).click();
+  return menu;
+}
+
+async function closeSetupMenu(page: Page) {
+  // Picking a key keeps the menu open on its Model tab.
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId(E2eTestId.ChatSetupMenu)).not.toBeVisible({
+    timeout: 5_000,
+  });
 }
 
 async function findWireMockAnthropicKeyId({
@@ -356,8 +305,4 @@ async function waitForRuntimeModel({
       lastError ? `: ${lastError.message}` : ""
     }`,
   );
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

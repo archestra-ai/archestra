@@ -260,13 +260,15 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   valueFrom:
     secretKeyRef:
       name: {{ include "archestra-platform.authSecretName" . }}
-      key: {{ include "archestra-platform.authSecretKey" . }}
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSecretKey" "default" "auth-secret") | quote }}
 {{- end }}
 
 {{/*
 Inject the session-signing and secret-encryption secrets from the auth Secret
-(Helm-managed or authSecret.existingSecretName) under the fixed session-secret
-and secrets-encryption-secret keys — an external Secret must provide both keys.
+(Helm-managed or authSecret.existingSecretName) — an external Secret must
+provide both keys. The keys default to session-secret and
+secrets-encryption-secret; an external Secret can name them through
+authSecret.existingSessionSecretKey and existingSecretsEncryptionSecretKey.
 An explicit archestra.env value overrides the injection.
 */}}
 {{- $authSecretName := include "archestra-platform.authSecretName" . }}
@@ -275,7 +277,7 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     secretKeyRef:
       name: {{ $authSecretName }}
-      key: session-secret
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSessionSecretKey" "default" "session-secret") | quote }}
       # optional so pods still start when the key is absent (the pre-upgrade
       # migration Job runs before the Secret is updated; config.ts then falls
       # back to ARCHESTRA_AUTH_SECRET).
@@ -286,7 +288,7 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     secretKeyRef:
       name: {{ $authSecretName }}
-      key: secrets-encryption-secret
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSecretsEncryptionSecretKey" "default" "secrets-encryption-secret") | quote }}
       optional: true
 {{- end }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET") }}
@@ -294,7 +296,7 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     secretKeyRef:
       name: {{ $authSecretName }}
-      key: offer-signing-secret
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingOfferSigningSecretKey" "default" "offer-signing-secret") | quote }}
       # optional so pods still start when the key is absent (pre-upgrade
       # migration Job ordering, or an external Secret without this key;
       # config.ts then falls back to a key derived from the auth secret).
@@ -354,13 +356,6 @@ An explicit archestra.env value overrides the injection.
 - name: ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS
   value: {{ .Values.archestra.orchestrator.failedPodReapIntervalSeconds | quote }}
 {{- end }}
-{{/* "false" is a meaningful value — beta feature explicitly off, winning over
-     the ARCHESTRA_BETA master switch — so compare against the empty string
-     instead of relying on truthiness. */}}
-{{- if ne (toString .Values.archestra.orchestrator.mcpIdleHibernationEnabled) "" }}
-- name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED
-  value: {{ .Values.archestra.orchestrator.mcpIdleHibernationEnabled | quote }}
-{{- end }}
 {{/* "0" is a meaningful value — the operator's kill switch — so compare
      against the empty string instead of relying on truthiness. */}}
 {{- if ne (toString .Values.archestra.orchestrator.mcpIdleHibernationSeconds) "" }}
@@ -418,6 +413,23 @@ An explicit archestra.env value overrides the injection.
 {{- if and .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces (not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES")) }}
 - name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
   value: {{ join "," .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces | quote }}
+{{- end }}
+{{- if .Values.archestra.sre.enabled }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_SRE_AGENT_ENABLED") }}
+- name: ARCHESTRA_SRE_AGENT_ENABLED
+  value: "true"
+{{- end }}
+{{/* The SRE ServiceAccount (templates/sre-serviceaccount.yaml) is bound to
+     the read-only Role, which exists only when the chart creates the MCP
+     server RBAC. */}}
+{{- if and .Values.archestra.orchestrator.kubernetes.mcpServerRbac.create (not (hasKey .Values.archestra.env "ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT")) }}
+- name: ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT
+  value: {{ printf "%s-sre" (include "archestra-platform.fullname" .) | quote }}
+{{- end }}
+{{- if and .Values.archestra.sre.apiServerCidrs (not (hasKey .Values.archestra.env "ARCHESTRA_SRE_APISERVER_CIDRS")) }}
+- name: ARCHESTRA_SRE_APISERVER_CIDRS
+  value: {{ join "," .Values.archestra.sre.apiServerCidrs | quote }}
+{{- end }}
 {{- end }}
 {{/* always emitted: "false" is the backend kill switch, and it must reach the
      backend even when a runner host arrives through archestra.env. */}}
@@ -542,13 +554,19 @@ Hook-only auth secret name for the database migration Job.
 {{- end }}
 
 {{/*
-Auth secret key for the Archestra Platform
+Key within the auth Secret for one of its values. Takes a dict with the root
+context ("root"), the authSecret value naming the key ("value"), and the key
+the Helm-managed Secret uses ("default"). A custom key only makes sense with
+authSecret.existingSecretName, because the Helm-managed Secret always writes
+the default keys.
 */}}
-{{- define "archestra-platform.authSecretKey" -}}
-{{- if and (not .Values.archestra.authSecret.existingSecretName) (ne .Values.archestra.authSecret.existingSecretKey "auth-secret") -}}
-{{- fail "archestra.authSecret.existingSecretKey requires archestra.authSecret.existingSecretName to also be set." -}}
+{{- define "archestra-platform.authSecretKeyFor" -}}
+{{- $authSecret := .root.Values.archestra.authSecret -}}
+{{- $key := default .default (get $authSecret .value) -}}
+{{- if and (not $authSecret.existingSecretName) (ne $key .default) -}}
+{{- fail (printf "archestra.authSecret.%s requires archestra.authSecret.existingSecretName to also be set." .value) -}}
 {{- end -}}
-{{- default "auth-secret" .Values.archestra.authSecret.existingSecretKey -}}
+{{- $key -}}
 {{- end }}
 
 {{/*
@@ -604,6 +622,10 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# MCP deployment diagnostics read namespace events to explain failing pods.
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list", "watch"]
 # Agent image prefetch reads the default ServiceAccount's image pull secrets.
 - apiGroups: [""]
   resources: ["serviceaccounts"]
@@ -617,11 +639,11 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["apps"]
   resources: ["deployments", "statefulsets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
-# Agent Sandbox owns the runtime Pod and persistent workspace lifecycle.
-# Transcript recovery verifies the retained claim belongs to its Sandbox.
+# Agent Sandbox owns persistent workspaces; transcript recovery reads them.
+# Dagger owns rebuildable engine caches and lists/deletes orphaned cache claims.
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
-  verbs: ["get"]
+  verbs: ["get", "list", "delete"]
 - apiGroups: ["agents.x-k8s.io"]
   resources: ["sandboxes"]
   verbs: ["get", "list", "create", "patch", "delete"]
@@ -670,33 +692,31 @@ app.kubernetes.io/component: worker
 {{- end }}
 
 {{/*
+Topology spread constraints for one Deployment. archestra.topologySpreadConstraints
+is shared by the web and worker Deployments, so a constraint without a
+labelSelector gets the rendering Deployment's own selector labels: each
+Deployment then spreads its own pods.
+Usage: include "archestra-platform.topologySpreadConstraints" (dict "constraints" .Values.archestra.topologySpreadConstraints "selectorLabels" (include "archestra-platform.selectorLabels" .))
+*/}}
+{{- define "archestra-platform.topologySpreadConstraints" -}}
+{{- $selector := fromYaml .selectorLabels -}}
+{{- $out := list -}}
+{{- range .constraints -}}
+{{- $constraint := deepCopy . -}}
+{{- if not (hasKey $constraint "labelSelector") -}}
+{{- $_ := set $constraint "labelSelector" (dict "matchLabels" $selector) -}}
+{{- end -}}
+{{- $out = append $out $constraint -}}
+{{- end -}}
+{{- toYaml $out -}}
+{{- end }}
+
+{{/*
 Worker labels
 */}}
 {{- define "archestra-platform.workerLabels" -}}
 helm.sh/chart: {{ include "archestra-platform.chart" . }}
 {{ include "archestra-platform.workerSelectorLabels" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-{{- end }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/part-of: archestra
-{{- end }}
-
-{{/*
-Renderer selector labels (app-recording video render service)
-*/}}
-{{- define "archestra-platform.rendererSelectorLabels" -}}
-app.kubernetes.io/name: {{ include "archestra-platform.name" . }}-renderer
-app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/component: renderer
-{{- end }}
-
-{{/*
-Renderer labels
-*/}}
-{{- define "archestra-platform.rendererLabels" -}}
-helm.sh/chart: {{ include "archestra-platform.chart" . }}
-{{ include "archestra-platform.rendererSelectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -809,7 +829,7 @@ args:
       says it without depending on which line Helm printed first.
     */}}
     if [ "$result" = blocked ]; then
-      echo "[archestra] ⚠️ ⚠️ ⚠️  NETWORK POLICY CHECK INCONCLUSIVE  ⚠️ ⚠️ ⚠️  Could not reach {{ .host }}:9000, so enforcement was never measured — environment egress rules (MCP servers, code sandboxes) may be accepted and then silently ignored, leaving pods able to reach cloud metadata endpoints and private cluster ranges. Re-run once the platform is up to get a verdict — see https://archestra.ai/docs/platform-deployment#ssrf-protection-for-mcp-server-pods"
+      echo "[archestra] ⚠️ ⚠️ ⚠️  NETWORK POLICY CHECK INCONCLUSIVE  ⚠️ ⚠️ ⚠️  Could not reach {{ .host }}:9000, so enforcement was never measured — environment egress rules (MCP servers, code sandboxes) may be accepted and then silently ignored, leaving pods able to reach cloud metadata endpoints and private cluster ranges. Re-run once the platform is up to get a verdict — see https://archestra.ai/docs/administration/deployment#ssrf-protection-for-mcp-server-pods"
     fi
     exit 0
 {{- end }}
@@ -866,7 +886,7 @@ args:
       renders on 3 and reaches 4 as a row of escapes. Emoji survive both.
     */}}
     if [ "$result" = reachable ]; then
-      echo "[archestra] ⚠️ ⚠️ ⚠️  NETWORK POLICY NOT ENFORCED  ⚠️ ⚠️ ⚠️  Environment egress rules (MCP servers, code sandboxes) are accepted and then silently ignored, so pods reach cloud metadata endpoints and private cluster ranges — see https://archestra.ai/docs/platform-deployment#ssrf-protection-for-mcp-server-pods"
+      echo "[archestra] ⚠️ ⚠️ ⚠️  NETWORK POLICY NOT ENFORCED  ⚠️ ⚠️ ⚠️  Environment egress rules (MCP servers, code sandboxes) are accepted and then silently ignored, so pods reach cloud metadata endpoints and private cluster ranges — see https://archestra.ai/docs/administration/deployment#ssrf-protection-for-mcp-server-pods"
     fi
     exit 0
 {{- end }}
@@ -930,6 +950,16 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
   {{- end }}
   env:
     {{- include "archestra-platform.env" . | nindent 4 }}
+  {{- /* ARCHESTRA_DATABASE_URL may come from envFrom, so mirror the main container's sources. */}}
+  {{- if or .Values.archestra.envFrom .initContainerExtraEnvFrom }}
+  envFrom:
+    {{- with .Values.archestra.envFrom }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .initContainerExtraEnvFrom }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
   {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
   volumeMounts:
     - name: vault-secrets
@@ -1124,3 +1154,23 @@ Examples:
 {{- printf "%s:%s" $image $imageTag -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+Resolve each scheduling field independently. A missing/null tier value inherits
+archestra.*, while an explicit empty map/list clears it. Do not use `default`:
+it treats empty collections as unset and would restore global constraints.
+*/}}
+{{- define "archestra-platform.scheduling" -}}
+{{- $tier := .tier | default dict -}}
+{{- range $field := list "nodeSelector" "tolerations" "affinity" -}}
+  {{- $value := index $.global $field -}}
+  {{- $override := index $tier $field -}}
+  {{- if ne $override nil -}}
+    {{- $value = $override -}}
+  {{- end -}}
+  {{- with $value }}
+{{ $field }}:
+  {{- toYaml . | nindent 2 }}
+  {{- end -}}
+{{- end -}}
+{{- end -}}

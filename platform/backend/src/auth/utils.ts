@@ -9,9 +9,15 @@ import {
 } from "@archestra/shared";
 import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import { auth as betterAuth } from "@/auth/better-auth";
+import { requestScope } from "@/auth/request-scope";
+import {
+  isServiceAccountUserId,
+  SERVICE_ACCOUNT_USER_ID_PREFIX,
+} from "@/auth/service-account-user-id";
 import logger from "@/logging";
-import { ServiceAccountModel, UserModel } from "@/models";
 import RoleCompositionModel from "@/models/role-composition";
+import ServiceAccountModel from "@/models/service-account";
+import UserModel from "@/models/user";
 import type { SelectServiceAccount } from "@/types";
 
 /**
@@ -24,17 +30,6 @@ type PermissionCheckResult = {
   error: Error | null;
   missingPermissions?: Permissions;
 };
-
-/** Prefix of the synthetic user id minted for service-account principals. */
-export const SERVICE_ACCOUNT_USER_ID_PREFIX = "service-account:";
-
-/**
- * Whether a user id is the synthetic id minted for service-account principals
- * (`service-account:<id>`, see fastify-plugin/middleware.ts). Such ids have no
- * `users` row, so anything that writes a `user_id` foreign key must not use them.
- */
-export const isServiceAccountUserId = (userId: string): boolean =>
-  userId.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX);
 
 export const hasPermission = async (
   permissions: Permissions,
@@ -183,14 +178,17 @@ export const isGlobalAdmin = async (
 export const getPermissionsForUserContext = async (params: {
   userId: string;
   organizationId: string;
-}): Promise<Permissions> => {
-  const serviceAccount = await getServiceAccountFromSyntheticUserId(params);
-  if (serviceAccount) {
-    return ServiceAccountModel.getPermissions(serviceAccount);
-  }
-
-  return UserModel.getUserPermissions(params.userId, params.organizationId);
-};
+}): Promise<Permissions> =>
+  requestScope.memo(
+    `permissions\0${params.organizationId}\0${params.userId}`,
+    async () => {
+      const serviceAccount = await getServiceAccountFromSyntheticUserId(params);
+      if (serviceAccount) {
+        return ServiceAccountModel.getPermissions(serviceAccount);
+      }
+      return UserModel.getUserPermissions(params.userId, params.organizationId);
+    },
+  );
 
 // === Internal helpers
 
@@ -242,10 +240,8 @@ async function checkUserPermissions(params: {
   organizationId: string;
   permissions: Permissions;
 }): Promise<PermissionCheckResult> {
-  const userPermissions = await UserModel.getUserPermissions(
-    params.userId,
-    params.organizationId,
-  );
+  // The read the route makes too, so a read request resolves it once.
+  const userPermissions = await getPermissionsForUserContext(params);
   return buildPermissionCheckResult(userPermissions, params.permissions);
 }
 
@@ -333,9 +329,13 @@ async function getServiceAccountFromSyntheticUserId(params: {
   const serviceAccountId = params.userId.slice(
     SERVICE_ACCOUNT_USER_ID_PREFIX.length,
   );
-  const serviceAccount = await ServiceAccountModel.findById(
-    serviceAccountId,
-    params.organizationId,
+  const serviceAccount = await requestScope.memo(
+    `service-account-auth-context:${serviceAccountId}:${params.organizationId}`,
+    () =>
+      ServiceAccountModel.findAuthContext(
+        serviceAccountId,
+        params.organizationId,
+      ),
   );
 
   if (serviceAccount?.disabled) return null;

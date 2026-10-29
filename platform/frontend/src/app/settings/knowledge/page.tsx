@@ -121,9 +121,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   extraHeaders: [],
   // An organization embedding/reranking key belongs to no one.
   shared: true,
-  teamId: null,
-  vaultSecretPath: null,
-  vaultSecretKey: null,
+
   isPrimary: true,
   bedrockAuthMethod: "api-key",
   awsAccessKeyId: null,
@@ -174,7 +172,7 @@ function AddApiKeyDialog({
   forEmbedding?: boolean;
 }) {
   const createMutation = useCreateLlmProviderApiKey();
-  const byosEnabled = useFeature("byosEnabled");
+
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
@@ -198,13 +196,12 @@ function AddApiKeyDialog({
   const isValid =
     formValues.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
     formValues.name &&
-    (byosEnabled
-      ? formValues.vaultSecretPath && formValues.vaultSecretKey
-      : isProviderApiKeyOptional({
-          provider: formValues.provider,
-          azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-          anthropicKeylessAuthEnabled: anthropicKeylessAuthEnabled === true,
-        }) || formValues.apiKey);
+    (isProviderApiKeyOptional({
+      provider: formValues.provider,
+      azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+      anthropicKeylessAuthEnabled: anthropicKeylessAuthEnabled === true,
+    }) ||
+      formValues.apiKey);
 
   const handleCreate = form.handleSubmit(async (values) => {
     const isBedrockSigV4 =
@@ -218,14 +215,7 @@ function AddApiKeyDialog({
         inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         shared: true,
         isPrimary: values.isPrimary,
-        vaultSecretPath:
-          !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
-            ? values.vaultSecretPath
-            : undefined,
-        vaultSecretKey:
-          !isBedrockSigV4 && byosEnabled && values.vaultSecretKey
-            ? values.vaultSecretKey
-            : undefined,
+
         awsAccessKeyId: isBedrockSigV4
           ? values.awsAccessKeyId || undefined
           : undefined,
@@ -790,14 +780,29 @@ function KnowledgeSettingsContent() {
       : "disabled";
 
   const { data: embeddingModels } = useEmbeddingModels(embeddingChatApiKeyId);
-  const {
-    data: modelsWithApiKeys,
-    isLoadingError: isModelsWithApiKeysLoadError,
-    refetch: refetchModelsWithApiKeys,
-  } = useModelsWithApiKeys({ toastOnError: false });
+  // Embedding models only, to find the keys that can embed.
+  const embeddingCatalog = useModelsWithApiKeys({
+    toastOnError: false,
+    embedding: true,
+    includeAssignments: false,
+  });
+  // The selected key's models, to describe the selected model.
+  const selectedKeyCatalog = useModelsWithApiKeys({
+    toastOnError: false,
+    enabled: !!embeddingChatApiKeyId,
+    apiKeyIds: embeddingChatApiKeyId ? [embeddingChatApiKeyId] : undefined,
+    includeAssignments: false,
+  });
+  const isModelsWithApiKeysLoadError =
+    embeddingCatalog.isLoadingError || selectedKeyCatalog.isLoadingError;
+  const refetchModelsWithApiKeys = () => {
+    embeddingCatalog.refetch();
+    if (embeddingChatApiKeyId) selectedKeyCatalog.refetch();
+  };
+  const embeddingModelsWithApiKeys = embeddingCatalog.data;
   const embeddingCapableKeyIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const model of modelsWithApiKeys ?? []) {
+    for (const model of embeddingModelsWithApiKeys ?? []) {
       if (model.embeddingDimensions == null) continue;
       for (const key of model.apiKeys) {
         // Dimensioned models are not sufficient on their own: `ollama-native`
@@ -813,7 +818,7 @@ function KnowledgeSettingsContent() {
       }
     }
     return ids;
-  }, [modelsWithApiKeys]);
+  }, [embeddingModelsWithApiKeys]);
   // OCR can only run on transports verified to forward PDF file parts.
   const ocrCapableKeyIds = useMemo(() => {
     const ids = new Set<string>();
@@ -838,7 +843,7 @@ function KnowledgeSettingsContent() {
     [embeddingModels, embeddingModel],
   );
   const selectedEmbeddingCatalogModel =
-    modelsWithApiKeys?.find(
+    selectedKeyCatalog.data?.find(
       (model) =>
         model.modelId === embeddingModel &&
         model.apiKeys.some((apiKey) => apiKey.id === embeddingChatApiKeyId),
@@ -1187,7 +1192,7 @@ function KnowledgeSettingsContent() {
           }
         >
           <WithPermissions
-            permissions={{ knowledgeSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -1302,7 +1307,7 @@ function KnowledgeSettingsContent() {
                 </p>
               )}
               <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
+                permissions={{ organizationSettings: ["update"] }}
                 noPermissionHandle="tooltip"
               >
                 {({ hasPermission }) => (
@@ -1356,7 +1361,10 @@ function KnowledgeSettingsContent() {
                 <p className="text-xs text-muted-foreground">
                   Use a model to reorder search results by relevance. Optional.{" "}
                   <ExternalDocsLink
-                    href={getDocsUrl(DocsPage.PlatformKnowledge, "reranking")}
+                    href={getDocsUrl(
+                      DocsPage.PlatformKnowledgeSettings,
+                      "reranking",
+                    )}
                     className="text-primary hover:underline"
                     showIcon={false}
                   >
@@ -1365,7 +1373,7 @@ function KnowledgeSettingsContent() {
                 </p>
               </div>
               <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
+                permissions={{ organizationSettings: ["update"] }}
                 noPermissionHandle="tooltip"
               >
                 {({ hasPermission }) => (
@@ -1408,7 +1416,7 @@ function KnowledgeSettingsContent() {
               {(rerankerChatApiKeyId || rerankerModel) && (
                 <div className="flex justify-end">
                   <WithPermissions
-                    permissions={{ knowledgeSettings: ["update"] }}
+                    permissions={{ organizationSettings: ["update"] }}
                     noPermissionHandle="tooltip"
                   >
                     {({ hasPermission }) => (
@@ -1477,7 +1485,7 @@ function KnowledgeSettingsContent() {
                           most. Always on.{" "}
                           <ExternalDocsLink
                             href={getDocsUrl(
-                              DocsPage.PlatformKnowledge,
+                              DocsPage.PlatformKnowledgeSettings,
                               "keyword-ranking",
                             )}
                             className="text-primary hover:underline"
@@ -1488,7 +1496,7 @@ function KnowledgeSettingsContent() {
                         </p>
                       </div>
                       <WithPermissions
-                        permissions={{ knowledgeSettings: ["update"] }}
+                        permissions={{ organizationSettings: ["update"] }}
                         noPermissionHandle="tooltip"
                       >
                         {({ hasPermission }) => (
@@ -1591,7 +1599,7 @@ function KnowledgeSettingsContent() {
                           model.{" "}
                           <ExternalDocsLink
                             href={getDocsUrl(
-                              DocsPage.PlatformKnowledge,
+                              DocsPage.PlatformKnowledgeSettings,
                               "contextual-retrieval",
                             )}
                             className="text-primary hover:underline"
@@ -1602,7 +1610,7 @@ function KnowledgeSettingsContent() {
                         </p>
                       </div>
                       <WithPermissions
-                        permissions={{ knowledgeSettings: ["update"] }}
+                        permissions={{ organizationSettings: ["update"] }}
                         noPermissionHandle="tooltip"
                       >
                         {({ hasPermission }) => (
@@ -1669,7 +1677,7 @@ function KnowledgeSettingsContent() {
           }
         >
           <WithPermissions
-            permissions={{ knowledgeSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -1724,7 +1732,7 @@ function KnowledgeSettingsContent() {
             <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
               <span />
               <WithPermissions
-                permissions={{ knowledgeSettings: ["update"] }}
+                permissions={{ organizationSettings: ["update"] }}
                 noPermissionHandle="tooltip"
               >
                 {({ hasPermission }) => (
@@ -1767,7 +1775,7 @@ function KnowledgeSettingsContent() {
           hasChanges={hasChanges}
           isSaving={updateKnowledgeSettings.isPending}
           disabledSave={bm25K1Invalid || bm25BInvalid}
-          permissions={{ knowledgeSettings: ["update"] }}
+          permissions={{ organizationSettings: ["update"] }}
           onSave={handleSave}
           onCancel={handleCancel}
         />

@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { pluginsQueryKey } from "@/lib/connection-approval-query-keys";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -41,16 +42,26 @@ export type GithubPluginMarketplace =
 export type ImportGithubPluginMarketplaceBody =
   archestraApiTypes.ImportGithubPluginMarketplaceData["body"];
 
-export function usePlugins(enabled = true, filters?: { labels?: string }) {
-  // Label filtering is resolved server-side (the junction table is the only
-  // place the mapping lives), unlike this page's other filters.
+export function usePlugins(
+  enabled = true,
+  filters?: Pick<
+    NonNullable<archestraApiTypes.GetPluginsData["query"]>,
+    "labels" | "access" | "sharedWith" | "owner"
+  >,
+) {
+  // Label and access filtering are resolved server-side (the junction table
+  // and the grants are the only places those live), unlike this page's other
+  // filters.
   const labels = filters?.labels;
+  const access = filters?.access;
+  const sharedWith = filters?.sharedWith;
+  const owner = filters?.owner;
   return useQuery({
-    queryKey: ["plugins", { labels }],
+    queryKey: pluginsQueryKey({ labels, access, sharedWith, owner }),
     enabled,
     queryFn: async () => {
       const { data, error } = await getPlugins({
-        query: labels ? { labels } : {},
+        query: { labels, access, sharedWith, owner },
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
@@ -138,7 +149,7 @@ export function useApplyGithubPluginUpdate(id: string) {
       if (!data) return;
       queryClient.setQueryData(["plugins", id], data);
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
-      toast.success("GitHub update approved and applied");
+      toast.success("Update approved and applied");
     },
   });
 }
@@ -157,7 +168,7 @@ export function useImportGithubPlugin() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
-      toast.success("Plugin imported from GitHub");
+      toast.success("Plugin imported");
     },
   });
 }
@@ -256,8 +267,8 @@ export function useUpdatePluginGithubSync(id: string) {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
       toast.success(
         data.githubSyncInterval
-          ? "GitHub checks updated"
-          : "GitHub checks disabled",
+          ? "Update checks updated"
+          : "Update checks turned off",
       );
     },
   });
@@ -277,7 +288,7 @@ export function useTriggerPluginGithubSync(id: string) {
     onSuccess: (queued) => {
       if (queued === null) return;
       toast.success(
-        queued ? "GitHub check queued" : "GitHub check already running",
+        queued ? "Update check queued" : "Update check already running",
       );
       for (const delay of [1_000, 3_000, 8_000]) {
         setTimeout(() => {
@@ -337,3 +348,5 @@ export function useBulkDeletePlugins() {
     },
   });
 }
+
+export { isDeliverablePlugin } from "./plugin-eligibility";

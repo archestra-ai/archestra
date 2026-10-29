@@ -3,13 +3,17 @@ import type { Locator, Page } from "@playwright/test";
 export class LlmLogsPage {
   readonly page: Page;
   readonly table: Locator;
-  readonly latestConversationHeading: Locator;
+  /** Session detail: the request list at the top of the split. */
+  readonly requestList: Locator;
+  /** Session detail: the conversation column of the details pane. */
+  readonly conversationPane: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.table = page.getByRole("table");
-    this.latestConversationHeading = page.getByRole("heading", {
-      name: "Latest Conversation",
+    this.requestList = page.getByRole("list", { name: "Requests" });
+    this.conversationPane = page.getByRole("tabpanel", {
+      name: "Conversation",
     });
   }
 
@@ -18,27 +22,21 @@ export class LlmLogsPage {
   }
 
   async gotoSession(sessionId: string) {
-    await this.page.goto(`/llm/logs/session/${encodeURIComponent(sessionId)}`);
+    await this.page.goto(`/llm/logs/${encodeURIComponent(sessionId)}`);
   }
 
-  // The filter bar renders four SearchableSelect comboboxes in order:
-  // Profile, User, Source, Client. The combobox's accessible name changes to
-  // the selected option, so the Client filter is addressed by position.
   get clientFilter(): Locator {
-    return this.page.getByRole("combobox").nth(3);
+    return this.page.getByRole("combobox", {
+      name: "Filter by apps and sources",
+    });
   }
 
   rowForText(text: string | RegExp): Locator {
     return this.table.locator("tbody tr").filter({ hasText: text });
   }
 
-  /**
-   * Open the Client filter and pick an option by its visible label.
-   * Claude options also carry the Anthropic logo's alt text ("Anthropic …"),
-   * so match on the label as a substring.
-   */
   async selectClient(label: string) {
     await this.clientFilter.click();
-    await this.page.getByRole("option", { name: label }).click();
+    await this.page.getByRole("option", { name: label, exact: true }).click();
   }
 }

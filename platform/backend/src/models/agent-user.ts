@@ -6,6 +6,7 @@ import {
   normalizeResourceUserInput,
   type ResourceUserInput,
 } from "@/types/resource-user-level";
+import { idArrayCondition } from "./id-array-condition";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
@@ -119,7 +120,7 @@ class AgentUserModel {
         authorId: schema.agentsTable.authorId,
       })
       .from(schema.agentsTable)
-      .where(inArray(schema.agentsTable.id, agentIds));
+      .where(idArrayCondition(schema.agentsTable.id, agentIds));
     const details =
       await ResourcePermissionPolicyModel.findReadRecipientDetails({
         resources: ["agent", "mcpGateway"],

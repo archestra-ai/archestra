@@ -9,6 +9,7 @@ import {
   SupportedEmbeddingDimensionsSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
+import { isValidModelPrice } from "@archestra/shared/model-price";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -153,6 +154,7 @@ export type CreateModel = z.infer<typeof CreateModelSchema>;
  *
  * - `custom`: admin-set override.
  * - `models_dev`: synced from the models.dev registry.
+ * - `provider`: published by the selected provider instance.
  * - `derived_multiplier`: cache price derived from the input price via a provider
  *   multiplier (used only for cache prices when the registry omits them).
  * - `default`: estimated flat fallback — a guess, surfaced as such in the UI.
@@ -160,6 +162,7 @@ export type CreateModel = z.infer<typeof CreateModelSchema>;
 export const PriceSourceSchema = z.enum([
   "custom",
   "models_dev",
+  "provider",
   "aws",
   "derived_multiplier",
   "default",
@@ -229,6 +232,11 @@ export const PatchModelBodySchema = createUpdateSchema(
     customPricePerMillionOutput: true,
     customPricePerMillionCacheRead: true,
     customPricePerMillionCacheWrite: true,
+    longContextThreshold: true,
+    longContextPricePerMillionInput: true,
+    longContextPricePerMillionOutput: true,
+    longContextPricePerMillionCacheRead: true,
+    longContextPricePerMillionCacheWrite: true,
     customContextLength: true,
     customOutputLength: true,
     ignored: true,
@@ -242,6 +250,17 @@ export const PatchModelBodySchema = createUpdateSchema(
     customPricePerMillionOutput: z.string().nullable().optional(),
     customPricePerMillionCacheRead: z.string().nullable().optional(),
     customPricePerMillionCacheWrite: z.string().nullable().optional(),
+    longContextThreshold: z
+      .number()
+      .int("Must be a whole number of tokens")
+      .min(1, "Must be 1 or greater")
+      .max(MAX_CUSTOM_MODEL_TOKEN_LIMIT)
+      .nullable()
+      .optional(),
+    longContextPricePerMillionInput: z.string().nullable().optional(),
+    longContextPricePerMillionOutput: z.string().nullable().optional(),
+    longContextPricePerMillionCacheRead: z.string().nullable().optional(),
+    longContextPricePerMillionCacheWrite: z.string().nullable().optional(),
     /**
      * Admin-set context window / max output tokens, overriding whatever the
      * provider reported (including nothing at all). `null` clears the override
@@ -325,20 +344,44 @@ export const PatchModelBodySchema = createUpdateSchema(
   )
   .refine(
     (data) => {
+      // The threshold and its four prices are written together, all set or all null.
+      const fields = [
+        data.longContextThreshold,
+        data.longContextPricePerMillionInput,
+        data.longContextPricePerMillionOutput,
+        data.longContextPricePerMillionCacheRead,
+        data.longContextPricePerMillionCacheWrite,
+      ];
+      return (
+        fields.every((value) => value === undefined) ||
+        fields.every((value) => value === null) ||
+        fields.every((value) => value != null)
+      );
+    },
+    {
+      message:
+        "Long-context threshold and all four long-context prices must be set together or all be null",
+    },
+  )
+  .refine(
+    (data) => {
       for (const value of [
         data.customPricePerMillionInput,
         data.customPricePerMillionOutput,
         data.customPricePerMillionCacheRead,
         data.customPricePerMillionCacheWrite,
+        data.longContextPricePerMillionInput,
+        data.longContextPricePerMillionOutput,
+        data.longContextPricePerMillionCacheRead,
+        data.longContextPricePerMillionCacheWrite,
       ]) {
         if (value != null) {
-          const price = parseFloat(value);
-          if (Number.isNaN(price) || price < 0) return false;
+          if (!isValidModelPrice(value)) return false;
         }
       }
       return true;
     },
-    { message: "Prices must be non-negative numbers" },
+    { message: "Prices must be decimal numbers between 0 and 99999999.99" },
   );
 export type PatchModelBody = z.infer<typeof PatchModelBodySchema>;
 
@@ -419,3 +462,18 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   embeddingClientImageCapable: z.boolean().nullable(),
 });
 export type ModelWithApiKeys = z.infer<typeof ModelWithApiKeysSchema>;
+
+/**
+ * A model as a picker shows it: name, provider and price. The slim form of
+ * {@link ModelWithApiKeysSchema}.
+ */
+export const LlmModelOptionSchema = ModelWithApiKeysSchema.pick({
+  id: true,
+  modelId: true,
+  provider: true,
+  description: true,
+  pricePerMillionInput: true,
+  pricePerMillionOutput: true,
+  isFree: true,
+  isBest: true,
+});

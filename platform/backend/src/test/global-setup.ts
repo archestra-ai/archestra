@@ -14,6 +14,7 @@
  * MUST live out-of-band (a temp file), not in a module variable.
  */
 
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -41,6 +42,9 @@ export default async function setup() {
   for (const migrationSql of getMigrationsSql()) {
     await pg.exec(migrationSql);
   }
+  // Migrations seed rows (e.g. a default organization). Ship an empty
+  // snapshot so a freshly loaded test database needs no reset (setup.ts).
+  await truncatePublicTables(pg);
 
   const dump = await pg.dumpDataDir("gzip");
   const bytes = Buffer.from(await dump.arrayBuffer());
@@ -48,7 +52,7 @@ export default async function setup() {
 
   const snapshotPath = path.join(
     os.tmpdir(),
-    `archestra-pglite-snapshot-${process.pid}.tar.gz`,
+    `archestra-pglite-snapshot-${process.pid}-${randomUUID()}.tar.gz`,
   );
   fs.writeFileSync(snapshotPath, bytes);
   process.env[SNAPSHOT_PATH_ENV] = snapshotPath;
@@ -58,4 +62,15 @@ export default async function setup() {
     fs.rmSync(snapshotPath, { force: true });
     delete process.env[SNAPSHOT_PATH_ENV];
   };
+}
+
+async function truncatePublicTables(pg: PGlite): Promise<void> {
+  const { rows } = await pg.query<{ tablename: string }>(`
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public'
+    AND tablename NOT LIKE 'drizzle_%'
+  `);
+  if (rows.length === 0) return;
+  const tables = rows.map((row) => `"${row.tablename}"`).join(", ");
+  await pg.exec(`TRUNCATE TABLE ${tables} RESTART IDENTITY CASCADE`);
 }

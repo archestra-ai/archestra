@@ -1,21 +1,12 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
-
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    enterpriseFeatures: { core: false },
-    observability: {
-      rum: {
-        enabled: true,
-        logExporter: { url: "http://localhost:4318/v1/logs" },
-      },
-    },
-  }),
-);
-
+import { beforeEach, describe, expect, test } from "vitest";
+import config from "@/config";
 import { rumExporter } from "./exporter.ee";
 
 describe("rumExporter enterprise gate", () => {
   beforeEach(async () => {
+    config.enterpriseFeatures.core = false;
+    config.observability.rum.enabled = true;
+    config.observability.rum.logExporter.url = "http://localhost:4318/v1/logs";
     await rumExporter.shutdown();
   });
 

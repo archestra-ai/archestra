@@ -6,7 +6,7 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   subscriptionKindForProvider,
 } from "@archestra/shared";
-import { KeyRound, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
@@ -18,8 +18,6 @@ import {
   type LlmProviderApiKeyFormValues,
   serializeExtraHeaders,
 } from "@/components/llm-provider-api-key-form";
-import { ResourceAccessSection } from "@/components/resource-access-section";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
@@ -45,8 +43,6 @@ export type CreateLlmProviderApiKeyDialogProps = {
   allowedProviders?: LlmProviderApiKeyFormValues["provider"][];
   /** Selects the focused progressive flow shown by this dialog. */
   credentialMode?: "api-key" | "subscription";
-  /** This dialog must connect the exact subscription kind pinned by an agent. */
-  requiresExactSubscriptionCredential?: boolean;
   showConsoleLink?: boolean;
   onSuccess?: (keyId?: string) => void;
   /**
@@ -65,7 +61,6 @@ export function CreateLlmProviderApiKeyDialog({
   defaultValues,
   allowedProviders,
   credentialMode = "api-key",
-  requiresExactSubscriptionCredential = false,
   showConsoleLink = false,
   onSuccess,
   reconnectKeyId,
@@ -73,16 +68,13 @@ export function CreateLlmProviderApiKeyDialog({
   const createMutation = useCreateLlmProviderApiKey();
   const reconnectMutation = useReconnectLlmProviderApiKey();
   const { data: existingKeys } = useLlmProviderApiKeys({ enabled: open });
-  const byosEnabled = useFeature("byosEnabled");
+
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
   const providerCatalog = useModelProviderCatalog();
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
-  const [activeSection, setActiveSection] = useState<
-    "general" | "connectivity" | "permissions"
-  >("general");
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const lastResetKeyRef = useRef<string | null>(null);
   const visibleProviderIdsKey = providerCatalog.visibleIds.join(",");
@@ -115,9 +107,10 @@ export function CreateLlmProviderApiKeyDialog({
         ? getDefaultFormValues({
             defaultValues,
             availableProviders,
+            credentialMode,
           })
         : null,
-    [availableProviders, defaultValues],
+    [availableProviders, defaultValues, credentialMode],
   );
   const resetKey = JSON.stringify(defaultFormValues);
 
@@ -133,7 +126,6 @@ export function CreateLlmProviderApiKeyDialog({
     if (!defaultFormValues || lastResetKeyRef.current === resetKey) return;
 
     lastResetKeyRef.current = resetKey;
-    setActiveSection("general");
     setLabels([]);
     form.reset(defaultFormValues);
   }, [defaultFormValues, form, open, resetKey]);
@@ -144,7 +136,7 @@ export function CreateLlmProviderApiKeyDialog({
     getIsCreateFormValid({
       azureOpenAiEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
       anthropicKeylessAuthEnabled: anthropicKeylessAuthEnabled === true,
-      byosEnabled: Boolean(byosEnabled),
+
       values: formValues,
     });
 
@@ -163,7 +155,10 @@ export function CreateLlmProviderApiKeyDialog({
     // deferred until a sign-in completes (so switching tabs can't silently
     // privatize anything), and the sign-in callback reads form values in the
     // same tick the credential lands — before any effect has run.
-    const shared = subscriptionKind ? false : values.shared;
+    // Ordinary keys use their grant policy for access. Creation grants the
+    // caller full access; personal account credentials remain owner-only.
+    const shared =
+      !subscriptionKind && !providerRequiresPerUserCredential(values.provider);
     try {
       const createdKey = await createMutation.mutateAsync({
         name:
@@ -190,14 +185,7 @@ export function CreateLlmProviderApiKeyDialog({
               ),
         // SPDX-SnippetEnd
         isPrimary: values.isPrimary,
-        vaultSecretPath:
-          !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
-            ? values.vaultSecretPath
-            : undefined,
-        vaultSecretKey:
-          !isBedrockSigV4 && byosEnabled && values.vaultSecretKey
-            ? values.vaultSecretKey
-            : undefined,
+
         awsAccessKeyId: isBedrockSigV4
           ? values.awsAccessKeyId || undefined
           : undefined,
@@ -270,11 +258,7 @@ export function CreateLlmProviderApiKeyDialog({
       allowedProviders={availableProviders}
       hideUnavailableProviders
       credentialMode={credentialMode}
-      requiresExactSubscriptionCredential={requiresExactSubscriptionCredential}
       progressive
-      activeSection={
-        activeSection === "connectivity" ? "connectivity" : "general"
-      }
       allowPersonalSubscriptions={credentialMode === "subscription"}
       onSubscriptionCredential={handleSubscriptionCredential}
       bedrockIamAuthEnabled={bedrockIamAuthEnabled}
@@ -299,31 +283,18 @@ export function CreateLlmProviderApiKeyDialog({
   }
 
   return (
-    <TabbedDialogShell
+    <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       title={dialogTitle}
       description={description}
-      sidebarLabel={form.watch("name") || "New provider key"}
-      sidebarDescription="Model provider"
-      sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
-      activeSection={activeSection}
-      navItems={
-        form.watch("shared")
-          ? [
-              { id: "general", label: "General" },
-              { id: "connectivity", label: "Connectivity" },
-              { id: "permissions", label: "Permissions" },
-            ]
-          : [
-              { id: "general", label: "General" },
-              { id: "connectivity", label: "Connectivity" },
-            ]
-      }
-      onActiveSectionChange={setActiveSection}
-      onSubmit={handleCreate}
-      footer={
-        <>
+      size="small"
+      className="sm:max-w-xl"
+      isDirty={credentialMode === "api-key" && form.formState.isDirty}
+    >
+      <form onSubmit={handleCreate} className="flex min-h-0 flex-col">
+        <DialogBody>{keyForm}</DialogBody>
+        <DialogStickyFooter className="mt-0">
           <DialogCancelButton>Cancel</DialogCancelButton>
           <Button type="submit" disabled={!isValid || createMutation.isPending}>
             {createMutation.isPending && (
@@ -331,28 +302,9 @@ export function CreateLlmProviderApiKeyDialog({
             )}
             <span>Test & Create</span>
           </Button>
-        </>
-      }
-      isDirty={credentialMode === "api-key" && form.formState.isDirty}
-    >
-      <div hidden={activeSection === "permissions"}>{keyForm}</div>
-      {form.watch("shared") && (
-        <div hidden={activeSection !== "permissions"}>
-          {/* SPDX-SnippetBegin
-            SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-            SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-          <ResourceAccessSection
-            resource="llmProviderApiKey"
-            grants={form.watch("initialGrants") ?? []}
-            onGrantsChange={(grants) =>
-              form.setValue("initialGrants", grants, { shouldDirty: true })
-            }
-            standalone
-          />
-          {/* SPDX-SnippetEnd */}
-        </div>
-      )}
-    </TabbedDialogShell>
+        </DialogStickyFooter>
+      </form>
+    </FormDialog>
   );
 }
 
@@ -360,8 +312,9 @@ function getDefaultFormValues(params: {
   defaultValues?: Partial<LlmProviderApiKeyFormValues>;
   /** Providers the organization still allows, in catalog order. */
   availableProviders: LlmProviderApiKeyFormValues["provider"][];
+  credentialMode: "api-key" | "subscription";
 }): LlmProviderApiKeyFormValues {
-  const { defaultValues, availableProviders } = params;
+  const { defaultValues, availableProviders, credentialMode } = params;
   const provider =
     defaultValues?.provider &&
     availableProviders.includes(defaultValues.provider)
@@ -375,11 +328,8 @@ function getDefaultFormValues(params: {
     baseUrl: null,
     inferenceBaseUrl: null,
     extraHeaders: [],
-    shared: false,
     initialGrants: [],
-    teamId: null,
-    vaultSecretPath: null,
-    vaultSecretKey: null,
+
     isPrimary: false,
     bedrockAuthMethod: "api-key",
     awsAccessKeyId: null,
@@ -389,19 +339,23 @@ function getDefaultFormValues(params: {
     ...defaultValues,
     // Anthropic unless the compatible provider list excludes it.
     provider,
+    shared:
+      credentialMode !== "subscription" &&
+      defaultValues?.authMethod !== "subscription" &&
+      !providerRequiresPerUserCredential(provider),
   };
 }
 
 function getIsCreateFormValid(params: {
   azureOpenAiEntraIdEnabled: boolean;
   anthropicKeylessAuthEnabled: boolean;
-  byosEnabled: boolean;
+
   values: LlmProviderApiKeyFormValues;
 }) {
   const {
     azureOpenAiEntraIdEnabled,
     anthropicKeylessAuthEnabled,
-    byosEnabled,
+
     values,
   } = params;
 
@@ -411,12 +365,11 @@ function getIsCreateFormValid(params: {
 
   return Boolean(
     values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
-      (byosEnabled
-        ? values.vaultSecretPath && values.vaultSecretKey
-        : isProviderApiKeyOptional({
-            provider: values.provider,
-            azureEntraIdEnabled: azureOpenAiEntraIdEnabled,
-            anthropicKeylessAuthEnabled,
-          }) || values.apiKey),
+      (isProviderApiKeyOptional({
+        provider: values.provider,
+        azureEntraIdEnabled: azureOpenAiEntraIdEnabled,
+        anthropicKeylessAuthEnabled,
+      }) ||
+        values.apiKey),
   );
 }

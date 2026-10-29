@@ -14,8 +14,6 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-vi.mock("@/observability");
-
 describe("Agent export/import routes", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
@@ -62,7 +60,6 @@ describe("Agent export/import routes", () => {
       systemPrompt: "Be helpful",
       icon: "🤖",
       scope: "org",
-      considerContextUntrusted: false,
       toolExposureMode: "full",
       llmModel: null,
       incomingEmailEnabled: false,

@@ -348,7 +348,21 @@ export function clientSupportsInputRequest(params: {
   const capabilityName = CAPABILITY_BY_METHOD[request.method];
   if (!capabilityName) return false;
 
-  return capabilityName in (clientCapabilities as Record<string, unknown>);
+  const capability = (clientCapabilities as Record<string, unknown>)[
+    capabilityName
+  ];
+  if (capability === undefined) return false;
+  if (request.method !== "elicitation/create") return true;
+
+  // Elicitation is declared per mode, and `elicitation: {}` predates modes and
+  // means form only. Cursor declares forms but rejects a URL request.
+  const mode = request.params?.mode === "url" ? "url" : "form";
+  if (!isPlainObject(capability)) return false;
+  const declaredModes = Object.keys(capability as Record<string, unknown>);
+  if (!declaredModes.some((key) => key === "form" || key === "url")) {
+    return mode === "form";
+  }
+  return declaredModes.includes(mode);
 }
 
 // =============================================================================

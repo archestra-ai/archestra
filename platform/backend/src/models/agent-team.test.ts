@@ -1,6 +1,8 @@
 // These junction-table tests exercise pre-migration compatibility. Scoped grants and revocation are covered by the migration and scoped route suites.
 import type { ResourcePermissionGrant } from "@archestra/shared";
+import { RequestLookups } from "@/auth/request-lookups";
 import { describe, expect, test } from "@/test";
+import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import TeamLabelModel from "./team-label";
@@ -43,6 +45,32 @@ describe("AgentTeamModel", () => {
       const agent = await makeAgent();
       const info = await AgentTeamModel.getTeamLabelInfoForAgent(agent.id);
       expect(info).toEqual([]);
+    });
+
+    test("a request's team source yields the same teams", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team1 = await makeTeam(org.id, user.id, { name: "Platform" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Security" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team1.id, team2.id] },
+      });
+      await TeamLabelModel.syncTeamLabels(team2.id, [
+        { key: "env", value: "prod", keyId: "", valueId: "" },
+      ]);
+
+      expect(
+        await AgentTeamModel.getTeamLabelInfoForAgent(
+          agent.id,
+          new RequestLookups(),
+        ),
+      ).toEqual(await AgentTeamModel.getTeamLabelInfoForAgent(agent.id));
     });
   });
 
@@ -297,6 +325,33 @@ describe("AgentTeamModel", () => {
         { subject: { type: "user", id: user.id }, actions: ["read"] },
       ]);
       expect(await check()).toBe(true);
+    });
+
+    test("an LLM proxy serves its organization's members and any proxy serves an admin", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const foreignOrg = await makeOrganization();
+      const member = await makeUser();
+      const outsider = await makeUser();
+      await makeMember(member.id, org.id);
+      await makeMember(outsider.id, foreignOrg.id);
+      const proxy = await AgentModel.getOrgLlmProxy(org.id);
+      const retiredProxy = await makeAgent({
+        organizationId: org.id,
+        agentType: "llm_proxy",
+        isDefault: false,
+      });
+      const check = (userId: string, agentId: string, isAgentAdmin = false) =>
+        AgentTeamModel.userHasAgentAccess({ userId, agentId, isAgentAdmin });
+
+      expect(await check(member.id, proxy.id)).toBe(true);
+      expect(await check(outsider.id, proxy.id)).toBe(false);
+      expect(await check(member.id, retiredProxy.id)).toBe(false);
+      expect(await check(member.id, retiredProxy.id, true)).toBe(true);
     });
 
     test("returns false for team-scoped agent when user is not in that team", async ({

@@ -7,7 +7,7 @@ import {
 } from "@/models";
 import MemberModel from "@/models/member";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
-import { describe, expect, test } from "@/test";
+import { describe, expect, type TestAccess, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
 import skillRoutes from "./skill.routes";
 import {
@@ -27,6 +27,138 @@ const PUBLISH_TO_ORGANIZATION = [
 
 describe("GET /api/skills", () => {
   const ctx = useSkillRouteTestApp(skillRoutes);
+
+  test("compact lists omit manifest bodies while preserving visibility and counts", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+    const visible = await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "visible-manifest",
+      sourceRef: "example/skills@main:skills/visible",
+      access: "org",
+    });
+    const owner = await makeUser();
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      name: "private-manifest",
+      sourceRef: "example/skills@main:skills/private",
+      access: "personal",
+    });
+    const full = await ctx.app.inject({ method: "GET", url: "/api/skills" });
+    const compact = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills?includeContent=false",
+    });
+    expect(full.statusCode, full.body).toBe(200);
+    expect(compact.statusCode, compact.body).toBe(200);
+    expect(full.json().data).toHaveLength(1);
+    expect(full.json().data[0]).toMatchObject({
+      id: visible.id,
+      content: "# visible-manifest",
+    });
+    expect(compact.json()).toEqual({
+      ...full.json(),
+      data: full
+        .json()
+        .data.map((skill: { content: string }) => ({ ...skill, content: "" })),
+    });
+    const explicit = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills?includeContent=true",
+    });
+    expect(explicit.json()).toEqual(full.json());
+  });
+
+  test("skillIds filters exact accessible rows before pagination and counting", async ({
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+    const imported = await Promise.all(
+      ["import-first", "import-second", "older-same-repo"].map((name) =>
+        seedImportedSkill({
+          organizationId: ctx.organizationId,
+          name,
+          sourceRef: `example/skills@main:skills/${name}`,
+          access: "org",
+        }),
+      ),
+    );
+    const otherOrg = await makeOrganization();
+    const foreign = await seedImportedSkill({
+      organizationId: otherOrg.id,
+      name: "foreign",
+      sourceRef: "example/skills@main:skills/foreign",
+      access: "org",
+    });
+    const owner = await makeUser();
+    const privateSkill = await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      name: "other-personal",
+      sourceRef: "example/skills@main:skills/private",
+      access: "personal",
+    });
+    const skillIds = [
+      imported[0].id,
+      imported[1].id,
+      foreign.id,
+      privateSkill.id,
+    ];
+    const params = new URLSearchParams({
+      skillIds: skillIds.join(","),
+      limit: "1",
+      sortBy: "name",
+      sortDirection: "asc",
+    });
+    const first = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?${params}`,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.json().data.map((skill: { id: string }) => skill.id)).toEqual([
+      imported[0].id,
+    ]);
+    expect(first.json().pagination).toMatchObject({
+      total: 2,
+      totalPages: 2,
+      hasNext: true,
+    });
+    params.set("offset", "1");
+    const second = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?${params}`,
+    });
+    expect(second.json().data.map((skill: { id: string }) => skill.id)).toEqual(
+      [imported[1].id],
+    );
+    const cleared = await ctx.app.inject({ method: "GET", url: "/api/skills" });
+    expect(
+      cleared
+        .json()
+        .data.map((skill: { id: string }) => skill.id)
+        .sort(),
+    ).toEqual(imported.map((skill) => skill.id).sort());
+    const empty = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?skillIds=${foreign.id}`,
+    });
+    expect(empty.json().data).toEqual([]);
+    expect(empty.json().pagination.total).toBe(0);
+    const malformed = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills?skillIds=not-an-id",
+    });
+    expect(malformed.statusCode).toBe(400);
+  });
 
   test("forAgentId restricts the list to the agent's environment", async ({
     makeAgent,
@@ -161,11 +293,14 @@ describe("GET /api/skills", () => {
 
   test("forAgentId lists the effective Auto-mode skills published by a gateway", async ({
     makeAgent,
-    makeMember,
   }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+    // The test app already made this user a member; editing the gateway's
+    // environment view takes the admin's organization-wide grants.
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     const gateway = await makeAgent({
       name: "Skill Gateway",
       organizationId: ctx.organizationId,
@@ -225,12 +360,14 @@ describe("GET /api/skills", () => {
     ).toEqual([excluded.json().id, published.json().id].sort());
   });
 
-  test("previews All-mode skills for a draft gateway environment", async ({
-    makeMember,
-  }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+  test("previews All-mode skills for a draft gateway environment", async () => {
+    // The helper already made the caller a member; publishing to everyone
+    // takes Full access on every skill.
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     const staging = await EnvironmentModel.create({
       organizationId: ctx.organizationId,
       name: "Gateway staging",
@@ -446,6 +583,74 @@ describe("GET /api/skills", () => {
     expect(await listNames(`?scope=team&teamIds=${teamA.id}`)).toEqual([
       "team-a-skill",
     ]);
+  });
+
+  test("access filter splits rows by how the caller reaches them, ignoring wildcard grants", async ({
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+    const myTeam = await makeTeam(ctx.organizationId, ctx.user.id);
+    await makeTeamMember(myTeam.id, ctx.user.id);
+    const otherTeam = await makeTeam(ctx.organizationId, otherUser.id);
+
+    const seed = (name: string, access?: TestAccess, authorId = otherUser.id) =>
+      seedImportedSkill({
+        organizationId: ctx.organizationId,
+        name,
+        sourceRef: `access/${name}@main:SKILL.md`,
+        authorId,
+        access,
+      });
+    await seed("mine", undefined, ctx.user.id);
+    await seed("other-personal");
+    await seed("org", "org");
+    await seed("my-team", { teams: [myTeam.id] });
+    await seed("other-team", { teams: [otherTeam.id] });
+    await seed("shared-with-me", { users: [ctx.user.id] });
+
+    const listNames = async (access?: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/skills${access ? `?access=${access}` : ""}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      const names = body.data.map((s: { name: string }) => s.name).sort();
+      expect(body.pagination.total).toBe(names.length);
+      return names;
+    };
+
+    // The admin reads every skill through a `*` grant, which the filter must
+    // not count as "shared".
+    expect(await listNames()).toEqual([
+      "mine",
+      "my-team",
+      "org",
+      "other-personal",
+      "other-team",
+      "shared-with-me",
+    ]);
+    expect(await listNames("mine,shared,org")).toEqual([
+      "mine",
+      "my-team",
+      "org",
+      "shared-with-me",
+    ]);
+    expect(await listNames("others")).toEqual(["other-personal", "other-team"]);
+    expect(await listNames("mine")).toEqual(["mine"]);
+    expect(await listNames("shared")).toEqual(["my-team", "shared-with-me"]);
+    expect(await listNames("org")).toEqual(["org"]);
   });
 
   test("author filters apply for admins and are ignored for non-admins", async ({

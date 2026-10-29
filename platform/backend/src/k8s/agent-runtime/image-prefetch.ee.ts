@@ -13,6 +13,7 @@ import {
 } from "@/k8s/shared";
 import logger from "@/logging";
 import { usesFloatingAgentImageTag } from "./image-pull-policy";
+import { agentSandboxApi } from "./sandbox-api";
 
 /** Warm the popular catalog at boot, without blocking server readiness.
  * DaemonSets also cover nodes added after startup. Kubelet skips cached images. */
@@ -22,7 +23,7 @@ class AgentImagePrefetcher {
   private inFlight = false;
 
   start(): void {
-    if (this.timer || !config.agentRuntime.enabled) return;
+    if (this.timer) return;
     void this.reconcile();
     this.timer = setInterval(() => void this.reconcile(), 60_000);
     this.timer.unref();
@@ -36,7 +37,7 @@ class AgentImagePrefetcher {
   async reconcile(): Promise<void> {
     if (
       this.inFlight ||
-      !config.agentRuntime.enabled ||
+      !agentSandboxApi.isInstalled ||
       !enterpriseTier.isCoreActive()
     )
       return;

@@ -16,7 +16,10 @@ import type {
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
+import { llmUpstreamFetch } from "@/clients/llm-upstream-fetch";
+import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapters/anthropic";
 import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapters/cohere";
 import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapters/gemini";
@@ -65,6 +68,12 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   // Embeddings-only provider: no chat traffic passes through this path, and
   // the KB embedder reports its own token usage.
   voyage: null,
+  // Decisions usage names its counts like the Responses API, with no cache or
+  // reasoning breakdown; TypeSafe's own endpoint may omit usage entirely.
+  jev: (usage: { input_tokens?: number; output_tokens?: number }) => ({
+    input: usage.input_tokens,
+    output: usage.output_tokens,
+  }),
   openai: getChatOrResponsesUsage,
   archestra: getOpenAIUsage,
   cerebras: getOpenAIUsage,
@@ -85,6 +94,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   minimax: getMinimaxUsage,
   deepseek: getOpenAIUsage,
   kimi: getOpenAIUsage,
+  "kimi-code": getOpenAIUsage,
   "github-copilot": getOpenAIUsage,
   // Responses are OpenAI-shaped by our own Graph translation (usage estimated)
   "microsoft-365-copilot": getOpenAIUsage,
@@ -510,7 +520,13 @@ export function reportLLMCost({
     logger.warn("LLM metrics not initialized, skipping cost reporting");
     return;
   } else if (!cost) {
-    logger.warn("Cost not specified when reporting");
+    // Zero is a valid settled cost (for example a free model or no tokens).
+    // An unpriced model lacks a cost on every request: say so once per model.
+    const unpriced = `${provider}:${model}`;
+    if (cost !== 0 && !unpricedModelsWarned.has(unpriced)) {
+      unpricedModelsWarned.set(unpriced, true);
+      logger.warn({ provider, model }, "Cost not specified when reporting");
+    }
     return;
   }
   llmCostTotal.inc({
@@ -708,6 +724,7 @@ export function getObservableFetch(
   provider: SupportedProvider,
   profile: GatewayAgent,
   source: InteractionSource,
+  options?: { reportTokens?: boolean },
 ): Fetch {
   return async function observableFetch(
     url: string | URL | Request,
@@ -716,10 +733,7 @@ export function getObservableFetch(
     // Opt-in upstream timeout dispatcher; undefined leaves undici defaults (and
     // `init`) untouched. See @/clients/llm-upstream-dispatcher.
     const dispatcher = getLlmUpstreamDispatcher();
-    const dispatchedInit = dispatcher
-      ? ({ ...init, dispatcher } as RequestInit)
-      : init;
-    logger.info(
+    logger.debug(
       {
         url: typeof url === "string" ? url : url.toString(),
         headers: extractHeaderNames(init?.headers),
@@ -728,7 +742,7 @@ export function getObservableFetch(
     );
     if (!llmRequestDuration) {
       logger.warn("LLM metrics not initialized, skipping duration tracking");
-      return fetch(url, dispatchedInit);
+      return llmUpstreamFetch(url, init, dispatcher);
     }
 
     // Extract model from request body if available
@@ -747,7 +761,7 @@ export function getObservableFetch(
     let model = requestModel;
 
     try {
-      response = await fetch(url, dispatchedInit);
+      response = await llmUpstreamFetch(url, init, dispatcher);
       const duration = (Date.now() - startTime) / 1000;
       const status = response.status.toString();
 
@@ -805,12 +819,24 @@ export function getObservableFetch(
 
     // Record token metrics
     if (
+      options?.reportTokens !== false &&
       response.ok &&
       response.headers.get("content-type")?.includes("application/json")
     ) {
-      const cloned = response.clone();
+      // Read the body once and give the SDK a response over the same text:
+      // cloning tees the stream, which costs more than the JSON it carries.
+      let text: string;
       try {
-        const data = await cloned.json();
+        text = await response.text();
+      } catch (readError) {
+        return new Response(
+          new ReadableStream({ start: (stream) => stream.error(readError) }),
+          response,
+        );
+      }
+      const replayed = new Response(text, response);
+      try {
+        const data = JSON.parse(text);
         // Extract model from response if not in request
         if (!model && data.model) {
           model = data.model;
@@ -827,10 +853,10 @@ export function getObservableFetch(
             model ?? "unknown",
             source,
           );
-          return response;
+          return replayed;
         }
         if (!data.usage) {
-          return response;
+          return replayed;
         }
         const extractor = fetchUsageExtractors[provider];
         if (extractor) {
@@ -848,6 +874,7 @@ export function getObservableFetch(
       } catch (_parseError) {
         logger.error("Error parsing LLM response JSON for tokens");
       }
+      return replayed;
     }
 
     return response;
@@ -1118,3 +1145,7 @@ function observeGeminiError(
     exemplarLabels: getExemplarLabels(),
   });
 }
+
+const unpricedModelsWarned = registerProcessLocalCache(
+  new LRUCacheManager<true>({ maxSize: 1_000, defaultTtl: 60 * 60 * 1000 }),
+);

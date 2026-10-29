@@ -4,7 +4,7 @@ import {
   type ResourcePermissionGrant,
   TOOL_LOAD_SKILL_FULL_NAME,
 } from "@archestra/shared";
-import type { TestAPI } from "vitest";
+import { beforeEach, type TestAPI, vi } from "vitest";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
@@ -46,6 +46,21 @@ type Fixtures = Pick<
  *   organization-wide grant is the Use preset.
  */
 describe("the use action after the upgrade", () => {
+  beforeEach(() => {
+    const fetch = globalThis.fetch;
+    const unavailableGateway: typeof fetch = async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : input);
+      if (url.hostname === "127.0.0.1" && url.pathname.startsWith("/v1/mcp/")) {
+        // This matrix tests authorization, not the host's connection timeout.
+        throw new TypeError("fetch failed", {
+          cause: { code: "ECONNREFUSED" },
+        });
+      }
+      return fetch(input, init);
+    };
+    vi.stubGlobal("fetch", unavailableGateway);
+  });
+
   test("chat with an agent or a gateway, and installing from the registry, ask for use", async ({
     makeOrganization,
     makeUser,

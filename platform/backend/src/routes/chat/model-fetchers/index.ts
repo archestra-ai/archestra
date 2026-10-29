@@ -13,6 +13,7 @@ import { fetchCohereModels } from "./cohere";
 import { fetchDeepSeekModels } from "./deepseek";
 import { fetchGeminiModels } from "./gemini";
 import { fetchGithubCopilotModels } from "./github-copilot";
+import { fetchJevModels } from "./jev";
 import { fetchMicrosoft365CopilotModels } from "./microsoft-365-copilot";
 import { fetchOllamaModels, fetchOllamaNativeModels } from "./ollama";
 import { fetchOpenAiModels } from "./openai";
@@ -76,6 +77,26 @@ const fetchKimiModels = makeBearerFetcher({
   errorLabel: "Kimi models",
 });
 
+// The Kimi Code endpoint lists the plan's model ids with a product name
+// (`kimi-for-coding` is "K2.8 Preview").
+const fetchKimiCodeModels = makeBearerFetcher<{
+  id: string;
+  created?: number;
+  display_name?: string;
+}>({
+  provider: "kimi-code",
+  configKey: "kimi-code",
+  errorLabel: "Kimi Code models",
+  mapModel: (model, provider) => ({
+    id: model.id,
+    displayName: model.display_name || model.id,
+    provider,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : undefined,
+  }),
+});
+
 const fetchMistralModels = makeBearerFetcher({
   provider: "mistral",
   configKey: "mistral",
@@ -92,6 +113,7 @@ const fetchZhipuaiModels = makeBearerFetcher({
 
 export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   voyage: fetchVoyageModels,
+  jev: fetchJevModels,
   anthropic: fetchAnthropicModels,
   archestra: fetchArchestraModels,
   azure: fetchAzureModels,
@@ -103,6 +125,7 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   "github-copilot": fetchGithubCopilotModels,
   groq: fetchGroqModels,
   kimi: fetchKimiModels,
+  "kimi-code": fetchKimiCodeModels,
   "microsoft-365-copilot": fetchMicrosoft365CopilotModels,
   minimax: makeStaticFetcher("minimax", MINIMAX_MODELS),
   mistral: fetchMistralModels,

@@ -13,22 +13,27 @@ import {
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { getBedrockRegion } from "@/clients/bedrock-credentials";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import {
   AgentModel,
+  AgentWorkspaceModel,
   LimitModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
-  TeamTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ServiceAccountModel from "@/models/service-account";
+import type { OpenAppaSession } from "@/openappa/service";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
+import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identity";
 import { archestraMarkWithText } from "@/services/archestra-mark";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { modelSyncService } from "@/services/model-sync";
+import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import type {
   AgentRunInput,
@@ -78,7 +83,18 @@ export async function buildAgentRunLaunchSpec(params: {
   runMode: "interactive" | "one_shot";
   inputFiles?: AgentRunInput[];
   imagePullSecrets?: string[];
-}): Promise<{ spec: AgentRunLaunchSpec; virtualApiKeyId: string | null }> {
+  /** Persisted workspace. The mint re-reads this row; it is not a client header. */
+  workspaceId?: string;
+  /** Caller-scoped session for this workspace. parentId is a full session id. */
+  runtimeSession?: Pick<
+    OpenAppaSession,
+    "session_id" | "caller_id" | "parent_id"
+  >;
+}): Promise<{
+  spec: AgentRunLaunchSpec;
+  virtualApiKeyId: string | null;
+  gatewayTokenId: string | null;
+}> {
   const platformBaseUrl = config.agentRuntime.platformBaseUrl.replace(
     /\/+$/,
     "",
@@ -92,11 +108,20 @@ export async function buildAgentRunLaunchSpec(params: {
     );
   }
 
+  if (params.actor.kind === "serviceAccount")
+    await resolveOauthServiceAccount({
+      serviceAccountId: params.actor.id,
+      organizationId: params.organizationId,
+    });
   const actorUserId = params.actor.kind === "user" ? params.actor.id : null;
   const credentials = await resolveAgentRuntimeCredentials({
     runtime: params.runtime,
     organizationId: params.organizationId,
     userId: actorUserId,
+    authorizationUserId:
+      params.actor.kind === "serviceAccount"
+        ? serviceAccountUserId(params.actor.id)
+        : actorUserId,
   });
   if (credentials.misconfigured.length > 0) {
     throw new ApiError(
@@ -113,12 +138,6 @@ export async function buildAgentRunLaunchSpec(params: {
     );
   }
 
-  const gatewayToken = await resolveGatewayToken({
-    actor: params.actor,
-    agentId: params.agentId,
-    organizationId: params.organizationId,
-  });
-
   const agent = await AgentModel.findById(params.agentId);
   if (!agent) {
     throw new ApiError(
@@ -126,10 +145,44 @@ export async function buildAgentRunLaunchSpec(params: {
       "The Agent for this Agent Runtime run no longer exists",
     );
   }
+  const boundWorkspace = params.workspaceId
+    ? await AgentWorkspaceModel.findById(params.workspaceId)
+    : null;
+  if (
+    params.workspaceId &&
+    (!boundWorkspace ||
+      boundWorkspace.organizationId !== params.organizationId ||
+      boundWorkspace.agentId !== params.agentId ||
+      boundWorkspace.actorKind !== params.actor.kind ||
+      boundWorkspace.actorId !== params.actor.id)
+  ) {
+    throw new ApiError(409, "The saved run is not available for this actor");
+  }
+  if (params.runtimeSession && boundWorkspace) {
+    const expected = runtimeOpenAppaSession({
+      organizationId: boundWorkspace.organizationId,
+      workspaceId: boundWorkspace.id,
+      workloadName: boundWorkspace.workloadName,
+      actorKind: boundWorkspace.actorKind,
+      actorId: boundWorkspace.actorId,
+    });
+    if (
+      params.runtimeSession.caller_id !== expected.caller_id ||
+      params.runtimeSession.session_id !== expected.session_id
+    ) {
+      throw new ApiError(
+        409,
+        "The runtime session does not match the saved run",
+      );
+    }
+  }
   const skillPreview = await buildSkillDiscoveryPreview({
     agentId: params.agentId,
     organizationId: params.organizationId,
-    userId: actorUserId ?? undefined,
+    userId:
+      params.actor.kind === "serviceAccount"
+        ? serviceAccountUserId(params.actor.id)
+        : (actorUserId ?? undefined),
   });
   const { llm, selectedModel, usesClaudeCodeSubscription } =
     await preflightAgentRuntimeModelCompatibility({
@@ -297,6 +350,37 @@ export async function buildAgentRunLaunchSpec(params: {
     task: params.task,
     inputs: params.inputFiles ?? [],
   });
+  const deadline = boundWorkspace
+    ? Math.max(
+        1,
+        Math.ceil((boundWorkspace.expiresAt.getTime() - Date.now()) / 1000),
+      )
+    : (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) * 3600;
+  let accountToken: Awaited<
+    ReturnType<typeof ServiceAccountModel.createToken>
+  > | null = null;
+  let gatewayToken: string;
+  try {
+    accountToken =
+      params.actor.kind === "serviceAccount"
+        ? await ServiceAccountModel.createToken({
+            serviceAccountId: params.actor.id,
+            organizationId: params.organizationId,
+            name: `agent-run-${params.runId}`,
+            expiresIn: deadline,
+          })
+        : null;
+    gatewayToken =
+      accountToken?.token ??
+      (await resolveGatewayToken({
+        actor: params.actor,
+        agentId: params.agentId,
+        organizationId: params.organizationId,
+      }));
+  } catch (error) {
+    if (virtualKey) await VirtualApiKeyModel.delete(virtualKey.virtualKey.id);
+    throw error;
+  }
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
     ...(claudeCodeToken ? { CLAUDE_CODE_OAUTH_TOKEN: claudeCodeToken } : {}),
@@ -325,6 +409,7 @@ export async function buildAgentRunLaunchSpec(params: {
         "decode resources marked base64 with a shell decoder, not a text-file tool. " +
         "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
         "not this runtime's filesystem.",
+      describeRuntimeWorkspace(params.runtime),
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -349,11 +434,14 @@ export async function buildAgentRunLaunchSpec(params: {
 
   return {
     virtualApiKeyId: virtualKey?.virtualKey.id ?? null,
+    gatewayTokenId: accountToken?.id ?? null,
     spec: {
       poolScope: `${params.organizationId}:${params.runtime.environmentId ?? "default"}`,
       taskId: params.taskId,
       agentRuntimeId: params.runtime.agentId,
-      frozenName: constructStableRunName(agent.name, params.taskId),
+      frozenName:
+        boundWorkspace?.workloadName ??
+        constructStableRunName(agent.name, params.taskId),
       runtimeScope: params.runtimeScope,
       image: params.runtime.image,
       command: params.runtime.command ?? null,
@@ -429,6 +517,7 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_MCP_GATEWAY_TOKEN",
   "ARCHESTRA_MCP_GATEWAY_URL",
   "ARCHESTRA_VIRTUAL_KEY",
+  "ARCHESTRA_AGENT_RUNTIME_BINDING",
 ]);
 
 function claudeCodeCustomHeaders(params: {
@@ -454,6 +543,11 @@ async function createProviderBackedVirtualKey(params: {
   agentLlmApiKeyId: string | null;
   requiredSubscriptionKind: SubscriptionCredentialKind | null;
 }): Promise<Awaited<ReturnType<typeof VirtualApiKeyModel.create>>> {
+  if (params.actor.kind === "serviceAccount")
+    await resolveOauthServiceAccount({
+      serviceAccountId: params.actor.id,
+      organizationId: params.organizationId,
+    });
   const actorUserId = params.actor.kind === "user" ? params.actor.id : null;
   const requiredSubscription =
     params.requiredSubscriptionKind && actorUserId
@@ -476,7 +570,10 @@ async function createProviderBackedVirtualKey(params: {
       }
     : await resolveProviderApiKey({
         organizationId: params.organizationId,
-        userId: actorUserId ?? undefined,
+        userId:
+          params.actor.kind === "serviceAccount"
+            ? serviceAccountUserId(params.actor.id)
+            : (actorUserId ?? undefined),
         provider: params.provider,
         agentLlmApiKeyId: params.agentLlmApiKeyId ?? undefined,
         modelName: params.model,
@@ -549,11 +646,9 @@ async function resolveGatewayToken(params: {
   agentId: string;
   organizationId: string;
 }): Promise<string> {
-  if (params.actor.kind === "team") {
-    const token = await TeamTokenModel.findTeamToken(params.actor.id);
-    const value = token ? await TeamTokenModel.getTokenValue(token.id) : null;
-    if (value) return value;
-  } else {
+  // Team tokens are retired, so a team actor (only left on runs started
+  // before then) has nothing to act with.
+  if (params.actor.kind !== "team") {
     const selected = await selectMCPGatewayToken(
       params.agentId,
       params.actor.kind === "user" ? params.actor.id : "system",
@@ -584,6 +679,8 @@ function virtualKeyVisibility(actor: A2AActor): {
   if (actor.kind === "user") {
     return { scope: "personal", authorId: actor.id };
   }
+  if (actor.kind === "serviceAccount")
+    return { scope: "personal", authorId: serviceAccountUserId(actor.id) };
   if (actor.kind === "team") {
     return {
       scope: "team",
@@ -594,6 +691,27 @@ function virtualKeyVisibility(actor: A2AActor): {
     };
   }
   return { scope: "org", authorId: null, publishToOrganization: true };
+}
+
+/**
+ * Workspace facts the platform owns, whatever the image installs: what
+ * survives between turns, and which ports a user can open from it. The image
+ * describes its own tools; see `docker_images/agent/environment.md`.
+ */
+function describeRuntimeWorkspace(
+  runtime: Pick<ResolvedAgentRuntime, "ports">,
+): string {
+  const ports = [...new Set(runtime.ports ?? [])];
+  return [
+    "Files under /home/node persist across this conversation's turns; " +
+      "other paths reset when the container is replaced.",
+    ports.length > 0 &&
+      `The user can forward ${ports.length === 1 ? "port" : "ports"} ` +
+        `${ports.join(", ")} from this workspace to a browser; serve anything ` +
+        "they should open there.",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function withNativeClientCredentialAliases(

@@ -20,8 +20,21 @@ async function runDataMigrationStatements() {
         ) || statement.startsWith('UPDATE "oauth_client"'),
     );
 
-  for (const statement of statements) {
-    await db.execute(sql.raw(statement));
+  // 0230 upserts on (virtual_api_key_id, provider), the mapping table's key
+  // at the time. A later migration widened that key to the provider key id,
+  // so restore the old unique key for the replay and drop it afterwards.
+  await db.execute(sql`
+    CREATE UNIQUE INDEX "virtual_api_key_provider_api_key_0230_conflict_target"
+    ON "virtual_api_key_provider_api_key" ("virtual_api_key_id", "provider")
+  `);
+  try {
+    for (const statement of statements) {
+      await db.execute(sql.raw(statement));
+    }
+  } finally {
+    await db.execute(sql`
+      DROP INDEX "virtual_api_key_provider_api_key_0230_conflict_target"
+    `);
   }
 }
 

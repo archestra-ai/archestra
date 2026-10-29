@@ -74,7 +74,6 @@ export function makeUserPermissions(
     mcpGateway: [...ALL],
     environment: ["read", "create", "update", "delete"],
     agent: [...ALL],
-    agentTrigger: [...ALL],
     skill: [...ALL],
     plugin: [...ALL],
     chat: [...ALL],
@@ -84,22 +83,18 @@ export function makeUserPermissions(
     llmProxy: ["read", "update"],
     llmProviderApiKey: [...ALL],
     llmVirtualKey: [...ALL],
-    llmOauthClient: [...ALL],
-    mcpOauthClient: [...ALL],
+    oauthClient: ["read", "create"],
     llmModel: [...ALL],
     llmLimit: [...ALL],
     llmCost: [...ALL],
-    toolPolicy: [...ALL],
-    organizationSettings: [...ALL],
-    knowledgeSettings: [...ALL],
+    guardrailsPolicy: ["read", "update"],
+    organizationSettings: ["read", "update"],
     knowledgeSource: [...ALL],
-    agentSettings: [...ALL],
-    llmSettings: [...ALL],
-    log: [...ALL],
+    log: ["read", "admin"],
+    auditLog: ["read", "admin"],
+    accessPolicies: ["read", "update"],
     ac: [...ALL],
     identityProvider: [...ALL],
-    secret: [...ALL],
-    scheduledTask: [...ALL],
     ...overrides,
   };
 }
@@ -110,8 +105,7 @@ export const adminPermissionsSeed = makeUserPermissions();
  * The admin role's grants at `*` — managing every object of each kind, which
  * the retired `admin` role actions became. Listed by hand: the shared barrel
  * cannot be imported into the MSW handlers. Keep it in step with
- * `ScopedResourceSchema`; a missing entry hides admin-only UI, such as the
- * logs User filter behind `log:read` at `*`.
+ * `ManagedResourceSchema`; log visibility uses the role permissions above.
  */
 export const adminScopedCapabilitiesSeed: archestraApiTypes.GetScopedCapabilitiesResponses["200"] =
   [
@@ -130,13 +124,12 @@ export const adminScopedCapabilitiesSeed: archestraApiTypes.GetScopedCapabilitie
     "knowledgeFile",
     "llmVirtualKey",
     "llmProviderApiKey",
-    "mcpOauthClient",
-    "llmOauthClient",
+    "externalAgent",
+    "oauthClient",
+    "oauthClient",
     "environment",
     "serviceAccount",
-    "scheduledTask",
-    "log",
-    "auditLog",
+    "credential",
   ].flatMap((resource) =>
     (["read", "use", "update", "delete", "manage-permissions"] as const).map(
       (action) => ({ resource, scope: "*", action }),

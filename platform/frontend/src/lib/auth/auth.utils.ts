@@ -1,6 +1,7 @@
 import {
   type Action,
   isPermissionActionGranted,
+  ManagedResourceSchema,
   type Permissions,
   type Resource,
   resourceLabels,
@@ -29,6 +30,10 @@ export function formatPermissionConstraint(permissions: Permissions): string {
   const noun = resources.length > 1 ? "permissions" : "permission";
 
   return `Available to roles with the ${resources.join(SEPARATOR)} ${noun}`;
+}
+
+export function permissionResourceLabel(resource: string): string {
+  return resourceLabels[resource as Resource] ?? resource;
 }
 
 export function hasPermissions(
@@ -65,6 +70,23 @@ export function hasPermissions(
   return true;
 }
 
+/** Whether the grants include `action` on this one item, or on every item. */
+export function holdsItemGrant(params: {
+  grants: readonly ScopedPermission[] | undefined;
+  resource: ScopedPermission["resource"];
+  action: ScopedPermission["action"];
+  id: string;
+}): boolean {
+  return (
+    params.grants?.some(
+      (grant) =>
+        grant.resource === params.resource &&
+        grant.action === params.action &&
+        (grant.scope === "*" || grant.scope === params.id),
+    ) ?? false
+  );
+}
+
 /** A page may discover a granted object; mutations still use exact target checks. */
 export function hasPagePermissions(params: {
   userPermissions: Permissions | undefined;
@@ -75,18 +97,34 @@ export function hasPagePermissions(params: {
     actions.every(
       (action) =>
         hasPermissions(params.userPermissions, { [resource]: [action] }) ||
-        (action === "read" &&
+        (capabilityCanGrantPageAction(resource, action) &&
           params.capabilities.some(
-            (grant) => grant.resource === resource && grant.action === "read",
+            (grant) => grant.resource === resource && grant.action === action,
           )),
     ),
   );
 }
 
+/**
+ * Whether hasPagePermissions can use the scoped capabilities for any of
+ * `required`. A page that cannot is decided by role permissions alone, so it
+ * need not wait for the capabilities.
+ */
+export function pageUsesCapabilities(required: Permissions): boolean {
+  return Object.entries(required).some(([resource, actions]) =>
+    actions.some((action) => capabilityCanGrantPageAction(resource, action)),
+  );
+}
+
+/** Only a read on a resource with object grants can come from a grant. */
+function capabilityCanGrantPageAction(resource: string, action: string) {
+  return action === "read" && ManagedResourceSchema.safeParse(resource).success;
+}
+
 /** One "Label (action, action)" entry per resource, in declaration order. */
 function describeResources(permissions: Permissions): string[] {
   return Object.entries(permissions).map(([resource, actions]) => {
-    const label = resourceLabels[resource as Resource] ?? resource;
+    const label = permissionResourceLabel(resource);
     return `${label} (${actions.join(SEPARATOR)})`;
   });
 }

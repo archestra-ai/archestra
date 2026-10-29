@@ -1,12 +1,16 @@
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { assert, vi } from "vitest";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
+import { settleFailedA2ATask } from "@/agents/a2a/a2a-task-settlement";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   A2AContextModel,
@@ -17,10 +21,14 @@ import {
   InteractionModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  RuntimeCredentialDefinitionModel,
 } from "@/models";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ServiceAccountModel from "@/models/service-account";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
+import { resolveAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
+import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import {
@@ -30,6 +38,7 @@ import {
 import { projectService } from "@/services/project";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import { shareForTest } from "@/test/sharing";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
@@ -43,14 +52,14 @@ vi.mock("@/services/agent-runtime/start-task", () => ({
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const oauthServer = useMswServer();
+// Transfer tickets live in the shared cache so any replica can redeem them.
+setupTestCacheManager();
 
 describe("Agent Runtime routes", () => {
   let app: FastifyInstanceWithZod;
   let agent: Agent;
   let user: User;
   let organizationId: string;
-  let previousFeatureEnabled: boolean;
-  let previousClusterReachable: unknown;
 
   beforeEach(async ({ makeAgent, makeAdmin, makeMember, makeOrganization }) => {
     const organization = await makeOrganization();
@@ -124,13 +133,7 @@ describe("Agent Runtime routes", () => {
     registerAuditLogHook(app);
     const { default: routes } = await import("./agent-runtime.routes");
     await app.register(routes);
-    previousFeatureEnabled = config.agentRuntime.enabled;
-    previousClusterReachable = Reflect.get(
-      agentRuntimeManager,
-      "clusterReachable",
-    );
-    config.agentRuntime.enabled = true;
-    Reflect.set(agentRuntimeManager, "clusterReachable", true);
+    vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
     vi.spyOn(agentRuntimeManager, "getStartupProgress").mockResolvedValue({
       phase: "scheduling",
       message: "Waiting for a node with room for this run",
@@ -140,12 +143,6 @@ describe("Agent Runtime routes", () => {
   });
 
   afterEach(async () => {
-    config.agentRuntime.enabled = previousFeatureEnabled;
-    Reflect.set(
-      agentRuntimeManager,
-      "clusterReachable",
-      previousClusterReachable,
-    );
     vi.restoreAllMocks();
     await app.close();
   });
@@ -584,7 +581,7 @@ describe("Agent Runtime routes", () => {
   });
 
   test("keeps every run endpoint unavailable when no run backend is enabled", async () => {
-    config.agentRuntime.enabled = false;
+    vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);
 
     const response = await app.inject({
       method: "GET",
@@ -694,18 +691,89 @@ describe("Agent Runtime routes", () => {
     expect(JSON.stringify(audit)).not.toContain("requirements.txt");
   });
 
+  test("exposes a classified failure on run reads and leaves other runs without one", async () => {
+    const failed = await createTask(agent.id);
+    await createRun({ taskId: failed.id, actorUserId: user.id });
+    await settleFailedA2ATask({
+      taskId: failed.id,
+      contextId: failed.contextId,
+      statusReason: "The Agent Runtime pod failed.\nReason: Evicted",
+      failure: { code: "pod.evicted", retriable: true },
+    });
+    // A failure settled before classification existed.
+    const legacy = await createTask(agent.id);
+    await createRun({ taskId: legacy.id, actorUserId: user.id });
+    await settleFailedA2ATask({
+      taskId: legacy.id,
+      contextId: legacy.contextId,
+      statusReason: "The Agent Runtime turn exited with status 1",
+    });
+    const running = await createTask(agent.id);
+    await createRun({ taskId: running.id, actorUserId: user.id });
+
+    const expected = {
+      code: "pod.evicted",
+      retriable: true,
+      message: "The Agent Runtime pod failed.\nReason: Evicted",
+    };
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/agent-runs/${failed.id}`,
+    });
+    expect(detail.statusCode, detail.body).toBe(200);
+    expect(detail.json()).toMatchObject({
+      state: "TASK_STATE_FAILED",
+      statusReason: expected.message,
+      failure: expected,
+    });
+    for (const taskId of [legacy.id, running.id]) {
+      const other = await app.inject({
+        method: "GET",
+        url: `/api/agent-runs/${taskId}`,
+      });
+      expect(other.json().failure).toBeNull();
+    }
+
+    const mine = await app.inject({ method: "GET", url: "/api/agent-runs" });
+    expect(mine.statusCode, mine.body).toBe(200);
+    const agentRuns = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/runs`,
+    });
+    expect(agentRuns.statusCode, agentRuns.body).toBe(200);
+    for (const rows of [
+      mine.json().data as Array<{ taskId: string; failure: unknown }>,
+      agentRuns.json() as Array<{ taskId: string; failure: unknown }>,
+    ]) {
+      expect(
+        Object.fromEntries(rows.map((row) => [row.taskId, row.failure])),
+      ).toEqual({
+        [failed.id]: expected,
+        [legacy.id]: null,
+        [running.id]: null,
+      });
+    }
+  });
+
   test("does not start a run inside a project the caller cannot read", async ({
     makeUser,
+    makeMember,
   }) => {
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId);
     await ResourcePermissions.updatePolicy({
       organizationId,
       userId: user.id,
       resource: "project",
       scope: "*",
       revision: 1,
-      grants: [],
+      grants: [
+        {
+          subject: { type: "user", id: otherUser.id },
+          actions: ["read", "use", "update", "delete", "manage-permissions"],
+        },
+      ],
     });
-    const otherUser = await makeUser();
     const project = await projectService.create({
       organizationId,
       userId: otherUser.id,
@@ -810,6 +878,119 @@ describe("Agent Runtime routes", () => {
         hasPrev: false,
       },
     });
+  });
+
+  test("keeps legacy ordering and pages sidebar runs by their latest state change", async () => {
+    const oldTask = await createTask(agent.id, new Date("2026-01-03"));
+    const newTask = await createTask(agent.id, new Date("2026-01-02"));
+    await createRun({
+      taskId: oldTask.id,
+      actorUserId: user.id,
+    });
+    await createRun({
+      taskId: newTask.id,
+      actorUserId: user.id,
+    });
+    const legacy = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?limit=1",
+    });
+    expect(legacy.statusCode).toBe(200);
+    expect(legacy.json().data[0].taskId).toBe(newTask.id);
+    const recent = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?sort=recent&limit=1",
+    });
+    expect(recent.statusCode).toBe(200);
+    expect(recent.json().data[0].taskId).toBe(oldTask.id);
+    expect(recent.json().pagination.hasNext).toBe(true);
+    const next = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?sort=recent&limit=1&offset=1",
+    });
+    expect(next.json().data[0].taskId).toBe(newTask.id);
+  });
+
+  test("pages pinned runs by pin time rather than activity time", async () => {
+    const recentlyPinned = await createTask(agent.id, new Date("2020-01-01"));
+    const recentlyActive = await createTask(agent.id, new Date("2026-01-01"));
+    await createRun({
+      taskId: recentlyPinned.id,
+      actorUserId: user.id,
+      pinnedAt: new Date("2026-01-02"),
+    });
+    await createRun({
+      taskId: recentlyActive.id,
+      actorUserId: user.id,
+      pinnedAt: new Date("2020-01-02"),
+    });
+    const first = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=true&sort=pinned&limit=1",
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().data[0].taskId).toBe(recentlyPinned.id);
+    expect(first.json().pagination.hasNext).toBe(true);
+    const next = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=true&sort=pinned&limit=1&offset=1",
+    });
+    expect(next.json().data[0].taskId).toBe(recentlyActive.id);
+  });
+
+  test("finds older pinned and searched runs without exposing another actor's sessions", async ({
+    makeUser,
+  }) => {
+    const oldTask = await createTask(agent.id);
+    const ordinaryTask = await createTask(agent.id);
+    const foreignTask = await createTask(agent.id);
+    const foreignUser = await makeUser();
+    await createRun({
+      taskId: oldTask.id,
+      actorUserId: user.id,
+      title: "Old 100% report",
+      pinnedAt: new Date("2020-01-02"),
+    });
+    await createRun({
+      taskId: ordinaryTask.id,
+      actorUserId: user.id,
+      title: "Ordinary report",
+    });
+    await createRun({
+      taskId: foreignTask.id,
+      actorUserId: foreignUser.id,
+      title: "Foreign 100% report",
+      pinnedAt: new Date(),
+    });
+    const pinned = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=true&sort=recent&limit=1",
+    });
+    expect(pinned.statusCode).toBe(200);
+    expect(
+      pinned.json().data.map((run: { taskId: string }) => run.taskId),
+    ).toEqual([oldTask.id]);
+    expect(pinned.json().pagination.total).toBe(1);
+    const unpinned = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=false",
+    });
+    expect(
+      unpinned.json().data.map((run: { taskId: string }) => run.taskId),
+    ).toEqual([ordinaryTask.id]);
+    const searched = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?search=%25",
+    });
+    expect(searched.statusCode).toBe(200);
+    expect(
+      searched.json().data.map((run: { taskId: string }) => run.taskId),
+    ).toEqual([oldTask.id]);
+    const invalid = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=invalid",
+    });
+    expect(invalid.statusCode).toBe(400);
   });
 
   test("lets only the initiating user cancel an active run and audits the transition", async ({
@@ -1053,6 +1234,57 @@ describe("Agent Runtime routes", () => {
     });
   });
 
+  test("tells a member who may not run with an organization credential, and still refuses the run", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const configured = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${agent.id}/runtime/credentials/SHARED_TOKEN`,
+      payload: { value: "shared-value" },
+    });
+    expect(configured.statusCode).toBe(200);
+
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    user = member;
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/runtime/preflight`,
+    });
+
+    // The setup check answers instead of failing, so the member's pages can
+    // say what is wrong rather than reporting a load error.
+    expect(response.statusCode).toBe(200);
+    expect(response.body).not.toContain("shared-value");
+    expect(response.json()).toEqual({
+      ready: false,
+      configured: [],
+      missing: [
+        expect.objectContaining({
+          key: "SHARED_TOKEN",
+          label: "Shared token",
+          canConnect: false,
+          adminOnly: true,
+        }),
+        expect.objectContaining({ key: "PERSONAL_TOKEN" }),
+      ],
+      misconfigured: [],
+      incompatible: null,
+    });
+    // Running with it is still refused.
+    const runtime = resolveAgentRuntime(agent);
+    assert(runtime);
+    await expect(
+      resolveAgentRuntimeCredentials({
+        runtime,
+        organizationId,
+        userId: member.id,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
   test("preflight flags an existing Gemini model on the maintained Codex runtime", async ({
     makeAgent,
     makeLlmProviderApiKey,
@@ -1096,7 +1328,7 @@ describe("Agent Runtime routes", () => {
     });
   });
 
-  test("lets a reader manage only their own personal credential", async ({
+  test("lets a reader manage their personal credential but not use a shared one", async ({
     makeMember,
     makeUser,
   }) => {
@@ -1121,7 +1353,55 @@ describe("Agent Runtime routes", () => {
       method: "GET",
       url: `/api/agents/${agent.id}/runtime/preflight`,
     });
-    expect(preflight.json().configured).toEqual(["PERSONAL_TOKEN"]);
+    expect(preflight.statusCode).toBe(200);
+    expect(preflight.json()).toMatchObject({
+      ready: false,
+      configured: ["PERSONAL_TOKEN"],
+      missing: [{ key: "SHARED_TOKEN", adminOnly: true, canConnect: false }],
+    });
+  });
+
+  test("refuses a personal value for a credential the caller may not use", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    // Keep the saved credential behind PERSONAL_TOKEN from members: no
+    // grant on it reaches them, so neither does storing a value of it.
+    const definition = await RuntimeCredentialDefinitionModel.find({
+      organizationId,
+      key: "github",
+    });
+    assert(definition);
+    const scope = {
+      organizationId,
+      resource: "credential" as const,
+      scope: definition.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(scope);
+    await ResourcePermissionPolicyModel.replace({
+      ...scope,
+      revision: policy?.revision ?? 0,
+      grants: [],
+    });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    user = member;
+
+    const refused = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${agent.id}/runtime/credentials/PERSONAL_TOKEN`,
+      payload: { value: "personal-value" },
+    });
+
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error.message).toBe(
+      'You don\'t have access to the "Personal token" credential. Ask an admin to share it with you.',
+    );
+    const rows = await db
+      .select({ userId: schema.runtimeCredentialConnectionsTable.userId })
+      .from(schema.runtimeCredentialConnectionsTable)
+      .where(eq(schema.runtimeCredentialConnectionsTable.userId, member.id));
+    expect(rows).toEqual([]);
   });
 
   test("reuses a typed personal connection across Agents without copying its value", async ({
@@ -1708,6 +1988,22 @@ describe("Agent Runtime routes", () => {
       before: { taskId: task.id },
       after: { taskId: next.id, previousTaskId: task.id, attachmentCount: 1 },
     });
+    const resume = await app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${task.id}/continue`,
+      payload: {},
+    });
+    expect(resume.statusCode, resume.body).toBe(200);
+    expect(resume.json().prompt).toBe("");
+    expect(startDetachedAgentTask).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        message: "",
+        systemParams: expect.objectContaining({
+          runtimeMode: "interactive",
+          resumeFromTaskId: task.id,
+        }),
+      }),
+    );
     await AgentWorkspaceModel.transition({
       id: workspace.id,
       from: "idle",
@@ -1821,6 +2117,106 @@ describe("Agent Runtime routes", () => {
     expect(fileAccess).toHaveBeenCalledTimes(1);
   });
 
+  test("an attachments transfer lands beside the run's inputs, not in its workspace", async () => {
+    const task = await createTask(agent.id);
+    const run = await createRun({ taskId: task.id, actorUserId: user.id });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "idle",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const bytes = Buffer.from("png");
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const helper = vi
+      .spyOn(agentRuntimeManager, "runWorkspaceTransferCommand")
+      .mockImplementation(async ({ args, stdin }) => {
+        const [, , command, ...rest] = args;
+        if (command === "stat")
+          return { ok: true, path: rest[0], present: false };
+        if (command === "write-stream") {
+          const received: Buffer[] = [];
+          for await (const chunk of stdin ?? []) received.push(chunk);
+          const stored = Buffer.concat(received);
+          return {
+            ok: true,
+            upload_id: rest[0],
+            size: stored.length,
+            sha256: createHash("sha256").update(stored).digest("hex"),
+          };
+        }
+        if (command === "discard") return { ok: true, discarded: rest[0] };
+        return { ok: true, path: rest[1], size: bytes.length, sha256 };
+      });
+    const mint = (size: number) =>
+      app.inject({
+        method: "POST",
+        url: `/api/agent-runs/${task.id}/workspace/transfers`,
+        payload: {
+          direction: "upload",
+          location: "attachments",
+          path: "screen shot.png",
+          size,
+          sha256,
+        },
+      });
+
+    const started = await mint(bytes.length);
+    expect(started.statusCode, started.body).toBe(200);
+    const { path, token, contentUrl } = started.json();
+    const root = `/var/run/archestra/attachments/${task.id}`;
+    expect(path).toMatch(new RegExp(`^${root}/[0-9a-f]{8}-screen shot\\.png$`));
+
+    const uploaded = await app.inject({
+      method: "PUT",
+      url: contentUrl,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/octet-stream",
+      },
+      payload: bytes,
+    });
+    expect(uploaded.statusCode, uploaded.body).toBe(200);
+    expect(uploaded.json()).toMatchObject({ path });
+    // Every helper call is confined to the attachments root.
+    expect(helper).toHaveBeenCalledTimes(3);
+    for (const [{ args }] of helper.mock.calls) {
+      expect(args.slice(0, 2)).toEqual(["--root", root]);
+    }
+
+    // Oversized files are refused before the workspace is touched, and a body
+    // larger than its ticket stops at the declared size.
+    expect(
+      (await mint(config.chat.attachmentStorageBytesLimit + 1)).statusCode,
+    ).toBe(413);
+    expect(helper).toHaveBeenCalledTimes(3);
+    const lying = (await mint(bytes.length)).json();
+    const overflow = await app.inject({
+      method: "PUT",
+      url: lying.contentUrl,
+      headers: {
+        authorization: `Bearer ${lying.token}`,
+        "content-type": "application/octet-stream",
+      },
+      payload: Buffer.alloc(64 * 1024, 1),
+    });
+    expect(overflow.statusCode, overflow.body).toBe(413);
+    expect(helper.mock.calls.map(([{ args }]) => args[2])).toEqual([
+      "stat",
+      "write-stream",
+      "finalize",
+      "stat",
+      "write-stream",
+      "discard",
+    ]);
+  });
+
   test("reports a retained terminal from the reconciler's probe until the CLI exits", async () => {
     const task = await createTask(agent.id);
     const run = await createRun({ taskId: task.id, actorUserId: user.id });
@@ -1893,7 +2289,7 @@ describe("Agent Runtime routes", () => {
     const failedDeletion = await app.inject({ method: "DELETE", url });
     expect(failedDeletion.statusCode).toBe(500);
     expect(failedDeletion.json().error.message).toContain(
-      "retrying this request is safe",
+      "you can also retry this request",
     );
     expect(
       (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,
@@ -1957,7 +2353,289 @@ describe("Agent Runtime routes", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
-  async function createTask(agentId: string) {
+  test("service accounts read, update, cancel and delete only their own run workspace", async ({
+    makeServiceAccount,
+  }) => {
+    const account = await makeServiceAccount(organizationId);
+    const other = await makeServiceAccount(organizationId);
+    const task = await A2ATaskModel.create({
+      contextId: (
+        await A2AContextModel.create({
+          actorKind: "serviceAccount",
+          actorId: account.id,
+        })
+      ).id,
+      agentId: agent.id,
+      state: "TASK_STATE_SUBMITTED",
+    });
+    const run = await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      actorUserId: null,
+      workloadName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+    });
+    const workspace = await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "suspended",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600000),
+    });
+    const human = user;
+    user = { ...human, id: serviceAccountUserId(other.id) };
+    for (const [method, suffix, payload] of [
+      ["GET", "", undefined],
+      ["PATCH", "", { title: "forbidden" }],
+      ["POST", "/cancel", undefined],
+      ["DELETE", "/workspace", undefined],
+    ] as const) {
+      const denied = await app.inject({
+        method,
+        url: `/api/agent-runs/${task.id}${suffix}`,
+        payload,
+      });
+      expect(denied.statusCode, denied.body).toBe(404);
+    }
+    user = { ...human, id: serviceAccountUserId(account.id) };
+    const listed = await app.inject({ method: "GET", url: "/api/agent-runs" });
+    expect(listed.statusCode, listed.body).toBe(200);
+    expect(
+      listed.json().data.map((row: { taskId: string }) => row.taskId),
+    ).toContain(task.id);
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/agent-runs/${task.id}`,
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: `/api/agent-runs/${task.id}`,
+      payload: { title: "worker run" },
+    });
+    expect(renamed.statusCode, renamed.body).toBe(200);
+    expect((await AgentRunModel.findByTaskId(task.id))?.title).toBe(
+      "worker run",
+    );
+    vi.mocked(cancelDetachedAgentTask).mockResolvedValue({
+      id: task.id,
+      contextId: task.contextId,
+      status: { state: "TASK_STATE_CANCELED" },
+    });
+    const canceled = await app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${task.id}/cancel`,
+    });
+    expect(canceled.statusCode, canceled.body).toBe(200);
+    expect(cancelDetachedAgentTask).toHaveBeenCalledWith({
+      actor: { kind: "serviceAccount", id: account.id, organizationId },
+      agentId: agent.id,
+      taskId: task.id,
+    });
+    await AgentRunModel.close({ id: run.id, logs: "retained transcript" });
+    vi.spyOn(agentRuntimeManager, "deleteWorkspace").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(undefined);
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/api/agent-runs/${task.id}/workspace`,
+    });
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect((await AgentWorkspaceModel.findById(workspace.id))?.state).toBe(
+      "deleted",
+    );
+    expect((await AgentRunModel.findByTaskId(task.id))?.logs).toBe(
+      "retained transcript",
+    );
+  });
+  test("names service-account runs and exposes terminal access only to their account managers", async ({
+    makeServiceAccount,
+    makeCustomRole,
+  }) => {
+    const account = await makeServiceAccount(organizationId, {
+      name: "Build automation",
+    });
+    const task = await A2ATaskModel.create({
+      contextId: (
+        await A2AContextModel.create({
+          actorKind: "serviceAccount",
+          actorId: account.id,
+        })
+      ).id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      actorUserId: null,
+      workloadName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+    });
+    const role = await makeCustomRole(organizationId, { permission: {} });
+    await MemberModel.updateRole(user.id, organizationId, role.role);
+    const agentKey = {
+      organizationId,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(agentKey);
+    await ResourcePermissionPolicyModel.replace({
+      ...agentKey,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "user", id: user.id }, actions: ["read", "use"] },
+      ],
+    });
+    const list = () => app.inject({ url: `/api/agents/${agent.id}/runs` });
+    const before = await list();
+    expect(before.statusCode, before.body).toBe(200);
+    expect(before.json()[0]).toMatchObject({
+      initiatorName: "Build automation",
+      canAttach: false,
+    });
+    expect(
+      (await app.inject({ url: `/api/agent-runs/${task.id}` })).statusCode,
+    ).toBe(404);
+    await ResourcePermissionPolicyModel.replace({
+      organizationId,
+      resource: "serviceAccount",
+      scope: account.id,
+      revision: 0,
+      grants: [{ subject: { type: "user", id: user.id }, actions: ["update"] }],
+    });
+    expect((await list()).json()[0]).toMatchObject({ canAttach: true });
+    const detail = await app.inject({ url: `/api/agent-runs/${task.id}` });
+    expect(detail.statusCode, detail.body).toBe(200);
+    expect(detail.json()).toMatchObject({
+      canAttach: true,
+      viewerRole: "shared",
+    });
+    const original = await AgentRunModel.findByTaskId(task.id);
+    assert(original);
+    for (let i = 0; i < 4; i++) {
+      const repeatedTask = await A2ATaskModel.create({
+        contextId: task.contextId,
+        agentId: agent.id,
+        state: "TASK_STATE_WORKING",
+      });
+      await AgentRunModel.create({
+        ...original,
+        id: undefined,
+        taskId: repeatedTask.id,
+        workloadName: `agent-run-${repeatedTask.id}`,
+      });
+    }
+    const endedTask = await A2ATaskModel.create({
+      contextId: task.contextId,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const endedRun = await AgentRunModel.create({
+      ...original,
+      id: undefined,
+      taskId: endedTask.id,
+      workloadName: `agent-run-${endedTask.id}`,
+    });
+    await AgentRunModel.close({ id: endedRun.id, logs: "done" });
+    // Count calls without replacing their implementation: authorization and storage stay real.
+    const accounts = vi.spyOn(ServiceAccountModel, "findAccount");
+    const permissions = vi.spyOn(ResourcePermissions, "allows");
+    const repeated = await list();
+    expect(repeated.statusCode, repeated.body).toBe(200);
+    expect(
+      repeated.json().filter((row: { canAttach: boolean }) => row.canAttach),
+    ).toHaveLength(5);
+    expect(accounts).toHaveBeenCalledTimes(1);
+    expect(
+      permissions.mock.calls.filter(
+        ([request]) => request.resource === "agent" && request.action === "use",
+      ),
+    ).toHaveLength(1);
+    expect(
+      repeated
+        .json()
+        .find((row: { taskId: string }) => row.taskId === endedTask.id)
+        .canAttach,
+    ).toBe(false);
+    const currentTask = await A2ATaskModel.create({
+      contextId: task.contextId,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      ...original,
+      id: undefined,
+      taskId: currentTask.id,
+    });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      backend: "kubernetes",
+      runtimeScope: original.runtimeScope,
+      workloadName: original.workloadName,
+      state: "active",
+      activeTaskId: currentTask.id,
+      lastTaskId: currentTask.id,
+      expiresAt: new Date(Date.now() + 3600000),
+    });
+    const currentDetail = await app.inject({
+      url: `/api/agent-runs/${task.id}`,
+    });
+    expect(currentDetail.statusCode, currentDetail.body).toBe(200);
+    expect(currentDetail.json()).toMatchObject({
+      taskId: currentTask.id,
+      canAttach: true,
+      viewerRole: "shared",
+    });
+    // Terminal access does not confer ownership or workspace mutation.
+    expect(
+      (
+        await app.inject({
+          method: "PATCH",
+          url: `/api/agent-runs/${task.id}`,
+          payload: { title: "changed" },
+        })
+      ).statusCode,
+    ).toBe(404);
+    const accountKey = {
+      organizationId,
+      resource: "serviceAccount" as const,
+      scope: account.id,
+    };
+    const accountPolicy = await ResourcePermissionPolicyModel.find(accountKey);
+    await ResourcePermissionPolicyModel.replace({
+      ...accountKey,
+      revision: accountPolicy?.revision ?? 0,
+      grants: [],
+    });
+    expect(
+      (await list())
+        .json()
+        .some((row: { canAttach: boolean }) => row.canAttach),
+    ).toBe(false);
+    expect(
+      (await app.inject({ url: `/api/agent-runs/${task.id}` })).statusCode,
+    ).toBe(404);
+  });
+
+  async function createTask(agentId: string, stateChangedAt?: Date) {
     const context = await A2AContextModel.create({
       actorKind: "user",
       actorId: user.id,
@@ -1966,6 +2644,7 @@ describe("Agent Runtime routes", () => {
       contextId: context.id,
       agentId,
       state: "TASK_STATE_SUBMITTED",
+      stateChangedAt,
     });
   }
 
@@ -1973,6 +2652,8 @@ describe("Agent Runtime routes", () => {
     taskId: string;
     actorUserId: string;
     projectId?: string;
+    title?: string;
+    pinnedAt?: Date;
   }) {
     return await AgentRunModel.create({
       organizationId,
@@ -1982,6 +2663,8 @@ describe("Agent Runtime routes", () => {
       actorId: params.actorUserId,
       actorUserId: params.actorUserId,
       projectId: params.projectId,
+      title: params.title,
+      pinnedAt: params.pinnedAt,
       workloadName: `agent-run-${params.taskId}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",

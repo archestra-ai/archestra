@@ -1,18 +1,28 @@
 import {
+  ASK_USER_OTHER_ANSWER_FIELD,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import config from "@/config";
 import logger from "@/logging";
+import {
+  CurrentTrajectorySchema,
+  parseCurrentTrajectory,
+} from "@/openappa/current-trajectory";
 import {
   getHitlAskUserArguments,
   hitlRulingFromLabels,
+  peekHitlDecision,
   recordHitlRuling,
+  reviewSessionFromTrajectory,
+  sealHitlClosure,
 } from "@/openappa/hitl-review";
-import { OfferJwsSchema, verifyOfferClaims } from "@/openappa/offer-claims";
-import { chatOpenAppaSession, type OpenAppaSession } from "@/openappa/service";
+import type { OpenAppaSession } from "@/openappa/service";
+import {
+  authenticatedRuntimeSpender,
+  parseWorkloadPrincipal,
+} from "@/services/agent-runtime/runtime-identity";
 import { archestraMcpBranding } from "./branding";
 import {
   catchError,
@@ -60,59 +70,75 @@ const AskUserOptionSchema = z
 const AskUserOutputSchema = z.object({
   action: z
     .enum(["accept", "decline", "cancel"])
-    .describe("Whether the user submitted, declined, or canceled."),
+    .describe("Whether the choice form was submitted, declined, or canceled."),
   selected: z
     .array(z.string())
     .describe("The labels the user selected. Empty when declined or canceled."),
+  text: z
+    .string()
+    .optional()
+    .describe("What the user typed instead of picking an option."),
   timedOut: z
     .boolean()
     .optional()
     .describe("True when the question expired without an answer."),
 });
 
-const AskUserSchema = z
-  .object({
-    question: z
-      .string()
-      .min(1)
-      .max(2000)
-      .describe("The question shown above the options."),
-    header: z
-      .string()
-      .trim()
-      .min(1)
-      .max(30)
-      .optional()
-      .describe(
-        "A very short label shown as the question's tab, e.g. 'Visibility'.",
-      ),
-    options: z
-      .array(AskUserOptionSchema)
-      .min(2)
-      .max(12)
-      .describe("The options the user can pick. Labels must be unique."),
-    allowMultiple: z
-      .boolean()
-      .optional()
-      .describe(
-        "When true, the user may select more than one option. Defaults to false (exactly one).",
-      ),
-    remedy_offer_ids: z
-      .array(z.string().min(1).max(128))
-      .max(12)
-      .optional()
-      .describe(
-        "Exact offer IDs from the blocked ruling that this question asks the user to decide. Omit for ordinary questions.",
-      ),
-  })
-  .strict();
+const AskUserSchema = z.object({
+  question: z
+    .string()
+    .min(1)
+    .max(2000)
+    .describe(
+      "The question shown above the options, as plain text. Put links and commands in your reply text.",
+    ),
+  header: z
+    .string()
+    .trim()
+    .min(1)
+    .max(30)
+    .optional()
+    .describe(
+      "A very short label shown as the question's tab, e.g. 'Visibility'.",
+    ),
+  options: z
+    .array(AskUserOptionSchema)
+    .min(2)
+    .max(12)
+    .describe("The options the user can pick. Labels must be unique."),
+  allowMultiple: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the user may select more than one option. Defaults to false (exactly one).",
+    ),
+  remedy_offer_ids: z
+    .array(z.string().min(1).max(128))
+    .max(12)
+    .optional()
+    .describe(
+      "Exact offer IDs from the blocked ruling that this question asks the user to decide: a review execute_remedy_plan requires, or a plan that would prevent what the user asked for. Say in the question what it would prevent. Omit for ordinary questions.",
+    ),
+});
 
 const AskUserExecutionSchema = AskUserSchema.extend({
-  remedy_offers: z
-    .array(OfferJwsSchema)
-    .optional()
-    .describe("Signed live offers added by the proxy for this question."),
-}).strict();
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // The proxy can replace the question with a complete HITL review. Its size
+  // is not bounded by the ordinary question limit; the handler resolves the
+  // scoped, server-held review before allowing that exception.
+  question: z.string().min(1),
+  // SPDX-SnippetEnd
+  // Earlier proxy versions rewrote a staged review's ask_user call with option
+  // previews for Claude Code. They are not advertised to models, and the
+  // handler uses the server-held review, so a preview is ignored here.
+  options: z
+    .array(AskUserOptionSchema.extend({ preview: z.string().optional() }))
+    .min(2)
+    .max(12),
+  trajectory: CurrentTrajectorySchema.optional(),
+});
 
 const NO_CHOICE_FORM_MESSAGE =
   "This client did not answer the choice form. If it has its own question tool (AskUserQuestion, Codex, OpenCode), use that instead. Do not ask this as a plain-text chat question.";
@@ -160,24 +186,27 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_ASK_USER_SHORT_NAME,
     title: "Ask User",
-    description: `Ask the user to pick from a short list of options. Use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, you must call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Never ask a multiple-choice question in plain text, including yes or no. Do not use this for open questions. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
+    description: `Ask the user to pick from a short list of options. For guardrail reviews, use this tool with the offer IDs: the platform shows the review in the client's own question card or form. Do not substitute a native question or a plain-text answer for that review. For connected clients, the platform renders an offer-bound approval card; its native schema omits remedy_offer_ids by design. Do not reconstruct the card or mistake its platform-generated text for your own. Supported clients offer Inspect to show the complete review in the conversation. For ordinary questions, use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Links and commands go in your reply text, not in the question or options: question forms show them as plain text. The form always adds its own "Type something" choice, so the user may type an answer instead of picking, returned as \`text\`; do not add an "Other" option. It is not for secrets, so never ask for a password, token, or key this way. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
     schema: AskUserExecutionSchema,
     publicSchema: AskUserSchema,
     outputSchema: AskUserOutputSchema,
     async handler({ args, context, toolName }) {
-      const verifiedOffers = verifiedRemedyOffers(
-        args.remedy_offers,
-        args.remedy_offer_ids,
-        context,
-      );
-      const liveOffers = verifiedOffers?.ids ?? [];
-      const session = verifiedOffers?.session;
+      const review = remedyReviewScope(args, context);
+      const liveOffers = review?.ids ?? [];
+      const session = review?.session;
       const hitlArgs = session
         ? await getHitlAskUserArguments({
             session,
             offerIds: liveOffers,
           })
         : undefined;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // An offer ID or trajectory alone must not relax ordinary validation.
+      // Only a live review supplies the canonical text shown to the user.
+      if (!hitlArgs) AskUserSchema.parse(args);
+      // SPDX-SnippetEnd
       // A staged HITL review owns its copy and fixed choices. The model can
       // route the offer to ask_user, but it cannot soften or replace the review.
       const effectiveArgs = hitlArgs ?? args;
@@ -185,9 +214,32 @@ const registry = defineArchestraTools([
       if (new Set(labels).size !== labels.length) {
         return errorResult("Give each option a different label.");
       }
+      // A guardrail review is a decision, so only ordinary questions take text.
+      const allowText = !hitlArgs;
 
       const elicitation = context.elicitation;
+      // The live review text is gone once the review is closed. The offer id
+      // still identifies that closure, so do not open another form.
+      if (session && liveOffers.length === 1) {
+        const closed = await peekHitlDecision({
+          session,
+          offerId: liveOffers[0],
+        });
+        if (closed?.ruling === "none" || closed?.ruling === "deny") {
+          return errorResult(
+            "This review is already closed. Keep the call blocked. Do not ask again.",
+          );
+        }
+      }
       if (!elicitation) {
+        if (hitlArgs && session) {
+          const stored = await sealOrReturnStoredRuling({
+            session,
+            offerId: hitlArgs.remedy_offer_ids[0],
+            closure: "unavailable",
+          });
+          if (stored) return stored;
+        }
         return errorResult(
           hitlArgs ? HITL_NO_VIEWER_MESSAGE : NO_VIEWER_MESSAGE,
         );
@@ -196,14 +248,26 @@ const registry = defineArchestraTools([
       const outcome = await elicitation.elicit({
         toolName,
         message: effectiveArgs.question,
-        requestedSchema: effectiveArgs.allowMultiple
-          ? buildMultiChoiceSchema(effectiveArgs.options)
-          : buildSingleChoiceSchema(effectiveArgs.options),
+        requestedSchema: withTextField({
+          schema: effectiveArgs.allowMultiple
+            ? buildMultiChoiceSchema(effectiveArgs.options)
+            : buildSingleChoiceSchema(effectiveArgs.options),
+          allowText,
+        }),
         toolCallId: context.currentToolCallId,
         header: effectiveArgs.header,
       });
 
+      // The gateway also reports a decline no person gave as no viewer.
       if (outcome.status === "no_viewer") {
+        if (hitlArgs && session) {
+          const stored = await sealOrReturnStoredRuling({
+            session,
+            offerId: hitlArgs.remedy_offer_ids[0],
+            closure: "unavailable",
+          });
+          if (stored) return stored;
+        }
         return errorResult(
           hitlArgs ? HITL_NO_VIEWER_MESSAGE : NO_CHOICE_FORM_MESSAGE,
         );
@@ -216,12 +280,20 @@ const registry = defineArchestraTools([
           : { action: "cancel" as const };
       if (result.action !== "accept") {
         const action = result.action === "decline" ? "decline" : "cancel";
+        // A client decline or dismissal is not a human Deny, including when
+        // the form carried a staged review.
         if (hitlArgs && session) {
-          await recordHitlRuling({
+          const stored = await sealOrReturnStoredRuling({
             session,
             offerId: hitlArgs.remedy_offer_ids[0],
-            ruling: action === "decline" ? "deny" : "none",
+            closure:
+              outcome.status === "unanswered"
+                ? "unanswered"
+                : action === "decline"
+                  ? "declined"
+                  : "cancelled",
           });
+          if (stored) return stored;
         }
         return structuredSuccessResult(
           {
@@ -233,9 +305,9 @@ const registry = defineArchestraTools([
             outcome.status === "unanswered"
               ? "The user did not answer the question in time."
               : action === "decline"
-                ? "The user declined to pick."
+                ? "The MCP client declined the choice form. It may not have reached the user."
                 : "The user dismissed the question.",
-            "This is the user's final decision on this question for this turn. Do not ask it again, offer the same options in prose, or end with a follow-up question or invitation. Wait for a new user message before revisiting this question.",
+            "No selection was returned. Do not ask again, offer the same options in prose, or end with a follow-up question or invitation. Wait for a new user message before revisiting this question.",
             // Several questions asked in one turn all carry the turn's offers,
             // so a dismissed one only refuses the remedy if it offered it.
             liveOffers.length > 0
@@ -250,10 +322,15 @@ const registry = defineArchestraTools([
         options: effectiveArgs.options,
         allowMultiple: effectiveArgs.allowMultiple === true,
       });
-      if (selected.length === 0) {
-        return errorResult("The user sent the form with no option selected.");
+      const text = allowText ? typedText(result.content) : undefined;
+      if (selected.length === 0 && text === undefined) {
+        return errorResult(
+          allowText
+            ? "The user sent the form with no option selected and no text."
+            : "The user sent the form with no option selected.",
+        );
       }
-      if (!effectiveArgs.allowMultiple && selected.length !== 1) {
+      if (!effectiveArgs.allowMultiple && selected.length > 1) {
         return errorResult("The user selected more than one option.");
       }
       const hitlRuling = hitlArgs ? hitlRulingFromLabels(selected) : undefined;
@@ -261,23 +338,33 @@ const registry = defineArchestraTools([
         return errorResult("The HITL review returned an invalid choice.");
       }
       if (hitlArgs && hitlRuling && session) {
-        await recordHitlRuling({
+        const recorded = await recordHitlRuling({
           session,
           offerId: hitlArgs.remedy_offer_ids[0],
           ruling: hitlRuling,
         });
+        if (!recorded) {
+          return errorResult(
+            "This review is no longer pending. No ruling was recorded. Keep the call blocked and do not reopen the review automatically.",
+          );
+        }
       }
 
       return structuredSuccessResult(
-        { action: "accept", selected },
+        { action: "accept", selected, ...(text === undefined ? {} : { text }) },
         [
-          `The user picked: ${selected.join(", ")}. Act on this choice.`,
+          selected.length > 0
+            ? `The user picked: ${selected.join(", ")}. Act on this choice.`
+            : "",
+          text === undefined
+            ? ""
+            : `The user typed: ${JSON.stringify(text)}. Act on this answer.`,
           hitlRuling === "deny"
             ? "The user denied the remedy. Keep the blocked call blocked. Do not ask again and do not call execute_remedy_plan."
             : liveOffers.length > 0
-              ? `Live remedy offers: ${liveOffers.join(", ")}. If the pick accepts a remedy, continue now exactly as the ruling says — call ${archestraMcpBranding.getToolName(
+              ? `Live remedy offers: ${liveOffers.join(", ")}. If the user's pick accepts a remedy, apply it with ${archestraMcpBranding.getToolName(
                   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-                )} with the offer_id and the plan from the ruling, then retry the blocked call. Do not ask the user again.`
+                )} using the offer_id and plan from the ruling, then retry the blocked call after the plan is authorized. The user already answered, so do not ask about the same plan again.`
               : "",
         ]
           .filter((part) => part.length > 0)
@@ -292,6 +379,24 @@ export const toolEntries = registry.toolEntries;
 // === Exports ===
 
 export const tools = registry.tools;
+
+async function sealOrReturnStoredRuling(params: {
+  session: OpenAppaSession;
+  offerId: string;
+  closure: "declined" | "cancelled" | "unanswered" | "unavailable";
+}) {
+  const sealed = await sealHitlClosure(params);
+  if (sealed !== "approve" && sealed !== "deny") return undefined;
+  return structuredSuccessResult(
+    {
+      action: "accept" as const,
+      selected: [sealed === "approve" ? "Approve" : "Deny"],
+    },
+    sealed === "approve"
+      ? "An approval is already recorded for this offer. Retry execute_remedy_plan for the same offer before retrying the blocked call. Do not ask again."
+      : "A denial is already recorded for this offer. The original call remains blocked. Do not ask again and do not call execute_remedy_plan.",
+  );
+}
 
 function buildSingleChoiceSchema(
   options: Array<{ label: string; description?: string }>,
@@ -313,106 +418,77 @@ function buildSingleChoiceSchema(
   };
 }
 
+/**
+ * Adds an optional "Type something" text field. The pick turns optional too, so a
+ * typed answer stands on its own.
+ */
+function withTextField(params: {
+  schema:
+    | ReturnType<typeof buildSingleChoiceSchema>
+    | ReturnType<typeof buildMultiChoiceSchema>;
+  allowText: boolean;
+}) {
+  const { schema, allowText } = params;
+  if (!allowText) return schema;
+  return {
+    type: "object" as const,
+    properties: {
+      ...schema.properties,
+      [ASK_USER_OTHER_ANSWER_FIELD]: {
+        type: "string" as const,
+        title: "Type something",
+      },
+    },
+    required: [],
+  };
+}
+
+function typedText(content: unknown): string | undefined {
+  if (!content || typeof content !== "object" || Array.isArray(content)) {
+    return undefined;
+  }
+  const value = (content as Record<string, unknown>)[
+    ASK_USER_OTHER_ANSWER_FIELD
+  ];
+  const text = typeof value === "string" ? value.trim() : "";
+  return text.length > 0 ? text : undefined;
+}
+
 function optionKey(index: number) {
   return `option_${index}`;
 }
 
-/**
- * Uses the offer's signed child scope to locate the staged review. Gateway
- * calls may have only the parent's session header, or no session header at all.
- */
-function verifiedRemedyOffers(
-  envelopes: unknown,
-  declaredIds: unknown,
+function remedyReviewScope(
+  args: {
+    remedy_offer_ids?: string[];
+    trajectory?: unknown;
+  },
   context: ArchestraContext,
 ): { session: OpenAppaSession; ids: string[] } | undefined {
-  if (!Array.isArray(envelopes) || !context.organizationId || !context.userId) {
-    return undefined;
-  }
-  const gatewaySession = callOpenAppaSession(context);
-  const spender = `user:${context.userId}`;
-  const gatewayId = gatewaySession?.session_id;
-  const normalizedGatewayId =
-    gatewayId && !gatewayId.startsWith(`${spender}|`)
-      ? `${spender}|${gatewayId}`
-      : gatewayId;
-  const secret = config.openappa.offerSigningSecret;
-  const ids = new Set<string>();
-  let session: OpenAppaSession | undefined;
-  for (const envelope of envelopes) {
-    const claims = verifyOfferClaims(envelope, secret);
-    if (!claims || claims.organization_id !== context.organizationId) continue;
-    if (!offerOwnerIsSpender(claims.caller_id, spender)) continue;
-    if (gatewayId) {
-      if (
-        claims.session_id !== gatewayId &&
-        claims.parent_id !== gatewayId &&
-        claims.session_id !== normalizedGatewayId &&
-        claims.parent_id !== normalizedGatewayId
-      ) {
-        continue;
-      }
-    } else if (!claims.parent_id || claims.caller_id !== spender) {
-      // Without a gateway session header, only this user's child offers can
-      // supply the missing session scope.
-      continue;
-    }
-    const scope: OpenAppaSession = {
-      organization_id: claims.organization_id,
-      session_id: claims.session_id,
-      caller_id: claims.caller_id ?? undefined,
-      parent_id: claims.parent_id ?? undefined,
-    };
-    if (
-      session &&
-      (scope.session_id !== session.session_id ||
-        scope.parent_id !== session.parent_id ||
-        scope.caller_id !== session.caller_id)
-    ) {
-      return undefined;
-    }
-    session = scope;
-    ids.add(claims.offer_id);
-  }
+  const ids = args.remedy_offer_ids;
+  if (!ids || ids.length === 0 || !context.organizationId) return undefined;
+  const trajectory = parseCurrentTrajectory(args.trajectory);
+  if (!trajectory) return undefined;
+  const session = reviewSessionFromTrajectory({
+    organizationId: context.organizationId,
+    trajectory,
+    context,
+  });
+  const callerId = session.caller_id;
+  const spender = authenticatedRuntimeSpender({
+    userId: context.userId,
+    callerId: context.openappaSession?.caller_id,
+  });
   if (
-    Array.isArray(declaredIds) &&
-    declaredIds.some((id) => typeof id !== "string" || !ids.has(id))
-  ) {
+    !spender ||
+    (parseWorkloadPrincipal(spender) && callerId !== spender) ||
+    (parseWorkloadPrincipal(callerId) && callerId !== spender)
+  )
     return undefined;
-  }
-  return session ? { session, ids: [...ids] } : undefined;
-}
-
-/**
- * Resolves the OpenAPPA session for this call: either the gateway session
- * from the request header or the Chat conversation ID.
- */
-function callOpenAppaSession(
-  context: ArchestraContext,
-): OpenAppaSession | undefined {
-  if (context.openappaSession) {
-    return context.openappaSession;
-  }
-  const sessionId = context.sessionId ?? context.conversationId;
-  return context.organizationId && context.userId && sessionId
-    ? chatOpenAppaSession(context.organizationId, context.userId, sessionId)
-    : undefined;
-}
-
-/**
- * Checks if `spender` can use an offer minted by `owner`.
- * User offers belong exclusively to that user.
- * App and virtual-key offers are organization-scoped.
- * Offers without an owner cannot be used.
- */
-function offerOwnerIsSpender(owner: string | null, spender: string): boolean {
-  if (!owner) {
-    return false;
-  }
-  if (owner.startsWith("user:")) {
-    return owner.length > "user:".length && owner === spender;
-  }
-  return !owner.startsWith("app:") && !owner.startsWith("virtual-key:");
+  return {
+    session,
+    ids,
+  };
 }
 
 function buildMultiChoiceSchema(

@@ -4,6 +4,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatCurrency } from "@/lib/utils/format-currency";
 import { formatCost } from "./cost";
 
 export function Savings({
@@ -15,6 +16,7 @@ export function Savings({
   variant = "default",
   baselineModel,
   actualModel,
+  precision = "exact",
 }: {
   cost: string;
   baselineCost: string;
@@ -26,7 +28,10 @@ export function Savings({
   baselineModel?: string | null;
   /** The model the request actually ran on */
   actualModel?: string | null;
+  /** `exact` keeps sub-cent digits; `cents` rounds to two decimals. */
+  precision?: "exact" | "cents";
 }) {
+  const formatAmount = precision === "cents" ? formatCurrency : formatCost;
   const {
     modelSwapSavings,
     totalSavings,
@@ -50,7 +55,7 @@ export function Savings({
   if (format === "percent") {
     content = totalSavings > 0 ? `-${savingsPercent}%` : `${savingsPercent}%`;
   } else if (format === "number") {
-    content = totalSavings === 0 ? "$0" : formatCost(Math.abs(totalSavings));
+    content = totalSavings === 0 ? "$0" : formatAmount(Math.abs(totalSavings));
   }
 
   if (tooltip !== "never") {
@@ -60,7 +65,7 @@ export function Savings({
       <Tooltip>
         <TooltipTrigger asChild>
           <span className={`${className || ""} cursor-default`}>
-            {formatCost(actualCost)}
+            {formatAmount(actualCost)}
             {savingsPercentNum >= 0.05 && (
               <span className="text-green-600 dark:text-green-400">
                 {" "}
@@ -74,15 +79,15 @@ export function Savings({
             <div className="space-y-0.5">
               {totalSavings > 0 ? (
                 <>
-                  <div>Estimated Cost: {formatCost(estimatedCost)}</div>
-                  <div>Actual Cost: {formatCost(actualCost)}</div>
+                  <div>Estimated Cost: {formatAmount(estimatedCost)}</div>
+                  <div>Actual Cost: {formatAmount(actualCost)}</div>
                   <div className="font-semibold">
-                    Savings: {formatCost(totalSavings)}
+                    Savings: {formatAmount(totalSavings)}
                     {savingsPercentNum >= 0.05 && ` (-${savingsPercent}%)`}
                   </div>
                 </>
               ) : (
-                <div>Cost: {formatCost(actualCost)}</div>
+                <div>Cost: {formatAmount(actualCost)}</div>
               )}
             </div>
 
@@ -97,7 +102,7 @@ export function Savings({
                     that history and is absent otherwise. */}
                 {modelSwapSavings > 0 && (
                   <div>
-                    Model swap: -{formatCost(modelSwapSavings)}
+                    Model swap: -{formatAmount(modelSwapSavings)}
                     {baselineModel &&
                     actualModel &&
                     baselineModel !== actualModel

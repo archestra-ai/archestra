@@ -10,6 +10,7 @@ import type {
   AgentRuntimeSteerMode,
   EffectiveNetworkPolicy,
 } from "@/types";
+import type { A2ATaskFailure } from "@/types/a2a-task";
 import type {
   AgentWorkspaceFileRequest,
   AgentWorkspaceFileResult,
@@ -84,6 +85,9 @@ export interface AgentRuntimeBackendDriver {
     environmentScope?: string | null;
     organizationScope?: string | null;
   }): string;
+
+  /** Throw an actionable error when the backend's infrastructure is missing. */
+  assertReady(): Promise<void>;
 
   /** Schedule the workload. Returns once accepted, not once running. */
   launch(spec: AgentRunLaunchSpec): Promise<void>;
@@ -241,6 +245,8 @@ export type AgentRuntimeBackendName = AgentRuntimeBackend;
 export interface AgentRunCompletion {
   outcome: "succeeded" | "failed" | "aborted";
   reason?: string;
+  /** Classification of a failed outcome; see `run-failure.ts`. */
+  failure?: A2ATaskFailure;
 }
 
 export interface AgentRunAttachStatus {

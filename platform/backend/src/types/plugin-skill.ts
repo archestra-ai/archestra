@@ -12,7 +12,7 @@ import {
  * format, so the Skills page can surface it for reuse — read-only, derived
  * from the approved plugin bytes, never stored as a standalone skill.
  */
-export const PluginSkillListItemSchema = z.object({
+const PluginSkillCatalogItemSchema = z.object({
   source: z.literal("plugin"),
   pluginId: z.string().uuid(),
   pluginName: z.string(),
@@ -30,6 +30,10 @@ export const PluginSkillListItemSchema = z.object({
   description: z.string(),
   compatibility: z.string().nullable(),
   fileCount: z.number().int().nonnegative(),
+});
+
+/** The Skills page row: the catalog item plus its activation usage summary. */
+export const PluginSkillListItemSchema = PluginSkillCatalogItemSchema.extend({
   usageCount: z.number().int().nonnegative(),
   usageUserCount: z.number().int().nonnegative(),
   lastUsedAt: z.date().nullable(),
@@ -52,6 +56,10 @@ export const PluginSkillDetailSchema = PluginSkillListItemSchema.extend({
   files: z.array(PluginSkillFileSchema),
 });
 
+/** Activation and count paths read only the catalog fields, never usage. */
+export type PluginSkillCatalogItem = z.infer<
+  typeof PluginSkillCatalogItemSchema
+>;
 export type PluginSkillListItem = z.infer<typeof PluginSkillListItemSchema>;
 export type PluginSkillFile = z.infer<typeof PluginSkillFileSchema>;
 export type PluginSkillDetail = z.infer<typeof PluginSkillDetailSchema>;

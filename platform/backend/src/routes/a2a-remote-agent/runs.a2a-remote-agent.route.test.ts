@@ -1,3 +1,4 @@
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { A2aOutboundRunModel } from "@/models";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { describe, expect, test } from "@/test";
@@ -8,7 +9,13 @@ import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
 describe("GET /api/a2a/remote-agents/:id/runs", () => {
   const ctx = useRouteTestApp(a2aRemoteAgentRoutes);
 
-  test("returns the newest bounded protocol outcome", async ({ makeAgent }) => {
+  test("returns the newest bounded protocol outcome", async ({
+    makeAgent,
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
     const parent = await makeAgent({ organizationId: ctx.organizationId });
     const remote = await createA2aRemoteAgent({
       organizationId: ctx.organizationId,
@@ -80,6 +87,32 @@ describe("GET /api/a2a/remote-agents/:id/runs", () => {
       url: `/api/a2a/remote-agents/${remote.id}/runs`,
     });
 
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("hides an external agent's runs from members without a grant on it", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+    const owner = await makeUser();
+    await makeMember(owner.id, ctx.organizationId);
+    const remote = await createA2aRemoteAgent({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      input: {
+        name: "Private Remote",
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+      },
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/a2a/remote-agents/${remote.id}/runs`,
+    });
     expect(response.statusCode).toBe(404);
   });
 });

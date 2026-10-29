@@ -7,6 +7,10 @@ description: Use when opening or updating an Archestra pull request to write an 
 
 Review the final diff and commit history before writing PR metadata. Describe the change that is actually present, not the work session that produced it.
 
+For a request to add a PR to the merge queue, monitor its merge, or repair queue
+CI, load [archestra-merge-queue](../archestra-merge-queue/SKILL.md). That skill
+owns queue execution and follow-through; this skill owns PR metadata.
+
 ## Title
 
 Follow `.github/commitlint.config.js`: use a conventional-commit title such as `feat(scope): add runtime credentials`, choose one of its allowed types, omit a trailing period, and stay within its 100-character limit. Keep the title focused on the PR's primary outcome.

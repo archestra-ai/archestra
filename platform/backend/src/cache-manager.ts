@@ -1,10 +1,11 @@
 import { TimeInMs } from "@archestra/shared";
 import KeyvPostgres from "@keyv/postgres";
-import { sql } from "drizzle-orm";
-import Keyv from "keyv";
+import { type SQL, sql } from "drizzle-orm";
+import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
 import db from "@/database";
 import logger from "@/logging";
+import CacheEntryModel from "@/models/cache-entry";
 
 export { LRUCacheManager } from "@/in-memory-lru-cache";
 
@@ -15,24 +16,39 @@ export { LRUCacheManager } from "@/in-memory-lru-cache";
  * of related entries using deleteByPrefix().
  */
 export const CacheKey = {
+  OpenAppaHitlSummary: "openappa-hitl-summary",
   ClientConnection: "client-connection",
   ClientConnectionRateLimit: "client-connection-rate-limit",
   /** models.dev sync tracking */
   ModelsDevSync: "models-dev-sync",
+  /** Recent scheduled model sync attempt for an LLM provider API key */
+  LlmModelSyncAttempt: "llm-model-sync-attempt",
   /** MCP tools for chat feature */
   ChatMcpTools: "chat-mcp-tools",
+  /** Last verified provider tool-token count, bounded to one slot per gateway. */
+  McpToolTokenCount: "mcp-tool-token-count",
   /** Deduplication for processed emails */
   ProcessedEmail: "processed-email",
   /** Rate limiting for webhooks */
   WebhookRateLimit: "webhook-rate-limit",
   /** OAuth flow state during authentication */
   OAuthState: "oauth-state",
+  /** Token endpoint requests, before verifying client credentials. */
+  OAuthTokenRateLimit: "oauth-token-rate-limit",
+  /** GitHub Actions OIDC token ids already exchanged, until they expire. */
+  GitHubActionsTokenJti: "github-actions-token-jti",
+  /** GitHub Actions token exchange requests, before verifying the OIDC token. */
+  GitHubActionsTokenRateLimit: "github-actions-token-rate-limit",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
   /** Legacy HTTP+SSE stream records for the MCP Gateway */
   LegacySseSession: "legacy-sse-session",
   /** Short-lived replies waiting for a legacy SSE stream on another replica */
   LegacySseMessages: "legacy-sse-messages",
+  /** Who an in-band gateway request (a form) was sent to, readable by every replica */
+  McpGatewayPendingRequest: "mcp-gateway-pending-request",
+  /** A client's answer to an in-band gateway request, waiting for the replica that sent it */
+  McpGatewayParkedAnswer: "mcp-gateway-parked-answer",
   /** IdP groups cache during login flow */
   IdpGroups: "idp-groups",
   /** Chat stream stop signal for cross-pod abort */
@@ -47,10 +63,30 @@ export const CacheKey = {
   OpenAppaNativeQuestion: "openappa-native-question",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
+  OpenAppaYellResult: "openappa-yell-result",
   /** OpenAPPA reviews waiting for a native client question */
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
   OpenAppaHitlRuling: "openappa-hitl-ruling",
+  /** review_required results the proxy already asked the client to put to the user, once each */
+  OpenAppaHitlQuestionAsked: "openappa-hitl-question-asked",
+  /** Per-call server-issued review status, for history only; never a ruling. */
+  OpenAppaHitlReviewHistory: "openappa-hitl-review-history",
+  /** Canonical result text replayed on later requests. Keep the deployed preview's
+   * namespace so upgrading a live conversation does not rewrite its earlier results. */
+  OpenAppaHitlReviewContinuation: "openappa-hitl-page-continuation",
+  /** Sessions already told once to resend a request that lacked the gateway remedy tools */
+  OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
+  /** Ruling on a call to a tool the client had not loaded, answered on that call's result */
+  OpenAppaNotLoadedRuling: "openappa-not-loaded-ruling",
+  /** Ruling an undeclared notice call carried, as the client can act on it, answered on that call's result */
+  OpenAppaCarriedRuling: "openappa-carried-ruling",
+  /** Notice for a call whose annotator gave no answer, answered on that call's result */
+  OpenAppaUnansweredAnnotationNotice: "openappa-unanswered-annotation-notice",
+  /** Host clarification appended to a runtime-confirmed denied call's result. */
+  OpenAppaDeniedCallClarification: "openappa-denied-call-clarification",
+  /** Sessions whose client already waited once for the gateway remedy tools to load */
+  OpenAppaRemedyToolsAwaited: "openappa-remedy-tools-awaited",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */
@@ -61,8 +97,8 @@ export const CacheKey = {
   VirtualKeyRateLimit: "virtual-key-rate-limit",
   /** Connection-setup script token brute-force rate limiting per IP */
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
-  /** Short-lived browser intent and bound native session for /connection. */
-  ConnectionPromptSession: "connection-prompt-session",
+  /** First native conversation to present a verified setup reference */
+  ConnectionSetupConversation: "connection-setup-conversation",
   /** Archestra VAF Add On package proxy rate limiting per IP */
   MfilesVafAddOnPackageRateLimit: "mfiles-vaf-add-on-package-rate-limit",
   /** Resolved release pin (package URL + ref) for the Archestra VAF Add On installer */
@@ -72,8 +108,6 @@ export const CacheKey = {
   ConnectionHealthRateLimit: "connection-health-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */
   GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
-  /** App Gallery share (GitHub device-flow) sign-in rate limiting per user */
-  AppGalleryDeviceAuthRateLimit: "app-gallery-device-auth-rate-limit",
   /** Microsoft 365 Copilot device-flow sign-in rate limiting per user */
   Microsoft365CopilotDeviceAuthRateLimit:
     "microsoft-365-copilot-device-auth-rate-limit",
@@ -85,50 +119,77 @@ export const CacheKey = {
   RumIngestRateLimit: "rum-ingest-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
+  SlackAppInstallState: "slack-app-install-state",
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
+  /** Most active users in an organization's LLM logs, for the logs user filter */
+  InteractionUserOptions: "interaction-user-options-v2",
   /** Per-user group-token resolution for auto-sync-permissions KB connectors */
   KbGroupTokens: "kb-group-tokens",
   /** Cross-pass upstream identity lookups (account id → email/profile) for KB permission sync */
   KbConnectorIdentity: "kb-connector-identity",
+  /** Files of the MS Teams message that triggered an agent-selection card, replayed once the agent is picked */
+  TeamsAgentSelectionAttachments: "teams-agent-selection-attachments",
+  /** An MS Teams group-chat message held until its sender signs in so the bot can read its files */
+  TeamsFileSignIn: "teams-file-sign-in",
+  /** OAuth state (PKCE verifier) of an MS Teams file sign-in in progress */
+  TeamsFileSignInState: "teams-file-sign-in-state",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
+  JiraThreadActive: "jira-thread-active",
   TeamsThreadActive: "teams-thread-active",
   /** Slack channel threads where the bot was @mentioned (sticky auto-reply) */
   SlackThreadActive: "slack-thread-active",
   /** MS Teams channel threads that already got the one-time "you can mute me" hint */
+  JiraThreadMuteHint: "jira-thread-mute-hint",
   TeamsThreadMuteHint: "teams-thread-mute-hint",
   /** Slack channel threads that already got the one-time "you can mute me" hint */
   SlackThreadMuteHint: "slack-thread-mute-hint",
   /** Latest mute token per MS Teams channel thread (cross-pod in-flight reply suppression) */
+  JiraThreadMuteMarker: "jira-thread-mute-marker",
   TeamsThreadMuteMarker: "teams-thread-mute-marker",
   /** Latest mute token per Slack channel thread (cross-pod in-flight reply suppression) */
   SlackThreadMuteMarker: "slack-thread-mute-marker",
   /** MS Teams channel threads muted while the channel answers all messages */
+  JiraThreadMuted: "jira-thread-muted",
   TeamsThreadMuted: "teams-thread-muted",
   /** Slack channel threads muted while the channel answers all messages */
   SlackThreadMuted: "slack-thread-muted",
   /** Per-channel "answer all messages" flag, briefly cached to spare the gate a DB read per message */
   ChatOpsChannelAnswerAll: "chatops-channel-answer-all",
+  ChatOpsReplyAnchor: "chatops-reply-anchor",
+  ChatOpsRuntimeAcknowledgement: "chatops-runtime-acknowledgement",
   /** MS Teams thread-format team id → aadGroupId, so the gate resolves it without a Bot Framework call per message */
   TeamsTeamAadGroupId: "teams-team-aad-group-id",
   /** MS Teams teams that have delivered an un-mentioned channel message — proof the RSC consent for reading channel messages exists */
   TeamsUnmentionedChannelTraffic: "teams-unmentioned-channel-traffic",
-  /** Dual LLM sanitized tool results, keyed by tool call + content hash */
-  DualLlmSanitizedResult: "dual-llm-sanitized-result",
-  /** Completed Q&A rounds of a dual LLM analysis that failed mid-flight, keyed by content hash so a retry resumes instead of re-interrogating */
-  DualLlmPartialTranscript: "dual-llm-partial-transcript",
   /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */
   TelegramLinkCode: "chatops-telegram-link",
-  /** Positive "this chat session is a locked chat" lookups for LLM proxy redaction */
+  /** Positive "this chat session is an encrypted chat" lookups for LLM proxy redaction */
   /**
    * v2: entries changed from a bare `true` to a facts object (fingerprint +
    * escrow presence). The suffix is load-bearing — the cache is Postgres-backed
    * and shared across replicas, so during a rolling deploy new code must not
-   * read an old boolean and mistake it for "not a locked chat".
+   * read an old boolean and mistake it for "not an encrypted chat".
    */
-  LockedChatSession: "locked-chat-session-v2",
+  EncryptedChatSession: "encrypted-chat-session-v2",
+  /** Arguments behind a Slack approval's "View arguments" button (a button value is capped at 2,000 chars) */
+  SlackApprovalArguments: "chatops-slack-approval-arguments",
+  /**
+   * Protected runtime files pinned for a parent session while their runtime
+   * was mid-call, one entry per runtime session. Any replica serving the
+   * runtime's next request releases them; any replica serving the parent's
+   * next call reads them.
+   */
+  AgentRuntimePendingExports: "agent-runtime-pending-exports-v1",
+  /** Model pool members sitting out after a failure, shared by every replica. */
+  ModelPoolBench: "model-pool-bench",
+  /**
+   * Workspace transfer tickets: minted by whichever replica serves the tool
+   * or API call, redeemed by whichever one the public content URL reaches.
+   */
+  AgentWorkspaceTransferTicket: "agent-workspace-transfer-ticket-v1",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
@@ -144,6 +205,11 @@ export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
 export type AllowedCacheKey =
   | `${CacheKeyPrefix}`
   | `${CacheKeyPrefix}-${string}`;
+
+type TransactionalCache = Pick<
+  CacheManager,
+  "get" | "set" | "delete" | "getAndDelete" | "getAndDeleteMany"
+>;
 
 /**
  * PostgreSQL-based cache manager for distributed caching using Keyv.
@@ -165,33 +231,21 @@ class CacheManager {
   /**
    * Start the cache manager by initializing the Keyv connection.
    * Should be called once during server startup.
+   *
+   * @param store - Keyv storage for the `keyv_cache` table. Defaults to the
+   * PostgreSQL adapter; tests pass one bound to their in-process database.
    */
-  start(): void {
+  start(store?: KeyvStoreAdapter): void {
     if (this.keyv) {
       return;
     }
 
-    const store = new KeyvPostgres({
-      uri: config.database.url,
-      table: "keyv_cache",
-      max: 10,
-      /**
-       * From the PostgreSQL documentation:
-       * If specified, the table is created as an unlogged table. Data written to unlogged tables is not written to the
-       * write-ahead log (see Chapter 28), which makes them considerably faster than ordinary tables. However, they are
-       * not crash-safe: an unlogged table is automatically truncated after a crash or unclean shutdown. The contents
-       * of an unlogged table are also not replicated to standby servers. Any indexes created on an unlogged table are
-       * automatically unlogged as well.
-       *
-       * We use this to improve performance of the cache manager.
-       *
-       * https://keyv.org/docs/storage-adapters/postgres/#using-an-unlogged-table-for-performance
-       */
-      useUnloggedTable: true,
+    this.isShuttingDown = false;
+    this.keyv = new Keyv({
+      store: store ?? createPostgresStore(),
+      // Let this wrapper decide which operations may fall back to a cache miss.
+      throwOnErrors: true,
     });
-
-    // Let this wrapper decide which operations may fall back to a cache miss.
-    this.keyv = new Keyv({ store, throwOnErrors: true });
 
     this.keyv.on("error", (err) => {
       if (!this.isShuttingDown) {
@@ -200,6 +254,27 @@ class CacheManager {
     });
 
     logger.debug("CacheManager: Started with Keyv PostgreSQL storage");
+  }
+
+  /**
+   * SQL that is true while a live entry is stored under `${prefix}-${id}`,
+   * for queries that must skip rows whose entry has not expired. `id` is a
+   * text SQL expression, usually a column. Entries are JSON text with an
+   * epoch-millisecond `expires`; one without it never expires.
+   *
+   * This reads Keyv's stored envelope (`{"value": ..., "expires": <ms>}`),
+   * the format incrementFixedWindows also writes. If a Keyv upgrade renamed
+   * `expires`, every entry would look live forever. The model sync schedule
+   * tests write their markers through `set` and expect a retry once the TTL
+   * passes, so they fail on such a change.
+   */
+  liveEntryExists(params: { prefix: CacheKeyPrefix; id: SQL; now: Date }): SQL {
+    const { prefix, id, now } = params;
+    return sql`EXISTS (
+      SELECT 1 FROM keyv_cache
+      WHERE keyv_cache.key = ${`keyv:${prefix}-`} || ${id}
+        AND coalesce((keyv_cache.value::jsonb ->> 'expires')::numeric > ${now.getTime()}, true)
+    )`;
   }
 
   /**
@@ -404,6 +479,163 @@ class CacheManager {
     return entries;
   }
 
+  /** All participants must use the same scope and this transaction's cache methods. */
+  async withLock<T>(
+    scope: AllowedCacheKey,
+    callback: (cache: TransactionalCache) => Promise<T>,
+  ): Promise<T> {
+    const keyv = this.keyv;
+    if (!keyv) throw new Error("CacheManager: Not started");
+    // KeyvPostgres creates its table asynchronously; await that before direct SQL.
+    if (keyv.opts.store instanceof KeyvPostgres) {
+      await keyv.opts.store.query("SELECT 1");
+    }
+    return CacheEntryModel.withLock(scope, async (entries) => {
+      const decode = async <V>(
+        raw: string | undefined,
+      ): Promise<V | undefined> => {
+        if (raw === undefined) return undefined;
+        const data = await keyv.deserializeData<V>(raw);
+        return data && (!data.expires || data.expires > Date.now())
+          ? data.value
+          : undefined;
+      };
+      const take = async <V>(keys: AllowedCacheKey[]) => {
+        const rows = await entries.take(keys.map((key) => `keyv:${key}`));
+        const values: Array<{ key: AllowedCacheKey; value: V }> = [];
+        for (const row of rows) {
+          const value = await decode<V>(row.value);
+          if (value !== undefined)
+            values.push({ key: row.key.slice(5) as AllowedCacheKey, value });
+        }
+        return values;
+      };
+      return callback({
+        get: async <V>(key: AllowedCacheKey) =>
+          decode<V>(await entries.get(`keyv:${key}`)),
+        set: async <V>(key: AllowedCacheKey, value: V, ttl?: number) => {
+          const lifetime = ttl ?? this.defaultTtl;
+          const payload = await keyv.serializeData({
+            value,
+            expires: lifetime === 0 ? undefined : Date.now() + lifetime,
+          });
+          await entries.set(
+            `keyv:${key}`,
+            typeof payload === "string" ? payload : JSON.stringify(payload),
+          );
+          return value;
+        },
+        delete: async (key: AllowedCacheKey) =>
+          (await entries.take([`keyv:${key}`])).length > 0,
+        getAndDelete: async <V>(key: AllowedCacheKey) =>
+          (await take<V>([key]))[0]?.value,
+        getAndDeleteMany: take,
+      });
+    });
+  }
+
+  /**
+   * Read several keys in one statement. Unlike {@link getMany}, a storage
+   * failure throws so a caller cannot treat an outage as an empty poll.
+   */
+  async readMany<T>(keys: AllowedCacheKey[]): Promise<Map<AllowedCacheKey, T>> {
+    const entries = new Map<AllowedCacheKey, T>();
+    if (!this.keyv) throw new Error("CacheManager: Not started");
+    if (keys.length === 0) return entries;
+    const rows = await CacheEntryModel.getMany(
+      keys.map((key) => `keyv:${key}`),
+    );
+    const now = Date.now();
+    for (const row of rows) {
+      const data = await this.keyv.deserializeData<T>(row.value);
+      if (data?.value === undefined) continue;
+      if (typeof data.expires === "number" && now > data.expires) continue;
+      entries.set(row.key.slice("keyv:".length) as AllowedCacheKey, data.value);
+    }
+    return entries;
+  }
+
+  /**
+   * Read several keys in one statement. Absent and expired entries are left
+   * out. Like {@link get}, a failed read is reported as misses.
+   */
+  async getMany<T>(keys: AllowedCacheKey[]): Promise<Map<AllowedCacheKey, T>> {
+    const entries = new Map<AllowedCacheKey, T>();
+    if (!this.keyv) {
+      logger.warn("CacheManager: Not started, returning no entries");
+      return entries;
+    }
+    if (keys.length === 0) return entries;
+    try {
+      const prefixed = keys.map((key) => sql`${`keyv:${key}`}`);
+      const result = await db.execute<{ key: string; value: string }>(sql`
+        SELECT key, value FROM keyv_cache
+        WHERE key IN (${sql.join(prefixed, sql`, `)})
+      `);
+      const now = Date.now();
+      for (const row of result.rows) {
+        const data = await this.keyv.deserializeData<T>(row.value);
+        if (data?.value === undefined) continue;
+        if (typeof data.expires === "number" && now > data.expires) continue;
+        entries.set(
+          row.key.slice("keyv:".length) as AllowedCacheKey,
+          data.value,
+        );
+      }
+    } catch (error) {
+      logger.error(
+        { error, keys },
+        "CacheManager: Error getting cache entries",
+      );
+      entries.clear();
+    }
+    return entries;
+  }
+
+  /**
+   * Count one event in each key's fixed window with a single atomic upsert,
+   * so concurrent writers never lose an increment. An entry whose window is
+   * still open keeps its end; an absent, ended or end-less entry starts a new
+   * window of `windowMs`. Entries are stored as
+   * `{ count, windowEndsAt }` and expire when their window ends.
+   */
+  async incrementFixedWindows(params: {
+    keys: AllowedCacheKey[];
+    windowMs: number;
+  }): Promise<void> {
+    if (!this.keyv) throw new Error("CacheManager: Not started");
+    if (params.keys.length === 0) return;
+    const now = Date.now();
+    const freshEnd = now + params.windowMs;
+    // Sorted so concurrent statements lock shared rows in the same order.
+    const rows = [...new Set(params.keys)]
+      .sort()
+      .map(
+        (key) =>
+          sql`(${`keyv:${key}`}, jsonb_build_object('value', jsonb_build_object('count', 1, 'windowEndsAt', ${freshEnd}::bigint), 'expires', ${freshEnd}::bigint)::text)`,
+      );
+    await db.execute(sql`
+      INSERT INTO keyv_cache (key, value)
+      VALUES ${sql.join(rows, sql`, `)}
+      ON CONFLICT (key) DO UPDATE SET value = CASE
+        WHEN jsonb_typeof(keyv_cache.value::jsonb #> '{value,windowEndsAt}') = 'number'
+          AND (keyv_cache.value::jsonb #>> '{value,windowEndsAt}')::numeric > ${now}
+          AND (
+            jsonb_typeof(keyv_cache.value::jsonb -> 'expires') IS DISTINCT FROM 'number'
+            OR (keyv_cache.value::jsonb ->> 'expires')::numeric >= ${now}
+          )
+        THEN jsonb_build_object(
+          'value', jsonb_build_object(
+            'count', COALESCE((keyv_cache.value::jsonb #>> '{value,count}')::numeric, 0) + 1,
+            'windowEndsAt', keyv_cache.value::jsonb #> '{value,windowEndsAt}'
+          ),
+          'expires', keyv_cache.value::jsonb #> '{value,windowEndsAt}'
+        )::text
+        ELSE EXCLUDED.value
+      END
+    `);
+  }
+
   /** Keyv expires entries on reads; sweep abandoned entries in this namespace too. */
   async deleteExpiredByPrefix(prefix: CacheKeyPrefix): Promise<void> {
     const pattern = `keyv:${prefix.replace(/[\\%_]/g, "\\$&")}-%`;
@@ -467,3 +699,26 @@ class CacheManager {
 }
 
 export const cacheManager = new CacheManager();
+
+// === Internal helpers
+
+function createPostgresStore(): KeyvStoreAdapter {
+  return new KeyvPostgres({
+    uri: config.database.url,
+    table: "keyv_cache",
+    max: 10,
+    /**
+     * From the PostgreSQL documentation:
+     * If specified, the table is created as an unlogged table. Data written to unlogged tables is not written to the
+     * write-ahead log (see Chapter 28), which makes them considerably faster than ordinary tables. However, they are
+     * not crash-safe: an unlogged table is automatically truncated after a crash or unclean shutdown. The contents
+     * of an unlogged table are also not replicated to standby servers. Any indexes created on an unlogged table are
+     * automatically unlogged as well.
+     *
+     * We use this to improve performance of the cache manager.
+     *
+     * https://keyv.org/docs/storage-adapters/postgres/#using-an-unlogged-table-for-performance
+     */
+    useUnloggedTable: true,
+  });
+}

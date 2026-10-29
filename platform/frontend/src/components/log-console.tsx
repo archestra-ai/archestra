@@ -146,10 +146,10 @@ export function LogConsole({
         {status ?? <div />}
         <Button
           variant="ghost"
-          size="sm"
+          size="xs"
           onClick={handleCopy}
           disabled={!!error || !content}
-          className="h-6 px-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          className="text-slate-400 hover:bg-slate-800 hover:text-slate-200"
         >
           <Copy className="mr-1 h-3 w-3" />
           {copied ? "Copied!" : "Copy"}

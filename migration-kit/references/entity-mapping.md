@@ -18,7 +18,6 @@ When you emit both a `mcp_catalog` and a `mcp_install` decision for the same ser
 same `name`/`name_override`: the install resolves its catalog item **by name**, so a mismatch fails with
 "no catalog item named …". `apply.py` runs all `mcp_catalog` ops before any `mcp_install`.
 | `hook` (event maps; any intent) | `hook` (native) | clean, preferred | Claude's `SessionStart`/`PreToolUse`/`PostToolUse` → a real Archestra lifecycle hook; the payload is Claude-compatible so the script ports near-1:1 — see below |
-| `hook` (intent `guard`, simple condition) | `tool_policy` | alt to `hook` | only when the guard is a clean `{key,operator,value}` on a real Archestra tool — see below |
 | `hook` (event unmapped, or script `unresolved`) | `manual` | report | `UserPromptSubmit`/`Stop`/… have no Archestra event; an unresolvable script body can't become a hook |
 | `openclaw` | `manual` | report | runtime config; schema unverified — report, don't translate |
 | LLM key (user-provided) | `llm_key` | best-effort | user pastes the secret in `user_answers.apiKey` |
@@ -108,21 +107,12 @@ validates the payload, attaches it to the primary agent, and skips an existing `
 - **Dropped env/argv.** A command like `TOKEN=… python3 x.py --flag` loses its env var and args — hooks
   take neither. discover flags these in the item summary.
 
-## Hooks → tool policies (the declarative alternative)
+## Guards and org-wide tool-call rules
 
-A deterministic `PreToolUse` guard (e.g. "block Bash commands matching `rm -rf /`") can instead map to a
-tool-invocation policy: `{toolId, conditions:[{key,operator:"regex",value}], action:"block_always", reason}`.
-Prefer this over a native `hook` only when the guard is a clean declarative condition **and** the guarded
-tool exists in Archestra (so it has a `toolId`) **and** the org enforces policies. Otherwise the native
-`hook` is the more faithful port.
-
-A policy attaches to a **tool that exists in Archestra**. Claude Code built-ins (Bash, Read, Write…) are
-not Archestra tools, so a guard on `Bash` has no policy target. Therefore:
-
-- The **model** must read the guard script and extract its semantics into `user_answers`:
-  `{tool_name, key, operator, value, action?, reason?}`. (Parsing arbitrary guard code is judgment — do it.)
-- `apply.py` resolves `tool_name` against `GET /api/tools`. If found → creates the policy. If not found
-  (the common case for built-ins) → records `manual` with the ready-to-paste policy in the report.
+A blocking guard (e.g. a `PreToolUse` script that rejects `rm -rf /`) ports as a native `hook`, like
+any other mappable hook. Org-wide tool-call rules belong in the OpenAPPA
+[guardrails policy](https://archestra.ai/docs/agents/guardrails), which this kit does not write — if
+the source relied on a guard as an org-wide rule, note it in the report for an admin to add there.
 
 ## Telemetry & observability → leverage Archestra's native telemetry (report-only)
 

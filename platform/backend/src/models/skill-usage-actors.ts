@@ -1,7 +1,7 @@
 import {
   isServiceAccountUserId,
   SERVICE_ACCOUNT_USER_ID_PREFIX,
-} from "@/auth/utils";
+} from "@/auth/service-account-user-id";
 import {
   type SkillUsageActorKind,
   type SkillUsageStatistics,

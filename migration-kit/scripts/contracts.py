@@ -53,20 +53,11 @@ def redact_tokens(text: str) -> str:
 Scope = Literal["personal", "team", "org"]
 ServerType = Literal["local", "remote"]
 Provider = Literal["anthropic", "openai", "gemini", "azure", "bedrock", "vertex"]
-PolicyAction = Literal[
-    "allow_when_context_is_untrusted",
-    "block_when_context_is_untrusted",
-    "block_always",
-    "require_approval",
-]
-ConditionOperator = Literal[
-    "equal", "notEqual", "contains", "notContains", "startsWith", "endsWith", "regex"
-]
 ItemKind = Literal[
     "claude_md", "subagent", "skill", "command", "local_tool", "mcp_server", "hook", "openclaw"
 ]
 TargetKind = Literal[
-    "agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy", "hook"
+    "agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "hook"
 ]
 Outcome = Literal["created", "skipped", "failed", "manual", "planned", "invalid"]
 HookIntent = Literal["guard", "passive"]
@@ -388,19 +379,12 @@ def require_answer(answers: Mapping[str, JsonValue], key: str, *, ctx: str) -> s
 
 
 _PROVIDERS: tuple[Provider, ...] = ("anthropic", "openai", "gemini", "azure", "bedrock", "vertex")
-_OPERATORS: tuple[ConditionOperator, ...] = (
-    "equal", "notEqual", "contains", "notContains", "startsWith", "endsWith", "regex",
-)
-_ACTIONS: tuple[PolicyAction, ...] = (
-    "allow_when_context_is_untrusted", "block_when_context_is_untrusted",
-    "block_always", "require_approval",
-)
 _SCOPES: tuple[Scope, ...] = ("personal", "team", "org")
 _SERVER_TYPES: tuple[ServerType, ...] = ("local", "remote")
 _INTENTS: tuple[HookIntent, ...] = ("guard", "passive")
 _HOOK_SOURCES: tuple[HookSource, ...] = ("bundled", "inline", "unresolved")
 _TARGET_KINDS: tuple[TargetKind, ...] = (
-    "agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy", "hook",
+    "agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "hook",
 )
 _PLAN_ACTIONS: tuple[Literal["migrate", "skip", "manual"], ...] = ("migrate", "skip", "manual")
 _ENCODINGS: tuple[Literal["utf8", "base64"], ...] = ("utf8", "base64")
@@ -420,19 +404,6 @@ def _require_literal(
 def require_provider(answers: Mapping[str, JsonValue], *, ctx: str) -> Provider:
     value = require_str_field(answers, "provider", ctx=ctx)
     return _require_literal(value, _PROVIDERS, what="provider", ctx=ctx)
-
-
-def require_operator(answers: Mapping[str, JsonValue], *, ctx: str) -> ConditionOperator:
-    value = require_str_field(answers, "operator", ctx=ctx)
-    return _require_literal(value, _OPERATORS, what="operator", ctx=ctx)
-
-
-def optional_action(answers: Mapping[str, JsonValue], *, ctx: str) -> PolicyAction:
-    """policy action defaults to block_always when the answer omits it."""
-    value = answers.get("action")
-    if value is None:
-        return "block_always"
-    return _require_literal(value, _ACTIONS, what="action", ctx=ctx)
 
 
 # --- hook validators (shared by discover PEP-723 extraction + apply build) -----------------

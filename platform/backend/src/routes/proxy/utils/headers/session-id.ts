@@ -2,9 +2,15 @@ import {
   CLAUDE_CODE_HEADER_SESSION_SOURCE,
   CLAUDE_METADATA_SESSION_SOURCE,
   isCodexClientAgentId,
-  isOpenCodeClientAgentId,
+  KIMI_CODE_CLIENT_ID,
   SESSION_ID_HEADER,
 } from "@archestra/shared";
+import {
+  isOpenCodeFamilyClient,
+  OPENCODE_FAMILY,
+  type OpenCodeFamilyClientId,
+  type OpenCodeFamilySessionSource,
+} from "@archestra/shared/opencode-family";
 import { getHeaderValue, parseMetaHeader } from "./meta-header";
 
 const OPENWEBUI_CHAT_ID_HEADER = "x-openwebui-chat-id";
@@ -44,9 +50,13 @@ export type SessionSource =
   | "meta_header"
   | "openwebui_chat"
   | "codex_session"
-  | "opencode_session"
+  | "pi_session"
+  | "kimi_code_session"
+  | OpenCodeFamilySessionSource
   | typeof CLAUDE_CODE_HEADER_SESSION_SOURCE
   | "openai_user"
+  /** The auto model's sticky routing key, for a request that named no session. */
+  | "auto_routing"
   | null;
 
 export interface SessionInfo {
@@ -71,11 +81,14 @@ export interface SessionInfo {
  *    `session-id` header its Responses requests carry (source:
  *    'opencode_session'). A delegated child keeps its own native session id;
  *    its parent signal classifies the row instead of renaming it.
- * 6. Claude Code `x-claude-code-session-id` (source: 'claude_code_header').
+ * 6. Pi `x-pi-session-id`, only for the Pi client (source: 'pi_session').
+ *    Kimi Code `prompt_cache_key`, only for the Kimi Code client (source:
+ *    'kimi_code_session'). It stays the same across resume and compaction.
+ * 7. Claude Code `x-claude-code-session-id` (source: 'claude_code_header').
  *    `/branch` or `--fork-session` creates a new ID here, ensuring forks
  *    record as separate sessions in logs.
- * 7. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
- * 8. OpenAI user field (source: 'openai_user')
+ * 8. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
+ * 9. OpenAI user field (source: 'openai_user')
  *
  * @param headers - The request headers object
  * @param body - The request body (may contain metadata.user_id, user, or
@@ -98,6 +111,7 @@ export function extractSessionInfo({
         metadata?: { user_id?: string | null };
         user?: string | null;
         client_metadata?: unknown;
+        prompt_cache_key?: unknown;
       }
     | undefined;
   externalAgentId: string | undefined;
@@ -145,25 +159,68 @@ export function extractSessionInfo({
 
   // Priority 5: OpenCode's session id, gated on the resolved client
   // attribution for the same reason as Codex: these header names are generic.
-  if (isOpenCodeClientAgentId(externalAgentId)) {
+  // Kilo Code, an OpenCode fork, sends the same headers and session ids; its
+  // rows carry its own source.
+  const openCodeFamilyClient =
+    externalAgentId &&
+    isOpenCodeFamilyClient(externalAgentId.trim().toLowerCase())
+      ? OPENCODE_FAMILY[
+          externalAgentId.trim().toLowerCase() as OpenCodeFamilyClientId
+        ]
+      : null;
+  if (openCodeFamilyClient) {
     for (const header of OPENCODE_SESSION_ID_HEADERS) {
       const openCodeSessionId = getHeaderValue(headers, header)?.trim();
       if (openCodeSessionId) {
         return {
           sessionId: openCodeSessionId,
-          sessionSource: "opencode_session",
+          sessionSource: openCodeFamilyClient.sessionSource,
         };
       }
     }
   }
 
-  // Priority 6: Claude Code's own session header. `/branch` or
-  // `--fork-session` mints a new value here while `metadata.user_id.session_id`
-  // stays on the parent conversation.
+  // The managed Pi extension keeps this identity across forks and compaction.
+  // Read it only for Pi so unrelated clients cannot acquire its provenance.
+  if (externalAgentId?.trim().toLowerCase() === "pi") {
+    const piSessionId = getHeaderValue(headers, "x-pi-session-id")?.trim();
+    if (piSessionId) {
+      return { sessionId: piSessionId, sessionSource: "pi_session" };
+    }
+  }
+
+  // Kimi Code sends its session id as the prompt cache key. The field is a
+  // generic OpenAI one, so it is read only for the Kimi Code client.
+  if (externalAgentId?.trim().toLowerCase() === KIMI_CODE_CLIENT_ID) {
+    const kimiSessionId =
+      typeof body?.prompt_cache_key === "string"
+        ? body.prompt_cache_key.trim()
+        : "";
+    if (kimiSessionId) {
+      return { sessionId: kimiSessionId, sessionSource: "kimi_code_session" };
+    }
+  }
+
+  // Priority 7: Out-of-process Claude Code / Claude Desktop children spawned
+  // with `--parent-session-id` carry `parent_session_id` in `metadata.user_id`
+  // alongside their own `x-claude-code-session-id`; group them under the parent
+  // session in logs. `/branch` and `--fork-session` do not set
+  // `parent_session_id`, so forks keep their new `x-claude-code-session-id`.
   const claudeCodeSessionId = getHeaderValue(
     headers,
     "x-claude-code-session-id",
   );
+  const claudeParentSessionId = parseClaudeMetadataParentSessionId(
+    body?.metadata?.user_id,
+  );
+  if (claudeParentSessionId) {
+    return {
+      sessionId: claudeParentSessionId,
+      sessionSource: claudeCodeSessionId
+        ? CLAUDE_CODE_HEADER_SESSION_SOURCE
+        : CLAUDE_METADATA_SESSION_SOURCE,
+    };
+  }
   if (claudeCodeSessionId) {
     return {
       sessionId: claudeCodeSessionId,
@@ -171,7 +228,7 @@ export function extractSessionInfo({
     };
   }
 
-  // Priority 7: Claude/Anthropic metadata.user_id (any known format)
+  // Priority 8: Claude/Anthropic metadata.user_id (any known format)
   const claudeSessionId = parseClaudeMetadataSessionId(body?.metadata?.user_id);
   if (claudeSessionId) {
     return {
@@ -180,7 +237,7 @@ export function extractSessionInfo({
     };
   }
 
-  // Priority 8: OpenAI user field (some clients use this for session tracking)
+  // Priority 9: OpenAI user field (some clients use this for session tracking)
   const user = body?.user;
   if (user && typeof user === "string" && user.trim().length > 0) {
     return { sessionId: user.trim(), sessionSource: "openai_user" };
@@ -250,4 +307,31 @@ export function isClaudeMetadataUserId(
   userId: string | null | undefined,
 ): boolean {
   return parseClaudeMetadataSessionId(userId) !== null;
+}
+
+/**
+ * Extract `parent_session_id` from a unified JSON Claude `metadata.user_id`
+ * value, when an out-of-process child/teammate CLI was launched with
+ * `--parent-session-id`.
+ */
+export function parseClaudeMetadataParentSessionId(
+  userId: string | null | undefined,
+): string | null {
+  if (!userId || !userId.trimStart().startsWith("{")) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(userId) as { parent_session_id?: unknown };
+    if (
+      typeof parsed.parent_session_id === "string" &&
+      parsed.parent_session_id.trim()
+    ) {
+      return parsed.parent_session_id.trim();
+    }
+  } catch {
+    // Ignore malformed JSON.
+  }
+
+  return null;
 }

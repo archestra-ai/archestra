@@ -313,8 +313,8 @@ describe("EnvironmentsSection filters", () => {
     expect(
       screen.getByRole("link", { name: /Learn more/ }),
     ).toBeInTheDocument();
-    // A new environment has no id to grant on yet, so it has no Permissions
-    // tab, and access is never a switch on the form.
+    // A new environment has no id to grant on yet, so it has no access
+    // section, and access is never a switch on the form.
     expect(
       screen.getByRole("button", { name: "Network Egress Policy" }),
     ).toBeInTheDocument();

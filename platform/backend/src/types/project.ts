@@ -149,3 +149,13 @@ export const ProjectConversationItemSchema = z.object({
 export type ProjectConversationItem = z.infer<
   typeof ProjectConversationItemSchema
 >;
+
+/** One app linked into a project, as the caller sees it. */
+export const ProjectAppListItemSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string().nullable(),
+  description: z.string().nullable(),
+  linkedAt: z.date(),
+});
+export type ProjectAppListItem = z.infer<typeof ProjectAppListItemSchema>;

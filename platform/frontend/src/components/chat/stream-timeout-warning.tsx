@@ -3,7 +3,7 @@
 import { AlertTriangle } from "lucide-react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { TRANSPORT_STALL_THRESHOLD_SECONDS } from "@/lib/chat/stream-stall.hook";
+import { TRANSPORT_STALL_THRESHOLD_SECONDS } from "@/lib/chat/use-stream-stall";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 /**
@@ -14,10 +14,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
  * indicator instead (see `useStreamStall`).
  */
 export function StreamTimeoutWarning({ isStalled }: { isStalled: boolean }) {
-  const docsUrl = getFrontendDocsUrl(
-    "platform-deployment",
-    "cloud-provider-configuration-streaming-timeout-settings",
-  );
+  const docsUrl = getFrontendDocsUrl("admin/deployment", "keep-alive-timeouts");
 
   if (!isStalled) {
     return null;

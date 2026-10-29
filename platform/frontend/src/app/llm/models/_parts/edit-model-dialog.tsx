@@ -8,10 +8,11 @@ import {
   OUTPUT_MODALITY_OPTIONS,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@archestra/shared";
+import { isValidModelPrice } from "@archestra/shared/model-price";
 import { AlertCircle, Boxes, RotateCcw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
@@ -38,12 +39,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { type ModelWithApiKeys, useUpdateModel } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import type { ModelCostBackfillPrices } from "@/lib/model-cost-backfill.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { formatThousands } from "@/lib/utils/format-thousands";
@@ -57,6 +60,7 @@ import {
   validateConfiguredParameter,
   validateCustomTokenLimit,
 } from "../models-page-utils";
+import { ModelCostBackfillSection } from "./model-cost-backfill-section";
 
 /**
  * The dialog's pages, in sidebar order. Each one owns a slice of the catalog
@@ -65,7 +69,6 @@ import {
  */
 type ModelDialogSection =
   | "availability"
-  | "permissions"
   | "pricing"
   | "limits"
   | "modalities"
@@ -83,6 +86,11 @@ const SECTION_BY_FIELD: Record<string, ModelDialogSection> = {
   customPricePerMillionOutput: "pricing",
   customPricePerMillionCacheRead: "pricing",
   customPricePerMillionCacheWrite: "pricing",
+  longContextThreshold: "pricing",
+  longContextPricePerMillionInput: "pricing",
+  longContextPricePerMillionOutput: "pricing",
+  longContextPricePerMillionCacheRead: "pricing",
+  longContextPricePerMillionCacheWrite: "pricing",
   customContextLength: "limits",
   customOutputLength: "limits",
   inputModalities: "modalities",
@@ -139,6 +147,11 @@ interface EditModelFormValues {
   customPricePerMillionOutput: string;
   customPricePerMillionCacheRead: string;
   customPricePerMillionCacheWrite: string;
+  longContextThreshold: string;
+  longContextPricePerMillionInput: string;
+  longContextPricePerMillionOutput: string;
+  longContextPricePerMillionCacheRead: string;
+  longContextPricePerMillionCacheWrite: string;
   customContextLength: string;
   customOutputLength: string;
   ignored: boolean;
@@ -165,6 +178,26 @@ export function EditModelDialog({
   const updateModel = useUpdateModel();
   const [labels, setLabels] = useState<ProfileLabel[]>(model.labels);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  // The permissions section keeps its edits in its own form. This dialog's
+  // Save Changes is the only Save on screen, so it commits them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
+  // The Pricing page's "Apply new prices to" recompute starts after the
+  // prices are saved, so it runs at exactly the stored prices.
+  const backfillStart = useRef<(() => Promise<boolean>) | null>(null);
+  const registerBackfillStart = useCallback(
+    (start: (() => Promise<boolean>) | null) => {
+      backfillStart.current = start;
+    },
+    [],
+  );
+  const [backfillDirty, setBackfillDirty] = useState(false);
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   // Model catalog managers restrict models across the whole org, so the
   // picker offers every team (not just the editor's own).
@@ -183,17 +216,26 @@ export function EditModelDialog({
   });
   const fallbackPricing = getFallbackPricing(model);
   const _teamScopeUnavailable = !canReadTeams || assignableTeams.length === 0;
-  // The model's provider supports prompt caching when the backend resolved a
-  // cache price for it (synced, custom, or multiplier-derived).
-  const supportsCachePricing = model.cachePriceSource !== null;
   const nonNegativePriceRule = {
     validate: (v: string) => {
-      if (!v) return true;
-      const n = parseFloat(v);
-      if (Number.isNaN(n) || n < 0) return "Must be a non-negative number";
+      if (!v.trim()) return true;
+      if (!isValidModelPrice(v))
+        return "Enter a decimal number between 0 and 99999999.99 (use a dot)";
       return true;
     },
   };
+  // The threshold and its four prices are one setting: all set or all empty.
+  const longContextRule = (validateValue: (v: string) => true | string) => ({
+    deps: [...LONG_CONTEXT_FIELDS],
+    validate: (v: string, values: EditModelFormValues) => {
+      if (!v.trim()) {
+        return LONG_CONTEXT_FIELDS.some((name) => values[name].trim())
+          ? "Set the threshold and all four long-context prices, or leave all empty"
+          : true;
+      }
+      return validateValue(v);
+    },
+  });
   const form = useForm<EditModelFormValues>({
     defaultValues: getDefaults(model),
   });
@@ -204,6 +246,15 @@ export function EditModelDialog({
   const contextCeiling =
     parseCustomTokenLimit(form.watch("customContextLength")) ??
     model.contextLength;
+  const backfillPrices = toBackfillPrices({
+    input: form.watch("customPricePerMillionInput"),
+    output: form.watch("customPricePerMillionOutput"),
+    cacheRead: form.watch("customPricePerMillionCacheRead"),
+    cacheWrite: form.watch("customPricePerMillionCacheWrite"),
+  });
+  const pricesChanged = PRICE_FIELDS.some(
+    (price) => form.formState.dirtyFields[price.name],
+  );
 
   // An embedding model whose embedding client is text-only can't take image
   // input — the backend rejects the save, so disable the option here with the
@@ -256,7 +307,10 @@ export function EditModelDialog({
   }, [open, model, form]);
 
   const handleSubmit = async (values: EditModelFormValues) => {
+    // Taken now: the range can still change while the update is in flight.
+    const startBackfill = backfillStart.current;
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+    await permissionsSave.current?.();
     const inputPrice = values.customPricePerMillionInput.trim() || null;
     const outputPrice = values.customPricePerMillionOutput.trim() || null;
     const cacheReadPrice = values.customPricePerMillionCacheRead.trim() || null;
@@ -268,6 +322,15 @@ export function EditModelDialog({
 
     const result = await updateModel.mutateAsync({
       id: model.id,
+      longContextThreshold: parseCustomTokenLimit(values.longContextThreshold),
+      longContextPricePerMillionInput:
+        values.longContextPricePerMillionInput.trim() || null,
+      longContextPricePerMillionOutput:
+        values.longContextPricePerMillionOutput.trim() || null,
+      longContextPricePerMillionCacheRead:
+        values.longContextPricePerMillionCacheRead.trim() || null,
+      longContextPricePerMillionCacheWrite:
+        values.longContextPricePerMillionCacheWrite.trim() || null,
       customPricePerMillionInput: inputPrice,
       customPricePerMillionOutput: outputPrice,
       customPricePerMillionCacheRead: cacheReadPrice,
@@ -308,9 +371,9 @@ export function EditModelDialog({
           }
         : {}),
     });
-    if (result) {
-      onOpenChange(false);
-    }
+    if (!result) return;
+    if ((await startBackfill?.()) === false) return;
+    onOpenChange(false);
   };
 
   const handleResetPricing = () => {
@@ -338,9 +401,6 @@ export function EditModelDialog({
       ...(showsParameters
         ? [{ id: "parameters" as const, label: "Parameters" }]
         : []),
-      // Access is about who reaches the model, not about the model itself, so
-      // it sits after every page that configures it.
-      { id: "permissions" as const, label: "Permissions" },
     ],
     [showsParameters],
   );
@@ -381,6 +441,7 @@ export function EditModelDialog({
       navItems={navItems}
       onActiveSectionChange={setActiveSection}
       onSubmit={form.handleSubmit(handleSubmit, showFirstInvalidSection)}
+      isDirty={form.formState.isDirty || permissionsDirty || backfillDirty}
       wrapForm={(formContent) => <Form {...form}>{formContent}</Form>}
       footer={
         <>
@@ -405,8 +466,8 @@ export function EditModelDialog({
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={updateModel.isPending}>
-            {updateModel.isPending ? "Saving..." : "Save Changes"}
+          <Button type="submit" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting ? "Saving..." : "Save Changes"}
           </Button>
         </>
       }
@@ -446,123 +507,129 @@ export function EditModelDialog({
               </FormItem>
             )}
           />
-
-          <AdvancedLabelsSection
-            ref={labelsRef}
-            labels={labels}
-            onLabelsChange={setLabels}
-          />
         </div>
+        <ResourceAccessSection
+          resource="llmModel"
+          id={model.id}
+          registerSave={registerPermissionsSave}
+          onDirtyChange={setPermissionsDirty}
+        />
+        <AdvancedLabelsSection
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
+        />
       </DialogSection>
 
-      <DialogSection id="permissions" activeSection={activeSection}>
-        <ResourceAccessSection resource="llmModel" id={model.id} standalone />
-      </DialogSection>
       <DialogSection id="pricing" activeSection={activeSection}>
-        {/* Pricing */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">
-              Custom Pricing ($/M tokens)
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs gap-1"
-              onClick={handleResetPricing}
-            >
-              <RotateCcw className="h-3 w-3" />
-              Reset
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <FormField
-              control={form.control}
-              name="customPricePerMillionInput"
-              rules={nonNegativePriceRule}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Input</FormLabel>
-                  <FormControl>
-                    <Input placeholder={fallbackPricing.input} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="customPricePerMillionOutput"
-              rules={nonNegativePriceRule}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Output</FormLabel>
-                  <FormControl>
-                    <Input placeholder={fallbackPricing.output} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-          {model.priceSource === "default" && (
-            <p className="text-xs text-muted-foreground">
-              Input/output prices are estimated — set a custom price for
-              accurate cost tracking.
-            </p>
-          )}
-          {supportsCachePricing && (
-            <div className="space-y-2 pt-2">
-              <div className="flex min-h-7 items-center">
-                <span className="text-sm font-medium">
-                  Cache Pricing ($/M tokens)
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <FormField
-                  control={form.control}
-                  name="customPricePerMillionCacheRead"
-                  rules={nonNegativePriceRule}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cache read</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder={fallbackPricing.cacheRead}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="customPricePerMillionCacheWrite"
-                  rules={nonNegativePriceRule}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cache write</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder={fallbackPricing.cacheWrite}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              {model.cachePriceSource === "derived_multiplier" && (
-                <p className="text-xs text-muted-foreground">
-                  Cache prices are estimated from the input price. Set a custom
-                  cache price to override.
-                </p>
-              )}
+        <div className="space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium">
+                Token prices ($/M tokens)
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={handleResetPricing}
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span>Reset</span>
+              </Button>
             </div>
-          )}
+            <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
+              {PRICE_FIELDS.map((price) => (
+                <FormField
+                  key={price.name}
+                  control={form.control}
+                  name={price.name}
+                  rules={nonNegativePriceRule}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{price.label}</FormLabel>
+                      <FormControl>
+                        <Input
+                          inputMode="decimal"
+                          placeholder={fallbackPricing[price.fallback]}
+                          className="tabular-nums"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ))}
+            </div>
+            {(model.priceSource === "default" ||
+              model.cachePriceSource === "derived_multiplier") && (
+              <div className="space-y-1 text-xs text-muted-foreground">
+                {model.priceSource === "default" && (
+                  <p>
+                    Input and output prices are estimated. Set a custom price
+                    for accurate cost tracking.
+                  </p>
+                )}
+                {model.cachePriceSource === "derived_multiplier" && (
+                  <p>
+                    Cache prices are estimated from the input price. Set a
+                    custom cache price to override.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="space-y-2 pt-2">
+            <div className="flex min-h-7 items-center">
+              <span className="text-sm font-medium">
+                Long-context Pricing ($/M tokens)
+              </span>
+            </div>
+            <FormField
+              control={form.control}
+              name="longContextThreshold"
+              rules={longContextRule(validateCustomTokenLimit)}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Above prompt tokens</FormLabel>
+                  <FormControl>
+                    <GroupedNumberInput placeholder="Not set" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              {LONG_CONTEXT_PRICE_FIELDS.map(({ name, label }) => (
+                <FormField
+                  key={name}
+                  control={form.control}
+                  name={name}
+                  rules={longContextRule(nonNegativePriceRule.validate)}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{label}</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ))}
+            </div>
+          </div>
+          <Separator />
+          <ModelCostBackfillSection
+            key={open ? model.id : "closed"}
+            modelId={model.id}
+            prices={backfillPrices}
+            pricesChanged={pricesChanged}
+            visible={open && activeSection === "pricing"}
+            registerStart={registerBackfillStart}
+            onDirtyChange={setBackfillDirty}
+          />
         </div>
       </DialogSection>
 
@@ -981,6 +1048,52 @@ function getFallbackPricing(model: ModelWithApiKeys): {
   };
 }
 
+const PRICE_FIELDS = [
+  { name: "customPricePerMillionInput", label: "Input", fallback: "input" },
+  { name: "customPricePerMillionOutput", label: "Output", fallback: "output" },
+  {
+    name: "customPricePerMillionCacheRead",
+    label: "Cache read",
+    fallback: "cacheRead",
+  },
+  {
+    name: "customPricePerMillionCacheWrite",
+    label: "Cache write",
+    fallback: "cacheWrite",
+  },
+] as const satisfies ReadonlyArray<{
+  name: keyof EditModelFormValues;
+  label: string;
+  fallback: keyof ReturnType<typeof getFallbackPricing>;
+}>;
+
+/**
+ * The custom prices as the recompute preview takes them: blank means "no
+ * custom price". Null while any field holds an invalid price, so the preview
+ * keeps its last answer instead of pricing a half-typed number.
+ */
+function toBackfillPrices(
+  values: Record<keyof ModelCostBackfillPrices, string>,
+): ModelCostBackfillPrices | null {
+  const prices = {} as ModelCostBackfillPrices;
+  for (const key of Object.keys(values) as Array<
+    keyof ModelCostBackfillPrices
+  >) {
+    const value = values[key].trim();
+    if (!value) {
+      prices[key] = null;
+      continue;
+    }
+    if (!isValidModelPrice(value)) return null;
+    // The form also accepts "1.", ".5" or "1e2"; the preview takes plain
+    // decimals. Ten places keep the digit that decides the stored rounding.
+    prices[key] = PLAIN_DECIMAL.test(value) ? value : Number(value).toFixed(10);
+  }
+  return prices;
+}
+
+const PLAIN_DECIMAL = /^\d+(\.\d+)?$/;
+
 /**
  * Placeholder for a limit input: the provider's own figure, or a note that it
  * published none. An empty field means "use the provider's value", so the
@@ -991,6 +1104,18 @@ function providerLimitPlaceholder(value: number | null): string {
     ? "Not reported by the provider"
     : formatThousands(value);
 }
+
+const LONG_CONTEXT_PRICE_FIELDS = [
+  { name: "longContextPricePerMillionInput", label: "Long input" },
+  { name: "longContextPricePerMillionOutput", label: "Long output" },
+  { name: "longContextPricePerMillionCacheRead", label: "Long cache read" },
+  { name: "longContextPricePerMillionCacheWrite", label: "Long cache write" },
+] as const;
+
+const LONG_CONTEXT_FIELDS = [
+  "longContextThreshold",
+  ...LONG_CONTEXT_PRICE_FIELDS.map(({ name }) => name),
+] as const;
 
 function sameModalities(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((modality) => b.includes(modality));
@@ -1003,6 +1128,15 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
     customPricePerMillionCacheRead: model.customPricePerMillionCacheRead ?? "",
     customPricePerMillionCacheWrite:
       model.customPricePerMillionCacheWrite ?? "",
+    longContextThreshold: model.longContextThreshold?.toString() ?? "",
+    longContextPricePerMillionInput:
+      model.longContextPricePerMillionInput ?? "",
+    longContextPricePerMillionOutput:
+      model.longContextPricePerMillionOutput ?? "",
+    longContextPricePerMillionCacheRead:
+      model.longContextPricePerMillionCacheRead ?? "",
+    longContextPricePerMillionCacheWrite:
+      model.longContextPricePerMillionCacheWrite ?? "",
     customContextLength: model.customContextLength?.toString() ?? "",
     customOutputLength: model.customOutputLength?.toString() ?? "",
     ignored: model.ignored,

@@ -3,6 +3,7 @@ export type FilePreviewKind =
   | "html"
   | "image"
   | "svg"
+  | "json"
   | "text"
   | "csv"
   | "pdf"
@@ -46,14 +47,11 @@ export function getFilePreviewKind(
   // inline — the browser's own viewer does the work.
   if (mime === "application/pdf" || lowerName.endsWith(".pdf")) return "pdf";
   if (mime === "text/csv" || lowerName.endsWith(".csv")) return "csv";
-  if (mime.startsWith("text/") || mime === "application/json") return "text";
+  if (mime === "application/json" || lowerName.endsWith(".json")) return "json";
+  if (mime.startsWith("text/")) return "text";
   // Sniffing short plain-text files often yields application/octet-stream,
   // so fall back to well-known text extensions.
-  if (
-    lowerName.endsWith(".txt") ||
-    lowerName.endsWith(".log") ||
-    lowerName.endsWith(".json")
-  ) {
+  if (lowerName.endsWith(".txt") || lowerName.endsWith(".log")) {
     return "text";
   }
   return "unsupported";

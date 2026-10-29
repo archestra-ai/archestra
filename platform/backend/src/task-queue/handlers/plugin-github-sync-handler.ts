@@ -1,10 +1,7 @@
 import logger from "@/logging";
 import { PluginModel } from "@/models";
 import { importPluginFromGithub } from "@/plugins/github-import";
-import {
-  resolveGithubAppInstallationToken,
-  resolveGithubPatToken,
-} from "@/skills/github-app-token";
+import { resolvePluginSourceAccess } from "@/plugins/plugin-source-access";
 
 /**
  * Checks one tracked source. Executable bytes are never auto-published: a new
@@ -16,8 +13,7 @@ export async function handlePluginGithubSync(
 ): Promise<void> {
   const pluginId =
     typeof payload.pluginId === "string" ? payload.pluginId : null;
-  if (!pluginId)
-    throw new Error("Missing pluginId in Plugin GitHub sync payload");
+  if (!pluginId) throw new Error("Missing pluginId in Plugin Git sync payload");
 
   const due = await PluginModel.findByIdForSync(pluginId);
   if (
@@ -29,24 +25,14 @@ export async function handlePluginGithubSync(
   }
 
   try {
-    const githubToken = due.githubPatId
-      ? await resolveGithubPatToken({
-          githubPatId: due.githubPatId,
-          organizationId: due.organizationId,
-        })
-      : due.githubAppConfigId
-        ? await resolveGithubAppInstallationToken({
-            githubAppConfigId: due.githubAppConfigId,
-            organizationId: due.organizationId,
-          })
-        : undefined;
+    const access = await resolvePluginSourceAccess(due);
     const imported = await importPluginFromGithub({
       repoUrl: due.sourceRepo,
       ref: due.githubSyncRef,
       trackingRef: due.githubSyncRef,
       subdir: due.sourceSubdir ?? "",
       exclude: due.sourceExclude,
-      githubToken,
+      access,
     });
     await PluginModel.markGithubSyncResult({
       id: due.id,
@@ -60,7 +46,7 @@ export async function handlePluginGithubSync(
     const message = error instanceof Error ? error.message : String(error);
     logger.warn(
       { pluginId: due.id, error: message },
-      "[Plugins] GitHub source check failed; keeping approved bytes",
+      "[Plugins] Git source check failed; keeping approved bytes",
     );
     await PluginModel.markGithubSyncResult({
       id: due.id,

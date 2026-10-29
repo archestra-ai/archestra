@@ -39,6 +39,29 @@ const TableCardViewContext = createContext<TableCardViewContextValue | null>(
 );
 
 /**
+ * Saved view preferences a server render read from the request's cookies, by
+ * storage key, so a page renders the saved view on the server and keeps it on
+ * the first browser render instead of swapping after mount.
+ */
+const SavedTableCardViewModes = createContext<
+  Partial<Record<string, TableCardViewMode>>
+>({});
+
+export function SavedTableCardViewModesProvider({
+  modes,
+  children,
+}: {
+  modes: Partial<Record<string, TableCardViewMode>>;
+  children: ReactNode;
+}) {
+  return (
+    <SavedTableCardViewModes.Provider value={modes}>
+      {children}
+    </SavedTableCardViewModes.Provider>
+  );
+}
+
+/**
  * Owns a collection page's table/card preference. The preference is persisted
  * per page; cards remain the only rendered collection layout below the `md`
  * breakpoint because they adapt to narrow screens without horizontal scroll.
@@ -52,17 +75,25 @@ export function TableCardView({
   defaultMode?: TableCardViewMode;
   children: ReactNode;
 }) {
-  const [mode, setMode] = useState<TableCardViewMode>(defaultMode);
+  const savedOnServer = useContext(SavedTableCardViewModes)[storageKey];
+  const [mode, setMode] = useState<TableCardViewMode>(
+    savedOnServer ?? defaultMode,
+  );
 
   useEffect(() => {
     const stored = window.localStorage.getItem(storageKey);
-    if (stored === "cards" || stored === "table") setMode(stored);
+    if (stored === "cards" || stored === "table") {
+      setMode(stored);
+      // A preference saved before the cookie existed reaches the server too.
+      writeViewCookie(storageKey, stored);
+    }
   }, [storageKey]);
 
   const selectMode = useCallback(
     (value: TableCardViewMode) => {
       setMode(value);
       window.localStorage.setItem(storageKey, value);
+      writeViewCookie(storageKey, value);
     },
     [storageKey],
   );
@@ -87,9 +118,16 @@ export function TableCardViewToggle({
   const { mode: selectedMode, selectMode } = useTableCardView();
 
   return (
+    // A soft segmented control, shared look with the sidebar's AI/Studio
+    // toggle: one soft outline on the muted track, so the control keeps its
+    // shape on themes where --muted matches the page, and the selected view
+    // as a raised card (fill + shadow, no outline of its own). 28px segments +
+    // 1px padding + 1px border = 32px, level with the filter controls; the
+    // segments' radius is the track's minus those 2px (`rounded-md` ->
+    // `rounded-sm`), so the corners nest.
     <div
       className={cn(
-        "hidden items-center gap-0.5 rounded-md border p-0.5 md:inline-flex",
+        "hidden h-8 items-center gap-0.5 rounded-md border bg-muted p-px md:inline-flex",
         className,
       )}
     >
@@ -97,11 +135,16 @@ export function TableCardViewToggle({
         <Tooltip key={mode}>
           <TooltipTrigger asChild>
             <Button
-              variant={selectedMode === mode ? "secondary" : "ghost"}
-              size="icon-sm"
+              variant="ghost"
+              size="icon-xs"
               aria-label={VIEW_LABELS[mode]}
               aria-pressed={selectedMode === mode}
-              className={cn(selectedMode !== mode && "text-muted-foreground")}
+              className={cn(
+                "rounded-sm",
+                selectedMode === mode
+                  ? "bg-raised text-foreground shadow-sm hover:bg-raised hover:text-foreground dark:bg-accent dark:hover:bg-accent"
+                  : "text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent",
+              )}
               onClick={() => selectMode(mode)}
             >
               {mode === "cards" ? (
@@ -464,3 +507,14 @@ function isCardInteractiveTarget(
   const interactiveTarget = target.closest(CARD_INTERACTIVE_SELECTOR);
   return interactiveTarget !== null && interactiveTarget !== currentTarget;
 }
+
+/**
+ * The view preference as a cookie under the same key as its localStorage
+ * entry, so a server render can read it.
+ */
+function writeViewCookie(storageKey: string, value: TableCardViewMode) {
+  // biome-ignore lint/suspicious/noDocumentCookie: a plain first-party preference cookie; the Cookie Store API is not available everywhere
+  document.cookie = `${storageKey}=${value}; path=/; max-age=${VIEW_COOKIE_MAX_AGE_S}; samesite=lax`;
+}
+
+const VIEW_COOKIE_MAX_AGE_S = 60 * 60 * 24 * 365;

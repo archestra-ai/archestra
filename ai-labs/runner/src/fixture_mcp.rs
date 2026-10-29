@@ -23,7 +23,7 @@ use std::net::SocketAddr;
 use axum::Router;
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation, ListToolsResult,
-    PaginatedRequestParams, ServerCapabilities, ServerInfo,
+    PaginatedRequestParams, ServerCapabilities, ServerConfig,
 };
 use rmcp::service::{RequestContext, RoleServer};
 use rmcp::transport::streamable_http_server::{
@@ -129,8 +129,8 @@ struct FixtureMcpHandler {
 }
 
 impl ServerHandler for FixtureMcpHandler {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new(self.server_name.clone(), env!("CARGO_PKG_VERSION")))
     }
 
@@ -424,7 +424,7 @@ mod tests {
                 .expect("billing_type must be a string");
             assert!(
                 ["paid", "free"].contains(&billing),
-                "unexpected billing_type {billing:?}"
+                "billing_type must be one of paid/free"
             );
             let contract_id = s
                 .get("contract_id")

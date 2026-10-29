@@ -64,15 +64,14 @@ describe("McpGatewayActions", () => {
   it.each([
     null,
     "2026-01-02T00:00:00.000Z",
-  ])("allows readers to toggle a personal pin (pinnedAt=%s)", async (pinnedAt) => {
+  ])("allows readers to toggle a personal pin from the row (pinnedAt=%s)", async (pinnedAt) => {
     const agent = gateway({ pinnedAt });
     const { onTogglePin } = renderActions(agent, false);
-    await openRowMenu();
-    await userEvent.click(
-      screen.getByRole("menuitem", {
-        name: pinnedAt ? "Unpin" : "Pin",
-      }),
-    );
+    const pin = screen.getByRole("button", {
+      name: `${pinnedAt ? "Unpin" : "Pin"} billing-gateway`,
+    });
+    expect(pin).toHaveAttribute("aria-pressed", pinnedAt ? "true" : "false");
+    await userEvent.click(pin);
     expect(onTogglePin).toHaveBeenCalledWith(agent);
   });
 
@@ -117,15 +116,20 @@ describe("McpGatewayActions", () => {
   it("labels the visible row buttons and folds the rest into the row menu", async () => {
     renderActions(gateway());
 
-    expect(
-      screen.getByLabelText("Connect billing-gateway"),
-    ).toBeInTheDocument();
     expect(screen.getByLabelText("Edit billing-gateway")).toBeInTheDocument();
-    // Clone, Version history and Delete are not competing for the row's width.
+    expect(
+      screen.getByRole("button", { name: "Pin billing-gateway" }),
+    ).toBeInTheDocument();
+    // Connect, Clone, Version history and Delete are not competing for the
+    // row's width.
+    expect(screen.queryByLabelText("Connect billing-gateway")).toBeNull();
     expect(screen.queryByLabelText("Clone billing-gateway")).toBeNull();
 
     await openRowMenu();
 
+    expect(
+      screen.getByRole("menuitem", { name: "Connect" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Clone" })).toBeInTheDocument();
     expect(
       screen.getByRole("menuitem", { name: "Version history" }),
@@ -137,9 +141,10 @@ describe("McpGatewayActions", () => {
     // not this user's to change.
     renderActions(gateway(), false);
 
-    const edit = screen.getByLabelText("Edit billing-gateway");
-    expect(edit).toHaveAttribute("aria-disabled", "true");
-
+    expect(screen.getByLabelText("Edit billing-gateway")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     await openRowMenu();
     expect(screen.getByRole("menuitem", { name: /Delete/ })).toHaveAttribute(
       "aria-disabled",

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
+  ManagedResourceSchema,
   ResourcePermissionActionSchema,
   ResourcePermissionScopeSchema,
   RouteId,
-  ScopedResourceSchema,
+  withoutWildcardCoveredGrants,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -22,7 +23,7 @@ const resourcePermissionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.SearchInitialPermissionSubjects,
         tags: ["Permissions"],
-        params: z.object({ resource: ScopedResourceSchema }),
+        params: z.object({ resource: ManagedResourceSchema }),
         querystring: z.object({ query: z.string().max(200).default("") }),
         response: constructResponseSchema(
           z.array(PermissionSubjectOptionSchema),
@@ -46,12 +47,12 @@ const resourcePermissionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetScopedCapabilities,
         tags: ["Permissions"],
         description:
-          "The signed-in actor's explicit scoped capabilities. Used for discovery; each operation still authorizes its target.",
+          "The signed-in actor's explicit scoped capabilities. Single-object grants that a `*` grant for the same resource and action covers are left out. Used for discovery; each operation still authorizes its target.",
         response: constructResponseSchema(
           z.array(
             z.object({
               organizationId: z.string(),
-              resource: ScopedResourceSchema,
+              resource: ManagedResourceSchema,
               scope: ResourcePermissionScopeSchema,
               action: ResourcePermissionActionSchema,
             }),
@@ -61,10 +62,12 @@ const resourcePermissionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) =>
       reply.send(
-        await ResourcePermissions.resolveAll({
-          userId: request.user.id,
-          organizationId: request.organizationId,
-        }),
+        withoutWildcardCoveredGrants(
+          await ResourcePermissions.resolveAll({
+            userId: request.user.id,
+            organizationId: request.organizationId,
+          }),
+        ),
       ),
   );
   fastify.get(
@@ -140,6 +143,6 @@ const resourcePermissionRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default resourcePermissionRoutes;
 
 const ParamsSchema = z.object({
-  resource: ScopedResourceSchema,
+  resource: ManagedResourceSchema,
   scope: ResourcePermissionScopeSchema,
 });

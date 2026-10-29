@@ -1,4 +1,3 @@
-import type { APIRequestContext } from "@playwright/test";
 import { makeCatalogItem } from "@/mocks/data/catalog";
 import { makeInstalledServer } from "@/mocks/data/servers";
 import { expect, test } from "./fixtures";
@@ -38,32 +37,13 @@ function brokenServer(index: number) {
 }
 
 /**
- * `count` catalog items, each with one install that failed to start, with the
- * alerting flag on so the badge has something to count.
- *
- * The config override is patched onto the seed fetched from the mock backend
- * rather than rebuilt with `makeConfig`: that factory imports runtime values
- * from `@archestra/shared`, whose barrel pulls in a JSON module the Playwright
- * loader will not take.
+ * `count` catalog items, each with one install that failed to start, so the
+ * badge has something to count.
  */
 async function seedServersNeedingAttention(
-  {
-    mswControl,
-    request,
-  }: { mswControl: MswControl; request: APIRequestContext },
+  { mswControl }: { mswControl: MswControl },
   count: number,
 ) {
-  const config = await (
-    await request.get("/internal-test/api/api/config")
-  ).json();
-  await mswControl.use({
-    method: "get",
-    url: "/api/config",
-    body: {
-      ...config,
-      features: { ...config.features, mcpServerAlertingEnabled: true },
-    },
-  });
   await mswControl.use({
     method: "get",
     url: "/api/internal_mcp_catalog",
@@ -86,9 +66,8 @@ test.describe("sidebar attention badge", () => {
   test("renders a circle for a single-digit count", async ({
     page,
     mswControl,
-    request,
   }) => {
-    await seedServersNeedingAttention({ mswControl, request }, 3);
+    await seedServersNeedingAttention({ mswControl }, 3);
     await page.goto("/mcp/registry");
 
     const badge = page.getByTestId("sidebar-mcp-registry-attention-count");
@@ -108,9 +87,8 @@ test.describe("sidebar attention badge", () => {
   test("stays row-height and turns into a pill for a three-digit count", async ({
     page,
     mswControl,
-    request,
   }) => {
-    await seedServersNeedingAttention({ mswControl, request }, 128);
+    await seedServersNeedingAttention({ mswControl }, 128);
     await page.goto("/mcp/registry");
 
     const badge = page.getByTestId("sidebar-mcp-registry-attention-count");

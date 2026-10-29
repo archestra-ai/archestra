@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { PanelApp } from "./apps-context";
 import { buildAppGroups } from "./apps-context.utils";

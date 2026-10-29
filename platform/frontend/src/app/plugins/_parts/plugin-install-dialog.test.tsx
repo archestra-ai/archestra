@@ -47,6 +47,28 @@ beforeEach(() => {
 });
 
 describe("PluginInstallDialog", () => {
+  it("sends Claude Desktop plugins to Connect instead of minting a plugin-only setup", async () => {
+    render(
+      <PluginInstallDialog
+        plugins={[
+          {
+            id: "plugin-1",
+            displayName: "Brief writer",
+            clientType: "claude-desktop",
+            supportedPlatforms: ["posix"],
+          },
+        ]}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("link", { name: "Open Connect" }),
+    ).toHaveAttribute("href", "/connection?clientId=claude-desktop");
+    expect(createSetup).not.toHaveBeenCalled();
+  });
+
   it("generates a plugin-only install command without the connection page", async () => {
     render(
       <PluginInstallDialog

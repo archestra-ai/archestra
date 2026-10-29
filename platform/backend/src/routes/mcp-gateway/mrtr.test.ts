@@ -220,7 +220,7 @@ describe("deriveStatePrincipal", () => {
     ).toBe("user:u1");
   });
 
-  test("falls back to the token for org and team tokens", () => {
+  test("falls back to the token for service account tokens", () => {
     expect(deriveStatePrincipal({ tokenId: "t1", organizationId: "o1" })).toBe(
       "token:t1",
     );
@@ -327,5 +327,21 @@ describe("clientSupportsInputRequest", () => {
         request: { method: "elicitation/create" },
       }),
     ).toBe(false);
+  });
+
+  test("elicitation is permitted per declared mode", () => {
+    const supports = (elicitation: unknown, mode: "form" | "url") =>
+      clientSupportsInputRequest({
+        clientCapabilities: { elicitation },
+        request: { method: "elicitation/create", params: { mode } },
+      });
+
+    // An empty declaration predates modes and means forms only.
+    expect(supports({}, "form")).toBe(true);
+    expect(supports({}, "url")).toBe(false);
+    // What Cursor declares.
+    expect(supports({ form: {} }, "url")).toBe(false);
+    expect(supports({ form: {}, url: {} }, "url")).toBe(true);
+    expect(supports({ url: {} }, "form")).toBe(false);
   });
 });

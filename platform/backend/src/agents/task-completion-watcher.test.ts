@@ -16,6 +16,7 @@ vi.mock("@/agents/incoming-email", () => ({
   }),
 }));
 
+import { CHATOPS_NO_REPLY_SENTINEL } from "@/agents/chatops/constants";
 import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
 import { agentRuntimeFailureReason } from "@/services/agent-runtime/failure-reason";
 import { describe, expect, test } from "@/test";
@@ -23,6 +24,59 @@ import type { AgentRunCompletionTarget } from "@/types";
 import { watchTaskCompletion } from "./task-completion-watcher";
 
 describe("watchTaskCompletion", () => {
+  test("a UI continuation preserves Teams routing without reusing the prior turn's placeholder or mute marker", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const agent = await makeAgent();
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    const original = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const continuation = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const target = {
+      type: "chatops" as const,
+      bindingId: crypto.randomUUID(),
+      threadId: "teams-thread",
+      conversationReference: { conversation: { id: "teams-thread" } },
+      originatingTaskId: original.id,
+      placeholderActivityId: "thinking-message",
+      muteMarkerAtStart: null,
+    };
+    await watchTaskCompletion({
+      taskId: original.id,
+      target,
+      agentName: agent.name,
+    });
+    await watchTaskCompletion({
+      taskId: continuation.id,
+      target,
+      agentName: agent.name,
+    });
+    expect(notifyBindingThread.mock.calls[0][0]).toMatchObject({
+      placeholderActivityId: "thinking-message",
+      muteMarkerAtStart: null,
+    });
+    expect(notifyBindingThread.mock.calls[1][0]).toEqual({
+      taskId: continuation.id,
+      bindingId: target.bindingId,
+      threadId: target.threadId,
+      conversationReference: target.conversationReference,
+      agentName: agent.name,
+      text: "Task finished.",
+    });
+  });
+
   test("delivers an image failure verbatim to its originating thread once", async ({
     makeAgent,
     makeUser,
@@ -84,12 +138,84 @@ describe("watchTaskCompletion", () => {
     await watchTaskCompletion(notification);
 
     expect(notifyBindingThread).toHaveBeenCalledExactlyOnceWith({
+      taskId: task.id,
       bindingId: target.bindingId,
       threadId: target.threadId,
       agentName: agent.name,
       text: "Task failed. Authentication failed: your session has expired.\nReconnect your account and retry the task. (Runtime exit status 75.)",
     });
     expect(sendEmailReply).not.toHaveBeenCalled();
+    expect(
+      (await AgentRunModel.findByTaskId(task.id))?.completionNotifiedAt,
+    ).toEqual(expect.any(Date));
+  });
+
+  test("delivers silent completion to the provider so it can clear its status", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const agent = await makeAgent();
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    const task = await A2ATaskModel.createForRun({
+      contextId: context.id,
+      agentId: agent.id,
+    });
+    const target = {
+      type: "chatops" as const,
+      bindingId: crypto.randomUUID(),
+      threadId: "group-thread",
+    };
+    await AgentRunModel.create({
+      organizationId: agent.organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+      workloadName: `runner-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      completionTarget: target,
+    });
+    const silence = `This is addressed to someone else. ${CHATOPS_NO_REPLY_SENTINEL}`;
+    await A2ATaskModel.completeRun({
+      taskId: task.id,
+      agentMessage: {
+        id: crypto.randomUUID(),
+        contextId: context.id,
+        role: "ROLE_AGENT",
+        parts: [{ text: silence }],
+        content: {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          parts: [{ type: "text", text: silence }],
+        },
+      },
+      artifact: {
+        id: crypto.randomUUID(),
+        name: "agent-response",
+        parts: [{ text: silence }],
+      },
+      eventPayloads: [],
+    });
+
+    await watchTaskCompletion({
+      taskId: task.id,
+      target,
+      agentName: agent.name,
+    });
+
+    expect(notifyBindingThread).toHaveBeenCalledExactlyOnceWith({
+      taskId: task.id,
+      bindingId: target.bindingId,
+      threadId: target.threadId,
+      agentName: agent.name,
+      text: silence,
+    });
     expect(
       (await AgentRunModel.findByTaskId(task.id))?.completionNotifiedAt,
     ).toEqual(expect.any(Date));
@@ -177,6 +303,7 @@ describe("watchTaskCompletion", () => {
       if (target.type === "chatops") {
         expect(notifyBindingThread).toHaveBeenCalledTimes(1);
         expect(notifyBindingThread).toHaveBeenCalledWith({
+          taskId: task.id,
           bindingId: target.bindingId,
           threadId: target.threadId,
           agentName: agent.name,

@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import {
-  childReturnMarkersConfigured,
   collectAndStripChildReturns,
   mintChildReturnMarker,
 } from "./child-return";
@@ -72,6 +71,285 @@ describe("OpenAPPA child-return markers", () => {
     expect(nativeResultContent(body)).not.toContain(rawSummary);
   });
 
+  test("collects Codex mailbox returns by spawn call, not by task path as a child id", () => {
+    const header =
+      "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n";
+    const body = {
+      input: [
+        {
+          type: "function_call",
+          name: "spawn_agent",
+          namespace: "collaboration",
+          call_id: "spawn-call",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "spawn-call",
+          output: '{"task_name":"/root/worker"}',
+        },
+        {
+          type: "function_call",
+          name: "wait_agent",
+          namespace: "collaboration",
+          call_id: "wait-call",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "wait-call",
+          output: '{"message":"Wait completed.","timed_out":false}',
+        },
+        {
+          type: "agent_message",
+          id: "mail-1",
+          role: "assistant",
+          author: "/root/worker",
+          recipient: "/root",
+          untrusted: "drop",
+          content: [
+            {
+              type: "input_text",
+              text: header + carrier(requiredMarker(RETURN)),
+            },
+          ],
+        },
+      ],
+    };
+    const collected = collectAndStripChildReturns(body, {
+      codexMailboxReturns: true,
+    });
+    expect(collected.completions).toEqual([
+      {
+        value: RETURN.value,
+        spawnCallId: "spawn-call",
+        envelopeId: "mail-1",
+        assistantOrigin: false,
+      },
+    ]);
+    expect(body.input[4]).toEqual({
+      type: "agent_message",
+      id: "mail-1",
+      author: "/root/worker",
+      recipient: "/root",
+      content: [{ type: "input_text", text: header + RETURN.value }],
+    });
+    expect(body.input[3].output).toBe(
+      '{"message":"Wait completed.","timed_out":false}',
+    );
+  });
+
+  test.each([
+    { name: "mismatched sender", author: "/root/other" },
+    { name: "mismatched recipient", recipient: "/root/other" },
+    { name: "injected sender", author: "/root/worker\nINJECTED" },
+    {
+      name: "unadmitted opaque payload",
+      extra: { type: "encrypted_content", encrypted_content: "unverified" },
+    },
+    {
+      name: "unrecognized message",
+      text: "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\n391",
+    },
+  ])("refuses malformed or unsupported native mailbox returns: $name", ({
+    author,
+    recipient,
+    extra,
+    text,
+  }) => {
+    const body = {
+      input: [
+        {
+          type: "agent_message",
+          author: author ?? "/root/worker",
+          recipient: recipient ?? "/root",
+          content: [
+            {
+              type: "input_text",
+              text:
+                text ??
+                "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n391",
+            },
+            ...(extra ? [extra] : []),
+          ],
+        },
+      ],
+    };
+    const sent = structuredClone(body);
+    expect(() =>
+      collectAndStripChildReturns(body, { codexMailboxReturns: true }),
+    ).toThrow(/OpenAPPA withheld/);
+
+    // A caller that does not know yet whether OpenAPPA governs the request
+    // takes the refusal instead, and the message stays as the client sent it.
+    const refusals: string[] = [];
+    collectAndStripChildReturns(body, {
+      codexMailboxReturns: true,
+      onRefusal: (refusal) => refusals.push(refusal.message),
+    });
+    expect(refusals).toEqual([expect.stringMatching(/^OpenAPPA withheld/)]);
+    expect(body).toEqual(sent);
+  });
+
+  test("still collects a mailbox return next to messages it cannot read", () => {
+    const header =
+      "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n";
+    const mail = (text: string, id?: string, payload?: string) => ({
+      type: "agent_message",
+      ...(id ? { id } : {}),
+      author: "/root/worker",
+      recipient: "/root",
+      content: [
+        { type: "input_text", text },
+        ...(payload
+          ? [{ type: "encrypted_content", encrypted_content: payload }]
+          : []),
+      ],
+    });
+    // The kinds a Codex agent sends besides a task and its final answer. Codex
+    // 0.162 sends the text of a message between agents as an encrypted part.
+    const message = mail(
+      "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\n",
+      undefined,
+      "gAAAA_opaque_message",
+    );
+    const post = mail(
+      "Message Type: CHANNEL_POST\nSender: /root/worker\nChannel: build\nMessage ID: m-1\nThread ID: t-1\nPayload:\nPosted",
+    );
+    const body = {
+      input: [
+        structuredClone(message),
+        mail(header + carrier(requiredMarker(RETURN)), "mail-1"),
+        structuredClone(post),
+      ],
+    };
+    const refusals: string[] = [];
+
+    const collected = collectAndStripChildReturns(body, {
+      codexMailboxReturns: true,
+      onRefusal: (refusal) => refusals.push(refusal.message),
+    });
+
+    expect(refusals).toEqual([
+      "OpenAPPA withheld an unsupported Codex mailbox message",
+      "OpenAPPA withheld an unsupported Codex mailbox message",
+    ]);
+    expect(collected.completions).toEqual([
+      { value: RETURN.value, envelopeId: "mail-1", assistantOrigin: false },
+    ]);
+    expect(body.input).toEqual([
+      message,
+      mail(header + RETURN.value, "mail-1"),
+      post,
+    ]);
+  });
+
+  test("leaves task ciphertext, unrelated clients and quoted mailbox data untouched", () => {
+    const task = {
+      type: "agent_message",
+      author: "/root",
+      recipient: "/root/worker",
+      content: [
+        {
+          type: "input_text",
+          text: "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\n",
+        },
+        { type: "encrypted_content", encrypted_content: "gAAAA_opaque_task" },
+      ],
+    };
+    const body = {
+      input: [task, { role: "user", content: JSON.stringify(task) }],
+    };
+    const before = structuredClone(body);
+    expect(
+      collectAndStripChildReturns(body, { codexMailboxReturns: true })
+        .completions,
+    ).toEqual([]);
+    expect(body).toEqual(before);
+    const other = {
+      input: [
+        {
+          ...task,
+          content: [
+            {
+              type: "input_text",
+              text: "Message Type: FINAL_ANSWER\nTask name: /root/worker\nSender: /root\nPayload:\nRAW",
+            },
+          ],
+        },
+      ],
+    };
+    const unchanged = structuredClone(other);
+    expect(collectAndStripChildReturns(other).completions).toEqual([]);
+    expect(other).toEqual(unchanged);
+  });
+
+  test.each([
+    ["as Kimi Code stores it", ""],
+    ["as Kimi Code sends it to the model", "Wall time: 0.140 seconds\n"],
+  ])("reads a Kimi Code Agent result %s and drops its framing", (_, wallTime) => {
+    const output = `${wallTime}agent_id: agent-0\nactual_subagent_type: explore\nstatus: completed\nstop_reason: completed\n\n[summary]\n${completeResponseCarrier(RETURN)}\n\nresume_hint: Continue with Agent(resume="agent-0", prompt="..."). Use agent_id only; do not set subagent_type.`;
+    const { body, collected } = collectNativeResult(output, "Agent");
+
+    expect(collected.completions).toEqual([
+      expect.objectContaining({
+        value: RETURN.value,
+        envelopeId: "native-result",
+      }),
+    ]);
+    expect(nativeResultContent(body)).toBe(RETURN.value);
+  });
+
+  test("reads a Kimi Code Agent result whose receipt was already stripped", () => {
+    // The proxy strips the child's trajectory receipt from history first,
+    // with the line break after the summary heading.
+    const output = `Wall time: 0.318 seconds\nagent_id: agent-0\nactual_subagent_type: explore\nstatus: completed\nstop_reason: completed\n\n[summary]${carrier(requiredMarker(RETURN))}\n\nresume_hint: Continue with Agent(resume="agent-0", prompt="...").`;
+    const { body, collected } = collectNativeResult(output, "Agent");
+
+    expect(collected.completions).toEqual([
+      expect.objectContaining({ value: RETURN.value }),
+    ]);
+    expect(nativeResultContent(body)).toBe(RETURN.value);
+  });
+
+  test("reads a Kimi Code Agent result sent as a text part", () => {
+    const text = `Wall time: 0.140 seconds\nagent_id: agent-0\nactual_subagent_type: explore\nstatus: completed\nstop_reason: completed\n\n[summary]\n${completeResponseCarrier(RETURN)}\n\nresume_hint: Continue with Agent(resume="agent-0", prompt="...").`;
+    const body = {
+      messages: [
+        {
+          role: "assistant",
+          tool_calls: [nativeToolCall("native-result", "Agent")],
+        },
+        {
+          role: "tool",
+          tool_call_id: "native-result",
+          content: [{ type: "text", text }],
+        },
+      ],
+    };
+
+    const collected = collectAndStripChildReturns(body);
+
+    expect(collected.completions).toEqual([
+      expect.objectContaining({
+        value: RETURN.value,
+        envelopeId: "native-result",
+      }),
+    ]);
+    expect(body.messages[1].content).toEqual([
+      { type: "text", text: RETURN.value },
+    ]);
+  });
+
+  test("leaves a Kimi Code Agent result without a return marker as Kimi Code sent it", () => {
+    const output =
+      'Wall time: 0.126 seconds\nagent_id: agent-0\nactual_subagent_type: explore\nstatus: completed\nstop_reason: completed\n\n[summary]\nUNSIGNED CHILD TEXT\n\nresume_hint: Continue with Agent(resume="agent-0", prompt="...").';
+    const { body, collected } = collectNativeResult(output, "Agent");
+
+    expect(collected.completions).toEqual([]);
+    expect(nativeResultContent(body)).toBe(output);
+  });
+
   test("treats a synthetic OpenCode user message as a child return", () => {
     const output = `<task id="child" state="completed">\n<summary>UNTRUSTED</summary>\n<task_result>\n${carrier(requiredMarker(RETURN))}\n</task_result>\n</task>`;
     const body = {
@@ -117,6 +395,48 @@ describe("OpenAPPA child-return markers", () => {
         { openCodeBackgroundReturns: true },
       ),
     ).toThrow("OpenAPPA withheld a malformed child completion");
+  });
+
+  test("leaves an OpenCode background launch as the client sent it", () => {
+    // Kilo Code 7.8 wraps the launch notice in <task_result>.
+    const launch =
+      '<task id="ses_child" state="running">\n<summary>Background task started</summary>\n<task_result>\nThe task is working in the background. You will be notified automatically when it finishes.\n</task_result>\n</task>';
+    const body = (content: string) => ({
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_task",
+              type: "function",
+              function: { name: "task", arguments: "{}" },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_task", content },
+      ],
+    });
+    const acknowledged = body(launch);
+    expect(
+      collectAndStripChildReturns(acknowledged, {
+        openCodeBackgroundReturns: true,
+      }).completions,
+    ).toEqual([]);
+    expect(acknowledged.messages[1].content).toBe(launch);
+
+    // A launch that carries a return marker is read as the return it claims.
+    const smuggled = body(
+      launch.replace(
+        "The task is working in the background. You will be notified automatically when it finishes.",
+        carrier(requiredMarker(RETURN)),
+      ),
+    );
+    expect(
+      collectAndStripChildReturns(smuggled, {
+        openCodeBackgroundReturns: true,
+      }).completions,
+    ).toEqual([expect.objectContaining({ childNativeId: "ses_child" })]);
   });
 
   test("preserves other clients' user text and unrelated OpenCode message parts", () => {
@@ -252,12 +572,34 @@ describe("OpenAPPA child-return markers", () => {
     const marker = requiredMarker(RETURN);
 
     expect(marker).toMatch(
-      /^▄█▄▄▄█▄\n██▄█▄██ {2}finished subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}$/,
+      /^▄█▄▄▄█▄ {2}finished subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}$/,
     );
     expect(requiredMarker({ ...RETURN, format: "inline" })).toMatch(
       /^finished subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}$/,
     );
     expect(marker).not.toContain("[appa]");
+  });
+
+  test("strips legacy two-line and space-collapsed child return markers", () => {
+    const marker = requiredMarker(RETURN);
+    const legacyTwoLine = marker.replace(/^▄█▄▄▄█▄/, "▄█▄▄▄█▄\n██▄█▄██");
+    const legacyCollapsed = marker.replace(/^▄█▄▄▄█▄/, "▄█▄▄▄█▄ ██▄█▄██");
+
+    for (const candidate of [legacyTwoLine, legacyCollapsed]) {
+      const body = {
+        messages: [
+          {
+            role: "assistant",
+            tool_calls: [nativeToolCall("direct", "Task")],
+          },
+          { role: "tool", tool_call_id: "direct", content: carrier(candidate) },
+        ],
+      };
+      const collected = collectAndStripChildReturns(body);
+      expect(collected.completions).toHaveLength(1);
+      expect(collected.completions[0]?.value).toBe(RETURN.value);
+      expect(body.messages[1].content).toBe(RETURN.value);
+    }
   });
 
   test("strips direct, JSON, and Claude notification carriers", () => {
@@ -627,17 +969,38 @@ describe("OpenAPPA child-return markers", () => {
     expect(() => collectAndStripChildReturns(body)).toThrow(
       "OpenAPPA received a malformed child-return marker",
     );
+    // Only a withheld return waits for the caller. A malformed marker is
+    // rejected whether or not the caller takes refusals.
+    expect(() =>
+      collectAndStripChildReturns(body, { onRefusal: () => {} }),
+    ).toThrow("OpenAPPA received a malformed child-return marker");
   });
 
-  test("mints deterministically through a fresh module graph", async () => {
-    const marker = requiredMarker(RETURN);
+  test("reports a return the body walk cannot read and leaves it as the client sent it", () => {
+    // The walk reads the returns of every other client. This one is an
+    // OpenCode background completion without its result framing.
+    const body = {
+      messages: [
+        {
+          role: "user",
+          content: '<task id="child" state="completed">RAW</task>',
+        },
+        { role: "user", content: "Carry on" },
+      ],
+    };
+    const sent = structuredClone(body);
+    const refusals: string[] = [];
 
-    vi.resetModules();
-    const reloadedConfig = (await import("@/config")).default;
-    reloadedConfig.openappa.offerSigningSecret = SECRET;
-    const reloaded = await import("./child-return");
+    const collected = collectAndStripChildReturns(body, {
+      openCodeBackgroundReturns: true,
+      onRefusal: (refusal) => refusals.push(refusal.message),
+    });
 
-    expect(reloaded.mintChildReturnMarker(RETURN)).toBe(marker);
+    expect(refusals).toEqual([
+      "OpenAPPA withheld a malformed child completion",
+    ]);
+    expect(collected.completions).toEqual([]);
+    expect(body).toEqual(sent);
   });
 
   test("bounds marker scanning and scans large indentation linearly", () => {
@@ -653,20 +1016,29 @@ describe("OpenAPPA child-return markers", () => {
     ]);
   }, 30_000);
 
-  test("requires a signing key to mint", () => {
+  test("mints and strips a display marker without a signing key", () => {
     config.openappa.offerSigningSecret = "";
 
-    expect(childReturnMarkersConfigured()).toBe(false);
-    expect(mintChildReturnMarker(RETURN)).toBeUndefined();
+    const marker = mintChildReturnMarker(RETURN);
+    expect(marker).toBe(mintChildReturnMarker(RETURN));
+    expect(
+      mintChildReturnMarker({ ...RETURN, value: "other summary" }),
+    ).not.toBe(marker);
+    const { body, collected } = collectNativeResult(
+      `${RETURN.value}\n\n${marker}`,
+      "Task",
+    );
+    expect(nativeResultContent(body)).toBe(RETURN.value);
+    expect(collected.completions).toEqual([
+      expect.objectContaining({ value: RETURN.value }),
+    ]);
   });
 });
 
 function requiredMarker(
   returned: Parameters<typeof mintChildReturnMarker>[0],
 ): string {
-  const marker = mintChildReturnMarker(returned);
-  if (!marker) throw new Error("expected a child-return marker");
-  return marker;
+  return mintChildReturnMarker(returned);
 }
 
 function carrier(marker: string, value: string = RETURN.value): string {

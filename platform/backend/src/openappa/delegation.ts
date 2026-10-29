@@ -17,6 +17,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import config from "@/config";
+import { withoutTrajectoryStamp } from "./trajectory-stamp";
 import { type AppaWireFamily, chatMessages, responsesItems } from "./wire";
 
 /** A marker read from a child's opening message, not yet verified. */
@@ -28,6 +29,11 @@ export type AppaDelegationMarker = {
   promptDigest: string;
   /** Original provider call whose spawn opened this child. */
   spawnCallId?: string;
+  /**
+   * Scoped workspace session the proxy verified when it released this spawn.
+   * Absent on markers minted outside a runtime.
+   */
+  runtimeSessionId?: string;
 };
 
 /** Creates and verifies markers only when the signing secret is set. */
@@ -47,9 +53,17 @@ export function mintDelegationMarker(params: {
   /** The text the line is appended to; empty for a line that stands alone. */
   prompt: string;
   spawnCallId?: string;
+  /** Scoped workspace session. Omit outside a runtime; never copy a client header. */
+  runtimeSessionId?: string;
 }): string | undefined {
   const key = delegationKey();
   if (!key) return undefined;
+  if (
+    params.runtimeSessionId !== undefined &&
+    (params.runtimeSessionId.length === 0 || !params.spawnCallId)
+  ) {
+    return undefined;
+  }
   const nonce = randomBytes(NONCE_BYTES).toString("hex");
   const tag = delegationTag({
     key,
@@ -60,28 +74,37 @@ export function mintDelegationMarker(params: {
     promptDigest: digestOf(params.prompt),
     nonce,
     spawnCallId: params.spawnCallId,
+    runtimeSessionId: params.runtimeSessionId,
   });
-  const token = params.spawnCallId
-    ? `appa2-${Buffer.from(params.spawnCallId).toString("base64url")}.${nonce}${tag}`
-    : `appa-${nonce}${tag}`;
+  const token = params.runtimeSessionId
+    ? `appa3-${Buffer.from(params.spawnCallId ?? "").toString("base64url")}.${Buffer.from(params.runtimeSessionId).toString("base64url")}.${nonce}${tag}`
+    : params.spawnCallId
+      ? `appa2-${Buffer.from(params.spawnCallId).toString("base64url")}.${nonce}${tag}`
+      : `appa-${nonce}${tag}`;
   return `${MARKER_PREFIX}${token} — child of ${params.parentId}.`;
 }
 
 /**
- * Returns true if this server signed `marker` for a spawn from `spawnerNativeId`
- * for this organization, caller, and prompt text.
+ * Returns what `marker` binds when this server signed it for a spawn from
+ * `spawnerNativeId` for this organization, caller, and prompt text, and
+ * undefined otherwise. It names the prompt by the digest of the text the
+ * marker closes; a line pushed as an item of its own binds no prompt.
  */
-export function verifyDelegationMarker(params: {
+export function verifyDelegatedPrompt(params: {
   marker: AppaDelegationMarker;
   organizationId: string;
   callerId: string | undefined;
   spawnerNativeId: string;
-}): boolean {
+}): { promptDigest?: string } | undefined {
   const key = delegationKey();
-  if (!key) return false;
+  if (!key) return undefined;
   const token = parseMarkerToken(params.marker.token);
-  if (!token) return false;
-  if (params.marker.spawnCallId !== token.spawnCallId) return false;
+  if (!token) return undefined;
+  if (
+    params.marker.spawnCallId !== token.spawnCallId ||
+    params.marker.runtimeSessionId !== token.runtimeSessionId
+  )
+    return undefined;
   const actual = Buffer.from(token.tag, "utf8");
   // A line pushed as an item of its own closes no text, but a client may
   // still join it to the text before it.
@@ -97,13 +120,19 @@ export function verifyDelegationMarker(params: {
         promptDigest,
         nonce: token.nonce,
         spawnCallId: token.spawnCallId,
+        runtimeSessionId: params.marker.runtimeSessionId,
       }),
       "utf8",
     );
     if (actual.length === expected.length && timingSafeEqual(actual, expected))
-      return true;
+      return promptDigest === EMPTY_PROMPT_DIGEST ? {} : { promptDigest };
   }
-  return false;
+  return undefined;
+}
+
+/** Whether `text` is the prompt a verified marker bound by `promptDigest`. */
+export function isDelegatedPrompt(text: string, promptDigest: string): boolean {
+  return digestOf(text) === promptDigest;
 }
 
 /** Matches exactly one marker line: the only text a finalizer can append to a call. */
@@ -124,9 +153,11 @@ export function isDelegationMarkerItem(value: unknown): boolean {
 }
 
 /**
- * Collects markers from opening user messages in wire order.
+ * Collects markers from opening user/agent task messages in wire order.
  * Ignores system messages, tool results, and client notifications.
- * Only accepts a marker line at the end of the text.
+ * Only accepts a marker line at the end of the text, or at the end of the
+ * body of the teammate envelope that ends it: Claude Code hands a teammate
+ * its prompt as a message from its lead.
  */
 export function collectDelegationMarkers(params: {
   family: AppaWireFamily;
@@ -163,6 +194,21 @@ export function stripDelegationMarkers(params: {
         stripTextContent(item, "output", "input_text", false);
       } else if (item.type === undefined || item.type === "message") {
         stripTextContent(item, "content", "input_text", item.role === "user");
+      } else if (isCodexTaskMessage(item)) {
+        stripTextContent(item, "content", "input_text", false);
+        // Codex carries an encrypted spawn.message verbatim into this part.
+        // Remove only our transport suffix; never decode or re-encode the blob.
+        for (const part of asArray(item.content) ?? []) {
+          const record = asRecord(part);
+          if (
+            record?.type === "encrypted_content" &&
+            typeof record.encrypted_content === "string"
+          ) {
+            record.encrypted_content = stripMarkerLines(
+              record.encrypted_content,
+            );
+          }
+        }
       }
     }
     return;
@@ -191,14 +237,71 @@ export function stripDelegationMarkers(params: {
   }
 }
 
+/**
+ * Returns the spawn calls APPA released, as the markers on the spawn prompts
+ * in a request's history name them. Read before `stripDelegationMarkers`. A
+ * marker names the call by the provider id APPA saw when it released it, so
+ * the ids match the request's tool results on a translated wire too. Markers
+ * are not verified here: the ids only tell a released spawn from one APPA
+ * never saw, and the runtime still rules on every result of them.
+ */
+export function collectReleasedSpawnCalls(params: {
+  family: AppaWireFamily;
+  body: unknown;
+}): string[] {
+  const released: string[] = [];
+  const read = (name: unknown, args: unknown) => {
+    let parsed = args;
+    if (typeof args === "string") {
+      try {
+        parsed = JSON.parse(args);
+      } catch {
+        return;
+      }
+    }
+    const record = asRecord(parsed);
+    for (const field of spawnFields(name)) {
+      const prompt = record?.[field];
+      const marked =
+        typeof prompt === "string"
+          ? trailingMarker(prompt)?.spawnCallId
+          : undefined;
+      if (marked) released.push(withoutTrajectoryStamp(marked));
+    }
+  };
+  if (params.family === "openai:responses") {
+    for (const item of responsesItems(params.body)) {
+      if (item.type === "function_call") read(item.name, item.arguments);
+    }
+    return released;
+  }
+  for (const message of chatMessages(params.body)) {
+    if (message.role !== "assistant") continue;
+    for (const block of asArray(message.content) ?? []) {
+      const record = asRecord(block);
+      if (record?.type === "tool_use") read(record.name, record.input);
+    }
+    for (const call of asArray(message.tool_calls) ?? []) {
+      const record = asRecord(call);
+      const fn = asRecord(record?.function);
+      if (fn) read(fn.name, fn.arguments);
+    }
+  }
+  return released;
+}
+
 // === Internal helpers ===
 
 const MARKER_PREFIX = "[appa] delegated trajectory ";
 const REMOVED_DELEGATION_TEXT = "[delegation metadata removed]";
+/** Claude Code's envelope for a message between a lead and its teammate. */
+const TEAMMATE_ENVELOPE_OPEN =
+  /<teammate-message(?:[ \t]+[A-Za-z_-]+="[^"]*")*>\n/g;
+const TEAMMATE_ENVELOPE_CLOSE = "\n</teammate-message>";
 const NONCE_BYTES = 8;
 const TAG_HEX_LENGTH = 24;
 const DELEGATION_KEY_LABEL = "archestra.appa.delegation.v1";
-const MARKER_TOKEN = String.raw`(?:appa-[0-9a-f]{40}|appa2-[A-Za-z0-9_-]+\.[0-9a-f]{40})`;
+const MARKER_TOKEN = String.raw`(?:appa-[0-9a-f]{40}|appa2-[A-Za-z0-9_-]+\.[0-9a-f]{40}|appa3-[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[0-9a-f]{40})`;
 // Clients can send lines with CRLF endings.
 // Both regular expressions permit a carriage return at the end of the line.
 const MARKER_LINE = new RegExp(
@@ -227,17 +330,19 @@ function delegationTag(params: {
   promptDigest: string;
   nonce: string;
   spawnCallId?: string;
+  runtimeSessionId?: string;
 }): string {
   return createHmac("sha256", params.key)
     .update(
       JSON.stringify([
-        params.spawnCallId ? "v2" : "v1",
+        params.runtimeSessionId ? "v3" : params.spawnCallId ? "v2" : "v1",
         params.organizationId,
         params.callerId ?? "",
         params.parentId,
         params.spawnerNativeId,
         params.promptDigest,
         ...(params.spawnCallId ? [params.spawnCallId] : []),
+        ...(params.runtimeSessionId ? [params.runtimeSessionId] : []),
         params.nonce,
       ]),
     )
@@ -254,7 +359,7 @@ const EMPTY_PROMPT_DIGEST = digestOf("");
 
 function trailingMarker(text: string): AppaDelegationMarker | undefined {
   if (!text.includes(MARKER_PREFIX)) return undefined;
-  const trimmed = text.trimEnd();
+  const trimmed = closingBody(text.trimEnd()).trimEnd();
   const lineStart = trimmed.lastIndexOf("\n") + 1;
   const match = MARKER_LINE.exec(trimmed.slice(lineStart));
   if (!match) return undefined;
@@ -263,14 +368,78 @@ function trailingMarker(text: string): AppaDelegationMarker | undefined {
   return {
     token: match[1],
     parentId: match[2],
-    promptDigest: digestOf(trimmed.slice(0, lineStart)),
+    promptDigest: digestOf(withoutClientPreamble(trimmed.slice(0, lineStart))),
     ...(token.spawnCallId ? { spawnCallId: token.spawnCallId } : {}),
+    ...(token.runtimeSessionId
+      ? { runtimeSessionId: token.runtimeSessionId }
+      : {}),
   };
 }
 
-function parseMarkerToken(
-  token: string,
-): { nonce: string; tag: string; spawnCallId?: string } | undefined {
+/**
+ * The spawn prompt without the repository summary Kimi Code puts in front of
+ * it when it starts a subagent: a `<git-context>` block and a blank line. Kimi
+ * Code builds the block from the working directory, remote, branch, changed
+ * files and recent commits, as Claude Code puts its git status in the system
+ * prompt; the model did not write it, so the marker does not sign it.
+ */
+function withoutClientPreamble(text: string): string {
+  const unavailable = KIMI_GIT_CONTEXT_UNAVAILABLE.exec(text);
+  if (unavailable) return text.slice(unavailable[0].length);
+  if (!text.startsWith(KIMI_GIT_CONTEXT_OPEN)) return text;
+  const end = text.indexOf(KIMI_GIT_CONTEXT_CLOSE);
+  return end === -1 ? text : text.slice(end + KIMI_GIT_CONTEXT_CLOSE.length);
+}
+
+const KIMI_GIT_CONTEXT_OPEN = "<git-context>\nWorking directory: ";
+const KIMI_GIT_CONTEXT_CLOSE = "\n</git-context>\n\n";
+const KIMI_GIT_CONTEXT_UNAVAILABLE =
+  /^<git-context status="unavailable" reason="[a-z-]+"\/>\n\n/;
+
+/**
+ * The text a marker may end: the text itself, or the body of the teammate
+ * envelope that ends it. Claude Code escapes an envelope's own tags inside
+ * its body, so the last opening tag starts the last envelope.
+ */
+function closingBody(text: string): string {
+  if (!text.endsWith(TEAMMATE_ENVELOPE_CLOSE)) return text;
+  let body: string | undefined;
+  for (const match of text.matchAll(TEAMMATE_ENVELOPE_OPEN)) {
+    body = text.slice(
+      (match.index ?? 0) + match[0].length,
+      text.length - TEAMMATE_ENVELOPE_CLOSE.length,
+    );
+  }
+  return body === undefined || body.includes(TEAMMATE_ENVELOPE_CLOSE)
+    ? text
+    : body;
+}
+
+function parseMarkerToken(token: string):
+  | {
+      nonce: string;
+      tag: string;
+      spawnCallId?: string;
+      runtimeSessionId?: string;
+    }
+  | undefined {
+  const version3 =
+    /^appa3-([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([0-9a-f]{40})$/.exec(token);
+  if (version3) {
+    const spawnCallId = Buffer.from(version3[1], "base64url").toString("utf8");
+    const runtimeSessionId = Buffer.from(version3[2], "base64url").toString(
+      "utf8",
+    );
+    if (spawnCallId.length === 0 || runtimeSessionId.length === 0) {
+      return undefined;
+    }
+    return {
+      spawnCallId,
+      runtimeSessionId,
+      nonce: version3[3].slice(0, NONCE_BYTES * 2),
+      tag: version3[3].slice(NONCE_BYTES * 2),
+    };
+  }
   if (token.startsWith("appa-")) {
     const body = token.slice("appa-".length);
     if (!/^[0-9a-f]{40}$/.test(body)) return undefined;
@@ -290,6 +459,16 @@ function parseMarkerToken(
   };
 }
 
+function isCodexTaskMessage(item: Record<string, unknown>): boolean {
+  const header = asRecord(asArray(item.content)?.[0]);
+  return (
+    item.type === "agent_message" &&
+    header?.type === "input_text" &&
+    typeof header.text === "string" &&
+    /^Message Type: NEW_TASK\r?\n/.test(header.text)
+  );
+}
+
 function userTexts(params: {
   family: AppaWireFamily;
   body: unknown;
@@ -297,12 +476,27 @@ function userTexts(params: {
   if (params.family === "openai:responses") {
     const input = asRecord(params.body)?.input;
     if (typeof input === "string") return [input];
-    return responsesItems(params.body).flatMap((item) =>
-      item.role === "user" &&
-      (item.type === undefined || item.type === "message")
+    return responsesItems(params.body).flatMap((item) => {
+      if (isCodexTaskMessage(item)) {
+        const parts = asArray(item.content) ?? [];
+        return parts.flatMap((part) => {
+          const record = asRecord(part);
+          if (
+            record?.type === "encrypted_content" &&
+            typeof record.encrypted_content === "string"
+          )
+            return [record.encrypted_content];
+          return record?.type === "input_text" &&
+            typeof record.text === "string"
+            ? [record.text]
+            : [];
+        });
+      }
+      return item.role === "user" &&
+        (item.type === undefined || item.type === "message")
         ? contentTexts(item.content, "input_text")
-        : [],
-    );
+        : [];
+    });
   }
   return chatMessages(params.body).flatMap((message) => {
     if (message.role !== "user") return [];

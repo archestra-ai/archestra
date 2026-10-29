@@ -170,6 +170,26 @@ class AppPinModel {
     return map;
   }
 
+  /**
+   * What one user has pinned, by kind: owned app ids, and whether any external
+   * pin exists. Lets a pinned-only listing skip loading the apps it would drop.
+   */
+  static async getPinnedRefs(
+    userId: string,
+  ): Promise<{ appIds: string[]; hasExternal: boolean }> {
+    const rows = await db
+      .select({
+        appId: schema.appPinsTable.appId,
+        mcpServerId: schema.appPinsTable.mcpServerId,
+      })
+      .from(schema.appPinsTable)
+      .where(eq(schema.appPinsTable.userId, userId));
+    return {
+      appIds: rows.flatMap((r) => (r.appId ? [r.appId] : [])),
+      hasExternal: rows.some((r) => r.mcpServerId !== null),
+    };
+  }
+
   /** The map key {@link AppPinModel.getPinnedAtForExternalApps} uses. */
   static externalPinKey(ref: ExternalAppPinRef): string {
     return externalKey(ref);

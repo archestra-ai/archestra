@@ -1,8 +1,13 @@
 import { createHash } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
+import config from "@/config";
 import logger from "@/logging";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import {
+  type CatalogAccessCaller,
+  filterToolsByCallerCatalogAccess,
+} from "@/services/caller-catalog-access";
 import {
   COMPLETE_RESULT_TYPE,
   MCP_PROTOCOL_VERSION_HEADER,
@@ -94,22 +99,39 @@ export function acknowledgedFilter(
  * that change a tool's description but not the set. Membership is what
  * clients key caching on, so that is the signal worth polling cheaply.
  */
-export async function toolsListFingerprint(agentId: string): Promise<string> {
-  const { tools } =
+export async function toolsListFingerprint(
+  agentId: string,
+  caller?: CatalogAccessCaller,
+): Promise<string> {
+  const { tools: agentTools } =
     await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+  const tools = caller
+    ? await filterToolsByCallerCatalogAccess(agentTools, caller)
+    : agentTools;
   const names = tools.map((tool) => tool.name).sort();
   return createHash("sha256").update(names.join("\n")).digest("base64url");
 }
 
 /**
  * Run a `subscriptions/listen` stream over the hijacked reply until the client
- * closes it.
+ * disconnects. A positive maximum duration, off by default, also ends it.
  *
  * Wire behavior, in spec order: the acknowledgment is the FIRST message and
  * carries the subscription id (the JSON-RPC id of the listen request); every
  * later notification carries the same id in `_meta`; a server-initiated end
- * sends the empty JSON-RPC response for the listen request before closing, so
- * the client can tell graceful closure from a dropped transport.
+ * sends the JSON-RPC response for the listen request before closing. A client
+ * may treat that as a clean end and open another listen. Reconnection requires
+ * client support; the protocol does not require it. If the client does not
+ * listen again, tool-list change notifications stop until it does. The
+ * response ends only this stream. In-flight `tools/call` requests, including
+ * an input request the client is still fulfilling, are separate and are not
+ * cancelled.
+ *
+ * A positive duration is a limited mitigation, not a universal fix. It must
+ * stay below the HTTP proxy's hard maximum request duration, which this
+ * process does not know. Heartbeats reset idle timeouts only. A proxy reset
+ * can fail an open form; a clean end does not guarantee the client will
+ * listen again, and some clients stop after repeated ends.
  */
 export async function runSubscriptionStream(params: {
   request: FastifyRequest;
@@ -117,20 +139,28 @@ export async function runSubscriptionStream(params: {
   agentId: string;
   subscriptionId: string | number;
   requested: SubscriptionFilter;
+  /** Who is listening: their tool list is narrowed to catalogs they can see. */
+  caller?: CatalogAccessCaller;
   /** Injectable for tests; defaults to the real fingerprint. */
   computeFingerprint?: () => Promise<string>;
   pollIntervalMs?: number;
   heartbeatMs?: number;
+  /**
+   * Injectable for tests. 0, the default, does not end the stream. A positive
+   * value must be below the proxy's hard request duration.
+   */
+  maxDurationMs?: number;
 }): Promise<void> {
   const {
-    request,
     reply,
     agentId,
     subscriptionId,
     requested,
-    computeFingerprint = () => toolsListFingerprint(agentId),
+    caller,
+    computeFingerprint = () => toolsListFingerprint(agentId, caller),
     pollIntervalMs = SUBSCRIPTION_POLL_INTERVAL_MS,
     heartbeatMs = SUBSCRIPTION_HEARTBEAT_MS,
+    maxDurationMs = config.mcpGateway.subscriptionMaxDurationMs,
   } = params;
 
   const honored = acknowledgedFilter(requested);
@@ -160,15 +190,31 @@ export async function runSubscriptionStream(params: {
   const timers: NodeJS.Timeout[] = [];
   let closed = false;
 
-  const cleanup = (): void => {
-    if (closed) return;
-    closed = true;
-    for (const timer of timers) clearInterval(timer);
+  const clearTimers = (): void => {
+    for (const timer of timers) {
+      clearTimeout(timer);
+      clearInterval(timer);
+    }
+    timers.length = 0;
   };
 
-  request.raw.on("close", () => {
-    cleanup();
-    logger.debug({ agentId, subscriptionId }, "MCP subscription stream closed");
+  const stop = (): void => {
+    if (closed) return;
+    closed = true;
+    clearTimers();
+  };
+
+  // The response, not the request. For a long-lived POST the request can
+  // finish when its body has been read while the stream is still open.
+  reply.raw.on("close", () => {
+    const alreadyClosed = closed;
+    stop();
+    if (!alreadyClosed) {
+      logger.debug(
+        { agentId, subscriptionId },
+        "MCP subscription stream closed",
+      );
+    }
   });
 
   timers.push(
@@ -177,10 +223,19 @@ export async function runSubscriptionStream(params: {
     }, heartbeatMs),
   );
 
+  if (maxDurationMs > 0) {
+    timers.push(
+      setTimeout(() => {
+        endGracefully();
+      }, maxDurationMs),
+    );
+  }
+
   if (honored.toolsListChanged) {
     let lastFingerprint: string;
     try {
       lastFingerprint = await computeFingerprint();
+      if (closed) return;
     } catch (error) {
       // Cannot establish a baseline: end gracefully rather than stream
       // notifications against an unknown starting state.
@@ -197,16 +252,18 @@ export async function runSubscriptionStream(params: {
         if (closed) return;
         try {
           const fingerprint = await computeFingerprint();
-          if (fingerprint !== lastFingerprint) {
-            lastFingerprint = fingerprint;
-            send({
-              jsonrpc: "2.0",
-              method: TOOLS_LIST_CHANGED_METHOD,
-              params: {
-                _meta: { [SUBSCRIPTION_ID_META_KEY]: subscriptionId },
-              },
-            });
-          }
+          // The await can outlive rotation or disconnect. Do not write a
+          // notification after the terminal result or onto a closed socket.
+          if (closed || fingerprint === lastFingerprint) return;
+          lastFingerprint = fingerprint;
+          if (closed) return;
+          send({
+            jsonrpc: "2.0",
+            method: TOOLS_LIST_CHANGED_METHOD,
+            params: {
+              _meta: { [SUBSCRIPTION_ID_META_KEY]: subscriptionId },
+            },
+          });
         } catch (error) {
           // A transient failure must not kill a long-lived stream; the next
           // tick retries against the same baseline.
@@ -221,8 +278,11 @@ export async function runSubscriptionStream(params: {
 
   function endGracefully(): void {
     if (closed) return;
-    // The empty JSON-RPC response to the original listen request signals
-    // graceful closure, as opposed to an abrupt transport drop.
+    // Stop timers before the terminal frame so a heartbeat cannot follow it.
+    stop();
+    // The JSON-RPC response to the original listen request signals graceful
+    // closure, as opposed to an abrupt transport drop. A client may listen
+    // again; that is not guaranteed. Other in-flight requests are untouched.
     send({
       jsonrpc: "2.0",
       id: subscriptionId,
@@ -231,7 +291,6 @@ export async function runSubscriptionStream(params: {
         _meta: { [SUBSCRIPTION_ID_META_KEY]: subscriptionId },
       },
     });
-    cleanup();
     reply.raw.end();
   }
 }

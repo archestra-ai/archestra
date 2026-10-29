@@ -1,35 +1,35 @@
 import { vi } from "vitest";
-import { betterAuth, hasPermission } from "@/auth";
+import { betterAuth } from "@/auth";
 import { authPlugin } from "@/auth/fastify-plugin";
-import { AgentTeamModel } from "@/models";
-
-vi.mock("@/auth");
-
+import config from "@/config";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import { AgentTeamModel, MemberModel, ModelPoolModel } from "@/models";
 import { afterEach, beforeEach, expect, test } from "@/test";
+import type { User } from "@/types";
 
 let app: FastifyInstanceWithZod;
 let organizationId: string;
+let user: User;
 beforeEach(async ({ makeOrganization, makeUser, makeMember, makeSession }) => {
   organizationId = (await makeOrganization()).id;
   app = createFastifyInstance();
-  const user = await makeUser();
+  user = await makeUser();
   await makeMember(user.id, organizationId, { role: "admin" });
   const session = await makeSession(user.id, {
     activeOrganizationId: organizationId,
   });
-  vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+  vi.spyOn(betterAuth.api, "getSession").mockResolvedValue({
     response: { user, session },
     headers: new Headers(),
   } as never);
-  vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
   await app.register(authPlugin);
   await app.register((await import("./statistics")).default);
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await app.close();
 });
 
@@ -131,6 +131,140 @@ test("counts each primary credential once and separates subscription coverage ac
   });
 });
 
+test("groups usage by provider key and model pool and counts failed-over attempts", async ({
+  makeAgent,
+  makeInteraction,
+  makeLlmProviderApiKey,
+}) => {
+  config.llmProxy.modelPoolsEnabled = true;
+  const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+  const dedicated = await makeLlmProviderApiKey(organizationId, null, {
+    name: "Dedicated",
+    provider: "openai",
+  });
+  const shared = await makeLlmProviderApiKey(organizationId, null, {
+    name: "Shared",
+    provider: "azure",
+  });
+  const pool = await ModelPoolModel.create({
+    organizationId,
+    input: {
+      name: "gpt-pool",
+      members: [
+        {
+          providerApiKeyId: dedicated.id,
+          modelId: "gpt-4o",
+          priority: 1,
+          weight: 1,
+          enabled: true,
+        },
+        {
+          providerApiKeyId: shared.id,
+          modelId: "gpt-4o",
+          priority: 2,
+          weight: 1,
+          enabled: true,
+        },
+      ],
+    },
+  });
+  // One pooled request that failed over from the dedicated key to the shared
+  // one, a pooled request the dedicated key answered, and an unpooled call.
+  await makeInteraction(proxy.id, {
+    providerApiKeyId: dedicated.id,
+    modelPoolId: pool.id,
+    attempt: 1,
+    attemptOutcome: "failed_over",
+    failureReason: "rate_limited (429)",
+    cost: "0",
+    inputTokens: 0,
+    outputTokens: 0,
+  });
+  await makeInteraction(proxy.id, {
+    providerApiKeyId: shared.id,
+    modelPoolId: pool.id,
+    attempt: 2,
+    attemptOutcome: "answered",
+    cost: "2",
+  });
+  await makeInteraction(proxy.id, {
+    providerApiKeyId: dedicated.id,
+    modelPoolId: pool.id,
+    attempt: 1,
+    attemptOutcome: "answered",
+    cost: "1",
+  });
+  await makeInteraction(proxy.id, {
+    providerApiKeyId: dedicated.id,
+    cost: "4",
+  });
+
+  const response = await app.inject({
+    url: "/api/statistics/llm-proxy?includeProviderKeys=true&includeModelPools=true",
+  });
+  expect(response.statusCode).toBe(200);
+  const body = response.json();
+  expect(body.totals).toMatchObject({
+    requests: 4,
+    billedCost: 7,
+    failedOverAttempts: 1,
+  });
+  expect(body.providerKeys).toEqual([
+    expect.objectContaining({
+      providerApiKeyId: dedicated.id,
+      providerApiKeyName: "Dedicated",
+      provider: "openai",
+      requests: 3,
+      billedCost: 5,
+      failedOverAttempts: 1,
+    }),
+    expect.objectContaining({
+      providerApiKeyId: shared.id,
+      providerApiKeyName: "Shared",
+      provider: "azure",
+      requests: 1,
+      billedCost: 2,
+      failedOverAttempts: 0,
+    }),
+  ]);
+  expect(body.modelPools).toEqual([
+    expect.objectContaining({
+      modelPoolId: null,
+      modelPoolName: null,
+      requests: 1,
+      billedCost: 4,
+    }),
+    expect.objectContaining({
+      modelPoolId: pool.id,
+      modelPoolName: "gpt-pool",
+      requests: 3,
+      billedCost: 3,
+      failedOverAttempts: 1,
+    }),
+  ]);
+
+  const byPool = await app.inject({
+    url: `/api/statistics/llm-proxy?modelPoolId=${pool.id}`,
+  });
+  expect(byPool.json().totals).toMatchObject({
+    requests: 3,
+    billedCost: 3,
+    failedOverAttempts: 1,
+  });
+  expect(byPool.json().providerKeys).toBeUndefined();
+  const byKey = await app.inject({
+    url: `/api/statistics/llm-proxy?providerApiKeyId=${shared.id}`,
+  });
+  expect(byKey.json().totals).toMatchObject({ requests: 1, billedCost: 2 });
+
+  // With model pools off there is nothing to group by pool.
+  config.llmProxy.modelPoolsEnabled = false;
+  const off = await app.inject({
+    url: "/api/statistics/llm-proxy?includeModelPools=true",
+  });
+  expect(off.json().modelPools).toBeUndefined();
+});
+
 test("includes legacy and soft-deleted proxy traffic but excludes chat, other organizations and out-of-range requests", async ({
   makeAgent,
   makeInteraction,
@@ -194,7 +328,7 @@ test("validates filters and distinguishes empty results from errors", async () =
 });
 
 test("denies callers without organization cost access", async () => {
-  vi.mocked(hasPermission).mockResolvedValue({ success: false, error: null });
+  await MemberModel.updateRole(user.id, organizationId, "member");
   const response = await app.inject({ url: "/api/statistics/llm-proxy" });
   expect(response.statusCode).toBe(403);
 });

@@ -50,6 +50,7 @@ export function KnowledgePageLayout({
             {extraActions}
             <PermissionButton
               permissions={createPermissions}
+              size="sm"
               onClick={onCreateClick}
               disabled={!isKnowledgeBaseConfigured}
             >

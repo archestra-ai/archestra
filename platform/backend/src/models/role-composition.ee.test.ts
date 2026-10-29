@@ -25,7 +25,7 @@ describe("role composition", () => {
     });
     const writeRole = await makeCustomRole(org.id, {
       role: "tool_editor",
-      permission: { agent: ["update"] },
+      permission: { agent: ["create"] },
     });
     const teamRole = await makeCustomRole(org.id, {
       role: "team_reader",
@@ -49,7 +49,7 @@ describe("role composition", () => {
     await TeamModel.addMember(child.id, user.id);
     expect(await UserModel.getUserPermissions(user.id, org.id)).toEqual({
       log: ["read"],
-      agent: ["update"],
+      agent: ["create"],
       team: ["read"],
     });
     expect(
@@ -74,7 +74,7 @@ describe("role composition", () => {
     await TeamModel.update(parent.id, { roles: [] });
     expect(await UserModel.getUserPermissions(user.id, org.id)).toEqual({
       log: ["read"],
-      agent: ["update"],
+      agent: ["create"],
     });
     await TeamModel.update(parent.id, { roles: [teamRole.role] });
     await TeamModel.removeMember(child.id, user.id);
@@ -121,7 +121,7 @@ describe("role composition", () => {
     });
     const editor = await makeCustomRole(org.id, {
       role: "tool_editor",
-      permission: { agent: ["update"] },
+      permission: { agent: ["create"] },
     });
     const account = await ServiceAccountModel.create({
       name: "Test automation",
@@ -131,7 +131,7 @@ describe("role composition", () => {
     });
     expect(await ServiceAccountModel.getPermissions(account)).toEqual({
       log: ["read"],
-      agent: ["update"],
+      agent: ["create"],
     });
     expect(
       (await OrganizationRoleModel.canDelete(editor.id, org.id)).canDelete,

@@ -7,21 +7,22 @@ import {
   type archestraApiTypes,
   BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
-  BUILT_IN_AGENT_IDS,
   DEFAULT_AGENT_SYSTEM_PROMPT,
   DocsPage,
-  DUAL_LLM_DEFAULT_MAX_ROUNDS,
   E2eTestId,
+  type GitHubActionsAccess,
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
   getDocsUrl,
   getResourceForAgentType,
+  grantsAudience,
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
   MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
+  providerSupportsChat,
   resolveAgentCatalogId,
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
@@ -30,13 +31,12 @@ import {
 import {
   AlertTriangle,
   Bot,
-  CheckIcon,
   ChevronRight,
   Globe,
   InfoIcon,
+  Loader2,
   Plus,
   RotateCcw,
-  Settings2,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -60,18 +60,23 @@ import {
   AgentHooksEditor,
   type AgentHooksEditorRef,
 } from "@/components/agent-hooks-editor";
-import { AgentIcon, type AgentIconVariant } from "@/components/agent-icon";
+import type { AgentIconVariant } from "@/components/agent-icon";
 import {
   type ProfileLabel,
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
-import { agentDetailHref } from "@/components/agent-pages/agent-page-config";
+import {
+  AgentChannelHowItWorks,
+  AgentOtherTaskSources,
+} from "@/components/agent-other-task-sources";
 import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
 } from "@/components/agent-runtime-fields";
+import { AgentRuntimeHowItWorks } from "@/components/agent-runtime-how-it-works";
 import { AgentRuntimePicker } from "@/components/agent-runtime-picker";
+import { AgentRuntimeToolSources } from "@/components/agent-runtime-tool-sources";
 import { AgentSelector } from "@/components/agent-selector";
 import {
   AgentSkillsEditor,
@@ -91,8 +96,13 @@ import {
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
+import { ClaudeProviderConnections } from "@/components/claude-provider-connections";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import {
+  GitHubActionsAccessSection,
+  gitHubActionsAccessError,
+} from "@/components/github-actions-access-section";
 import { IdentityFields } from "@/components/identity-fields";
 import {
   type InitialPermissionGrant,
@@ -104,6 +114,11 @@ import {
 } from "@/components/knowledge-sources-editor";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { McpConflictServerList } from "@/components/mcp-conflict-server-list";
+import {
+  EMPTY_MODEL_TIERS,
+  ModelTierPickers,
+  type ModelTierSelection,
+} from "@/components/model-tier-pickers";
 import { PageHeaderBanner } from "@/components/page-header-banner";
 import { SettingIcon } from "@/components/setting-icon";
 import {
@@ -141,8 +156,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -152,7 +166,6 @@ import {
 } from "@/components/ui/tooltip";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useLlmProviderApiKeyCreateDialog } from "@/components/use-llm-provider-api-key-create-dialog";
-
 import {
   useA2aRemoteAgents,
   useAgentA2aDelegations,
@@ -160,7 +173,6 @@ import {
 } from "@/lib/a2a-remote-agents.query";
 import {
   useCreateProfile,
-  useDelegationTargetAgents,
   useDeleteProfile,
   useProfile,
   useUpdateProfile,
@@ -169,6 +181,7 @@ import {
   useAgentKnowledgeSourceExclusions,
   useUpdateAgentKnowledgeSourceExclusions,
 } from "@/lib/agent-knowledge-source-exclusions.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
 import {
   useAgentSkillExclusions,
@@ -195,33 +208,38 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
 import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
-import { useConnectors } from "@/lib/knowledge/connector.query";
+import {
+  useConnectors,
+  useConnectorsByIds,
+} from "@/lib/knowledge/connector.query";
 import {
   useIsKnowledgeBaseConfigured,
   useKnowledgeBases,
+  useKnowledgeBasesByIds,
 } from "@/lib/knowledge/knowledge-base.query";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useAvailableModelPools } from "@/lib/model-pools.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { isReportedApiError } from "@/lib/utils/api";
+import { mergeById } from "@/lib/utils/merge-by-id";
 import { cn } from "@/lib/utils/tailwind";
+import { AccessModeCards, accessModeCountStat } from "./access-mode-cards";
 import { useAgentEnvironmentConflicts } from "./agent-environment-conflicts";
 import {
-  assignedSubagentsSummary,
-  assignedToolsSummary,
   excludedSourcesSummary,
-  excludedSubagentsSummary,
-  excludedToolsSummary,
   getDescriptionPlaceholder,
   getNamePlaceholder,
   normalizeSuggestedPrompts,
-  publishedSkillsSummary,
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
 } from "./agent-form.utils";
 
-type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type Agent = archestraApiTypes.GetAgentResponses["200"];
+type AgentOption =
+  archestraApiTypes.GetAgentOptionsResponses["200"]["data"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
 type MissingCredentialBehavior = Agent["missingCredentialBehavior"];
 type A2aRemoteAgent =
@@ -330,43 +348,9 @@ function AgentToolsList({ agentId }: { agentId: string }) {
   );
 }
 
-type BuiltInAgentId =
-  (typeof BUILT_IN_AGENT_IDS)[keyof typeof BUILT_IN_AGENT_IDS];
-
-function getBuiltInAgentConfigForSave(params: {
-  builtInAgentName: BuiltInAgentId;
-  autoConfigureOnToolDiscovery: boolean;
-  maxRounds: number;
-}) {
-  switch (params.builtInAgentName) {
-    case BUILT_IN_AGENT_IDS.POLICY_CONFIG:
-      return {
-        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        autoConfigureOnToolDiscovery: params.autoConfigureOnToolDiscovery,
-      };
-    case BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN:
-      return {
-        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-        maxRounds: params.maxRounds,
-      };
-    case BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG:
-    case BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE:
-    case BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION:
-    case BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION:
-    case BUILT_IN_AGENT_IDS.APP_RUNTIME:
-    case BUILT_IN_AGENT_IDS.ADVISOR:
-      return { name: params.builtInAgentName };
-    default: {
-      // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
-      const _exhaustive: never = params.builtInAgentName;
-      throw new Error(`Unsupported built-in agent: ${String(_exhaustive)}`);
-    }
-  }
-}
-
 // Single subagent pill with popover
 interface SubagentPillProps {
-  agent: Agent;
+  agent: AgentOption;
   isSelected: boolean;
   onToggle: (agentId: string) => void;
   readOnly?: boolean;
@@ -392,7 +376,7 @@ function SubagentPill({
             variant="outline"
             size="sm"
             className={cn(
-              "h-8 px-3 gap-1.5 text-xs max-w-[200px] rounded-r-none border-r-0",
+              "max-w-[200px] rounded-r-none border-r-0 text-xs",
               !isSelected && "border-dashed opacity-50",
             )}
           >
@@ -414,10 +398,14 @@ function SubagentPill({
         {!readOnly && (
           <Button
             variant="outline"
-            size="sm"
-            className="h-8 w-7 p-0 rounded-l-none text-muted-foreground hover:text-destructive"
+            size="icon-sm"
+            className="rounded-l-none text-muted-foreground hover:text-destructive"
             onClick={() => onToggle(agent.id)}
-            aria-label={`Remove agent ${agent.name}`}
+            aria-label={
+              tone === "exclude"
+                ? `Include agent ${agent.name} again`
+                : `Remove agent ${agent.name}`
+            }
           >
             <X className="h-3 w-3" />
           </Button>
@@ -443,8 +431,8 @@ function SubagentPill({
           </div>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 shrink-0"
+            size="icon-xs"
+            className="shrink-0"
             onClick={() => setOpen(false)}
             aria-label="Close"
           >
@@ -460,12 +448,25 @@ function SubagentPill({
   );
 }
 
+// Stands in for a just-picked subagent until its name loads.
+function PendingSubagentPill() {
+  return (
+    <output
+      aria-label="Loading subagent"
+      className="flex h-8 w-32 items-center gap-2 rounded-md border border-dashed px-3 text-xs text-muted-foreground"
+    >
+      <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+      <Skeleton className="h-3 flex-1" />
+    </output>
+  );
+}
+
 // Component to display and edit local delegation targets.
 interface SubagentsEditorProps {
   agentId?: string;
   readOnly: boolean;
   localMode: "all" | "selected";
-  availableAgents: Agent[];
+  canReadAgents: boolean;
   selectedAgentIds: string[];
   onSelectionChange: (ids: string[]) => void;
   disabledAgentIds: string[];
@@ -477,35 +478,52 @@ function SubagentsEditor({
   agentId,
   readOnly,
   localMode,
-  availableAgents,
+  canReadAgents,
   selectedAgentIds,
   onSelectionChange,
   disabledAgentIds,
   onDisabledSelectionChange,
   emptyDescription = "Every task is handled here, with nothing handed on.",
 }: SubagentsEditorProps) {
-  // The advisor has a dedicated switch below. Keeping it out of both the
-  // local list and the switch prevents two controls from changing one grant.
-  const filteredAgents = availableAgents.filter(
-    (agent) =>
-      agent.id !== agentId &&
-      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR,
-  );
-
   const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
+  const visibleIds = selectedIds.slice(0, 20);
+  // Every pick changes the id list, and so the lookup's key. Without the
+  // previous rows the assigned pills would all vanish until it answers.
+  const { data: availableAgents = [], isFetching: agentsFetching } =
+    useAgentOptionsByIds({
+      ids: visibleIds,
+      enabled: canReadAgents,
+      keepPreviousData: true,
+    });
+  const agentsById = new Map(availableAgents.map((agent) => [agent.id, agent]));
   const handleSelectionChange = (ids: string[]) => {
     const setIds =
       localMode === "all" ? onDisabledSelectionChange : onSelectionChange;
     setIds(ids);
   };
-
-  const selectedLocalAgents = filteredAgents.filter((agent) =>
-    selectedAgentIds.includes(agent.id),
-  );
-  const excludedLocalAgents = filteredAgents.filter((agent) =>
-    disabledAgentIds.includes(agent.id),
-  );
-  const hasSelectedTargets = selectedLocalAgents.length > 0;
+  // In pick order, so a new pick holds its place as a loading pill until the
+  // lookup names it, and the pills around it do not move.
+  const pills = visibleIds
+    .filter((id) => id !== agentId && (agentsById.has(id) || agentsFetching))
+    .map((id) => {
+      const agent = agentsById.get(id);
+      if (!agent) return <PendingSubagentPill key={id} />;
+      return (
+        <SubagentPill
+          key={id}
+          agent={agent}
+          isSelected={true}
+          readOnly={readOnly}
+          onToggle={() =>
+            handleSelectionChange(
+              selectedIds.filter((selectedId) => selectedId !== id),
+            )
+          }
+          tone={localMode === "all" ? "exclude" : "delegate"}
+        />
+      );
+    });
+  const hasSelectedTargets = selectedAgentIds.length > 0;
 
   return (
     <div className="space-y-3">
@@ -520,9 +538,8 @@ function SubagentsEditor({
             </Badge>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {excludedLocalAgents.length === 0
-              ? "Every local agent you can access may be delegated to."
-              : `${excludedLocalAgents.length} local ${excludedLocalAgents.length === 1 ? "agent is" : "agents are"} excluded below.`}
+            Includes every local agent you can access, and agents created later.
+            To leave one out, exclude it.
           </p>
         </div>
       ) : !hasSelectedTargets ? (
@@ -532,55 +549,44 @@ function SubagentsEditor({
         </div>
       ) : null}
 
-      {localMode === "all" && excludedLocalAgents.length > 0 && (
+      {localMode === "all" && pills.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground">
-            Local exceptions
+            Excluded from all local agents
           </p>
-          <div className="flex flex-wrap gap-2">
-            {excludedLocalAgents.map((agent) => (
-              <SubagentPill
-                key={agent.id}
-                agent={agent}
-                isSelected={true}
-                readOnly={readOnly}
-                onToggle={() =>
-                  onDisabledSelectionChange(
-                    disabledAgentIds.filter((id) => id !== agent.id),
-                  )
-                }
-                tone="exclude"
-              />
-            ))}
-          </div>
+          <div className="flex flex-wrap gap-2">{pills}</div>
         </div>
       )}
 
-      {localMode === "selected" && selectedLocalAgents.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {selectedLocalAgents.map((agent) => (
-            <SubagentPill
-              key={agent.id}
-              agent={agent}
-              isSelected={true}
-              readOnly={readOnly}
-              onToggle={() =>
-                onSelectionChange(
-                  selectedAgentIds.filter((id) => id !== agent.id),
-                )
-              }
-            />
-          ))}
-        </div>
+      {localMode === "selected" && pills.length > 0 && (
+        <div className="flex flex-wrap gap-2">{pills}</div>
+      )}
+
+      {selectedIds.length > 20 && (
+        <p className="text-xs text-muted-foreground">
+          Showing 20 of {selectedIds.length} selections. Search the picker to
+          change another selection.
+        </p>
       )}
 
       {!readOnly && (
         <AgentSelector
           mode="multiple"
-          agents={filteredAgents}
+          remote={{
+            filters: {
+              agentType: "agent",
+              excludeBuiltIn: true,
+              excludeIds: agentId ? [agentId] : undefined,
+            },
+            enabled: canReadAgents,
+          }}
           value={selectedIds}
           onValueChange={handleSelectionChange}
-          triggerLabel="Add subagent"
+          // In All mode every local agent is already a subagent, so the only
+          // change the picker can make is to leave one out. Its label says so.
+          triggerLabel={
+            localMode === "all" ? "Exclude a local agent" : "Add subagent"
+          }
           searchPlaceholder={
             localMode === "all"
               ? "Search agents to exclude..."
@@ -616,7 +622,7 @@ function OutboundAgentPill({
           <Button
             variant="outline"
             size="sm"
-            className="h-8 max-w-[200px] gap-1.5 rounded-r-none border-r-0 px-3 text-xs"
+            className="max-w-[200px] rounded-r-none border-r-0 text-xs"
           >
             <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
             <Globe className="h-3 w-3 shrink-0" />
@@ -630,8 +636,8 @@ function OutboundAgentPill({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="h-8 w-7 rounded-l-none p-0 text-muted-foreground hover:text-destructive"
+            size="icon-sm"
+            className="rounded-l-none text-muted-foreground hover:text-destructive"
             aria-label={`Remove ${target.name}`}
             onClick={onRemove}
           >
@@ -659,8 +665,8 @@ function OutboundAgentPill({
           </div>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-6 w-6 shrink-0 p-0"
+            size="icon-xs"
+            className="shrink-0"
             onClick={() => setOpen(false)}
             aria-label="Close"
           >
@@ -791,7 +797,7 @@ function OutboundAgentsEditor({
         )}
         {!agentId && (
           <p className="pt-1 text-xs text-muted-foreground">
-            Save this agent before assigning an outbound A2A agent.
+            You can add external agents after you create this agent.
           </p>
         )}
         {agentId && (assignmentsError || agentsError) && (
@@ -919,6 +925,11 @@ export interface AgentFormFooterState {
    * shows nothing at all.
    */
   readOnly: boolean;
+  /**
+   * The agent runs in its own container: opening it in Chat starts a run
+   * rather than a foreground conversation.
+   */
+  hasRuntime: boolean;
 }
 
 /** Editable values a create flow may seed from a catalog template. */
@@ -942,7 +953,12 @@ export interface AgentFormProps {
   initialValues?: AgentFormInitialValues;
   initialRuntimeId?: AgentCatalogId;
   /** Callback when a new agent/profile is created (not called for updates) */
-  onCreated?: (created: { id: string; name: string }) => void;
+  onCreated?: (created: {
+    id: string;
+    name: string;
+    /** Whether it runs in a dedicated container runtime. */
+    hasRuntime: boolean;
+  }) => void;
   /** Callback after an existing agent was saved (not called for creates). */
   onSaved?: (saved: { id: string; name: string }) => void;
   /**
@@ -958,11 +974,11 @@ export interface AgentFormProps {
    */
   sections?: readonly AgentFormSection[];
   /**
-   * The one mounted group on screen; the others stay mounted but hidden. The
-   * create wizard steps through every group on one mount, so each editor
-   * keeps what was picked on it until the create at the end.
+   * The mounted group (or groups) on screen; the others stay mounted but
+   * hidden. The create wizard and the edit page step through every group on
+   * one mount, so each editor keeps what was picked on it until the one save.
    */
-  activeSection?: AgentFormSection;
+  activeSection?: AgentFormSection | readonly AgentFormSection[];
   /**
    * Whether submitting the form saves. Off on the create wizard's earlier
    * steps: Enter in a field must not create the record before the last step
@@ -979,6 +995,13 @@ export interface AgentFormProps {
   readOnly?: boolean;
   /** When true, the tools "Add MCP server" combobox starts open. */
   openToolsCombobox?: boolean;
+  /**
+   * Returns to the catalog to pick another agent. Set when the runtime came
+   * from the catalog, so the form shows that choice instead of asking again.
+   */
+  onChangeRuntimeTemplate?: () => void;
+  /** Shown right after the Description field, e.g. the page's access block. */
+  afterDescription?: ReactNode;
 }
 
 /**
@@ -1004,6 +1027,8 @@ export function AgentForm({
   footer,
   readOnly = false,
   openToolsCombobox = false,
+  onChangeRuntimeTemplate,
+  afterDescription,
 }: AgentFormProps) {
   const appName = useAppName();
   // Given to the footer so a submit button portaled out of this form (into a
@@ -1024,7 +1049,10 @@ export function AgentForm({
     showAdvancedSections ||
     showRuntimeSection;
   const isActiveSection = (group: AgentFormSection) =>
-    activeSection === undefined || activeSection === group;
+    activeSection === undefined ||
+    (typeof activeSection === "string"
+      ? activeSection === group
+      : activeSection.includes(group));
   // Which records can delegate at all, mirroring the backend's
   // `DELEGATING_AGENT_TYPES` (services/agent-subagent-exclusions.ts): only an
   // `llm_proxy` is excluded, because it has no MCP surface to advertise a
@@ -1053,10 +1081,7 @@ export function AgentForm({
   const shouldLoadLlmConfiguration = agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canReadAgentTriggers } = useHasPermissions({
-    agentTrigger: ["read"],
-  });
-  const { data: allInternalAgents = [] } = useDelegationTargetAgents({
-    enabled: supportsSubagents && !!canReadAgents,
+    organizationSettings: ["read"],
   });
   const createAgent = useCreateProfile();
   const updateAgent = useUpdateProfile();
@@ -1077,7 +1102,6 @@ export function AgentForm({
   } = useAgentA2aDelegations(supportsSubagents ? agent?.id : undefined);
   const a2aRemoteAgents = useA2aRemoteAgents({
     enabled: supportsSubagents && Boolean(agent?.id) && !agent?.builtIn,
-    accessibleOnly: true,
   });
   const syncA2aDelegations = useSyncAgentA2aDelegations();
   const syncSubagentExclusions = useUpdateAgentSubagentExclusions();
@@ -1105,6 +1129,10 @@ export function AgentForm({
     !!canReadSkills &&
     !agent?.builtIn &&
     (agentType === "mcp_gateway" || agentType === "profile");
+  // Set on a saved gateway, by someone who may edit it. A reader who cannot
+  // change it gets no section at all.
+  const showGitHubActionsAccess =
+    agentType === "mcp_gateway" && !!agent && !readOnly;
   const loadSkills = showSkills;
   const syncSkills = useUpdateAgentSkills();
   const syncSkillExclusions = useUpdateAgentSkillExclusions();
@@ -1135,6 +1163,7 @@ export function AgentForm({
         offset: 0,
         sortBy: "name",
         sortDirection: "asc",
+        includeContent: false,
       },
       { enabled: loadSkills },
     );
@@ -1152,6 +1181,7 @@ export function AgentForm({
         sortBy: "name",
         sortDirection: "asc",
         search: debouncedSkillSearch,
+        includeContent: false,
       },
       { enabled: loadSkills && debouncedSkillSearch.trim().length > 0 },
     );
@@ -1169,15 +1199,11 @@ export function AgentForm({
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });
-  const advisorDocsUrl = getDocsUrl(
-    DocsPage.PlatformBuiltInSubagents,
-    "advisor",
-  );
   const { data: canReadKnowledgeBase } = useHasPermissions({
     knowledgeSource: ["read"],
   });
   const { data: canAccessKnowledgeSettings } = useHasPermissions({
-    knowledgeSettings: ["read"],
+    organizationSettings: ["read"],
   });
   const isKnowledgeConfigured = useIsKnowledgeBaseConfigured();
   const { data: canReadLlmProviderApiKeys } = useHasPermissions({
@@ -1204,17 +1230,30 @@ export function AgentForm({
   const { data: knowledgeBasesData } = useKnowledgeBases({
     enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
-  const knowledgeBases = knowledgeBasesData ?? [];
   const { data: connectorsData } = useConnectors({
     enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
-  const connectors = connectorsData ?? [];
   const {
     data: currentKnowledgeSourceExclusions,
     isSuccess: knowledgeSourceExclusionsLoaded,
   } = useAgentKnowledgeSourceExclusions(
     shouldLoadKnowledgeSources && canReadKnowledgeBase ? agent?.id : undefined,
   );
+  // Saved and excluded sources are read by id, so ones past the picker's
+  // first page still show.
+  const { data: savedKnowledgeBases } = useKnowledgeBasesByIds(
+    agent?.knowledgeBaseIds ?? [],
+    { enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase },
+  );
+  const { data: savedConnectors } = useConnectorsByIds(
+    [
+      ...(agent?.connectorIds ?? []),
+      ...(currentKnowledgeSourceExclusions?.excludedConnectorIds ?? []),
+    ],
+    { enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase },
+  );
+  const knowledgeBases = mergeById(knowledgeBasesData, savedKnowledgeBases);
+  const connectors = mergeById(connectorsData, savedConnectors);
   const agentLlmApiKeyId = agent?.llmApiKeyId;
   const { data: availableApiKeys = [] } = useAvailableLlmProviderApiKeys({
     includeKeyId: agentLlmApiKeyId ?? undefined,
@@ -1261,10 +1300,26 @@ export function AgentForm({
   // scope, so the control below reads (scope, userIds) as a fourth choice.
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
-  const [considerContextUntrusted, setConsiderContextUntrusted] =
-    useState(false);
   const [llmApiKeyId, setLlmApiKeyId] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
+  // A model pool in place of the key and model; the server stores one of its
+  // members as the key and model.
+  const [modelPoolId, setModelPoolId] = useState<string | null>(null);
+  // Fast/smart models belong to the key they were picked for; any other key
+  // sees them as unset.
+  const [keyedModelTiers, setKeyedModelTiers] = useState<{
+    keyId: string | null;
+    tiers: ModelTierSelection;
+  }>({ keyId: null, tiers: EMPTY_MODEL_TIERS });
+  const modelTiers =
+    keyedModelTiers.keyId === llmApiKeyId
+      ? keyedModelTiers.tiers
+      : EMPTY_MODEL_TIERS;
+  const { data: organization } = useOrganization();
+  const organizationModelTiers: ModelTierSelection = {
+    fast: organization?.defaultFastModelId ?? null,
+    smart: organization?.defaultSmartModelId ?? null,
+  };
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
   // The tools editor's live selection (pending edits included), so the
@@ -1303,12 +1358,9 @@ export function AgentForm({
   );
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
-  const [autoConfigureOnToolDiscovery, setAutoConfigureOnToolDiscovery] =
-    useState(false);
-  const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState(
-    String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
-  );
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
+  const [githubActionsAccess, setGithubActionsAccess] =
+    useState<GitHubActionsAccess | null>(null);
   const [runtime, setAgentRuntime] = useState<AgentRuntimeConfig | null>(null);
   const originalRuntimeId =
     initialRuntimeId ??
@@ -1318,6 +1370,10 @@ export function AgentForm({
   const [selectedRuntimeId, setSelectedRuntimeId] = useState<
     AgentCatalogId | "chat" | "custom"
   >(originalRuntimeId);
+  // The catalog already decided this is a built-in agent; there is no
+  // runtime left to pick.
+  const runsOnBuiltInHarness =
+    !!onChangeRuntimeTemplate && selectedRuntimeId === "chat";
   const [channelAssignmentsDirty, setChannelAssignmentsDirty] = useState(false);
   const [activationSkillsDirty, setActivationSkillsDirty] = useState(false);
   const [activationSkillsReady, setActivationSkillsReady] = useState(false);
@@ -1332,8 +1388,9 @@ export function AgentForm({
     },
     [],
   );
-  const [toolExposureMode, setToolExposureMode] =
-    useState<ToolExposureMode>("full");
+  const [toolExposureMode, setToolExposureMode] = useState<ToolExposureMode>(
+    "search_and_run_only",
+  );
   // What the record will actually do. `isEnforcing` in
   // agent-credential-readiness refuses to enforce on an `accessAllTools`
   // record, so an Auto agent asks when a tool needs one whatever is stored —
@@ -1468,6 +1525,9 @@ export function AgentForm({
     useFeature("anthropicVertexAiEnabled") === true;
   const isClaudeCodeRuntime = runtime?.command?.[0] === "archestra-claude-code";
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
+  // A runtime saved before the deployment turned Agent Runtime off stays
+  // editable, so it can be switched off.
+  const runtimeEditable = agentRuntimeEnabled || !!agent?.runtime;
   const runtimePreflight = useAgentRuntimePreflight(
     agent?.id ?? "",
     agentRuntimeEnabled && !!agent?.runtime,
@@ -1498,18 +1558,8 @@ export function AgentForm({
   const defaultSystemPrompt = builtInAgentName
     ? (BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[builtInAgentName] ?? "")
     : undefined;
-  const isPolicyConfigBuiltIn =
-    builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
-  const isDualLlmMainBuiltIn =
-    builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN;
-  const isDualLlmQuarantineBuiltIn =
-    builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
-  const isAdvisorBuiltIn = builtInAgentName === BUILT_IN_AGENT_IDS.ADVISOR;
-  const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
-  // The Advisor is org-wide by design — every environment consults the one
-  // instance — so it is the one agent kind with no environment of its own.
   const showsEnvironmentSelector =
-    (isInternalAgent || agentType === "mcp_gateway") && !isAdvisorBuiltIn;
+    isInternalAgent || agentType === "mcp_gateway";
   const supportsIdentityProvider =
     agentType === "mcp_gateway" || agentType === "agent";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
@@ -1548,17 +1598,17 @@ export function AgentForm({
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
     showsModelControl ||
-    isInternalAgent ||
-    isPolicyConfigBuiltIn ||
-    isDualLlmMainBuiltIn;
+    isInternalAgent;
   // Who may reach it — the scope picker, plus the caller's own default-agent
   // toggle. A built-in belongs to the organization and offers neither, so the
   // section would be empty.
+  // A built-in offers its assigned tools and nothing else: the backend keeps a
+  // built-in's other fields at their shipped values, so the All mode,
+  // knowledge sources and tool behavior would not save.
   const showTools =
-    !isBuiltIn &&
-    (agentType === "mcp_gateway" ||
-      agentType === "agent" ||
-      agentType === "profile");
+    agentType === "mcp_gateway" ||
+    agentType === "agent" ||
+    agentType === "profile";
   const showSubagents = !isBuiltIn && supportsSubagents;
   // The delegation targets and the disabled-subagent set each arrive from their
   // own request. Until both have succeeded the editors would render a
@@ -1569,7 +1619,6 @@ export function AgentForm({
     !agent?.id ||
     !supportsSubagents ||
     (delegationsLoaded && subagentExclusionsLoaded);
-  const showSecurity = !isBuiltIn && agentType === "agent";
   const showsHooks = agentHooksEnabled && isInternalAgent && !isBuiltIn;
   // The tools panel is mounted only when it has a section to show: an empty
   // bordered panel would read as broken.
@@ -1663,26 +1712,21 @@ export function AgentForm({
             assignedTeamIds: agentData.teams.map((t) => t.id),
             assignedUserIds: agentData.users?.map((u) => u.id) ?? [],
             labels: agentData.labels,
-            considerContextUntrusted: agentData.considerContextUntrusted,
             llmApiKeyId: agentData.llmApiKeyId,
             llmModel: agentData.modelId,
+            modelPoolId: agentData.modelPoolId ?? null,
+            modelTiers: {
+              fast: agentData.fastModelId ?? null,
+              smart: agentData.smartModelId ?? null,
+            },
             identityProviderId: agentData.identityProviderId ?? undefined,
             environmentId: agentData.environmentId ?? undefined,
             knowledgeBaseIds: agentData.knowledgeBaseIds,
             connectorIds: agentData.connectorIds,
             scope: agentData.scope,
             initialGrants: [],
-            autoConfigureOnToolDiscovery:
-              agentData.builtInAgentConfig?.name ===
-              BUILT_IN_AGENT_IDS.POLICY_CONFIG
-                ? agentData.builtInAgentConfig.autoConfigureOnToolDiscovery
-                : false,
-            dualLlmMaxRounds:
-              agentData.builtInAgentConfig?.name ===
-              BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN
-                ? String(agentData.builtInAgentConfig.maxRounds)
-                : String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: agentData.passthroughHeaders ?? [],
+            githubActionsAccess: agentData.githubActionsAccess ?? null,
             runtime: (agentData.runtime as AgentRuntimeConfig | null) ?? null,
             toolExposureMode: agentData.toolExposureMode ?? "full",
             missingCredentialBehavior:
@@ -1704,22 +1748,22 @@ export function AgentForm({
             assignedTeamIds: [],
             assignedUserIds: [],
             labels: [],
-            considerContextUntrusted: false,
             llmApiKeyId: null,
             llmModel: null,
+            modelPoolId: null,
+            modelTiers: EMPTY_MODEL_TIERS,
             identityProviderId: undefined,
             environmentId: undefined,
             knowledgeBaseIds: [],
             connectorIds: [],
             scope: "personal",
             initialGrants: [],
-            autoConfigureOnToolDiscovery: false,
-            dualLlmMaxRounds: String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: [],
+            githubActionsAccess: null,
             runtime: initialValues?.runtime ?? null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
-            toolExposureMode: "full",
+            toolExposureMode: "search_and_run_only",
             missingCredentialBehavior: "allow",
             accessAllTools: initialValues?.accessAllTools ?? true,
             accessAllSubagents: true,
@@ -1733,10 +1777,14 @@ export function AgentForm({
       setSuggestedPromptsOpen(false);
       setLlmApiKeyId(nextValues.llmApiKeyId);
       setLlmModel(nextValues.llmModel);
+      setModelPoolId(nextValues.modelPoolId);
+      setKeyedModelTiers({
+        keyId: nextValues.llmApiKeyId,
+        tiers: nextValues.modelTiers,
+      });
       setAssignedTeamIds(nextValues.assignedTeamIds);
       setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
-      setConsiderContextUntrusted(nextValues.considerContextUntrusted);
       setIdentityProviderId(nextValues.identityProviderId);
       setEnvironmentId(nextValues.environmentId);
       setKnowledgeBaseIds(nextValues.knowledgeBaseIds);
@@ -1744,13 +1792,12 @@ export function AgentForm({
       setScope(nextValues.scope);
       setInitialGrants(nextValues.initialGrants);
       setPassthroughHeaders(nextValues.passthroughHeaders);
+      setGithubActionsAccess(nextValues.githubActionsAccess);
       setAgentRuntime(nextValues.runtime);
       setToolExposureMode(nextValues.toolExposureMode);
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
       setAccessAllTools(nextValues.accessAllTools);
       setAccessAllSubagents(nextValues.accessAllSubagents);
-      setAutoConfigureOnToolDiscovery(nextValues.autoConfigureOnToolDiscovery);
-      setDualLlmMaxRounds(nextValues.dualLlmMaxRounds);
       if (!agentData) {
         // Create mode only: edit mode remounts per agent and seeds each set
         // from its own request, and clearing here would instead wipe pending
@@ -1871,92 +1918,24 @@ export function AgentForm({
     }
   }, [agentId, currentExcludedSkillIds, skillExclusionsLoaded]);
 
-  // One org-wide advisor: delegation reaches it from every environment, so the
-  // switch targets the same row wherever this agent lives.
-  const advisorAgentId = allInternalAgents.find(
-    (a) => a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR,
-  )?.id;
-
-  // Consulting the advisor is off until someone turns it on. A new agent gets
-  // that default from the backend, which excludes the advisor as it creates the
-  // agent — seeding it here as well meant the create could not be submitted
-  // until the delegation-target roster had loaded, for a write the server was
-  // going to make anyway.
-
-  // One switch over two representations: Auto mode reaches every agent unless
-  // excluded, Custom mode reaches only what is listed. The reader should not
-  // have to know which is in play to decide whether the advisor is on. Before
-  // the record exists the switch holds the choice itself: the server excludes
-  // the advisor as it creates the agent, and waiting for the roster to seed
-  // that here would only hold the create for a write the server makes anyway.
-  const [createAdvisorEnabled, setCreateAdvisorEnabled] = useState(false);
-  const advisorEnabled = advisorAgentId
-    ? agent
-      ? accessAllSubagents
-        ? !disabledSubagentIds.includes(advisorAgentId)
-        : selectedDelegationTargetIds.includes(advisorAgentId)
-      : createAdvisorEnabled
-    : false;
-
-  // The advisor is kept out of both lists, so it must be kept out of their
-  // counts too — a count that includes something invisible reads as a bug.
-  const delegationTargetCount = selectedDelegationTargetIds.filter(
-    (id) => id !== advisorAgentId,
-  ).length;
-  const disabledSubagentCount = disabledSubagentIds.filter(
-    (id) => id !== advisorAgentId,
-  ).length;
-
-  const listedWhen = (
-    ids: string[],
-    agentId: string | undefined,
-    listed: boolean,
-  ) => {
-    if (!agentId) return ids;
-    if (listed) {
-      return ids.includes(agentId) ? ids : [...ids, agentId];
-    }
-    return ids.filter((id) => id !== agentId);
-  };
-
-  const advisorListedWhen = (ids: string[], listed: boolean) =>
-    listedWhen(ids, advisorAgentId, listed);
-
-  // Save writes both sets whatever the mode, and an Auto-mode agent driven by a
-  // system or token flow resolves its targets from the explicit set rather than
-  // the Auto surface. So the advisor has to match the switch in both sets, not
-  // just the one the current mode reads — a grant stranded in the other set is
-  // a live consultation nothing in the dialog can show or clear.
-  const delegationTargetIdsToSave = advisorListedWhen(
-    selectedDelegationTargetIds,
-    advisorEnabled,
-  );
-  const disabledSubagentIdsToSave = advisorListedWhen(
-    disabledSubagentIds,
-    !advisorEnabled,
-  );
-
-  const writeAdvisorEnabled = (enabled: boolean) => {
-    if (!advisorAgentId) return;
-    if (!agent) setCreateAdvisorEnabled(enabled);
-    setDisabledSubagentIds((ids) => advisorListedWhen(ids, !enabled));
-    setSelectedDelegationTargetIds((ids) => advisorListedWhen(ids, enabled));
-  };
-
-  // Each mode reads the advisor from its own set, so a mode change would
-  // otherwise surface an unrelated value and appear to flip the switch on its
-  // own. Carry the current setting across instead.
-  const handleSubagentModeChange = (value: string) => {
-    setAccessAllSubagents(value === "auto");
-    writeAdvisorEnabled(advisorEnabled);
-  };
-
+  const delegationTargetCount = selectedDelegationTargetIds.length;
+  const disabledSubagentCount = disabledSubagentIds.length;
+  const delegationTargetIdsToSave = selectedDelegationTargetIds;
+  const disabledSubagentIdsToSave = disabledSubagentIds;
   // LLM Configuration: computed values and bidirectional auto-linking
   // (same reactive pattern as prompt input: LlmProviderApiKeySelector + onProviderChange)
   const selectedApiKey = useMemo(
     () => availableApiKeys.find((k) => k.id === llmApiKeyId),
     [availableApiKeys, llmApiKeyId],
   );
+  // Pools are offered to agents the platform runs itself, not to runtimes.
+  const { data: modelPools = [] } = useAvailableModelPools({
+    enabled: isInternalAgent && !runtime,
+  });
+  const agentModelPoolId = runtime ? null : modelPoolId;
+  const agentModelPool = agentModelPoolId
+    ? modelPools.find((pool) => pool.id === agentModelPoolId)
+    : undefined;
   const requiredSubscriptionKind =
     !agent && runtime?.command?.[0] === "archestra-codex"
       ? "chatgpt"
@@ -2012,10 +1991,16 @@ export function AgentForm({
       }).compatible,
     [runtime],
   );
+  // The agent's key answers its conversations, so only providers that can
+  // chat are offered; a runtime narrows that further.
+  const apiKeyProviderFilter = useCallback(
+    (provider: SupportedProvider) =>
+      providerSupportsChat(provider) && runtimeProviderFilter(provider),
+    [runtimeProviderFilter],
+  );
   const allowedApiKeyProviders = useMemo(
-    () =>
-      runtime ? SupportedProviders.filter(runtimeProviderFilter) : undefined,
-    [runtime, runtimeProviderFilter],
+    () => SupportedProviders.filter(apiKeyProviderFilter),
+    [apiKeyProviderFilter],
   );
   // A runtime with no explicit model inherits the organization default. Validate
   // that effective model locally before allowing a create or runtime change.
@@ -2197,12 +2182,23 @@ export function AgentForm({
   const savedEnvironmentId = persistedAgent?.environmentId ?? null;
   const environmentChanged =
     !!persistedAgent && (environmentId ?? null) !== savedEnvironmentId;
+  // Saving it asks whether the editor may use its GitHub App, so it is sent
+  // only when it changed.
+  const githubActionsAccessChanged =
+    !!persistedAgent &&
+    hasUnsavedChanges(
+      persistedAgent.githubActionsAccess ?? null,
+      githubActionsAccess,
+    );
   // The API validates the key and the model against each other, so whichever
   // one moved, both go.
   const llmSelectionChanged =
     !!persistedAgent &&
     ((llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
-      (llmModel ?? null) !== (persistedAgent.modelId ?? null));
+      (llmModel ?? null) !== (persistedAgent.modelId ?? null) ||
+      agentModelPoolId !== (persistedAgent.modelPoolId ?? null) ||
+      modelTiers.fast !== (persistedAgent.fastModelId ?? null) ||
+      modelTiers.smart !== (persistedAgent.smartModelId ?? null));
   const hasCompleteLlmSelection = Boolean(llmApiKeyId) === Boolean(llmModel);
   const needsClaudeProviderKey =
     !agent &&
@@ -2234,20 +2230,9 @@ export function AgentForm({
   const performSave = useCallback(async (): Promise<boolean> => {
     const trimmedName = name.trim();
     const trimmedSystemPrompt = systemPrompt.trim();
-    const parsedDualLlmMaxRounds = Number.parseInt(dualLlmMaxRounds, 10);
 
     if (!trimmedName) {
       toast.error("Name is required");
-      return false;
-    }
-
-    if (
-      isDualLlmMainBuiltIn &&
-      (!Number.isInteger(parsedDualLlmMaxRounds) ||
-        parsedDualLlmMaxRounds < 1 ||
-        parsedDualLlmMaxRounds > 20)
-    ) {
-      toast.error("Max rounds must be an integer between 1 and 20");
       return false;
     }
 
@@ -2310,27 +2295,28 @@ export function AgentForm({
       let updateConfirmed = false;
 
       // Save tool changes FIRST (before agent update triggers refetch that clears pending changes)
-      // Skip for built-in agents as they don't have editable tools
-      if (agent && !isBuiltIn) {
+      if (agent) {
         await agentToolsEditorRef.current?.saveChanges({
           resourceLabel: agentTypeDisplayName[agentType] || "resource",
         });
       }
 
       if (agent && isBuiltIn && builtInAgentName) {
-        const builtInAgentConfig = getBuiltInAgentConfigForSave({
-          builtInAgentName,
-          autoConfigureOnToolDiscovery,
-          maxRounds: parsedDualLlmMaxRounds,
-        });
+        const builtInAgentConfig = { name: builtInAgentName };
 
         const updated = await updateAgent.mutateAsync({
           id: agent.id,
           data: {
             builtInAgentConfig,
+            // An emptied prompt is stored as null, which the runtime reads as
+            // the shipped default.
+            systemPrompt: trimmedSystemPrompt || null,
             ...(llmSelectionChanged && {
               llmApiKeyId: llmApiKeyId || null,
               modelId: llmModel || null,
+              modelPoolId: agentModelPoolId,
+              fastModelId: modelTiers.fast,
+              smartModelId: modelTiers.smart,
             }),
           },
         });
@@ -2366,6 +2352,9 @@ export function AgentForm({
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
+                  modelPoolId: agentModelPoolId,
+                  fastModelId: modelTiers.fast,
+                  smartModelId: modelTiers.smart,
                 }),
               }),
             }),
@@ -2386,13 +2375,14 @@ export function AgentForm({
               ...(supportsIdentityProvider && {
                 identityProviderId: identityProviderId || null,
               }),
-              ...(showSecurity && { considerContextUntrusted }),
               ...(agentType === "mcp_gateway" && {
                 passthroughHeaders:
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
+              ...(showGitHubActionsAccess &&
+                githubActionsAccessChanged && { githubActionsAccess }),
             }),
-            ...(showRuntimeSection && agentRuntimeEnabled && { runtime }),
+            ...(showRuntimeSection && runtimeEditable && { runtime }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -2432,6 +2422,9 @@ export function AgentForm({
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
+            modelPoolId: agentModelPoolId,
+            fastModelId: modelTiers.fast,
+            smartModelId: modelTiers.smart,
             suggestedPrompts: validSuggestedPrompts,
             ...(activationSkillPolicy && { activationSkillPolicy }),
           }),
@@ -2451,7 +2444,6 @@ export function AgentForm({
           accessAllTools,
           ...(supportsSubagents && { accessAllSubagents }),
           labels: updatedLabels,
-          ...(showSecurity && { considerContextUntrusted }),
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
@@ -2482,7 +2474,7 @@ export function AgentForm({
               agentId: savedAgentId,
             });
             // Delegations and disabled subagents: the server wrote the new
-            // record's defaults (advisor off, nothing listed), so only a set
+            // record's empty defaults, so only a set
             // that differs from those is worth a write.
             if (supportsSubagents && delegationTargetIdsToSave.length > 0) {
               await syncDelegations.mutateAsync({
@@ -2490,7 +2482,7 @@ export function AgentForm({
                 targetAgentIds: delegationTargetIdsToSave,
               });
             }
-            const createdExclusions = advisorAgentId ? [advisorAgentId] : [];
+            const createdExclusions: string[] = [];
             if (
               supportsSubagents &&
               hasUnsavedChanges(
@@ -2534,7 +2526,11 @@ export function AgentForm({
         toast.success(getSuccessMessage(agentType, false));
         // Notify parent about creation (for opening connection dialog, etc.)
         if (onCreated && created) {
-          onCreated({ id: created.id, name: created.name });
+          onCreated({
+            id: created.id,
+            name: created.name,
+            hasRuntime: created.runtime != null,
+          });
         }
       }
 
@@ -2666,9 +2662,9 @@ export function AgentForm({
     systemPrompt,
     suggestedPrompts,
     labels,
-    considerContextUntrusted,
     llmApiKeyId,
     llmModel,
+    agentModelPoolId,
     llmSelectionChanged,
     identityProviderId,
     environmentId,
@@ -2679,18 +2675,13 @@ export function AgentForm({
     agentType,
     agent,
     isBuiltIn,
-    autoConfigureOnToolDiscovery,
-    dualLlmMaxRounds,
-    isDualLlmMainBuiltIn,
     isInternalAgent,
     builtInAgentName,
-    showSecurity,
     showConfigurationSections,
     showToolsSections,
     showAdvancedSections,
     showRuntimeSection,
     mountsAgentFields,
-    advisorAgentId,
     deleteAgent,
     delegationTargetIdsToSave,
     currentDelegations,
@@ -2723,6 +2714,9 @@ export function AgentForm({
     onSaved,
     supportsIdentityProvider,
     passthroughHeaders,
+    showGitHubActionsAccess,
+    githubActionsAccess,
+    githubActionsAccessChanged,
     toolExposureMode,
     missingCredentialBehavior,
     accessAllTools,
@@ -2730,10 +2724,12 @@ export function AgentForm({
     supportsEnvironment,
     supportsSubagents,
     agentRuntimeEnabled,
+    runtimeEditable,
     runtime,
     channelAssignmentsDirty,
     isClaudeCodeRuntime,
     runtimeHasLocalChanges,
+    modelTiers,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2821,18 +2817,18 @@ export function AgentForm({
     assignedTeamIds,
     assignedUserIds,
     labels,
-    considerContextUntrusted,
     llmApiKeyId,
     llmModel,
+    modelPoolId,
+    modelTiers,
     identityProviderId,
     environmentId,
     knowledgeBaseIds,
     connectorIds,
     scope,
     initialGrants,
-    autoConfigureOnToolDiscovery,
-    dualLlmMaxRounds,
     passthroughHeaders,
+    githubActionsAccess,
     toolExposureMode,
     missingCredentialBehavior,
     accessAllTools,
@@ -2910,7 +2906,8 @@ export function AgentForm({
     !needsRuntimeContainer &&
     !runtimeModelIncompatibility &&
     mcpEnvConflicts.length === 0 &&
-    !environmentConflicts.blocksSave;
+    !environmentConflicts.blocksSave &&
+    !(showGitHubActionsAccess && gitHubActionsAccessError(githubActionsAccess));
   const footerState: AgentFormFooterState = {
     formId,
     isCreate: !agent,
@@ -2918,6 +2915,7 @@ export function AgentForm({
     isDirty,
     canSubmit,
     readOnly,
+    hasRuntime: runtime !== null,
   };
   // Keep the popover portaled: choosing a credential changes the model control
   // while Radix closes its focus scope, and reconciling both in the form tree
@@ -2931,12 +2929,25 @@ export function AgentForm({
         onOpenChange={setApiKeySelectorOpen}
         onSelectKey={(keyId) => {
           cancelPendingCreatedKeySelection();
+          setModelPoolId(null);
           handleLlmApiKeyChange(keyId);
+          setApiKeySelectorOpen(false);
+        }}
+        pools={runtime ? [] : modelPools}
+        selectedPoolId={agentModelPoolId}
+        onSelectPool={(poolId) => {
+          cancelPendingCreatedKeySelection();
+          pendingModelAutoSelectionRef.current = null;
+          setModelPoolId(poolId);
+          setLlmApiKeyId(null);
+          setLlmModel(null);
+          setKeyedModelTiers({ keyId: null, tiers: EMPTY_MODEL_TIERS });
+          lastAutoSelectedProviderRef.current = null;
           setApiKeySelectorOpen(false);
         }}
         onAddApiKey={onAddApiKey}
         currentProvider={currentLlmProvider ?? undefined}
-        providerFilter={runtime ? runtimeProviderFilter : undefined}
+        providerFilter={apiKeyProviderFilter}
         triggerVariant="button"
         triggerClassName="h-8 max-w-[250px] text-xs"
         popoverClassName="w-96"
@@ -2944,14 +2955,54 @@ export function AgentForm({
         allowOrganizationDefault={
           !!agent || !isClaudeCodeRuntime || usesClaudeSubscription
         }
-        organizationDefaultSelected={!llmApiKeyId}
+        organizationDefaultSelected={!llmApiKeyId && !agentModelPoolId}
         onSelectOrganizationDefault={() => {
           cancelPendingCreatedKeySelection();
+          setModelPoolId(null);
           setLlmApiKeyId(null);
           setLlmModel(null);
           lastAutoSelectedProviderRef.current = null;
           setApiKeySelectorOpen(false);
         }}
+      />
+      {createApiKeyDialog}
+    </>
+  );
+  const setClaudeAuthentication = (
+    authentication: "provider" | "subscription",
+  ) => {
+    if (!runtime) return;
+    setAgentRuntime({
+      ...runtime,
+      claudeCode: {
+        ...runtime.claudeCode,
+        authentication,
+      },
+      credentials:
+        runtime.credentials?.filter(
+          ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
+        ) ?? null,
+    });
+    if (authentication === "subscription") {
+      handleLlmApiKeyChange(null);
+      setLlmModel(null);
+    }
+  };
+  // Claude Code chooses among the few connections that can run Claude, so
+  // they are listed outright instead of behind a dropdown of every key.
+  const claudeConnectionControl = (
+    <>
+      <ClaudeProviderConnections
+        keys={availableApiKeys}
+        selectedKeyId={llmApiKeyId}
+        canRunClaude={runtimeProviderFilter}
+        onSelect={(keyId) => {
+          cancelPendingCreatedKeySelection();
+          handleLlmApiKeyChange(keyId);
+        }}
+        onAddApiKey={onAddApiKey}
+        onUseSubscription={() => setClaudeAuthentication("subscription")}
+        disabled={readOnly}
       />
       {createApiKeyDialog}
     </>
@@ -3005,6 +3056,8 @@ export function AgentForm({
           unavailableModelHeading={
             runtime ? "Current model (unavailable)" : undefined
           }
+          // A pool is picked with the key; a model picked here is never pooled.
+          markPooledModels={!!runtime}
         />
       )}
     </>
@@ -3022,16 +3075,20 @@ export function AgentForm({
             : "Select a provider for the selected model"
           : runtimeModelIncompatibility || undefined;
   const modelSummary = usesClaudeSubscription
-    ? "Personal Claude subscription. Connect after saving."
+    ? "Each person's Claude subscription"
     : requiredSubscription
       ? `${requiredSubscription.label}. ${requiredSubscriptionSatisfied ? "Connected" : "Not connected yet"}`
       : needsClaudeProviderKey
         ? "Select a provider and Claude model"
-        : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
+        : agentModelPoolId
+          ? `Model pool ${agentModelPool?.name ?? ""}`.trim()
+          : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
   const modelBlock = (
     <div className="space-y-2">
       {(agent || !isInternalAgent || !agentRuntimeEnabled) && (
-        <Label>{isClaudeCodeRuntime ? "Authentication" : "Model"}</Label>
+        <Label>
+          {isClaudeCodeRuntime ? "Whose Claude account runs it" : "Model"}
+        </Label>
       )}
       {cannotReadLlmConfiguration && !isClaudeCodeRuntime ? (
         <Alert>
@@ -3065,6 +3122,7 @@ export function AgentForm({
             </Alert>
           )}
           {!isClaudeCodeRuntime &&
+            !agentModelPoolId &&
             (selectedApiKeyIsSubscription ? (
               <Alert>
                 <InfoIcon className="h-4 w-4" />
@@ -3089,24 +3147,7 @@ export function AgentForm({
               authentication={
                 usesClaudeSubscription ? "subscription" : "provider"
               }
-              onAuthenticationChange={(authentication) => {
-                if (!runtime) return;
-                setAgentRuntime({
-                  ...runtime,
-                  claudeCode: {
-                    ...runtime.claudeCode,
-                    authentication,
-                  },
-                  credentials:
-                    runtime.credentials?.filter(
-                      ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
-                    ) ?? null,
-                });
-                if (authentication === "subscription") {
-                  handleLlmApiKeyChange(null);
-                  setLlmModel(null);
-                }
-              }}
+              onAuthenticationChange={setClaudeAuthentication}
               model={runtime?.claudeCode?.model}
               onModelChange={(model) => {
                 if (!runtime) return;
@@ -3128,14 +3169,40 @@ export function AgentForm({
                 null
               }
               vertexEnabled={anthropicVertexAiEnabled}
-              apiKeySelector={providerKeyControl}
+              apiKeySelector={claudeConnectionControl}
               modelSelector={modelControl}
+              showModelSelector={
+                !!llmApiKeyId ||
+                availableApiKeys.some(
+                  (key) =>
+                    !isPersonalSubscription(key) &&
+                    runtimeProviderFilter(key.provider),
+                )
+              }
             />
           ) : (
-            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-              <div className="min-w-0">{providerKeyControl}</div>
-              <div className="min-w-0">{modelControl}</div>
-            </div>
+            <>
+              <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="min-w-0">{providerKeyControl}</div>
+                {!agentModelPoolId && (
+                  <div className="min-w-0">{modelControl}</div>
+                )}
+              </div>
+              {selectedApiKey && !agentModelPoolId && (
+                <div className="sm:max-w-sm">
+                  <ModelTierPickers
+                    apiKeyId={selectedApiKey.id}
+                    provider={selectedApiKey.provider}
+                    value={modelTiers}
+                    onChange={(tiers) =>
+                      setKeyedModelTiers({ keyId: selectedApiKey.id, tiers })
+                    }
+                    inherited={organizationModelTiers}
+                    disabled={readOnly}
+                  />
+                </div>
+              )}
+            </>
           )}
           {runtimeModelIncompatibility &&
             !needsClaudeProviderKey &&
@@ -3206,6 +3273,9 @@ export function AgentForm({
                   section, and saying it twice reads as a mistake. */}
               {showPrimarySettingsCard && (
                 <SettingsSection>
+                  {!agent && runtime && agentRuntimeEnabled && (
+                    <AgentRuntimeHowItWorks />
+                  )}
                   {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
                   {!isBuiltIn && (
                     <IdentityFields
@@ -3225,15 +3295,15 @@ export function AgentForm({
                     </IdentityFields>
                   )}
 
-                  {showsModelControl &&
-                    (agent || !isInternalAgent || !agentRuntimeEnabled) &&
-                    modelBlock}
-
                   {/* Description (hidden for built-in agents) */}
                   {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
                     <div className="space-y-2">
                       <Label htmlFor="agentDescription">Description</Label>
+                      <FieldDescription id="agent-description-hint">
+                        Helps people and other agents pick it.
+                      </FieldDescription>
                       <Textarea
+                        aria-describedby="agent-description-hint"
                         id="agentDescription"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
@@ -3243,18 +3313,30 @@ export function AgentForm({
                     </div>
                   )}
 
+                  {afterDescription}
+
+                  {showsModelControl &&
+                    (agent ||
+                      !isInternalAgent ||
+                      !agentRuntimeEnabled ||
+                      runsOnBuiltInHarness) &&
+                    modelBlock}
+
                   {/* Instructions: what the agent is told to do. Saved with the
                       rest of this panel, so one Save covers the whole tab. */}
                   {isInternalAgent && (
                     <div className="space-y-2">
                       <SystemPromptEditor
                         title="Instructions"
-                        description="Define what this agent should do, how it should respond, and any rules it should follow."
+                        description={
+                          runtime
+                            ? "Added to every task, on top of what the person asks."
+                            : "Define what this agent should do, how it should respond, and any rules it should follow."
+                        }
                         value={systemPrompt}
                         onChange={setSystemPrompt}
                         readOnly={readOnly}
                         variant="default"
-                        builtInAgentId={builtInAgentName}
                         headerExtra={
                           defaultSystemPrompt !== undefined && !readOnly ? (
                             <Button
@@ -3276,110 +3358,67 @@ export function AgentForm({
                     </div>
                   )}
 
-                  {!agent && agentType !== "llm_proxy" && (
-                    <InitialResourcePermissions
-                      resource={
-                        agentType === "mcp_gateway" ? "mcpGateway" : "agent"
-                      }
-                      grants={initialGrants}
-                      onChange={setInitialGrants}
-                    />
-                  )}
-
-                  {!agent && isInternalAgent && agentRuntimeEnabled && (
-                    <div className="space-y-4 border-t pt-6">
-                      <AgentRuntimePicker
-                        selectedId={selectedRuntimeId}
-                        value={runtime}
-                        onSelect={(id, nextRuntime) => {
-                          setSelectedRuntimeId(id);
-                          setAgentRuntime(nextRuntime);
-                          catalogSubscriptionAppliedRef.current = false;
-                          cancelPendingCreatedKeySelection();
-                          pendingModelAutoSelectionRef.current = null;
-                          lastAutoSelectedProviderRef.current = null;
-                          if (
-                            nextRuntime?.claudeCode?.authentication ===
-                              "subscription" ||
-                            (nextRuntime &&
-                              selectedApiKey &&
-                              !getAgentRuntimeProviderCompatibility({
-                                inferenceProtocol:
-                                  nextRuntime.inferenceProtocol,
-                                runtimeCommand: nextRuntime.command,
-                                provider: selectedApiKey.provider,
-                              }).compatible)
-                          ) {
-                            setLlmApiKeyId(null);
-                            setLlmModel(null);
-                          }
-                        }}
-                        onChange={setAgentRuntime}
-                        modelBlock={showsModelControl ? modelBlock : null}
-                        modelSummary={modelSummary}
-                        modelAttention={modelAttention}
-                      />
-                    </div>
-                  )}
-
-                  {/* Built-in agent config */}
-                  {isPolicyConfigBuiltIn && (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label
-                            htmlFor="auto-configure-on-tool-discovery"
-                            className="text-sm font-medium cursor-pointer"
-                          >
-                            Auto-configure on tool discovery
-                          </Label>
-                          <FieldDescription>
-                            Automatically analyze and configure security
-                            policies when tools are discovered
-                          </FieldDescription>
-                        </div>
-                        <Switch
-                          id="auto-configure-on-tool-discovery"
-                          checked={autoConfigureOnToolDiscovery}
-                          onCheckedChange={setAutoConfigureOnToolDiscovery}
+                  {!agent &&
+                    isInternalAgent &&
+                    agentRuntimeEnabled &&
+                    !runsOnBuiltInHarness && (
+                      <div className="space-y-4 border-t pt-6">
+                        <AgentRuntimePicker
+                          selectedId={selectedRuntimeId}
+                          value={runtime}
+                          onSelect={(id, nextRuntime) => {
+                            setSelectedRuntimeId(id);
+                            setAgentRuntime(nextRuntime);
+                            catalogSubscriptionAppliedRef.current = false;
+                            cancelPendingCreatedKeySelection();
+                            pendingModelAutoSelectionRef.current = null;
+                            lastAutoSelectedProviderRef.current = null;
+                            if (
+                              nextRuntime?.claudeCode?.authentication ===
+                                "subscription" ||
+                              (nextRuntime &&
+                                selectedApiKey &&
+                                !getAgentRuntimeProviderCompatibility({
+                                  inferenceProtocol:
+                                    nextRuntime.inferenceProtocol,
+                                  runtimeCommand: nextRuntime.command,
+                                  provider: selectedApiKey.provider,
+                                }).compatible)
+                            ) {
+                              setLlmApiKeyId(null);
+                              setLlmModel(null);
+                            }
+                          }}
+                          onChange={setAgentRuntime}
+                          onChangeTemplate={onChangeRuntimeTemplate}
+                          modelBlock={showsModelControl ? modelBlock : null}
+                          modelSummary={modelSummary}
+                          modelAttention={modelAttention}
                         />
                       </div>
-                    </div>
-                  )}
-
-                  {isDualLlmMainBuiltIn && (
-                    <div className="space-y-2">
-                      <Label htmlFor="dual-llm-max-rounds">Max rounds</Label>
-                      <Input
-                        id="dual-llm-max-rounds"
-                        type="number"
-                        min={1}
-                        max={20}
-                        value={dualLlmMaxRounds}
-                        onChange={(e) => setDualLlmMaxRounds(e.target.value)}
-                      />
-                    </div>
-                  )}
-                </SettingsSection>
-              )}
-
-              {/* Labels for built-in agents (the Advanced step that holds
-                them for everyone else does not exist for a built-in). */}
-              {isBuiltIn && (
-                <SettingsSection
-                  title="Labels"
-                  description="Use key-value labels to organize and filter this resource."
-                >
-                  <ProfileLabels
-                    ref={agentLabelsRef}
-                    labels={labels}
-                    onLabelsChange={setLabels}
-                    showLabel={false}
-                    showDescription={false}
-                  />
+                    )}
                 </SettingsSection>
               )}
             </SettingsSectionGroup>
+          )}
+
+          {/* Who can use it, at the foot of General as on the detail page:
+              outside the group, so no rule separates it from the fields. It
+              takes back the group's bottom padding to sit at field spacing. */}
+          {showConfigurationSections && !agent && agentType !== "llm_proxy" && (
+            <div
+              className={cn(
+                "-mt-6",
+                !isActiveSection("configuration") && "hidden",
+              )}
+            >
+              <InitialResourcePermissions
+                standalone
+                resource={agentType === "mcp_gateway" ? "mcpGateway" : "agent"}
+                grants={initialGrants}
+                onChange={setInitialGrants}
+              />
+            </div>
           )}
 
           {/* Messaging channels: a surface of its own, because the
@@ -3392,6 +3431,11 @@ export function AgentForm({
               <SettingsSectionGroup
                 className={cn(!isActiveSection("messaging") && "hidden")}
               >
+                <SettingsSection>
+                  <AgentChannelHowItWorks
+                    hasRuntime={!!runtime && agentRuntimeEnabled}
+                  />
+                </SettingsSection>
                 {/* The editor renders its own Channels and Email sections:
                     the two are different kinds of thing, and neither belongs
                     inside the other's list. */}
@@ -3404,7 +3448,9 @@ export function AgentForm({
                       id: null,
                       name: name.trim() || "This agent",
                       icon: icon || null,
-                      scope,
+                      // The draft's reach comes from the grants picked on
+                      // General, as it will once the record exists.
+                      scope: grantsAudience(initialGrants),
                       authorId: currentUserId,
                     }
                   }
@@ -3417,6 +3463,14 @@ export function AgentForm({
                   standaloneSave={false}
                   onSaveHandlerChange={registerChannelAssignmentsSave}
                 />
+                <SettingsSection
+                  title="Other ways to start tasks"
+                  description="Nothing to set up here. These work as soon as the agent exists."
+                >
+                  <AgentOtherTaskSources
+                    hasRuntime={!!runtime && agentRuntimeEnabled}
+                  />
+                </SettingsSection>
               </SettingsSectionGroup>
             )}
 
@@ -3424,6 +3478,11 @@ export function AgentForm({
             <SettingsSectionGroup
               className={cn(!isActiveSection("tools") && "hidden")}
             >
+              {runtime && agentRuntimeEnabled && (
+                <SettingsSection>
+                  <AgentRuntimeToolSources />
+                </SettingsSection>
+              )}
               {/* Section 3: Tools & Knowledge Sources */}
               {showTools && (
                 <SettingsSection
@@ -3432,40 +3491,52 @@ export function AgentForm({
                   data-testid={E2eTestId.AgentToolsSection}
                 >
                   <div className="space-y-3">
-                    {/* What the mode means, beside the control that sets it.
-                        A full-width tab bar over the whole panel read as the
-                        page's own navigation rather than this block's switch,
-                        and the count it governed sat somewhere else entirely.
-                        Both panels stay mounted, so the sentence is resolved
-                        here rather than inside either of them. */}
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm text-muted-foreground">
-                        {autoToolsMode
-                          ? excludedToolsSummary(
-                              exclusionsState
-                                ? exclusionsState.current.excludedToolIds.length
-                                : null,
-                            )
-                          : assignedToolsSummary(assignedToolCount)}
-                      </p>
-                      <Tabs
-                        value={autoToolsMode ? "auto" : "custom"}
-                        onValueChange={(value) => {
-                          const auto = value === "auto";
-                          setAccessAllTools(auto);
-                          // Dynamic access only works through the search/run
-                          // dispatch surface, so picking it enables that mode.
-                          if (auto) {
-                            setToolExposureMode("search_and_run_only");
-                          }
-                        }}
-                      >
-                        <TabsList>
-                          <TabsTrigger value="auto">All</TabsTrigger>
-                          <TabsTrigger value="custom">Manual</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
-                    </div>
+                    {/* Each card states what the list below it means: in All
+                        it blocks tools, in Manual it allows them. Both panels
+                        stay mounted, so the counts are resolved here rather
+                        than inside either of them. */}
+                    <AccessModeCards
+                      label="Tool access"
+                      mode={autoToolsMode ? "all" : "manual"}
+                      readOnly={isBuiltIn}
+                      onModeChange={(mode) => {
+                        const auto = mode === "all";
+                        setAccessAllTools(auto);
+                        // Dynamic access only works through the search/run
+                        // dispatch surface, so picking it enables that mode.
+                        if (auto) setToolExposureMode("search_and_run_only");
+                      }}
+                      all={{
+                        title: "All tools",
+                        rule: "Everything is on, including tools added later. Disable the ones you don't want.",
+                        stat: accessModeCountStat(
+                          exclusionsState
+                            ? exclusionsState.current.excludedToolIds.length
+                            : null,
+                          "disabled",
+                        ),
+                      }}
+                      manual={{
+                        title: "Manual",
+                        rule: "Only the tools you pick. New tools stay off.",
+                        stat: accessModeCountStat(
+                          assignedToolCount,
+                          "assigned",
+                        ),
+                      }}
+                      footnote={
+                        autoToolsMode ? (
+                          <p>
+                            To save context, the{" "}
+                            {agentType === "mcp_gateway" ? "gateway" : "agent"}{" "}
+                            sees only{" "}
+                            <code className="font-mono">search_tools</code> and{" "}
+                            <code className="font-mono">run_tool</code>, and
+                            looks up the rest when it needs one.
+                          </p>
+                        ) : null
+                      }
+                    />
                     {/* Auto and Custom are the same pair of fields inversed —
                         every tool and source minus a set, or exactly a set — so
                         they carry the same order, the same widgets and the same
@@ -3485,6 +3556,7 @@ export function AgentForm({
                         <AgentToolExclusionsEditor
                           ref={agentToolExclusionsEditorRef}
                           agentId={agent?.id}
+                          isPersonalGateway={agent?.isPersonalGateway}
                           active={autoToolsMode}
                           seedDefaultExclusions={seedDefaultExclusions}
                           pendingAssignedToolIds={pendingSelectedToolIds}
@@ -3572,7 +3644,7 @@ export function AgentForm({
                           includeAppCatalogs={shouldOfferAppCatalogs(agentType)}
                         />
                       </div>
-                      {canReadKnowledgeBase && (
+                      {canReadKnowledgeBase && !isBuiltIn && (
                         <div className="space-y-2">
                           {/* At zero the editor's own empty state names the
                               count and the tool assigning one produces, so
@@ -3640,7 +3712,7 @@ export function AgentForm({
                       // inset past the icon column, and the two together
                       // stacked one line on another.
                       "mt-2 border-t pt-2",
-                      autoToolsMode && "hidden",
+                      (autoToolsMode || isBuiltIn) && "hidden",
                     )}
                     data-testid={E2eTestId.AgentToolLoadingSection}
                   >
@@ -3712,27 +3784,34 @@ export function AgentForm({
                     </p>
                   ) : (
                     <div className="space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-sm text-muted-foreground">
-                          {accessAllSubagents
-                            ? excludedSubagentsSummary(disabledSubagentCount)
-                            : assignedSubagentsSummary(delegationTargetCount)}
-                        </p>
-                        <Tabs
-                          value={accessAllSubagents ? "auto" : "custom"}
-                          onValueChange={handleSubagentModeChange}
-                        >
-                          <TabsList>
-                            <TabsTrigger value="auto">All</TabsTrigger>
-                            <TabsTrigger value="custom">Manual</TabsTrigger>
-                          </TabsList>
-                        </Tabs>
-                      </div>
+                      <AccessModeCards
+                        label="Subagent access"
+                        mode={accessAllSubagents ? "all" : "manual"}
+                        onModeChange={(mode) =>
+                          setAccessAllSubagents(mode === "all")
+                        }
+                        all={{
+                          title: "All agents",
+                          rule: "Every local agent, including ones added later. Exclude the ones you don't want.",
+                          stat: accessModeCountStat(
+                            disabledSubagentCount,
+                            "excluded",
+                          ),
+                        }}
+                        manual={{
+                          title: "Manual",
+                          rule: "Only the agents you pick. New agents stay off.",
+                          stat: accessModeCountStat(
+                            delegationTargetCount,
+                            "assigned",
+                          ),
+                        }}
+                      />
                       <SubagentsEditor
                         agentId={agent?.id}
                         readOnly={readOnly}
                         localMode={accessAllSubagents ? "all" : "selected"}
-                        availableAgents={allInternalAgents}
+                        canReadAgents={canReadAgents === true}
                         selectedAgentIds={selectedDelegationTargetIds}
                         onSelectionChange={setSelectedDelegationTargetIds}
                         disabledAgentIds={disabledSubagentIds}
@@ -3755,93 +3834,6 @@ export function AgentForm({
                         agentsPending={a2aRemoteAgents.isPending}
                         agentsError={!!a2aRemoteAgents.isError}
                       />
-                      {/* Outside the Auto/Custom split on purpose: whether this
-                        agent can consult the advisor is one decision, even
-                        though the two modes record it differently. */}
-                      {advisorAgentId && (
-                        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 border-t pt-4 sm:flex sm:items-center">
-                          <SettingIcon tone={advisorEnabled ? "on" : "off"}>
-                            <AgentIcon
-                              icon={
-                                allInternalAgents.find(
-                                  (candidate) =>
-                                    candidate.id === advisorAgentId,
-                                )?.icon ?? null
-                              }
-                              fallbackType="agent"
-                              size={16}
-                            />
-                          </SettingIcon>
-                          <div className="min-w-0 flex-1 space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <Label htmlFor="consult-advisor">
-                                Advisor Subagent
-                              </Label>
-                              <Badge
-                                variant="secondary"
-                                className="px-1.5 py-0 text-[10px]"
-                              >
-                                Beta
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              {isInternalAgent
-                                ? advisorEnabled
-                                  ? "Gets a second opinion from the Advisor before answering."
-                                  : "Answers without consulting the Advisor."
-                                : advisorEnabled
-                                  ? "Reachable through this gateway, alongside its other subagents."
-                                  : "Not reachable through this gateway."}{" "}
-                              <ExternalDocsLink
-                                href={advisorDocsUrl}
-                                className="underline"
-                                showIcon={false}
-                              >
-                                Learn more
-                              </ExternalDocsLink>
-                            </p>
-                          </div>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="col-start-2 row-start-2 w-fit shrink-0 sm:w-auto"
-                                asChild
-                              >
-                                {/* New tab: this form holds unsaved edits
-                                  that navigating away would discard. */}
-                                <Link
-                                  href={agentDetailHref(
-                                    "agent",
-                                    advisorAgentId,
-                                  )}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  <Settings2 className="size-4" />
-                                  <span>Open Advisor</span>
-                                  <span className="sr-only">
-                                    (opens in new tab)
-                                  </span>
-                                </Link>
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-64">
-                              Open the organization&apos;s shared Advisor to see
-                              or change the model it uses.
-                            </TooltipContent>
-                          </Tooltip>
-                          <Switch
-                            className="col-start-3 row-start-1"
-                            id="consult-advisor"
-                            checked={advisorEnabled}
-                            onCheckedChange={writeAdvisorEnabled}
-                            data-testid={E2eTestId.ConsultAdvisorSwitch}
-                          />
-                        </div>
-                      )}
                     </div>
                   )}
                 </SettingsSection>
@@ -3868,18 +3860,14 @@ export function AgentForm({
           {agent &&
             showRuntimeSection &&
             agentType === "agent" &&
-            agentRuntimeEnabled &&
+            runtimeEditable &&
             !isBuiltIn && (
-              <SettingsSectionGroup
-                className={cn(!isActiveSection("runtime") && "hidden")}
-              >
-                <SettingsSection aria-label="Agent runtime">
-                  <AgentRuntimeFields
-                    value={runtime}
-                    onChange={setAgentRuntime}
-                  />
-                </SettingsSection>
-              </SettingsSectionGroup>
+              <div className={cn(!isActiveSection("runtime") && "hidden")}>
+                <AgentRuntimeFields
+                  value={runtime}
+                  onChange={setAgentRuntime}
+                />
+              </div>
             )}
 
           {/* The Advanced step: security, passthrough
@@ -3889,6 +3877,13 @@ export function AgentForm({
             <SettingsSectionGroup
               className={cn(!isActiveSection("advanced") && "hidden")}
             >
+              {!agent && (
+                <SettingsSection>
+                  <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
+                    Optional. The defaults work in most cases.
+                  </p>
+                </SettingsSection>
+              )}
               {/* Skills served over MCP (SEP-2640). Gateways only, behind the
                   draft-extension feature flag. It sits in Advanced rather than
                   beside Tools & Knowledge: these are resources the gateway
@@ -3928,11 +3923,15 @@ export function AgentForm({
                       onModeChange={(mode) =>
                         setAccessAllSkills(mode === "all")
                       }
-                      summary={publishedSkillsSummary({
-                        publishesAll: accessAllSkills,
-                        excludedCount: excludedSkillIds.length,
-                        assignedCount: assignedSkillIds.length,
-                      })}
+                      allRule="Every organization-wide skill in this environment, including new ones. Exclude the ones you don't want."
+                      allStat={accessModeCountStat(
+                        excludedSkillIds.length,
+                        "excluded",
+                      )}
+                      manualStat={accessModeCountStat(
+                        assignedSkillIds.length,
+                        "assigned",
+                      )}
                       availableSkillsView={
                         <AvailableSkillsDialog
                           source={{
@@ -3944,20 +3943,10 @@ export function AgentForm({
                       }
                       allEditor={
                         <div className="space-y-2">
-                          <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
-                            <li className="flex gap-2">
-                              <CheckIcon className="mt-px size-3.5 shrink-0" />
-                              Publishes skills with organization-wide use
-                              permission in this{" "}
-                              {agentTypeDisplayName[agentType] || "agent"}
-                              's environment — new ones included automatically
-                            </li>
-                            <li className="flex gap-2">
-                              <CheckIcon className="mt-px size-3.5 shrink-0" />
-                              Other skills require permission to share them and
-                              a manual assignment
-                            </li>
-                          </ul>
+                          <p className="pt-1 text-xs text-muted-foreground">
+                            Other skills need permission to share them and a
+                            manual assignment.
+                          </p>
                           <div className="space-y-1.5">
                             <AgentSkillsEditor
                               availableSkills={availableSkillsForExclusion}
@@ -4105,8 +4094,8 @@ export function AgentForm({
                               <Button
                                 type="button"
                                 variant="ghost"
-                                size="icon"
-                                className="absolute top-2 right-2 h-6 w-6"
+                                size="icon-xs"
+                                className="absolute top-2 right-2"
                                 aria-label="Remove suggested prompt"
                                 onClick={() => {
                                   setSuggestedPrompts((prev) => {
@@ -4167,37 +4156,6 @@ export function AgentForm({
                       </CollapsibleContent>
                     </div>
                   </Collapsible>
-                </SettingsSection>
-              )}
-
-              {/* Security (LLM Proxy and Agent only) */}
-              {showSecurity && (
-                <SettingsSection
-                  title="Security"
-                  description="How this agent treats the content its tools hand back."
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label
-                          htmlFor="consider-context-untrusted"
-                          className="text-sm font-medium cursor-pointer"
-                        >
-                          Treat context as sensitive from the start of chat
-                        </Label>
-                        <FieldDescription>
-                          When enabled, the context is always considered
-                          sensitive. Only tools allowed to run in sensitive
-                          context will be permitted.
-                        </FieldDescription>
-                      </div>
-                      <Switch
-                        id="consider-context-untrusted"
-                        checked={considerContextUntrusted}
-                        onCheckedChange={setConsiderContextUntrusted}
-                      />
-                    </div>
-                  </div>
                 </SettingsSection>
               )}
 
@@ -4270,6 +4228,13 @@ export function AgentForm({
                     )}
                   </div>
                 </SettingsSection>
+              )}
+
+              {showGitHubActionsAccess && (
+                <GitHubActionsAccessSection
+                  value={githubActionsAccess}
+                  onChange={setGithubActionsAccess}
+                />
               )}
 
               {/* Identity Provider for JWKS auth */}
@@ -4367,8 +4332,8 @@ export function AgentForm({
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="h-7 shrink-0 self-center bg-background/80 px-2 text-xs"
+              size="xs"
+              className="shrink-0 self-center bg-background/80"
               disabled={environmentConflicts.isRemoving || isSaving}
               onClick={() => void handleRemoveEnvironmentConflicts()}
             >
@@ -4410,8 +4375,8 @@ export function AgentForm({
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="h-7 shrink-0 self-center bg-background/80 px-2 text-xs"
+              size="xs"
+              className="shrink-0 self-center bg-background/80"
               onClick={() =>
                 agentToolsEditorRef.current?.removeIncompatibleTools()
               }
@@ -4447,17 +4412,17 @@ type AgentFormFields = {
   assignedTeamIds: string[];
   assignedUserIds: string[];
   labels: ProfileLabel[];
-  considerContextUntrusted: boolean;
   llmApiKeyId: string | null;
   llmModel: string | null;
+  modelPoolId: string | null;
+  modelTiers: ModelTierSelection;
   identityProviderId: string | null | undefined;
   environmentId: string | null | undefined;
   knowledgeBaseIds: string[];
   connectorIds: string[];
   scope: AgentScope;
-  autoConfigureOnToolDiscovery: boolean;
-  dualLlmMaxRounds: string;
   passthroughHeaders: string[];
+  githubActionsAccess: GitHubActionsAccess | null;
   runtime: AgentRuntimeConfig | null;
   toolExposureMode: ToolExposureMode;
   missingCredentialBehavior: MissingCredentialBehavior;

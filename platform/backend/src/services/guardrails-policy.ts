@@ -1,23 +1,31 @@
 import { createHash } from "node:crypto";
+import {
+  TOOL_ASK_USER_SHORT_NAME,
+  TOOL_RUN_COMMAND_SHORT_NAME,
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { userHasPermission } from "@/auth";
-import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
+import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { ARCHESTRA_BATTERY } from "@/openappa/archestra-audience";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   addedGrants,
   bundledEntry,
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
-import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
+import { CredentialAccess } from "@/services/credential-access";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
+import type { PolicyTestFile } from "@/types/openappa-policy-tests";
 
 /**
- * A document and the revision it would replace, resolved together: resolving
- * one says nothing about the other, and every write compares the two.
+ * A document and the revision it would replace, resolved together with the
+ * stored credential bindings applied: resolving one says nothing about the
+ * other, and every write compares the two as the host would compose them.
  */
 async function resolveBoth(params: {
   organizationId: string;
@@ -26,10 +34,16 @@ async function resolveBoth(params: {
 }): Promise<{ submitted: PolicyResolution; previous: PolicyResolution }> {
   const { organizationId } = params;
   const [submitted, previous] = await Promise.all([
-    openappaDeclarations.resolve({ organizationId, content: params.content }),
-    openappaDeclarations.resolve({ organizationId, content: params.previous }),
+    openappaDeclarations.resolveWithBindings({
+      organizationId,
+      content: params.content,
+    }),
+    openappaDeclarations.resolveWithBindings({
+      organizationId,
+      content: params.previous,
+    }),
   ]);
-  return { submitted, previous };
+  return { submitted: submitted.resolution, previous: previous.resolution };
 }
 
 /**
@@ -52,8 +66,59 @@ function duplicateEntryErrors(resolution: PolicyResolution): string[] {
     );
 }
 
+/**
+ * What this deployment's recompose would make of a document that composes on
+ * its own: a battery the deployment holds back composes as empty, and the root
+ * may name what it declares. A refusal the revision being replaced already
+ * meets is a warning, so a write that leaves it as it was is never blocked by
+ * it; one the document introduces is an error. Either way the held-back
+ * batteries are named with it, since they are what the refusal is fixed by.
+ * A held-back battery the document composes without is no refusal; its status
+ * is the effective policy's to report.
+ */
+async function deploymentRefusal(params: {
+  organizationId: string;
+  content: string;
+  previous: string;
+}): Promise<{ errors: string[]; warnings: string[] }> {
+  const { organizationId, content, previous } = params;
+  const submitted = await openappaBatteriesService.composeInDeployment({
+    organizationId,
+    content,
+  });
+  if (submitted.refusal.length === 0) return { errors: [], warnings: [] };
+  const kept = new Set(
+    previous === content
+      ? submitted.refusal
+      : (
+          await openappaBatteriesService.composeInDeployment({
+            organizationId,
+            content: previous,
+          })
+        ).refusal,
+  );
+  const introduced = submitted.refusal.filter((error) => !kept.has(error));
+  const inDeployment = (line: string) => `in this deployment: ${line}`;
+  const keptNote =
+    " (the current revision is refused the same way; the runtime keeps enforcing the last composition that opened)";
+  if (introduced.length > 0)
+    return {
+      errors: [...introduced, ...submitted.heldBack].map(inDeployment),
+      warnings: [],
+    };
+  return {
+    errors: [],
+    warnings: [...submitted.refusal, ...submitted.heldBack].map(
+      (line) => inDeployment(line) + keptNote,
+    ),
+  };
+}
+
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */
 export const GUARDRAILS_REVISION_CONFLICT = "guardrails_policy_revision_stale";
+
+/** @public — the LLM annotator the default policy routes every call no rule names to; tests assert it. */
+export const UNDECLARED_TOOL_ANNOTATOR = "archestra.llm-annotator";
 
 export const guardrailsPolicyService = {
   async get(organizationId: string): Promise<GuardrailsPolicy> {
@@ -111,15 +176,16 @@ export const guardrailsPolicyService = {
   ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
     requireEnabled();
     const { organizationId } = params;
+    const previous =
+      params.previous ?? (await this.get(organizationId)).content;
     const resolved =
       params.resolved ??
-      (await resolveBoth({
-        organizationId,
-        content,
-        previous: params.previous ?? (await this.get(organizationId)).content,
-      }));
+      (await resolveBoth({ organizationId, content, previous }));
     const resolution = resolved.submitted;
-    const errors = [...resolution.errors];
+    const errors = [
+      ...resolution.errors,
+      ...(await openappaDeclarations.credentialErrors(content)),
+    ];
     const kept = new Set(resolved.previous.entries.map((entry) => entry.entry));
     const warnings: string[] = [];
     for (const entry of resolution.entries)
@@ -134,8 +200,21 @@ export const guardrailsPolicyService = {
       const composed = await openappaDeclarations.composeForCheck({
         root: content,
         resolution,
+        deployed: await openappaBatteriesService.deployedBatteries({
+          organizationId,
+          resolution,
+        }),
       });
       if ((composed.content ?? null) === null) errors.push(...composed.errors);
+      else {
+        const deployed = await deploymentRefusal({
+          organizationId,
+          content,
+          previous,
+        });
+        errors.push(...deployed.errors);
+        warnings.push(...deployed.warnings);
+      }
     }
     return { valid: errors.length === 0, errors, warnings };
   },
@@ -144,8 +223,8 @@ export const guardrailsPolicyService = {
    * Save a new revision of the organization's policy.
    *
    * Every user-driven write of the text passes here, so this is where a credential
-   * grant — an organization credential's value reaching a battery's helper sandbox
-   * — is authorized. A grant the submitted text adds, or whose key it changes
+   * grant — an organization credential's value reaching a battery's helper sandbox,
+   * or a root external or profile that names it as its `token_env` — is authorized. A grant the submitted text adds, or whose key it changes
    * against the latest revision, takes `credential:update`; removing one takes
    * nothing beyond the route's own permission. The diff runs against the latest
    * revision, so a stale `expectedRevision` still ends in the save's own conflict.
@@ -155,34 +234,26 @@ export const guardrailsPolicyService = {
     userId: string;
     content: string;
     expectedRevision: number;
+    validation?: { expectedVersion: string; files?: PolicyTestFile[] };
   }) {
     requireEnabled();
     const { organizationId, userId, content } = params;
     if ((await OpenAppaGithubSyncModel.find(organizationId))?.interval)
-      throw new ApiError(
-        409,
-        "Stop GitHub syncing before editing this policy.",
-      );
+      throw new ApiError(409, "Stop Git sync before editing this policy.");
     const latest = await this.get(organizationId);
     const resolved = await resolveBoth({
       organizationId,
       content,
       previous: latest.content,
     });
-    const granted = addedGrants(
-      openappaDeclarations.grants(resolved.previous),
-      openappaDeclarations.grants(resolved.submitted),
-    );
-    if (
-      granted.length > 0 &&
-      !(await userHasPermission(userId, organizationId, "credential", "update"))
-    )
-      throw new ApiError(
-        403,
-        `Credential update permission is required: this policy hands ${granted
-          .map((grant) => `${grant.variable} to ${grant.battery}`)
-          .join(", ")}`,
-      );
+    await requireGrantPermission({
+      organizationId,
+      userId,
+      granted: addedGrants(
+        openappaDeclarations.grants(resolved.previous),
+        openappaDeclarations.grants(resolved.submitted),
+      ),
+    });
     const validation = await this.validate(content, {
       organizationId,
       previous: latest.content,
@@ -196,6 +267,7 @@ export const guardrailsPolicyService = {
       content,
       contentHash: hash(content),
       expectedRevision: params.expectedRevision,
+      validation: params.validation,
     });
     if (!saved)
       throw new ApiError(
@@ -203,14 +275,53 @@ export const guardrailsPolicyService = {
         "This policy changed since you opened it. Reload the latest revision before saving.",
         GUARDRAILS_REVISION_CONFLICT,
       );
+    if (latest.revision === 0 || latest.contentHash !== saved.contentHash) {
+      try {
+        await OpenAppaPolicyTestsModel.enqueuePolicyValidation(
+          organizationId,
+          saved.contentHash,
+        );
+      } catch {
+        logger.warn(
+          { organizationId },
+          "OpenAPPA could not queue informational validation after a policy change",
+        );
+      }
+    }
     return saved;
   },
 };
 
+/**
+ * A write that adds or rekeys a credential grant hands that credential's value
+ * to helper code, so it takes `use` on the credential. A key with no credential
+ * behind it yet would hand over whichever one is created under it later, so it
+ * takes `use` on every credential.
+ */
+export async function requireGrantPermission(params: {
+  organizationId: string;
+  userId: string;
+  granted: ReturnType<typeof addedGrants>;
+}): Promise<void> {
+  const { organizationId, userId, granted } = params;
+  const message = `Use access to the credential is required: this policy hands ${granted
+    .map((grant) => `${grant.variable} to ${grant.battery}`)
+    .join(", ")}`;
+  for (const key of new Set(granted.map((grant) => grant.key)))
+    await CredentialAccess.requireUseOfKey({
+      organizationId,
+      userId,
+      key,
+      message,
+    });
+}
+
 function requireEnabled() {
-  if (!config.openappa.enabled)
+  if (!enterpriseTier.isOpenappaActive())
     throw new ApiError(404, "Guardrails v2 is disabled");
 }
+const CODING_BATTERY = "coding";
+const CLAUDE_CODE_BATTERY = "claude-code";
 function hash(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
@@ -218,13 +329,48 @@ function hash(content: string) {
 /**
  * The text an organization that never saved a revision is read as. It installs
  * the bundled `archestra` battery over the built-in tools, under the name they
- * carry in this deployment, and reads the organization's members as `internal`.
+ * carry in this deployment, and the bundled `coding` battery over the client
+ * built-ins this host derives as `host/archestra/<name>`: `claude-code` maps it
+ * onto Claude Code's tools, and the root maps it onto the other clients'. It
+ * reads the organization's members as `internal`, and has the organization's
+ * default model label each sandbox command, each shell command the client
+ * batteries route to a model, and each tool no rule names.
  */
 export function initialPolicy(): string {
-  return `include = ["${bundledEntry(ARCHESTRA_BATTERY)}"]
+  return `include = [
+  "${bundledEntry(ARCHESTRA_BATTERY)}",
+  "${bundledEntry(CODING_BATTERY)}",
+  "${bundledEntry(CLAUDE_CODE_BATTERY)}",
+]
 
-[server_aliases]
+[aliases.mcp]
 ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
+
+# The client battery's rules name Claude Code's tools; here they govern the
+# built-ins of whichever client runs through this deployment.
+[aliases.host]
+${CLAUDE_CODE_BATTERY} = ["archestra"]
+
+# The coding battery's tools under Codex's, OpenCode's, Claude Desktop
+# Cowork's and Kimi Code's spellings. Kimi Code shares Claude Code's other tool
+# names; the proxy also evaluates its Read, Write and Edit \`path\` as
+# \`file_path\`.
+[aliases.tool.${CODING_BATTERY}]
+shell = [
+  { name = "host/archestra/exec_command", args = { command = "cmd" } },
+  { name = "host/archestra/shell", args = { command = "command" } },
+  { name = "host/archestra/bash", args = { command = "command" } },
+  { name = "host/archestra/mcp__workspace__bash", args = { command = "command" }, confined = true },
+]
+read_file = [{ name = "host/archestra/read", args = { file_path = "filePath" } }]
+search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
+write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
+edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]
+fetch_url = [
+  { name = "host/archestra/webfetch", args = { url = "url" } },
+  { name = "host/archestra/mcp__workspace__web_fetch", args = { url = "url" } },
+  { name = "host/archestra/FetchURL", args = { url = "url" } },
+]
 
 [policy]
 version = 2
@@ -235,15 +381,102 @@ internal = ["${ARCHESTRA_BATTERY}:members"]
 [policy.deployment]
 context_control = true
 
-[[policy.annotator]]
-name = "noop"
+# Lets an agent hand a risky read to a subagent. The subagent must reply in
+# the strict JSON shape the agent asked for, so injected instructions and
+# extra data can't slip back. A reply that fits gets the agent's trust.
+# Built into the runtime.
+[[policy.sanitizer]]
+name = "attest-schema"
+on = ["tool_output"]
 
-# Tools without a specific rule have no additional restrictions.
+[policy.sanitizer.permits]
+trust = { from = "suspicious", to = "trusted" }
+
+# Labels each sandbox command (run_command) with the annotator model,
+# through the LLM proxy.
+[[policy.annotator]]
+name = "archestra.run-command"
+builtin = "archestra"
+hint = "run_command runs a shell command in this conversation's sandbox, a scratch workspace. A command that only lists, reads or changes ordinary files in the sandbox, with no network access, keeps the neutral annotation unless a file it reads visibly holds credentials or secrets."
+ranks = ["suspicious", "trusted"]
+marks = []
+effects = []
+
+[[policy.tool]]
+name = "${archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME)}"
+annotator = "archestra.run-command"
+
+# The client batteries' shell and Monitor annotators, with the batteries' own
+# mandate, asked of the annotator model instead of a local claude process.
+[[policy.annotator]]
+name = "${CLAUDE_CODE_BATTERY}.bash-repository-requirements"
+builtin = "archestra"
+hint = "\`context.github\` is the deployment's finding about the repository and pull request or issue the command reaches. A push, pull request, issue, release, or comment into a public repository, or one it does not establish, requires audience public; into a private or internal one, internal. A read keeps the session's audience."
+
+[[policy.annotator]]
+name = "${CLAUDE_CODE_BATTERY}.bash-requirements"
+builtin = "archestra"
+
+[[policy.annotator]]
+name = "${CLAUDE_CODE_BATTERY}.monitor-requirements"
+builtin = "archestra"
+
+# Labels each call no rule names with the OpenAPPA annotator model (the
+# organization's default model unless Guardrails settings pick another).
+[[policy.annotator]]
+name = "${UNDECLARED_TOOL_ANNOTATOR}"
+builtin = "archestra"
+ranks = ["suspicious", "trusted"]
+audiences = ["self", "internal"]
+marks = []
+effects = []
+hint = "Routine requester-local file/shell operations, diagnostics, edits, builds, tests and client setup need no audience or trust requirement when they do not publish data or perform destructive actions. A network fetch or dependency install alone is not disclosure of trajectory data. Require public audience for actual external sends, internal for organization-only sends. Keep secrets self-only; third-party content stays suspicious. Use supplied context; do not guess destination visibility."
+
+# Questions carry no data: they keep an empty label even if the catch-all
+# below is made stricter. search_tools gets the same from the archestra battery.
+[[policy.tool]]
+name = "${archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME)}"
+delta = {}
+
+# Starting a subagent opens a child trajectory under this deployment's context
+# control; what the subagent hands back is checked when it returns.
+[[policy.tool]]
+name = "host/archestra/Agent"
+delta = {}
+
+# \`Task\` is the earlier name of \`Agent\`.
+[[policy.tool]]
+name = "host/archestra/Task"
+delta = {}
+
+# Claude Desktop Code tab's local turn UI tools (the desktop equivalents of
+# EndConversation and TodoWrite) render inside the session's own window.
+[[policy.tool]]
+name = "host/archestra/mcp__ccd_turn__wrap_up"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/mcp__ccd_turn__update_plan"
+delta = {}
+
 [[policy.tool]]
 name = "*"
-annotator = "noop"
+annotator = "${UNDECLARED_TOOL_ANNOTATOR}"
 
-[externals.annotators.noop]
-url = "http://127.0.0.1:${config.api.port}${GUARDRAILS_NOOP_ANNOTATOR_PATH}"
+# Review one exact call for any attention mark, trust or audience gap.
+[[policy.authority]]
+name = "human-approval"
+hint = "Ask the person running this session to approve this exact call."
+
+[policy.authority.permits]
+trust_below = "trusted"
+audience_missing = ["public"]
+attention = ["*"]
+
+[externals]
+timeout_ms = 20000
+
+[externals.authorities.human-approval]
+builtin = "hitl"
 `;
 }

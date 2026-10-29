@@ -7,12 +7,13 @@ import {
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
-import {
-  parseAuthRequired,
-  parseExpiredAuth,
-  parsePolicyDenied,
-} from "@/lib/chat/mcp-error-ui";
+import { parseAuthRequired, parseExpiredAuth } from "@/lib/chat/mcp-error-ui";
 import type { PendingToolAction } from "@/lib/chat/pending-tool-state";
+
+const POLICY_PREVIEW_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
+  "preview_guardrails_policy_change",
+  "preview_guardrails_validation_change",
+]);
 
 /**
  * Compute the default set of enabled tool IDs for a conversation.
@@ -145,10 +146,7 @@ export function getHumanRulingDisplay({
   if (getToolErrorText({ part, toolResultPart })) return null;
   const ruling = extractMcpHumanRuling(toolResultPart?.output ?? part.output);
   if (!ruling) return null;
-  return {
-    ruling,
-    label: ruling === "deny" ? "Denied by you" : "Approved by you",
-  };
+  return { ruling, label: HUMAN_RULING_LABELS[ruling] };
 }
 
 export function isCompactEligible(params: {
@@ -174,7 +172,6 @@ export function isCompactEligible(params: {
   );
   if (errorText) {
     if (
-      structuredError?.type === "policy_denied" ||
       structuredError?.type === "assigned_credential_unavailable" ||
       structuredError?.type === "auth_required" ||
       structuredError?.type === "auth_expired"
@@ -182,23 +179,70 @@ export function isCompactEligible(params: {
       return false;
     }
 
-    if (
-      parsePolicyDenied(errorText) ||
-      parseExpiredAuth(errorText) ||
-      parseAuthRequired(errorText)
-    ) {
+    if (isAuthErrorText(errorText, toolResultPart ?? part)) {
       return false;
     }
 
     return true;
   }
 
+  // A proposed policy is what the operator is asked to approve: its preview
+  // stays open in the reply instead of folding into a circle. A saved change
+  // folds as usual; its banner reports the save.
+  if (shortName && POLICY_PREVIEW_TOOL_SHORT_NAMES.has(shortName)) {
+    return false;
+  }
+
   const rawOutput = toolResultPart?.output ?? part.output;
   if (typeof rawOutput === "string") {
-    if (parseExpiredAuth(rawOutput) || parseAuthRequired(rawOutput)) {
+    if (isAuthErrorText(rawOutput, toolResultPart ?? part)) {
       return false;
     }
   }
 
   return true;
 }
+
+/**
+ * A denial notice carries the blocked call's arguments in their wire form.
+ * When that form is a JSON string, show the object it holds.
+ */
+export function withParsedArguments(
+  input: ToolUIPart["input"],
+): ToolUIPart["input"] {
+  if (typeof input !== "object" || input === null) return input;
+  const { arguments: args } = input as { arguments?: unknown };
+  if (typeof args !== "string") return input;
+  try {
+    return {
+      ...(input as Record<string, unknown>),
+      arguments: JSON.parse(args),
+    };
+  } catch {
+    return input;
+  }
+}
+
+const HUMAN_RULING_LABELS: Record<McpHumanRuling, string> = {
+  approve: "Approved by you",
+  deny: "Denied by you",
+  superseded: "Policy changed, the agent will ask again",
+};
+
+/**
+ * Whether a tool's error or output text asks the user to (re)authenticate.
+ * Memoized per message part: the transcript re-checks every tool part on
+ * every render, and parts are stable objects while their text is unchanged.
+ */
+function isAuthErrorText(text: string, source: object): boolean {
+  const cached = authErrorTextCache.get(source);
+  if (cached && cached.text === text) return cached.result;
+  const result = !!(parseExpiredAuth(text) || parseAuthRequired(text));
+  authErrorTextCache.set(source, { text, result });
+  return result;
+}
+
+const authErrorTextCache = new WeakMap<
+  object,
+  { text: string; result: boolean }
+>();

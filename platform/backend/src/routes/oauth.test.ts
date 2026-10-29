@@ -1,12 +1,14 @@
 import { createHash } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import type { FastifyRequest } from "fastify";
 import { type Mock, vi } from "vitest";
-import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { secretManager } from "@/secrets-manager";
+import { consumeMcpOAuthCredentialGrant } from "@/services/mcp-oauth-credential-grant";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useRouteTestApp } from "@/test/route-test-app";
 import oauthRoutes, {
   buildDiscoveryUrls,
@@ -26,6 +28,8 @@ import { OAUTH_CALLBACK_PATH } from "./route-paths";
 // after their assertions. If an assertion throws, the inline restore is skipped
 // and the mocked fetch leaks into whatever test file runs next in the worker.
 // This top-level hook guarantees the real fetch is back after every test.
+setupTestCacheManager();
+
 const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;
@@ -237,6 +241,7 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://example.com",
           authorization_endpoint: "https://example.com/authorize",
           token_endpoint: "https://example.com/token",
           scopes_supported: ["openid", "profile", "email"],
@@ -259,6 +264,7 @@ describe("OAuth helper functions", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({
+            resource: "https://example.com/mcp",
             scopes_supported: ["mcp:read", "mcp:write"],
           }),
         }) as Mock;
@@ -285,6 +291,7 @@ describe("OAuth helper functions", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({
+            issuer: "https://example.com",
             authorization_endpoint: "https://example.com/authorize",
             token_endpoint: "https://example.com/token",
             scopes_supported: ["api:read"],
@@ -306,6 +313,7 @@ describe("OAuth helper functions", () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://auth.example.com",
           authorization_endpoint: "https://auth.example.com/authorize",
           token_endpoint: "https://auth.example.com/token",
           scopes_supported: ["jira:read"],
@@ -338,6 +346,7 @@ describe("OAuth helper functions", () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          resource: "https://example.com/mcp",
           scopes_supported: ["mcp:read"],
         }),
       }) as Mock;
@@ -367,6 +376,7 @@ describe("OAuth helper functions", () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://auth.example.com",
           authorization_endpoint: "https://auth.example.com/authorize",
           token_endpoint: "https://auth.example.com/token",
           scopes_supported: ["jira:read"],
@@ -431,6 +441,7 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://example.com",
           authorization_endpoint: "https://example.com/authorize",
           token_endpoint: "https://example.com/token",
           scopes_supported: ["jira:read"],
@@ -459,6 +470,7 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://example.com",
           authorization_endpoint: "https://example.com/authorize",
           token_endpoint: "https://example.com/token",
           scopes_supported: ["jira:write"],
@@ -579,6 +591,7 @@ describe("OAuth helper functions", () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://auth.example.com",
           authorization_endpoint: "https://auth.example.com/authorize",
           token_endpoint: "https://auth.example.com/token",
         }),
@@ -598,10 +611,7 @@ describe("OAuth helper functions", () => {
         authorizationEndpoint: "https://auth.example.com/authorize",
         tokenEndpoint: "https://auth.example.com/token",
         registrationEndpoint: undefined,
-        // Carried out of discovery for the RFC 9207 issuer check. This
-        // metadata declares neither, so there is nothing to record and the
-        // server has not advertised iss support.
-        issuer: undefined,
+        issuer: "https://auth.example.com",
         issParameterSupported: false,
       });
       expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -640,6 +650,7 @@ describe("OAuth helper functions", () => {
           return {
             ok: true,
             json: async () => ({
+              issuer: "https://auth.example.com",
               authorization_endpoint:
                 "https://auth.example.com/oauth2/authorize",
               token_endpoint: "https://auth.example.com/oauth2/token",
@@ -671,6 +682,120 @@ describe("OAuth helper functions", () => {
       ]);
 
       globalThis.fetch = originalFetch;
+    });
+
+    test("skips authorization server metadata issued for a different issuer", async () => {
+      const issuer = "https://login.example.com/tenant-a/v2.0";
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (
+          url ===
+          "https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+        ) {
+          return {
+            ok: true,
+            json: async () => ({
+              resource: "https://mcp.example.com/mcp",
+              authorization_servers: [issuer],
+            }),
+          };
+        }
+        // The host root answers the RFC 8414 root fallback with metadata for
+        // its own issuer, which has no registration endpoint.
+        if (
+          url ===
+          "https://login.example.com/.well-known/oauth-authorization-server"
+        ) {
+          return {
+            ok: true,
+            json: async () => ({
+              issuer: "https://login.example.com",
+              authorization_endpoint: "https://login.example.com/authorize",
+              token_endpoint: "https://login.example.com/token",
+            }),
+          };
+        }
+        if (url === `${issuer}/.well-known/openid-configuration`) {
+          return {
+            ok: true,
+            json: async () => ({
+              issuer,
+              authorization_endpoint: `${issuer}/authorize`,
+              token_endpoint: `${issuer}/token`,
+              registration_endpoint: `${issuer}/register`,
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as Mock;
+      globalThis.fetch = fetchMock;
+
+      const endpoints = await discoverOAuthEndpoints({
+        server_url: "https://mcp.example.com/mcp",
+        supports_resource_metadata: true,
+      });
+
+      expect(endpoints).toMatchObject({
+        authorizationEndpoint: `${issuer}/authorize`,
+        tokenEndpoint: `${issuer}/token`,
+        registrationEndpoint: `${issuer}/register`,
+        issuer,
+      });
+    });
+
+    test("rejects an issuer that differs from the discovery URL only by a trailing slash", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          issuer: "https://auth.example.com/",
+          authorization_endpoint: "https://auth.example.com/authorize",
+          token_endpoint: "https://auth.example.com/token",
+          registration_endpoint: "https://auth.example.com/register",
+        }),
+      }) as Mock;
+      globalThis.fetch = fetchMock;
+
+      await expect(
+        discoverOAuthEndpoints({
+          server_url: "https://auth.example.com",
+          supports_resource_metadata: false,
+        }),
+      ).rejects.toThrow("issuer does not match");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    test("accepts the matching root issuer during legacy discovery from an MCP URL", async () => {
+      // Servers without protected resource metadata are discovered from the
+      // MCP URL itself, which is not an issuer; their metadata lives at the
+      // origin and must keep working.
+      globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+        if (
+          String(input) ===
+          "https://mcp.example.com/.well-known/oauth-authorization-server"
+        ) {
+          return {
+            ok: true,
+            json: async () => ({
+              issuer: "https://mcp.example.com",
+              authorization_endpoint: "https://mcp.example.com/authorize",
+              token_endpoint: "https://mcp.example.com/token",
+              registration_endpoint: "https://mcp.example.com/register",
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as Mock;
+
+      const endpoints = await discoverOAuthEndpoints({
+        server_url: "https://mcp.example.com/mcp",
+        supports_resource_metadata: false,
+      });
+
+      expect(endpoints).toMatchObject({
+        authorizationEndpoint: "https://mcp.example.com/authorize",
+        registrationEndpoint: "https://mcp.example.com/register",
+        issuer: "https://mcp.example.com",
+      });
     });
 
     test("falls back to explicit endpoints when discovery fails", async () => {
@@ -712,6 +837,7 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          issuer: "https://mcp.example.com",
           authorization_endpoint: "https://auth.example.com/authorize",
           token_endpoint: "https://auth.example.com/token",
           registration_endpoint: "https://auth.example.com/register",
@@ -730,7 +856,7 @@ describe("OAuth helper functions", () => {
         authorizationEndpoint: "https://legacy-idp.example.com/oauth/authorize",
         tokenEndpoint: "https://legacy-idp.example.com/oauth/token",
         registrationEndpoint: "https://auth.example.com/register",
-        issuer: undefined,
+        issuer: "https://mcp.example.com",
         issParameterSupported: false,
       });
 
@@ -741,12 +867,24 @@ describe("OAuth helper functions", () => {
 
 describe("OAuth routes", () => {
   let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let userId: string;
   const originalFetch = globalThis.fetch;
 
-  beforeEach(async () => {
-    cacheManager.start();
-    usePgliteCacheWrites();
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    organizationId = (await makeOrganization()).id;
+    const user = await makeUser();
+    userId = user.id;
+    await makeMember(user.id, organizationId);
     app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      Object.assign(request, {
+        user,
+        organizationId,
+        authMethod: "session",
+        sessionInfo: { id: "test-oauth-session", createdAt: new Date() },
+      });
+    });
     await app.register(oauthRoutes);
   });
 
@@ -773,6 +911,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Resource Split MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/mcp",
@@ -796,6 +935,7 @@ describe("OAuth routes", () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
+        issuer: "https://login.example.com/tenant/v2.0",
         authorization_endpoint:
           "https://login.example.com/tenant/oauth2/v2.0/authorize",
         token_endpoint: "https://login.example.com/tenant/oauth2/v2.0/token",
@@ -824,6 +964,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Direct OAuth MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/v1/mcp",
@@ -880,6 +1021,7 @@ describe("OAuth routes", () => {
       return {
         ok: true,
         json: async () => ({
+          issuer: "https://login.example.com/oauth",
           authorization_endpoint: "https://login.example.com/oauth/authorize",
           token_endpoint: "https://login.example.com/oauth/token",
         }),
@@ -898,29 +1040,6 @@ describe("OAuth routes", () => {
     const authorizationUrl = new URL(initiateResponse.json().authorizationUrl);
     expect(authorizationUrl.searchParams.has("resource")).toBe(false);
     const state = initiateResponse.json().state;
-
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS keyv_cache (
-        key text PRIMARY KEY,
-        value text NOT NULL
-      )
-    `);
-    await db.execute(sql`
-      INSERT INTO keyv_cache (key, value)
-      VALUES (
-        ${`keyv:${CacheKey.OAuthState}-${state}`},
-        ${JSON.stringify({
-          value: {
-            catalogId: catalog.id,
-            codeVerifier: "test-code-verifier",
-            clientId: "public-client-id",
-            clientSecret: "public-client-secret",
-          },
-          expires: Date.now() + 60_000,
-        })}
-      )
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-    `);
 
     const callbackResponse = await app.inject({
       method: "POST",
@@ -938,6 +1057,19 @@ describe("OAuth routes", () => {
       accessToken: "new-access-token",
       refreshToken: "new-refresh-token",
     });
+    const grantRequest = {
+      user: { id: userId },
+      organizationId,
+      authMethod: "session",
+      sessionInfo: { id: "test-oauth-session" },
+    } as FastifyRequest;
+    const grant = {
+      request: grantRequest,
+      secretId: callbackResponse.json().secretId,
+      catalogId: catalog.id,
+    };
+    expect(await consumeMcpOAuthCredentialGrant(grant)).toBe(true);
+    expect(await consumeMcpOAuthCredentialGrant(grant)).toBe(false);
 
     const tokenRequest = fetchMock.mock.calls.find(
       ([input]) => String(input) === "https://login.example.com/oauth/token",
@@ -951,6 +1083,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Direct OAuth MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/v1/mcp",
@@ -1007,6 +1140,8 @@ describe("OAuth routes", () => {
       return {
         ok: true,
         json: async () => ({
+          issuer: "https://login.example.com/oauth",
+          authorization_response_iss_parameter_supported: true,
           authorization_endpoint: "https://login.example.com/oauth/authorize",
           token_endpoint: "https://login.example.com/oauth/token",
         }),
@@ -1026,38 +1161,13 @@ describe("OAuth routes", () => {
     expect(authorizationUrl.searchParams.has("resource")).toBe(false);
     const state = initiateResponse.json().state;
 
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS keyv_cache (
-        key text PRIMARY KEY,
-        value text NOT NULL
-      )
-    `);
-    await db.execute(sql`
-      INSERT INTO keyv_cache (key, value)
-      VALUES (
-        ${`keyv:${CacheKey.OAuthState}-${state}`},
-        ${JSON.stringify({
-          value: {
-            catalogId: catalog.id,
-            codeVerifier: "test-code-verifier",
-            clientId: "public-client-id",
-            clientSecret: "public-client-secret",
-            issuer: "https://login.example.com",
-            issParameterSupported: true,
-          },
-          expires: Date.now() + 60_000,
-        })}
-      )
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-    `);
-
     const callbackResponse = await app.inject({
       method: "POST",
       url: "/api/oauth/callback",
       payload: {
         code: "authorization-code",
         state,
-        iss: "https://login.example.com",
+        iss: "https://login.example.com/oauth",
       },
     });
 
@@ -1070,6 +1180,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Direct OAuth MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/v1/mcp",
@@ -1126,6 +1237,8 @@ describe("OAuth routes", () => {
       return {
         ok: true,
         json: async () => ({
+          issuer: "https://login.example.com/oauth",
+          authorization_response_iss_parameter_supported: true,
           authorization_endpoint: "https://login.example.com/oauth/authorize",
           token_endpoint: "https://login.example.com/oauth/token",
         }),
@@ -1144,31 +1257,6 @@ describe("OAuth routes", () => {
     const authorizationUrl = new URL(initiateResponse.json().authorizationUrl);
     expect(authorizationUrl.searchParams.has("resource")).toBe(false);
     const state = initiateResponse.json().state;
-
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS keyv_cache (
-        key text PRIMARY KEY,
-        value text NOT NULL
-      )
-    `);
-    await db.execute(sql`
-      INSERT INTO keyv_cache (key, value)
-      VALUES (
-        ${`keyv:${CacheKey.OAuthState}-${state}`},
-        ${JSON.stringify({
-          value: {
-            catalogId: catalog.id,
-            codeVerifier: "test-code-verifier",
-            clientId: "public-client-id",
-            clientSecret: "public-client-secret",
-            issuer: "https://login.example.com",
-            issParameterSupported: true,
-          },
-          expires: Date.now() + 60_000,
-        })}
-      )
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-    `);
 
     const callbackResponse = await app.inject({
       method: "POST",
@@ -1188,6 +1276,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Refresh Resource Split MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/mcp",
@@ -1231,7 +1320,9 @@ describe("OAuth routes", () => {
     }) as Mock;
     globalThis.fetch = fetchMock;
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: true,
     });
 
@@ -1275,6 +1366,7 @@ describe("OAuth routes", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "Basic Auth Refresh MCP",
         serverType: "remote",
         serverUrl: "https://mcp.example.com/mcp",
@@ -1366,6 +1458,7 @@ describe("OAuth routes", () => {
             ok: true,
             status: 200,
             json: async () => ({
+              issuer: "https://mcp.example.com",
               authorization_endpoint: "https://auth.example.com/authorize",
               token_endpoint: tokenEndpoint,
               registration_endpoint: registrationEndpoint,
@@ -1377,9 +1470,6 @@ describe("OAuth routes", () => {
       vi.stubGlobal("fetch", fetchMock);
       // Capture the external cache write without requiring PostgreSQL. The
       // callback below reads the same state through the real PGlite database.
-      const cacheWrite = vi
-        .spyOn(cacheManager, "set")
-        .mockResolvedValue(undefined);
 
       const initiateResponse = await app.inject({
         method: "POST",
@@ -1395,27 +1485,6 @@ describe("OAuth routes", () => {
       });
 
       const state = initiateResponse.json().state;
-      const oauthState = cacheWrite.mock.calls.find(
-        ([key]) => key === `${CacheKey.OAuthState}-${state}`,
-      )?.[1];
-      expect(oauthState).toBeDefined();
-      await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS keyv_cache (
-        key text PRIMARY KEY,
-        value text NOT NULL
-      )
-    `);
-      await db.execute(sql`
-      INSERT INTO keyv_cache (key, value)
-      VALUES (
-        ${`keyv:${CacheKey.OAuthState}-${state}`},
-        ${JSON.stringify({
-          value: oauthState,
-          expires: Date.now() + 60_000,
-        })}
-      )
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-    `);
 
       const callbackResponse = await app.inject({
         method: "POST",
@@ -1435,7 +1504,10 @@ describe("OAuth routes", () => {
       });
 
       await expect(
-        refreshOAuthToken(callbackResponse.json().secretId, catalog.id),
+        refreshOAuthToken({
+          secretId: callbackResponse.json().secretId,
+          catalogId: catalog.id,
+        }),
       ).resolves.toEqual({ ok: true });
       const refreshedSecret = await secretManager().getSecret(
         callbackResponse.json().secretId,
@@ -1446,7 +1518,10 @@ describe("OAuth routes", () => {
         client_secret: "registered-secret",
       });
       await expect(
-        refreshOAuthToken(callbackResponse.json().secretId, catalog.id),
+        refreshOAuthToken({
+          secretId: callbackResponse.json().secretId,
+          catalogId: catalog.id,
+        }),
       ).resolves.toEqual({ ok: true });
 
       const refreshRequest = fetchMock.mock.calls.find(([, init]) => {
@@ -1469,6 +1544,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Persist Failure MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/mcp",
@@ -1510,7 +1586,9 @@ describe("OAuth routes", () => {
       .spyOn(secretManager(), "updateSecret")
       .mockRejectedValueOnce(new Error("vault unavailable"));
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: false,
       kind: "terminal",
       category: "refresh_failed",
@@ -1524,6 +1602,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Invalid Grant MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/mcp",
@@ -1559,7 +1638,9 @@ describe("OAuth routes", () => {
     }) as Mock;
     const updateSpy = vi.spyOn(secretManager(), "updateSecret");
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: false,
       kind: "terminal",
       category: "refresh_failed",
@@ -1576,6 +1657,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "No Refresh Token MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/mcp",
@@ -1597,7 +1679,9 @@ describe("OAuth routes", () => {
       true,
     );
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: false,
       kind: "terminal",
       category: "no_refresh_token",
@@ -1609,6 +1693,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Missing Secret MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/mcp",
@@ -1626,7 +1711,10 @@ describe("OAuth routes", () => {
     });
 
     await expect(
-      refreshOAuthToken("00000000-0000-0000-0000-000000000000", catalog.id),
+      refreshOAuthToken({
+        secretId: "00000000-0000-0000-0000-000000000000",
+        catalogId: catalog.id,
+      }),
     ).resolves.toEqual({
       ok: false,
       kind: "terminal",
@@ -1639,6 +1727,7 @@ describe("OAuth routes", () => {
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
+      organizationId,
       name: "Refresh Direct OAuth MCP",
       serverType: "remote",
       serverUrl: "https://mcp.example.com/v1/mcp",
@@ -1703,6 +1792,7 @@ describe("OAuth routes", () => {
       return {
         ok: true,
         json: async () => ({
+          issuer: "https://login.example.com/oauth",
           authorization_endpoint: "https://login.example.com/oauth/authorize",
           token_endpoint: "https://login.example.com/oauth/token",
         }),
@@ -1710,7 +1800,9 @@ describe("OAuth routes", () => {
     }) as Mock;
     globalThis.fetch = fetchMock;
 
-    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toEqual({
+    await expect(
+      refreshOAuthToken({ secretId: secret.id, catalogId: catalog.id }),
+    ).resolves.toEqual({
       ok: true,
     });
 
@@ -1732,9 +1824,12 @@ describe("OAuth dynamic client registration client name", () => {
   const originalFetch = globalThis.fetch;
   const REGISTRATION_ENDPOINT = "https://auth.example.com/register";
 
-  beforeEach(() => {
-    cacheManager.start();
-    usePgliteCacheWrites();
+  beforeEach(async ({ makeMember }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+    ctx.app.addHook("onRequest", async (request) => {
+      request.authMethod = "session";
+      request.sessionInfo = { id: "test-oauth-session", createdAt: new Date() };
+    });
   });
 
   afterEach(() => {
@@ -1757,6 +1852,7 @@ describe("OAuth dynamic client registration client name", () => {
       return {
         ok: true,
         json: async () => ({
+          issuer: "https://mcp.example.com",
           authorization_endpoint: "https://auth.example.com/authorize",
           token_endpoint: "https://auth.example.com/token",
           registration_endpoint: REGISTRATION_ENDPOINT,
@@ -1914,9 +2010,12 @@ describe("OAuth dynamic client registration scope fallback", () => {
   const originalFetch = globalThis.fetch;
   const REGISTRATION_ENDPOINT = "https://auth.example.com/register";
 
-  beforeEach(() => {
-    cacheManager.start();
-    usePgliteCacheWrites();
+  beforeEach(async ({ makeMember }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+    ctx.app.addHook("onRequest", async (request) => {
+      request.authMethod = "session";
+      request.sessionInfo = { id: "test-oauth-session", createdAt: new Date() };
+    });
   });
 
   afterEach(() => {
@@ -2001,6 +2100,7 @@ describe("OAuth dynamic client registration scope fallback", () => {
         return {
           ok: true,
           json: async () => ({
+            issuer: "https://mcp.example.com",
             authorization_endpoint: "https://auth.example.com/authorize",
             token_endpoint: "https://auth.example.com/token",
             registration_endpoint: REGISTRATION_ENDPOINT,
@@ -2189,26 +2289,3 @@ describe("OAuth dynamic client registration scope fallback", () => {
     expect(message).toContain("Registration is disabled for this tenant.");
   });
 });
-
-function usePgliteCacheWrites(): void {
-  vi.spyOn(cacheManager, "set").mockImplementation(async (key, value, ttl) => {
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS keyv_cache (
-        key text PRIMARY KEY,
-        value text NOT NULL
-      )
-    `);
-    await db.execute(sql`
-      INSERT INTO keyv_cache (key, value)
-      VALUES (
-        ${`keyv:${key}`},
-        ${JSON.stringify({
-          value,
-          expires: Date.now() + (ttl ?? 60 * 60 * 1000),
-        })}
-      )
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-    `);
-    return value;
-  });
-}

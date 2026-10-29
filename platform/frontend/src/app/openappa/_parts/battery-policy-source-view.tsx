@@ -32,6 +32,7 @@ export function BatteryPolicySourceView({
     return (
       <QueryLoadError
         title="Could not load battery policy source"
+        error={source.error}
         onRetry={() => source.refetch()}
       />
     );

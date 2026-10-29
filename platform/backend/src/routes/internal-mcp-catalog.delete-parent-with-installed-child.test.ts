@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
-import { type Mock, vi } from "vitest";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -7,12 +8,6 @@ import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import websocketService from "@/websocket";
-
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-
-const mockHasPermission = hasPermission as Mock;
 
 /**
  * The preset feature is removed, but legacy child rows (non-NULL
@@ -31,7 +26,9 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed legacy 
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
     vi.spyOn(McpServerRuntimeManager, "removeMcpServer").mockResolvedValue(
       undefined,
     );

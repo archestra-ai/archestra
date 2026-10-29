@@ -1,11 +1,44 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { type SQLWrapper, sql } from "drizzle-orm";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+} from "./resource-permission-subject";
 
 /** Live grant checks keep indexed content in sync with permission edits and revocations. */
 export default class KbDocumentAccessModel {
+  /**
+   * The grant subjects of the caller a request ACL names, or null when it
+   * names none. Resolve once per retrieval and pass the result to
+   * {@link condition} for every stage of it.
+   */
+  static async resolvePrincipals(params: {
+    userAcl: readonly string[];
+    organizationId?: string;
+  }): Promise<GrantPrincipal[] | null> {
+    const userId = principalOf(params.userAcl);
+    return userId
+      ? ResourcePermissionSubjectModel.resolvePrincipals({
+          userId,
+          organizationId: params.organizationId,
+        })
+      : null;
+  }
+
+  /** The caller's resolved principals, resolving them here only when absent. */
+  static principalsFor(params: {
+    userAcl: readonly string[];
+    grantPrincipals?: GrantPrincipal[] | null;
+  }): Promise<GrantPrincipal[] | null> {
+    return params.grantPrincipals !== undefined
+      ? Promise.resolve(params.grantPrincipals)
+      : KbDocumentAccessModel.resolvePrincipals(params);
+  }
+
   static condition(params: {
     userAcl: readonly string[];
+    /** From {@link resolvePrincipals} for this same `userAcl`. */
+    grantPrincipals: GrantPrincipal[] | null;
     documentId: SQLWrapper;
     connectorId: SQLWrapper;
     organizationId: SQLWrapper;
@@ -13,9 +46,6 @@ export default class KbDocumentAccessModel {
   }) {
     // Identity is request context, not a stored ACL token. Excluding it from
     // overlap prevents a connector-supplied token from impersonating a grant.
-    const principal = params.userAcl
-      .find((token) => token.startsWith("principal:"))
-      ?.slice("principal:".length);
     const tokens = params.userAcl.filter(
       (token) => !token.startsWith("principal:"),
     );
@@ -35,11 +65,13 @@ export default class KbDocumentAccessModel {
       resource: "knowledgeConnector" as const,
       scopeColumn: params.connectorId,
     };
+    const principals = params.grantPrincipals;
     const access = (context: typeof fileContext | typeof connectorContext) =>
-      principal
-        ? ResourcePermissionPolicyModel.grantCondition({
+      principals
+        ? ResourcePermissionPolicyModel.grantConditionForAny({
             ...context,
-            userId: principal,
+            principals,
+            organizationColumn: params.organizationId,
             action: "use",
           })
         : ResourcePermissionPolicyModel.organizationAccessCondition({
@@ -58,4 +90,10 @@ export default class KbDocumentAccessModel {
       ELSE ${access(connectorContext)}
     END`;
   }
+}
+
+function principalOf(userAcl: readonly string[]): string | undefined {
+  return userAcl
+    .find((token) => token.startsWith("principal:"))
+    ?.slice("principal:".length);
 }

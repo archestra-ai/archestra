@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
 import { matchesSearchTokens } from "@/lib/search-tokens";
 import { cn } from "@/lib/utils/tailwind";
@@ -30,6 +31,7 @@ interface SearchableMultiSelectProps {
   className?: string;
   disabled?: boolean;
   emptyMessage?: string;
+  allowCustom?: boolean;
   /**
    * Lifts the typed query so a caller can search server-side. The list is
    * still filtered locally, so a caller that ignores this keeps working.
@@ -62,6 +64,7 @@ export function SearchableMultiSelect({
   className,
   disabled = false,
   emptyMessage = "No results found.",
+  allowCustom = false,
   onSearchQueryChange,
   showSearchIcon = true,
   contentClassName,
@@ -83,13 +86,25 @@ export function SearchableMultiSelect({
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
 
+  const customValue = searchQuery.trim();
+  const canAddCustom =
+    allowCustom &&
+    customValue.length > 0 &&
+    !items.some((item) => item.value === customValue);
   const filteredItems = React.useMemo(() => {
-    if (!searchQuery) return items;
-
-    return items.filter((item) =>
-      matchesSearchTokens(searchQuery, [item.searchText ?? item.label]),
-    );
-  }, [items, searchQuery]);
+    const matches = searchQuery
+      ? items.filter((item) =>
+          matchesSearchTokens(searchQuery, [item.searchText ?? item.label]),
+        )
+      : items;
+    if (!canAddCustom) return matches;
+    const customItem: (typeof items)[number] = {
+      value: customValue,
+      label: customValue,
+      content: <span>Add “{customValue}”</span>,
+    };
+    return [...matches, customItem];
+  }, [items, searchQuery, canAddCustom, customValue]);
 
   const selectedItems = items.filter((item) => value.includes(item.value));
 
@@ -106,6 +121,10 @@ export function SearchableMultiSelect({
       onValueChange(value.filter((v) => v !== itemValue));
     } else if (maxSelected === undefined || value.length < maxSelected) {
       onValueChange([...value, itemValue]);
+      if (allowCustom && !items.some((item) => item.value === itemValue)) {
+        setSearchQuery("");
+        onSearchQueryChange?.("");
+      }
     }
   };
 
@@ -177,7 +196,7 @@ export function SearchableMultiSelect({
                 {visibleBadges.map((item) => (
                   <Badge key={item.value} variant="secondary">
                     {item.selectedContent ?? item.label}
-                    <button
+                    <UnstyledButton
                       type="button"
                       aria-label="Remove selected item"
                       disabled={disabled || value.length <= minSelected}
@@ -194,7 +213,7 @@ export function SearchableMultiSelect({
                       onClick={(e) => handleRemoveItem(item.value, e)}
                     >
                       <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                    </button>
+                    </UnstyledButton>
                   </Badge>
                 ))}
                 {hiddenCount > 0 && (
@@ -228,6 +247,22 @@ export function SearchableMultiSelect({
           )}
           <input
             {...navigation.inputProps}
+            onKeyDown={(event) => {
+              if (
+                allowCustom &&
+                event.key === "Enter" &&
+                navigation.activeValue === null &&
+                !event.nativeEvent.isComposing &&
+                !event.altKey &&
+                !event.ctrlKey &&
+                !event.metaKey
+              ) {
+                event.preventDefault();
+                if (canAddCustom) handleToggleItem(customValue);
+                return;
+              }
+              navigation.inputProps.onKeyDown(event);
+            }}
             aria-label={searchPlaceholder || "Search options"}
             placeholder={searchPlaceholder}
             value={searchQuery}
@@ -257,7 +292,7 @@ export function SearchableMultiSelect({
             filteredItems.map((item) => {
               const isSelected = value.includes(item.value);
               return (
-                <button
+                <UnstyledButton
                   key={item.value}
                   {...navigation.getOptionProps(item.value)}
                   role="option"
@@ -292,7 +327,7 @@ export function SearchableMultiSelect({
                       isSelected ? "opacity-100" : "opacity-0",
                     )}
                   />
-                </button>
+                </UnstyledButton>
               );
             })
           )}

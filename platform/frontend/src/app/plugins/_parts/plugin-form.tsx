@@ -1,39 +1,18 @@
 "use client";
 
 import type { Ref } from "react";
+import { AdvancedSection } from "@/components/advanced-section";
 import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
-import { GithubAuthConfigFields } from "@/components/github-auth-config-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import {
   SettingsSection,
   SettingsSectionGroup,
 } from "@/components/settings-section";
-import { FieldDescription } from "@/components/ui/field-description";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { SecretInput } from "@/components/ui/secret-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { PluginContentFields } from "./plugin-content-fields";
 import type { PluginDraft } from "./plugin-draft";
-
-const SYNCED_FROM_GITHUB =
-  "These values are synced from GitHub. Change sync settings below.";
-
-const GITHUB_SYNC_OPTIONS = [
-  { value: "off", label: "Manual checks" },
-  { value: "15m", label: "Every 15 minutes" },
-  { value: "1h", label: "Every hour" },
-  { value: "1d", label: "Once a day" },
-] as const;
 
 /**
  * A plugin's configuration and permissions share one draft and save action.
@@ -49,7 +28,6 @@ export function PluginForm({
   readOnly = false,
   pluginSlug,
   isGithubPlugin = false,
-  githubAppConfigs,
   isCreate = false,
   pluginId,
   activeSection,
@@ -62,11 +40,10 @@ export function PluginForm({
   /** The immutable identity a saved plugin keeps across renames. */
   pluginSlug?: string;
   /**
-   * The files belong to a repository. The payload is shown but locked, and
-   * the source that owns it becomes editable in its place.
+   * The files belong to a repository: the payload is shown but locked, and
+   * the page edits the source that owns it instead.
    */
   isGithubPlugin?: boolean;
-  githubAppConfigs?: { id: string; name: string }[];
   /** Client type is part of a plugin's identity, so it is set once, at create. */
   isCreate?: boolean;
   /**
@@ -89,6 +66,8 @@ export function PluginForm({
             <PluginContentFields
               displayName={draft.displayName}
               onDisplayNameChange={(displayName) => onChange({ displayName })}
+              icon={draft.icon}
+              onIconChange={(icon) => onChange({ icon })}
               description={draft.description}
               onDescriptionChange={(description) => onChange({ description })}
               clientType={isCreate ? draft.clientType : undefined}
@@ -102,34 +81,24 @@ export function PluginForm({
               }
               files={draft.files}
               onFilesChange={(files) => onChange({ files })}
-              readOnly={readOnly || isGithubPlugin}
-              readOnlyReason={isGithubPlugin ? SYNCED_FROM_GITHUB : undefined}
+              readOnly={readOnly}
+              locked={isGithubPlugin}
             />
           </SettingsSection>
 
-          {/* Under the payload it governs, not above it: the fields on this panel
-          are the answer to "these are read-only — where do I change them?",
-          so they read best straight after the question. */}
-          {isGithubPlugin && (
-            <SettingsSection
-              title="GitHub source"
-              description="Where these files are pulled from, and how they stay up to date."
-            >
-              <GithubSourceFields
-                draft={draft}
-                onChange={onChange}
-                githubAppConfigs={githubAppConfigs ?? []}
-              />
-            </SettingsSection>
-          )}
-
           <SettingsSection>
             <fieldset disabled={readOnly}>
-              <ProfileLabels
-                ref={labelsRef}
-                labels={draft.labels}
-                onLabelsChange={(labels) => onChange({ labels })}
-              />
+              {/* Labels only organize the list, so they wait under Advanced unless set. */}
+              <AdvancedSection
+                defaultOpen={draft.labels.length > 0}
+                className="border-t-0 pt-0"
+              >
+                <ProfileLabels
+                  ref={labelsRef}
+                  labels={draft.labels}
+                  onLabelsChange={(labels) => onChange({ labels })}
+                />
+              </AdvancedSection>
             </fieldset>
           </SettingsSection>
         </SettingsSectionGroup>
@@ -145,118 +114,5 @@ export function PluginForm({
         </fieldset>
       )}
     </>
-  );
-}
-
-/** Where a GitHub-sourced plugin's files come from, and how often it looks. */
-function GithubSourceFields({
-  draft,
-  onChange,
-  githubAppConfigs,
-}: {
-  draft: PluginDraft;
-  onChange: (patch: Partial<PluginDraft>) => void;
-  githubAppConfigs: { id: string; name: string }[];
-}) {
-  return (
-    <div className="space-y-5">
-      <div className="space-y-2">
-        <Label htmlFor="plugin-github-repo-url">Repository URL</Label>
-        <FieldDescription>
-          The GitHub repository checked for plugin updates.
-        </FieldDescription>
-        <Input
-          id="plugin-github-repo-url"
-          value={draft.githubRepoUrl}
-          onChange={(event) => onChange({ githubRepoUrl: event.target.value })}
-          placeholder="github.com/owner/repo"
-          autoComplete="off"
-          data-1p-ignore
-          data-lpignore="true"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="plugin-github-sync-interval">Keep in sync</Label>
-        <FieldDescription>
-          New commits become review candidates and never replace approved plugin
-          bytes automatically.
-        </FieldDescription>
-        <Select
-          value={draft.githubSyncInterval ?? "off"}
-          onValueChange={(value) =>
-            onChange({
-              githubSyncInterval:
-                value === "off" ? null : (value as "15m" | "1h" | "1d"),
-            })
-          }
-        >
-          <SelectTrigger id="plugin-github-sync-interval" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {GITHUB_SYNC_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <GithubAuthConfigFields
-        authMethod={draft.githubAuthMethod}
-        onAuthMethodChange={(githubAuthMethod) =>
-          onChange({
-            githubAuthMethod,
-            ...(githubAuthMethod === "pat" ? { githubAppConfigId: "" } : {}),
-          })
-        }
-        githubAppConfigId={draft.githubAppConfigId}
-        onGithubAppConfigIdChange={(githubAppConfigId) =>
-          onChange({ githubAppConfigId })
-        }
-        githubAppConfigs={githubAppConfigs}
-        patFields={
-          <div className="space-y-2">
-            <Label htmlFor="plugin-github-token">Personal access token</Label>
-            <FieldDescription>
-              <span>Leave empty to keep existing credentials unchanged.</span>{" "}
-              <span>
-                Fine-grained or classic — see{" "}
-                <a
-                  href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  managing your personal access tokens
-                </a>
-                .
-              </span>
-            </FieldDescription>
-            <SecretInput
-              id="plugin-github-token"
-              value={draft.githubToken}
-              onChange={(event) =>
-                onChange({ githubToken: event.target.value })
-              }
-              placeholder="ghp_…"
-            />
-          </div>
-        }
-      />
-      <div className="space-y-2">
-        <Label htmlFor="plugin-github-sync-ref">Ref</Label>
-        <FieldDescription>
-          Leave empty to track the repository&apos;s default branch.
-        </FieldDescription>
-        <Input
-          id="plugin-github-sync-ref"
-          value={draft.githubSyncRef}
-          onChange={(event) => onChange({ githubSyncRef: event.target.value })}
-          placeholder="Default branch"
-          autoComplete="off"
-        />
-      </div>
-    </div>
   );
 }

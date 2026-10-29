@@ -1,16 +1,11 @@
 name: Docker Image Scanning
 
-# Platform and MCP scans run here on demand when the "run-docker-scan" label
-# is added to a PR. Merge-queue scans reuse the images built by
-# platform-e2e-tests.yml; the p4 scan remains here because E2E does not build it.
-# Remove and re-add the label to re-trigger after new commits.
+# Keep required contexts present on every PR/queue SHA. Release Please PRs
+# classify without building; version-changing queue groups scan both architectures.
+# Publication independently scans its bytes; see ../release-image-security.md.
 on:
   pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - labeled
+    types: [opened, synchronize, reopened, edited]
   merge_group:
   workflow_dispatch:
     inputs:
@@ -22,113 +17,186 @@ on:
 permissions: {}
 
 concurrency:
-  group: "docker-image-scanning-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}"
+  group: docker-image-scanning-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Required-check placeholders for ordinary PR updates. Trusted PRs can run
-  # the real scans explicitly. Fork PRs always get the placeholder — the real
-  # scan needs trusted context, and without this a labeled fork PR would run
-  # neither job, leaving the required check pending.
-  docker-image-scanning-placeholder:
-    name: Docker Image Scanning (${{ matrix.name }})
-    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-docker-scan' || github.event.pull_request.head.repo.fork == true) }}
+  classify:
+    name: Classify release image scan
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        name: [Platform, MCP Server Base, p4 Shim]
-    steps:
-      - name: Skip full image scan on ordinary PR updates
-        run: echo "Docker image scanning runs on merge queue or when the run-docker-scan label is added."
-
-  # Platform is isolated from the generic matrix because it scans two images.
-  # Attested E2E images take the fast path: Scout reads their build-time SBOMs
-  # by immutable digest, so no image layers are pulled or re-indexed. A labeled
-  # PR without E2E images still builds and scans both variants locally.
-  docker-image-scanning-platform:
-    name: Docker Image Scanning (Platform)
-    if: ${{ github.event_name == 'pull_request' && github.event.label.name == 'run-docker-scan' && github.event.pull_request.head.repo.fork != true }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
     permissions:
-      contents: read
+      contents: read # Required to checkout scan policy and image sources.
+    outputs:
+      scan: ${{ steps.policy.outputs.scan }}
+      matrix: ${{ steps.policy.outputs.matrix }}
     steps:
-      - name: Reclaim disk space (background)
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
-
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: ${{ github.event_name == 'merge_group' && '0' || 1 }}
+      - name: Classify event
+        id: policy
+        run: python3 .github/scripts/release-image-policy.py classify
 
-      - name: Resolve attested E2E image digests
-        id: e2e-images
-        env:
-          IMAGE_REPO: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
-          GIT_SHA: ${{ github.sha }}
+  scan-release-images:
+    name: Scan release candidate (${{ matrix.image }}, ${{ matrix.arch }})
+    needs: [classify]
+    if: ${{ needs.classify.outputs.scan == 'true' }}
+    # Build every architecture on native Blacksmith runners in parallel.
+    runs-on: ${{ matrix.arch == 'arm64' && 'blacksmith-32vcpu-ubuntu-2404-arm' || 'blacksmith-16vcpu-ubuntu-2404' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
+    env:
+      IMAGE_NAME: ${{ matrix.image }}
+      IMAGE_ARCH: ${{ matrix.arch }}
+      IMAGE_REFERENCE: release-scan-${{ matrix.image }}:${{ github.sha }}
+      CANDIDATE_DIR: ${{ github.workspace }}/.release-candidate
+    steps:
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+      - name: Checkout exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - name: Resolve release build inputs
+        id: inputs
+        run: python3 .github/scripts/release-candidate.py prepare
+      - name: Build candidate locally
+        uses: $/.github/actions/build-docker-image
+        with:
+          builder-cache-key: ${{ format('{0}-release-scan-{1}-{2}-v1', github.repository, matrix.image, matrix.arch) }}
+          context: ${{ matrix.context }}
+          dockerfile: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          platforms: linux/${{ matrix.arch }}
+          push: "false"
+          outputs: type=oci,dest=${{ env.CANDIDATE_DIR }}/image.oci.tar,oci-artifact=false
+          provenance: "mode=min"
+          tags: ${{ env.IMAGE_REFERENCE }}
+          version: ${{ steps.inputs.outputs.version }}
+          previous-image: ${{ steps.inputs.outputs.previous-image }}
+          require-previous-assets: "true"
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          sentry-auth-token: ${{ (matrix.image == 'platform' || matrix.image == 'platform-slim') && secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN || '' }}
+          cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/${{ matrix.image == 'platform-slim' && 'platform' || matrix.image }}:buildcache-${{ matrix.arch }}
+      - name: Seal candidate bytes for scanning
         run: |
-          set -euo pipefail
-          full_tag="${IMAGE_REPO}:${GIT_SHA}-e2e"
-          slim_tag="${IMAGE_REPO}:${GIT_SHA}-e2e-slim"
-
-          if full_ref=$(bash .github/scripts/resolve-attested-image.sh "$full_tag") \
-            && slim_ref=$(bash .github/scripts/resolve-attested-image.sh "$slim_tag"); then
-            primary=$full_ref
-            additional=$slim_ref
-            {
-              echo "primary=${primary}"
-              echo "additional=${additional}"
-              echo "reused=true"
-            } >> "$GITHUB_OUTPUT"
-          else
-            echo "Using byte-derived local scan for both Platform variants."
-            {
-              echo "primary=archestra-platform:${GIT_SHA}"
-              echo "additional=archestra-platform-slim:${GIT_SHA}"
-              echo "reused=false"
-            } >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build full Platform image with workspace cache
-        if: ${{ steps.e2e-images.outputs.reused != 'true' }}
-        uses: ./.github/actions/build-docker-image
+          skopeo copy --override-os linux --override-arch "$IMAGE_ARCH" \
+            "oci-archive:$CANDIDATE_DIR/image.oci.tar" "docker-archive:$CANDIDATE_DIR/image.scan.tar:$IMAGE_REFERENCE"
+          docker load --input "$CANDIDATE_DIR/image.scan.tar"
+          python3 .github/scripts/release-candidate.py seal
+          rm "$CANDIDATE_DIR/image.scan.tar"
+      - name: Verify candidate bytes
+        id: image
+        run: python3 .github/scripts/release-candidate.py verify
+      - name: Scan exact candidate bytes
+        id: scan
+        uses: $/.github/actions/scan-docker-image
         with:
-          context: ./platform
-          dockerfile: ./platform/Dockerfile
-          load: "true"
-          tags: archestra-platform:${{ github.sha }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          cache-from: |
-            type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache
-            type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache-amd64
-
-      - name: Build slim Platform image with workspace cache
-        if: ${{ steps.e2e-images.outputs.reused != 'true' }}
-        uses: ./.github/actions/build-docker-image
-        with:
-          context: ./platform
-          dockerfile: ./platform/Dockerfile
-          target: unified-slim
-          load: "true"
-          tags: archestra-platform-slim:${{ github.sha }}
-          setup-builder: "false"
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          cache-from: |
-            type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache
-            type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache-amd64
-
-      - name: Scan full and slim Platform images for CVEs
-        uses: ./.github/actions/scan-docker-image
-        with:
-          image: ${{ steps.e2e-images.outputs.primary }}
-          additional-images: ${{ steps.e2e-images.outputs.additional }}
+          image: ${{ steps.image.outputs.reference }}
+          platform: linux/${{ matrix.arch }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           exit-code: "true"
+      - name: Record successful scan
+        env:
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        run: python3 .github/scripts/release-candidate.py scanned
+      - name: Retain exact scanned bytes
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: release-candidate-${{ matrix.image }}-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.CANDIDATE_DIR }}/image.oci.tar
+            ${{ env.CANDIDATE_DIR }}/build.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 1
+      - name: Transfer scan evidence to gate
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: release-evidence-${{ matrix.image }}-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: ${{ env.CANDIDATE_DIR }}/evidence/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release-image-security:
+    name: Release Image Security
+    needs: [classify, scan-release-images]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout scan policy and image sources.
+      pull-requests: read # Recheck the queue release PR head and target after scanning.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: ${{ (needs.classify.outputs.scan == 'true' || github.event_name == 'merge_group') && '0' || 1 }}
+      - name: Download complete scan evidence
+        if: ${{ needs.classify.outputs.scan == 'true' && needs.scan-release-images.result == 'success' }}
+        uses: $/.github/actions/github-download-artifact
+        with:
+          pattern: release-evidence-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-evidence
+          merge-multiple: true
+      - name: Require complete queue scan evidence or explicit PR skip
+        env:
+          CLASSIFY_RESULT: ${{ needs.classify.result }}
+          SCAN_REQUIRED: ${{ needs.classify.outputs.scan }}
+          SCAN_RESULT: ${{ needs.scan-release-images.result }}
+          EVIDENCE_DIR: ${{ runner.temp }}/release-evidence
+          CANDIDATE_INDEX: ${{ runner.temp }}/release-candidate-index.json
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/release-image-policy.py gate
+
+      - name: Retain complete successful candidate index
+        if: ${{ needs.classify.outputs.scan == 'true' }}
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: release-candidate-index-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-candidate-index.json
+          if-no-files-found: error
+          retention-days: 1
+
+  # Compatibility bridge for current main/release rulesets. These jobs depend on
+  # the gate: PRs classify successfully, while version-changing queue groups
+  # require complete scan evidence before any required context turns green.
+  required-contexts:
+    name: Docker Image Scanning (${{ matrix.name }})
+    needs: [release-image-security]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        name: [Platform, MCP Server Base, p4 Shim]
+    steps:
+      - name: Require release image security decision
+        env:
+          RESULT: ${{ needs.release-image-security.result }}
+        run: test "$RESULT" = success
+
+  # main also requires the historical unexpanded matrix name. Construct it
+  # literally without expression interpolation; remove only after ruleset rollout.
+  legacy-required-context:
+    name: ${{ format('Docker Image Scanning ({0}{1}{1} matrix.name {2}{2})', '$', '{', '}') }} # zizmor: ignore[obfuscation] literal legacy required context contains Actions delimiters
+    needs: [release-image-security]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require release image security decision
+        env:
+          RESULT: ${{ needs.release-image-security.result }}
+        run: test "$RESULT" = success
 
   manual-platform-byte-scan:
     name: Manual Docker Image Scanning (Platform, byte-derived)
@@ -136,7 +204,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
+      contents: read # Required to checkout scan policy and image sources.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -145,147 +213,35 @@ jobs:
           fetch-depth: 1
 
       - name: Scan exact full and slim Platform image bytes
-        uses: ./.github/actions/scan-platform-image-bytes
+        uses: $/.github/actions/scan-platform-image-bytes
         with:
           image-sha: ${{ inputs.image-sha }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
 
-  docker-image-scanning:
-    name: Docker Image Scanning (${{ matrix.name }})
-    # Platform and MCP merge-queue scans run after their E2E image builds in
-    # platform-e2e-tests.yml. Keeping this matrix PR-only avoids duplicate
-    # same-named checks that could mask a failed required scan.
-    if: ${{ github.event_name == 'pull_request' && github.event.label.name == 'run-docker-scan' && github.event.pull_request.head.repo.fork != true }}
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read # Required to checkout the repository and read Docker build inputs.
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: MCP Server Base
-            runner: ubuntu-latest
-            context: ./platform/mcp_server_docker_image
-            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
-            local-tag-prefix: mcp-server-base
-            use-build-action: false
-            scan-exit-code: "true"
-            cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:buildcache
-            e2e-image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base
-            e2e-tag-suffix: ""
-            e2e-slim-image: ""
-            e2e-slim-tag-suffix: ""
-          - name: p4 Shim
-            runner: ubuntu-latest
-            context: ./platform/p4_shim_docker_image
-            dockerfile: ./platform/p4_shim_docker_image/Dockerfile
-            local-tag-prefix: p4-shim
-            use-build-action: false
-            scan-exit-code: "true"
-            cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:buildcache-amd64
-            e2e-image: ""
-            e2e-tag-suffix: ""
-            e2e-slim-image: ""
-            e2e-slim-tag-suffix: ""
-    steps:
-      # Standard runners ship ~14 GB free; drop the unused preinstalled
-      # toolchains so the image build + scan never run out of disk.
-      - name: Reclaim disk space (background)
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
-
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Reuse exact E2E image when available
-        id: e2e-image
-        if: ${{ matrix.e2e-image != '' }}
-        env:
-          E2E_IMAGE: ${{ format('{0}:{1}{2}', matrix.e2e-image, github.sha, matrix.e2e-tag-suffix) }}
-          LOCAL_IMAGE: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
-        run: |
-          if docker manifest inspect "$E2E_IMAGE" >/dev/null 2>&1; then
-            docker pull "$E2E_IMAGE"
-            docker tag "$E2E_IMAGE" "$LOCAL_IMAGE"
-            echo "reused=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "reused=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build image with workspace cache
-        if: ${{ matrix.use-build-action && steps.e2e-image.outputs.reused != 'true' }}
-        uses: ./.github/actions/build-docker-image
-        with:
-          context: ${{ matrix.context }}
-          dockerfile: ${{ matrix.dockerfile }}
-          load: "true"
-          tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          # Read-only: E2E and native publish paths own their separate exports.
-          cache-from: |
-            type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache
-            type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache-amd64
-
-      - name: Build image with registry cache
-        if: ${{ !matrix.use-build-action && steps.e2e-image.outputs.reused != 'true' }}
-        uses: ./.github/actions/build-docker-image
-        with:
-          context: ${{ matrix.context }}
-          dockerfile: ${{ matrix.dockerfile }}
-          platforms: linux/amd64
-          push: "false"
-          load: "true"
-          tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
-          cache-from: ${{ matrix.cache-from }}
-
-      - name: Scan image for CVEs
-        uses: ./.github/actions/scan-docker-image
-        with:
-          image: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-          exit-code: ${{ matrix.scan-exit-code }}
-
-  # E2E has no p4 image to reuse, so this small scan still builds locally on
-  # merge_group. Platform and MCP are deliberately absent from this job: their
-  # required checks are emitted by platform-e2e-tests.yml after the exact
-  # tested images are available.
-  merge-queue-p4-image-scanning:
-    name: Docker Image Scanning (p4 Shim)
-    if: ${{ github.event_name == 'merge_group' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  handoff-fixture:
+    name: Build non-publishing handoff fixture
+    if: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'ci/release-gate-parity-') && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
     steps:
-      - name: Reclaim disk space (background)
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
-
-      - name: Checkout repository
+      - name: Checkout fixture policy
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
-
-      - name: Build p4 Shim image
-        uses: ./.github/actions/build-docker-image
+      - name: Setup fixture builder
+        uses: $/.github/actions/setup-docker-builder
+      - name: Build harmless scratch-image archives
+        env:
+          FIXTURE_DIR: ${{ runner.temp }}/handoff-fixture
+          FIXTURE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 .github/scripts/release-handoff-fixture.py create
+      - name: Retain non-publishing fixture
+        uses: $/.github/actions/github-upload-artifact
         with:
-          context: ./platform/p4_shim_docker_image
-          dockerfile: ./platform/p4_shim_docker_image/Dockerfile
-          platforms: linux/amd64
-          push: "false"
-          load: "true"
-          tags: p4-shim:${{ github.sha }}
-          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:buildcache-amd64
-
-      - name: Scan image for CVEs
-        uses: ./.github/actions/scan-docker-image
-        with:
-          image: p4-shim:${{ github.sha }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-          exit-code: "true"
+          name: release-handoff-fixture-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/handoff-fixture/*
+          if-no-files-found: error
+          retention-days: 1

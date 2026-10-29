@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import { ORGANIZATION_USE_GRANT, UI_BASE_URL } from "../consts";
+import { getOrgTokenForProfile } from "../utils/mcp-gateway";
 import { test } from "./api-fixtures";
 
 /**
@@ -36,21 +37,7 @@ test.describe("A2A over the public origin", () => {
     const agent = await agentResponse.json();
 
     try {
-      const tokensResponse = await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: "/api/tokens",
-      });
-      const { tokens } = await tokensResponse.json();
-      const orgToken = tokens.find(
-        (token: { isOrganizationToken: boolean }) => token.isOrganizationToken,
-      );
-      const tokenValueResponse = await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: `/api/tokens/${orgToken.id}/value`,
-      });
-      const { value: archestraToken } = await tokenValueResponse.json();
+      const archestraToken = await getOrgTokenForProfile(request);
 
       // The AgentCard is what an A2A SDK fetches first, so it is the first
       // thing a broken /v2 route breaks.

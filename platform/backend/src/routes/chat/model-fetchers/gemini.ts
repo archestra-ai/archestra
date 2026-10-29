@@ -19,29 +19,47 @@ export async function fetchGeminiModels(
   extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.gemini.baseUrl;
-  const url = joinBaseUrl(
-    baseUrl,
-    `/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=100`,
-  );
 
-  const response = await fetch(url, {
-    headers: extraHeaders ?? undefined,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    logger.error(
-      { status: response.status, error: errorText },
-      "Failed to fetch Gemini models",
+  // The catalog is paginated. Read every page, or models past the first page
+  // silently drop out of the selector once Google's list outgrows it.
+  const catalog: Gemini.Types.Model[] = [];
+  const seenPageTokens = new Set<string>();
+  let pageToken: string | undefined;
+  for (let page = 0; page < GEMINI_CATALOG_MAX_PAGES; page++) {
+    const url = joinBaseUrl(
+      baseUrl,
+      `/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=${GEMINI_CATALOG_PAGE_SIZE}${
+        pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""
+      }`,
     );
-    throw modelFetchError("Gemini models", response.status);
+
+    const response = await fetch(url, {
+      headers: extraHeaders ?? undefined,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(
+        { status: response.status, error: errorText },
+        "Failed to fetch Gemini models",
+      );
+      throw modelFetchError("Gemini models", response.status);
+    }
+
+    const data = (await response.json()) as {
+      models?: Gemini.Types.Model[];
+      nextPageToken?: string;
+    };
+    catalog.push(...(data.models ?? []));
+
+    pageToken = data.nextPageToken || undefined;
+    if (!pageToken || seenPageTokens.has(pageToken)) {
+      break;
+    }
+    seenPageTokens.add(pageToken);
   }
 
-  const data = (await response.json()) as {
-    models: Gemini.Types.Model[];
-  };
-
-  return data.models
+  return catalog
     .filter(
       (model) =>
         model.supportedGenerationMethods?.includes("generateContent") ||
@@ -69,7 +87,8 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
   );
 
   const clientForModel = createVertexClientResolver();
-  const discoveredModels = await listVertexGeminiModels();
+  const { models: discoveredModels, listingError } =
+    await listVertexGeminiModels();
 
   logger.debug(
     { modelCount: discoveredModels.length },
@@ -99,6 +118,13 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
     ...fallbackModels,
     ...multimodalEmbeddingModels,
   ]);
+  // No location could be listed and no probe found a model: Vertex AI refused
+  // every call (a billing or permission denial answers each one with 403).
+  // That says nothing about the catalog, so fail the sync and keep the models
+  // already linked to the key instead of unlinking every one of them.
+  if (listingError !== undefined && candidateModels.length === 0) {
+    throw listingError;
+  }
   const reachableModels = filterToConfiguredVertexLocations(candidateModels);
   const accessibleModels = await filterToAccessibleVertexModels({
     clientForModel,
@@ -117,6 +143,11 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
   return accessibleModels;
 }
 
+/** The Gemini API's largest accepted `models.list` page size. */
+const GEMINI_CATALOG_PAGE_SIZE = 1000;
+/** Stops a catalog whose page tokens never end from looping forever. */
+const GEMINI_CATALOG_MAX_PAGES = 20;
+
 const VERTEX_GEMINI_FALLBACK_MODEL_IDS = [
   "gemini-embedding-001",
   "gemini-embedding-2",
@@ -126,6 +157,13 @@ const VERTEX_GEMINI_FALLBACK_MODEL_IDS = [
 ];
 
 type VertexClientResolver = (modelId: string) => GoogleGenAI;
+
+/** One location's catalog; `error` is set when its listing failed. */
+type LocationListing = {
+  models: ModelInfo[];
+  failed: boolean;
+  error?: unknown;
+};
 
 /**
  * One client per Vertex location, built on first use and reused for every model
@@ -157,8 +195,14 @@ function createVertexClientResolver(): VertexClientResolver {
  * global catalogs are not nested — Gemma MaaS and `gemini-embedding-001` appear
  * only regionally, and a global-only generation may be listed only globally —
  * so both are read and merged when the global endpoint is in play.
+ *
+ * `listingError` is the first location's error, set only when every location
+ * failed to list.
  */
-async function listVertexGeminiModels(): Promise<ModelInfo[]> {
+async function listVertexGeminiModels(): Promise<{
+  models: ModelInfo[];
+  listingError?: unknown;
+}> {
   const { location, allowGlobalEndpoint } = config.llm.gemini.vertexAi;
   const locations = new Set([location]);
   if (allowGlobalEndpoint) {
@@ -166,7 +210,7 @@ async function listVertexGeminiModels(): Promise<ModelInfo[]> {
   }
 
   const perLocation = await Promise.all(
-    [...locations].map(async (vertexLocation) => {
+    [...locations].map(async (vertexLocation): Promise<LocationListing> => {
       const client = createVertexClientForLocation(
         vertexLocation,
         "[ChatModels]",
@@ -180,6 +224,7 @@ async function listVertexGeminiModels(): Promise<ModelInfo[]> {
             models.push(modelInfo);
           }
         }
+        return { models, failed: false };
       } catch (error) {
         // One unreachable location must not empty the catalog: the other still
         // has models, and the accessibility probe vets whatever comes back.
@@ -191,12 +236,17 @@ async function listVertexGeminiModels(): Promise<ModelInfo[]> {
           },
           "Failed to list Vertex AI Gemini models for location",
         );
+        return { models, failed: true, error };
       }
-      return models;
     }),
   );
 
-  return dedupeModelsById(perLocation.flat());
+  return {
+    models: dedupeModelsById(perLocation.flatMap((result) => result.models)),
+    listingError: perLocation.every((result) => result.failed)
+      ? perLocation[0].error
+      : undefined,
+  };
 }
 
 /**

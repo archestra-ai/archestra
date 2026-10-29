@@ -522,6 +522,32 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
+   * How many of a provider's channels and DMs each agent is assigned to, most
+   * used first. Unassigned bindings are left out.
+   */
+  static async countByAgent(params: {
+    organizationId: string;
+    provider: ChatOpsProviderType;
+  }): Promise<{ agentId: string; bindings: number }[]> {
+    const table = schema.chatopsChannelBindingsTable;
+    const rows = await db
+      .select({ agentId: table.agentId, bindings: count() })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.provider, params.provider),
+          isNotNull(table.agentId),
+        ),
+      )
+      .groupBy(table.agentId)
+      .orderBy(desc(count()));
+    return rows.flatMap((row) =>
+      row.agentId ? [{ agentId: row.agentId, bindings: row.bindings }] : [],
+    );
+  }
+
+  /**
    * Update a channel binding
    */
   static async update(
@@ -623,6 +649,8 @@ class ChatOpsChannelBindingModel {
     organizationId: string;
     provider: ChatOpsProviderType;
     dmOwnerEmail: string;
+    /** Only the DMs of this bot, where a person has DMs with several. */
+    scope?: DmBotScope;
   }): Promise<ChatOpsChannelBinding | null> {
     const [binding] = await db
       .select()
@@ -639,6 +667,7 @@ class ChatOpsChannelBindingModel {
             schema.chatopsChannelBindingsTable.dmOwnerEmail,
             params.dmOwnerEmail,
           ),
+          dmBotScopeCondition(params.scope),
         ),
       )
       .orderBy(desc(schema.chatopsChannelBindingsTable.updatedAt))
@@ -784,10 +813,12 @@ class ChatOpsChannelBindingModel {
    *
    * For DM bindings: removes stale bindings for the same user+provider
    * with a different channelId (Slack/Teams can assign new channel IDs
-   * when a user re-initiates a DM conversation).
+   * when a user re-initiates a DM conversation). `staleDms` narrows that to
+   * the DMs of the same bot where one person has DMs with several bots.
    */
   static async upsertByChannel(
     input: InsertChatOpsChannelBinding,
+    options: { staleDms?: DmBotScope } = {},
   ): Promise<ChatOpsChannelBinding> {
     const existing = await ChatOpsChannelBindingModel.findByChannel({
       provider: input.provider,
@@ -836,6 +867,7 @@ class ChatOpsChannelBindingModel {
               input.dmOwnerEmail,
             ),
             ne(schema.chatopsChannelBindingsTable.channelId, input.channelId),
+            dmBotScopeCondition(options.staleDms),
           ),
         )
         .returning();
@@ -1204,3 +1236,25 @@ class ChatOpsChannelBindingModel {
 }
 
 export default ChatOpsChannelBindingModel;
+
+// =============================================================================
+// Internal Helpers
+// =============================================================================
+
+/**
+ * Which DM bindings belong to one Slack bot. Each Slack app has its own DM with
+ * a person, labelled with the agent: a bot pinned to an agent owns the DMs
+ * labelled with that agent, and the router bot the rest.
+ */
+type DmBotScope = { agentId: string } | { excludeAgentIds: string[] };
+
+function dmBotScopeCondition(scope: DmBotScope | undefined) {
+  if (!scope) return undefined;
+  const agentIdColumn = schema.chatopsChannelBindingsTable.agentId;
+  if ("agentId" in scope) return eq(agentIdColumn, scope.agentId);
+  if (scope.excludeAgentIds.length === 0) return undefined;
+  return or(
+    isNull(agentIdColumn),
+    notInArray(agentIdColumn, scope.excludeAgentIds),
+  );
+}

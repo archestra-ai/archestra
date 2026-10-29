@@ -1,11 +1,16 @@
-import type { IncomingEmailSecurityMode } from "@archestra/shared";
+import type {
+  GitHubActionsAccess,
+  IncomingEmailSecurityMode,
+} from "@archestra/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   index,
   integer,
   jsonb,
+  numeric,
   text,
   timestamp,
   uniqueIndex,
@@ -24,6 +29,8 @@ import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
+import modelPoolsTable from "./model-pool";
+import routingScorerVersionsTable from "./routing-scorer-version";
 import secretsTable from "./secret";
 import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
@@ -62,9 +69,6 @@ const agentsTable = softDeletablePgTable(
     isDefault: boolean("is_default").notNull().default(false),
     isPersonalGateway: boolean("is_personal_gateway").notNull().default(false),
     isPersonalProxy: boolean("is_personal_proxy").notNull().default(false),
-    considerContextUntrusted: boolean("consider_context_untrusted")
-      .notNull()
-      .default(false),
     agentType: text("agent_type")
       .$type<AgentType>()
       .notNull()
@@ -105,6 +109,56 @@ const agentsTable = softDeletablePgTable(
     modelId: uuid("model_id").references(() => modelsTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * A model pool as the agent's default model. `llmApiKeyId` and `modelId`
+     * then hold one member, for everything that needs a single model; its
+     * runs and new chats go to the pool. ON DELETE SET NULL.
+     */
+    modelPoolId: uuid("model_pool_id").references(() => modelPoolsTable.id, {
+      onDelete: "set null",
+    }),
+    /** Optional `fast` / `smart` tiers of the agent's trio, on `llmApiKeyId`. */
+    fastModelId: uuid("fast_model_id").references(() => modelsTable.id, {
+      onDelete: "set null",
+    }),
+    smartModelId: uuid("smart_model_id").references(() => modelsTable.id, {
+      onDelete: "set null",
+    }),
+
+    /**
+     * Auto routing (the org's `llm_proxy` row only). Server-managed: written
+     * under the routing-plan lock, which also bumps `autoRoutingGeneration`.
+     */
+    autoRoutingEnabled: boolean("auto_routing_enabled")
+      .notNull()
+      .default(false),
+    autoRoutingBudgetUsdPerDay: numeric("auto_routing_budget_usd_per_day", {
+      precision: 12,
+      scale: 2,
+    }),
+    autoRoutingFastModelId: uuid("auto_routing_fast_model_id").references(
+      () => modelsTable.id,
+      { onDelete: "set null" },
+    ),
+    autoRoutingNormalModelId: uuid("auto_routing_normal_model_id").references(
+      () => modelsTable.id,
+      { onDelete: "set null" },
+    ),
+    autoRoutingSmartModelId: uuid("auto_routing_smart_model_id").references(
+      () => modelsTable.id,
+      { onDelete: "set null" },
+    ),
+    autoRoutingScorerVersionId: uuid(
+      "auto_routing_scorer_version_id",
+    ).references(() => routingScorerVersionsTable.id),
+    autoRoutingGeneration: bigint("auto_routing_generation", { mode: "number" })
+      .notNull()
+      .default(0),
+    autoRoutingPlannedGeneration: bigint("auto_routing_planned_generation", {
+      mode: "number",
+    })
+      .notNull()
+      .default(0),
 
     /** Optional Identity Provider for JWKS-based JWT validation on MCP Gateway requests */
     identityProviderId: text("identity_provider_id").references(
@@ -144,11 +198,20 @@ const agentsTable = softDeletablePgTable(
     /** Allowlist of HTTP header names to forward from gateway requests to downstream MCP servers */
     passthroughHeaders: text("passthrough_headers").array(),
 
+    /**
+     * MCP gateways only: which GitHub Actions pull-request jobs may trade
+     * their OIDC token for a token on this gateway that acts as the pull
+     * request's author. Null turns the exchange off.
+     */
+    githubActionsAccess: jsonb(
+      "github_actions_access",
+    ).$type<GitHubActionsAccess>(),
+
     /** Whether tools/list exposes the full tool menu or only meta-discovery tools */
     toolExposureMode: text("tool_exposure_mode")
       .$type<ToolExposureMode>()
       .notNull()
-      .default("full"),
+      .default("search_and_run_only"),
 
     /**
      * How a shared agent behaves for a caller who has no usable connection to
@@ -236,6 +299,16 @@ const agentsTable = softDeletablePgTable(
      */
     latestVersion: integer("latest_version").notNull().default(0),
 
+    /**
+     * When anything last ran through the agent: the later of its newest MCP
+     * request (`mcp_tool_calls`) and its newest LLM call (`interactions`).
+     * Null means never used. Stamped forward-only by `AgentUsageModel` after
+     * each insert into those two tables, so lists can sort by it without
+     * scanning them. It outlives log retention: deleting old log rows does not
+     * move it back.
+     */
+    lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+
     /** Service account creator; separate from human ownership. */
     createdByServiceAccountId: uuid("created_by_service_account_id").references(
       () => serviceAccountsTable.id,
@@ -257,6 +330,85 @@ const agentsTable = softDeletablePgTable(
     index("agents_environment_id_idx").on(table.environmentId),
     index("agents_author_id_idx").on(table.authorId),
     index("agents_scope_idx").on(table.scope),
+    // Deleting a model clears these columns through their foreign keys, one
+    // lookup per deleted model and column. Without an index every lookup read
+    // the whole table, so removing a provider key's models outran the
+    // statement timeout. Partial: the tier and auto-routing columns are
+    // empty on most rows.
+    index("agents_model_id_idx")
+      .on(table.modelId)
+      .where(sql`${table.modelId} IS NOT NULL`),
+    index("agents_fast_model_id_idx")
+      .on(table.fastModelId)
+      .where(sql`${table.fastModelId} IS NOT NULL`),
+    index("agents_smart_model_id_idx")
+      .on(table.smartModelId)
+      .where(sql`${table.smartModelId} IS NOT NULL`),
+    index("agents_auto_routing_fast_model_id_idx")
+      .on(table.autoRoutingFastModelId)
+      .where(sql`${table.autoRoutingFastModelId} IS NOT NULL`),
+    index("agents_auto_routing_normal_model_id_idx")
+      .on(table.autoRoutingNormalModelId)
+      .where(sql`${table.autoRoutingNormalModelId} IS NOT NULL`),
+    index("agents_auto_routing_smart_model_id_idx")
+      .on(table.autoRoutingSmartModelId)
+      .where(sql`${table.autoRoutingSmartModelId} IS NOT NULL`),
+    // Agent lists: walk visible agents in name or creation order and stop at
+    // the page. The name indexes also carry the columns the list's
+    // visibility filter reads, so the list's count is an index-only scan.
+    index("agents_org_name_live_idx")
+      .on(
+        table.organizationId,
+        table.name,
+        table.id,
+        table.agentType,
+        table.authorId,
+        table.builtIn,
+        table.isDefault,
+      )
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("agents_org_name_deleted_idx")
+      .on(
+        table.organizationId,
+        table.name,
+        table.id,
+        table.agentType,
+        table.authorId,
+        table.builtIn,
+        table.isDefault,
+      )
+      .where(sql`${table.deletedAt} IS NOT NULL`),
+    index("agents_org_created_at_live_idx")
+      .on(table.organizationId, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NULL`),
+    // Selector select-all walks live agents newest first; the type and
+    // built-in flag let it read the index alone.
+    index("agents_org_created_at_type_live_idx")
+      .on(
+        table.organizationId,
+        table.createdAt,
+        table.id,
+        table.agentType,
+        table.builtIn,
+      )
+      .where(sql`${table.deletedAt} IS NULL`),
+    // Pickers and the chat roster order by name byte-wise (COLLATE "C"),
+    // which the name index above, in the database collation, cannot serve.
+    index("agents_org_name_c_live_idx")
+      .on(table.organizationId, sql`${table.name} COLLATE "C"`, table.id)
+      .where(sql`${table.deletedAt} IS NULL`),
+    // The Agents page's trash view lists deleted agents newest first.
+    index("agents_org_created_at_deleted_idx")
+      .on(table.organizationId, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
+    // The gateways and profiles list walks only those rows newest first.
+    // On agents_org_created_at_live_idx it filters every chat agent and
+    // can reach the end of the index before it fills a page.
+    index("agents_org_gateway_profile_created_at_live_idx")
+      .on(table.organizationId, table.createdAt, table.id)
+      .where(
+        sql`${table.deletedAt} IS NULL AND ${table.agentType} IN ('mcp_gateway', 'profile')`,
+      ),
     check(
       "agents_activation_skill_mode_check",
       sql`${table.activationSkillMode} IN ('all', 'manual')`,

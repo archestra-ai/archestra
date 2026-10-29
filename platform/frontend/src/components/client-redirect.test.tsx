@@ -19,4 +19,18 @@ describe("ClientRedirect", () => {
     expect(mockReplace).toHaveBeenCalledWith("/account/api-keys");
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("carries the query string and hash over when asked", () => {
+    window.history.pushState(
+      {},
+      "",
+      "/settings/credentials?github=connected#top",
+    );
+    render(<ClientRedirect to="/account/credentials" keepQuery />);
+
+    expect(mockReplace).toHaveBeenCalledWith(
+      "/account/credentials?github=connected#top",
+    );
+    window.history.pushState({}, "", "/");
+  });
 });

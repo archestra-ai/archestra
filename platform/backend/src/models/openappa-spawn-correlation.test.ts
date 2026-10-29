@@ -1,6 +1,7 @@
 import db, { schema } from "@/database";
 import { openappaActor } from "@/openappa/actor";
 import { expect, test } from "@/test";
+import OpenAppaSessionModel from "./openappa-session";
 import OpenAppaSpawnCorrelationModel from "./openappa-spawn-correlation";
 
 test("recovers the child's recorded spawn, not another open sibling spawn", async ({
@@ -120,4 +121,81 @@ test("recovers the child's recorded spawn, not another open sibling spawn", asyn
     .insert(schema.openappaOperationsTable)
     .values(prompt(childSessionId, "second", "prompt:contradictory"));
   expect(await OpenAppaSpawnCorrelationModel.soleOpenSpawn(scope)).toBeNull();
+});
+
+test("a compacted spawn still names the agent from its allowed arguments", async ({
+  makeOrganization,
+}) => {
+  const { id: organizationId } = await makeOrganization();
+  const callerId = "user:test";
+  const parentSessionId = `${callerId}|parent`;
+  const root = openappaActor(parentSessionId);
+  await db.insert(schema.openappaOperationsTable).values({
+    organizationId,
+    callerId,
+    sessionId: parentSessionId,
+    operationId: "call:spawn-auditor",
+    root,
+    status: "complete",
+    input: {
+      semantic: {
+        event: "tool_call",
+        tool: "Agent",
+        spawn: true,
+        arguments: {
+          name: "auditor",
+          description: "Audit the triggers",
+          prompt: "Audit the schedule triggers.",
+        },
+      },
+    },
+    decision: { decision: "allow_call" },
+  });
+  await db.insert(schema.openappaProcessedResultsTable).values({
+    organizationId,
+    callerId,
+    sessionId: parentSessionId,
+    toolCallId: "spawn-auditor",
+    root,
+    status: "complete",
+    approvedOutput:
+      "Spawned successfully.\nagent_id: auditor@team\nname: auditor",
+    decision: { decision: "ack" },
+  });
+  await db.insert(schema.openappaSessionsTable).values({
+    actor: openappaActor(parentSessionId),
+    root,
+    organizationId,
+    callerId,
+    sessionId: parentSessionId,
+    parentId: `${callerId}|grandparent`,
+    startDecision: { decision: "ack" },
+  });
+
+  expect(
+    await OpenAppaSpawnCorrelationModel.allowedSpawnAliases({
+      organizationId,
+      callerId,
+      parentSessionId,
+    }),
+  ).toEqual([
+    {
+      spawnCallId: "spawn-auditor",
+      name: "auditor",
+      description: "Audit the triggers",
+      launchText:
+        "Spawned successfully.\nagent_id: auditor@team\nname: auditor",
+    },
+  ]);
+  expect(
+    await OpenAppaSessionModel.familySession({
+      organizationId,
+      sessionId: parentSessionId,
+      callerId,
+    }),
+  ).toEqual({
+    sessionId: parentSessionId,
+    parentId: `${callerId}|grandparent`,
+    callerId,
+  });
 });

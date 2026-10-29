@@ -161,7 +161,7 @@ function rootPolicy(params: { acmeEntry: string; github?: boolean }): string {
   ];
   return `include = [${includes.map((entry) => `"${entry}"`).join(", ")}]
 
-[server_aliases]
+[aliases.mcp]
 microsoft-learn = ["docs"]
 acme = [${params.github ? `"acme", "mixed"` : `"acme"`}]
 jira = ["jira_cloud"]
@@ -179,11 +179,13 @@ delta = { trust = "suspicious", audience = ["public"] }
 [[policy.tool]]
 name = "acme__delete_item"
 delta = {}
+forwards = { audience = ["self"] }
 requires = { trust = "trusted" }
 
 [[policy.tool]]
 name = "acme__ping"
 delta = {}
+requires = { audience = { within = ["internal"] } }
 
 [[policy.tool]]
 name = "*"

@@ -1,4 +1,5 @@
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
+import type { RequestLookups } from "@/auth/request-lookups";
 import config from "@/config";
 import { AgentModel } from "@/models";
 import { listPluginSkills } from "@/plugins/plugin-skills";
@@ -6,8 +7,8 @@ import { listExternalMcpSkills } from "@/services/external-mcp-skills";
 import { listAccessibleCatalogSkills } from "@/skills/skill-catalog-prompt";
 import type {
   AgentActivationSkillReference,
-  ExternalMcpSkillListItem,
-  PluginSkillListItem,
+  ExternalMcpSkillCatalogItem,
+  PluginSkillCatalogItem,
   Skill,
 } from "@/types";
 
@@ -17,12 +18,15 @@ export interface SkillAvailabilityContext {
   agentId?: string;
   /** Draft or pending-edit environment override; takes precedence over agentId. */
   environmentId?: string | null;
+  lookups?: RequestLookups;
+  /** Metadata consumers may omit native instruction bodies at the SQL boundary. */
+  includeContent?: boolean;
 }
 
 export type PolicyIndependentAvailableAgentSkill =
   | { source: "native"; skill: Skill }
-  | { source: "plugin"; skill: PluginSkillListItem }
-  | { source: "external"; skill: ExternalMcpSkillListItem };
+  | { source: "plugin"; skill: PluginSkillCatalogItem }
+  | { source: "external"; skill: ExternalMcpSkillCatalogItem };
 
 export function getAvailableAgentSkillReference(
   available: PolicyIndependentAvailableAgentSkill,
@@ -64,6 +68,8 @@ export async function listPolicyIndependentAvailableAgentSkills(
       organizationId: params.organizationId,
       userId: params.userId,
       environmentId,
+      lookups: params.lookups,
+      includeContent: params.includeContent,
     }),
     config.mcpGateway.skillsEnabled
       ? listExternalMcpSkills({
@@ -73,12 +79,11 @@ export async function listPolicyIndependentAvailableAgentSkills(
           environmentId,
         })
       : [],
-    config.plugins.enabled
-      ? listPluginSkills({
-          organizationId: params.organizationId,
-          userId: params.userId,
-        })
-      : [],
+    listPluginSkills({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      lookups: params.lookups,
+    }),
   ]);
   return [
     ...nativeSkills.map((skill) => ({ source: "native" as const, skill })),

@@ -22,7 +22,10 @@ name: Platform E2E Tests
 #     and vault-k8s (Vault K8s-auth boot).
 #   - Quickstart: a pristine, key-less `docker run` instance for the
 #     @quickstart first-run onboarding specs (the lite environment seeds
-#     provider keys, so it can never be in that state).
+#     provider keys, so it can never be in that state). The same job first
+#     runs the openappa project on a lite stack booted with the beta switch on.
+# Test runners are allocated only after both images are published. This trades
+# setup overlap for lower billed execution time, including on failed builds.
 # Merge-queue / label runs cover chromium only; the nightly schedule (and
 # manual workflow_dispatch, which matches it) additionally runs the firefox +
 # webkit projects, which only carry the @firefox/@webkit-tagged tests.
@@ -46,9 +49,14 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PLATFORM_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  # This published stable-release fallback is owned by release publication,
+  # not the CI SHA publishers. Keep it available until the release cutover;
+  # CI packages deliberately do not move a latest tag.
+  # supply-chain-policy: allow-latest published stable MCP fallback
+  RELEASED_MCP_SERVER_BASE_IMAGE: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest
+  PLATFORM_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
   PLATFORM_IMAGE_NAME: platform
-  MCP_SERVER_BASE_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  MCP_SERVER_BASE_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
   MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
   # Dependabot PRs use the same restricted secret context as forks even though
   # their branches live in this repository and report head.repo.fork=false.
@@ -97,19 +105,14 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'run-e2e') }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
-      id-token: write # Required for Workload Identity Federation when pushing trusted images.
+      packages: write # Trusted CI publishes images and caches to GHCR.
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: Platform
-            # 16-vcpu Blacksmith: the platform image build is compile-bound
-            # (pnpm install + turbo build + Rust NAPI inside docker build)
-            # and is merge-queue critical path — the lite legs serialize
-            # behind it. Measured 12-13 min on 4-vcpu ubuntu-latest vs ~30s
-            # on a 16-vcpu Blacksmith runner whose sticky disk keeps the
-            # local layer cache warm; the registry cache-from misses the
-            # compile-heavy layers on every source change.
+            # Docker builds use Blacksmith so BuildKit can retain sticky-disk
+            # layers and cache mounts across trusted queue commits.
             runner: blacksmith-16vcpu-ubuntu-2404
             context: ./platform
             dockerfile: ""
@@ -118,9 +121,9 @@ jobs:
             local-tag-prefix: archestra-platform
             use-build-action: true
           - name: MCP Server Base
-            runner: ubuntu-latest
-            context: ./platform/mcp_server_docker_image
-            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
+            runner: blacksmith-16vcpu-ubuntu-2404
+            context: ./platform/docker_images/mcp_server
+            dockerfile: ./platform/docker_images/mcp_server/Dockerfile
             artifact-name: mcp-server-base-docker-image
             tarball-name: mcp-server-base-image.tar.gz
             local-tag-prefix: mcp-server-base
@@ -144,7 +147,7 @@ jobs:
 
       - name: Build Platform image
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR == 'true' }}
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           load: "true"
@@ -160,12 +163,13 @@ jobs:
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
 
-      - name: Authenticate to Google Artifact Registry
+      - name: Log in to GHCR
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: $/.github/actions/docker-login
         with:
-          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       # Reuse a platform image already built for this exact image-input hash —
       # by a labeled run-e2e build, a prior merge-queue entry, or the scheduled
@@ -228,25 +232,26 @@ jobs:
           fi
           echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
 
-      - name: Build Platform image and push to Artifact Registry
+      # Slim variant FIRST: the same image minus the ~352MB Dagger engine tar
+      # that only the quickstart job's pristine instance uses. The full build
+      # below reuses this builder's layers before the dependent test jobs start.
+      - name: Build slim Platform image (lite/K8s jobs, no Dagger engine tar) and push
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && steps.platform-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
+          # Keep BuildKit layers and cache mounts between trusted builds.
+          builder-cache-key: ${{ github.repository }}-platform-e2e-linux-amd64-v1
           context: ${{ matrix.context }}
-          # outputs= replaces the push:"true" shorthand to push with zstd-compressed
-          # layers: zstd is ~3-5x faster to decompress than gzip, cutting the e2e
-          # shard's image pull ~15-20s (the pull is dominated by single-threaded gunzip).
-          # (A tree-tag REUSED image keeps whatever compression it was built with;
-          # only fresh builds are guaranteed zstd.)
-          outputs: type=image,compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true,push=true
-          # Publish under both the commit-SHA e2e tag (what the shards pull;
+          push: "true"
+          target: unified-slim
+          # Publish under both the commit-SHA e2e tag (what the test jobs pull;
           # `-e2e` suffixed so it can never clobber the bare `:${sha}` tag the
           # staging deploy publishes and the cluster pulls — see the reuse step
           # above) and the input-hash tag, so a later run of the same image
           # inputs reuses this image instead of rebuilding.
           tags: |
-            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e
-            ${{ steps.platform-reuse.outputs.input_tag }}
+            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e-slim
+            ${{ steps.platform-reuse.outputs.slim_input_tag }}
           # E2E image consumed only by CI e2e jobs — skip SLSA provenance to
           # trim export time. The SBOM below intentionally makes this an OCI
           # index with an attestation manifest. Published release images keep
@@ -265,46 +270,69 @@ jobs:
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
           # Exact input-hash tags handle whole-image reuse; publisher mode=max caches
           # supply intermediate layers, so E2E only needs to export final layers.
+          # Only a fresh standard builder exports it, from this first build:
+          # exporting from reused BuildKit state (the second build, or the
+          # persistent builder's restored disk) dropped the BuildKit connection
+          # (rpc EOF) after the images were already pushed. The persistent
+          # builder skips the export and keeps its layers on its own disk.
           cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache,mode=min
 
-      # Slim variant for the K8s e2e job: the same image minus the ~352MB
-      # Dagger engine tar that only the quickstart job uses. Every layer is already in
-      # the builder cache from the full build above, so this push takes
-      # seconds.
-      - name: Build slim Platform image (K8s job, no Dagger engine tar) and push
+      # Full image for the quickstart job: `unified` is `unified-slim` plus one
+      # COPY of the Dagger engine tar, so on the slim build's live builder only
+      # that stage is new.
+      - name: Build Platform image and push to Artifact Registry
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && steps.platform-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
-          push: "true"
-          target: unified-slim
-          # Same dual-tag scheme as the full image: the SHA e2e tag the K8s job
-          # pulls, plus the input-hash tag the reuse step checks.
+          # outputs= replaces the push:"true" shorthand to push with zstd-compressed
+          # layers: zstd is ~3-5x faster to decompress than gzip, cutting the e2e
+          # shard's image pull ~15-20s (the pull is dominated by single-threaded gunzip).
+          # (A tree-tag REUSED image keeps whatever compression it was built with;
+          # only fresh builds are guaranteed zstd.)
+          outputs: type=image,compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true,push=true
+          # Same dual-tag scheme as the slim image: the SHA e2e tag the
+          # quickstart job pulls, plus the input-hash tag the reuse step checks.
           tags: |
-            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e-slim
-            ${{ steps.platform-reuse.outputs.slim_input_tag }}
+            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e
+            ${{ steps.platform-reuse.outputs.input_tag }}
           provenance: "false"
           sbom: generator=docker/scout-sbom-indexer:1.24.0@sha256:4b67f29eb0d1244ab0f62de867ac5dafd7262fcd7ebbdefa6ec8aacd6b15252d
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          # Reuse the full build's live BuildKit cache instead of creating a
+          # Reuse the slim build's live BuildKit cache instead of creating a
           # second builder and re-importing/rebuilding the same graph.
           setup-builder: "false"
-          # All slim layers are a subset of the full build just done on this
-          # builder; the registry ref only backstops a same-run builder loss.
+          # The registry refs only backstop a same-run builder loss.
           cache-from: |
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
 
-      - name: Authenticate to Google Artifact Registry
-        if: ${{ !matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
-        uses: ./.github/actions/auth-to-gar
+      # Preserve the exact image pair even when later browser tests fail. The
+      # nightly scanner consumes these immutable refs, not overall E2E success.
+      - name: Record Platform byte scan inputs
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        run: python3 .github/scripts/platform-byte-scan-inputs.py record
+
+      - name: Retain Platform byte scan inputs
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        uses: $/.github/actions/github-upload-artifact
         with:
-          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          name: platform-byte-scan-inputs
+          path: ${{ runner.temp }}/platform-byte-scan-inputs.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Log in to GHCR
+        if: ${{ !matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
+        uses: $/.github/actions/docker-login
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       # Same input-hash reuse as the Platform image above. This image rarely
-      # changes, and the lite/quickstart jobs wait for this job — so on a match, a
+      # changes, and the lite/quickstart/K8s jobs wait for its push — so on a match, a
       # seconds-long registry retag replaces the ~100s rebuild.
       - name: Resolve MCP server base image reuse
         id: mcp-base-reuse
@@ -334,7 +362,7 @@ jobs:
 
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action && steps.mcp-base-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
@@ -366,118 +394,88 @@ jobs:
 
       - name: Upload Docker image artifact
         if: ${{ env.UNTRUSTED_PR == 'true' }}
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: ${{ matrix.artifact-name }}
           path: /tmp/${{ matrix.tarball-name }}
           retention-days: 1
           compression-level: 0 # Already gzipped
 
-  # Scan the exact images exercised by E2E instead of rebuilding the same
-  # Docker contexts on slower standard runners. The required check names stay
-  # unchanged, while the scans leave the queue critical path: they begin once
-  # the images are pushed and run alongside the E2E environments.
-  merge-queue-image-scanning:
-    name: Docker Image Scanning (${{ matrix.name }})
-    needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'merge_group' && needs.platform-e2e-build.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read # Required for checkout and local scan actions.
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Platform
-            image-repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
-            tag-suffix: -e2e
-            slim-image-repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
-            slim-tag-suffix: -e2e-slim
-            remote-sbom: true
-          - name: MCP Server Base
-            image-repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base
-            tag-suffix: ""
-            slim-image-repository: ""
-            slim-tag-suffix: ""
-            remote-sbom: false
-    steps:
-      - name: Reclaim disk space (background)
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+      # Share the exact slim runtime once per run. Host-side E2E consumers
+      # download this one-day artifact instead of each pulling GAR layers.
+      # Keep the registry publication for Kind/VM consumers and byte scans.
+      - name: Export trusted slim platform image
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
+        env:
+          PLATFORM_IMAGE: ${{ format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+        shell: bash
+        run: |
+          docker pull "${PLATFORM_IMAGE}"
+          docker save "${PLATFORM_IMAGE}" | gzip -1 > /tmp/platform-image.tar.gz
 
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Upload trusted slim platform image
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: platform-slim-docker-image
+          # Keep the name stable for consumer-only reruns; replace it when
+          # rerunning the producer so immutable artifact names do not collide.
+          overwrite: "true"
+          path: /tmp/platform-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  # Start screenshot compute only once the queue's exact images are published.
+  # This removes the second full platform build from the independent docs job.
+  docs-screenshot-capture:
+    name: Capture Docs Screenshots (validation)
+    needs: [platform-e2e-build]
+    if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch'
+    runs-on: ubicloud-standard-8-ubuntu-2404
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read # Required for the same-run platform image artifact.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
-
-      - name: Resolve attested Platform image digests
-        id: scan-refs
-        if: ${{ matrix.remote-sbom }}
-        env:
-          FULL_TAG: ${{ format('{0}:{1}{2}', matrix.image-repository, github.sha, matrix.tag-suffix) }}
-          SLIM_TAG: ${{ format('{0}:{1}{2}', matrix.slim-image-repository, github.sha, matrix.slim-tag-suffix) }}
-          GIT_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          if full_ref=$(bash .github/scripts/resolve-attested-image.sh "$FULL_TAG") \
-            && slim_ref=$(bash .github/scripts/resolve-attested-image.sh "$SLIM_TAG"); then
-            primary=$full_ref
-            additional=$slim_ref
-          else
-            echo "::warning::Attestation validation failed; falling back to the stronger byte-derived scan."
-            docker pull "$FULL_TAG"
-            docker pull "$SLIM_TAG"
-            docker tag "$FULL_TAG" "archestra-platform:${GIT_SHA}"
-            docker tag "$SLIM_TAG" "archestra-platform-slim:${GIT_SHA}"
-            primary="local://archestra-platform:${GIT_SHA}"
-            additional="local://archestra-platform-slim:${GIT_SHA}"
-          fi
-          echo "primary=${primary}" >> "$GITHUB_OUTPUT"
-          echo "additional=${additional}" >> "$GITHUB_OUTPUT"
-
-      - name: Pull E2E image
-        if: ${{ !matrix.remote-sbom }}
-        env:
-          SCAN_IMAGE: ${{ format('{0}:{1}{2}', matrix.image-repository, github.sha, matrix.tag-suffix) }}
-        run: docker pull "${SCAN_IMAGE}"
-
-      - name: Scan exact E2E image digest(s) for CVEs
-        uses: ./.github/actions/scan-docker-image
+      - name: Load the queue's platform image
+        id: platform-image
+        uses: $/.github/actions/load-platform-image
         with:
-          image: ${{ steps.scan-refs.outputs.primary || format('{0}:{1}{2}', matrix.image-repository, github.sha, matrix.tag-suffix) }}
-          additional-images: ${{ steps.scan-refs.outputs.additional }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-          exit-code: "true"
+          source: artifact
+          artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
+          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          wait-timeout-seconds: "60"
+      - uses: $/.github/actions/capture-docs-screenshots
+        with:
+          platform-image: ${{ steps.platform-image.outputs.image-tag }}
+          # The embedded Kind cluster pulls this itself; a host-daemon pull
+          # would duplicate the transfer. Private mirrors keep the harness's
+          # existing public MCP-base fallback (their local tag is not pullable).
+          mcp-server-base-image: ${{ env.UNTRUSTED_PR != 'true' && format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) || '' }}
 
-  # Fast-cancel the run when an image build fails. The K8s job deliberately has
-  # no `needs: [platform-e2e-build]` so it can set up in parallel with the
-  # build, and then polls the registry for the pushed image up to
-  # image-pull-timeout-seconds (900s). That overlap is a win when the build
-  # succeeds, but when it FAILS the K8s job would otherwise burn the full ~15-min
-  # poll deadline on an 8vcpu runner for an image that will never arrive. The
-  # merge is already blocked by the failed required "Build ... Image" check, so
-  # cancelling the run here only reclaims that wasted runner time — it changes no
-  # merge outcome. (The lite and quickstart jobs already fast-fail: they `needs`
-  # the build and are skipped on failure. Only the poll-based K8s job needs this.)
-  platform-e2e-cancel-on-build-failure:
-    name: Cancel E2E on build failure
-    needs: [platform-e2e-build]
-    if: ${{ failure() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+  docs-screenshot-validation:
+    name: Docs Screenshot Validation
+    needs: [docs-screenshot-capture]
+    if: always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      actions: write # Required to cancel this workflow run.
+      contents: read
     steps:
-      - name: Cancel run so the K8s job stops polling for an image that will never arrive
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Report screenshot validation
         env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.run_id }}
-          REPO: ${{ github.repository }}
-        run: |
-          echo "An image build failed; cancelling run ${RUN_ID} so the K8s e2e job stops burning the image-pull deadline."
-          gh api --method POST "repos/${REPO}/actions/runs/${RUN_ID}/cancel"
+          EVENT_NAME: ${{ github.event_name }}
+          VALIDATION_ONLY: "true"
+          CAPTURE_RESULT: ${{ needs.docs-screenshot-capture.result }}
+        run: python3 .github/scripts/check-docs-screenshot-result.py
 
   # K8s-bound E2E tests: only the specs that need a real host cluster —
   # host-cluster kubectl, NetworkPolicy enforcement, helm-deployed fixture
@@ -491,24 +489,15 @@ jobs:
   # The required check is "Merge E2E Test Reports", not this job.
   platform-e2e-k8s-tests:
     name: Platform E2E Tests (K8s)
-    # Deliberately NO `needs: [platform-e2e-build]`: this job starts alongside
-    # the image build and does all image-independent setup (checkout, pnpm, Kind
-    # cluster, MCP dependency images) while the build runs. Setup Archestra
-    # Platform then polls the registry (image-pull-timeout-seconds) until the
-    # freshly pushed image appears; untrusted PRs poll for the build artifact in the
-    # load steps below. This overlap takes ~2.5 min off the merge-queue critical
-    # path. Trade-off: if the build fails, this job burns the poll deadline
-    # instead of being skipped — the merge is still blocked either way by the
-    # required "Build ... Image" checks.
+    needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    # The 4m15s baseline spent 171s in Kind/Helm setup and only 51s in tests.
-    # More CPU targets that setup bottleneck without duplicating the cluster.
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    # Setup dominates this environment; keep the existing 8-vCPU runner.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 60
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
-      actions: read # Required to poll for build artifacts on untrusted PRs (wait-timeout-seconds).
+      actions: read # Required to read build artifacts on untrusted PRs.
     steps:
       # See the reclaim note in the build job.
       - name: Reclaim disk space (background)
@@ -521,29 +510,29 @@ jobs:
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
       # Untrusted PRs only: the platform image travels as a workflow artifact
-      # because they get no OIDC-backed registry access, so wait for the build job to upload
-      # it. Trusted runs skip these steps entirely — Setup Archestra Platform
+      # because they get no OIDC-backed registry access. Load it here after
+      # publication. Trusted runs skip these steps — Setup Archestra Platform
       # pulls from the registry itself, after the image-independent setup.
       - name: Load platform image (untrusted PRs, from artifact)
         if: ${{ env.UNTRUSTED_PR == 'true' }}
-        uses: ./.github/actions/load-platform-image
+        uses: $/.github/actions/load-platform-image
         with:
           source: artifact
           image-tag: archestra-platform:${{ github.sha }}
-          wait-timeout-seconds: "900"
+          wait-timeout-seconds: "60"
 
       - name: Load MCP server base image (untrusted PRs, from artifact)
         if: ${{ env.UNTRUSTED_PR == 'true' }}
-        uses: ./.github/actions/load-mcp-server-base-image
+        uses: $/.github/actions/load-mcp-server-base-image
         with:
           source: artifact
           image-tag: mcp-server-base:${{ github.sha }}
-          wait-timeout-seconds: "900"
+          wait-timeout-seconds: "60"
 
       - name: Prepare blob report workspace
         run: |
@@ -552,7 +541,7 @@ jobs:
 
       - name: Setup Archestra Platform
         id: setup-platform
-        uses: ./.github/actions/setup-archestra-platform
+        uses: $/.github/actions/setup-archestra-platform
         with:
           kind-config-path: .github/kind.yaml
           kind-cluster-name: archestra-ci-cluster
@@ -572,17 +561,13 @@ jobs:
           # Untrusted PRs load a local artifact tag, which must be kind-loaded.
           platform-image-in-cluster-pull: ${{ env.UNTRUSTED_PR == 'true' && 'false' || 'true' }}
           mcp-server-base-image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
-          # Must cover the platform image build this job deliberately does not
-          # `needs`: warm registry-cache builds finish well inside this, but a
-          # fully cold build (empty buildcache after a cache-invalidating
-          # change) measured 20 min on a standard runner. A failed build still
-          # cancels this run early via platform-e2e-cancel-on-build-failure.
-          image-pull-timeout-seconds: "1500"
+          # Images are already published; retry briefly for registry failures.
+          image-pull-timeout-seconds: "60"
 
       - name: Run K8s-bound E2E tests
         id: e2e
         continue-on-error: true
-        uses: ./.github/actions/run-e2e-tests
+        uses: $/.github/actions/run-e2e-tests
         with:
           projects: api-k8s --project=vault-k8s
           timeout: "20"
@@ -592,7 +577,7 @@ jobs:
         # Playwright reports are diagnostic artifacts; an artifact-service
         # outage must not turn a passing E2E leg red in the merge queue.
         continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           # Suffixed so the report job's blob-report-* download glob (which
           # also matches the lite leg's artifact) picks it up.
@@ -679,8 +664,9 @@ jobs:
   # remains intact while all independent groups overlap.
   platform-e2e-hibernation-tests:
     name: Platform E2E Tests (Hibernation ${{ matrix.name }})
+    needs: [platform-e2e-build]
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubicloud-standard-16-ubuntu-2404
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -697,7 +683,7 @@ jobs:
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
-      actions: read # Required to poll for build artifacts on untrusted PRs (wait-timeout-seconds).
+      actions: read # Required to read build artifacts on untrusted PRs.
     steps:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
@@ -709,29 +695,29 @@ jobs:
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
       - name: Load platform image (untrusted PRs, from artifact)
         if: ${{ env.UNTRUSTED_PR == 'true' }}
-        uses: ./.github/actions/load-platform-image
+        uses: $/.github/actions/load-platform-image
         with:
           source: artifact
           image-tag: archestra-platform:${{ github.sha }}
-          wait-timeout-seconds: "900"
+          wait-timeout-seconds: "60"
 
       - name: Load MCP server base image (untrusted PRs, from artifact)
         if: ${{ env.UNTRUSTED_PR == 'true' }}
-        uses: ./.github/actions/load-mcp-server-base-image
+        uses: $/.github/actions/load-mcp-server-base-image
         with:
           source: artifact
           image-tag: mcp-server-base:${{ github.sha }}
-          wait-timeout-seconds: "900"
+          wait-timeout-seconds: "60"
 
       - name: Setup Archestra Platform
         id: setup-platform
-        uses: ./.github/actions/setup-archestra-platform
+        uses: $/.github/actions/setup-archestra-platform
         with:
           kind-config-path: .github/kind.yaml
           kind-cluster-name: archestra-ci-cluster
@@ -746,7 +732,7 @@ jobs:
           platform-context: ./platform
           platform-image-in-cluster-pull: ${{ env.UNTRUSTED_PR == 'true' && 'false' || 'true' }}
           mcp-server-base-image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
-          image-pull-timeout-seconds: "1500"
+          image-pull-timeout-seconds: "60"
           # Production retains its 120s safety floor. ENABLE_E2E_TEST_ENDPOINTS
           # gates this isolated cluster's accelerated 8s timing profile.
           extra-helm-set: archestra.orchestrator.mcpIdleHibernationSeconds=8
@@ -754,7 +740,7 @@ jobs:
       - name: Run hibernation E2E tests
         id: e2e
         continue-on-error: true
-        uses: ./.github/actions/run-e2e-tests
+        uses: $/.github/actions/run-e2e-tests
         with:
           projects: api-k8s-hibernation
           extra_args: ${{ format('--workers=1 {0}', matrix.spec) }}
@@ -767,7 +753,7 @@ jobs:
         # Playwright reports are diagnostic artifacts; an artifact-service
         # outage must not turn a passing E2E leg red in the merge queue.
         continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: blob-report-k8s-hibernation-${{ matrix.name }}
           path: platform/e2e-tests/blob-report-hibernation-${{ matrix.name }}/
@@ -812,7 +798,8 @@ jobs:
     # single lite job ran 6.9 min on 8 vcpu where the 4-vcpu legs ran 8-9
     # min each.
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 30
+    # Leave room for cold image pulls and platform startup.
+    timeout-minutes: 45
     strategy:
       # A failing leg must not cancel its siblings; we want the full failure
       # picture in one pass.
@@ -823,44 +810,32 @@ jobs:
           # provider projects follow the first Chromium shard on its existing
           # stack, avoiding a separate runner and duplicate setup. Nightly
           # cross-browser projects ride that second step too.
-          # The chromium legs cap Playwright at 2 workers: sized on 4-vcpu
-          # standard runners, where the CI default (90% of cores) oversubscribed
-          # a runner that was also hosting the whole lite stack, and the
-          # resulting CPU starvation made the heavy dialog-interaction specs
-          # (static-credentials, chat) miss their interaction windows.
-          # Conservative on the 8-vcpu runners; raising it is a follow-up.
+          # Two Chromium shards retain the complete project while avoiding a
+          # third full lite stack and its runner setup. They split by FILE via
+          # E2E_CHROMIUM_SHARD (see chromiumShard2TestMatch in
+          # playwright.config.ts), not --shard: --shard splits by test count,
+          # which left the second leg with ~196s of tests to the first's ~115s
+          # (+44s of API/IdP). Unlisted specs run on shard 1.
+          # The chromium legs cap Playwright at 3 workers. 2 was sized on
+          # 4-vcpu standard runners, where the CI default (90% of cores)
+          # oversubscribed a runner that was also hosting the whole lite stack,
+          # and the resulting CPU starvation made the heavy dialog-interaction
+          # specs (static-credentials, chat) miss their interaction windows.
+          # These legs run on 8 vcpu, which leaves headroom for a third
+          # browser next to the stack.
           # The API step keeps the default worker count because it runs after
           # Chromium and does not compete with its browser interaction tests.
-          # Two Chromium shards retain the complete project while avoiding a
-          # third full lite stack and its runner setup.
-          # The OpenAPPA root tool flow, on a stack booted with the feature on.
-          # It is its own leg because the flag is not additive: with OpenAPPA
-          # enabled the proxy rejects any tool-declaring request that omits the
-          # two APPA tools, which other lite specs rely on. Every leg boots its
-          # own stack anyway, so
-          # this costs one runner, not a second harness. The `openappa`
-          # Playwright project runs here and nowhere else.
-          - name: openappa
-            projects_default: openappa
-            projects_nightly: openappa
-            shard: ""
-            workers_arg: ""
-            beta_enabled: "true"
+          # The OpenAPPA project runs in the quickstart job, on its own stack.
           - name: chromium-1of2
-            projects_default: chromium
-            projects_nightly: chromium
-            shard: "--shard=1/2"
-            workers_arg: "--workers=2"
+            chromium_shard: "1"
             secondary_projects_default: api --project=identity-providers
             secondary_projects_nightly: api --project=identity-providers --project=identity-providers-saml --project=firefox --project=webkit
           - name: chromium-2of2
-            projects_default: chromium
-            projects_nightly: chromium
-            shard: "--shard=2/2"
-            workers_arg: "--workers=2"
+            chromium_shard: "2"
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
+      actions: read # Required to read build artifacts on untrusted PRs.
     steps:
       # See the reclaim note in the build job.
       - name: Reclaim disk space (background)
@@ -874,7 +849,9 @@ jobs:
 
       # Both foreground consumers below remain authoritative. Start their
       # independent pulls before pnpm setup so registry and browser-image I/O
-      # overlap instead of extending every Lite shard's critical path.
+      # overlap instead of extending every Lite shard's critical path. The
+      # platform pull fails harmlessly when the build has not pushed yet; the
+      # "Load platform image" step then waits for it.
       - name: Pre-pull Lite images (background)
         env:
           TRUSTED_PLATFORM_IMAGE: ${{ format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
@@ -887,39 +864,61 @@ jobs:
           docker pull "mcr.microsoft.com/playwright:v${version}-noble" >"${RUNNER_TEMP}/lite-playwright-pull.log" 2>&1 &
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
       # The -slim variant: this environment runs with the code runtime
-      # disabled (see e2e-lite-platform.env), so the ~352MB Dagger engine tar
-      # is dead weight here. Untrusted PRs get the full image — only one
-      # variant travels as a build artifact.
+      # disabled (see e2e-lite-platform.env), so the Dagger engine tar
+      # is dead weight here. Untrusted PRs use their existing full-image
+      # artifact; trusted jobs share the slim artifact published once per run.
+      # The build dependency guarantees publication before allocating this
+      # runner; retry only transient errors.
       - name: Load platform image
         id: load-platform-image
-        uses: ./.github/actions/load-platform-image
+        uses: $/.github/actions/load-platform-image
         with:
-          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
+          source: artifact
+          artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
           image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          wait-timeout-seconds: "60"
+
+      # Check registry availability before the embedded Kind cluster pulls
+      # this commit's MCP server base image by tag.
+      - name: Wait for MCP server base image
+        if: ${{ env.UNTRUSTED_PR != 'true' }}
+        env:
+          MCP_SERVER_BASE_IMAGE: ${{ format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+        run: |
+          deadline=$(( $(date +%s) + 60 ))
+          until docker buildx imagetools inspect "${MCP_SERVER_BASE_IMAGE}" > /dev/null 2>&1; do
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "Timed out waiting for ${MCP_SERVER_BASE_IMAGE} to appear in the registry"
+              exit 1
+            fi
+            echo "${MCP_SERVER_BASE_IMAGE} not pushed yet, retrying in 10s..."
+            sleep 10
+          done
+          echo "${MCP_SERVER_BASE_IMAGE} is available"
 
       - name: Start lite e2e stack
         env:
           PLATFORM_IMAGE: ${{ steps.load-platform-image.outputs.image-tag }}
-          # OpenAPPA follows the beta master switch. Off for every leg but the
-          # openappa one, so the other legs' stacks are byte-identical to what
-          # they were before this existed.
-          ARCHESTRA_BETA: ${{ matrix.beta_enabled || 'false' }}
+          # OpenAPPA follows the beta master switch, off here: with it on the
+          # proxy rejects tool-declaring requests these specs send. The
+          # OpenAPPA specs run on their own stack in the quickstart job.
+          ARCHESTRA_BETA: "false"
           # The embedded Kind cluster pulls the MCP server base image straight
           # from the (anonymous-pull) registry, so trusted runs can use the
           # image this workflow just built. Untrusted PRs don't push to the
           # registry — they fall back to the script's published :latest
           # default (host-loaded images are invisible to the embedded Kind).
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
-          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && format('{0}/{1}:latest', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && env.RELEASED_MCP_SERVER_BASE_IMAGE || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
         run: ./platform/scripts/e2e-lite.sh up
 
       - name: Configure embedded Kind registry cache
-        uses: ./.github/actions/configure-kind-registry-cache
+        uses: $/.github/actions/configure-kind-registry-cache
         with:
           cluster-name: archestra-mcp
 
@@ -939,25 +938,31 @@ jobs:
             echo "E2E_WIREMOCK_BASE_URL=http://127.0.0.1:9092"
             echo "E2E_WIREMOCK_INTERNAL_URL=http://e2e-tests-wiremock:8080"
             echo "E2E_KEYCLOAK_BACKEND_URL=http://e2e-tests-keycloak:8080"
+            # Selects this leg's chromium files (playwright.config.ts).
+            echo "E2E_CHROMIUM_SHARD=${CHROMIUM_SHARD}"
           } > /tmp/lite-e2e.env
           cat /tmp/lite-e2e.env
+        env:
+          CHROMIUM_SHARD: ${{ matrix.chromium_shard }}
 
       - name: Run lite E2E tests
         id: e2e
-        uses: ./.github/actions/run-e2e-tests
+        uses: $/.github/actions/run-e2e-tests
         with:
           # Merge queue / on-demand label runs cover chromium only. The nightly
-          # schedule (and manual workflow_dispatch) add firefox + webkit, which
-          # only carry the @firefox/@webkit-tagged tests.
-          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.projects_nightly || matrix.projects_default }}
-          shard: ${{ matrix.shard }}
-          extra_args: "--grep-invert '@quickstart' ${{ matrix.workers_arg }}"
+          # schedule (and manual workflow_dispatch) add firefox + webkit to the
+          # chromium-1of2 leg's second step; they only carry the
+          # @firefox/@webkit-tagged tests.
+          projects: chromium
+          extra_args: "--grep-invert '@quickstart' --workers=3"
           timeout: "20"
           env_file: /tmp/lite-e2e.env
+          # Both chromium legs would otherwise write the same default name.
+          blob_report_name: report-chromium-shard-${{ matrix.chromium_shard }}.zip
 
       - name: Run API and identity provider E2E tests on the same stack
         if: ${{ matrix.name == 'chromium-1of2' }}
-        uses: ./.github/actions/run-e2e-tests
+        uses: $/.github/actions/run-e2e-tests
         with:
           projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.secondary_projects_nightly || matrix.secondary_projects_default }}
           extra_args: "--grep-invert '@quickstart'"
@@ -970,7 +975,7 @@ jobs:
         # Playwright reports are diagnostic artifacts; an artifact-service
         # outage must not turn a passing E2E leg red in the merge queue.
         continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: blob-report-lite-${{ matrix.name }}
           path: platform/e2e-tests/blob-report/
@@ -979,7 +984,7 @@ jobs:
       - name: Upload API and identity provider blob report
         if: ${{ !cancelled() && matrix.name == 'chromium-1of2' }}
         continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: blob-report-lite-api
           path: platform/e2e-tests/blob-report-api/
@@ -1005,18 +1010,32 @@ jobs:
 
       # No teardown: the runner VM is thrown away after the job anyway.
 
+  # Two short environments on one runner, one after the other:
+  #   1. OpenAPPA: the lite stack (scripts/e2e-lite.sh) booted with the beta
+  #      switch on, for the `openappa` Playwright project. The flag is not
+  #      additive — with OpenAPPA enabled the proxy rejects any tool-declaring
+  #      request that omits the two APPA tools, which other lite specs rely
+  #      on — so it needs its own stack, but its ~30s of tests did not justify
+  #      a runner of their own. It runs FIRST because it uses the -slim image,
+  #      which the build pushes before the full one.
+  #   2. Quickstart: a pristine, key-less `docker run` of the full image. The
+  #      lite teardown removes every container, network and the embedded Kind
+  #      node, and the lite stack keeps no volumes, so the instance still
+  #      starts from first-run state.
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    # The test step is only ~1m40s; image load and platform startup dominate
-    # this 5-6 minute job. Match the other E2E legs' 8-vCPU runner so image
-    # extraction and first-run initialization are not CPU-bound.
+    # The test steps are short; image loads and platform startup dominate
+    # this job. Match the other E2E legs' 8-vCPU runner so image extraction
+    # and first-run initialization are not CPU-bound.
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 30
+    # Covers cold image pulls and both environments.
+    timeout-minutes: 50
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
+      actions: read # Required to read build artifacts on untrusted PRs.
     steps:
       # See the reclaim note in the build job.
       - name: Reclaim disk space (background)
@@ -1029,16 +1048,131 @@ jobs:
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
+      # The -slim image, as in the lite job (the code runtime is off in that
+      # stack). Untrusted PRs load the one image that travels as an artifact —
+      # the full one — which the quickstart half below then reuses.
+      - name: Load OpenAPPA platform image
+        id: load-openappa-image
+        uses: $/.github/actions/load-platform-image
+        with:
+          source: artifact
+          artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
+          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          wait-timeout-seconds: "60"
+
+      - name: Wait for MCP server base image
+        if: ${{ env.UNTRUSTED_PR != 'true' }}
+        env:
+          MCP_SERVER_BASE_IMAGE: ${{ format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+        run: |
+          deadline=$(( $(date +%s) + 60 ))
+          until docker buildx imagetools inspect "${MCP_SERVER_BASE_IMAGE}" > /dev/null 2>&1; do
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "Timed out waiting for ${MCP_SERVER_BASE_IMAGE} to appear in the registry"
+              exit 1
+            fi
+            echo "${MCP_SERVER_BASE_IMAGE} not pushed yet, retrying in 10s..."
+            sleep 10
+          done
+          echo "${MCP_SERVER_BASE_IMAGE} is available"
+
+      # continue-on-error on the OpenAPPA steps so a red OpenAPPA run still
+      # lets the quickstart half run; "Fail if OpenAPPA E2E tests failed" at
+      # the end turns it back into a job failure.
+      - name: Start lite e2e stack (OpenAPPA on)
+        id: openappa-stack
+        continue-on-error: true
+        env:
+          PLATFORM_IMAGE: ${{ steps.load-openappa-image.outputs.image-tag }}
+          ARCHESTRA_BETA: "true"
+          # Same MCP server base image choice as the lite job.
+          # supply-chain-policy: allow-latest quickstart needs a published public fallback
+          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && env.RELEASED_MCP_SERVER_BASE_IMAGE || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+        run: ./platform/scripts/e2e-lite.sh up
+
+      - name: Configure embedded Kind registry cache (OpenAPPA)
+        if: ${{ steps.openappa-stack.outcome == 'success' }}
+        continue-on-error: true
+        uses: $/.github/actions/configure-kind-registry-cache
+        with:
+          cluster-name: archestra-mcp
+
+      - name: Create OpenAPPA e2e test env file
+        if: ${{ steps.openappa-stack.outcome == 'success' }}
+        run: |
+          # Same values as the lite job's env file; see the notes there.
+          {
+            echo "E2E_UI_BASE_URL=http://localhost:3000"
+            echo "E2E_API_BASE_URL=http://localhost:9000"
+            echo "E2E_WIREMOCK_BASE_URL=http://127.0.0.1:9092"
+            echo "E2E_WIREMOCK_INTERNAL_URL=http://e2e-tests-wiremock:8080"
+            echo "E2E_KEYCLOAK_BACKEND_URL=http://e2e-tests-keycloak:8080"
+          } > /tmp/lite-e2e.env
+          cat /tmp/lite-e2e.env
+
+      - name: Run OpenAPPA E2E tests
+        id: openappa-e2e
+        if: ${{ steps.openappa-stack.outcome == 'success' }}
+        continue-on-error: true
+        uses: $/.github/actions/run-e2e-tests
+        with:
+          projects: openappa
+          extra_args: "--grep-invert '@quickstart'"
+          timeout: "20"
+          env_file: /tmp/lite-e2e.env
+          # Its own directory: the quickstart run below writes blob-report/.
+          blob_report_dir: blob-report-openappa
+
+      - name: Upload OpenAPPA blob report
+        if: ${{ !cancelled() && steps.openappa-stack.outcome == 'success' }}
+        # Playwright reports are diagnostic artifacts; an artifact-service
+        # outage must not turn a passing E2E leg red in the merge queue.
+        continue-on-error: true
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          # Name kept from the former standalone lite leg; the report job's
+          # blob-report-* glob picks it up.
+          name: blob-report-lite-openappa
+          path: platform/e2e-tests/blob-report-openappa/
+          retention-days: 1
+
+      - name: Show OpenAPPA platform logs on failure
+        if: ${{ always() && (steps.openappa-stack.outcome == 'failure' || steps.openappa-e2e.outcome == 'failure') }}
+        run: |
+          echo "=== Lite Platform Container Logs ==="
+          docker logs archestra-lite --tail=500 2>&1 || echo "Could not get container logs"
+
+          echo "=== WireMock Container Logs ==="
+          docker logs e2e-tests-wiremock --tail=200 2>&1 || echo "Could not get WireMock logs"
+
+          echo "=== Embedded Kind Pods (MCP servers) ==="
+          docker exec archestra-lite kubectl --kubeconfig /app/data/.kubeconfig get pods -A -o wide 2>&1 || true
+
+          echo "=== Docker Container Status ==="
+          docker ps -a
+
+      # Frees the ports and removes the embedded Kind node so the quickstart
+      # instance below boots pristine.
+      - name: Tear down lite e2e stack
+        if: ${{ always() }}
+        run: ./platform/scripts/e2e-lite.sh down
+
+      # Trusted runs pull the full image (the quickstart path deploys the
+      # Dagger engine from its tar); most of its layers are already on the
+      # host from the -slim pull above. Untrusted PRs already loaded it from
+      # the artifact, so they skip this.
       - name: Load platform image
         id: load-platform-image
-        uses: ./.github/actions/load-platform-image
+        if: ${{ env.UNTRUSTED_PR != 'true' }}
+        uses: $/.github/actions/load-platform-image
         with:
-          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
-          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          source: registry
+          image-tag: ${{ format('{0}/{1}:{2}-e2e', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          wait-timeout-seconds: "60"
 
       # Note: We intentionally don't load/use a custom MCP server base image for quickstart tests.
       # The embedded Kind cluster inside the quickstart container cannot easily access images
@@ -1074,7 +1208,7 @@ jobs:
 
       - name: Start platform in quickstart mode
         env:
-          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag }}
+          PLATFORM_IMAGE_TAG: ${{ steps.load-platform-image.outputs.image-tag || steps.load-openappa-image.outputs.image-tag }}
         run: |
           echo "Starting Archestra platform in quickstart mode..."
 
@@ -1103,7 +1237,7 @@ jobs:
             -p 127.0.0.1:3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
             -e ARCHESTRA_AUTH_RATE_LIMIT_DISABLED=true \
-            -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest \
+            -e "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${RELEASED_MCP_SERVER_BASE_IMAGE}" \
             -e ARCHESTRA_ANALYTICS=disabled \
             -e ARCHESTRA_OPENAI_BASE_URL=http://archestra-wiremock:8080/v1 \
             -e ARCHESTRA_ANTHROPIC_BASE_URL=http://archestra-wiremock:8080 \
@@ -1119,21 +1253,22 @@ jobs:
         run: |
           echo "Waiting for platform services to be healthy..."
 
-          # Wait for backend health endpoint (max 3 minutes)
+          # Startup liveness can succeed before the API takes over its port.
+          # Wait for backend readiness before running application assertions (max 3 minutes).
           # Use 127.0.0.1 instead of localhost to avoid IPv6 issues with Docker port mapping
-          echo "Checking backend health..."
+          echo "Checking backend readiness..."
           for i in {1..90}; do
-            if curl -sf http://127.0.0.1:9000/health > /dev/null 2>&1; then
-              echo "Backend is healthy!"
+            if curl -sf http://127.0.0.1:9000/ready > /dev/null 2>&1; then
+              echo "Backend is ready!"
               break
             fi
             echo "Waiting for backend... (attempt $i/90)"
             sleep 2
           done
 
-          # Verify backend is accessible
-          if ! curl -sf http://127.0.0.1:9000/health; then
-            echo "Backend health check failed after 3 minutes"
+          # Verify the application API is ready
+          if ! curl -sf http://127.0.0.1:9000/ready; then
+            echo "Backend readiness check failed after 3 minutes"
             docker logs archestra-quickstart --tail=200
             exit 1
           fi
@@ -1159,7 +1294,7 @@ jobs:
           echo "All services are ready!"
 
       - name: Configure embedded Kind registry cache
-        uses: ./.github/actions/configure-kind-registry-cache
+        uses: $/.github/actions/configure-kind-registry-cache
         with:
           cluster-name: archestra-mcp
 
@@ -1314,7 +1449,7 @@ jobs:
 
       - name: Run quickstart E2E tests
         id: e2e
-        uses: ./.github/actions/run-e2e-tests
+        uses: $/.github/actions/run-e2e-tests
         with:
           projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'quickstart --project=quickstart-recovery' || 'quickstart' }}
           # Run all tests tagged @quickstart: MCP install, auth origin, and first-time chat flow
@@ -1326,7 +1461,7 @@ jobs:
         # Playwright reports are diagnostic artifacts; an artifact-service
         # outage must not turn a passing E2E leg red in the merge queue.
         continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: blob-report-quickstart
           path: platform/e2e-tests/blob-report/
@@ -1356,68 +1491,9 @@ jobs:
           docker volume rm archestra-ci-postgres-data 2>/dev/null || true
           docker volume rm archestra-ci-app-data 2>/dev/null || true
 
-  # The generic K8s leg deliberately uses the DB secrets manager, while this
-  # project asserts the Readonly Vault path. Run it on the nightly/manual
-  # coverage lane instead of silently skipping it in the DB-backed environment
-  # or adding another K8s stack to every merge-group run.
-  platform-e2e-vault-tests:
-    name: Platform E2E Tests (Vault)
-    needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 45
-    permissions:
-      contents: read # Required to checkout the repository and read test assets.
-      id-token: write # Required for Workload Identity Federation in setup actions.
-    steps:
-      - name: Reclaim disk space (background)
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
-
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Setup environment
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: ./platform
-
-      - name: Setup Archestra Platform with Readonly Vault
-        uses: ./.github/actions/setup-archestra-platform
-        with:
-          kind-config-path: .github/kind.yaml
-          kind-cluster-name: archestra-ci-cluster
-          helm-values-path: .github/values-ci.yaml
-          deploy-e2e-dependencies: "true"
-          e2e-dependencies-install-mode: "foreground"
-          e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
-          e2e-dependencies-wait-for-vault: "true"
-          build-platform-image: "false"
-          platform-image-tag: ${{ format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
-          platform-context: ./platform
-          platform-image-in-cluster-pull: "true"
-          mcp-server-base-image-tag: ${{ format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
-          image-pull-timeout-seconds: "1500"
-          extra-helm-set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT"
-
-      - name: Run Readonly Vault E2E tests
-        uses: ./.github/actions/run-e2e-tests
-        with:
-          projects: credentials-with-vault
-          timeout: "20"
-
-      - name: Upload blob report
-        if: ${{ !cancelled() }}
-        # Playwright reports are diagnostic artifacts; an artifact-service
-        # outage must not turn a passing E2E leg red in the merge queue.
-        continue-on-error: true
-        uses: ./.github/actions/github-upload-artifact
-        with:
-          name: blob-report-vault
-          path: platform/e2e-tests/blob-report/
-          retention-days: 1
+      - name: Fail if OpenAPPA E2E tests failed
+        if: ${{ always() && (steps.openappa-stack.outcome == 'failure' || steps.openappa-e2e.outcome == 'failure') }}
+        run: exit 1
 
   # `rust-napi-musl-smoke` is the Dockerfile stage that actually loads every
   # musl-built NAPI addon. The merge-group Rust job keeps the fast Cargo target
@@ -1437,7 +1513,7 @@ jobs:
           fetch-depth: 1
 
       - name: Build and smoke musl NAPI addons
-        uses: ./.github/actions/build-docker-image
+        uses: $/.github/actions/build-docker-image
         with:
           context: ./platform
           target: rust-napi-musl-smoke
@@ -1545,12 +1621,12 @@ jobs:
           fetch-depth: 1
 
       - name: Setup environment
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
         with:
           working-directory: ./platform
 
       - name: Download all blob reports
-        uses: ./.github/actions/github-download-artifact
+        uses: $/.github/actions/github-download-artifact
         with:
           path: platform/e2e-tests/blob-reports
           pattern: blob-report-*
@@ -1571,7 +1647,7 @@ jobs:
 
       - name: Upload merged Playwright report
         if: always()
-        uses: ./.github/actions/github-upload-artifact
+        uses: $/.github/actions/github-upload-artifact
         with:
           name: playwright-report
           path: platform/e2e-tests/playwright-report/
@@ -1580,7 +1656,7 @@ jobs:
 
       - name: Write test summary
         if: always()
-        uses: daun/playwright-report-summary@31ed947ec7a623d18a66cfd20ef546dc66ef8063 # v4.1.0
+        uses: daun/playwright-report-summary@5359ae22f265fd2dfdb7744a0cc6614c5c3abde6 # v4.1.1
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true

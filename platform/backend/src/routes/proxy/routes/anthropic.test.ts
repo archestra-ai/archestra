@@ -26,11 +26,20 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
+import { internalCallHeader } from "@/clients/internal-call";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelModel, VirtualApiKeyModel } from "@/models";
+import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
+import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
+import {
+  formatSessionReceipt,
+  mintReceiptCode,
+} from "@/openappa/session-token";
+import { stampToolCallId } from "@/openappa/trajectory-stamp";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { anthropicAdapterFactory } from "../adapters";
 import anthropicProxyRoutes from "./anthropic";
 
@@ -202,6 +211,7 @@ describe("Anthropic anthropic-beta forwarding", () => {
         url: `/v1/anthropic/${agentId}/v1/messages`,
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           "content-type": "application/json",
           authorization: "Bearer test-key",
           "anthropic-version": "2023-06-01",
@@ -250,7 +260,11 @@ describe("Anthropic cost tracking", () => {
     vi.restoreAllMocks();
   });
 
-  test("stores cost and baselineCost in interaction", async ({ makeAgent }) => {
+  test("stores cost and baselineCost in interaction", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
@@ -269,6 +283,12 @@ describe("Anthropic cost tracking", () => {
     });
 
     const agent = await makeAgent({ name: "Test Cost Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -276,6 +296,7 @@ describe("Anthropic cost tracking", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
         "x-api-key": "test-anthropic-key",
@@ -322,6 +343,8 @@ describe("Anthropic streaming mode", () => {
 
   test("streaming mode completes normally and records interaction", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
@@ -341,6 +364,12 @@ describe("Anthropic streaming mode", () => {
     });
 
     const agent = await makeAgent({ name: "Test Streaming Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const { InteractionModel } = await import("@/models");
 
@@ -354,6 +383,7 @@ describe("Anthropic streaming mode", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
         "x-api-key": "test-anthropic-key",
@@ -394,7 +424,7 @@ describe("Anthropic streaming mode", () => {
 
   test("streaming mode interrupted still records interaction", {
     timeout: 10000,
-  }, async ({ makeAgent }) => {
+  }, async ({ makeAgent, makeMember, makeUser }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
@@ -418,6 +448,12 @@ describe("Anthropic streaming mode", () => {
     const agent = await makeAgent({
       name: "Test Interrupted Streaming Agent",
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const { InteractionModel } = await import("@/models");
 
@@ -431,6 +467,7 @@ describe("Anthropic streaming mode", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
         "x-api-key": "test-anthropic-key",
@@ -545,6 +582,8 @@ describe("Anthropic virtual key auth", () => {
 });
 
 describe("Anthropic Claude Code requests", () => {
+  let platformCredential: string;
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -553,7 +592,8 @@ describe("Anthropic Claude Code requests", () => {
   // survive validation unchanged.
   function captureUpstreamParams() {
     const stub = createAnthropicTestClient();
-    const captured: { params?: { messages?: unknown[] } } = {};
+    const captured: { params?: { messages?: unknown[]; thinking?: unknown } } =
+      {};
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
       () =>
         ({
@@ -579,7 +619,7 @@ describe("Anthropic Claude Code requests", () => {
   function injectMessages(
     app: FastifyInstance,
     agentId: string,
-    messages: unknown[],
+    body: { messages: unknown[]; thinking?: unknown },
   ) {
     return app.inject({
       method: "POST",
@@ -591,11 +631,12 @@ describe("Anthropic Claude Code requests", () => {
         "anthropic-beta":
           "claude-code-20250219,mid-conversation-system-2026-04-07,interleaved-thinking-2025-05-14",
         "x-api-key": "test-anthropic-key",
+        "x-archestra-virtual-key": platformCredential,
       },
       payload: {
         model: "claude-opus-4-20250514",
         max_tokens: 1024,
-        messages,
+        ...body,
       },
     });
   }
@@ -605,31 +646,41 @@ describe("Anthropic Claude Code requests", () => {
   // accept them and forward them upstream unchanged.
   test("accepts and forwards mid-conversation system messages", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const captured = captureUpstreamParams();
     const app = await buildApp();
 
     try {
       const agent = await makeAgent({ name: "System Role Agent" });
+      const owner = await makeUser();
+      await makeMember(owner.id, agent.organizationId);
+      platformCredential = await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: owner.id,
+      });
       const systemMessage = {
         role: "system",
         content: "SessionStart:startup hook success: OK",
       };
 
-      const response = await injectMessages(app, agent.id, [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "hi" },
-            {
-              type: "text",
-              text: "<system-reminder>context</system-reminder>",
-              cache_control: { type: "ephemeral" },
-            },
-          ],
-        },
-        systemMessage,
-      ]);
+      const response = await injectMessages(app, agent.id, {
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "hi" },
+              {
+                type: "text",
+                text: "<system-reminder>context</system-reminder>",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+          systemMessage,
+        ],
+      });
 
       expect(response.statusCode).toBe(200);
       expect(captured.params?.messages?.[1]).toEqual(systemMessage);
@@ -644,12 +695,20 @@ describe("Anthropic Claude Code requests", () => {
   // thinking signature in particular is required on replay).
   test("accepts and forwards thinking, server-tool and unknown content blocks", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const captured = captureUpstreamParams();
     const app = await buildApp();
 
     try {
       const agent = await makeAgent({ name: "Thinking Blocks Agent" });
+      const owner = await makeUser();
+      await makeMember(owner.id, agent.organizationId);
+      platformCredential = await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: owner.id,
+      });
       const assistantMessage = {
         role: "assistant",
         content: [
@@ -674,13 +733,45 @@ describe("Anthropic Claude Code requests", () => {
         ],
       };
 
-      const response = await injectMessages(app, agent.id, [
-        { role: "user", content: "hi" },
-        assistantMessage,
-      ]);
+      const response = await injectMessages(app, agent.id, {
+        messages: [{ role: "user", content: "hi" }, assistantMessage],
+      });
 
       expect(response.statusCode).toBe(200);
       expect(captured.params?.messages?.[1]).toEqual(assistantMessage);
+    } finally {
+      await app.close();
+    }
+  });
+
+  // Claude Code sends `display: "updates"` on interactive requests. When the
+  // proxy answers 400, Claude Code sends the request again without `display`
+  // and stops sending it for the rest of the conversation.
+  test("accepts and forwards Claude Code's thinking display mode", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const captured = captureUpstreamParams();
+    const app = await buildApp();
+
+    try {
+      const agent = await makeAgent({ name: "Thinking Display Agent" });
+      const owner = await makeUser();
+      await makeMember(owner.id, agent.organizationId);
+      platformCredential = await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: owner.id,
+      });
+      const thinking = { type: "adaptive", display: "updates" };
+
+      const response = await injectMessages(app, agent.id, {
+        messages: [{ role: "user", content: "hi" }],
+        thinking,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(captured.params?.thinking).toEqual(thinking);
     } finally {
       await app.close();
     }
@@ -706,6 +797,8 @@ describe("Anthropic tool call accumulation", () => {
 
   test("accumulates tool call input without [object Object] bug", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
@@ -727,6 +820,12 @@ describe("Anthropic tool call accumulation", () => {
     });
 
     const agent = await makeAgent({ name: "Test Tool Call Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -734,6 +833,7 @@ describe("Anthropic tool call accumulation", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
         "x-api-key": "test-anthropic-key",
@@ -766,6 +866,8 @@ describe("Anthropic tool call accumulation", () => {
 
   test("accepts document content blocks in request payloads", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
@@ -774,6 +876,12 @@ describe("Anthropic tool call accumulation", () => {
     await app.register(anthropicProxyRoutes);
 
     const agent = await makeAgent({ name: "Test Document Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -781,6 +889,7 @@ describe("Anthropic tool call accumulation", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
         "anthropic-beta": "pdfs-2024-09-25",
@@ -969,8 +1078,19 @@ describe("Anthropic count_tokens passthrough", () => {
   const PROXY_ID = "44f56e01-7167-42c1-88ee-64b566fbc34d";
   let upstream: FastifyInstance;
   let forwardedBodies: string[];
+  let agentId: string;
+  let passthroughToken: string;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
+    // The catch-all resolves the agent in the URL, so it must exist.
+    const agent = await makeAgent({ name: "count_tokens passthrough" });
+    agentId = agent.id;
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     forwardedBodies = [];
     upstream = Fastify();
     upstream.addContentTypeParser(
@@ -1001,11 +1121,12 @@ describe("Anthropic count_tokens passthrough", () => {
     try {
       return await app.inject({
         method: "POST",
-        url: `/v1/anthropic/${PROXY_ID}/v1/messages/count_tokens`,
+        url: `/v1/anthropic/${agentId}/v1/messages/count_tokens`,
         headers: {
           "content-type": "application/json",
           "anthropic-version": "2023-06-01",
           "x-api-key": "test-anthropic-key",
+          "x-archestra-virtual-key": passthroughToken,
         },
         payload,
       });
@@ -1070,11 +1191,265 @@ describe("Anthropic count_tokens passthrough", () => {
     });
   });
 
-  test("forwards a body without markers byte for byte", async () => {
-    // Re-serializing would reformat this and round the integer.
+  test("takes OpenAPPA's signed offers, receipts and stamps out of a counted history", async () => {
+    const secret = "test-offer-signing-secret-32chars";
+    config.openappa.offerSigningSecret = secret;
+    const stamp = (callId: string) =>
+      stampToolCallId({
+        callId,
+        sessionId: "count-tokens-session",
+        organizationId: "org-count-tokens",
+        callerId: "user:count-tokens",
+        secret,
+      });
+    // Leftover offer material from persisted history. Not minted, and not a route.
+    const offer = {
+      protected: "eyJhbGciOiJIUzI1NiJ9",
+      payload: JSON.stringify({ session_id: "historical-offer-session" }),
+      signature: "historical-offer",
+    };
+    const ruling = "[appa] get_weather is blocked until a plan is approved.";
+    const control = "mcp__gw__archestra__execute_remedy_plan";
+    const remedyArguments = { offer_id: "offer-weather", plan: "approve" };
+    const execution = {
+      v: 1,
+      kind: "appa_remedy",
+      call_id: "toolu_remedy",
+      tool_name: control,
+      original_arguments: JSON.stringify(remedyArguments),
+    } satisfies RemedyExecution;
+    // Declaring tools rules out restoring a control call in the notice pass.
+    // The catch-all has no gateway identity. After the stamp is put back, the
+    // execution receipt names this call, so the legacy offer fields are removed
+    // with it. They are not checked.
+    const tools = [
+      {
+        name: "get_weather",
+        input_schema: {
+          type: "object",
+          properties: { location: { type: "string" } },
+        },
+      },
+      {
+        name: control,
+        input_schema: {
+          type: "object",
+          properties: {
+            offer_id: { type: "string" },
+            plan: { type: "string" },
+          },
+          required: ["offer_id"],
+        },
+      },
+    ];
+
+    const response = await countTokens(
+      JSON.stringify({
+        model: "claude-opus-4-20250514",
+        messages: [
+          { role: "user", content: "What's the weather in SF?" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: stamp("toolu_weather"),
+                name: "mcp__gw__archestra__get_remedy_plans",
+                input: {
+                  ...buildNoticeArguments({
+                    id: "toolu_weather",
+                    tool: "get_weather",
+                    arguments: { location: "SF" },
+                    result: ruling,
+                  }),
+                  offers: [offer],
+                },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: stamp("toolu_weather"),
+                content: "rendered for the user",
+              },
+            ],
+          },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: stamp("toolu_remedy"),
+                name: control,
+                input: { ...remedyArguments, execution, ...offer },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: stamp("toolu_remedy"),
+                content: "Plan authorized.",
+              },
+            ],
+          },
+        ],
+        tools,
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ input_tokens: 42 });
+    expect(forwardedBodies).toHaveLength(1);
+    expect(forwardedBodies[0]).not.toMatch(
+      /appat1|"signature"|"offers"|"execution"/,
+    );
+    expect(JSON.parse(forwardedBodies[0])).toEqual({
+      model: "claude-opus-4-20250514",
+      messages: [
+        { role: "user", content: "What's the weather in SF?" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_weather",
+              name: "get_weather",
+              input: { location: "SF" },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_weather",
+              content: ruling,
+              is_error: true,
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_remedy",
+              name: control,
+              input: remedyArguments,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_remedy",
+              content: "Plan authorized.",
+            },
+          ],
+        },
+      ],
+      tools,
+    });
+  });
+
+  test("takes the proxy's receipts out of a counted history", async () => {
+    const secret = "test-offer-signing-secret-32chars";
+    config.openappa.offerSigningSecret = secret;
+    const session = {
+      organization_id: "org-count-tokens",
+      caller_id: "user:count-tokens",
+      session_id: "count-tokens-session",
+    };
+    const sessionReceipt = formatSessionReceipt(mintReceiptCode());
+    const childReceipt = mintChildTrajectoryReceipt({
+      organizationId: session.organization_id,
+      callerId: session.caller_id,
+      parentId: session.session_id,
+      childId: "count-tokens-child",
+      spawnerNativeId: "count-tokens-native",
+    });
+    expect(childReceipt).toBeDefined();
+    const question = {
+      questions: [
+        {
+          question: "Clean the build?",
+          header: "Approval",
+          options: [{ label: "Approve" }, { label: "Deny" }],
+          multiSelect: false,
+        },
+      ],
+    };
+    const history = (ids: { question: string }, texts: string[]) => [
+      { role: "user", content: "Clean the build." },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: texts[0] },
+          {
+            type: "tool_use",
+            id: ids.question,
+            name: "AskUserQuestion",
+            input: question,
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: ids.question,
+            content: "Approve",
+          },
+        ],
+      },
+      { role: "assistant", content: [{ type: "text", text: texts[1] }] },
+      { role: "user", content: "Thanks." },
+    ];
+
+    const response = await countTokens(
+      JSON.stringify({
+        model: "claude-opus-4-20250514",
+        messages: history({ question: "toolu_question" }, [
+          `${sessionReceipt}\n\nI'll ask first.`,
+          `${childReceipt}\n\nA subagent is cleaning it.`,
+        ]),
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(forwardedBodies).toHaveLength(1);
+    expect(forwardedBodies[0]).not.toMatch(
+      /appact2-|protected session|started subagent/,
+    );
+    expect(JSON.parse(forwardedBodies[0])).toEqual({
+      model: "claude-opus-4-20250514",
+      messages: history({ question: "toolu_question" }, [
+        "I'll ask first.",
+        "A subagent is cleaning it.",
+      ]),
+    });
+  });
+
+  test("forwards a body without markers or OpenAPPA payloads byte for byte", async () => {
+    // Each of these words passes the byte check that decides whether to parse
+    // the body, but none is a marker, a receipt, a stamp or a remedy call, so
+    // nothing changes. Re-serializing would reformat this and round the
+    // integer.
     const payload =
       '{ "model": "claude-opus-4-20250514", "seed": 12345678901234567890,\n' +
-      '  "messages": [{ "role": "user", "content": "gwa1 is not a marker" }] }';
+      '  "messages": [{ "role": "user", "content":\n' +
+      '    "gwa1 is not a marker, appat1 is not a stamp, get_remedy_plans is a word, ' +
+      'protected session is a phrase, appact2- is not a receipt" }] }';
 
     const response = await countTokens(payload);
 
@@ -1096,6 +1471,8 @@ describe("Anthropic delta encoding (claude_metadata sessions)", () => {
 
   test("two sequential requests delta-encode on write and reconstruct on read", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
@@ -1114,11 +1491,18 @@ describe("Anthropic delta encoding (claude_metadata sessions)", () => {
     });
 
     const agent = await makeAgent({ name: "Test Delta Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     const sessionUuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
     const userId = `user_test_account_1_session_${sessionUuid}`;
     const headers = {
       "content-type": "application/json",
       authorization: "Bearer test-key",
+      "x-archestra-virtual-key": platformCredential,
       "user-agent": "test-client",
       "anthropic-version": "2023-06-01",
       "x-api-key": "test-anthropic-key",
@@ -1188,6 +1572,7 @@ describe("Anthropic delta encoding (claude_metadata sessions)", () => {
 });
 
 describe("Anthropic input-token fallback", () => {
+  let platformCredential: string;
   let stubOptions: {
     zeroInputTokens?: boolean;
     zeroOutputTokens?: boolean;
@@ -1230,6 +1615,7 @@ describe("Anthropic input-token fallback", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
         "x-api-key": "test-anthropic-key",
@@ -1255,9 +1641,17 @@ describe("Anthropic input-token fallback", () => {
 
   test("non-streaming: zero provider input tokens are replaced by an estimate", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     stubOptions.zeroInputTokens = true;
     const agent = await makeAgent({ name: "Zero Input NonStreaming" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     await runRequest(agent.id);
 
@@ -1271,9 +1665,17 @@ describe("Anthropic input-token fallback", () => {
 
   test("streaming: zero provider input tokens are replaced by an estimate", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     stubOptions.zeroInputTokens = true;
     const agent = await makeAgent({ name: "Zero Input Streaming" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     await runRequest(agent.id, { stream: true });
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1287,8 +1689,16 @@ describe("Anthropic input-token fallback", () => {
 
   test("provider-reported input tokens are recorded as measured, not estimated", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const agent = await makeAgent({ name: "Measured Input" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     await runRequest(agent.id);
 
@@ -1299,10 +1709,18 @@ describe("Anthropic input-token fallback", () => {
 
   test("zero input with zero output is not estimated (no output to corroborate)", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     stubOptions.zeroInputTokens = true;
     stubOptions.zeroOutputTokens = true;
     const agent = await makeAgent({ name: "Zero Input Zero Output" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     await runRequest(agent.id);
 
@@ -1313,10 +1731,18 @@ describe("Anthropic input-token fallback", () => {
 
   test("zero input with cache-read tokens is not estimated (legitimately cached)", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     stubOptions.zeroInputTokens = true;
     stubOptions.cacheReadInputTokens = 2000;
     const agent = await makeAgent({ name: "Zero Input Cached" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     await runRequest(agent.id);
 

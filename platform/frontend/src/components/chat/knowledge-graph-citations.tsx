@@ -13,6 +13,7 @@ import {
   hasConnectorIcon,
 } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { Button } from "@/components/ui/button";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
 
 export function hasKnowledgeBaseToolCall(parts: ChatMessagePart[]): boolean {
@@ -249,14 +250,14 @@ function CitationChip({
   // link moves into the expanded panel so the chip stays a single control.
   if (quotes.length > 0) {
     return (
-      <button
+      <UnstyledButton
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
         className="group inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1.5 text-xs transition-colors hover:bg-accent hover:border-accent-foreground/20 max-w-[260px]"
       >
         {content}
-      </button>
+      </UnstyledButton>
     );
   }
 

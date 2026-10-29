@@ -1,7 +1,9 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import logger from "@/logging";
 import { SkillShareLinkRevisionModel } from "@/models";
 import {
   computePluginDeliveryStats,
@@ -9,6 +11,8 @@ import {
 } from "@/plugins/delivery-budget";
 import type {
   MarketplaceRepoRef,
+  ReplayRevision,
+  RevisionHead,
   RevisionPayloadFile,
 } from "@/types/skill-share-link-revision";
 import { computeLayout, type MaterializeRequest } from "./layout";
@@ -21,6 +25,16 @@ import { computeLayout, type MaterializeRequest } from "./layout";
  * the clone.
  */
 const REVISION_APPEND_MAX_ATTEMPTS = 5;
+
+/**
+ * How many first-parent disk commits to search for a stored base. A replica
+ * that is merely behind matches at HEAD; a lost append race leaves one orphan
+ * on top. Anything deeper falls back to a full rebuild.
+ */
+const INCREMENTAL_BASE_SEARCH_DEPTH = 8;
+
+/** Revisions per payload query while replaying, so a rebuild never holds them all. */
+const REPLAY_PAGE_SIZE = 50;
 
 /**
  * Materializes a marketplace git repository on disk, backed by an append-only
@@ -158,7 +172,7 @@ export class MarketplaceMaterializer {
     if (deliveryError) throw new Error(deliveryError);
     const repoPath = this.repoPathFor(req.ref);
 
-    let latest = await SkillShareLinkRevisionModel.getLatest(req.ref);
+    let latest = await SkillShareLinkRevisionModel.getLatestHead(req.ref);
 
     for (let attempt = 0; ; attempt++) {
       const currentSequence = latest?.sequence ?? 0;
@@ -166,7 +180,7 @@ export class MarketplaceMaterializer {
       const currentContentHash = computeContentHash(currentFiles);
 
       if (latest && latest.contentHash === currentContentHash) {
-        await this.syncDiskToRevisions(req.ref);
+        await this.syncDiskToRevisions(req.ref, latest);
         return {
           repoPath,
           commitHash: latest.commitSha,
@@ -178,18 +192,20 @@ export class MarketplaceMaterializer {
       const sequence = currentSequence + 1;
       const files = computeLayout(req, sequence);
       const contentHash = computeContentHash(files);
-      await this.syncDiskToRevisions(req.ref);
+      await this.syncDiskToRevisions(req.ref, latest);
 
       const createdAt = roundToSeconds(new Date());
-      const message = formatMessage(sequence, contentHash);
-
-      const commitSha = await this.commitOnDisk({
+      const marks = await this.importRevisions({
         repoPath,
-        files,
         parentSha: latest?.commitSha ?? null,
-        date: createdAt,
-        message,
+        pages: [[{ sequence, contentHash, createdAt, payload: { files } }]],
       });
+      const commitSha = marks.get(sequence);
+      if (!commitSha) {
+        throw new Error(
+          `materialize: git fast-import wrote no commit for ${req.ref.kind} ${req.ref.id} sequence ${sequence}`,
+        );
+      }
 
       try {
         await SkillShareLinkRevisionModel.append(
@@ -217,7 +233,7 @@ export class MarketplaceMaterializer {
         // rerender against its sequence. If the winner carried different
         // source bytes, this request is stale and must never append on top of
         // it (that would roll the marketplace back at a higher version).
-        latest = await SkillShareLinkRevisionModel.getLatest(req.ref);
+        latest = await SkillShareLinkRevisionModel.getLatestHead(req.ref);
         if (!latest) throw new MarketplaceMaterializationConflictError();
         const rerenderedHash = computeContentHash(
           computeLayout(req, latest.sequence),
@@ -229,38 +245,161 @@ export class MarketplaceMaterializer {
     }
   }
 
-  private async syncDiskToRevisions(ref: MarketplaceRepoRef): Promise<void> {
-    const revisions = await SkillShareLinkRevisionModel.list(ref);
-    const expectedHead = revisions.at(-1)?.commitSha ?? null;
+  private async syncDiskToRevisions(
+    ref: MarketplaceRepoRef,
+    expectedHead: RevisionHead | null,
+  ): Promise<void> {
     const repoPath = this.repoPathFor(ref);
 
+    // every git request of a clone lands here; load revision payloads only
+    // when the disk actually needs a replay
     const diskHead = await this.readDiskHead(repoPath);
-    if (diskHead === expectedHead) {
+    if (diskHead === (expectedHead?.commitSha ?? null)) {
       // already in sync — but a brand-new repo still needs `.git` initialized
       // so the upcoming commit has somewhere to land
       if (expectedHead === null) await this.initEmptyRepo(repoPath);
       return;
     }
 
+    const startedAt = Date.now();
+    let fallbackReason =
+      diskHead === null ? "no repo on disk" : "no stored revisions";
+    // a throw (git error, replay SHA mismatch) means a corrupt repo or a bug,
+    // unlike the expected reasons for a full rebuild
+    let incrementalFailed = false;
+    if (diskHead !== null && expectedHead !== null) {
+      try {
+        const result = await this.replayIncremental({
+          ref,
+          repoPath,
+          expectedHead,
+        });
+        if (typeof result !== "string") {
+          logReplay({
+            ref,
+            mode: "incremental",
+            baseSequence: result.baseSequence,
+            replayed: result.replayed,
+            startedAt,
+          });
+          return;
+        }
+        fallbackReason = result;
+      } catch (error) {
+        fallbackReason = error instanceof Error ? error.message : String(error);
+        incrementalFailed = true;
+      }
+    }
+
     await fs.rm(repoPath, { recursive: true, force: true });
     await this.initEmptyRepo(repoPath);
+    const replayed = await this.replayRevisions({
+      ref,
+      repoPath,
+      afterSequence: 0,
+      parentSha: null,
+    });
+    logReplay({
+      ref,
+      mode: "full",
+      baseSequence: 0,
+      replayed,
+      startedAt,
+      fallbackReason,
+      level: incrementalFailed ? "warn" : "info",
+    });
+  }
 
-    let parentSha: string | null = null;
-    for (const rev of revisions) {
-      const sha = await this.commitOnDisk({
-        repoPath,
-        files: rev.payload.files,
-        parentSha,
-        date: rev.createdAt,
-        message: formatMessage(rev.sequence, rev.contentHash),
-      });
+  /**
+   * Commit SHAs are deterministic over the whole parent chain, so a disk commit
+   * equal to the stored `commitSha` at its sequence proves the disk history up
+   * to it matches the stored chain. Rewind `main` to the newest such commit
+   * (HEAD itself when this replica is merely behind; its parent when a lost
+   * append left an orphan) and replay only the newer revisions. Our commit
+   * subjects (`Snapshot <n>`) only choose which stored rows to compare against;
+   * SHA equality stays the proof. Returns a reason string when the disk can't
+   * be caught up this way and the caller should rebuild from scratch.
+   */
+  private async replayIncremental(params: {
+    ref: MarketplaceRepoRef;
+    repoPath: string;
+    expectedHead: RevisionHead;
+  }): Promise<{ baseSequence: number; replayed: number } | string> {
+    const { ref, repoPath, expectedHead } = params;
+    const recent = await runGit({
+      binary: this.gitBinaryPath,
+      cwd: repoPath,
+      args: [
+        "log",
+        "--first-parent",
+        `--max-count=${INCREMENTAL_BASE_SEARCH_DEPTH}`,
+        "--format=%H%x09%s",
+        "HEAD",
+      ],
+    });
+    const candidates = recent.stdout
+      .split("\n")
+      .map(parseSnapshotLine)
+      .filter(
+        (line): line is { sha: string; sequence: number } =>
+          line !== null && line.sequence <= expectedHead.sequence,
+      );
+    const stored = new Map(
+      (
+        await SkillShareLinkRevisionModel.listCommitShas(ref, [
+          ...new Set(candidates.map((line) => line.sequence)),
+        ])
+      ).map((rev) => [rev.sequence, rev.commitSha]),
+    );
+    const base = candidates.find(
+      (line) => stored.get(line.sequence) === line.sha,
+    );
+    if (!base) return "no stored commit in the recent disk history";
+
+    await runGit({
+      binary: this.gitBinaryPath,
+      cwd: repoPath,
+      args: ["update-ref", "refs/heads/main", base.sha],
+    });
+    const replayed = await this.replayRevisions({
+      ref,
+      repoPath,
+      afterSequence: base.sequence,
+      parentSha: base.sha,
+    });
+    return { baseSequence: base.sequence, replayed };
+  }
+
+  /**
+   * Replays the stored revisions after `afterSequence` on top of `parentSha`,
+   * a page at a time, and checks every resulting commit against its stored
+   * SHA. Returns how many revisions were replayed.
+   */
+  private async replayRevisions(params: {
+    ref: MarketplaceRepoRef;
+    repoPath: string;
+    afterSequence: number;
+    parentSha: string | null;
+  }): Promise<number> {
+    const { ref } = params;
+    const expected: Array<{ sequence: number; commitSha: string }> = [];
+    const marks = await this.importRevisions({
+      repoPath: params.repoPath,
+      parentSha: params.parentSha,
+      pages: recordStoredShas(
+        revisionPages(ref, params.afterSequence),
+        expected,
+      ),
+    });
+    for (const rev of expected) {
+      const sha = marks.get(rev.sequence);
       if (sha !== rev.commitSha) {
         throw new Error(
           `materialize: replay SHA mismatch for ${ref.kind} ${ref.id} sequence ${rev.sequence}: expected ${rev.commitSha}, got ${sha}`,
         );
       }
-      parentSha = sha;
     }
+    return expected.length;
   }
 
   private async readDiskHead(repoPath: string): Promise<string | null> {
@@ -288,85 +427,119 @@ export class MarketplaceMaterializer {
       cwd: repoPath,
       args: ["init", "--quiet", "--initial-branch=main"],
     });
-    // disable executable-bit tracking so replays don't depend on host umask
-    await runGit({
-      binary: this.gitBinaryPath,
-      cwd: repoPath,
-      args: ["config", "core.fileMode", "false"],
-    });
   }
 
-  private async commitOnDisk(params: {
+  /**
+   * Writes one commit per revision onto `refs/heads/main` with a single
+   * `git fast-import`, streaming file contents without touching the working
+   * tree. The first commit lists every file (`deleteall` + `M`); later ones
+   * only what changed from the previous revision. Commit bytes match what the
+   * earlier write-tree/commit-tree writer produced, so SHAs stay identical.
+   * Returns sequence → commit SHA from the exported marks.
+   */
+  private async importRevisions(params: {
     repoPath: string;
-    files: RevisionPayloadFile[];
     parentSha: string | null;
-    date: Date;
-    message: string;
-  }): Promise<string> {
-    await wipeWorkingTree(params.repoPath);
-
-    for (const file of params.files) {
-      const target = path.join(params.repoPath, ...file.path.split("/"));
-      await fs.mkdir(path.dirname(target), { recursive: true });
-      const buf =
-        file.encoding === "base64"
-          ? Buffer.from(file.content, "base64")
-          : Buffer.from(file.content, "utf8");
-      await fs.writeFile(target, buf);
-    }
-
-    await runGit({
+    pages: Iterable<ImportRevision[]> | AsyncIterable<ImportRevision[]>;
+  }): Promise<Map<number, string>> {
+    const marksPath = path.join(params.repoPath, ".git", "fast-import-marks");
+    const importer = new FastImportWriter({
       binary: this.gitBinaryPath,
       cwd: params.repoPath,
-      args: ["add", "--all", "."],
+      args: [
+        "fast-import",
+        "--quiet",
+        // match the old unconditional update-ref: main moves to the replayed tip
+        "--force",
+        "--date-format=raw",
+        `--export-marks=${marksPath}`,
+      ],
     });
-    for (const file of params.files) {
+    const who = `${this.identity.name} <${this.identity.email}>`;
+
+    try {
+      await importer.write("feature done\n");
+      let previous: Map<string, RevisionPayloadFile> | null = null;
+      for await (const page of params.pages) {
+        for (const rev of page) {
+          const date = toGitDate(rev.createdAt);
+          await importer.write(
+            `commit refs/heads/main\nmark :${rev.sequence}\nauthor ${who} ${date}\ncommitter ${who} ${date}\n`,
+          );
+          await importer.writeData(
+            Buffer.from(formatMessage(rev.sequence, rev.contentHash), "utf8"),
+          );
+          if (previous === null) {
+            // later commits in this stream continue from the previous commit
+            // on refs/heads/main, so only the first one names its parent
+            if (params.parentSha) {
+              await importer.write(`from ${params.parentSha}\n`);
+            }
+            await importer.write("deleteall\n");
+          }
+
+          const current = new Map(
+            rev.payload.files.map((file) => [file.path, file]),
+          );
+          for (const file of current.values()) {
+            const before = previous?.get(file.path);
+            if (
+              before &&
+              before.mode === file.mode &&
+              before.encoding === file.encoding &&
+              before.content === file.content
+            ) {
+              continue;
+            }
+            await importer.write(
+              `M ${file.mode} inline ${quoteFastImportPath(file.path)}\n`,
+            );
+            await importer.writeData(fileBytes(file));
+          }
+          for (const filePath of previous?.keys() ?? []) {
+            if (!current.has(filePath)) {
+              await importer.write(`D ${quoteFastImportPath(filePath)}\n`);
+            }
+          }
+          await importer.write("\n");
+          previous = current;
+        }
+      }
+      await importer.write("done\n");
+      await importer.finish();
+    } catch (error) {
+      importer.kill();
+      throw error;
+    }
+
+    let exported = "";
+    try {
+      exported = await fs.readFile(marksPath, "utf8");
+    } catch (error) {
+      // no commits, no marks file
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    await fs.rm(marksPath, { force: true });
+    const marks = new Map<number, string>();
+    for (const line of exported.split("\n")) {
+      // object ids are 40 hex digits (SHA-1) or 64 (SHA-256 repos)
+      const match = /^:(\d+) ([0-9a-f]{40}|[0-9a-f]{64})$/.exec(line.trim());
+      if (match) marks.set(Number(match[1]), match[2]);
+    }
+
+    // each import adds a pack or loose objects; git consolidates them once its
+    // own thresholds are crossed and does nothing otherwise. In the foreground,
+    // so no background gc outlives the request or a later revoke.
+    try {
       await runGit({
         binary: this.gitBinaryPath,
         cwd: params.repoPath,
-        args: [
-          "update-index",
-          file.mode === "100755" ? "--chmod=+x" : "--chmod=-x",
-          "--",
-          file.path,
-        ],
+        args: ["-c", "gc.autoDetach=false", "gc", "--auto", "--quiet"],
       });
+    } catch (err) {
+      logger.warn({ err }, "[SkillMarketplace] git gc --auto failed");
     }
-    const treeRes = await runGit({
-      binary: this.gitBinaryPath,
-      cwd: params.repoPath,
-      args: ["write-tree"],
-    });
-    const treeSha = treeRes.stdout.trim();
-
-    const dateStr = toGitDate(params.date);
-    const env = {
-      GIT_AUTHOR_NAME: this.identity.name,
-      GIT_AUTHOR_EMAIL: this.identity.email,
-      GIT_AUTHOR_DATE: dateStr,
-      GIT_COMMITTER_NAME: this.identity.name,
-      GIT_COMMITTER_EMAIL: this.identity.email,
-      GIT_COMMITTER_DATE: dateStr,
-    };
-    const commitArgs = ["commit-tree", treeSha];
-    if (params.parentSha) commitArgs.push("-p", params.parentSha);
-    commitArgs.push("-m", params.message);
-
-    const commitRes = await runGit({
-      binary: this.gitBinaryPath,
-      cwd: params.repoPath,
-      args: commitArgs,
-      env,
-    });
-    const commitSha = commitRes.stdout.trim();
-
-    await runGit({
-      binary: this.gitBinaryPath,
-      cwd: params.repoPath,
-      args: ["update-ref", "refs/heads/main", commitSha],
-    });
-
-    return commitSha;
+    return marks;
   }
 }
 
@@ -388,6 +561,29 @@ function computeContentHash(files: RevisionPayloadFile[]): string {
   return h.digest("hex");
 }
 
+function logReplay(params: {
+  ref: MarketplaceRepoRef;
+  mode: "incremental" | "full";
+  baseSequence: number;
+  replayed: number;
+  startedAt: number;
+  fallbackReason?: string;
+  level?: "info" | "warn";
+}): void {
+  logger[params.level ?? "info"](
+    {
+      refKind: params.ref.kind,
+      refId: params.ref.id,
+      mode: params.mode,
+      baseSequence: params.baseSequence,
+      replayedRevisions: params.replayed,
+      durationMs: Date.now() - params.startedAt,
+      fallbackReason: params.fallbackReason,
+    },
+    "[SkillMarketplace] Replayed revisions onto the on-disk repo",
+  );
+}
+
 function roundToSeconds(d: Date): Date {
   return new Date(Math.floor(d.getTime() / 1000) * 1000);
 }
@@ -400,16 +596,159 @@ function formatMessage(sequence: number, contentHash: string): string {
   return `Snapshot ${sequence}\n\ncontent-hash: ${contentHash}\n`;
 }
 
-async function wipeWorkingTree(repoPath: string): Promise<void> {
-  let entries: string[];
-  try {
-    entries = await fs.readdir(repoPath);
-  } catch {
-    return;
+/** `<sha>\t<subject>` from `git log`, where the subject is ours (`formatMessage`). */
+function parseSnapshotLine(
+  line: string,
+): { sha: string; sequence: number } | null {
+  const match = /^([0-9a-f]{40}|[0-9a-f]{64})\tSnapshot (\d+)$/.exec(
+    line.trim(),
+  );
+  return match ? { sha: match[1], sequence: Number(match[2]) } : null;
+}
+
+type ImportRevision = Pick<
+  ReplayRevision,
+  "sequence" | "contentHash" | "createdAt" | "payload"
+>;
+
+async function* revisionPages(
+  ref: MarketplaceRepoRef,
+  afterSequence: number,
+): AsyncGenerator<ReplayRevision[]> {
+  let last = afterSequence;
+  for (;;) {
+    const page = await SkillShareLinkRevisionModel.listAfter(
+      ref,
+      last,
+      REPLAY_PAGE_SIZE,
+    );
+    if (page.length > 0) yield page;
+    if (page.length < REPLAY_PAGE_SIZE) return;
+    last = page[page.length - 1].sequence;
   }
-  for (const entry of entries) {
-    if (entry === ".git") continue;
-    await fs.rm(path.join(repoPath, entry), { recursive: true, force: true });
+}
+
+/** Passes pages through, noting each revision's stored SHA for the check after import. */
+async function* recordStoredShas(
+  pages: AsyncIterable<ReplayRevision[]>,
+  expected: Array<{ sequence: number; commitSha: string }>,
+): AsyncGenerator<ReplayRevision[]> {
+  for await (const page of pages) {
+    for (const rev of page) {
+      expected.push({ sequence: rev.sequence, commitSha: rev.commitSha });
+    }
+    yield page;
+  }
+}
+
+function fileBytes(file: RevisionPayloadFile): Buffer {
+  return file.encoding === "base64"
+    ? Buffer.from(file.content, "base64")
+    : Buffer.from(file.content, "utf8");
+}
+
+/**
+ * fast-import takes a path verbatim to the end of the line unless it starts
+ * with a quote; C-style quote anything with a quote, backslash, control or
+ * non-ASCII byte so it round-trips exactly.
+ */
+function quoteFastImportPath(filePath: string): string {
+  const bytes = Buffer.from(filePath, "utf8");
+  if (!bytes.some((b) => b < 0x20 || b >= 0x7f || b === 0x22 || b === 0x5c)) {
+    return filePath;
+  }
+  let out = '"';
+  for (const b of bytes) {
+    if (b === 0x22) out += '\\"';
+    else if (b === 0x5c) out += "\\\\";
+    else if (b === 0x0a) out += "\\n";
+    else if (b < 0x20 || b >= 0x7f)
+      out += `\\${b.toString(8).padStart(3, "0")}`;
+    else out += String.fromCharCode(b);
+  }
+  return `${out}"`;
+}
+
+/** A `git fast-import` child fed with backpressure; binary-safe. */
+class FastImportWriter {
+  private readonly proc: ChildProcess;
+  private readonly exited: Promise<void>;
+  private stderr = "";
+
+  constructor(params: { binary: string; cwd: string; args: string[] }) {
+    this.proc = spawn(params.binary, params.args, {
+      cwd: params.cwd,
+      env: scrubGitEnv(process.env),
+      stdio: ["pipe", "ignore", "pipe"],
+    });
+    this.proc.stderr?.on("data", (chunk) => {
+      this.stderr += chunk.toString();
+    });
+    // a git that dies mid-stream closes stdin under us; report its exit
+    // status from `exited` rather than an EPIPE
+    this.proc.stdin?.on("error", () => undefined);
+    this.exited = new Promise((resolve, reject) => {
+      this.proc.once("error", reject);
+      this.proc.once("close", (code, signal) => {
+        if (signal) {
+          reject(
+            new Error(
+              `git fast-import terminated by signal ${signal}: ${this.stderr.trim()}`,
+            ),
+          );
+        } else if (code === 0) {
+          resolve();
+        } else {
+          reject(
+            new Error(
+              `git fast-import exited with code ${code}: ${this.stderr.trim()}`,
+            ),
+          );
+        }
+      });
+    });
+    // observed through write()/finish(); avoid an unhandled rejection meanwhile
+    this.exited.catch(() => undefined);
+  }
+
+  async write(chunk: string | Buffer): Promise<void> {
+    const stdin = this.proc.stdin;
+    if (!stdin || this.proc.exitCode !== null || this.proc.signalCode) {
+      await this.exited;
+      throw new Error(`git fast-import exited early: ${this.stderr.trim()}`);
+    }
+    if (stdin.write(chunk)) return;
+    try {
+      await Promise.race([once(stdin, "drain"), this.exited]);
+    } catch (error) {
+      // once(stream, "drain") rejects on a pipe error before the child's
+      // close event. Preserve the subprocess diagnostic in that ordering too.
+      await this.exited;
+      throw new Error(`git fast-import exited early: ${this.stderr.trim()}`, {
+        cause: error,
+      });
+    }
+    // `exited` wins the race when git stops reading and exits 0; the rest of
+    // the stream would go nowhere
+    if (this.proc.exitCode !== null || this.proc.signalCode) {
+      throw new Error(`git fast-import exited early: ${this.stderr.trim()}`);
+    }
+  }
+
+  /** `data <n>` + the exact bytes + LF. */
+  async writeData(bytes: Buffer): Promise<void> {
+    await this.write(`data ${bytes.length}\n`);
+    await this.write(bytes);
+    await this.write("\n");
+  }
+
+  async finish(): Promise<void> {
+    this.proc.stdin?.end();
+    await this.exited;
+  }
+
+  kill(): void {
+    if (this.proc.exitCode === null) this.proc.kill();
   }
 }
 
@@ -438,7 +777,6 @@ interface RunGitParams {
   binary: string;
   cwd: string;
   args: string[];
-  env?: Record<string, string>;
 }
 
 function runGit(
@@ -449,7 +787,7 @@ function runGit(
       cwd: params.cwd,
       // strip host GIT_* env so e.g. an operator-set GIT_DIR or
       // GIT_AUTHOR_DATE can't divert commits or break replay determinism
-      env: { ...scrubGitEnv(process.env), ...(params.env ?? {}) },
+      env: scrubGitEnv(process.env),
     });
     let stdout = "";
     let stderr = "";
@@ -460,6 +798,7 @@ function runGit(
       stderr += chunk.toString();
     });
     proc.once("error", reject);
+    proc.stdin?.end();
     proc.once("close", (code, signal) => {
       // a signal-killed process has code=null; never treat that as success
       if (signal) {

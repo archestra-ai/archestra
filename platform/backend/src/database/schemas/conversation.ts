@@ -10,11 +10,12 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ConversationOrigin,
-  LockedChatEscrowBlob,
+  EncryptedChatEscrowBlob,
 } from "@/types/conversation";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
+import modelPoolsTable from "./model-pool";
 import projectsTable from "./project";
 import { softDeletablePgTable } from "./soft-deletable-table";
 
@@ -44,6 +45,16 @@ const conversationsTable = softDeletablePgTable(
     selectedProvider: text("selected_provider").$type<SupportedProvider>(),
     /** FK to models(id) — the resolved model for this conversation. */
     modelId: uuid("model_id").references(() => modelsTable.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * The model pool the user picked for this chat. Its turns go to the pool's
+     * members instead of `modelId` on `chatApiKeyId`, which then hold one
+     * member the user can use, for everything that needs a single model
+     * (context size, attachments, titles). Null: no pool, even when the key is
+     * a pool member.
+     */
+    modelPoolId: uuid("model_pool_id").references(() => modelPoolsTable.id, {
       onDelete: "set null",
     }),
     /**
@@ -107,16 +118,18 @@ const conversationsTable = softDeletablePgTable(
       .notNull()
       .default(false),
     /**
-     * Locked chats: message content is encrypted under a
+     * Encrypted chats: message content is encrypted under a
      * browser-held per-conversation key the server never persists.
-     * `lockedChatDekFingerprint` rejects wrong keys up front;
-     * `lockedChatEscrow` is the enterprise escrow record (RSA-wrapped key or
-     * Vault reference — see content-encryption/locked-chat-escrow.ts), null
+     * `encryptedChatDekFingerprint` rejects wrong keys up front;
+     * `encryptedChatEscrow` is the enterprise escrow record (RSA-wrapped key or
+     * Vault reference — see content-encryption/encrypted-chat-escrow.ts), null
      * when escrow is not configured.
      */
-    lockedChat: boolean("locked_chat").notNull().default(false),
-    lockedChatDekFingerprint: text("locked_chat_dek_fingerprint"),
-    lockedChatEscrow: jsonb("locked_chat_escrow").$type<LockedChatEscrowBlob>(),
+    encryptedChat: boolean("encrypted_chat").notNull().default(false),
+    encryptedChatDekFingerprint: text("encrypted_chat_dek_fingerprint"),
+    encryptedChatEscrow: jsonb(
+      "encrypted_chat_escrow",
+    ).$type<EncryptedChatEscrowBlob>(),
     pinnedAt: timestamp("pinned_at", { mode: "date" }),
     lastMessageAt: timestamp("last_message_at", { mode: "date" })
       .notNull()
@@ -149,6 +162,11 @@ const conversationsTable = softDeletablePgTable(
     // is the hard floor beneath the trash — which the partial owner-scoped
     // index above cannot serve.
     index("conversations_last_message_at_idx").on(table.lastMessageAt),
+    // Deleting a model clears modelId through its foreign key; without this
+    // each deleted model reads the whole table.
+    index("conversations_model_id_idx")
+      .on(table.modelId)
+      .where(sql`${table.modelId} IS NOT NULL`),
   ],
 );
 

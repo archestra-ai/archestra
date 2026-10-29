@@ -7,6 +7,7 @@ import {
   ErrorBoundary as ReactErrorBoundary,
 } from "react-error-boundary";
 import { ClientErrorFallback } from "@/components/error-fallback";
+import { errorReporting } from "@/lib/error-reporting";
 
 function DefaultFallbackComponent({
   error,
@@ -39,15 +40,11 @@ export function ErrorBoundary({
     const capturedError =
       error instanceof Error ? error : new Error("Unknown client error");
 
-    void import("@sentry/nextjs")
-      .then(({ captureException }) => {
-        captureException(capturedError, {
-          extra: {
-            componentStack: info.componentStack,
-          },
-        });
-      })
-      .catch(() => undefined);
+    errorReporting.captureException(capturedError, {
+      extra: {
+        componentStack: info.componentStack,
+      },
+    });
   };
 
   return (

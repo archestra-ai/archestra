@@ -1,7 +1,10 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import { EnvironmentModel, SkillModel } from "@/models";
-import { selectEffectiveNativeSkills } from "@/services/agent-activation-skills";
+import {
+  listAvailableAgentSkills,
+  selectEffectiveNativeSkills,
+} from "@/services/agent-activation-skills";
 import {
   accessGrants,
   afterAll,
@@ -59,6 +62,32 @@ describe("buildSkillCatalogPrompt (sandbox unavailable)", () => {
       agentId: agent.id,
     });
     expect(prompt).toMatchSnapshot();
+  });
+
+  test("metadata catalog reads retain visibility and prompt output while runtime reads keep instruction bodies", async () => {
+    const skill = await seedSkill(organizationId);
+    expect(skill).not.toBeNull();
+    const params = { organizationId, userId, agentId: agent.id };
+    const full = await listAccessibleCatalogSkills(params);
+    const metadata = await listAccessibleCatalogSkills({
+      ...params,
+      includeContent: false,
+    });
+    expect(full.find((row) => row.id === skill?.id)?.content).toBe(
+      "# PDF Processing\nUse pdftotext.",
+    );
+    expect(metadata).toEqual(full.map((row) => ({ ...row, content: "" })));
+    expect(
+      await buildSkillCatalogPrompt({ ...params, catalogSkills: metadata }),
+    ).toEqual(
+      await buildSkillCatalogPrompt({ ...params, catalogSkills: full }),
+    );
+    const runtime = await listAvailableAgentSkills(params);
+    expect(
+      runtime.find(
+        (row) => row.source === "native" && row.skill.id === skill?.id,
+      )?.skill,
+    ).toEqual(full.find((row) => row.id === skill?.id));
   });
 
   test("returns null when the caller has no accessible skills", async () => {

@@ -22,6 +22,7 @@ import {
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
 import { ProjectLabelModel } from "./entity-labels";
 import ProjectAccessModel from "./project-access";
+import ProjectAppModel from "./project-app";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
@@ -470,6 +471,15 @@ class ProjectModel {
    */
   static async hardDeleteLocked(tx: Transaction, id: string): Promise<void> {
     await hardDelete(tx, schema.projectsTable, eq(schema.projectsTable.id, id));
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await ResourcePermissionPolicyModel.deleteForTarget({
+      tx,
+      resources: ["project"],
+      scope: id,
+    });
+    // SPDX-SnippetEnd
   }
 
   /**
@@ -578,7 +588,8 @@ class ProjectModel {
   }
 
   /**
-   * Audit snapshot: the project row plus who it is shared with, org-scoped.
+   * Audit snapshot: the project row plus who it is shared with and which apps
+   * are linked into it, org-scoped.
    *
    * Deliberately NOT filtered by `deleted_at` — delete and restore are the two
    * lifecycle events that most need an audit trail, and both would diff against
@@ -602,9 +613,10 @@ class ProjectModel {
       .limit(1);
     if (!row) return null;
 
-    const [audience, labels] = await Promise.all([
+    const [audience, labels, appIds] = await Promise.all([
       ProjectAccessModel.findAudience(row),
       ProjectLabelModel.getLabelsFor(id),
+      ProjectAppModel.listAppIds(id),
     ]);
     return {
       ...row,
@@ -612,10 +624,26 @@ class ProjectModel {
       shareTeamIds: audience.teams.map((team) => team.id).sort(),
       shareUserIds: audience.users.map((user) => user.id).sort(),
       labels: labels.map(({ key, value }) => `${key}:${value}`).sort(),
+      appIds,
     };
   }
 
   /** Conversation counts for a set of projects, in one grouped query. */
+  /**
+   * Icons for a page of projects, keyed by id. Kept out of the list's
+   * candidate query because an image icon is a data URL of up to ~1 MB.
+   */
+  static async getIcons(projectIds: string[]): Promise<Map<string, string>> {
+    if (projectIds.length === 0) return new Map();
+    const rows = await db
+      .select({ id: schema.projectsTable.id, icon: schema.projectsTable.icon })
+      .from(schema.projectsTable)
+      .where(inArray(schema.projectsTable.id, projectIds));
+    const icons = new Map<string, string>();
+    for (const row of rows) if (row.icon !== null) icons.set(row.id, row.icon);
+    return icons;
+  }
+
   static async countConversations(
     projectIds: string[],
   ): Promise<Map<string, number>> {

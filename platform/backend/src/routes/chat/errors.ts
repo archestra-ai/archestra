@@ -14,7 +14,6 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
   subscriptionKindForProvider,
-  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   VllmErrorTypes,
@@ -106,6 +105,22 @@ export class EmptyModelResponseError extends Error {
     this.finishReason = params.finishReason;
     this.rawFinishReason = params.rawFinishReason;
     this.attempts = params.attempts;
+  }
+}
+
+/**
+ * The model stream produced no parsed chunk within the idle deadline (SSE
+ * comments and proxy keep-alives never reach the parser output, so they do not
+ * count as progress). Emitted as a stream error part by the idle-timeout
+ * middleware; mapProviderError turns it into the retryable UpstreamStalled card.
+ */
+export class ModelStreamStalledError extends Error {
+  public readonly idleTimeoutMs: number;
+
+  constructor(idleTimeoutMs: number) {
+    super(`Model stream sent no data for ${idleTimeoutMs} ms`);
+    this.name = "ModelStreamStalledError";
+    this.idleTimeoutMs = idleTimeoutMs;
   }
 }
 
@@ -1444,6 +1459,8 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   // OpenAI-compatible handler stands in so an unexpected caller still gets a
   // classified error rather than a crash.
   voyage: openAiCompatibleErrorHandler,
+  // Decisions-only provider: never on the chat path either.
+  jev: openAiCompatibleErrorHandler,
   openai: openAiCompatibleErrorHandler,
   archestra: openAiCompatibleErrorHandler,
   anthropic: providerErrorHandler(parseAnthropicError, mapAnthropicErrorToCode),
@@ -1462,6 +1479,7 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
   kimi: openAiCompatibleErrorHandler,
+  "kimi-code": openAiCompatibleErrorHandler,
   "github-copilot": providerErrorHandler(
     parseOpenAIError,
     mapGithubCopilotErrorToCode,
@@ -1642,6 +1660,36 @@ export function buildAbortiveTurnError(
 }
 
 /**
+ * Build the non-fatal notice attached to a reply the model finished for a
+ * reason other than a clean stop: `length` means the output cap cut it short,
+ * anything else (`other`, `error`, `unknown`, `content-filter`) that the model
+ * stopped early. Null for a clean finish, which needs no notice.
+ */
+export function buildIncompleteResponseNotice(
+  finishReason: string | undefined,
+): ChatErrorResponse | null {
+  switch (finishReason) {
+    case undefined:
+    case "stop":
+    case "tool-calls":
+      return null;
+    case "length":
+      return {
+        code: ChatErrorCode.IncompleteResponse,
+        message:
+          "The model reached its output limit, so this reply was cut short.",
+        isRetryable: false,
+      };
+    default:
+      return {
+        code: ChatErrorCode.IncompleteResponse,
+        message: ChatErrorMessages[ChatErrorCode.IncompleteResponse],
+        isRetryable: false,
+      };
+  }
+}
+
+/**
  * Map a provider error to a normalized ChatErrorResponse.
  * Uses provider-specific parsing and mapping for accurate error classification.
  *
@@ -1764,6 +1812,17 @@ export function mapProviderError(
     );
   }
 
+  if (error instanceof ModelStreamStalledError) {
+    return createErrorResponse(
+      ChatErrorCode.UpstreamStalled,
+      provider,
+      undefined,
+      error.message,
+      "ModelStreamStalledError",
+      { idleTimeoutMs: error.idleTimeoutMs },
+    );
+  }
+
   // Handle NoOutputGeneratedError — the provider failed before producing any
   // output. Map it to a structured server_error so the frontend shows the
   // same styled error card instead of raw text.
@@ -1836,21 +1895,38 @@ export function mapProviderError(
     // (status + body) delivery shape. Only the fields those consumers read are
     // copied, so arbitrary (possibly circular) extra properties are ignored.
     // Error instances are excluded: their fields are non-enumerable, so
-    // wrapping them would serialize to nothing.
-    if (
-      !responseBody &&
-      !(error instanceof Error) &&
-      typeof obj.message === "string"
-    ) {
+    // wrapping them would serialize to nothing. The AI SDK's Responses parser
+    // relays the whole `{ type: "error", error: {...} }` chunk instead, so the
+    // part's fields may sit one level down.
+    const nested = (obj.error ?? undefined) as
+      | Record<string, unknown>
+      | undefined;
+    const part =
+      error instanceof Error
+        ? undefined
+        : typeof obj.message === "string"
+          ? obj
+          : typeof nested === "object" && typeof nested.message === "string"
+            ? nested
+            : undefined;
+    if (!responseBody && part) {
+      // The Responses stream frame carries the normalized code in `code`,
+      // since that schema has no `internal_code` field.
+      const internalCode =
+        typeof part.internal_code === "string"
+          ? part.internal_code
+          : part === nested
+            ? part.code
+            : undefined;
       responseBody = JSON.stringify({
         error: {
-          message: obj.message,
-          ...(typeof obj.type === "string" ? { type: obj.type } : {}),
-          ...(typeof obj.code === "string" || typeof obj.code === "number"
-            ? { code: obj.code }
+          message: part.message,
+          ...(typeof part.type === "string" ? { type: part.type } : {}),
+          ...(typeof part.code === "string" || typeof part.code === "number"
+            ? { code: part.code }
             : {}),
-          ...(typeof obj.internal_code === "string"
-            ? { internal_code: obj.internal_code }
+          ...(typeof internalCode === "string"
+            ? { internal_code: internalCode }
             : {}),
         },
       });
@@ -1863,7 +1939,15 @@ export function mapProviderError(
 
   // Map to error code using provider-specific mapper
   let errorCode = mapError(statusCode, parsedError);
-  const isTerminatedStream = isStreamTerminatedError(error);
+  const errorMessage = extractErrorMessage(parsedError, responseBody, error);
+  // A proxy can serialize a native disconnect into an error frame, losing
+  // its Error prototype. Recognize that status-less fallback too, without
+  // overriding an explicit provider rejection or a more specific category.
+  const isTerminatedStream =
+    isStreamTerminatedError(error) ||
+    (statusCode === undefined &&
+      errorCode === ChatErrorCode.Unknown &&
+      errorMessage === "terminated");
 
   if (isTerminatedStream) {
     errorCode = ChatErrorCode.NetworkError;
@@ -1927,9 +2011,6 @@ export function mapProviderError(
   if (usageLimitError) {
     errorCode = ChatErrorCode.UsageLimitExceeded;
   }
-
-  // Extract the most meaningful error message
-  const errorMessage = extractErrorMessage(parsedError, responseBody, error);
 
   // OpenRouter ends a streaming turn with "Upstream idle timeout exceeded" when
   // the routed upstream stops emitting tokens mid-generation (e.g. a reasoning
@@ -2001,12 +2082,7 @@ export function mapProviderError(
   // indicate a bug.
   const isExpectedProviderError =
     (statusCode !== undefined && statusCode >= 400 && statusCode < 500) ||
-    RetryableErrorCodes.has(errorCode) ||
-    // An approval-gated tool call rejected in an autonomous session (A2A,
-    // Slack, MS Teams, sub-agents) is our own policy enforcement doing its
-    // job, not a provider failure. It reaches this mapper as a bare Error
-    // with no HTTP envelope, so match the policy reason it was thrown with.
-    isToolApprovalPolicyBlockError(errorMessage);
+    RetryableErrorCodes.has(errorCode);
 
   if (!isTerminatedStream && !isExpectedProviderError) {
     captureRawProviderErrorInSentry({
@@ -2092,13 +2168,6 @@ function isStreamTerminatedError(error: unknown): boolean {
 
 function isUpstreamIdleTimeoutError(message: string): boolean {
   return /idle timeout/i.test(message);
-}
-
-// `includes` rather than equality: the error may pick up wrapper prefixes on
-// its way through the tool-execution stack, but the thrown message is always
-// the shared policy-reason constant verbatim.
-function isToolApprovalPolicyBlockError(message: string): boolean {
-  return message.includes(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
 }
 
 function isUpstreamProviderError(message: string): boolean {

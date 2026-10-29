@@ -9,13 +9,14 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { userHasPermission } from "@/auth";
 import {
   InteractionModel,
   KnowledgeBaseConnectorModel,
+  LlmProviderApiKeyModel,
   OpenAppaSessionModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   constructResponseSchema,
@@ -53,7 +54,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe("Filter by user ID (from X-Archestra-User-Id header)"),
-            sessionId: z.string().optional().describe("Filter by session ID"),
+            sessionId: z
+              .string()
+              .optional()
+              .describe(
+                "Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.",
+              ),
             startDate: z
               .string()
               .datetime()
@@ -104,13 +110,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // log:read scopes the view to the caller's own attributed rows;
       // log:admin lifts it within the active organization.
-      const canSeeAllLogs = await ResourcePermissions.allows({
-        userId: user.id,
-        organizationId: organizationId,
-        resource: "log",
-        scope: "*",
-        action: "read",
-      });
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
 
       fastify.log.info(
         {
@@ -170,7 +175,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
             profileId: UuidIdSchema.optional(),
             externalAgentId: z.string().optional(),
             userId: z.string().optional(),
-            sessionId: z.string().optional(),
+            sessionId: z
+              .string()
+              .optional()
+              .describe(
+                "Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.",
+              ),
             startDate: z.string().datetime().optional(),
             endDate: z.string().datetime().optional(),
           })
@@ -208,13 +218,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
-      const canSeeAllLogs = await ResourcePermissions.allows({
-        userId: user.id,
-        organizationId: organizationId,
-        resource: "log",
-        scope: "*",
-        action: "read",
-      });
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
       return reply.send(
         await InteractionModel.findSummariesPaginated({
           pagination: { limit, offset },
@@ -259,7 +268,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
             client: ClientFilterSchema.optional().describe(
               "Filter by client app (queries external_agent_id; e.g. claude)",
             ),
-            sessionId: z.string().optional().describe("Filter by session ID"),
+            sessionId: z
+              .string()
+              .optional()
+              .describe(
+                "Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.",
+              ),
             startDate: z
               .string()
               .datetime()
@@ -297,13 +311,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       const cursorQuery = { limit, cursor };
 
-      const canSeeAllLogs = await ResourcePermissions.allows({
-        userId: user.id,
-        organizationId: organizationId,
-        resource: "log",
-        scope: "*",
-        action: "read",
-      });
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
 
       fastify.log.info(
         {
@@ -363,13 +376,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { sessionId }, user, organizationId }, reply) => {
-      const canSeeAllLogs = await ResourcePermissions.allows({
-        userId: user.id,
-        organizationId: organizationId,
-        resource: "log",
-        scope: "*",
-        action: "read",
-      });
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
       return reply.send(
         await OpenAppaSessionModel.lineage({
           organizationId,
@@ -401,13 +413,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId }, reply) => {
-      const canSeeAllLogs = await ResourcePermissions.allows({
-        userId: user.id,
-        organizationId: organizationId,
-        resource: "log",
-        scope: "*",
-        action: "read",
-      });
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
 
       const externalAgentIds = await InteractionModel.getUniqueExternalAgentIds(
         {
@@ -428,30 +439,42 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetUniqueUserIds,
         description:
-          "Get user IDs represented in visible logs in the active organization. `log:read` returns the caller's identity; `log:admin` returns every represented user in the organization.",
+          "Get users represented in visible logs in the active organization, at most `limit` of them. Without `search` or `ids`, the most active users come first. `search` matches user names; `ids` resolves specific users. `log:read` returns only the caller; `log:admin` returns users from every log in the organization.",
         tags: ["Interaction"],
+        querystring: z.object({
+          search: z.string().optional(),
+          ids: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.string().min(1)).max(100),
+            )
+            .optional(),
+          limit: z.coerce.number().int().min(1).max(100).default(20),
+        }),
         response: constructResponseSchema(z.array(UserInfoSchema)),
       },
     },
-    async ({ user, organizationId }, reply) => {
-      const canSeeAllLogs = await ResourcePermissions.allows({
-        userId: user.id,
-        organizationId: organizationId,
-        resource: "log",
-        scope: "*",
-        action: "read",
-      });
+    async ({ user, organizationId, query }, reply) => {
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
       if (!canSeeAllLogs) {
         // Own-logs view: the only user to filter by is the caller — anything
         // more would enumerate the org roster through a side door.
         return reply.send([{ id: user.id, name: user.name }]);
       }
 
-      const userIds = await InteractionModel.getUniqueUserIds({
-        organizationId,
-      });
-
-      return reply.send(userIds);
+      return reply.send(
+        await InteractionModel.getUserFilterOptions({
+          organizationId,
+          search: query.search,
+          ids: query.ids,
+          limit: query.limit,
+        }),
+      );
     },
   );
 
@@ -482,13 +505,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Own-logs view: a row attributed to someone else (or to nobody — no
       // X-Archestra-User-Id) does not exist for this caller. 404, not 403,
       // so existence is not disclosed.
-      const canSeeAllLogs = await ResourcePermissions.allows({
-        userId: user.id,
-        organizationId: organizationId,
-        resource: "log",
-        scope: "*",
-        action: "read",
-      });
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
       if (!canSeeAllLogs && interaction.userId !== user.id) {
         throw new ApiError(404, "Interaction not found");
       }
@@ -511,8 +533,19 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
+      const copilotCredentialSource =
+        interaction.providerApiKeyId &&
+        interaction.type.startsWith("github-copilot:")
+          ? ((
+              await LlmProviderApiKeyModel.findCopilotCredentialSources([
+                interaction.providerApiKeyId,
+              ])
+            ).get(interaction.providerApiKeyId) ?? null)
+          : null;
+
       return reply.send({
         ...interaction,
+        copilotCredentialSource,
         connectorName: connector?.name ?? null,
         virtualKey: interaction.virtualKeyId
           ? (virtualKeys.get(interaction.virtualKeyId) ?? null)

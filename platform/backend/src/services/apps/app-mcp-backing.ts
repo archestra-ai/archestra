@@ -1,5 +1,5 @@
 import { getArchestraAppResourceUri } from "@archestra/shared";
-import { isServiceAccountUserId } from "@/auth/utils";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -167,7 +167,10 @@ export async function syncAppBacking(app: App): Promise<void> {
       if (nameChanged) {
         const desiredDescription = appLaunchToolDescription(app.name);
         const launchTool = (
-          await ToolModel.findByCatalogIdWithMeta(server.catalogId)
+          await ToolModel.findByCatalogIdWithMeta(server.catalogId, {
+            kind: "internal",
+            purpose: "app-backing",
+          })
         ).find(
           (tool) => ToolModel.unslugifyName(tool.name) === APP_LAUNCH_TOOL_NAME,
         );

@@ -2,32 +2,40 @@
 
 import {
   type ContextWindowBreakdown,
+  DocsPage,
   E2eTestId,
+  getDocsUrl,
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
   subscriptionKindForProvider,
   type ThinkingEffortSetting,
 } from "@archestra/shared";
-import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
-import { memo, useCallback, useEffect } from "react";
-import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
+import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   PromptInputButton,
   PromptInputTools,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
-import { AppRecordingControls } from "@/components/app-session-recording/app-recording-controls";
 import { NotRecommendedForAgentsNoticeBadge } from "@/components/chat/agent-recommendation-notice";
-import { ComposerBadge } from "@/components/chat/composer-badge";
+import { ChatModelButton } from "@/components/chat/chat-model-button";
+import { ChatSetupMenu } from "@/components/chat/chat-setup-menu";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
+import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
-import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
-import { ModelSelector } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
-import { ThinkingEffortSelector } from "@/components/chat/thinking-effort-selector";
-import { OpenAppaIcon } from "@/components/openappa-icon";
+import { useChatSetupMenuPosition } from "@/components/chat/use-chat-setup-menu-position";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {
@@ -40,20 +48,18 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
-  LOCKED_CHAT_DRAFT_SHORTCUT_EVENT,
-  SHORTCUT_NEW_LOCKED_CHAT,
+  ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT,
+  SHORTCUT_NEW_ENCRYPTED_CHAT,
 } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useOpenappaStatus } from "@/lib/chat/chat.query";
+import { resolveContextWindowUsage } from "@/lib/chat/context-window-status";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
-import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useFeature } from "@/lib/config/config.query";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { logoNameForProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils/tailwind";
 
 export interface ChatPromptInputToolsProps {
@@ -72,15 +78,15 @@ export interface ChatPromptInputToolsProps {
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
   /**
-   * Whether the next chat will be created locked-chat. New-chat composer only —
+   * Whether the next chat will be created encrypted-chat. New-chat composer only —
    * the toggle renders only while there is no conversation yet.
    */
-  lockedChat?: boolean;
+  encryptedChat?: boolean;
   /**
    * Provided only by the new-chat composer; together with the
-   * `lockedChatEnabled` feature flag it enables the locked-chat toggle.
+   * `encryptedChatEnabled` feature flag it enables the encrypted-chat toggle.
    */
-  onLockedChatChange?: (lockedChat: boolean) => void;
+  onEncryptedChatChange?: (encryptedChat: boolean) => void;
   /** The composer launches an isolated Agent run, not a chat turn. */
   runtimeMode?: boolean;
   /** Whether the agent has a code sandbox available (allows any file type) */
@@ -105,11 +111,14 @@ export interface ChatPromptInputToolsProps {
   onCompactConversation?: () => Promise<void> | void;
   /** A compaction is already running (manual or automatic) */
   isContextCompacting?: boolean;
+  /** Open the conversation's Files panel; absent before the chat exists */
+  onOpenFiles?: () => void;
   /** Agent's configured LLM API key ID - passed to LlmProviderApiKeySelector */
   agentLlmApiKeyId?: string | null;
   /** Current agent ID for agent selector */
   selectorAgentId?: string | null;
-  agentSelectorReadOnly?: boolean;
+  /** The agent is still being decided; the selector shows a placeholder */
+  isSelectorAgentResolving?: boolean;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
   /** Source of the currently selected model (agent, organization, user, or null) */
@@ -131,6 +140,9 @@ export interface ChatPromptInputToolsProps {
   /** Reasoning depth for Gemini flash models; ignored by every other model. */
   thinkingEffort?: ThinkingEffortSetting;
   onThinkingEffortChange?: (effort: ThinkingEffortSetting) => void;
+  /** The model pool the chat is set to, in place of a key and model. */
+  modelPoolId?: string | null;
+  onModelPoolChange?: (modelPoolId: string | null) => void;
   /**
    * The selected agent pins a per-user-credential model (e.g. GitHub Copilot)
    * that the viewer hasn't connected. Keep the agent's model and subscription
@@ -174,8 +186,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onApiKeyChange,
   onProviderChange,
   allowFileUploads = false,
-  lockedChat = false,
-  onLockedChatChange,
+  encryptedChat = false,
+  onEncryptedChatChange,
   runtimeMode = false,
   sandboxAvailable = false,
   isModelsLoading = false,
@@ -186,9 +198,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   lastCompaction,
   onCompactConversation,
   isContextCompacting = false,
+  onOpenFiles,
   agentLlmApiKeyId,
   selectorAgentId,
-  agentSelectorReadOnly = false,
+  isSelectorAgentResolving = false,
   onAgentChange,
   modelSource,
   toolsUnavailable = false,
@@ -196,6 +209,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onResetModelOverride,
   thinkingEffort = null,
   onThinkingEffortChange,
+  modelPoolId,
+  onModelPoolChange,
   agentRequiresPerUserConnect = false,
   subscriptionConnectRequired = false,
   subscriptionProvider,
@@ -207,33 +222,29 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   toolbarRef,
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
-  const providerCatalog = useModelProviderCatalog();
-  const { data: statusData, isError: statusReadFailed } = useOpenappaStatus(
-    runtimeMode ? undefined : conversationId,
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const {
+    triggerRef: optionsTriggerRef,
+    position: optionsPosition,
+    updatePosition: updateOptionsPosition,
+  } = useChatSetupMenuPosition(optionsOpen && !conversationId);
+  const handleOptionsOpenChange = (next: boolean) => {
+    if (next && !conversationId) updateOptionsPosition();
+    setOptionsOpen(next);
+  };
+  const credentialSelectorRef = useRef<{ selectKey: (keyId: string) => void }>(
+    null,
   );
-  const openappaStatus = statusReadFailed ? null : statusData;
-  const { data: guardrailsDeployment } = useGuardrailsDeployment();
-  const openappaEnabled = useFeature("openappaEnabled") === true;
-  const showOpenappaStatus =
-    openappaEnabled && guardrailsDeployment?.active === true;
-
-  // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
-  const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
-    useModelSelectorDisplay({ conversationId });
+  const handleSubscriptionSelect = (keyId: string) =>
+    credentialSelectorRef.current?.selectKey(keyId);
+  const providerCatalog = useModelProviderCatalog();
+  // The pickers stay inline whenever they fit, for new and started chats
+  // alike; the menu is only the fallback for a toolbar too narrow to hold them.
+  const showOptionsMenu = isNarrow;
 
   const selectedApiKeyId = conversationId
     ? (currentConversationChatApiKeyId ?? null)
     : (initialApiKeyId ?? null);
-  const { data: availableKeys } = useAvailableLlmProviderApiKeys({
-    includeKeyId: selectedApiKeyId ?? undefined,
-    toastOnError: false,
-  });
-  const selectedKeySubscriptionKind =
-    availableKeys?.find((key) => key.id === selectedApiKeyId)
-      ?.subscriptionKind ?? null;
-  const logoProvider = currentProvider
-    ? logoNameForProvider(currentProvider, selectedKeySubscriptionKind)
-    : null;
   const providerToConnect = subscriptionProvider ?? currentProvider;
   const subscriptionKind = providerToConnect
     ? subscriptionKindForProvider(providerToConnect)
@@ -246,78 +257,87 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           : "subscription"
       }`;
 
-  // Label for the model-source badge. A custom model is a "chat override" when
-  // it is scoped to an existing conversation, and a "user override" otherwise
-  // (the new-chat case, where it reflects the user's own default).
-  const modelSourceLabel =
-    modelSource === "agent"
-      ? "agent"
-      : modelSource === "organization"
-        ? "org"
-        : conversationId
-          ? "chat override"
-          : "user override";
-
   // Any file type can be attached: a file the model can't read is still stored
   // and surfaced in the conversation's Files panel (and staged into the
   // sandbox when one is available), so the only gate is the org-level toggle.
   const showFileUploadButton = allowFileUploads;
-  const supportedTypesDescription = runtimeMode
-    ? "files are staged into the dedicated runtime before the Agent starts"
-    : sandboxAvailable
-      ? "any file type"
-      : "any file type (files this model can't read are saved to the chat's Files panel)";
+  // Short on purpose; the Files link only exists once the chat does.
+  const attachHint: ReactNode = runtimeMode ? (
+    "Attach files for the runtime"
+  ) : sandboxAvailable || !onOpenFiles ? (
+    "Attach any file"
+  ) : (
+    <>
+      <span className="block">Attach any file</span>
+      <span className="block">
+        Unreadable ones go to{" "}
+        <UnstyledButton
+          type="button"
+          onClick={onOpenFiles}
+          className="underline underline-offset-2 hover:no-underline"
+        >
+          Files
+        </UnstyledButton>
+      </span>
+    </>
+  );
 
   // Check if user can update agent settings (to show settings link in tooltip)
   const { data: canUpdateAgentSettings } = useHasPermissions({
-    agentSettings: ["update"],
+    organizationSettings: ["update"],
   });
 
-  // LockedChat toggle: only on the new-chat composer (no conversation yet —
+  // EncryptedChat toggle: only on the new-chat composer (no conversation yet —
   // the same gate InitialAgentSelector uses via its callback prop) and only
-  // when the instance has locked chats enabled.
-  const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
+  // when the instance has encrypted chats enabled.
+  const encryptedChatFeature = useFeature("encryptedChatEnabled");
+  const encryptedChatEnabled = encryptedChatFeature ?? false;
   const { altKey } = usePlatform();
-  const showLockedChatToggle =
-    !runtimeMode &&
-    lockedChatEnabled &&
-    !conversationId &&
-    !!onLockedChatChange;
+  const appName = useAppName();
+  const encryptedChatComposer =
+    !runtimeMode && !conversationId && !!onEncryptedChatChange;
+  const showEncryptedChatToggle = encryptedChatComposer && encryptedChatEnabled;
+  // When the instance has not enabled encrypted chats, the lock stays in the
+  // same spot as a pointer to the feature: it explains what it does and how an
+  // administrator turns it on. Only on an explicit `false`, so it does not
+  // flash in place of the real toggle while the config is still loading.
+  const showEncryptedChatSetupHint =
+    encryptedChatComposer && encryptedChatFeature === false;
 
-  // Files staged before the toggle survive it: a locked chat stores its
+  // Files staged before the toggle survive it: an encrypted chat stores its
   // attachments sealed under the conversation key, so the first message can
-  // carry them just as an unlocked one would.
-  const toggleLockedChat = useCallback(() => {
-    onLockedChatChange?.(!lockedChat);
-  }, [lockedChat, onLockedChatChange]);
+  // carry them just as an unencrypted one would.
+  const toggleEncryptedChat = useCallback(() => {
+    onEncryptedChatChange?.(!encryptedChat);
+  }, [encryptedChat, onEncryptedChatChange]);
 
   // While the toggle is on screen, Alt+I toggles the draft in place: the
   // global shortcut dispatches this cancelable event before navigating and
   // claiming it (preventDefault) suppresses the navigation — see
   // useConversationSearch.
   useEffect(() => {
-    if (!showLockedChatToggle) return;
+    if (!showEncryptedChatToggle) return;
     const handleShortcut = (event: Event) => {
       event.preventDefault();
-      toggleLockedChat();
+      toggleEncryptedChat();
     };
-    window.addEventListener(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, handleShortcut);
+    window.addEventListener(
+      ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT,
+      handleShortcut,
+    );
     return () =>
       window.removeEventListener(
-        LOCKED_CHAT_DRAFT_SHORTCUT_EVENT,
+        ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT,
         handleShortcut,
       );
-  }, [showLockedChatToggle, toggleLockedChat]);
+  }, [showEncryptedChatToggle, toggleEncryptedChat]);
 
-  // RBAC: check if user can see agent picker and provider settings in chat
-  const { data: canSeeAgentPicker } = useHasPermissions({
-    chatAgentPicker: ["enable"],
+  // RBAC: the full chat view shows the agent picker and provider settings;
+  // without it, chat is the simpler view.
+  const { data: canSeeFullView } = useHasPermissions({
+    chat: ["full-view"],
   });
-  const { data: canSeeProviderSettings } = useHasPermissions({
-    chatProviderSettings: ["enable"],
-  });
-  const canShowProviderSettings =
-    !runtimeMode && canSeeProviderSettings === true;
+  const canShowProviderSettings = !runtimeMode && canSeeFullView === true;
 
   const focusTextarea = useCallback(() => {
     // Popover restores focus to its trigger as it closes. Wait until that
@@ -335,6 +355,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     [focusTextarea, onAgentChange],
   );
 
+  const closeOptions = useCallback(() => {
+    setOptionsOpen(false);
+    focusTextarea();
+  }, [focusTextarea]);
+
   const handleSelectorOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
@@ -344,14 +369,56 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     [focusTextarea],
   );
 
+  // Context usage follows the model picker when the pickers are inline, and
+  // sits beside the attachment button when they collapse into the menu.
+  const resolvedContextUsage = useMemo(
+    () =>
+      resolveContextWindowUsage({
+        tokensUsed,
+        maxTokens: maxContextLength,
+        breakdown: contextWindow ?? null,
+      }),
+    [tokensUsed, maxContextLength, contextWindow],
+  );
+  const contextUsage = resolvedContextUsage.tokensUsed > 0 &&
+    resolvedContextUsage.maxTokens && (
+      <ContextWindowDialog
+        breakdown={contextWindow ?? null}
+        tokensUsed={resolvedContextUsage.tokensUsed}
+        cachedTokens={cachedTokens}
+        maxTokens={resolvedContextUsage.maxTokens}
+        lastCompaction={lastCompaction}
+        onCompact={onCompactConversation}
+        isCompacting={isContextCompacting}
+      >
+        <UnstyledButton
+          type="button"
+          aria-label="Context usage"
+          data-testid={E2eTestId.ChatContextUsageTrigger}
+          className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ContextIndicator
+            tokensUsed={resolvedContextUsage.tokensUsed}
+            maxTokens={resolvedContextUsage.maxTokens}
+            size="sm"
+          />
+        </UnstyledButton>
+      </ContextWindowDialog>
+    );
+
   return (
     <PromptInputTools ref={toolbarRef} className="gap-0.5">
+      {/* Not rendered visibly: it owns the key auto-selection and the
+          subscription connect/reconnect dialogs. The setup menu lists keys
+          itself, and a viewer without provider settings still needs the
+          connect flow. */}
       {!runtimeMode &&
-        canSeeProviderSettings === false &&
-        subscriptionConnectRequired &&
-        (conversationId || onApiKeyChange) && (
+        (conversationId || onApiKeyChange) &&
+        (canShowProviderSettings ||
+          (canSeeFullView === false && subscriptionConnectRequired)) && (
           <div className="hidden">
             <LlmProviderApiKeySelector
+              ref={credentialSelectorRef}
               conversationId={conversationId}
               currentProvider={currentProvider}
               currentConversationChatApiKeyId={
@@ -368,200 +435,71 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             />
           </div>
         )}
-      {/* Narrow: vertical three-dots menu for collapsed toolbar items */}
-      {isNarrow &&
-        (!showOpenappaStatus &&
-        showDefaultLogo &&
-        logoProvider &&
-        !subscriptionConnectRequired &&
-        (modelSource === "agent" || modelSource === "organization") ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2"
-            aria-label="Change model or provider"
-            onClick={expandModelSelector}
+      {/* Only when the inline pickers no longer fit. */}
+      {showOptionsMenu && (
+        <Popover open={optionsOpen} onOpenChange={handleOptionsOpenChange}>
+          <PopoverTrigger asChild>
+            <Button
+              ref={optionsTriggerRef}
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+            >
+              <MoreVerticalIcon className="size-4" />
+              <span className="sr-only">More options</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            side={conversationId ? "top" : optionsPosition.side}
+            align="start"
+            sideOffset={8}
+            collisionPadding={12}
+            className="w-auto overflow-hidden rounded-xl p-0"
           >
-            <ModelSelectorLogo provider={logoProvider} className="size-4" />
-          </Button>
-        ) : (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2"
-              >
-                <MoreVerticalIcon className="size-4" />
-                <span className="sr-only">More options</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent side="top" align="start" className="w-auto p-3">
-              <div className="flex flex-col gap-3">
-                {canSeeAgentPicker &&
-                  selectorAgentId !== undefined &&
-                  onAgentChange && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Agent
-                      </p>
-                      <InitialAgentSelector
-                        currentAgentId={selectorAgentId}
-                        onAgentChange={handleAgentChange}
-                        readOnly={agentSelectorReadOnly}
-                      />
-                    </div>
-                  )}
-                {canShowProviderSettings && (
-                  <>
-                    {modelSource && !subscriptionConnectRequired && (
-                      <div className="flex items-center gap-1.5">
-                        <ComposerBadge>
-                          {modelSourceLabel}
-                          {modelSource === "user" && onResetModelOverride && (
-                            <button
-                              type="button"
-                              onClick={onResetModelOverride}
-                              className="text-muted-foreground hover:text-foreground transition-colors"
-                              title="Reset to default"
-                            >
-                              <XIcon className="size-3" />
-                            </button>
-                          )}
-                        </ComposerBadge>
-                      </div>
-                    )}
-                    {toolsUnavailable && (
-                      <div className="flex items-center gap-1.5">
-                        <NoToolsModelBadge />
-                      </div>
-                    )}
-                    {(conversationId || onApiKeyChange) && (
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                          Provider API Key
-                        </p>
-                        <LlmProviderApiKeySelector
-                          conversationId={conversationId}
-                          currentProvider={currentProvider}
-                          currentConversationChatApiKeyId={
-                            conversationId
-                              ? (currentConversationChatApiKeyId ?? null)
-                              : (initialApiKeyId ?? null)
-                          }
-                          onApiKeyChange={onApiKeyChange}
-                          onProviderChange={onProviderChange}
-                          isModelsLoading={isModelsLoading}
-                          agentLlmApiKeyId={agentLlmApiKeyId}
-                          suppressAutoSelect={agentRequiresPerUserConnect}
-                          connectRequestToken={subscriptionConnectRequest}
-                        />
-                        {subscriptionConnectRequired &&
-                          onSubscriptionConnect && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="mt-2 h-7 gap-1.5 px-2 text-xs"
-                              onClick={onSubscriptionConnect}
-                            >
-                              {subscriptionSignInTitle}
-                            </Button>
-                          )}
-                      </div>
-                    )}
-                    {!subscriptionConnectRequired && (
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                          Model
-                        </p>
-                        <ModelSelector
-                          selectedModel={selectedModel}
-                          onModelChange={onModelChange}
-                          apiKeyId={
-                            conversationId
-                              ? currentConversationChatApiKeyId
-                              : initialApiKeyId
-                          }
-                          suppressAutoSelect={agentRequiresPerUserConnect}
-                          fallbackModelName={agentModelDisplayName}
-                        />
-                        {onThinkingEffortChange && (
-                          <ThinkingEffortSelector
-                            selectedModel={selectedModel}
-                            apiKeyId={
-                              conversationId
-                                ? currentConversationChatApiKeyId
-                                : initialApiKeyId
-                            }
-                            value={thinkingEffort}
-                            onChange={onThinkingEffortChange}
-                            className="mt-2 w-fit"
-                          />
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-                {!runtimeMode &&
-                  canSeeProviderSettings === false &&
-                  subscriptionConnectRequired &&
-                  onSubscriptionConnect && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={onSubscriptionConnect}
-                    >
-                      {subscriptionSignInTitle}
-                    </Button>
-                  )}
-                {tokensUsed > 0 && maxContextLength && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                      Context
-                    </p>
-                    <ContextWindowDialog
-                      breakdown={contextWindow ?? null}
-                      tokensUsed={tokensUsed}
-                      cachedTokens={cachedTokens}
-                      maxTokens={maxContextLength}
-                      lastCompaction={lastCompaction}
-                      onCompact={onCompactConversation}
-                      isCompacting={isContextCompacting}
-                    >
-                      <button
-                        type="button"
-                        aria-label="Context usage"
-                        data-testid={E2eTestId.ChatContextUsageTrigger}
-                        className="inline-flex cursor-pointer items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <ContextIndicator
-                          tokensUsed={tokensUsed}
-                          maxTokens={maxContextLength}
-                          size="sm"
-                        />
-                      </button>
-                    </ContextWindowDialog>
-                  </div>
-                )}
-                {showOpenappaStatus && (
-                  <OpenappaStatusDisplay status={openappaStatus} inPopover />
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
-        ))}
+            <ChatSetupMenu
+              conversationId={conversationId}
+              maxHeight={conversationId ? undefined : optionsPosition.maxHeight}
+              close={closeOptions}
+              agentId={selectorAgentId}
+              onAgentChange={
+                canSeeFullView && selectorAgentId !== undefined
+                  ? handleAgentChange
+                  : undefined
+              }
+              canShowProviderSettings={canShowProviderSettings}
+              selectedModel={selectedModel}
+              onModelChange={onModelChange}
+              fallbackModelName={agentModelDisplayName}
+              modelSource={modelSource}
+              onResetModelOverride={onResetModelOverride}
+              suppressAutoSelect={agentRequiresPerUserConnect}
+              apiKeyId={selectedApiKeyId}
+              currentProvider={currentProvider}
+              canChangeCredential={
+                canShowProviderSettings && !!(conversationId || onApiKeyChange)
+              }
+              onApiKeyChange={onApiKeyChange}
+              onProviderChange={onProviderChange}
+              subscriptionConnectRequired={subscriptionConnectRequired}
+              onSubscriptionConnect={onSubscriptionConnect}
+              onSubscriptionSelect={handleSubscriptionSelect}
+              subscriptionSignInTitle={subscriptionSignInTitle}
+              thinkingEffort={thinkingEffort}
+              onThinkingEffortChange={onThinkingEffortChange}
+              modelPoolId={modelPoolId}
+              onModelPoolChange={onModelPoolChange}
+              toolsUnavailable={toolsUnavailable}
+              notRecommendedForAgents={notRecommendedForAgents}
+            />
+          </PopoverContent>
+        </Popover>
+      )}
 
-      {/* Rendered beside whichever control the collapsed toolbar picked (the
-          logo shortcut or the three-dots menu) and outside the RBAC gate: a
+      {/* Rendered beside the options menu and outside the RBAC gate: a
           warning that only exists inside a popover — or only for users who can
           see provider settings — is a warning most narrow-viewport users never
           get. The wide toolbar renders its own copy below. */}
-      {!runtimeMode && isNarrow && notRecommendedForAgents && (
+      {!runtimeMode && showOptionsMenu && notRecommendedForAgents && (
         <NotRecommendedForAgentsNoticeBadge />
       )}
 
@@ -573,8 +511,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-8 px-2"
+              size="icon-sm"
               onClick={() => attachments.openFileDialog()}
               data-testid={E2eTestId.ChatFileUploadButton}
             >
@@ -582,11 +519,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               <span className="sr-only">Attach files</span>
             </Button>
           </TooltipTrigger>
-          {supportedTypesDescription && (
-            <TooltipContent side="top" sideOffset={4}>
-              Supports: {supportedTypesDescription}
-            </TooltipContent>
-          )}
+          <TooltipContent side="top" sideOffset={4}>
+            {attachHint}
+          </TooltipContent>
         </Tooltip>
       ) : (
         <Tooltip>
@@ -619,245 +554,160 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         </Tooltip>
       )}
 
-      {/* LockedChat toggle — placed with the always-visible controls (next to
+      {/* With the setup in the menu, context usage stays one glance away
+          beside the attachment button. */}
+      {showOptionsMenu && contextUsage}
+
+      {/* EncryptedChat toggle — placed with the always-visible controls (next to
           the attachment button) so it renders in both the wide and the
           collapsed (narrow) toolbar without duplication. */}
-      {showLockedChatToggle && (
+      {showEncryptedChatToggle && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              aria-pressed={lockedChat}
-              aria-label="Locked chat"
-              data-testid={E2eTestId.LockedChatToggle}
+              size="icon-sm"
+              aria-pressed={encryptedChat}
+              aria-label="Encrypted chat"
+              data-testid={E2eTestId.EncryptedChatToggle}
               className={cn(
-                "h-8 px-2",
-                lockedChat &&
+                encryptedChat &&
                   "bg-accent text-accent-foreground hover:bg-accent/80",
               )}
-              onClick={toggleLockedChat}
+              onClick={toggleEncryptedChat}
             >
-              <LockedChatIcon className="size-4" />
+              <EncryptedChatIcon className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={4}>
             <span className="flex items-center gap-1.5">
-              Locked chat <Kbd>{altKey}</Kbd>
-              <Kbd>{SHORTCUT_NEW_LOCKED_CHAT.label}</Kbd>
+              Encrypted chat <Kbd>{altKey}</Kbd>
+              <Kbd>{SHORTCUT_NEW_ENCRYPTED_CHAT.label}</Kbd>
             </span>
           </TooltipContent>
         </Tooltip>
       )}
 
+      {showEncryptedChatSetupHint && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Encrypted chat (not set up)"
+              data-testid={E2eTestId.EncryptedChatSetupHint}
+              className="text-muted-foreground"
+            >
+              <EncryptedChatIcon className="size-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            side="top"
+            align="start"
+            collisionPadding={12}
+            className="w-96 max-w-[calc(100vw-1.5rem)] space-y-2 text-sm"
+          >
+            <p className="font-medium">Encrypted chats (not configured)</p>
+            <p className="text-muted-foreground">
+              Some conversations shouldn&apos;t be visible to the team that runs{" "}
+              {appName} — for example, sensitive discussions among senior
+              management. Yet the company still needs a way to audit them in an
+              emergency.
+            </p>
+            <p className="text-muted-foreground">
+              Encrypted chats solve this. Each chat is encrypted with a key kept
+              in the user&apos;s browser, and a backup of that key is locked
+              with an escrow key held by a trusted group, such as the
+              CISO&apos;s office. People can then work with sensitive data with
+              more peace of mind.
+            </p>
+            <p className="text-muted-foreground">
+              To turn it on, generate an escrow key pair, hand the private key
+              to that group, and set{" "}
+              <code className="break-all rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+                ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY
+              </code>{" "}
+              on the deployment.
+            </p>
+            <ExternalDocsLink
+              href={getDocsUrl(
+                DocsPage.PlatformSecurityContentEncryption,
+                "key-escrow",
+              )}
+              className="underline decoration-dotted underline-offset-4 hover:decoration-solid"
+            >
+              Learn how to enable it
+            </ExternalDocsLink>
+          </PopoverContent>
+        </Popover>
+      )}
+
       {/* Wide: inline toolbar items */}
-      {!isNarrow && (
+      {!showOptionsMenu && (
         <>
-          {canSeeAgentPicker &&
-            selectorAgentId !== undefined &&
-            onAgentChange && (
-              <InitialAgentSelector
-                currentAgentId={selectorAgentId}
-                onAgentChange={handleAgentChange}
-                readOnly={agentSelectorReadOnly}
-              />
-            )}
+          {canSeeFullView && selectorAgentId !== undefined && onAgentChange && (
+            <InitialAgentSelector
+              currentAgentId={selectorAgentId}
+              onAgentChange={handleAgentChange}
+              isAgentResolving={isSelectorAgentResolving}
+            />
+          )}
           {!runtimeMode &&
-            canSeeProviderSettings === false &&
+            canSeeFullView === false &&
             subscriptionConnectRequired &&
             onSubscriptionConnect && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-8 px-2 text-xs text-primary hover:text-primary"
+                className="text-primary hover:text-primary"
                 onClick={onSubscriptionConnect}
               >
                 {subscriptionSignInTitle}
               </Button>
             )}
-          {!canShowProviderSettings ? null : showDefaultLogo &&
-            logoProvider &&
-            !subscriptionConnectRequired &&
-            (modelSource === "agent" || modelSource === "organization") ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2"
-              aria-label="Change model or provider"
-              onClick={expandModelSelector}
-            >
-              <ModelSelectorLogo provider={logoProvider} className="size-4" />
-            </Button>
-          ) : (
-            /* Same radius as the controls it clips: they are full-height and
-               sit flush against the group's end caps, so a wider group radius
-               rounds their outer corners while the inner ones keep the button
-               radius — a lopsided hover shape (T-1088). Let keyboard focus
-               escape that clipping and stack above adjacent controls so its
-               ring stays intact. */
-            <div className="flex items-center h-8 rounded-md bg-muted/50 overflow-hidden has-[:focus-visible]:overflow-visible [&_button:focus-visible]:relative [&_button:focus-visible]:z-10">
-              {(conversationId || onApiKeyChange) && (
-                <LlmProviderApiKeySelector
-                  conversationId={conversationId}
-                  currentProvider={currentProvider}
-                  currentConversationChatApiKeyId={
-                    conversationId
-                      ? (currentConversationChatApiKeyId ?? null)
-                      : (initialApiKeyId ?? null)
-                  }
-                  onApiKeyChange={onApiKeyChange}
-                  onProviderChange={onProviderChange}
-                  isModelsLoading={isModelsLoading}
-                  agentLlmApiKeyId={agentLlmApiKeyId}
-                  suppressAutoSelect={agentRequiresPerUserConnect}
-                  connectRequestToken={subscriptionConnectRequest}
-                  onOpenChange={handleSelectorOpenChange}
-                />
-              )}
-              {subscriptionConnectRequired && onSubscriptionConnect && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1 px-2 text-xs text-primary hover:text-primary"
-                  onClick={onSubscriptionConnect}
-                >
-                  {subscriptionSignInTitle}
-                </Button>
-              )}
-              {!subscriptionConnectRequired && (
-                <ModelSelector
-                  selectedModel={selectedModel}
-                  onModelChange={onModelChange}
-                  onOpenChange={handleSelectorOpenChange}
-                  apiKeyId={
-                    conversationId
-                      ? currentConversationChatApiKeyId
-                      : initialApiKeyId
-                  }
-                  suppressAutoSelect={agentRequiresPerUserConnect}
-                  fallbackModelName={agentModelDisplayName}
-                />
-              )}
-              {!subscriptionConnectRequired && onThinkingEffortChange && (
-                <ThinkingEffortSelector
-                  selectedModel={selectedModel}
-                  apiKeyId={
-                    conversationId
-                      ? currentConversationChatApiKeyId
-                      : initialApiKeyId
-                  }
-                  value={thinkingEffort}
-                  onChange={onThinkingEffortChange}
-                  className="mr-1"
-                />
-              )}
-              {modelSource && !subscriptionConnectRequired && (
-                <ComposerBadge className="ml-1 mr-2">
-                  {modelSourceLabel}
-                  {modelSource === "user" && onResetModelOverride && (
-                    <button
-                      type="button"
-                      onClick={onResetModelOverride}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                      title="Reset to default"
-                    >
-                      <XIcon className="size-3" />
-                    </button>
-                  )}
-                </ComposerBadge>
-              )}
-            </div>
+          {canShowProviderSettings && (
+            <ChatModelButton
+              onOpenChange={handleSelectorOpenChange}
+              conversationId={conversationId}
+              agentId={selectorAgentId}
+              canShowProviderSettings={canShowProviderSettings}
+              selectedModel={selectedModel}
+              onModelChange={onModelChange}
+              fallbackModelName={agentModelDisplayName}
+              modelSource={modelSource}
+              onResetModelOverride={onResetModelOverride}
+              suppressAutoSelect={agentRequiresPerUserConnect}
+              apiKeyId={selectedApiKeyId}
+              currentProvider={currentProvider}
+              canChangeCredential={
+                canShowProviderSettings && !!(conversationId || onApiKeyChange)
+              }
+              onApiKeyChange={onApiKeyChange}
+              onProviderChange={onProviderChange}
+              subscriptionConnectRequired={subscriptionConnectRequired}
+              onSubscriptionConnect={onSubscriptionConnect}
+              onSubscriptionSelect={handleSubscriptionSelect}
+              subscriptionSignInTitle={subscriptionSignInTitle}
+              thinkingEffort={thinkingEffort}
+              onThinkingEffortChange={onThinkingEffortChange}
+              modelPoolId={modelPoolId}
+              onModelPoolChange={onModelPoolChange}
+              toolsUnavailable={toolsUnavailable}
+              notRecommendedForAgents={notRecommendedForAgents}
+            />
           )}
+          {contextUsage}
           {!runtimeMode && toolsUnavailable && <NoToolsModelBadge />}
           {!runtimeMode && notRecommendedForAgents && (
             <NotRecommendedForAgentsNoticeBadge />
           )}
-          {tokensUsed > 0 && maxContextLength && (
-            <ContextWindowDialog
-              breakdown={contextWindow ?? null}
-              tokensUsed={tokensUsed}
-              cachedTokens={cachedTokens}
-              maxTokens={maxContextLength}
-              lastCompaction={lastCompaction}
-              onCompact={onCompactConversation}
-              isCompacting={isContextCompacting}
-            >
-              <button
-                type="button"
-                aria-label="Context usage"
-                data-testid={E2eTestId.ChatContextUsageTrigger}
-                className="inline-flex cursor-pointer items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <ContextIndicator
-                  tokensUsed={tokensUsed}
-                  maxTokens={maxContextLength}
-                  size="sm"
-                />
-              </button>
-            </ContextWindowDialog>
-          )}
         </>
       )}
-
-      {!isNarrow && showOpenappaStatus && (
-        <OpenappaStatusDisplay status={openappaStatus} />
-      )}
-
-      {/* Apps Hackathon session recorder — a distinct cluster in the composer.
-          It records the whole chat (from scratch, even before the first message)
-          and opens the replay. Renders nothing when the feature is disabled. */}
-      <AppRecordingControls />
     </PromptInputTools>
   );
 });
 
 export { ChatPromptInputTools };
-
-function OpenappaStatusDisplay({
-  status,
-  inPopover = false,
-}: {
-  status: { trust: string; audience: string } | null | undefined;
-  inPopover?: boolean;
-}) {
-  const statusLabel = status
-    ? `Trust: ${status.trust}; audience: ${status.audience}`
-    : "Trust and audience status unavailable";
-
-  const content = (
-    <output
-      aria-label={statusLabel}
-      className="flex max-w-64 items-start gap-2 text-sm text-muted-foreground [overflow-wrap:anywhere]"
-    >
-      <OpenAppaIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-      <span className="flex min-w-0 flex-col gap-1">
-        <span>{`Trust: ${status?.trust ?? "unavailable"}`}</span>
-        <span>{`Audience: ${status?.audience ?? "unavailable"}`}</span>
-      </span>
-    </output>
-  );
-
-  if (inPopover) return content;
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="OpenAPPA status"
-        >
-          <OpenAppaIcon aria-hidden="true" className="size-4" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-auto p-3">
-        {content}
-      </PopoverContent>
-    </Popover>
-  );
-}

@@ -1,14 +1,16 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-
-import { fetchInternalAgents, useCreateProfile } from "@/lib/agent.query";
+import { useCreateProfile } from "@/lib/agent.query";
+import { fetchInternalAgentOptionByName } from "@/lib/agent-options.query";
 import { useBulkAssignTools } from "@/lib/agent-tools.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
+import { fetchInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -23,6 +25,7 @@ type CatalogItem =
  */
 export function useChatWithCatalogItem() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const createAgent = useCreateProfile();
   const bulkAssignTools = useBulkAssignTools();
   const [isCreating, setIsCreating] = useState(false);
@@ -30,15 +33,17 @@ export function useChatWithCatalogItem() {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
-  const startChat = async (item: CatalogItem) => {
+  const startChat = async (
+    item: Pick<CatalogItem, "id" | "name" | "icon" | "enterpriseManagedConfig">,
+  ) => {
     setIsCreating(true);
     const agentName = item.name;
     try {
       // Get or create: check if a personal agent with this name already exists for the current user
-      const existingAgents = await fetchInternalAgents();
-      const existing = existingAgents?.find(
-        (a) => a.name === agentName && a.authorId === currentUserId,
-      );
+      const existing = await fetchInternalAgentOptionByName({
+        name: agentName,
+        authorId: currentUserId,
+      });
 
       const agent =
         existing ??
@@ -74,5 +79,19 @@ export function useChatWithCatalogItem() {
     }
   };
 
-  return { startChat, isCreating };
+  /**
+   * For registry list rows, which carry neither the image icon nor the
+   * credential mode: load the item first so the agent gets both.
+   */
+  const startChatById = async (id: string) => {
+    setIsCreating(true);
+    try {
+      const item = await fetchInternalMcpCatalogItem(queryClient, id);
+      if (item) await startChat(item);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  return { startChat, startChatById, isCreating };
 }

@@ -18,6 +18,7 @@ import {
   allAvailableActions,
   findUngrantablePermissions,
   predefinedPermissionsMap,
+  withDerivedPermissions,
 } from "@archestra/shared/access-control";
 import { and, eq, getTableColumns, ilike, inArray, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
@@ -127,7 +128,7 @@ class OrganizationRoleModel {
       }
     }
 
-    return sanitizedPermissions;
+    return withDerivedPermissions(sanitizedPermissions);
   }
 
   static invalidatePermissionsCacheForRole(

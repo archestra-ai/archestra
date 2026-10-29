@@ -31,6 +31,7 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  ScheduleTriggerRunKindSchema,
   ScheduleTriggerRunStatusSchema,
   SelectConversationSchema,
   SelectScheduleTriggerRunSchema,
@@ -102,14 +103,14 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let excludeActorUserId: string | undefined;
 
       if (showAll) {
-        const isScheduledTaskAdmin = await ResourcePermissions.allows({
+        const hasProjectOversight = await ResourcePermissions.allows({
           userId: user.id,
           organizationId,
-          resource: "scheduledTask",
+          resource: "project",
           scope: "*",
           action: "read",
         });
-        if (isScheduledTaskAdmin) {
+        if (hasProjectOversight) {
           actorUserId = undefined;
           if (actorUserIdsParam) {
             // Filter to specific users
@@ -257,7 +258,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         userId: user.id,
         organizationId,
-        access: "mutate",
+        access: "delete",
       });
 
       const success = await ScheduleTriggerModel.delete(id);
@@ -285,7 +286,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         userId: user.id,
         organizationId,
-        access: "mutate",
+        access: "update",
       });
 
       const updated = await ScheduleTriggerModel.update(id, {
@@ -316,7 +317,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         userId: user.id,
         organizationId,
-        access: "mutate",
+        access: "update",
       });
 
       const updated = await ScheduleTriggerModel.update(id, {
@@ -347,7 +348,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         userId: user.id,
         organizationId,
-        access: "mutate",
+        access: "use",
       });
 
       const run = await startManualScheduleTriggerRun({
@@ -369,6 +370,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: UuidIdSchema }),
         querystring: PaginationQuerySchema.extend({
           status: ScheduleTriggerRunStatusSchema.optional(),
+          runKind: ScheduleTriggerRunKindSchema.optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectScheduleTriggerRunSchema),
@@ -378,7 +380,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         params: { id },
-        query: { limit, offset, status },
+        query: { limit, offset, status, runKind },
         user,
         organizationId,
       },
@@ -398,11 +400,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           limit,
           offset,
           status,
+          runKind,
         }),
         ScheduleTriggerRunModel.countByTrigger({
           organizationId,
           triggerId: trigger.id,
           status,
+          runKind,
         }),
       ]);
 
@@ -456,7 +460,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id, runId }, user, organizationId }, reply) => {
-      // Access is owner / scheduledTask:admin (the shared run gate) — the
+      // Access is owner / project oversight (the shared run gate) — the
       // same gate as every other schedule op. Loading the run conversation can
       // MINT one when it isn't linked yet (createAndLinkRunConversation below),
       // so it stays on that existing permission rather than any project scope.
@@ -465,7 +469,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         runId,
         userId: user.id,
         organizationId,
-        access: "mutate",
+        access: "use",
       });
 
       const conversation = await ensureRunConversation({
@@ -500,6 +504,7 @@ async function ensureRunConversation(params: {
     ? await ConversationModel.findByIdInOrganization({
         id: run.chatConversationId,
         organizationId,
+        viewer: { kind: "internal", purpose: "scheduled-run" },
       })
     : null;
   if (!conversation) {

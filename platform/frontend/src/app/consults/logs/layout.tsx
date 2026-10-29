@@ -1,7 +1,6 @@
 "use client";
 
 import { LogsSectionLayout } from "@/app/_parts/logs-section-layout";
-import { ResourceListActions } from "@/components/resource-list-actions";
 
 export default function ConsultLogsLayout({
   children,
@@ -11,7 +10,7 @@ export default function ConsultLogsLayout({
   return (
     <LogsSectionLayout
       listPath="/consults/logs"
-      actionButton={<ResourceListActions resource="log" />}
+      description="Logs Guardrails requests to external services, such as labeling models or audience lookups, before a tool call is allowed or blocked."
     >
       {children}
     </LogsSectionLayout>

@@ -274,6 +274,57 @@ describe("computeLayout", () => {
       );
     }
   });
+
+  test("lists a Claude Desktop plugin under the name its manifest declares", () => {
+    const withManifest = (
+      pluginSlug: string,
+      name: string,
+    ): MaterializePluginInput => ({
+      ...makePlugin("claude-desktop", pluginSlug),
+      files: [
+        {
+          path: ".claude-plugin/plugin.json",
+          content: JSON.stringify({ name, version: "1.3.1" }),
+          encoding: "utf8",
+          mode: "100644",
+        },
+      ],
+    });
+    const files = computeLayout(
+      {
+        ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
+        marketplaceName: "org-abcd1234-plugins",
+        ownerName: "Acme Corp",
+        displayName: "Acme Plugins",
+        skills: [],
+        plugins: [
+          withManifest("productivity-9fabc89b", "productivity"),
+          // Two plugins declaring one name keep their unique slugs.
+          withManifest("notes-11111111", "notes"),
+          withManifest("notes-22222222", "notes"),
+          makePlugin("claude-desktop", "hooks-only-33333333"),
+        ],
+      },
+      2,
+    );
+    const marketplace = JSON.parse(
+      files.find((file) => file.path === ".claude-plugin/marketplace.json")
+        ?.content ?? "{}",
+    );
+
+    expect(
+      marketplace.plugins.map((plugin: { name: string; source: string }) => [
+        plugin.name,
+        plugin.source,
+      ]),
+    ).toEqual([
+      ["org-abcd1234-plugins", "./plugins/org-abcd1234-plugins"],
+      ["hooks-only-33333333", "./plugins/hooks-only-33333333"],
+      ["notes-11111111", "./plugins/notes-11111111"],
+      ["notes-22222222", "./plugins/notes-22222222"],
+      ["productivity", "./plugins/productivity-9fabc89b"],
+    ]);
+  });
 });
 
 function computeTestLayout(

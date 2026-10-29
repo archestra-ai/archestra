@@ -92,7 +92,7 @@ describe("summarizeUploadResults", () => {
 
   it("includes the server's explanation when every file failed with one", () => {
     const forbidden =
-      "You don't have permission to upload project files. Missing permission: file:manage (List, read, write, and delete files in chats and projects).";
+      "You don't have permission to upload project files. Missing permission: project:read (View projects and your own sessions inside them).";
     expect(
       summarizeUploadResults(
         [

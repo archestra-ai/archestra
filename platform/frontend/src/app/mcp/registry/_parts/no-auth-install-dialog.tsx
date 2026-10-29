@@ -5,6 +5,7 @@ import { Building2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
+import { InlineCredentialFormShell } from "./inline-credential-form-shell";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -34,6 +35,7 @@ interface NoAuthInstallDialogProps {
   personalOnly?: boolean;
   /** When true, only organization-wide installation is allowed */
   orgOnly?: boolean;
+  presentation?: "dialog" | "inline";
 }
 
 export function NoAuthInstallDialog({
@@ -45,6 +47,7 @@ export function NoAuthInstallDialog({
   preselectedTeamId,
   personalOnly = false,
   orgOnly = false,
+  presentation = "dialog",
 }: NoAuthInstallDialogProps) {
   const [scope, setScope] = useState<McpServerInstallScope>(
     orgOnly ? "org" : preselectedTeamId ? "team" : "personal",
@@ -73,8 +76,11 @@ export function NoAuthInstallDialog({
     return null;
   }
 
+  const FormShell =
+    presentation === "inline" ? InlineCredentialFormShell : StandardFormDialog;
+
   return (
-    <StandardFormDialog
+    <FormShell
       open={isOpen}
       onOpenChange={handleClose}
       title={
@@ -114,6 +120,6 @@ export function NoAuthInstallDialog({
         personalOnly={personalOnly}
         orgOnly={orgOnly}
       />
-    </StandardFormDialog>
+    </FormShell>
   );
 }

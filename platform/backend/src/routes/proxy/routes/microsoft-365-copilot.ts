@@ -130,6 +130,7 @@ const microsoft365CopilotProxyRoutes: FastifyPluginAsyncZod = async (
   ) {
     const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
       request,
+      agentId,
       provider: "microsoft-365-copilot",
       token: extractBearerToken(request.headers.authorization),
     });

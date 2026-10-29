@@ -546,6 +546,16 @@ describe("withTransactionRetry", () => {
     vi.restoreAllMocks();
   });
 
+  test("does not replay transaction callbacks on a deadlock", async () => {
+    const error = Object.assign(new Error("transaction aborted"), {
+      code: "40P01",
+    });
+    const runTransaction = vi.fn().mockRejectedValue(error);
+    await expect(withTransactionRetry(runTransaction)).rejects.toBe(error);
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+    expect(isTransientDbError(error)).toBe(false);
+  });
+
   test("retries the whole transaction operation on transient errors", async () => {
     const runTransaction = vi
       .fn()
@@ -586,6 +596,35 @@ describe("wrapPoolWithRetry", () => {
 
     await expect(pool.query("INVALID SQL")).rejects.toThrow("syntax error");
     expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
+  test("retries an autocommit statement rolled back by a deadlock", async () => {
+    const error = Object.assign(new Error("statement aborted"), {
+      code: "40P01",
+    });
+    const query = vi
+      .fn()
+      .mockRejectedValueOnce(error)
+      .mockResolvedValue({ rows: [{ id: 1 }] });
+    const pool = { query };
+    wrapPoolWithRetry(pool);
+    await expect(pool.query("SELECT 1")).resolves.toEqual({
+      rows: [{ id: 1 }],
+    });
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  test("does not replay a SQL batch that could have committed earlier statements", async () => {
+    const error = Object.assign(new Error("statement aborted"), {
+      code: "40P01",
+    });
+    const query = vi.fn().mockRejectedValue(error);
+    const pool = { query };
+    wrapPoolWithRetry(pool);
+    await expect(pool.query("BEGIN; SELECT 1; COMMIT; SELECT 2")).rejects.toBe(
+      error,
+    );
+    expect(query).toHaveBeenCalledTimes(1);
   });
 
   test("passes through callback-style calls without retry", async () => {

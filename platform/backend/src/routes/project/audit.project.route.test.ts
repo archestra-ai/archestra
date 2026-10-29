@@ -8,8 +8,6 @@ import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { AuditEventName, User } from "@/types";
 
-vi.mock("@/observability");
-
 /**
  * The project lifecycle is audited as a whole, so these run through the HTTP
  * layer: the audit record is written by a Fastify hook, and calling the service
@@ -224,5 +222,40 @@ describe("project routes — audit trail", () => {
     // `/api/projects/:id`'s full-snapshot fetcher.
     expect(rows[0].before).toEqual({ id: project.id, name: "audited-purge" });
     expect(rows[0].after).toBeNull();
+  });
+
+  test("linking and unlinking an app are project.updated diffs on appIds", async ({
+    makeApp,
+  }) => {
+    const project = await makeProject("audited-apps");
+    const linked = await makeApp({ organizationId, authorId: user.id });
+
+    const link = await app.inject({
+      method: "PUT",
+      url: `/api/projects/${project.id}/apps/${linked.id}`,
+    });
+    expect(link.statusCode).toBe(200);
+    const [linkRow] = await auditRowsFor(project.id, "project.updated");
+    expect(linkRow.before).toMatchObject({ appIds: [] });
+    expect(linkRow.after).toMatchObject({ appIds: [linked.id] });
+
+    const unlink = await app.inject({
+      method: "DELETE",
+      url: `/api/projects/${project.id}/apps/${linked.id}`,
+    });
+    expect(unlink.statusCode).toBe(200);
+    // An unlink is an update, never a project deletion by walk-up.
+    await vi.waitFor(async () => {
+      expect(await selectAuditRows(project.id, "project.updated")).toHaveLength(
+        2,
+      );
+    });
+    const rows = await selectAuditRows(project.id, "project.updated");
+    expect(rows.map((row) => row.after)).toContainEqual(
+      expect.objectContaining({ appIds: [] }),
+    );
+    expect(await selectAuditRows(project.id, "project.deleted")).toHaveLength(
+      0,
+    );
   });
 });

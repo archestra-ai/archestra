@@ -5,7 +5,8 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { runBlock } from "./measure.mjs";
-import { MOCK_CONTENT } from "./mock-upstream.mjs";
+import { MOCK_CONTENT, MOCK_MCP_TOOL } from "./mock-upstream.mjs";
+import { createSummary, renderSummary } from "./report.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const options = Object.fromEntries(
@@ -25,10 +26,18 @@ const allowed = new Set([
   "scenarios",
   "proxy-url",
   "mock-url",
+  "mcp-url",
+  "mcp-tool",
   "output",
+  "diagnostic",
+  "web-workers",
 ]);
 for (const key of Object.keys(options))
   if (!allowed.has(key)) throw new Error(`Unknown option: ${key}`);
+if (options.diagnostic && options.diagnostic !== "cpu-profile")
+  throw new Error("Unknown diagnostic mode");
+if (options["web-workers"] && !/^[1-4]$/.test(options["web-workers"]))
+  throw new Error("Web workers must be between 1 and 4");
 const integer = (key, fallback) => {
   const value = Number(options[key] ?? fallback);
   if (!Number.isSafeInteger(value) || value < 1)
@@ -44,9 +53,14 @@ const concurrencyLevels = (options.concurrency ?? "1,10,50")
   .map(Number);
 if (concurrencyLevels.some((c) => !Number.isSafeInteger(c) || c < 1 || c > 500))
   throw new Error("Concurrency must be between 1 and 500");
-const scenarios = (options.scenarios ?? "chat,tools,stream").split(",");
-if (scenarios.some((s) => !["chat", "tools", "stream"].includes(s)))
+const mcpUrl = options["mcp-url"];
+const scenarios = (
+  options.scenarios ?? `chat,tools,stream${mcpUrl ? ",mcp" : ""}`
+).split(",");
+if (scenarios.some((s) => !["chat", "tools", "stream", "mcp"].includes(s)))
   throw new Error("Unknown scenario");
+if (scenarios.includes("mcp") && !(mcpUrl && options["mcp-tool"]))
+  throw new Error("The mcp scenario needs --mcp-url and --mcp-tool");
 const maxConcurrency = Math.max(...concurrencyLevels);
 if (
   (scenarios.includes("stream") && streamCount < maxConcurrency) ||
@@ -80,13 +94,30 @@ if (
   throw new Error("Direct upstream is not the benchmark mock");
 const headers = {
   authorization: `Bearer ${process.env.ARCHESTRA_BENCHMARK_API_KEY ?? "benchmark-no-inference"}`,
+  ...(process.env.ARCHESTRA_BENCHMARK_VIRTUAL_KEY
+    ? { "x-archestra-virtual-key": process.env.ARCHESTRA_BENCHMARK_VIRTUAL_KEY }
+    : {}),
 };
+const mcpHeaders = {
+  accept: "application/json, text/event-stream",
+  "mcp-protocol-version": "2025-11-25",
+};
+const mcpGatewayHeaders = {
+  ...mcpHeaders,
+  authorization: `Bearer ${process.env.ARCHESTRA_BENCHMARK_MCP_TOKEN ?? ""}`,
+};
+const mcpMockUrl = new URL("/mcp", mockUrl).href;
 const getGit = (args) =>
   execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 const report = {
   schemaVersion: 1,
   startedAt: new Date().toISOString(),
   metadata: {
+    ...(options.diagnostic ? { diagnostic: options.diagnostic } : {}),
+    ...(options["web-workers"]
+      ? { webWorkers: integer("web-workers", 1) }
+      : {}),
+    workloadVersion: "openai-chat-authenticated-v1",
     gitCommit: getGit(["rev-parse", "HEAD"]),
     platformTree: getGit(["rev-parse", "HEAD:platform"]),
     node: process.version,
@@ -98,9 +129,13 @@ const report = {
     totalMemoryBytes: os.totalmem(),
     proxyUrl,
     mockUrl,
-    auth: process.env.ARCHESTRA_BENCHMARK_API_KEY
-      ? "supplied-key"
-      : "synthetic-provider-key",
+    ...(scenarios.includes("mcp") ? { mcpUrl, mcpMockUrl } : {}),
+    auth: process.env.ARCHESTRA_BENCHMARK_VIRTUAL_KEY
+      ? "passthrough-virtual-key"
+      : process.env.ARCHESTRA_BENCHMARK_API_KEY
+        ? "supplied-key"
+        : "synthetic-provider-key",
+    workspaceDirty: getGit(["status", "--porcelain"]).length > 0,
     count,
     streamCount,
     warmup,
@@ -109,39 +144,65 @@ const report = {
     scenarios,
     mock: mockHealth,
     methodology:
-      "Closed-loop HTTP/1.1 keep-alive; direct and proxy blocks alternate order. Median difference is an estimate, not a per-request overhead distribution. Streaming first content excludes non-content SSE events.",
+      "Closed-loop HTTP/1.1 keep-alive; direct and proxy blocks alternate order. Non-streaming gateway latency is server request receipt through response serialization; overhead excludes timed upstream SDK calls, per request. Client latency includes complete body delivery. Streaming first content excludes non-content SSE events; streaming server timing is not collected.",
   },
   blocks: [],
 };
 let failed = false;
 try {
   for (const scenario of scenarios) {
-    const body = {
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: "Reply with the benchmark marker." }],
-      max_tokens: 32,
-      ...(scenario === "stream"
-        ? { stream: true, stream_options: { include_usage: true } }
-        : {}),
-      ...(scenario === "tools"
-        ? {
-            tools: [
-              {
-                type: "function",
-                function: {
-                  name: "benchmark_lookup",
-                  description: "Look up a fictional item.",
-                  parameters: {
-                    type: "object",
-                    properties: { name: { type: "string" } },
-                    required: ["name"],
-                  },
-                },
-              },
+    // The gateway exposes the mock's tool under its server-prefixed name.
+    const toolCall = (name) => ({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name, arguments: { name: "widget" } },
+    });
+    const body =
+      scenario === "mcp"
+        ? toolCall(options["mcp-tool"])
+        : {
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "user", content: "Reply with the benchmark marker." },
             ],
+            max_tokens: 32,
+            ...(scenario === "stream"
+              ? { stream: true, stream_options: { include_usage: true } }
+              : {}),
+            ...(scenario === "tools"
+              ? {
+                  tools: [
+                    {
+                      type: "function",
+                      function: {
+                        name: "benchmark_lookup",
+                        description: "Look up a fictional item.",
+                        parameters: {
+                          type: "object",
+                          properties: { name: { type: "string" } },
+                          required: ["name"],
+                        },
+                      },
+                    },
+                  ],
+                }
+              : {}),
+          };
+    const targets =
+      scenario === "mcp"
+        ? {
+            direct: {
+              url: mcpMockUrl,
+              headers: mcpHeaders,
+              body: toolCall(MOCK_MCP_TOOL),
+            },
+            proxy: { url: mcpUrl, headers: mcpGatewayHeaders, body },
           }
-        : {}),
-    };
+        : {
+            direct: { url: mockUrl, headers: {}, body },
+            proxy: { url: proxyUrl, headers, body },
+          };
     const expectedContent =
       scenario === "stream"
         ? MOCK_CONTENT + ".".repeat(mockHealth.chunks - 1)
@@ -152,9 +213,8 @@ try {
           ? ["direct", "proxy"]
           : ["proxy", "direct"]) {
           const result = await runBlock({
-            url: target === "direct" ? mockUrl : proxyUrl,
-            body,
-            headers,
+            ...targets[target],
+            requireGatewayTiming: target === "proxy" && scenario !== "stream",
             expectedContent,
             count: scenario === "stream" ? streamCount : count,
             concurrency,
@@ -165,7 +225,9 @@ try {
             concurrency,
             repeat,
             target,
-            requestBytes: Buffer.byteLength(JSON.stringify(body)),
+            requestBytes: Buffer.byteLength(
+              JSON.stringify(targets[target].body),
+            ),
             ...result,
           });
           await writeFile(
@@ -243,7 +305,13 @@ try {
     );
   }
   if (report.error) lines.push("", `Run incomplete: ${report.error}`);
-  await writeFile(path.join(output, "summary.md"), `${lines.join("\n")}\n`);
+  await writeFile(path.join(output, "details.md"), `${lines.join("\n")}\n`);
+  const summary = createSummary(report);
+  await writeFile(
+    path.join(output, "report.json"),
+    JSON.stringify(summary, null, 2),
+  );
+  await writeFile(path.join(output, "summary.md"), renderSummary(summary));
   console.info(`Results: ${output}`);
 }
 if (failed) process.exitCode = 1;

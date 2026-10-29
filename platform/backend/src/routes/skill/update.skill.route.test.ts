@@ -413,6 +413,31 @@ describe("PUT /api/skills/:id on a GitHub-synced skill", () => {
     expect(response.json().githubSyncInterval).toBe("1d");
     expect(response.json().latestVersion).toBe(1);
   });
+
+  test("sets and keeps an icon without forking a version", async () => {
+    const skill = await seedSynced();
+    const withIcon = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${skill.id}`,
+      payload: { content: echoManifest, icon: "📘" },
+    });
+    expect(withIcon.statusCode).toBe(200);
+    expect(withIcon.json()).toMatchObject({ icon: "📘", latestVersion: 1 });
+
+    // A save that omits the icon leaves it; null clears it.
+    const untouched = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${skill.id}`,
+      payload: { content: echoManifest },
+    });
+    expect(untouched.json().icon).toBe("📘");
+    const cleared = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${skill.id}`,
+      payload: { content: echoManifest, icon: null },
+    });
+    expect(cleared.json().icon).toBeNull();
+  });
 });
 
 /** The teams a skill's permission policy grants. */

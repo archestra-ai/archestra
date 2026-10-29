@@ -16,8 +16,6 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import serviceAccountRoutes from "./service-account";
 
-vi.mock("@/observability");
-
 /**
  * Looking after one service account.
  *

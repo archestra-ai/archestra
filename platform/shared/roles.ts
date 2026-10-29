@@ -46,7 +46,7 @@ export const roleDescriptions: Record<PredefinedRoleName, string> = {
   platform_admin:
     "Runs the platform — everything an admin can do, except reading other users' logs, reading the audit log, and impersonating users",
   editor:
-    "Full access to core resources and settings, but cannot manage users, roles, or identity providers",
+    "Full access to core resources, but cannot change organization settings or manage users, roles, or identity providers",
   member:
     "Can manage agents, tools, and chat, with read-only access to most other resources",
 };

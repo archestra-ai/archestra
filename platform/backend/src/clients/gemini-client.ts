@@ -20,13 +20,14 @@ export const VERTEX_GLOBAL_LOCATION = "global";
  * - User credentials from `gcloud auth application-default login` (for local dev)
  *
  * @param apiKey - API key (optional when Vertex AI is enabled)
- * @param logPrefix - Prefix for log messages (e.g., "[GeminiProxy]", "[dualLlmClient]")
+ * @param logPrefix - Prefix for log messages (e.g., "[GeminiProxy]")
  * @param baseUrlOverride - Base URL override (API key mode only)
  * @param modelId - Model the client will be used for, so Vertex AI mode can
  *   pick the location that actually serves it (see {@link resolveVertexLocation}).
  *   Omitting it keeps the configured location, which is right for
  *   catalog-listing calls that are not about one model.
  * @param googleUserProject - Optional quota project for a caller-supplied OAuth token.
+ * @param defaultHeaders - Provider headers configured for this request.
  * @returns GoogleGenAI client instance
  * @throws Error if Vertex AI is enabled but project is not set
  * @throws Error if API key is not provided when Vertex AI is disabled
@@ -37,6 +38,7 @@ export function createGoogleGenAIClient(
   baseUrlOverride?: string | null,
   modelId?: string | null,
   googleUserProject?: string,
+  defaultHeaders?: Record<string, string>,
 ): GoogleGenAI {
   const { vertexAi } = config.llm.gemini;
 
@@ -51,6 +53,7 @@ export function createGoogleGenAIClient(
       resolveVertexLocation(modelId),
       logPrefix,
       modelId,
+      defaultHeaders,
     );
   }
 
@@ -72,9 +75,12 @@ export function createGoogleGenAIClient(
       httpOptions: {
         baseUrl: baseUrlOverride || config.llm.gemini.baseUrl,
         apiVersion: "v1beta",
-        ...(googleUserProject && {
-          headers: { "x-goog-user-project": googleUserProject },
-        }),
+        headers: {
+          ...defaultHeaders,
+          ...(googleUserProject && {
+            "x-goog-user-project": googleUserProject,
+          }),
+        },
       },
     });
   }
@@ -96,6 +102,7 @@ export function createGoogleGenAIClient(
     httpOptions: {
       baseUrl: baseUrlOverride || config.llm.gemini.baseUrl,
       apiVersion: "v1beta",
+      ...(defaultHeaders && { headers: defaultHeaders }),
     },
   });
 }
@@ -112,6 +119,7 @@ export function createVertexClientForLocation(
   location: string,
   logPrefix = "[Gemini]",
   modelId?: string | null,
+  defaultHeaders?: Record<string, string>,
 ): GoogleGenAI {
   const { vertexAi } = config.llm.gemini;
 
@@ -141,6 +149,7 @@ export function createVertexClientForLocation(
     vertexai: true,
     project: vertexAi.project,
     location,
+    ...(defaultHeaders && { httpOptions: { headers: defaultHeaders } }),
     googleAuthOptions: {
       projectId: vertexAi.project,
       ...(hasCredentialsFile && {

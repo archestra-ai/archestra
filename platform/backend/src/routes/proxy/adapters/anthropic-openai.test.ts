@@ -275,7 +275,7 @@ describe("ResponsesFromChatStreamAdapter response replacement", () => {
     ).createStreamAdapter();
     const rawFrames = feedRawTextAndReasoning(adapter);
     expect(rawFrames).toContain("RAW");
-    expect(rawFrames).toContain("response.completed");
+    expect(rawFrames).not.toContain("response.completed");
 
     adapter.prepareResponseReplacement?.();
     expect(adapter.state.text).toBe("");
@@ -294,10 +294,7 @@ describe("ResponsesFromChatStreamAdapter response replacement", () => {
             response?: { output: unknown[]; [key: string]: unknown };
           },
       );
-    const loggedResponse = adapter.toProviderResponse() as unknown as {
-      output: unknown[];
-      [key: string]: unknown;
-    };
+    const loggedResponse = adapter.toProviderResponse();
     const completed = admittedEvents.find(
       (event) => event.type === "response.completed",
     );
@@ -317,8 +314,16 @@ describe("ResponsesFromChatStreamAdapter response replacement", () => {
         (event) => event.type === "response.output_text.delta",
       )?.delta,
     ).toBe("ADMITTED");
-    expect(completed?.response).toMatchObject(loggedResponse);
-    expect(completed?.response?.output).toEqual(loggedResponse.output);
+    expect(completed?.response?.output).toMatchObject([
+      { type: "message", content: [{ type: "output_text", text: "ADMITTED" }] },
+    ]);
+    expect(loggedResponse.content).toEqual([
+      { type: "text", text: "ADMITTED", citations: null },
+    ]);
+    expect(completed?.response?.usage).toMatchObject({
+      input_tokens: 5,
+      output_tokens: 2,
+    });
     expect(JSON.stringify({ admittedEvents, loggedResponse })).not.toContain(
       "RAW",
     );

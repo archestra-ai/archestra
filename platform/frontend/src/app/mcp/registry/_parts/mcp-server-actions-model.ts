@@ -44,7 +44,7 @@ export function getMcpServerActionModel(item: {
     {
       id: "logs",
       label: "View logs",
-      href: `${pathname}?tab=logs`,
+      href: mcpServerLogsHref({ item }) ?? undefined,
     },
     {
       id: "edit",
@@ -61,6 +61,27 @@ export function getMcpServerActionModel(item: {
       label: "Delete",
     },
   ];
+}
+
+/**
+ * Where "View logs" goes for a server, or null when it has nowhere to go.
+ *
+ * Only local servers, which run in a pod, have a Logs tab on the server page.
+ * A remote or built-in server has no container output to show, and the page
+ * silently falls back to Overview for a tab it does not render. `serverId`
+ * pre-selects that installation in the logs view.
+ */
+export function mcpServerLogsHref({
+  item,
+  serverId,
+}: {
+  item: { id: string; serverType: "app" | "builtin" | "local" | "remote" };
+  serverId?: string;
+}): string | null {
+  if (item.serverType !== "local") return null;
+  const params = new URLSearchParams({ tab: "logs" });
+  if (serverId) params.set("server", serverId);
+  return `/mcp/registry/${item.id}?${params.toString()}`;
 }
 
 export function mcpServerAction(

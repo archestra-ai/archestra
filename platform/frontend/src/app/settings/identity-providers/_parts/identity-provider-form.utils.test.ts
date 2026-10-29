@@ -249,7 +249,7 @@ describe("normalizeIdentityProviderFormValues", () => {
           userInfoEndpoint: "https://graph.microsoft.com/oidc/userinfo",
           discoveryEndpoint:
             "https://login.microsoftonline.com/test-tenant/v2.0/.well-known/openid-configuration",
-          mapping: { id: "sub", email: "email", name: "name" },
+          mapping: { id: "sub", email: "", name: "name" },
           enterpriseManagedCredentials: {
             clientId: "archestra-oidc",
             clientSecret: "archestra-oidc-secret",
@@ -271,7 +271,11 @@ describe("normalizeIdentityProviderFormValues", () => {
     expect(normalized.oidcConfig?.mapping?.email).toBe("preferred_username");
   });
 
-  it("preserves custom Entra OBO email mappings", () => {
+  it.each([
+    "email",
+    "preferred_username",
+    "upn",
+  ])("preserves an explicit Entra OBO email claim: %s", (emailClaim) => {
     const normalized = normalizeIdentityProviderFormValues(
       makeOidcFormValues({
         providerId: "EntraID",
@@ -284,7 +288,7 @@ describe("normalizeIdentityProviderFormValues", () => {
           userInfoEndpoint: "https://graph.microsoft.com/oidc/userinfo",
           discoveryEndpoint:
             "https://login.microsoftonline.com/test-tenant/v2.0/.well-known/openid-configuration",
-          mapping: { id: "sub", email: "upn", name: "name" },
+          mapping: { id: "sub", email: emailClaim, name: "name" },
           enterpriseManagedCredentials: {
             exchangeStrategy: "entra_obo",
             clientId: "archestra-oidc",
@@ -294,6 +298,6 @@ describe("normalizeIdentityProviderFormValues", () => {
     );
 
     expect(normalized.oidcConfig?.userInfoEndpoint).toBeUndefined();
-    expect(normalized.oidcConfig?.mapping?.email).toBe("upn");
+    expect(normalized.oidcConfig?.mapping?.email).toBe(emailClaim);
   });
 });

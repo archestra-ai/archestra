@@ -20,6 +20,21 @@ describe("formatCallerIdentity", () => {
     ).toEqual({ name: null, scope: "team" });
   });
 
+  it("names a service account call by the account, or as a service account once it is gone", () => {
+    expect(
+      formatCallerIdentity({
+        userName: "CI pipeline",
+        authMethod: "service_account_token",
+      }),
+    ).toEqual({ name: "CI pipeline", scope: "personal" });
+    expect(
+      formatCallerIdentity({
+        userName: null,
+        authMethod: "service_account_token",
+      }),
+    ).toEqual({ name: "Service account", scope: "org" });
+  });
+
   it("has nothing to name when a personal method lost its user", () => {
     expect(
       formatCallerIdentity({ userName: null, authMethod: "oauth" }),

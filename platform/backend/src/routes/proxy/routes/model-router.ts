@@ -1,50 +1,63 @@
 import {
-  credentialRequiresPerUserScope,
   hasArchestraTokenPrefix,
+  isChatCompletionsOnlyRouterProvider,
   LLM_PROXY_OAUTH_SCOPE,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
-  perUserCredentialLabel,
-  type ResourceVisibilityScope,
+  providerDisplayNames,
+  providerHasEndpointLocalModels,
   RouteId,
-  requiresOpenAiResponsesApi,
-  requiresResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getProviderConfiguredBaseUrl } from "@/config";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
+import {
+  AUTO_MODEL,
+  autoModelAvailable,
+  resolveAutoModel,
+} from "@/auto-routing/router";
+import config, { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
-  LlmOauthClientModel,
+  ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
   MemberModel,
-  ModelModel,
-  ModelTeamModel,
+  ModelPoolModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import AgentTeamModel from "@/models/agent-team";
+import { collectDelegationMarkers } from "@/openappa/delegation";
+import { scrubTranslatedClientWire } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
+import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
-import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
+import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
+import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
+import { ResourcePermissions } from "@/services/resource-permissions";
+import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import type { GatewayAgent, LLMProvider } from "@/types";
 import {
   ApiError,
   constructResponseSchema,
+  GithubCopilot,
   OpenAi,
   UuidIdSchema,
 } from "@/types";
+import { CacheControlSchema } from "@/types/llm-providers/openai/messages";
 import {
   azureAdapterFactory,
+  azureResponsesAdapterFactory,
   cerebrasAdapterFactory,
   deepseekAdapterFactory,
   geminiEmbeddingsAdapterFactory,
   githubCopilotAdapterFactory,
   githubCopilotResponsesAdapterFactory,
   groqAdapterFactory,
+  kimiAdapterFactory,
+  kimiCodeAdapterFactory,
   makeOpenAiCompatibleEmbeddingsAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
@@ -65,7 +78,10 @@ import { openaiToConverse } from "../adapters/bedrock-openai-translator";
 import { makeCohereOpenaiAdapterFactory } from "../adapters/cohere-openai";
 import { openaiToCohere } from "../adapters/cohere-openai-translator";
 import { makeGeminiOpenaiAdapterFactory } from "../adapters/gemini-openai";
-import { openaiToGemini } from "../adapters/gemini-openai-translator";
+import {
+  decodeSignedToolCallId,
+  openaiToGemini,
+} from "../adapters/gemini-openai-translator";
 import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
 import {
   type OpenaiResponsesContext,
@@ -80,13 +96,31 @@ import {
 import {
   handleLLMProxy,
   type LLMProxyAuthOverride,
+  sendUsageLimitRefusal,
 } from "../llm-proxy-handler";
+import { type ModelPoolCaller, mayUseModelPool } from "../model-pool-failover";
+import {
+  type ModelRouterAuth,
+  type ModelRouterMappedProviderKey,
+  type ModelRouterOAuthClientAuth,
+  type ModelRouterUserOAuthAuth,
+  modelRequiresResponses,
+  modelRouterAuthenticatedUserId,
+  nativeResponsesProvider,
+  selectModelRouterCredential,
+} from "../model-router-access";
+import { assertModelRouterCacheControls } from "../model-router-cache-controls";
 import {
   buildRoutableModelId,
+  listRoutableModels,
   type ModelRouterResolution,
   resolveModelRoute,
-  sortRoutableModels,
 } from "../model-router-resolver";
+
+const RouterChatRequestSchema = OpenAi.API.ChatCompletionRequestSchema.extend({
+  cache_control: CacheControlSchema.optional(),
+  cachedContent: z.string().optional(),
+});
 
 type OpenAiWireProvider = LLMProvider<
   OpenAi.Types.ChatCompletionsRequest,
@@ -104,66 +138,9 @@ type EmbeddingsModelRouterProvider = LLMProvider<
   OpenAi.Types.ChatCompletionsHeaders
 >;
 
-type ModelRouterMappedProviderKey = {
-  provider: SupportedProvider;
-  providerApiKeyId: string;
-  providerApiKeyName: string;
-  secretId: string | null;
-  baseUrl: string | null;
-  scope: ResourceVisibilityScope;
-  userId: string | null;
-};
-
 type ModelRouterUserProviderKey = Awaited<
   ReturnType<typeof LlmProviderApiKeyModel.getAvailableKeysForUser>
 >[number];
-
-type ModelRouterVirtualKeyAuth = {
-  authMethod: "virtual_key";
-  organizationId: string;
-  virtualKeyId: string;
-  virtualKeyIsPersonal: boolean;
-  virtualKeyAuthorId: string | null;
-  providerApiKeysByProvider: Map<
-    SupportedProvider,
-    ModelRouterMappedProviderKey
-  >;
-  oauthClient?: never;
-};
-
-type ModelRouterOAuthClientAuth = {
-  authMethod: "oauth_client_credentials";
-  organizationId: string;
-  providerApiKeysByProvider: Map<
-    SupportedProvider,
-    ModelRouterMappedProviderKey
-  >;
-  oauthClient: {
-    id: string;
-    name: string;
-    clientId: string;
-  };
-};
-
-type ModelRouterUserOAuthAuth = {
-  authMethod: "oauth_user";
-  organizationId: string;
-  userId: string;
-  providerApiKeysByProvider: Map<
-    SupportedProvider,
-    ModelRouterMappedProviderKey
-  >;
-  oauthClient: {
-    id: string;
-    name: string;
-    clientId: string;
-  } | null;
-};
-
-type ModelRouterAuth =
-  | ModelRouterVirtualKeyAuth
-  | ModelRouterOAuthClientAuth
-  | ModelRouterUserOAuthAuth;
 
 type OpenAiWireModelRouterProvider = {
   kind: "openai-wire";
@@ -212,6 +189,14 @@ const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const RESPONSES_SUFFIX = "/responses";
 const EMBEDDINGS_SUFFIX = "/embeddings";
 
+// The router fronts every OpenAI-wire provider, and some (GitHub Copilot) omit
+// or vary `object`/`created` on an otherwise valid completion. The strict
+// OpenAI schema turned those into a 500 during response serialization. The
+// Copilot schema is the OpenAI schema with those two fields relaxed and
+// provider extensions passed through, so it accepts every standard reply too.
+const ModelRouterChatCompletionResponseSchema =
+  GithubCopilot.API.ChatCompletionResponseSchema;
+
 const openAiWireProviders = {
   openai: openaiAdapterFactory,
   azure: azureAdapterFactory,
@@ -219,6 +204,8 @@ const openAiWireProviders = {
   deepseek: deepseekAdapterFactory,
   "github-copilot": githubCopilotAdapterFactory,
   groq: groqAdapterFactory,
+  kimi: kimiAdapterFactory,
+  "kimi-code": kimiCodeAdapterFactory,
   minimax: minimaxAdapterFactory,
   mistral: mistralAdapterFactory,
   ollama: ollamaAdapterFactory,
@@ -237,6 +224,13 @@ const translatedModelRouterProviders = [
   "cohere",
   "gemini",
 ] as const satisfies ReadonlyArray<TranslatedModelRouterProvider>;
+
+/**
+ * Translated providers whose wire OpenAPPA does not read. Anthropic's
+ * Messages wire is one OpenAPPA reads, so it is not here.
+ */
+const unreadTranslatedProviders: ReadonlySet<SupportedProvider> =
+  new Set<TranslatedModelRouterProvider>(["bedrock", "cohere", "gemini"]);
 
 /**
  * Built from the shared list so the connection UI cannot advertise the router
@@ -413,10 +407,10 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Create a chat completion through the OpenAI-compatible model router (default LLM proxy)",
         tags: ["LLM Proxy"],
-        body: OpenAi.API.ChatCompletionRequestSchema,
+        body: RouterChatRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          OpenAi.API.ChatCompletionResponseSchema,
+          ModelRouterChatCompletionResponseSchema,
         ),
       },
     },
@@ -437,10 +431,10 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        body: OpenAi.API.ChatCompletionRequestSchema,
+        body: RouterChatRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          OpenAi.API.ChatCompletionResponseSchema,
+          ModelRouterChatCompletionResponseSchema,
         ),
       },
     },
@@ -463,11 +457,32 @@ async function routeChatCompletion(
     ? await getModelRouterAgent(params.agentId)
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
-  const resolution = await resolveModelRoute({
+  const auto = await resolveAutoModel({
+    request,
+    auth,
+    agent,
+    endpoint: "chat_completions",
     requestedModel: body.model,
+    body,
+  });
+  if (auto.kind === "usage_limited")
+    return sendUsageLimitRefusal(reply, auto.violation);
+  // A model pool's name is served by the pool's members, LiteLLM style: the
+  // proxy picks a member and its key, when the caller may use the pool.
+  const poolId =
+    auto.kind === "as_requested"
+      ? await usableModelPoolId({ auth, model: body.model })
+      : null;
+  if (poolId) {
+    applyModelPoolAuthOverride({ request, auth, poolId });
+    return handleLLMProxy(body, request, reply, openaiAdapterFactory);
+  }
+  const resolution = await resolveModelRoute({
+    requestedModel: auto.model,
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
+  assertModelRouterCacheControls(resolution.provider, body);
   const routedBody = {
     ...body,
     model: resolution.modelId,
@@ -484,6 +499,12 @@ async function routeChatCompletion(
 
   assertModelServesChatCompletions(resolution);
 
+  scrubClientWireBeforeTranslation({
+    request,
+    provider: resolution.provider,
+    family: "openai:chatCompletions",
+    body: routedBody,
+  });
   const provider = getOpenAiChatProviderForResolution({
     provider: resolution.provider,
     body: routedBody,
@@ -491,7 +512,7 @@ async function routeChatCompletion(
   await applyModelRouterAuthOverride({
     request,
     auth,
-    provider: resolution.provider,
+    resolution,
   });
 
   return handleModelRouterProvider(provider, request, reply);
@@ -499,18 +520,29 @@ async function routeChatCompletion(
 
 async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   const body = request.body as OpenAi.Types.ResponsesRequest;
-  const { chatBody, responsesContext } = responsesToOpenaiChat(body);
   const params = request.params as { agentId?: string };
   const auth = await getModelRouterAuth(request);
   const agent = params.agentId
     ? await getModelRouterAgent(params.agentId)
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
+  const auto = await resolveAutoModel({
+    request,
+    auth,
+    agent,
+    endpoint: "responses",
+    requestedModel: body.model,
+    body,
+  });
+  if (auto.kind === "usage_limited")
+    return sendUsageLimitRefusal(reply, auto.violation);
   const resolution = await resolveModelRoute({
-    requestedModel: chatBody.model,
+    requestedModel: auto.model,
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
+
+  assertModelRouterCacheControls(resolution.provider, body);
 
   // Preserve native Responses semantics whenever that surface is available.
   // A chat round trip loses reasoning settings, encrypted replay state,
@@ -520,7 +552,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     await applyModelRouterAuthOverride({
       request,
       auth,
-      provider: resolution.provider,
+      resolution,
     });
     return handleLLMProxy(
       { ...body, model: resolution.modelId },
@@ -530,6 +562,35 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     );
   }
 
+  // The shared list keeps this refusal, the model picker and the runtime
+  // launch preflight in agreement: see CHAT_COMPLETIONS_ONLY_ROUTER_PROVIDERS.
+  if (isChatCompletionsOnlyRouterProvider(resolution.provider)) {
+    throw new ApiError(
+      501,
+      `${providerDisplayNames[resolution.provider]} models are available through the model router's Chat Completions endpoint only: the Responses translation cannot carry the reasoning their thinking models need on tool-call turns.`,
+    );
+  }
+
+  // The translation joins a message's text parts into one string, which can
+  // leave a client's delegation marker mid-text (Kilo Code appends an
+  // environment part after the prompt it was handed). Collect the markers
+  // from the wire the client sent, where each still ends its own part.
+  setCollectedDelegationMarkers(
+    request,
+    collectDelegationMarkers({ family: "openai:responses", body }),
+  );
+  // The translation also joins an OpenCode-family subagent return with the
+  // parts beside it, so returns are read from the client's wire too.
+  scrubClientWireBeforeTranslation({
+    request,
+    provider: resolution.provider,
+    family: "openai:responses",
+    body,
+  });
+  const { chatBody, responsesContext } = responsesToOpenaiChat(body, {
+    preserveContentParts:
+      resolution.provider === "bedrock" || resolution.provider === "anthropic",
+  });
   const routedChatBody = {
     ...chatBody,
     model: resolution.modelId,
@@ -542,7 +603,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   await applyModelRouterAuthOverride({
     request,
     auth,
-    provider: resolution.provider,
+    resolution,
   });
 
   return handleModelRouterResponsesProvider(
@@ -580,7 +641,7 @@ async function routeEmbedding(request: FastifyRequest, reply: FastifyReply) {
   await applyModelRouterAuthOverride({
     request,
     auth,
-    provider: resolution.provider,
+    resolution,
   });
 
   return handleLLMProxy(routedBody, request, reply, embeddingsProvider);
@@ -625,24 +686,20 @@ function getModelRouterEmbeddingsProvider(
 }
 
 /**
- * Prefer OpenAI's native Responses surface even when a model also supports
- * chat. Other providers retain their existing compatibility routing.
- *
- * Keyed off the model's published surfaces where available. OpenAI does not
- * publish those surfaces, so its known Responses-only model families use the
- * same model-id discriminator as foreground Agent chat.
+ * Prefer a provider's native Responses surface whenever one serves the model;
+ * other providers keep the chat translation.
  */
 function getNativeResponsesAdapter(resolution: ModelRouterResolution) {
-  if (resolution.provider === "openai") {
-    return openAiResponsesAdapterFactory;
+  switch (nativeResponsesProvider(resolution)) {
+    case "openai":
+      return openAiResponsesAdapterFactory;
+    case "azure":
+      return azureResponsesAdapterFactory;
+    case "github-copilot":
+      return githubCopilotResponsesAdapterFactory;
+    case null:
+      return null;
   }
-  if (!modelRequiresResponses(resolution)) {
-    return null;
-  }
-  if (resolution.provider === "github-copilot") {
-    return githubCopilotResponsesAdapterFactory;
-  }
-  return null;
 }
 
 /**
@@ -661,14 +718,6 @@ function assertModelServesChatCompletions(
     400,
     `Model "${resolution.requestedModel}" is only served over the Responses API. ` +
       `Send this request to the model router's ${RESPONSES_SUFFIX} endpoint instead of ${CHAT_COMPLETIONS_SUFFIX}.`,
-  );
-}
-
-function modelRequiresResponses(resolution: ModelRouterResolution): boolean {
-  return (
-    requiresResponsesApi(resolution.supportedEndpoints) ||
-    (resolution.provider === "openai" &&
-      requiresOpenAiResponsesApi(resolution.modelId))
   );
 }
 
@@ -692,6 +741,35 @@ function getOpenAiChatProviderForResolution(params: {
     501,
     `Provider "${params.provider}" is not yet available through the OpenAI-compatible model router.`,
   );
+}
+
+/**
+ * OpenAPPA reads the client's Responses and Chat Completions wires but not the
+ * Gemini, Bedrock Converse or Cohere wire, so a request translated to one of
+ * those would reach it with no session and no subagent returns it can check.
+ * It scrubs the client's body here instead, before the translation, which
+ * then forwards the scrubbed body.
+ */
+function scrubClientWireBeforeTranslation(params: {
+  request: FastifyRequest;
+  provider: SupportedProvider;
+  family: "openai:responses" | "openai:chatCompletions";
+  body: OpenAi.Types.ChatCompletionsRequest | OpenAi.Types.ResponsesRequest;
+}): void {
+  if (!unreadTranslatedProviders.has(params.provider)) return;
+  scrubTranslatedClientWire({
+    request: params.request,
+    family: params.family,
+    body: params.body,
+    // Gemini's ids carry the call's thought signature on the client's wire
+    // only; the translated body names the call by its own id.
+    ...(params.provider === "gemini"
+      ? {
+          translatedCallId: (callId: string) =>
+            decodeSignedToolCallId(callId).id ?? callId,
+        }
+      : {}),
+  });
 }
 
 function getTranslatedModelRouterProvider(params: {
@@ -801,46 +879,60 @@ function handleModelRouterResponsesProvider(
 }
 
 async function listModels(params: { auth: ModelRouterAuth }) {
-  const apiKeyIds = [...params.auth.providerApiKeysByProvider.values()]
-    .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
-    .map((mapping) => mapping.providerApiKeyId);
-  const linkedModels =
-    await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
-  const candidateModels = linkedModels
-    .map(({ model }) => model)
-    .filter((model) => {
-      if (!modelRouterSupportedProviders.has(model.provider)) {
-        return false;
-      }
-      return (
-        ModelModel.supportsTextChat(model) ||
-        ModelModel.supportsEmbeddings(model)
-      );
-    });
-
   // Hide models the caller cannot invoke, mirroring the proxy-time check: a
   // user-attributed credential needs a `use` grant; auth without a user
   // identity may exercise only an organization-wide grant.
-  const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
-    modelIds: candidateModels.map((model) => model.id),
+  const chatModels = await listRoutableModels({
     organizationId: params.auth.organizationId,
+    providerApiKeyIds: params.auth.providerApiKeys
+      .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
+      .map((mapping) => mapping.providerApiKeyId),
     userId:
-      params.auth.authMethod === "oauth_user" ? params.auth.userId : undefined,
-    action: "use",
+      params.auth.authMethod === "oauth_user"
+        ? params.auth.userId
+        : params.auth.serviceAccountId
+          ? serviceAccountUserId(params.auth.serviceAccountId)
+          : undefined,
+    includeEmbeddings: true,
   });
-
-  const chatModels = sortRoutableModels(
-    candidateModels.filter((model) => allowedModelIds.has(model.id)),
+  // Pools come first: their names are what clients are meant to ask for.
+  const pools = (
+    config.llmProxy.modelPoolsEnabled
+      ? await ModelPoolModel.list(params.auth.organizationId)
+      : []
+  ).filter(
+    (pool) =>
+      pool.members.some((member) => member.enabled) &&
+      mayUseModelPool({ pool, caller: modelPoolCaller(params.auth) }),
   );
 
+  const autoModel = (await autoModelAvailable(params.auth))
+    ? [
+        {
+          id: AUTO_MODEL,
+          object: "model" as const,
+          created: 0,
+          owned_by: "archestra",
+        },
+      ]
+    : [];
   return {
     object: "list" as const,
-    data: chatModels.map((model) => ({
-      id: buildRoutableModelId(model),
-      object: "model" as const,
-      created: Math.floor(model.createdAt.getTime() / 1000),
-      owned_by: model.provider,
-    })),
+    data: [
+      ...pools.map((pool) => ({
+        id: pool.name,
+        object: "model" as const,
+        created: Math.floor(pool.createdAt.getTime() / 1000),
+        owned_by: "model-pool",
+      })),
+      ...autoModel,
+      ...chatModels.map((model) => ({
+        id: buildRoutableModelId(model),
+        object: "model" as const,
+        created: Math.floor(model.createdAt.getTime() / 1000),
+        owned_by: model.provider,
+      })),
+    ],
   };
 }
 
@@ -866,6 +958,32 @@ async function ensureModelRouterAgentAccess(params: {
       "Model Router virtual key cannot access this Agent.",
     );
   }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (
+    params.auth.serviceAccountId &&
+    !(params.agent.agentType === "llm_proxy" && params.agent.isDefault)
+  ) {
+    const userId = serviceAccountUserId(params.auth.serviceAccountId);
+    if (
+      !(await AgentTeamModel.userHasAgentAccess({
+        userId,
+        agentId: params.agent.id,
+        agentAccessContext: params.agent,
+        action: "use",
+        isAgentAdmin: await ResourcePermissions.allows({
+          userId,
+          organizationId: params.agent.organizationId,
+          resource: "agent",
+          scope: "*",
+          action: "update",
+        }),
+      }))
+    )
+      throw new ApiError(403, "Service account cannot access this Agent.");
+  }
+  // SPDX-SnippetEnd
   if (params.auth.authMethod === "oauth_user") {
     const member = await MemberModel.getByUserId(
       params.auth.userId,
@@ -900,7 +1018,12 @@ async function getModelRouterAuth(
   });
   try {
     const resolved = await validateVirtualApiKeyToken(bearerToken);
-    const mappings = await VirtualApiKeyModel.getProviderApiKeysForRouting(
+    if (resolved.virtualKey.createdByServiceAccountId)
+      await resolveOauthServiceAccount({
+        serviceAccountId: resolved.virtualKey.createdByServiceAccountId,
+        organizationId: resolved.virtualKey.organizationId,
+      });
+    const mappings = await resolveVirtualKeyProviderMappings(
       resolved.virtualKey.id,
     );
     if (mappings.length === 0) {
@@ -920,9 +1043,10 @@ async function getModelRouterAuth(
         resolved.virtualKey,
       ),
       virtualKeyAuthorId: resolved.virtualKey.authorId,
-      providerApiKeysByProvider: new Map(
-        mappings.map((mapping) => [mapping.provider, mapping]),
-      ),
+      serviceAccountId:
+        resolved.virtualKey.createdByServiceAccountId ?? undefined,
+      billingTeamId: resolved.virtualKey.billingTeamId,
+      providerApiKeys: mappings,
     };
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 401) {
@@ -948,13 +1072,11 @@ async function getModelRouterAuth(
 }
 
 function getMappedProviders(auth: ModelRouterAuth): Set<SupportedProvider> {
-  return new Set(auth.providerApiKeysByProvider.keys());
+  return new Set(auth.providerApiKeys.map((mapping) => mapping.provider));
 }
 
 function getMappedApiKeyIds(auth: ModelRouterAuth): string[] {
-  return [...auth.providerApiKeysByProvider.values()].map(
-    (mapping) => mapping.providerApiKeyId,
-  );
+  return auth.providerApiKeys.map((mapping) => mapping.providerApiKeyId);
 }
 
 function isTranslatedModelRouterProvider(
@@ -969,50 +1091,59 @@ function assertNever(value: never): never {
   throw new ApiError(500, `Unhandled model router provider "${value}".`);
 }
 
+/** The pool named `model` when the caller may use it and it has members. */
+async function usableModelPoolId(params: {
+  auth: ModelRouterAuth;
+  model: string;
+}): Promise<string | null> {
+  if (!config.llmProxy.modelPoolsEnabled) return null;
+  const pool = await ModelPoolModel.findByName({
+    organizationId: params.auth.organizationId,
+    name: params.model.trim(),
+  });
+  if (!pool || pool.members.length === 0) return null;
+  return mayUseModelPool({ pool, caller: modelPoolCaller(params.auth) })
+    ? pool.id
+    : null;
+}
+
+function modelPoolCaller(auth: ModelRouterAuth): ModelPoolCaller {
+  return {
+    virtualKeyId:
+      auth.authMethod === "virtual_key" ? auth.virtualKeyId : undefined,
+    providerApiKeyIds: getMappedApiKeyIds(auth),
+    modelPoolIds:
+      auth.authMethod === "oauth_client_credentials"
+        ? auth.modelPoolIds
+        : undefined,
+  };
+}
+
+function applyModelPoolAuthOverride(params: {
+  request: FastifyRequest;
+  auth: ModelRouterAuth;
+  poolId: string;
+}): void {
+  (
+    params.request as FastifyRequest & {
+      llmProxyAuthOverride?: LLMProxyAuthOverride;
+    }
+  ).llmProxyAuthOverride = {
+    apiKey: undefined,
+    baseUrl: undefined,
+    ...modelRouterCaller(params.auth),
+    modelPoolId: params.poolId,
+  };
+}
+
 async function applyModelRouterAuthOverride(params: {
   request: FastifyRequest;
   auth: ModelRouterAuth;
-  provider: SupportedProvider;
+  resolution: ModelRouterResolution;
 }): Promise<void> {
-  const mappedApiKey = params.auth.providerApiKeysByProvider.get(
-    params.provider,
-  );
-  if (!mappedApiKey) {
-    throw new ApiError(
-      400,
-      `Model Router credential is not mapped to provider "${params.provider}".`,
-    );
-  }
-
-  const apiKey = mappedApiKey.secretId
-    ? await getSecretValueForLlmProviderApiKey(mappedApiKey.secretId)
-    : undefined;
-  assertSubscriptionCredentialForProvider({
-    apiKey,
-    provider: params.provider,
-  });
-
-  if (
-    credentialRequiresPerUserScope({
-      provider: params.provider,
-      apiKey,
-    })
-  ) {
-    const isOwnedPersonalCredential =
-      mappedApiKey.userId !== null &&
-      (params.auth.authMethod === "oauth_user"
-        ? mappedApiKey.userId === params.auth.userId
-        : params.auth.authMethod === "virtual_key" &&
-          params.auth.virtualKeyIsPersonal &&
-          params.auth.virtualKeyAuthorId !== null &&
-          mappedApiKey.userId === params.auth.virtualKeyAuthorId);
-    if (!isOwnedPersonalCredential) {
-      throw new ApiError(
-        403,
-        `${perUserCredentialLabel({ provider: params.provider, apiKey })} is per-user: it can only be used through the same user's own personal credential.`,
-      );
-    }
-  }
+  const credential = await selectModelRouterCredential(params);
+  if (credential.kind === "denied") throw credential.error;
+  const { mappedApiKey, apiKey } = credential;
   (
     params.request as FastifyRequest & {
       llmProxyAuthOverride?: LLMProxyAuthOverride;
@@ -1021,24 +1152,29 @@ async function applyModelRouterAuthOverride(params: {
     apiKey,
     baseUrl: mappedApiKey.baseUrl ?? undefined,
     chatApiKeyId: mappedApiKey.providerApiKeyId,
+    ...modelRouterCaller(params.auth),
+  };
+}
+
+function modelRouterCaller(
+  auth: ModelRouterAuth,
+): Omit<LLMProxyAuthOverride, "apiKey" | "baseUrl" | "chatApiKeyId"> {
+  return {
     authenticated: true,
     source: "model_router",
-    authMethod: params.auth.authMethod,
+    authMethod: auth.authMethod,
+    serviceAccountId: auth.serviceAccountId,
     virtualKeyId:
-      params.auth.authMethod === "virtual_key"
-        ? params.auth.virtualKeyId
-        : undefined,
+      auth.authMethod === "virtual_key" ? auth.virtualKeyId : undefined,
     authenticatedApp:
-      params.auth.authMethod === "oauth_user"
-        ? (params.auth.oauthClient ?? undefined)
-        : params.auth.oauthClient,
-    userId:
-      params.auth.authMethod === "oauth_user"
-        ? params.auth.userId
-        : params.auth.authMethod === "virtual_key" &&
-            params.auth.virtualKeyIsPersonal
-          ? (params.auth.virtualKeyAuthorId ?? undefined)
-          : undefined,
+      auth.authMethod === "oauth_user"
+        ? (auth.oauthClient ?? undefined)
+        : auth.oauthClient,
+    userId: modelRouterAuthenticatedUserId(auth),
+    billingTeamId:
+      auth.authMethod === "oauth_user"
+        ? undefined
+        : (auth.billingTeamId ?? undefined),
   };
 }
 
@@ -1061,6 +1197,15 @@ async function getModelRouterOAuthClientAuth(
   if (!accessToken.scopes?.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE)) {
     throw new ApiError(403, "Access token is missing Model Router scope.");
   }
+  const managedClient = await LlmOauthClientModel.findByClientId(
+    accessToken.clientId,
+  );
+  if (managedClient?.disabled) {
+    throw new ApiError(401, "LLM OAuth client is disabled.");
+  }
+  if (managedClient && !managedClient.scopes.includes(LLM_PROXY_OAUTH_SCOPE)) {
+    throw new ApiError(403, "OAuth client no longer grants LLM proxy access.");
+  }
   if (accessToken.userId) {
     return getModelRouterUserOAuthAuth({ accessToken });
   }
@@ -1075,8 +1220,14 @@ async function getModelRouterOAuthClientAuth(
     throw new ApiError(401, "LLM OAuth client is disabled.");
   }
 
+  if (oauthClient.serviceAccountId)
+    await resolveOauthServiceAccount({
+      serviceAccountId: oauthClient.serviceAccountId,
+      organizationId: oauthClient.organizationId,
+    });
+  const mappings = await resolveOauthClientProviderMappings(oauthClient);
   const providerApiKeys = await LlmProviderApiKeyModel.findByIds(
-    oauthClient.providerApiKeys.map((mapping) => mapping.providerApiKeyId),
+    mappings.map((mapping) => mapping.providerApiKeyId),
   );
   const providerApiKeysById = new Map(
     providerApiKeys.map((apiKey) => [apiKey.id, apiKey]),
@@ -1084,35 +1235,33 @@ async function getModelRouterOAuthClientAuth(
 
   return {
     authMethod: "oauth_client_credentials",
+    serviceAccountId: oauthClient.serviceAccountId ?? undefined,
     organizationId: oauthClient.organizationId,
+    billingTeamId: oauthClient.billingTeamId,
+    modelPoolIds: oauthClient.modelPoolIds,
     oauthClient: {
       id: oauthClient.id,
       name: oauthClient.name,
       clientId: oauthClient.clientId,
     },
-    providerApiKeysByProvider: new Map(
-      oauthClient.providerApiKeys.map((mapping) => {
-        const apiKey = providerApiKeysById.get(mapping.providerApiKeyId);
-        if (!apiKey) {
-          throw new ApiError(
-            500,
-            "LLM OAuth client references a missing provider API key.",
-          );
-        }
-        return [
-          mapping.provider,
-          {
-            provider: mapping.provider,
-            providerApiKeyId: apiKey.id,
-            providerApiKeyName: apiKey.name,
-            secretId: apiKey.secretId,
-            baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
-            scope: apiKey.scope,
-            userId: apiKey.userId,
-          },
-        ];
-      }),
-    ),
+    providerApiKeys: mappings.map((mapping) => {
+      const apiKey = providerApiKeysById.get(mapping.providerApiKeyId);
+      if (!apiKey) {
+        throw new ApiError(
+          500,
+          "LLM OAuth client references a missing provider API key.",
+        );
+      }
+      return {
+        provider: mapping.provider,
+        providerApiKeyId: apiKey.id,
+        providerApiKeyName: apiKey.name,
+        secretId: apiKey.secretId,
+        baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
+        scope: apiKey.scope,
+        userId: apiKey.userId,
+      };
+    }),
   };
 }
 
@@ -1133,12 +1282,12 @@ async function getModelRouterUserOAuthAuth(params: {
   }
 
   const userTeamIds = await TeamModel.getUserTeamIds(params.accessToken.userId);
-  const providerApiKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+  const availableKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
     member.organizationId,
     params.accessToken.userId,
     userTeamIds,
   );
-  if (providerApiKeys.length === 0) {
+  if (availableKeys.length === 0) {
     throw new ApiError(
       401,
       "OAuth user has no provider API keys available for Model Router usage.",
@@ -1148,17 +1297,19 @@ async function getModelRouterUserOAuthAuth(params: {
   const oauthClient = await OAuthClientModel.findByClientId(
     params.accessToken.clientId,
   );
-  const providerApiKeysByProvider = new Map<
-    SupportedProvider,
-    ModelRouterMappedProviderKey
-  >();
-  for (const apiKey of [...providerApiKeys].sort(
+  // A user reaches every endpoint of a self-hosted provider they can use; for
+  // a credential-style provider only their best-ranked key, as everywhere else.
+  const providerApiKeys: ModelRouterMappedProviderKey[] = [];
+  for (const apiKey of [...availableKeys].sort(
     compareModelRouterUserProviderKeys,
   )) {
-    if (providerApiKeysByProvider.has(apiKey.provider)) {
+    if (
+      !providerHasEndpointLocalModels(apiKey.provider) &&
+      providerApiKeys.some((mapping) => mapping.provider === apiKey.provider)
+    ) {
       continue;
     }
-    providerApiKeysByProvider.set(apiKey.provider, {
+    providerApiKeys.push({
       provider: apiKey.provider,
       providerApiKeyId: apiKey.id,
       providerApiKeyName: apiKey.name,
@@ -1173,7 +1324,7 @@ async function getModelRouterUserOAuthAuth(params: {
     authMethod: "oauth_user",
     organizationId: member.organizationId,
     userId: params.accessToken.userId,
-    providerApiKeysByProvider,
+    providerApiKeys,
     oauthClient: oauthClient
       ? {
           id: oauthClient.id,

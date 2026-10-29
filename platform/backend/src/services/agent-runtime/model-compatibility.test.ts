@@ -1,7 +1,7 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
-import config from "@/config";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
   A2AContextModel,
   A2AMessageModel,
@@ -10,9 +10,12 @@ import {
   ModelModel,
   OrganizationModel,
 } from "@/models";
-import { expect, test } from "@/test";
+import { afterEach, expect, test, vi } from "@/test";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
+import { kubernetesAgentRuntimeBackendDriver } from "./backends/kubernetes";
 import { preflightAgentRuntimeModelCompatibility } from "./model-compatibility";
+
+afterEach(() => vi.restoreAllMocks());
 
 test("refuses an incompatible Gemini runtime before creating a detached task", async ({
   makeAgent,
@@ -40,8 +43,13 @@ test("refuses an incompatible Gemini runtime before creating a detached task", a
     llmApiKeyId: providerKey.id,
     runtime: agentRuntime("anthropic"),
   });
-  const previousRuntimeEnabled = config.agentRuntime.enabled;
-  config.agentRuntime.enabled = true;
+  const sandboxInstalled = vi
+    .spyOn(agentSandboxApi, "isInstalled", "get")
+    .mockReturnValue(true);
+  vi.spyOn(
+    kubernetesAgentRuntimeBackendDriver,
+    "assertReady",
+  ).mockResolvedValue();
   const actor = {
     id: user.id,
     kind: "user" as const,
@@ -72,7 +80,7 @@ test("refuses an incompatible Gemini runtime before creating a detached task", a
       A2ATaskModel.listForActor({
         actorKind: "user",
         actorId: user.id,
-        agentId: agent.id,
+        agentIds: [agent.id],
         pageSize: 10,
       }),
     ).resolves.toMatchObject({ totalSize: 0 });
@@ -100,7 +108,7 @@ test("refuses an incompatible Gemini runtime before creating a detached task", a
     ).rejects.toMatchObject({ statusCode: 409 });
     expect(await A2AMessageModel.findByContextId(context.id)).toEqual([]);
   } finally {
-    config.agentRuntime.enabled = previousRuntimeEnabled;
+    sandboxInstalled.mockRestore();
   }
 });
 

@@ -1,16 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { userHasPermission } from "@/auth";
-
-const mockUserHasPermission = vi.mocked(userHasPermission);
 
 describe("GET /api/llm-virtual-keys/:id", () => {
   let app: FastifyInstanceWithZod;
@@ -23,8 +16,6 @@ describe("GET /api/llm-virtual-keys/:id", () => {
     user = await makeUser();
     // Grants reach organization members only.
     await makeMember(user.id, organizationId, { role: "member" });
-    mockUserHasPermission.mockReset();
-    mockUserHasPermission.mockResolvedValue(false);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -104,8 +95,6 @@ describe("GET /api/llm-virtual-keys/:id", () => {
   test("returns 404 for an id belonging to another organization", async ({
     makeOrganization,
   }) => {
-    mockUserHasPermission.mockResolvedValue(true);
-
     const otherOrg = await makeOrganization();
     const { virtualKey } = await VirtualApiKeyModel.create({
       organizationId: otherOrg.id,

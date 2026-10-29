@@ -112,7 +112,22 @@ builtin = "hitl"
   const policy = { content: readFileSync(policyPath, 'utf8'), credentials: {} };
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
-  t.after(() => { sanitizer.close(); annotator.close(); client.end(); rmSync(dir, { recursive: true, force: true }); });
+  const replicas = new Set();
+  t.after(async () => {
+    // Flush a held sanitizer barrier so its pods can end, then end any replica
+    // still running: a cancelled assertion must not strand a fixture child.
+    if (sanitizerBarrier) for (const flush of sanitizerBarrier.pending.splice(0)) flush();
+    const running = [...replicas];
+    for (const child of running) child.kill('SIGKILL');
+    await Promise.all(running.map((child) => new Promise((resolve) => child.once('exit', resolve))));
+    // close() waits for open keep-alive and held connections; force them shut.
+    sanitizer.closeAllConnections();
+    annotator.closeAllConnections();
+    sanitizer.close();
+    annotator.close();
+    await client.end();
+    rmSync(dir, { recursive: true, force: true });
+  });
 
   const organization_id = `smoke-${randomUUID()}`;
   const scope = (caller_id = 'user:owner', session_id = randomUUID()) => ({ organization_id, caller_id, session_id });
@@ -130,6 +145,8 @@ builtin = "hitl"
       env: { ...process.env, OPENAPPA_TEST_POLICY_PATH: policyPath },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    replicas.add(child);
+    child.on('exit', () => replicas.delete(child));
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });
@@ -140,13 +157,21 @@ builtin = "hitl"
   });
   const restarted = (session, event) => onReplica({ ...session, ...event });
   const offerInput = (session, event) => {
-    const { original_arguments, ...rest } = event;
+    const {
+      original_arguments,
+      tool: _tool,
+      spelling: _spelling,
+      dispatch: _dispatch,
+      ...rest
+    } = event;
     return {
       organization_id: session.organization_id,
-      caller_id: session.caller_id,
-      session_id: session.session_id,
-      parent_id: session.parent_id,
-      owner_caller_id: session.owner_caller_id ?? session.caller_id,
+      ...(session.caller_id ? { caller_id: session.caller_id } : {}),
+      trajectory: {
+        v: 1,
+        session_id: session.session_id,
+        ...(session.parent_id ? { parent_id: session.parent_id } : {}),
+      },
       execution_mode: event.tool_call_id ? 'tracked' : 'untracked',
       original_arguments: JSON.stringify(original_arguments || event.arguments),
       presentation: { control_tool: 'archestra__execute_remedy_plan', supports_delegation: false },
@@ -214,11 +239,35 @@ builtin = "hitl"
 
     const other = scope();
     const otherDenial = await call(other, 'other-held', 'read_untrusted');
-    const attempts = await Promise.all(['attempt-a', 'attempt-b'].map((tool_call_id) => remoteOffer(other, {
+    const attemptIds = ['attempt-a', 'attempt-b'];
+    const attempts = await Promise.allSettled(attemptIds.map((tool_call_id) => remoteOffer(other, {
       tool_call_id, arguments: { offer_id: otherDenial.offers[0].offer_id },
     })));
-    assert.equal(attempts.filter((response) => response.result.isError !== true).length, 1, JSON.stringify(attempts));
-    assert.equal(attempts.filter((response) => response.result.isError === true).length, 1);
+    assert.equal(attempts.filter((response) => response.status === 'fulfilled' && response.value.result.isError !== true).length, 1, JSON.stringify(attempts));
+    const loser = attempts.findIndex((response) => response.status === 'rejected' || response.value.result.isError === true);
+    if (attempts[loser].status === 'rejected') {
+      assert.match(attempts[loser].reason.message, /OpenAPPA remedy is still executing; retry the request/);
+    }
+    // A running claim may ask the competing request to retry. Once the winner
+    // completes, that retry must refuse the spent offer and retain its refusal.
+    const losingEvent = { tool_call_id: attemptIds[loser], arguments: { offer_id: otherDenial.offers[0].offer_id } };
+    const spent = await remoteOffer(other, losingEvent);
+    assert.equal(spent.result.isError, true, JSON.stringify(spent));
+    assert.deepEqual((await remoteOffer(other, losingEvent)).result, spent.result);
+  });
+
+  await t.test('a block names the yell tool the presentation carries, and only then', async () => {
+    const blocked = async (presentation) => hook(scope(), {
+      event: 'tool_call', operation_id: 'call:held', tool: 'leak_partial', arguments: {}, presentation,
+    });
+    const reporting = await blocked({
+      control_tool: 'gateway.custom_remedy', supports_delegation: false, yell_tool: 'gateway.custom_yell',
+    });
+    assert.equal(reporting.decision, 'deny_call', JSON.stringify(reporting));
+    assert.match(reporting.feedback, /\nReport:\n  If a plan makes no sense, .* call gateway\.custom_yell\.$/);
+    const silent = await blocked({ control_tool: 'gateway.custom_remedy', supports_delegation: false });
+    assert.equal(silent.decision, 'deny_call', JSON.stringify(silent));
+    assert.ok(!silent.feedback.includes('Report:'), silent.feedback);
   });
 
   await t.test('unrelated sessions overlap consult I/O instead of sharing a process lock', { timeout: 15000 }, async () => {
@@ -290,31 +339,62 @@ builtin = "hitl"
     assert.equal(sanitizations, before + 1, 'accepting staged material does not rerun the sanitizer');
   });
 
-  await t.test('wrong organization and personal owner are indistinguishable unknowns', async () => {
+  await t.test('a wrong run is unknown and does not spend the offer', async () => {
     const session = scope();
     const denied = await call(session, 'held', 'read_untrusted');
     const offer_id = denied.offers[0].offer_id;
-    const event = { tool_call_id: 'provider-remedy-scope', arguments: { offer_id } };
-    const wrongOrganization = await byOffer({ ...session, organization_id: `other-${randomUUID()}` }, event);
-    const wrongUser = await byOffer({ ...session, caller_id: 'user:wrong', owner_caller_id: 'user:owner' }, event);
-    for (const response of [wrongOrganization, wrongUser]) {
+    const event = { arguments: { offer_id } };
+    const wrongOrganization = await byOffer({ ...session, organization_id: `other-${randomUUID()}` }, {
+      ...event, tool_call_id: 'wrong-org',
+    });
+    const wrongSession = await byOffer({ ...session, session_id: randomUUID() }, {
+      ...event, tool_call_id: 'wrong-session',
+    });
+    const wrongParent = await byOffer({ ...session, parent_id: 'not-the-parent' }, {
+      ...event, tool_call_id: 'wrong-parent',
+    });
+    for (const response of [wrongOrganization, wrongSession, wrongParent]) {
       assert.equal(response.offer.status, 'unknown');
       assert.equal(response.reason, 'unknown_control_call');
       assert.equal(response.output_source, 'runtime');
-      assert.equal(response.approved_output, response.result.content[0].text);
     }
-    assert.equal(wrongOrganization.approved_output, wrongUser.approved_output);
+    const other = scope();
+    await call(other, 'other-open', 'read_plain');
+    const wrongActor = await byOffer(other, { ...event, tool_call_id: 'wrong-actor' });
+    assert.equal(wrongActor.offer.status, 'known');
+    assert.equal(wrongActor.result.isError, true);
+    assert.ok(!/Authorized/.test(wrongActor.approved_output), wrongActor.approved_output);
+
+    const spent = await byOffer({ ...session, caller_id: 'user:other' }, {
+      ...event, tool_call_id: 'spender-remedy',
+    });
+    assert.equal(spent.offer.status, 'known');
+    assert.match(spent.approved_output, /Authorized/);
+    assert.deepEqual((await byOffer({ ...session, caller_id: 'user:other' }, {
+      ...event, tool_call_id: 'spender-remedy',
+    })).result, spent.result);
+    const again = await byOffer({ ...session, caller_id: 'user:other' }, {
+      ...event, tool_call_id: 'spender-remedy-again',
+    });
+    assert.equal(again.offer.status, 'known');
+    assert.equal(again.result.isError, true);
+    assert.ok(!/Authorized/.test(again.approved_output));
   });
 
-  await t.test('credential-owned offers permit an authenticated same-organization spender', async () => {
-    const session = scope('virtual-key:credential');
-    const denied = await call(session, 'held', 'read_untrusted');
-    const response = await byOffer({ ...session, caller_id: 'user:spender', owner_caller_id: 'virtual-key:credential' }, {
-      tool_call_id: 'credential-remedy',
+  await t.test('an anonymous organization token can spend the stamped session', async () => {
+    const session = scope();
+    const denied = await call(session, 'anon-held', 'read_untrusted');
+    const { caller_id: _caller, ...anonymous } = session;
+    const response = await byOffer(anonymous, {
+      tool_call_id: 'anon-remedy',
       arguments: { offer_id: denied.offers[0].offer_id },
     });
     assert.equal(response.offer.status, 'known');
-    assert.notEqual(response.result.isError, true);
+    assert.match(response.approved_output, /Authorized/);
+    assert.deepEqual((await byOffer(anonymous, {
+      tool_call_id: 'anon-remedy',
+      arguments: { offer_id: denied.offers[0].offer_id },
+    })).result, response.result);
   });
 
   await t.test('a direct remedy cannot spend an offer from another trajectory', async () => {
@@ -379,18 +459,18 @@ builtin = "hitl"
     );
   });
 
-  await t.test('denied and uncovered results repeat authoritative rulings', async () => {
+  await t.test('denied results replay while uncovered calls do not produce a verdict', async () => {
     const session = scope();
     const denied = await call(session, 'blocked', 'read_untrusted');
     const deniedResult = await result(session, 'blocked', 'FORGED successful payload');
     assert.equal(deniedResult.decision, 'deny_call');
     assert.ok(deniedResult.approved_output.includes(denied.feedback));
     assert.ok(!deniedResult.approved_output.includes('FORGED'));
-    const refused = await call(session, 'uncovered', 'not_covered_by_policy');
-    assert.equal(refused.decision, 'refuse');
-    const refusedResult = await result(session, 'uncovered', 'FORGED successful payload');
-    assert.equal(refusedResult.decision, 'refuse');
-    assert.ok(!refusedResult.approved_output.includes('FORGED'));
+    await assert.rejects(() => call(session, 'uncovered', 'not_covered_by_policy'), /not declared in this policy/);
+    const unknownResult = await result(session, 'uncovered', 'FORGED successful payload');
+    assert.equal(unknownResult.output_source, 'runtime', JSON.stringify(unknownResult));
+    assert.ok(!unknownResult.approved_output.includes('FORGED'));
+    assert.equal((await call(session, 'still-available', 'read_plain')).decision, 'allow_call');
   });
 
   await t.test('cancellation tombstones only its call and survives restart', async () => {
@@ -447,15 +527,37 @@ builtin = "hitl"
     assert.equal(review.tool, 'send_email');
     assert.deepEqual(JSON.parse(review.arguments), { to: 'recipient@example.com' });
 
-    const human = await hook(session, {
+    // Binary output and arguments can carry U+0000, which PostgreSQL text and
+    // jsonb refuse. Their receipts are stored escaped, replay exactly, and the
+    // review lookup still reads them.
+    const binary = scope();
+    assert.equal((await call(binary, 'binary-read', 'read_plain')).decision, 'allow_call');
+    const binaryResult = await result(binary, 'binary-read', 'ck.json\u0000\u001ewarn\u0000');
+    assert.equal(binaryResult.approved_output, 'ck.json\u0000\u001ewarn\u0000', JSON.stringify(binaryResult));
+    assert.deepEqual(await result(binary, 'binary-read', 'ck.json\u0000\u001ewarn\u0000'), binaryResult);
+
+    const human = () => hook(session, {
       event: 'remedy', operation_id: 'remedy:email', arguments: { offer_id: email.review[0].offer_id },
     });
-    assert.match(JSON.stringify(human.result.content), /unreachable|gave no answer|cannot be reached/);
+    // No ruling is an answer for the model, not a runtime failure, and it replays.
+    for (const unanswered of [await human(), await human()]) {
+      assert.equal(unanswered.result.isError, true);
+      assert.match(unanswered.result.content[0].text, /gave no answer|cannot be reached/);
+    }
     assert.notEqual(
       (await call(session, 'email-without-ruling', 'send_email', { to: 'recipient@example.com' })).decision,
       'allow_call',
       'an unavailable authority must not authorize the call',
     );
+    const binaryEmail = await call(session, 'binary-email', 'send_email', { to: 'recipient\u0000@example.com' });
+    assert.ok(binaryEmail.review?.length > 0, JSON.stringify(binaryEmail));
+    const binaryReview = await native.loadOfferReview(session.organization_id, session.session_id, binaryEmail.review[0].offer_id);
+    assert.equal(binaryReview?.tool, 'send_email', JSON.stringify(binaryReview));
+    assert.deepEqual(JSON.parse(binaryReview.arguments), { to: 'recipient\u0000@example.com' });
+    const binaryRemedy = await hook(session, {
+      event: 'remedy', operation_id: 'remedy:binary-email', arguments: { offer_id: binaryEmail.review[0].offer_id },
+    });
+    assert.match(binaryRemedy.result.content[0].text, /gave no answer|cannot be reached/);
   });
 
   await t.test('compact keeps labels on the root; an unprepared fork is refused; a stranger stays clean', async () => {
@@ -733,6 +835,55 @@ builtin = "hitl"
     return staged.value;
   };
 
+  await t.test('a runtime workspace binds to its released spawn and returns across replica restarts without ending', async () => {
+    const { parent, proposeSpawn } = await openReturnDeclaredParent();
+    assert.equal((await proposeSpawn('runtime-start')).decision, 'allow_call');
+    const child = { ...parent, session_id: `workspace-${randomUUID()}`, parent_id: parent.session_id };
+    assert.ok(!child.session_id.startsWith(`${parent.session_id}:`));
+    const started = await hook(child, { event: 'session_start', spawn_call_id: 'runtime-start' });
+    assert.ok(['ack', 'context'].includes(started.decision), JSON.stringify(started));
+    assert.deepEqual(await restarted(child, { event: 'session_start' }), started, 'a continuation retains its return contract');
+    const wrongParent = scope();
+    await hook(wrongParent, { event: 'session_start' });
+    const foreign = await hook(wrongParent, { event: 'child_address', operation_id: 'foreign-address', spawned_id: child.session_id, output: '' });
+    assert.notEqual(foreign.decision, 'ack');
+    const addressed = await restarted(parent, { event: 'child_address', operation_id: 'runtime-steer', spawned_id: child.session_id, output: '' });
+    assert.equal(addressed.decision, 'ack', JSON.stringify(addressed));
+    const cross = async (turn, text) => {
+      const operation_id = `runtime-return:task:${turn}`;
+      const returned = await restarted(child, { event: 'child_return', operation_id, output: text });
+      assert.ok(['ack', 'child_return'].includes(returned.decision), JSON.stringify(returned));
+      const approved = returned.decision === 'ack' ? text : returned.value;
+      if (returned.decision === 'child_return') {
+        const echo = await restarted(child, { event: 'child_return', operation_id: `${operation_id}:echo`, output: approved });
+        assert.equal(echo.decision, 'ack', JSON.stringify(echo));
+      }
+      const records = await native.loadChildReturns(organization_id, parent.session_id);
+      assert.ok(records.some(record => record.childSessionId === child.session_id && record.operationId.startsWith(operation_id) && record.value === approved));
+      return approved;
+    };
+    await cross('first', 'runtime result one');
+    const next = await call(child, 'read-next', 'read_plain');
+    assert.equal(next.decision, 'allow_call', JSON.stringify(next));
+    const held = await hook(child, { event: 'child_return', operation_id: 'runtime-return:task:pending', output: 'must not settle read-next' });
+    assert.equal(held.decision, 'block', JSON.stringify(held));
+    // The host keeps a busy runtime's file pending on this mark, not on the text.
+    assert.equal(held.busy, true, JSON.stringify(held));
+    await result(child, 'read-next', 'private report');
+    const admittedSecond = await cross('second', 'runtime result two');
+    const latest = await native.loadChildReturns(organization_id, parent.session_id, {
+      childSessionId: child.session_id, operationPrefix: 'runtime-return:task:',
+    });
+    assert.equal(latest.length, 1);
+    assert.equal(latest[0].value, admittedSecond);
+    assert.ok(latest[0].operationId.includes(':second'));
+    assert.deepEqual(await native.loadChildReturns(organization_id, parent.session_id, {
+      childSessionId: child.session_id, operationPrefix: 'runtime-return:another-task:',
+    }), []);
+    assert.equal((await call(child, 'read-third', 'read_plain')).decision, 'allow_call', 'returning did not end the workspace');
+    await result(child, 'read-third', 'next report');
+  });
+
   await t.test('a void child end never poisons the durable child-return ledger', async () => {
     const { parent, proposeSpawn } = await openReturnDeclaredParent();
     assert.equal((await proposeSpawn('spawn-real')).decision, 'allow_call');
@@ -790,6 +941,239 @@ builtin = "hitl"
     assert.equal(crossings.length, 2, 'each authentic return survives without its echo');
   });
 
+  // Teammates: a lead spawns a child that keeps running and trades messages
+  // with it. A message crosses the same checked return as a child's end, and a
+  // message to the child carries the lead's label into it.
+  const openTeammate = async (lead, name, label, sanitizer) => {
+    const presentation = {
+      control_tool: 'archestra__execute_remedy_plan',
+      supports_delegation: true,
+    };
+    const proposeSpawn = (id) => hook(lead, {
+      event: 'tool_call',
+      operation_id: `call:${id}`,
+      tool: 'spawn_worker',
+      arguments: { prompt: `Work as ${name}`, name },
+      spawn: true,
+      presentation,
+    });
+    const held = await proposeSpawn(`${name}-held`);
+    assert.equal(held.decision, 'deny_call', JSON.stringify(held));
+    const plan = held.offers?.find((offer) => (sanitizer
+      ? offer.returns?.sanitizer === sanitizer
+      : offer.returns === 'as_spoken'));
+    assert.ok(plan?.offer_id, `the spawn offered the return plan: ${JSON.stringify(held)}`);
+    const declaration = await byOffer(lead, {
+      tool_call_id: `${name}-declare`,
+      arguments: { offer_id: plan.offer_id, label },
+      presentation,
+    });
+    assert.notEqual(declaration.result?.isError, true, JSON.stringify(declaration));
+    assert.equal((await proposeSpawn(`${name}-spawn`)).decision, 'allow_call');
+    return `${name}-spawn`;
+  };
+  const readUntrusted = async (session, id) => {
+    const held = await call(session, `${id}-held`, 'read_untrusted');
+    if (held.decision === 'deny_call') {
+      await byOffer(session, {
+        tool_call_id: `${id}-accept`,
+        arguments: { offer_id: held.offers[0].offer_id },
+      });
+    }
+    assert.equal((await call(session, id, 'read_untrusted')).decision, 'allow_call');
+    await result(session, id, 'untrusted text');
+  };
+
+  await t.test('a teammate message crosses its fork mid-turn and narrows its lead', async () => {
+    const lead = scope();
+    const spawnCallId = await openTeammate(lead, 'auditor', { trust: 'suspicious' });
+    const teammate = await startChild(lead, 'auditor@team');
+    assert.equal((await call(lead, 'lead-before', 'write_public')).decision, 'allow_call');
+    await result(lead, 'lead-before', 'posted');
+
+    await readUntrusted(teammate, 'teammate-read');
+    const sent = await hook(teammate, {
+      event: 'child_end',
+      operation_id: 'child_send:message-1',
+      output: 'Three triggers are stuck',
+      spawn_call_id: spawnCallId,
+      child_native_id: 'auditor@team',
+    });
+    assert.equal(sent.decision, 'ack', JSON.stringify(sent));
+
+    // The teammate works on after its message; nothing ended it.
+    assert.equal((await call(teammate, 'teammate-after', 'read_plain')).decision, 'allow_call');
+    await result(teammate, 'teammate-after', 'plain text');
+    // The lead absorbed the message's label the moment it crossed.
+    const write = await call(lead, 'lead-after', 'write_public');
+    assert.equal(write.decision, 'deny_call', JSON.stringify(write));
+    // The crossing is the record the lead's side verifies the message against.
+    const crossings = await native.loadChildReturns(organization_id, lead.session_id);
+    assert.ok(crossings.some((record) => record.childSessionId === teammate.session_id
+      && record.value === 'Three triggers are stuck'));
+
+    // A message with U+0000 is stored escaped and is still the newest crossing.
+    const binary = await hook(teammate, {
+      event: 'child_end',
+      operation_id: 'child_send:message-2',
+      output: 'Two\u0000 triggers recovered',
+      spawn_call_id: spawnCallId,
+      child_native_id: 'auditor@team',
+    });
+    assert.equal(binary.decision, 'ack', JSON.stringify(binary));
+    assert.deepEqual(
+      (await native.loadChildReturns(organization_id, lead.session_id, {
+        childSessionId: teammate.session_id, operationPrefix: 'child_send:',
+      })).map((record) => [record.operationId, record.value, record.spawnCallId]),
+      [['child_send:message-2', 'Two\u0000 triggers recovered', spawnCallId]],
+    );
+    assert.deepEqual(
+      (await native.loadChildReturns(organization_id, lead.session_id, { childSessionId: teammate.session_id }))
+        .map((record) => record.value),
+      ['Two\u0000 triggers recovered', 'Three triggers are stuck'],
+    );
+  });
+
+  await t.test('a teammate message through a sanitizing return reaches its lead as the sanitizer output', async () => {
+    const lead = scope();
+    const spawnCallId = await openTeammate(lead, 'scrubbed', { audience: ['insider'] }, 'scrub');
+    const teammate = await startChild(lead, 'scrubbed@team');
+    const read = await call(teammate, 'scrubbed-read-held', 'read_return_only');
+    await byOffer(teammate, {
+      tool_call_id: 'scrubbed-accept',
+      arguments: { offer_id: read.offers[0].offer_id },
+    });
+    assert.equal((await call(teammate, 'scrubbed-read', 'read_return_only')).decision, 'allow_call');
+    await result(teammate, 'scrubbed-read', 'CUSTOMER-RAW-7731');
+
+    const message = {
+      event: 'child_end',
+      operation_id: 'child_send:scrubbed',
+      output: 'CUSTOMER-RAW-7731 is affected',
+      spawn_call_id: spawnCallId,
+      child_native_id: 'scrubbed@team',
+    };
+    const staged = await hook(teammate, message);
+    assert.equal(staged.decision, 'child_return', JSON.stringify(staged));
+    assert.equal(staged.value, 'approved scrubbed output');
+    const crossed = await hook(teammate, {
+      ...message,
+      operation_id: 'child_send:scrubbed:echo',
+      output: staged.value,
+    });
+    assert.equal(crossed.decision, 'ack', JSON.stringify(crossed));
+    const values = (await native.loadChildReturns(organization_id, lead.session_id))
+      .filter((record) => record.childSessionId === teammate.session_id)
+      .map((record) => record.value);
+    assert.deepEqual(values, ['approved scrubbed output'], 'only the sanitizer output crossed');
+    // The teammate keeps working after its message.
+    assert.equal((await call(teammate, 'scrubbed-after', 'read_plain')).decision, 'allow_call');
+  });
+
+  await t.test('a lead message carries the lead label into its started teammate', async () => {
+    const lead = scope();
+    await openTeammate(lead, 'writer', { trust: 'suspicious' });
+    const teammate = await startChild(lead, 'writer@team');
+    assert.equal((await call(teammate, 'writer-before', 'write_public')).decision, 'allow_call');
+    await result(teammate, 'writer-before', 'posted');
+
+    await readUntrusted(lead, 'lead-read');
+    const address = {
+      event: 'child_address',
+      operation_id: 'address:message-1',
+      spawned_id: teammate.session_id,
+      output: 'Post the summary',
+    };
+    assert.equal((await hook(lead, address)).decision, 'ack');
+    assert.deepEqual(await hook(lead, address), { decision: 'ack' }, 'a transport replay repeats the decision');
+    const binaryAddress = { ...address, operation_id: 'address:message-2', output: 'Post\u0000 the table' };
+    assert.equal((await hook(lead, binaryAddress)).decision, 'ack');
+
+    const write = await call(teammate, 'writer-after', 'write_public');
+    assert.equal(write.decision, 'deny_call', JSON.stringify(write));
+    assert.deepEqual(
+      (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
+      ['Post the summary', 'Post\u0000 the table'],
+    );
+  });
+
+  await t.test('a lead message to a teammate that has not started reaches it at its start', async () => {
+    const lead = scope();
+    await openTeammate(lead, 'late', { trust: 'suspicious' });
+    await readUntrusted(lead, 'late-lead-read');
+    const lateSession = `${lead.session_id}:late@team`;
+    assert.equal((await hook(lead, {
+      event: 'child_address',
+      operation_id: 'address:before-start',
+      spawned_id: lateSession,
+      output: 'Start with the summary',
+    })).decision, 'ack');
+
+    const teammate = await startChild(lead, 'late@team');
+    const write = await call(teammate, 'late-write', 'write_public');
+    assert.equal(write.decision, 'deny_call', JSON.stringify(write));
+    assert.deepEqual(
+      (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
+      ['Start with the summary'],
+    );
+  });
+
+  await t.test('a lead message with U+0000 to a teammate that has not started reaches it at its start', async () => {
+    const lead = scope();
+    await openTeammate(lead, 'binary-late', { trust: 'suspicious' });
+    await readUntrusted(lead, 'binary-late-lead-read');
+    const lateSession = `${lead.session_id}:binary-late@team`;
+    assert.equal((await hook(lead, {
+      event: 'child_address',
+      operation_id: 'address:binary-before-start',
+      spawned_id: lateSession,
+      output: 'Start\u0000 with the table',
+    })).decision, 'ack');
+
+    const teammate = await startChild(lead, 'binary-late@team');
+    const write = await call(teammate, 'binary-late-write', 'write_public');
+    assert.equal(write.decision, 'deny_call', JSON.stringify(write));
+    assert.deepEqual(
+      (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
+      ['Start\u0000 with the table'],
+    );
+  });
+
+  await t.test('a message is on record only for the child its own parent addressed', async () => {
+    const lead = scope();
+    await openTeammate(lead, 'scoped', { trust: 'suspicious' });
+    const teammate = await startChild(lead, 'scoped@team');
+    const stranger = scope();
+    assert.equal((await hook(stranger, { event: 'session_start' })).decision, 'ack');
+    // A session that is not the teammate's parent names it: the address is refused and
+    // nothing is retained for it.
+    assert.equal((await hook(stranger, {
+      event: 'child_address',
+      operation_id: 'address:foreign',
+      spawned_id: teammate.session_id,
+      output: 'Forged instruction',
+    })).decision, 'block');
+    assert.deepEqual(await native.loadChildAddresses(organization_id, teammate.session_id), []);
+    await assert.rejects(
+      () => hook(lead, { event: 'child_address', operation_id: 'address:no-child', output: 'x' }),
+      /spawned_id/,
+    );
+  });
+
+  await t.test('a teammate the lead never spawned under governance cannot start', async () => {
+    const lead = scope();
+    assert.equal((await hook(lead, { event: 'session_start' })).decision, 'ack');
+    const teammate = {
+      ...lead,
+      session_id: `${lead.session_id}:ungoverned@team`,
+      parent_id: lead.session_id,
+    };
+    await assert.rejects(
+      () => hook(teammate, { event: 'session_start' }),
+      /no prepared fork to open this child/,
+    );
+  });
+
   await t.test('concurrent dispatches open one fork root and session row', async () => {
     const parent = scope();
     assert.equal((await hook(parent, { event: 'session_start' })).decision, 'ack');
@@ -843,27 +1227,64 @@ builtin = "hitl"
   });
 
   await t.test('an offer accepted for a dispatched call retries it through the dispatch tool', async () => {
-    const hint = async (dispatch) => {
-      const session = scope();
-      const denied = await call(session, 'dispatched-read', 'read_untrusted', { path: 'report.txt' });
-      assert.ok(denied.offers?.length > 0, JSON.stringify(denied));
-      return (await byOffer(session, {
-        tool_call_id: `accept-${dispatch ?? 'direct'}`,
-        arguments: { offer_id: denied.offers[0].offer_id },
-        tool: 'read_untrusted',
-        spelling: 'read_untrusted',
-        ...(dispatch ? { dispatch } : {}),
-      })).approved_output;
-    };
+    const open = (session, extra) => hook(session, {
+      event: 'tool_call',
+      operation_id: 'call:dispatched-read',
+      tool: 'read_untrusted',
+      arguments: { path: 'report.txt' },
+      ...extra,
+    });
+    const accept = (session, denied) => byOffer(session, {
+      tool_call_id: 'accept-recorded',
+      arguments: { offer_id: denied.offers[0].offer_id },
+    });
 
-    const [prefix, retry] = (await hint('my_gateway_archestra__run_tool')).split('exactly these arguments: ');
+    const dispatched = scope();
+    const denied = await open(dispatched, {
+      spelling: 'client.read_untrusted',
+      dispatch: 'my_gateway_archestra__run_tool',
+    });
+    assert.ok(denied.offers?.length > 0, JSON.stringify(denied));
+    const [prefix, retry] = (await accept(dispatched, denied)).approved_output.split('exactly these arguments: ');
     assert.equal(prefix, '[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with ');
     assert.deepEqual(JSON.parse(retry), { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } });
-    // A direct call keeps naming the tool itself.
+
+    const direct = scope();
+    const named = await open(direct, { spelling: 'client.read_untrusted' });
     assert.match(
-      await hint(undefined),
-      /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the read_untrusted tool again/,
+      (await accept(direct, named)).approved_output,
+      /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the client\.read_untrusted tool again/,
     );
+  });
+
+  await t.test('a restarted replica recovers dispatch retry text, and an old row falls back', async () => {
+    const session = scope();
+    const denied = await hook(session, {
+      event: 'tool_call',
+      operation_id: 'call:restart-read',
+      tool: 'read_untrusted',
+      arguments: { path: 'report.txt' },
+      spelling: 'client.read_untrusted',
+      dispatch: 'my_gateway_archestra__run_tool',
+    });
+    const restarted = await remoteOffer(session, {
+      tool_call_id: 'accept-restart',
+      arguments: { offer_id: denied.offers[0].offer_id },
+    });
+    assert.match(restarted.approved_output, /Call the my_gateway_archestra__run_tool tool again/);
+    assert.deepEqual(
+      JSON.parse(restarted.approved_output.split('exactly these arguments: ')[1]),
+      { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } },
+    );
+
+    const legacy = scope();
+    const old = await call(legacy, 'legacy-read', 'read_untrusted', { path: 'report.txt' });
+    const text = (await byOffer(legacy, {
+      tool_call_id: 'accept-legacy',
+      arguments: { offer_id: old.offers[0].offer_id },
+    })).approved_output;
+    assert.match(text, /Call the read_untrusted tool again/);
+    assert.doesNotMatch(text, /run_tool/);
   });
 
   await t.test('a human denial is final, reads as one, and replays', async () => {
@@ -906,7 +1327,7 @@ builtin = "hitl"
     const approved = await byOffer(session, {
       tool_call_id: 'post-other-approve', tool: 'publish_post', arguments: { offer_id: remaining }, ruling: 'approve',
     });
-    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the publish_post tool again/);
+    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the publish_post tool again/);
   });
 
   await t.test('a precheck refusal answers the remedy without touching the offer', async () => {
@@ -934,7 +1355,7 @@ builtin = "hitl"
     const approved = await byOffer(session, {
       tool_call_id: 'email-after-precheck', tool: 'send_email', arguments: { offer_id }, ruling: 'approve',
     });
-    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the send_email tool again/);
+    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the send_email tool again/);
 
     await assert.rejects(
       () => byOffer(session, {
@@ -1007,21 +1428,119 @@ builtin = "hitl"
     assert.equal(Number(stored.rows[0].n), 0);
   });
 
-  await t.test('a failed receipt completion leaves a durable pending recovery fence', async () => {
+  await t.test('a label change is recorded under the event that moved it, after a baseline', async (st) => {
+    const organization_id = `smoke-org-${randomUUID()}`;
+    await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization_id]);
+    st.after(() => client.query('DELETE FROM organization WHERE id = $1', [organization_id]));
+    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID() };
+    assert.equal((await call(session, 'plain-1', 'read_plain')).decision, 'allow_call');
+    await result(session, 'plain-1', 'nothing to see');
+    // Reading untrusted content narrows trust: the call is held until the
+    // session accepts the narrower label, and admitting its result moves it.
+    const denied = await call(session, 'narrow-1', 'read_untrusted');
+    assert.equal(denied.decision, 'deny_call');
+    await hook(session, { event: 'remedy', operation_id: 'accept-1', arguments: { offer_id: denied.offers[0].offer_id } });
+    assert.equal((await call(session, 'narrow-2', 'read_untrusted')).decision, 'allow_call');
+    await result(session, 'narrow-2', 'web page text');
+
+    const { rows } = await client.query(
+      'SELECT event, call_id, trust_before, audience_before, trust_after, audience_after, session_id FROM openappa_label_changes WHERE organization_id = $1 ORDER BY created_at, id',
+      [organization_id],
+    );
+    const status = await native.getOpenappaStatus(organization_id, session.session_id, policy);
+    assert.equal(rows[0].event, 'session_start');
+    assert.equal(rows[0].trust_before, rows[0].trust_after);
+    assert.equal(rows[0].audience_before, rows[0].audience_after);
+    // Unchanged labels wrote nothing more: one change, filed under the result
+    // that moved it.
+    const changes = rows.slice(1);
+    assert.equal(changes.length, 1);
+    assert.deepEqual(
+      {
+        event: changes[0].event,
+        call_id: changes[0].call_id,
+        trust_before: changes[0].trust_before,
+        trust_after: changes[0].trust_after,
+        audience_after: changes[0].audience_after,
+        session_id: changes[0].session_id,
+      },
+      {
+        event: 'tool_result',
+        call_id: 'call:narrow-2',
+        trust_before: rows[0].trust_after,
+        trust_after: status.trust,
+        audience_after: status.audience,
+        session_id: session.session_id,
+      },
+    );
+    assert.equal(status.trust, 'suspicious');
+  });
+
+  await t.test('a consult under the Metadata only log setting keeps who and how, never what', async (st) => {
+    const organization_id = `smoke-org-${randomUUID()}`;
+    await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization_id]);
+    st.after(() => client.query('DELETE FROM organization WHERE id = $1', [organization_id]));
+    // The host resolves the setting and says so on the dispatch.
+    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID(), withhold_consult_content: true };
+    assert.equal((await call(session, 'annotated-1', 'annotated_read', { a: 1 })).decision, 'allow_call');
+
+    const { rows } = await client.query('SELECT * FROM openappa_external_consults WHERE organization_id = $1', [organization_id]);
+    assert.equal(rows.length, 1);
+    const [row] = rows;
+    assert.deepEqual(
+      {
+        role: row.role, external_name: row.external_name, backend: row.backend, outcome: row.outcome,
+        http_status: row.http_status, answer: row.answer, raw_response: row.raw_response, diagnostics: row.diagnostics,
+      },
+      {
+        role: 'annotator', external_name: 'gatekeeper', backend: 'url', outcome: 'answered',
+        http_status: 200, answer: null, raw_response: null, diagnostics: null,
+      },
+    );
+    assert.equal(row.request.__redacted, 'log_content_policy');
+    assert.equal(row.request.kind, 'annotation');
+    assert.ok(!JSON.stringify(row.request).includes('"a":1'), 'the tool arguments are not stored');
+    assert.deepEqual(row.request, {
+      __redacted: 'log_content_policy',
+      kind: 'annotation',
+      artifact: { args: { name: 'host/archestra/annotated_read', arguments: { __redacted: 'log_content_policy' } } },
+    });
+  });
+
+  await t.test('disabled reporting does not leave a session with an unfinished operation', async () => {
+    const session = scope();
+    await assert.rejects(
+      () => hook(session, { event: 'yell', operation_id: 'report:disabled', arguments: { message: 'test report', with_trajectory: false } }),
+      /reporting is disabled/,
+    );
+    const next = await call(session, 'after-report', 'read_plain');
+    assert.equal(next.decision, 'allow_call');
+  });
+
+  await t.test('a failed receipt completion is recovered by the retry, not fenced', async () => {
     const session = scope();
     const callId = `fault-${randomUUID()}`;
     await call(session, callId, 'read_plain');
     await client.query('CREATE OR REPLACE FUNCTION openappa_smoke_fail_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION \'injected receipt failure\'; END $$');
-    await client.query(`CREATE TRIGGER openappa_smoke_failure BEFORE UPDATE ON openappa_processed_results FOR EACH ROW WHEN (NEW.tool_call_id = '${callId}') EXECUTE FUNCTION openappa_smoke_fail_receipt()`);
+    await client.query(`CREATE TRIGGER openappa_smoke_failure BEFORE UPDATE ON openappa_processed_results FOR EACH ROW WHEN (NEW.tool_call_id = '${callId}' AND NEW.status = 'complete') EXECUTE FUNCTION openappa_smoke_fail_receipt()`);
     try {
       await assert.rejects(() => result(session, callId, 'uncommitted'), /PostgreSQL|database|db error/);
     } finally {
       await client.query('DROP TRIGGER openappa_smoke_failure ON openappa_processed_results');
       await client.query('DROP FUNCTION openappa_smoke_fail_receipt()');
     }
-    await assert.rejects(
-      () => restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'retry', outcome: 'success' }),
-      /interrupted processing/,
+    // The runtime recorded the result; the receipt did not finish. The same
+    // result on another process completes from the committed record.
+    const recovered = await restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'uncommitted', outcome: 'success' });
+    assert.equal(recovered.decision, 'ack', JSON.stringify(recovered));
+    assert.equal(recovered.approved_output, 'uncommitted');
+    // A retry of the completed receipt replays its answer, whatever the bytes.
+    const forged = await restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'changed after the fact', outcome: 'success' });
+    assert.deepEqual(
+      { decision: forged.decision, approved_output: forged.approved_output },
+      { decision: recovered.decision, approved_output: recovered.approved_output },
+      'the completed receipt replays its committed answer',
     );
+    assert.equal((await call(session, 'after-recovery', 'read_plain')).decision, 'allow_call');
   });
 });

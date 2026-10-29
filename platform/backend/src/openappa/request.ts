@@ -15,31 +15,45 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
-import type { CollectedChildReturns } from "./child-return";
+import {
+  type CollectedChildReturns,
+  collectAndStripChildReturns,
+} from "./child-return";
 import type { AppaChildTrajectoryReceipt } from "./child-trajectory-receipt";
+import { unwrapCompactionCarriersFromRequest } from "./compaction-carrier";
 import {
   type AppaDelegationMarker,
   collectDelegationMarkers,
   stripDelegationMarkers,
 } from "./delegation";
-import type { OfferJws } from "./offer-claims";
+import { readNotice, readRemedyExecution } from "./notice";
+import { mayHoldTrajectoryStamp } from "./trajectory-stamp";
 import {
   type AppaSessionIdentity,
   type AppaWireFamily,
   appaTurnBoundaries,
   appaWireFamily,
-  collectSignedOfferClaims,
   type DeclaredToolSpelling,
   declaredToolEntries,
   declaredToolNamespaces,
+  type HistoryWire,
+  historyWire,
   isClientRunToolType,
+  type ProviderToolCall,
+  type ProviderWire,
   providerHostedTool,
+  providerToolCalls,
+  providerWire,
   restoreAppaNotices,
   restoreAppaRemedyExecutions,
+  restoreTrajectoryStamps,
+  restoreTrajectoryStampsInText,
   stripAppaTools,
   stripChildTrajectoryReceiptsFromRequest,
   stripDeclaredParameters,
   stripProxyArguments,
+  stripSessionReceiptsFromRequest,
+  stripToolReferences,
 } from "./wire";
 
 export type AppaRequestTools = {
@@ -49,6 +63,10 @@ export type AppaRequestTools = {
   notice: DeclaredToolSpelling;
   /** The ask_user tool's declaration, when this session declares one. */
   askUser: DeclaredToolSpelling | undefined;
+  /** Exact accepted members; absent for an ordinary singleton declaration. */
+  controlAliases?: readonly DeclaredToolSpelling[];
+  noticeAliases?: readonly DeclaredToolSpelling[];
+  askUserAliases?: readonly DeclaredToolSpelling[];
   /** Declared spellings that resolve to the platform's ask_user. */
   platformToolNames: ReadonlySet<string>;
   /** Tool name to declaration namespace mapping (Codex). */
@@ -66,14 +84,21 @@ export type AppaPreparedRequest = {
   customTools: ReadonlySet<string>;
   /** Tool declarations retained so adapters can detect native local tools. */
   declaredTools: readonly DeclaredToolSpelling[];
+  /**
+   * The request defers tools to a tool search: some callable tools are not
+   * declared until the client loads them, the gateway remedy tools among them.
+   */
+  defersTools?: true;
+  /**
+   * Gateway remedy and ask_user tools the client declared while the remedy
+   * pair was incomplete. They are withheld from the model, and a call to one
+   * is refused, until both remedy tools are declared.
+   */
+  heldTools?: readonly DeclaredToolSpelling[];
   promptOperationId?: string;
   turnEndOperationId?: string;
-  /** Signed offer routing collected from notices before restoration. */
-  offerClaims?: OfferJws[];
   /** Original call IDs whose results are restored rulings, not executions. */
   restoredNoticeCallIds?: ReadonlySet<string>;
-  /** Signed offers the proxy may stamp onto this turn's ask_user calls. */
-  askUserOfferClaims?: OfferJws[];
   /**
    * Present on wire families where the proxy reads and removes delegation markers.
    * Only these families allow attaching delegation markers to spawn calls.
@@ -84,6 +109,8 @@ export type AppaPreparedRequest = {
   };
   /** Child-return completions collected before provider dispatch. */
   childReturns?: CollectedChildReturns;
+  /** The spawn calls APPA released, as the markers in the history name them. */
+  releasedSpawnCalls?: string[];
   /** Unverified self-contained trajectory proofs; child binding verifies them. */
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
 };
@@ -107,28 +134,41 @@ export function prepareAppaRequest(params: {
     | "verified"
     | "unverifiedMarkerCount"
     | "gatewayConnected"
-  >;
+  > &
+    Partial<Pick<GatewayToolIdentity, "aliasesOf" | "spellingOf">>;
   /**
    * Markers the proxy already collected before it stripped them
    * unconditionally at request entry.
    */
   delegationMarkers?: AppaDelegationMarker[];
   childReturns?: CollectedChildReturns;
+  releasedSpawnCalls?: string[];
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
+  /**
+   * The client's own wire, when a Model Router route translated it to this
+   * one. Turns are counted on it.
+   */
+  clientWire?: { family: AppaWireFamily; body: unknown };
 }): AppaPreparedRequest {
-  // A wire family this proxy cannot restore notices on — Gemini, Bedrock,
-  // Cohere, native Ollama — is governed in part rather than refused: calls
-  // and results are still ruled on, but a notice stays in the history as the
-  // notice call the client ran, and no turn accounting runs.
+  // A wire outside the APPA families — Gemini, Bedrock, Cohere, native
+  // Ollama — is governed in part rather than refused: calls and results are
+  // still ruled on, but no turn accounting runs unless a Model Router route
+  // kept the client's own wire to count turns on. Bedrock Converse still
+  // restores notices; on the others a notice stays in the history as the
+  // notice call the client ran.
   const family = appaWireFamily(params.interactionType);
   const entries = declaredToolEntries(params.body);
   const declared = entries.map((entry) => entry.tool);
-  refuseDeferredTools(declared);
+  const defersTools = declared.some(declaresToolSearch);
   refuseUnsupportedToolTypes(declared);
   // Provider-run tools never return a client call to gate. Responses web search
   // remains governed by the response adapter, not by its declaration.
   const clientEntries = entries.filter((entry) => {
     if (providerHostedTool(entry.tool)) return false;
+    // A Responses `tool_search` names no tool and returns no call to run: the
+    // tools it loads are declared in `tools` or `tool_search_output` and
+    // their calls are ruled on by name like any other.
+    if (asToolDeclaration(entry.tool)?.type === "tool_search") return false;
     if (
       params.interactionType === "gemini:generateContent" &&
       !entry.grouped &&
@@ -162,7 +202,7 @@ export function prepareAppaRequest(params: {
   if ([...hostedNames].some((name) => clientNames.has(name))) {
     throw new ApiError(
       400,
-      "A provider-hosted tool conflicts with a client tool; rename or remove that declaration.",
+      "OpenAPPA found a provider-hosted tool that conflicts with a client tool; rename or remove that declaration.",
     );
   }
   if (
@@ -187,63 +227,35 @@ export function prepareAppaRequest(params: {
       "OpenAPPA cannot govern tool traffic over Azure Responses. Use Azure Chat Completions or disable OpenAPPA for this client.",
     );
   }
+  // Read where they are spread: the body changes on its way there.
+  const turnBoundaries = () =>
+    family
+      ? appaTurnBoundaries({ family, body: params.body })
+      : params.clientWire
+        ? appaTurnBoundaries(params.clientWire)
+        : {};
   let historicalControlToolName: string | undefined;
-  let offerClaims: OfferJws[] | undefined;
   let restoredNoticeCallIds: ReadonlySet<string> | undefined;
-  let askUserOfferClaims: OfferJws[] | undefined;
   let delegation: AppaPreparedRequest["delegation"];
   let childTrajectoryReceipts: AppaChildTrajectoryReceipt[] | undefined;
   const session = params.session ?? {
     provenance: "none" as const,
   };
+  const history = historyWire(params.interactionType);
+  if (history) {
+    // The plugin stamps the current trajectory. History is not a source of
+    // offer claims.
+    const restored = restoreHistory({
+      family: history,
+      body: params.body,
+      ours: platformToolMatchers(params.identity),
+      declaredCount: declared.length,
+    });
+    historicalControlToolName = restored.historicalControlToolName;
+    if (restored.noticeCallIds.size > 0)
+      restoredNoticeCallIds = restored.noticeCallIds;
+  }
   if (family) {
-    const noticeMatch = {
-      isNoticeTool: (name: string, namespace?: string) =>
-        shortToolName(params.identity.canonicalize(name, namespace)) ===
-        TOOL_GET_REMEDY_PLANS_SHORT_NAME,
-      mayBeNoticeTool: (name: string) => NOTICE_TOOL_SPELLING.test(name),
-    };
-    const collected = collectSignedOfferClaims({
-      family,
-      body: params.body,
-      ...noticeMatch,
-    });
-    if (collected.length > 0) offerClaims = collected;
-    // Only notices minted since the last user message may still be stamped
-    // onto this turn's ask_user calls; older ones belong to their turn.
-    const thisTurn = collectSignedOfferClaims({
-      family,
-      body: params.body,
-      ...noticeMatch,
-      currentTurnOnly: true,
-    });
-    if (thisTurn.length > 0) askUserOfferClaims = thisTurn;
-    historicalControlToolName = restoreAppaRemedyExecutions({
-      family,
-      body: params.body,
-      allowHistoricalControl: declared.length === 0,
-      // Current declarations bind live controls. Without declarations, only a
-      // typed record bound to the same call and arguments can restore history.
-      isControlTool: (name, namespace) =>
-        shortToolName(params.identity.canonicalize(name, namespace)) ===
-        TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-    });
-    const restored = restoreAppaNotices({
-      family,
-      body: params.body,
-      ...noticeMatch,
-    });
-    if (restored.size > 0) restoredNoticeCallIds = restored;
-    // The control calls came back whole from their receipts above; ask_user
-    // calls carry the offers the proxy stamped for the tool alone.
-    stripProxyArguments({
-      family,
-      body: params.body,
-      isStampedTool: (name, namespace) =>
-        shortToolName(params.identity.canonicalize(name, namespace)) ===
-        TOOL_ASK_USER_SHORT_NAME,
-      names: ASK_USER_PROXY_ARGUMENTS,
-    });
     // Read before the strip: every request of a child carries its opening
     // message, and with it the marker that binds it.
     delegation = {
@@ -259,6 +271,11 @@ export function prepareAppaRequest(params: {
         body: params.body,
       }),
     ];
+  } else if (params.delegationMarkers) {
+    // A Model Router route collected these from the client's own wire, and
+    // stripped them there, before translating it to this one.
+    delegation = { markers: params.delegationMarkers };
+    childTrajectoryReceipts = params.childTrajectoryReceipts;
   }
 
   // A tool-free child can still return a value. Proxy-only clients still need
@@ -268,16 +285,18 @@ export function prepareAppaRequest(params: {
     declaredTools: readonly DeclaredToolSpelling[],
   ): AppaPreparedRequest => ({
     tools: undefined,
+    ...(defersTools ? { defersTools: true as const } : {}),
     ...(historicalControlToolName ? { historicalControlToolName } : {}),
     session,
     customTools,
     declaredTools,
-    ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
-    ...(offerClaims ? { offerClaims } : {}),
+    ...turnBoundaries(),
     ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
-    ...(askUserOfferClaims ? { askUserOfferClaims } : {}),
     ...(delegation ? { delegation } : {}),
     ...(params.childReturns ? { childReturns: params.childReturns } : {}),
+    ...(params.releasedSpawnCalls
+      ? { releasedSpawnCalls: params.releasedSpawnCalls }
+      : {}),
     ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
       ? { childTrajectoryReceipts }
       : {}),
@@ -320,8 +339,28 @@ export function prepareAppaRequest(params: {
       entries: clientEntries,
       identity: params.identity,
     });
-  let control = remedyTool(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
-  let notice = remedyTool(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
+  const controlAliases = remedyTool(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
+  const noticeAliases = remedyTool(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
+  const select = (members: readonly DeclaredToolSpelling[]) => {
+    const first = members[0];
+    if (!first) return undefined;
+    const stable = params.identity.spellingOf?.(
+      params.identity.canonicalize(first.name, first.namespace),
+    );
+    return (
+      members.find(
+        (member) =>
+          member.name === stable?.name && member.namespace === stable.namespace,
+      ) ?? first
+    );
+  };
+  let control = select(controlAliases);
+  let notice = select(noticeAliases);
+  const heldWhenIncomplete = [
+    ...controlAliases,
+    ...noticeAliases,
+    ...askUserDeclarations,
+  ];
   if (params.identity.mode === "attested" && control && notice) {
     // Control and notice status come from one gateway: each declaration must
     // still hold its attestation after demotion, and both must name the same
@@ -374,7 +413,7 @@ export function prepareAppaRequest(params: {
       ) {
         throw new ApiError(
           400,
-          "A provider-hosted tool conflicts with the OpenAPPA remedy tools; rename or remove that declaration.",
+          "OpenAPPA found a provider-hosted tool that conflicts with its remedy tools; rename or remove that declaration.",
         );
       }
       if (!notice) {
@@ -386,6 +425,30 @@ export function prepareAppaRequest(params: {
         appendDeclaredTool(params.body, family, control.name);
       }
     } else {
+      // A session that defers tools has not loaded the remedy tools yet. Every
+      // call is still ruled on, and a denial is refused with the tools to
+      // load; once the client loads them they arrive declared and attested,
+      // and the remedy flow runs as usual.
+      if (defersTools) {
+        // Codex loads tools one search at a time, and an older gateway tool
+        // list has no alwaysLoad: part of the set can be declared. None of it
+        // is usable on its own, so it is withheld from the model and refused
+        // when called, until the pair is complete.
+        stripAppaTools({ body: params.body, tools: heldWhenIncomplete });
+        stripToolReferences({ body: params.body, tools: heldWhenIncomplete });
+        const isHeld = (tool: DeclaredToolSpelling) =>
+          heldWhenIncomplete.some(
+            (held) =>
+              held.name === tool.name && held.namespace === tool.namespace,
+          );
+        return {
+          ...withoutRemedies(
+            customTools,
+            declaredTools.filter((t) => !isHeld(t)),
+          ),
+          heldTools: heldWhenIncomplete,
+        };
+      }
       const missing = [
         control ? undefined : TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
         notice ? undefined : TOOL_GET_REMEDY_PLANS_SHORT_NAME,
@@ -407,7 +470,10 @@ export function prepareAppaRequest(params: {
     const short =
       name === undefined
         ? null
-        : control && name === control.name && namespace === control.namespace
+        : controlAliases.some(
+              (member) =>
+                member.name === name && member.namespace === namespace,
+            )
           ? TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
           : isAskUser
             ? TOOL_ASK_USER_SHORT_NAME
@@ -426,24 +492,33 @@ export function prepareAppaRequest(params: {
   // tool was declared in, so restoration can put the call back under it.
   const namespaces = declaredToolNamespaces(params.body);
   // Strip notice tool from provider request so the model cannot invoke it directly.
-  stripAppaTools({ body: params.body, tools: [notice] });
+  const notices = noticeAliases.length > 0 ? noticeAliases : [notice];
+  stripAppaTools({ body: params.body, tools: notices });
+  stripToolReferences({ body: params.body, tools: notices });
   return {
     tools: {
       control,
       notice,
-      askUser: askUserDeclarations[0],
+      askUser: select(askUserDeclarations),
+      ...(controlAliases.length > 1 ? { controlAliases } : {}),
+      ...(noticeAliases.length > 1 ? { noticeAliases } : {}),
+      ...(askUserDeclarations.length > 1
+        ? { askUserAliases: askUserDeclarations }
+        : {}),
       platformToolNames,
       namespaces,
     },
     session,
     customTools,
     declaredTools,
-    ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
-    ...(offerClaims ? { offerClaims } : {}),
+    ...(defersTools ? { defersTools: true as const } : {}),
+    ...turnBoundaries(),
     ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
-    ...(askUserOfferClaims ? { askUserOfferClaims } : {}),
     ...(delegation ? { delegation } : {}),
     ...(params.childReturns ? { childReturns: params.childReturns } : {}),
+    ...(params.releasedSpawnCalls
+      ? { releasedSpawnCalls: params.releasedSpawnCalls }
+      : {}),
     ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
       ? { childTrajectoryReceipts }
       : {}),
@@ -451,22 +526,91 @@ export function prepareAppaRequest(params: {
 }
 
 /**
- * Resolves an OpenCode tool spelling where the gateway label is joined to the
- * tool name with an underscore (`my_gateway_archestra__run_tool`).
- * Only resolves when the label matches one of the organization's gateways.
+ * Takes OpenAPPA's transport members out of a request on its way to the
+ * provider, whatever restoration did and whether or not the request has an
+ * OpenAPPA session (deployment switch off, a bypassed client, a delegated
+ * run, a wire notices do not restore on).
+ *
+ * 1. On the three restoring families, puts history back exactly as
+ *    {@link prepareAppaRequest} does.
+ * 2. On every wire, drops what restoration left: a notice's record and
+ *    historical offers, a control call's receipt and legacy transport keys,
+ *    and ask_user's stamped trajectory. Remedy signatures are not checked.
+ * 3. Drops those members from the declarations of this platform's remedy and
+ *    ask_user tools, for clients still holding a tool list that has them.
+ * 4. Puts the provider's call id back where a client copied a trajectory stamp
+ *    into message or tool-result text.
+ *
+ * Never changes a call id, so tool-result updates keyed by id still land.
+ * Returns how many calls, declarations and texts it rewrote.
  */
-export function underscoreLabeledPlatformToolName(
-  name: string,
-  canonicalize: (name: string) => string,
-): string | null {
-  for (let at = name.indexOf("_"); at > 0; at = name.indexOf("_", at + 1)) {
-    const rest = name.slice(at + 1);
-    if (rest.startsWith("_") || !archestraMcpBranding.isToolName(rest))
-      continue;
-    const canonical = canonicalize(`mcp__${name.slice(0, at)}__${rest}`);
-    if (archestraMcpBranding.isToolName(canonical)) return canonical;
-  }
-  return null;
+export function sanitizeProviderBoundRequest(params: {
+  body: unknown;
+  interactionType: string;
+  /** Absent where no gateway identity was resolved: catch-all routes. */
+  identity?: Pick<GatewayToolIdentity, "canonicalize">;
+}): number {
+  const wire = providerWire(params.interactionType);
+  if (!wire) return 0;
+  const ours = platformToolMatchers(params.identity);
+  const history = historyWire(params.interactionType);
+  const restored = history
+    ? restoreHistory({
+        family: history,
+        body: params.body,
+        ours,
+        declaredCount: declaredToolEntries(params.body).length,
+      }).changed
+    : 0;
+  return (
+    restored +
+    scrubProxyMembers({
+      wire,
+      body: params.body,
+      ours,
+    }) +
+    (params.identity
+      ? stripDeclaredProxyParameters({ body: params.body, ours })
+      : 0) +
+    restoreTrajectoryStampsInText({ wire, body: params.body })
+  );
+}
+
+/** Whether a raw JSON body could hold anything {@link sanitizeForwardedRequest} removes. */
+export function mayHoldOpenAppaPayload(raw: Buffer): boolean {
+  return (
+    mayHoldTrajectoryStamp(raw) ||
+    OPENAPPA_TOOL_TOKENS.some((token) => raw.includes(token)) ||
+    PROXY_MARK_TOKENS.some((token) => raw.includes(token))
+  );
+}
+
+/**
+ * {@link sanitizeProviderBoundRequest} for a body a catch-all proxy forwards
+ * without the LLM proxy pipeline: Anthropic's `/v1/messages/count_tokens`,
+ * OpenAI's `/responses/input_tokens`, Gemini's `:countTokens`. The wire is
+ * read from the body's shape. As at the pipeline's entry, the proxy's receipts
+ * and markers go first, then call ids come back from their stamps and native
+ * question ids. With no gateway identity, only a record that names its own
+ * call goes. Remedy signatures are not consulted. Returns whether the body
+ * changed.
+ */
+export function sanitizeForwardedRequest(body: object): boolean {
+  // Gemini's countTokens may wrap a whole generateContent request.
+  const target = asRecord(asRecord(body)?.generateContentRequest) ?? body;
+  const interactionType = forwardedWire(target);
+  if (!interactionType) return false;
+  const family = appaWireFamily(interactionType);
+  const marks = family ? stripProxyMarks({ family, body: target }) : false;
+  const stamps = restoreTrajectoryStamps({
+    interactionType,
+    body: target,
+  }).length;
+  const sanitized = sanitizeProviderBoundRequest({
+    body: target,
+    interactionType,
+  });
+  return marks || stamps + sanitized > 0;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -481,7 +625,7 @@ function asArray(value: unknown): unknown[] | null {
 
 // === Internal helpers ===
 
-/** The offers the proxy stamps onto the model's ask_user calls. */
+/** Transport keys the proxy stamps onto the model's ask_user calls. */
 const ASK_USER_PROXY_ARGUMENTS: ReadonlySet<string> = new Set(
   PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_ASK_USER_SHORT_NAME],
 );
@@ -493,6 +637,268 @@ const NOTICE_TOOL_SPELLING = new RegExp(
 
 function shortToolName(name: string): ArchestraToolShortName | null {
   return archestraMcpBranding.getToolShortName(name);
+}
+
+type PlatformToolMatchers = Record<
+  "notice" | "control" | "askUser",
+  (name: string, namespace?: string) => boolean
+>;
+
+/**
+ * Which calls this request's gateway identity resolves to the platform's
+ * remedy and ask_user tools: attested declarations in attested mode, the
+ * gateway's own labels in compat mode, bare names for Chat. Without an
+ * identity (catch-all routes) nothing is ours by name.
+ */
+function platformToolMatchers(
+  identity: Pick<GatewayToolIdentity, "canonicalize"> | undefined,
+): PlatformToolMatchers {
+  const resolvesTo =
+    (short: ArchestraToolShortName) => (name: string, namespace?: string) =>
+      identity !== undefined &&
+      shortToolName(identity.canonicalize(name, namespace)) === short;
+  return {
+    notice: resolvesTo(TOOL_GET_REMEDY_PLANS_SHORT_NAME),
+    control: resolvesTo(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+    askUser: resolvesTo(TOOL_ASK_USER_SHORT_NAME),
+  };
+}
+
+/**
+ * Puts provider history back the way the model wrote it: control calls from
+ * their receipts, notices to the denied calls and their rulings, ask_user
+ * calls without the trajectory the proxy stamped. Shared by the session path
+ * and the provider-bound sanitizer, so both show the provider the same bytes.
+ */
+function restoreHistory(params: {
+  family: HistoryWire;
+  body: unknown;
+  ours: PlatformToolMatchers;
+  /** Declarations the request made, before any was stripped. */
+  declaredCount: number;
+}): {
+  historicalControlToolName?: string;
+  noticeCallIds: ReadonlySet<string>;
+  changed: number;
+} {
+  const historicalControlToolName = restoreAppaRemedyExecutions({
+    family: params.family,
+    body: params.body,
+    // Current declarations bind live controls. Without declarations, only a
+    // typed record bound to the same call and arguments can restore history.
+    allowHistoricalControl: params.declaredCount === 0,
+    isControlTool: params.ours.control,
+  });
+  const noticeCallIds = restoreAppaNotices({
+    family: params.family,
+    body: params.body,
+    isNoticeTool: params.ours.notice,
+    mayBeNoticeTool: (name) => NOTICE_TOOL_SPELLING.test(name),
+  });
+  // The control calls came back whole from their receipts above; ask_user
+  // calls carry the trajectory the proxy stamped for the tool alone.
+  const askUsers = stripProxyArguments({
+    family: params.family,
+    body: params.body,
+    isStampedTool: params.ours.askUser,
+    names: ASK_USER_PROXY_ARGUMENTS,
+  });
+  return {
+    ...(historicalControlToolName ? { historicalControlToolName } : {}),
+    noticeCallIds,
+    changed:
+      (historicalControlToolName ? 1 : 0) + noticeCallIds.size + askUsers,
+  };
+}
+
+/** What only the proxy writes on a notice: its record and historical offers. */
+const NOTICE_PROXY_MEMBERS: ReadonlySet<string> = new Set(["notice", "offers"]);
+const OFFERS_MEMBER: ReadonlySet<string> = new Set(["offers"]);
+/** The receipt and legacy transport keys the proxy strips from a control call. */
+const CONTROL_PROXY_MEMBERS: ReadonlySet<string> = new Set(
+  PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME],
+);
+/** Names that end in the control short name, under any client label. */
+const CONTROL_TOOL_SPELLING = new RegExp(
+  `(^|[^a-z0-9])${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME}$`,
+);
+/** What a body must mention before the catch-all parses it. */
+const OPENAPPA_TOOL_TOKENS = [
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  "remedy_offers",
+];
+/**
+ * The fixed text of the receipts and markers the proxy writes into history:
+ * session receipts, child returns, child-trajectory receipts, delegation
+ * markers and Responses compaction carriers.
+ */
+const PROXY_MARK_TOKENS = [
+  "protected session ",
+  "finished subagent ",
+  "appact2-",
+  "[appa] delegated trajectory ",
+  "appac1-",
+];
+
+/**
+ * Drops the receipts and markers handleLLMProxy strips at its entry, for a
+ * body that skips the pipeline. Only a session resolves them into lineage
+ * evidence, so they are dropped here, not collected. Returns whether the body
+ * changed.
+ */
+function stripProxyMarks(params: {
+  family: AppaWireFamily;
+  body: object;
+}): boolean {
+  const before = JSON.stringify(params.body);
+  if (!PROXY_MARK_TOKENS.some((token) => before.includes(token))) return false;
+  stripSessionReceiptsFromRequest(params);
+  if (params.family === "openai:responses")
+    unwrapCompactionCarriersFromRequest(params.body);
+  stripChildTrajectoryReceiptsFromRequest(params);
+  stripDelegationMarkers(params);
+  collectAndStripChildReturns(params.body);
+  return JSON.stringify(params.body) !== before;
+}
+
+/**
+ * What restoration leaves behind still never reaches the provider, on every
+ * wire. A call is ours by name, as this request's identity resolves it, or by
+ * a notice or receipt that names its own call. Remedy signatures are not
+ * proof. Spelling or field presence alone does not take a foreign tool's
+ * arguments.
+ */
+function scrubProxyMembers(params: {
+  wire: ProviderWire;
+  body: unknown;
+  ours: PlatformToolMatchers;
+}): number {
+  let scrubbed = 0;
+  const keep = (
+    call: ProviderToolCall,
+    args: Record<string, unknown>,
+    next: Record<string, unknown> | string,
+  ) => {
+    if (next === args) return;
+    call.writeArguments(next);
+    scrubbed++;
+  };
+  for (const call of providerToolCalls(params)) {
+    if (call.kind !== "function") continue;
+    const { id, name, namespace } = call;
+    if (
+      params.ours.notice(name, namespace) ||
+      NOTICE_TOOL_SPELLING.test(name)
+    ) {
+      const args = call.readArguments();
+      if (!args) continue;
+      // Our notice tool, or a record that names its own call: the call keeps
+      // what it showed, the tool, its arguments and the ruling.
+      if (
+        params.ours.notice(name, namespace) ||
+        (id !== undefined &&
+          readNotice({ callId: id, arguments: args }) !== null)
+      )
+        keep(call, args, withoutMembers(args, NOTICE_PROXY_MEMBERS));
+      continue;
+    }
+    if (
+      params.ours.control(name, namespace) ||
+      CONTROL_TOOL_SPELLING.test(name)
+    ) {
+      const args = call.readArguments();
+      if (!args) continue;
+      const receipt =
+        id === undefined
+          ? null
+          : readRemedyExecution({
+              callId: id,
+              toolName: name,
+              namespace,
+              arguments: args,
+            });
+      // A lookalike's own payload or signature stays. A matching receipt is
+      // structural and does not verify a remedy signature.
+      if (!params.ours.control(name, namespace) && !receipt) continue;
+      keep(
+        call,
+        args,
+        receipt
+          ? receipt.original_arguments
+          : withoutMembers(args, CONTROL_PROXY_MEMBERS),
+      );
+      continue;
+    }
+    if (params.ours.askUser(name, namespace)) {
+      const args = call.readArguments();
+      if (!args) continue;
+      keep(call, args, withoutMembers(args, ASK_USER_PROXY_ARGUMENTS));
+    }
+  }
+  return scrubbed;
+}
+
+/**
+ * Drops the proxy-only parameters from this platform's remedy and ask_user
+ * declarations, as prepareAppaRequest does on the session path, for clients
+ * holding a tool list fetched before the gateway stopped publishing them. The
+ * notice keeps its record, which the gateway still advertises; historical
+ * offers go. Only declarations the identity resolves count.
+ */
+function stripDeclaredProxyParameters(params: {
+  body: unknown;
+  ours: PlatformToolMatchers;
+}): number {
+  let stripped = 0;
+  for (const { tool, name, namespace } of declaredToolEntries(params.body)) {
+    if (name === undefined) continue;
+    const members = params.ours.control(name, namespace)
+      ? CONTROL_PROXY_MEMBERS
+      : params.ours.askUser(name, namespace)
+        ? ASK_USER_PROXY_ARGUMENTS
+        : params.ours.notice(name, namespace)
+          ? OFFERS_MEMBER
+          : undefined;
+    if (members && stripDeclaredParameters({ tool, names: members }))
+      stripped++;
+  }
+  return stripped;
+}
+
+/** The arguments without `members`; the same object when it holds none of them. */
+function withoutMembers(
+  args: Record<string, unknown>,
+  members: ReadonlySet<string>,
+): Record<string, unknown> {
+  if (!Object.keys(args).some((key) => members.has(key))) return args;
+  return Object.fromEntries(
+    Object.entries(args).filter(([key]) => !members.has(key)),
+  );
+}
+
+/** The wire a forwarded body is shaped as, read from the body alone. */
+function forwardedWire(body: unknown): ProviderWire | undefined {
+  const record = asRecord(body);
+  if (!record) return undefined;
+  if (Array.isArray(record.contents)) return "gemini:generateContent";
+  if (record.input !== undefined) return "openai:responses";
+  const messages = asArray(record.messages);
+  if (!messages) return undefined;
+  for (const message of messages) {
+    const entry = asRecord(message);
+    if (Array.isArray(entry?.tool_calls) || entry?.role === "tool")
+      return "openai:chatCompletions";
+    for (const part of asArray(entry?.content) ?? []) {
+      const block = asRecord(part);
+      if (block?.type === "tool_use" || block?.type === "tool_result")
+        return "anthropic:messages";
+      if (block && ("toolUse" in block || "toolResult" in block))
+        return "bedrock:converse";
+    }
+  }
+  // No tool traffic: the Anthropic and Chat Completions shapes read text alike.
+  return "anthropic:messages";
 }
 
 /**
@@ -515,7 +921,13 @@ function platformDeclarationsOf(
       .filter(
         (declaration) =>
           declaration.kind === "b" &&
-          shortToolName(declaration.advertisedName) === shortName,
+          shortToolName(declaration.advertisedName) === shortName &&
+          identity.attestationOf(declaration.name, declaration.namespace)
+            ?.advertisedName === declaration.advertisedName &&
+          identity.attestationOf(declaration.name, declaration.namespace)
+            ?.gatewayId === declaration.gatewayId &&
+          identity.attestationOf(declaration.name, declaration.namespace)
+            ?.kind === "b",
       )
       .map((declaration) => ({
         name: declaration.name,
@@ -536,7 +948,7 @@ function platformDeclarationsOf(
 }
 
 /**
- * The one declaration of a remedy tool this session makes, if any.
+ * Exact declarations of a remedy tool, including explicitly authorized aliases.
  *
  * With attestations, only a declaration the gateway attested as that built-in
  * counts, whatever its spelling, and a lookalike under any label stays a
@@ -545,15 +957,19 @@ function platformDeclarationsOf(
  * demotion, so a replayed marker or a second gateway reads as the conflict it
  * is. Without attestations the identity's own resolution decides.
  *
- * A second declaration of the same tool leaves the session ambiguous about
- * which name to render and which call to trust, so it is refused with the way
- * out, as is a declaration that takes free-form input.
+ * Copyable markers do not authorize an alias group. Only the identity's
+ * client-bound alias proof can admit its surviving members. Other duplicates
+ * are refused, as are accepted declarations that take free-form input.
  */
 function oneRemedyDeclaration(params: {
   shortName: ArchestraToolShortName;
   entries: ReturnType<typeof declaredToolEntries>;
-  identity: Pick<GatewayToolIdentity, "mode" | "canonicalize" | "verified">;
-}): DeclaredToolSpelling | undefined {
+  identity: Pick<
+    GatewayToolIdentity,
+    "mode" | "canonicalize" | "verified" | "attestationOf"
+  > &
+    Partial<Pick<GatewayToolIdentity, "aliasesOf">>;
+}): DeclaredToolSpelling[] {
   const { shortName, entries, identity } = params;
   const found =
     identity.mode === "attested"
@@ -576,18 +992,49 @@ function oneRemedyDeclaration(params: {
     });
   }
   const [first, second] = candidates.values();
-  if (second) {
+  const raw = identity.verified.filter(
+    (declaration) =>
+      declaration.kind === "b" &&
+      shortToolName(declaration.advertisedName) === shortName,
+  );
+  const authorized =
+    identity.mode === "attested" && raw[0]
+      ? identity.aliasesOf?.(raw[0].advertisedName)
+      : undefined;
+  const grouped =
+    authorized !== undefined &&
+    raw.every(
+      (declaration) =>
+        declaration.gatewayId === raw[0].gatewayId &&
+        declaration.advertisedName === raw[0].advertisedName,
+    );
+  if (second && !grouped) {
     throw new ApiError(
       400,
       `OpenAPPA needs exactly one declaration of ${shortName}. This request declares both ${spellingLabel(first)} and ${spellingLabel(second)}. Connect this client to one gateway of this platform at a time.`,
     );
   }
-  if (!first) return undefined;
+  if (!first) return [];
+  const members = grouped
+    ? authorized.filter((member) => {
+        const attestation = identity.attestationOf(
+          member.name,
+          member.namespace,
+        );
+        return (
+          candidates.has(`${member.namespace ?? ""}\u0000${member.name}`) &&
+          attestation?.kind === "b" &&
+          attestation.gatewayId === raw[0].gatewayId &&
+          attestation.advertisedName === raw[0].advertisedName
+        );
+      })
+    : [first];
   const custom = entries.some(
     (entry) =>
-      entry.name === first.name &&
-      entry.namespace === first.namespace &&
-      asToolDeclaration(entry.tool)?.type === "custom",
+      members.some(
+        (member) =>
+          entry.name === member.name && entry.namespace === member.namespace,
+      ) && asToolDeclaration(entry.tool)?.type === "custom",
   );
   if (custom) {
     throw new ApiError(
@@ -595,7 +1042,7 @@ function oneRemedyDeclaration(params: {
       "OpenAPPA control tools require structured function arguments, not free-form custom input",
     );
   }
-  return first;
+  return [...members];
 }
 
 /** The gateway that attested this exact declaration, after demotion. */
@@ -696,22 +1143,18 @@ function appendDeclaredTool(
   ];
 }
 
-/** Refuses sessions where tools are deferred to a provider tool search. */
-function refuseDeferredTools(declared: readonly unknown[]): void {
-  const deferred = declared.some((tool) => {
-    const declaration = asToolDeclaration(tool);
-    return (
-      declaration?.type === "tool_search" ||
-      declaration?.type?.startsWith("tool_search_tool_") === true ||
-      declaration?.defer_loading === true
-    );
-  });
-  if (deferred) {
-    throw new ApiError(
-      400,
-      "OpenAPPA cannot govern a session that defers its tools to a tool search; the tools it may call are not on the wire. Configure the client to declare its tools inline, or disable OpenAPPA for this client.",
-    );
-  }
+/**
+ * Whether the request defers tools to a tool search: a `tool_search`
+ * declaration (Responses; Anthropic's provider-run `tool_search_tool_*`) or
+ * any tool declared with `defer_loading`.
+ */
+function declaresToolSearch(tool: unknown): boolean {
+  const declaration = asToolDeclaration(tool);
+  return (
+    declaration?.type === "tool_search" ||
+    declaration?.type?.startsWith("tool_search_tool_") === true ||
+    declaration?.defer_loading === true
+  );
 }
 
 function refuseUnsupportedToolTypes(declared: readonly unknown[]): void {

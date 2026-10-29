@@ -2,11 +2,13 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  ManagedResourceSchema,
   type ResourcePermissionGrant,
   type ScopedResource,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { authQueryKeys } from "@/lib/auth/auth.query";
 import { reportBulkOutcome, runBulkAction } from "./bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "./utils";
 
@@ -25,7 +27,7 @@ export function useResourcePermissions(
     queryKey: ["resource-permissions", resource, scope],
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getResourcePermissions({
-        path: { resource, scope },
+        path: { resource: ManagedResourceSchema.parse(resource), scope },
       });
       throwOnApiError(error, { toastOnError: false });
       if (!data) throw new Error("Permissions response is missing");
@@ -53,11 +55,14 @@ export function usePermissionRecipients(params: {
       const { data, error } =
         params.scope === undefined
           ? await archestraApiSdk.searchInitialPermissionSubjects({
-              path: { resource: params.resource },
+              path: { resource: ManagedResourceSchema.parse(params.resource) },
               query: { query: params.query },
             })
           : await archestraApiSdk.searchResourcePermissionSubjects({
-              path: { resource: params.resource, scope: params.scope },
+              path: {
+                resource: ManagedResourceSchema.parse(params.resource),
+                scope: params.scope,
+              },
               query: { query: params.query },
             });
       throwOnApiError(error, { toastOnError: false });
@@ -76,7 +81,7 @@ export function useUpdateResourcePermissions(
       body: archestraApiTypes.UpdateResourcePermissionsData["body"],
     ) => {
       const { data, error } = await archestraApiSdk.updateResourcePermissions({
-        path: { resource, scope },
+        path: { resource: ManagedResourceSchema.parse(resource), scope },
         body,
       });
       if (error) {
@@ -91,7 +96,9 @@ export function useUpdateResourcePermissions(
       await Promise.all([
         client.invalidateQueries({ queryKey: ["resource-permissions"] }),
         client.invalidateQueries({ queryKey: ["mcp-catalog"] }),
-        client.invalidateQueries({ queryKey: ["scoped-capabilities"] }),
+        client.invalidateQueries({
+          queryKey: authQueryKeys.scopedCapabilities(),
+        }),
         client.invalidateQueries({ queryKey: ["skills"] }),
         client.invalidateQueries({ queryKey: ["apps"] }),
         client.invalidateQueries({ queryKey: ["agents"] }),
@@ -100,6 +107,9 @@ export function useUpdateResourcePermissions(
         client.invalidateQueries({ queryKey: ["agent-runs"] }),
         client.invalidateQueries({ queryKey: ["llm-models"] }),
         client.invalidateQueries({ queryKey: ["models-with-api-keys"] }),
+        client.invalidateQueries({ queryKey: ["runtime-credentials"] }),
+        client.invalidateQueries({ queryKey: ["github-app-configs"] }),
+        client.invalidateQueries({ queryKey: ["github-pats"] }),
       ]);
       toast.success("Permissions saved");
     },
@@ -128,7 +138,10 @@ export function useAddBulkResourceAccess(resource: ScopedResource) {
         run: async (item) => {
           const { data: policy, error } =
             await archestraApiSdk.getResourcePermissions({
-              path: { resource, scope: item.id },
+              path: {
+                resource: ManagedResourceSchema.parse(resource),
+                scope: item.id,
+              },
             });
           throwOnApiError(error, { toastOnError: false });
           if (!policy) throw new Error("Permissions response is missing");
@@ -153,7 +166,10 @@ export function useAddBulkResourceAccess(resource: ScopedResource) {
               });
           }
           const result = await archestraApiSdk.updateResourcePermissions({
-            path: { resource, scope: item.id },
+            path: {
+              resource: ManagedResourceSchema.parse(resource),
+              scope: item.id,
+            },
             body: { revision: policy.revision, grants: merged },
           });
           throwOnApiError(result.error, { toastOnError: false });

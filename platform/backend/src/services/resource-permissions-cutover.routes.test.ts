@@ -123,8 +123,9 @@ describe("write routes after the upgrade", () => {
         teamEditor: [200, 403, 403],
         outsider: [200, 403, 403],
         loner: [200, 403, 403],
-        // Approved: the widening to the Can use preset.
-        blind: [200, 404, 403],
+        // Approved: the widening to the Can use preset. It can now see the
+        // agent, so a refused edit says 403 rather than hiding it.
+        blind: [200, 403, 403],
       },
       skill: {
         admin: [200, 200, 200],

@@ -7,6 +7,8 @@ import config from "@/config";
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import type { Bm25Tuning, VectorSearchResult } from "@/models/kb-chunk";
+import KbDocumentAccessModel from "@/models/kb-document-access";
+import type { GrantPrincipal } from "@/models/resource-permission-subject";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry, KbDocumentMetadataFilter } from "@/types";
 import { expandChunkContext } from "./context-expansion";
@@ -106,6 +108,13 @@ export class QueryService {
     } = params;
     if (connectorIds.length === 0) return [];
     if (!bypassAcl && params.userAcl.length === 0) return [];
+    // Every retrieval stage below checks the same caller's grants.
+    const grantPrincipals = bypassAcl
+      ? null
+      : await KbDocumentAccessModel.resolvePrincipals({
+          userAcl: params.userAcl,
+          organizationId,
+        });
 
     const queryStartTime = Date.now();
     const hybridEnabled = config.kb.hybridSearchEnabled;
@@ -146,6 +155,7 @@ export class QueryService {
           connectorId,
           limit: overFetchLimit,
           userAcl: params.userAcl,
+          grantPrincipals,
           bypassAcl,
           environmentId,
           metadataFilter,
@@ -254,6 +264,7 @@ export class QueryService {
       topResults = await resolveParentPassages({
         results: topResults,
         userAcl: params.userAcl,
+        grantPrincipals,
         bypassAcl,
         environmentId,
         retrievalBackend: this.retrievalBackend,
@@ -270,6 +281,7 @@ export class QueryService {
         results: topResults,
         radius: config.kb.contextExpansionRadius,
         userAcl: params.userAcl,
+        grantPrincipals,
         bypassAcl,
         environmentId,
         retrievalBackend: this.retrievalBackend,
@@ -323,6 +335,7 @@ export class QueryService {
     connectorId: string | null;
     limit: number;
     userAcl: AclEntry[];
+    grantPrincipals?: GrantPrincipal[] | null;
     bypassAcl: boolean;
     environmentId?: string | null;
     metadataFilter?: KbDocumentMetadataFilter;
@@ -339,6 +352,7 @@ export class QueryService {
       connectorId,
       limit,
       userAcl,
+      grantPrincipals,
       bypassAcl,
       environmentId,
       metadataFilter,
@@ -418,6 +432,7 @@ export class QueryService {
           dimensions: embeddingConfig.dimensions,
           limit,
           userAcl,
+          grantPrincipals,
           bypassAcl,
           environmentId,
           metadataFilter,
@@ -432,6 +447,7 @@ export class QueryService {
               bm25,
               limit,
               userAcl,
+              grantPrincipals,
               bypassAcl,
               environmentId,
               metadataFilter,
@@ -445,6 +461,7 @@ export class QueryService {
         candidates: unverifiedVectorRows,
         connectorIds,
         userAcl,
+        grantPrincipals,
         bypassAcl,
         environmentId,
         metadataFilter,
@@ -453,6 +470,7 @@ export class QueryService {
         candidates: unverifiedFullTextRows,
         connectorIds,
         userAcl,
+        grantPrincipals,
         bypassAcl,
         environmentId,
         metadataFilter,
@@ -541,6 +559,7 @@ export class QueryService {
     candidates: VectorSearchResult[] | null;
     connectorIds: string[];
     userAcl: AclEntry[];
+    grantPrincipals?: GrantPrincipal[] | null;
     bypassAcl: boolean;
     environmentId?: string | null;
     metadataFilter?: KbDocumentMetadataFilter;

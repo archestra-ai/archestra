@@ -71,6 +71,12 @@ def test_parse_plan_rejects_bad_enums() -> None:
         c.parse_decision({**base, "target_kind": "agent", "action": "delete"}, ctx="d")
 
 
+def test_parse_plan_rejects_removed_tool_policy_kind() -> None:
+    # tool-invocation policies were removed from Archestra; a stale plan must fail loudly.
+    with pytest.raises(c.ContractError, match=r"target kind 'tool_policy' must be one of"):
+        c.parse_decision({"source_id": "hook:x", "target_kind": "tool_policy", "scope": "personal"}, ctx="d")
+
+
 def test_parse_bundled_file_allows_empty_content() -> None:
     # an empty file (e.g. a package __init__.py) is legitimate and must survive the round-trip.
     bf = c.parse_bundled_file({"path": "recipes/__init__.py", "content": "", "encoding": "utf8"}, ctx="t")
@@ -107,17 +113,10 @@ def test_migrate_decision_requires_target_kind() -> None:
 def test_user_answer_validators_reject_bad_values() -> None:
     with pytest.raises(c.ContractError, match="provider"):
         c.require_provider({"provider": "huggingface"}, ctx="a")
-    with pytest.raises(c.ContractError, match="operator"):
-        c.require_operator({"operator": "matches"}, ctx="a")
-    with pytest.raises(c.ContractError, match="action"):
-        c.optional_action({"action": "obliterate"}, ctx="a")
 
 
 def test_user_answer_validators_accept_good_values() -> None:
     assert c.require_provider({"provider": "anthropic"}, ctx="a") == "anthropic"
-    assert c.require_operator({"operator": "regex"}, ctx="a") == "regex"
-    assert c.optional_action({}, ctx="a") == "block_always"  # default
-    assert c.optional_action({"action": "require_approval"}, ctx="a") == "require_approval"
 
 
 def test_archestra_hook_event_maps_supported_events_only() -> None:

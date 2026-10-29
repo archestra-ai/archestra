@@ -1,4 +1,5 @@
-import { type Mock, vi } from "vitest";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { InternalMcpCatalogModel } from "@/models";
@@ -6,12 +7,6 @@ import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY } from "@/types";
-
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-
-const mockHasPermission = hasPermission as Mock;
 
 /**
  * Registry passwords and enterprise-managed client-secret overrides: the two
@@ -26,7 +21,9 @@ describe("Internal MCP Catalog - secret extraction", () => {
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
     user = await makeUser();
     const organization = await makeOrganization();

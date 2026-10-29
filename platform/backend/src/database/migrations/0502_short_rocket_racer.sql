@@ -1,0 +1,4 @@
+-- drizzle-migration-linter: allow-breaking
+-- drizzle-migration-linter: reason=Widens the primary key so a virtual key can map several endpoints of one self-hosted provider. Existing rows are unique on (virtual_api_key_id, provider) and each provider key has exactly one provider, so they are already unique on (virtual_api_key_id, provider_api_key_id) and the new key cannot fail. Both statements run in one transaction. During rollout, old pods keep reading correctly; only their connection-setup upsert (ON CONFLICT (virtual_api_key_id, provider)) errors until they are replaced, and a retry succeeds.
+ALTER TABLE "virtual_api_key_provider_api_key" DROP CONSTRAINT "virtual_api_key_provider_api_key_virtual_api_key_id_provider_pk";--> statement-breakpoint
+ALTER TABLE "virtual_api_key_provider_api_key" ADD CONSTRAINT "virtual_api_key_provider_api_key_pk" PRIMARY KEY("virtual_api_key_id","provider_api_key_id");

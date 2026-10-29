@@ -3,7 +3,7 @@
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageHeaderBannerSlotContext } from "@/components/page-header-banner";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +44,7 @@ function isTabActive(
 export function PageLayout({
   title,
   documentTitle,
+  icon,
   backLink,
   description,
   status,
@@ -55,6 +56,9 @@ export function PageLayout({
   minWidth: minWidthKey = "none",
   contentOverflowX = "auto",
   fillContent = false,
+  compactHeader = false,
+  stackHeaderOnMobile = false,
+  denseContent = false,
 }: {
   children: React.ReactNode;
   /**
@@ -80,6 +84,7 @@ export function PageLayout({
      * decide, or every connected channel renders as the open page at once.
      */
     selected?: boolean;
+    onClick?: React.MouseEventHandler<HTMLAnchorElement>;
   }[];
   title: React.ReactNode;
   /**
@@ -89,8 +94,17 @@ export function PageLayout({
    */
   documentTitle?: string;
   /**
-   * "Back to <parent>" control for a detail page, rendered above the title so
-   * it reads as part of the header rather than as the first item of content.
+   * The record's own mark (an agent's icon, an MCP server's logo), for a
+   * detail page. Pass the bare glyph at 24px; the header draws the tile around
+   * it. It sits to the left of the title and description as one column, so the
+   * description lines up under the name rather than under the icon — which is
+   * where it lands when the icon is composed into `title` instead.
+   */
+  icon?: React.ReactNode;
+  /**
+   * "Back to <parent>" control for a detail or wizard page — a `PageBackLink`.
+   * It sits in the title row, before the title, so the way back reads as part
+   * of the header without spending a row of its own.
    */
   backLink?: React.ReactNode;
   /** Omit on pages whose title needs no gloss — nothing is rendered. */
@@ -126,7 +140,17 @@ export function PageLayout({
   contentOverflowX?: "auto" | "clip";
   /** Let a page's content fill the available app viewport. */
   fillContent?: boolean;
+  /** Tighter header spacing when the page layout is hosted in a dialog. */
+  compactHeader?: boolean;
+  /** Give long detail titles the full phone width, with actions below the description. */
+  stackHeaderOnMobile?: boolean;
+  /**
+   * Start the content 16px below the header at every width, for dense
+   * detail pages whose first section is a card of its own.
+   */
+  denseContent?: boolean;
 }) {
+  const headerSpacing = compactHeader ? COMPACT_HEADER_SPACING : HEADER_SPACING;
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const appName = useAppName();
@@ -159,6 +183,7 @@ export function PageLayout({
     null,
   );
   const [headerHeight, setHeaderHeight] = useState(0);
+  const mobileTabsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!headerElement) return;
@@ -169,6 +194,20 @@ export function PageLayout({
     observer.observe(headerElement);
     return () => observer.disconnect();
   }, [headerElement]);
+
+  // Moving to another page under this layout (a tab such as Costs → Limits)
+  // starts it at the top. Next scrolls only the new page segment into view,
+  // which inside the app's scroll container leaves this header scrolled away
+  // whenever the page is taller than the viewport. Query-only changes keep
+  // their position.
+  const previousPathname = useRef(pathname);
+  useEffect(() => {
+    if (previousPathname.current === pathname) return;
+    previousPathname.current = pathname;
+    headerElement
+      ?.closest<HTMLElement>("[data-page-scroll-container]")
+      ?.scrollTo({ top: 0 });
+  }, [pathname, headerElement]);
 
   // Split tabs for mobile: visible vs overflow
   const mobileVisibleTabs = tabs.slice(0, mobileVisibleCount);
@@ -185,6 +224,22 @@ export function PageLayout({
     selectedTab && mobileOverflowTabs.includes(selectedTab)
       ? selectedTab
       : undefined;
+
+  // On a narrow phone the tab row scrolls sideways; bring the selected tab
+  // (or the overflow trigger naming it) into view so the reader can see
+  // where they are without swiping for it.
+  const selectedTabHref = selectedTab?.href;
+  useEffect(() => {
+    const row = mobileTabsRef.current;
+    if (!row || !selectedTabHref) return;
+    const selected = row.querySelector<HTMLElement>("[data-tab-selected]");
+    if (!selected) return;
+    const overflowEnd =
+      selected.offsetLeft + selected.offsetWidth - row.clientWidth;
+    if (overflowEnd > row.scrollLeft) row.scrollLeft = overflowEnd;
+    else if (selected.offsetLeft < row.scrollLeft)
+      row.scrollLeft = selected.offsetLeft;
+  }, [selectedTabHref]);
 
   return (
     <PageHeaderBannerSlotContext.Provider value={bannerSlot}>
@@ -204,34 +259,59 @@ export function PageLayout({
         >
           <div
             className={cn(
-              "mx-auto px-6",
+              "mx-auto px-4 sm:px-6",
               minWidth,
               maxWidth,
-              maxWidthKey === "wizard" ? "pt-4 sm:pt-6" : "pt-6",
+              headerSpacing.top,
             )}
           >
             {/* On phones, the title and actions share a row while the
-                description uses the full width below them. */}
+                description uses the full width below them. An icon adds a
+                leading column; from `sm` up the title and description stack
+                beside it as one block, so both start at the same edge. Every
+                width shares HEADER_SPACING; `wizard` only clamps the copy to
+                one line each, so its header never changes height. */}
             <div
               className={cn(
-                "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 sm:gap-x-6 sm:gap-y-3",
-                maxWidthKey === "wizard" ? "mb-4 sm:mb-6" : "mb-6",
-                maxWidthKey === "wizard" && description && "sm:min-h-[3.75rem]",
+                "grid items-center gap-x-3 gap-y-2 sm:gap-y-3",
+                icon
+                  ? "grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-4"
+                  : "grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6",
+                headerSpacing.bottom,
               )}
             >
-              {backLink && (
-                <div className="col-start-1 row-start-1 min-w-0">
+              {icon && (
+                // The back link leads the tile, so the arrow stays outside
+                // the record's own mark: "← [icon] Title".
+                <div className="col-start-1 row-start-1 flex items-center gap-1 self-center">
                   {backLink}
+                  <div
+                    aria-hidden
+                    data-page-icon
+                    className={cn(
+                      "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/40",
+                      // The tile owns the glyph size so no page can drift.
+                      // Line icons keep a 2px inner margin, so a 20px raster
+                      // logo reads the same size as a 24px line icon.
+                      "*:size-6! [&>img]:size-5!",
+                      // From `sm` up the description stacks beside the icon,
+                      // so the tile grows to the height of the two lines it
+                      // fronts.
+                      description && "sm:size-12",
+                      // On a phone the arrow and the tile together would
+                      // squeeze the title to a few letters; the tile is only
+                      // decoration, so the title keeps that room instead.
+                      backLink && "hidden sm:flex",
+                    )}
+                  >
+                    {icon}
+                  </div>
                 </div>
               )}
               <div
                 className={cn(
-                  "contents sm:col-start-1 sm:block sm:min-w-0",
-                  backLink ? "row-start-2" : "row-start-1",
-                  maxWidthKey === "wizard" &&
-                    description &&
-                    "min-h-10 sm:relative sm:h-[3.75rem] sm:min-h-0",
-                  maxWidthKey === "wizard" && !description && "min-h-10",
+                  "contents row-start-1 sm:block sm:min-w-0",
+                  icon ? "sm:col-start-2" : "sm:col-start-1",
                 )}
               >
                 {/* Sibling pages of a tabbed section render PageLayout at the
@@ -244,40 +324,69 @@ export function PageLayout({
                   (facebook/react#11538). Keying the wrappers by pathname
                   swaps a whole element per page instead. */}
                 {/* The status pill is a sibling of the heading, not part of it:
-                  detail titles already compose an icon, a name and badges
-                  inside `title`, and folding a live state into the accessible
+                  detail titles already compose a name and badges inside
+                  `title`, and folding a live state into the accessible
                   heading name would make the heading change every time the
                   probe does. */}
                 <div
+                  data-page-title-row
                   className={cn(
-                    "col-start-1 flex min-w-0 items-center gap-2",
-                    backLink ? "row-start-2" : "row-start-1",
-                    // 40px even without an icon, so a plain text title and
-                    // the actions share one centre line.
+                    "row-start-1 flex min-w-0 items-center gap-2",
+                    headerSpacing.titleRow,
+                    icon ? "col-start-2" : "col-start-1",
+                    stackHeaderOnMobile && "col-span-full sm:col-span-1",
                     maxWidthKey === "wizard"
-                      ? "min-h-10 flex-nowrap overflow-hidden"
-                      : "min-h-9 flex-wrap",
-                    description && maxWidthKey !== "wizard" && "sm:mb-2",
+                      ? stackHeaderOnMobile
+                        ? "sm:flex-nowrap sm:overflow-hidden"
+                        : "flex-nowrap overflow-hidden"
+                      : // A long detail title wraps inside itself; wrapping
+                        // the row would drop it below the back link.
+                        stackHeaderOnMobile
+                        ? "flex-nowrap"
+                        : "flex-wrap",
                   )}
                 >
-                  <h1
-                    className={cn(
-                      "min-w-0 break-words text-2xl font-semibold tracking-tight",
-                      maxWidthKey === "wizard" && "max-h-10 overflow-hidden",
+                  {/* Without an icon the back link leads the title itself;
+                    with one it leads the tile instead (above). The arrow
+                    stays on the title's first line rather than wrapping onto
+                    a row of its own, and the status pill shares the title's
+                    column: beside it when it fits, under its text when not. */}
+                  <div className="flex min-w-0 max-w-full items-start gap-2">
+                    {!icon && backLink && (
+                      <span className="flex h-7 shrink-0 items-center sm:h-8">
+                        {backLink}
+                      </span>
                     )}
-                  >
-                    <span key={pathname}>{title}</span>
-                  </h1>
-                  {status && <div className="shrink-0">{status}</div>}
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <h1
+                        className={cn(
+                          "min-w-0 break-words text-2xl font-semibold tracking-tight",
+                          // Detail titles name a record and run long; a step
+                          // smaller on phones keeps them to a line or two.
+                          backLink && "text-xl sm:text-2xl",
+                          maxWidthKey === "wizard" &&
+                            (stackHeaderOnMobile
+                              ? "sm:max-h-10 sm:overflow-hidden"
+                              : "max-h-10 overflow-hidden"),
+                        )}
+                      >
+                        <span key={pathname}>{title}</span>
+                      </h1>
+                      {status && <div className="shrink-0">{status}</div>}
+                    </div>
+                  </div>
                 </div>
                 {description && (
                   <div
                     data-page-description
                     className={cn(
-                      "col-span-2 text-sm text-muted-foreground",
-                      backLink ? "row-start-3" : "row-start-2",
+                      // Hidden when a page portals into an empty slot.
+                      "col-span-full row-start-2 text-sm text-muted-foreground has-[>span>span:empty:only-child]:hidden",
+                      headerSpacing.description,
                       maxWidthKey === "wizard" &&
-                        "hidden sm:absolute sm:inset-x-0 sm:bottom-0 sm:line-clamp-1",
+                        (stackHeaderOnMobile
+                          ? "sm:line-clamp-1"
+                          : "hidden sm:line-clamp-1"),
                     )}
                   >
                     <span key={pathname}>{description}</span>
@@ -288,12 +397,22 @@ export function PageLayout({
                 <div
                   data-page-actions
                   className={cn(
-                    "col-start-2 flex min-h-9 items-center justify-self-end self-start lg:self-center",
-                    backLink ? "row-start-2" : "row-start-1",
+                    // Actions align with the title row at every width, so they
+                    // sit in the same spot on every page however long its
+                    // description is.
+                    "flex items-center self-start",
+                    stackHeaderOnMobile
+                      ? "col-span-full col-start-1 row-start-3 justify-self-start sm:col-span-1 sm:row-start-1 sm:justify-self-end"
+                      : "row-start-1 justify-self-end",
+                    headerSpacing.titleRow,
+                    stackHeaderOnMobile
+                      ? icon
+                        ? "sm:col-start-3"
+                        : "sm:col-start-2"
+                      : icon
+                        ? "col-start-3"
+                        : "col-start-2",
                     contentOverflowX === "clip" && "max-w-full overflow-x-auto",
-                    // Tablet and phone actions align with the title; desktop
-                    // actions centre against the title and description together.
-                    maxWidthKey === "wizard" && "min-h-10",
                   )}
                 >
                   {actionButton}
@@ -303,13 +422,14 @@ export function PageLayout({
             {tabs.length > 0 && (
               <>
                 {/* Desktop: Show all tabs */}
-                <div className="hidden md:flex gap-4 mb-0 overflow-x-auto whitespace-nowrap">
+                <div className="hidden md:flex gap-4 mb-0 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {tabs.map((tab) => {
                     const isSelected = tab === selectedTab;
                     return (
                       <Link
                         key={tab.href}
                         href={tab.href}
+                        onClick={tab.onClick}
                         aria-current={isSelected ? "page" : undefined}
                         // Only this copy carries the test id — see the `tabs` prop.
                         data-testid={tab.testId}
@@ -330,16 +450,27 @@ export function PageLayout({
                 </div>
 
                 {/* Mobile: Show first N tabs + overflow dropdown */}
-                <div className="flex md:hidden gap-3 mb-0 items-center whitespace-nowrap overflow-x-auto">
+                {/* Same rhythm as the desktop row, a step tighter on phones so
+                    a selected overflow tab's label still fits; the overflow
+                    menu sits at the far end so the visible tabs keep their
+                    spacing. Should the row still overflow, it scrolls without
+                    a scrollbar: under a tab strip that only reads as a stray
+                    line. */}
+                <div
+                  ref={mobileTabsRef}
+                  className="relative flex md:hidden gap-3 sm:gap-4 mb-0 items-end whitespace-nowrap overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                >
                   {mobileVisibleTabs.map((tab) => {
                     const isSelected = tab === selectedTab;
                     return (
                       <Link
                         key={tab.href}
                         href={tab.href}
+                        onClick={tab.onClick}
                         aria-current={isSelected ? "page" : undefined}
+                        data-tab-selected={isSelected || undefined}
                         className={cn(
-                          "relative cursor-pointer pb-1 text-sm font-medium transition-colors hover:text-foreground",
+                          "relative cursor-pointer pb-3 text-sm font-medium transition-colors hover:text-foreground",
                           isSelected
                             ? "text-foreground"
                             : "text-muted-foreground",
@@ -354,76 +485,75 @@ export function PageLayout({
                   })}
 
                   {mobileOverflowTabs.length > 0 && (
-                    <>
-                      <div className="h-5 w-px bg-border shrink-0" />
-                      <Popover
-                        open={overflowOpen}
-                        onOpenChange={setOverflowOpen}
-                      >
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            className={cn(
-                              "relative h-auto cursor-pointer rounded-none px-1 pb-3 text-sm font-medium transition-colors hover:bg-transparent hover:text-foreground flex items-center gap-1",
-                              selectedOverflowTab
-                                ? "text-foreground"
-                                : "text-muted-foreground",
-                            )}
-                          >
-                            {/* Distinct keyed spans so switching between the
-                              label (an element) and "More" (a string) swaps
-                              elements instead of deleting a bare text node —
-                              Chrome page-translate re-parents text nodes into
-                              <font> wrappers and React crashes removing a
-                              re-parented text node (facebook/react#11538). */}
-                            {selectedOverflowTab ? (
-                              <span key="selected-tab">
-                                {selectedOverflowTab.label}
-                              </span>
-                            ) : (
-                              <span key="more">More</span>
-                            )}
-                            <ChevronDown className="h-3.5 w-3.5" />
-                            {selectedOverflowTab && (
-                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          className="w-auto p-1 flex flex-col"
-                          align="end"
+                    <Popover open={overflowOpen} onOpenChange={setOverflowOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          data-tab-selected={
+                            selectedOverflowTab ? true : undefined
+                          }
+                          className={cn(
+                            // Shrinks and truncates the selected tab's label
+                            // rather than overflowing the row, which would
+                            // paint a scrollbar under the tabs.
+                            "relative ml-auto h-auto min-w-0 shrink cursor-pointer rounded-none px-0 pt-0 pb-3 text-sm font-medium transition-colors hover:bg-transparent dark:hover:bg-transparent hover:text-foreground flex items-center gap-1",
+                            selectedOverflowTab
+                              ? "text-foreground"
+                              : "text-muted-foreground",
+                          )}
                         >
-                          {mobileOverflowTabs.map((tab) => {
-                            const isSelected = tab === selectedTab;
-                            return (
-                              <Link
-                                key={tab.href}
-                                href={tab.href}
-                                aria-current={isSelected ? "page" : undefined}
-                                onClick={() => setOverflowOpen(false)}
-                                className={cn(
-                                  "cursor-pointer rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",
-                                  isSelected
-                                    ? "font-medium text-foreground bg-muted"
-                                    : "text-muted-foreground",
-                                )}
-                              >
-                                {tab.label}
-                              </Link>
-                            );
-                          })}
-                        </PopoverContent>
-                      </Popover>
-                    </>
+                          {/* Distinct keyed spans so switching between the
+                            label (an element) and "More" (a string) swaps
+                            elements instead of deleting a bare text node —
+                            Chrome page-translate re-parents text nodes into
+                            <font> wrappers and React crashes removing a
+                            re-parented text node (facebook/react#11538). */}
+                          {selectedOverflowTab ? (
+                            <span key="selected-tab" className="truncate">
+                              {selectedOverflowTab.label}
+                            </span>
+                          ) : (
+                            <span key="more">More</span>
+                          )}
+                          <ChevronDown className="h-3.5 w-3.5" />
+                          {selectedOverflowTab && (
+                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-auto p-1 flex flex-col"
+                        align="end"
+                      >
+                        {mobileOverflowTabs.map((tab) => {
+                          const isSelected = tab === selectedTab;
+                          return (
+                            <Link
+                              key={tab.href}
+                              href={tab.href}
+                              aria-current={isSelected ? "page" : undefined}
+                              onClick={(event) => {
+                                setOverflowOpen(false);
+                                tab.onClick?.(event);
+                              }}
+                              className={cn(
+                                "cursor-pointer rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",
+                                isSelected
+                                  ? "font-medium text-foreground bg-muted"
+                                  : "text-muted-foreground",
+                              )}
+                            >
+                              {tab.label}
+                            </Link>
+                          );
+                        })}
+                      </PopoverContent>
+                    </Popover>
                   )}
                 </div>
               </>
             )}
-            {!tabs.length && (
-              <div
-                className={maxWidthKey === "wizard" ? "mb-2 sm:mb-6" : "mb-6"}
-              />
-            )}
+            {!tabs.length && <div className={headerSpacing.bottom} />}
           </div>
         </div>
         <div
@@ -435,7 +565,7 @@ export function PageLayout({
             } as React.CSSProperties
           }
           className={cn(
-            "sticky top-3 z-10 mx-auto mt-6 w-full space-y-2 px-6 empty:hidden md:top-[var(--page-banner-top)]",
+            "sticky top-3 z-10 mx-auto mt-6 w-full space-y-2 px-4 empty:hidden sm:px-6 md:top-[var(--page-banner-top)]",
             maxWidth,
           )}
         />
@@ -460,7 +590,8 @@ export function PageLayout({
               fillContent && "flex min-h-0 flex-1 flex-col",
               minWidth || "min-w-0",
               maxWidth,
-              "px-6 py-6 md:px-6",
+              "px-4 py-4 sm:px-6",
+              !denseContent && "sm:py-6",
             )}
           >
             {children}
@@ -476,9 +607,26 @@ const MIN_WIDTH_CLASSES = {
   phone: "min-w-[20rem]",
 } as const;
 
+// One vertical rhythm for every page header, whatever its width. The title
+// row is 40px, the height of the icon tile and of the actions, so all three
+// share a centre line.
+const HEADER_SPACING = {
+  top: "pt-4 sm:pt-6",
+  bottom: "mb-4 sm:mb-6",
+  titleRow: "min-h-10",
+  description: "sm:mt-1",
+} as const;
+
 const MAX_WIDTH_CLASSES = {
   wide: "max-w-[1680px]",
   // Wizard and detail pages share this exact header/content column. Padding
   // lives inside the band, so add it back for 5xl content-edge alignment.
   wizard: "max-w-[calc(var(--container-5xl)+3rem)]",
+} as const;
+
+const COMPACT_HEADER_SPACING = {
+  top: "pt-3",
+  bottom: "mb-3",
+  titleRow: "min-h-8",
+  description: "sm:mt-1",
 } as const;

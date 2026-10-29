@@ -37,13 +37,9 @@ vi.mock("posthog-js", () => ({
   },
 }));
 
-vi.mock("posthog-js/react", () => ({
-  PostHogProvider: ({
-    children,
-  }: {
-    children: React.ReactNode;
-    client: unknown;
-  }) => <>{children}</>,
+// The app is interactive at once here; PostHog loads on the next tick.
+vi.mock("@/lib/app-interactive", () => ({
+  appInteractive: { whenIdle: () => Promise.resolve() },
 }));
 
 vi.mock("@/lib/auth/auth.query");
@@ -487,9 +483,9 @@ describe("PostHogProviderWrapper", () => {
       </PostHogProviderWrapper>,
     );
 
-    await waitFor(() => {
-      expect(mockInit).toHaveBeenCalledTimes(1);
-    });
+    // PostHog initializes once per page, so an earlier test may have done
+    // it; let any queued calls run before checking none of them reset.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mockIdentify).not.toHaveBeenCalled();
     expect(mockReset).not.toHaveBeenCalled();
   });

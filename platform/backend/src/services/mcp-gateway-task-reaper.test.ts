@@ -112,6 +112,48 @@ describe("MCP gateway task reaper", () => {
     await db.execute(sql`INSERT INTO keyv_cache (key, value) VALUES (
       ${abandonedReply}, ${JSON.stringify({ value: [{ id: 1 }], expires: Date.now() - 1_000 })}
     )`);
+    const abandonedHistory = `keyv:${CacheKey.OpenAppaHitlReviewHistory}-orphan`;
+    const liveHistory = `keyv:${CacheKey.OpenAppaHitlReviewHistory}-live`;
+    for (const [key, expires] of [
+      [abandonedHistory, Date.now() - 1_000],
+      [liveHistory, Date.now() + TTL_MS],
+    ] as const) {
+      await db.execute(sql`INSERT INTO keyv_cache (key, value) VALUES (
+        ${key}, ${JSON.stringify({ value: { outcome: "review_cancelled" }, expires })}
+      )`);
+    }
+    // A download ticket is kept for resumes and read by nobody after it expires.
+    const abandonedTicket = `keyv:${CacheKey.AgentWorkspaceTransferTicket}-orphan`;
+    const liveTicket = `keyv:${CacheKey.AgentWorkspaceTransferTicket}-live`;
+    for (const [key, expires] of [
+      [abandonedTicket, Date.now() - 1_000],
+      [liveTicket, Date.now() + TTL_MS],
+    ] as const) {
+      await db.execute(sql`INSERT INTO keyv_cache (key, value) VALUES (
+        ${key}, ${JSON.stringify({ value: { direction: "download" }, expires })}
+      )`);
+    }
+    // GitHub Actions exchange state: used token ids and per-IP budgets.
+    const githubActionsKeys = {
+      expired: [
+        `keyv:${CacheKey.GitHubActionsTokenJti}-expired`,
+        `keyv:${CacheKey.GitHubActionsTokenRateLimit}-198.51.100.1`,
+      ],
+      live: [
+        `keyv:${CacheKey.GitHubActionsTokenJti}-live`,
+        `keyv:${CacheKey.GitHubActionsTokenRateLimit}-198.51.100.2`,
+      ],
+    };
+    for (const [keys, expires] of [
+      [githubActionsKeys.expired, Date.now() - 1_000],
+      [githubActionsKeys.live, Date.now() + TTL_MS],
+    ] as const) {
+      for (const key of keys) {
+        await db.execute(sql`INSERT INTO keyv_cache (key, value) VALUES (
+          ${key}, ${JSON.stringify({ value: true, expires })}
+        )`);
+      }
+    }
 
     const outcome = await mcpGatewayTaskReaper.sweep();
 
@@ -124,6 +166,25 @@ describe("MCP gateway task reaper", () => {
       sql`SELECT key FROM keyv_cache WHERE key = ${abandonedReply}`,
     );
     expect(cached.rows).toEqual([]);
+    const history = await db.execute(
+      sql`SELECT key FROM keyv_cache WHERE key IN (${abandonedHistory}, ${liveHistory})`,
+    );
+    expect(history.rows).toEqual([{ key: liveHistory }]);
+    const tickets = await db.execute(
+      sql`SELECT key FROM keyv_cache WHERE key IN (${abandonedTicket}, ${liveTicket})`,
+    );
+    expect(tickets.rows).toEqual([{ key: liveTicket }]);
+    const githubActions = await db.execute<{ key: string }>(
+      sql`SELECT key FROM keyv_cache WHERE key IN (${sql.join(
+        [...githubActionsKeys.expired, ...githubActionsKeys.live].map(
+          (key) => sql`${key}`,
+        ),
+        sql`, `,
+      )})`,
+    );
+    expect(githubActions.rows.map((row) => row.key).sort()).toEqual(
+      [...githubActionsKeys.live].sort(),
+    );
   });
 
   test("a concurrent settle beats the reaper, matching the cancellation race rule", async ({

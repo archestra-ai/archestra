@@ -10,6 +10,9 @@ import { z } from "zod";
 import db, { schema } from "@/database";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type PrincipalSource,
+} from "./resource-permission-subject";
 
 export default class ResourcePermissionTargetModel {
   /** Discovery only. Execution must still check the specific target. */
@@ -17,8 +20,13 @@ export default class ResourcePermissionTargetModel {
     organizationId: string;
     userId: string;
     action: ResourcePermissionAction;
+    lookups?: PrincipalSource;
   }): Promise<boolean> {
     const table = schema.internalMcpCatalogTable;
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+      params.lookups,
+      { userId: params.userId, organizationId: params.organizationId },
+    );
     const [row] = await db
       .select({ id: table.id })
       .from(table)
@@ -31,7 +39,8 @@ export default class ResourcePermissionTargetModel {
           isNull(table.deletedAt),
           isNull(table.parentCatalogItemId),
           ResourcePermissionPolicyModel.grantCondition({
-            ...params,
+            ...principal,
+            action: params.action,
             resource: "mcpRegistry",
             scopeColumn: table.id,
           }),
@@ -57,6 +66,7 @@ export default class ResourcePermissionTargetModel {
     organizationId: string;
     resource: ScopedResource;
     id: string;
+    includeDeleted?: boolean;
   }): Promise<Target | null> {
     if (params.resource === "agent" || params.resource === "mcpGateway") {
       const table = schema.agentsTable;
@@ -127,7 +137,7 @@ export default class ResourcePermissionTargetModel {
             ? schema.conversationsTable.userId
             : schema.agentRunsTable.actorUserId,
           enabled: conversation
-            ? sql<boolean>`NOT ${schema.conversationsTable.lockedChat}`
+            ? sql<boolean>`NOT ${schema.conversationsTable.encryptedChat}`
             : sql<boolean>`true`,
         })
         .from(table)
@@ -209,8 +219,51 @@ export default class ResourcePermissionTargetModel {
           CreatedByModel.id({ createdByServiceAccountId }, createdBy) ?? null,
       };
     }
+    if (params.resource === "credential") {
+      const table = schema.runtimeCredentialDefinitionsTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.name,
+          createdBy: table.createdBy,
+          createdByServiceAccountId: table.createdByServiceAccountId,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+          ),
+        );
+      if (!target) return null;
+      // Organization-owned, like a service account: the creator is reported
+      // so the permissions editor can name them, not because they own it.
+      const { createdBy, createdByServiceAccountId, ...rest } = target;
+      return {
+        ...rest,
+        authorId:
+          CreatedByModel.id({ createdByServiceAccountId }, createdBy) ?? null,
+      };
+    }
     if (params.resource === "llmVirtualKey") {
       const table = schema.virtualApiKeysTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.name,
+          authorId: table.authorId,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+          ),
+        );
+      return target ?? null;
+    }
+    if (params.resource === "externalAgent") {
+      const table = schema.a2aRemoteAgentsTable;
       const [target] = await db
         .select({
           id: table.id,
@@ -297,10 +350,7 @@ export default class ResourcePermissionTargetModel {
       // audience of its own. Its whole access story is the grants below.
       return { ...target, authorId: null };
     }
-    if (
-      params.resource === "mcpOauthClient" ||
-      params.resource === "llmOauthClient"
-    ) {
+    if (params.resource === "oauthClient") {
       // Both kinds share the OAuth provider's table; the registration's
       // organization, kind and author live in its metadata.
       const table = schema.oauthClientsTable;
@@ -315,11 +365,7 @@ export default class ResourcePermissionTargetModel {
         .where(
           and(
             eq(table.id, params.id),
-            sql`${table.metadata}->>'type' = ${
-              params.resource === "mcpOauthClient"
-                ? "mcp_oauth_client"
-                : "llm_oauth_client"
-            }`,
+            sql`${table.metadata}->>'type' IN ('mcp_oauth_client', 'llm_oauth_client', 'managed_oauth_client')`,
             sql`${table.metadata}->>'organizationId' = ${params.organizationId}`,
           ),
         );
@@ -379,7 +425,9 @@ export default class ResourcePermissionTargetModel {
             eq(catalog.organizationId, params.organizationId),
             isNull(catalog.organizationId),
           ),
-          isNull(catalog.deletedAt),
+          params.resource === "mcpRegistry" && params.includeDeleted
+            ? undefined
+            : isNull(catalog.deletedAt),
         ),
       );
     if (!target) return null;

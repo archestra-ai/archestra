@@ -17,7 +17,7 @@ import { agentRuntimeFailureReason } from "./failure-reason";
 const execFileAsync = promisify(execFile);
 const ENTRYPOINT = path.resolve(
   import.meta.dirname,
-  "../../../../agent_images/bin/archestra-codex",
+  "../../../../docker_images/agent/bin/archestra-codex",
 );
 
 describe("Codex image entrypoint", () => {
@@ -70,6 +70,10 @@ describe("Codex image entrypoint", () => {
       await writeExecutable(
         path.join(bin, "codex"),
         `#!/bin/sh
+if [ "$1" = "debug" ]; then
+  jq -n --arg model "$ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL" '{models:[{slug:$model,upgrade:{model:"next-model"}}]}'
+  exit 0
+fi
 printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
 if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "one_shot" ]; then
   transcript="$ARCHESTRA_AGENT_RUNTIME_DIR/codex-transcript.jsonl"
@@ -144,6 +148,9 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       );
       expect(parsedConfig.model).toBe(env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL);
       expect(parsedConfig.unexpected).toBeUndefined();
+      expect(parsedConfig.notice.model_migrations).toEqual({
+        [env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL]: "next-model",
+      });
       expect(parsedConfig.model_providers.archestra.base_url).toBe(
         env.OPENAI_BASE_URL,
       );
@@ -282,6 +289,9 @@ printf '%s\\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
           ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID: "agent-run-codex-first",
           ARCHESTRA_AGENT_RUNTIME_TASK: "Run the task.",
           ARCHESTRA_AGENT_RUNTIME_OPENAPPA: openappa ? "1" : "",
+          ARCHESTRA_AGENT_RUNTIME_BINDING: openappa
+            ? "synthetic-codex-binding"
+            : "",
           ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
           ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
           OPENAI_API_KEY: "test-key",
@@ -307,6 +317,9 @@ printf '%s\\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
           "X-Archestra-Run-Id": "follow-up-task",
           "X-Archestra-Session-Id": "agent-run-codex-first",
           "X-Appa-Session-ID": "agent-run-codex-first",
+          ...(openappa
+            ? { "X-Archestra-Runtime-Binding": "synthetic-codex-binding" }
+            : {}),
         });
 
       if (!openappa) {
@@ -365,7 +378,10 @@ printf '%s\\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
       await writeExecutable(
         path.join(bin, "codex"),
         `#!/usr/bin/env python3
-import json, os, pathlib, subprocess, time
+import json, os, pathlib, subprocess, sys, time
+if sys.argv[1:] == ["debug", "models", "--bundled"]:
+    print(json.dumps({"models": []}))
+    raise SystemExit(0)
 runtime = pathlib.Path(os.environ["ARCHESTRA_AGENT_RUNTIME_DIR"])
 hooks = json.loads((pathlib.Path(os.environ["CODEX_HOME"]) / "hooks.json").read_text())
 hook = hooks["hooks"]["SessionStart"][0]["hooks"][0]["command"]

@@ -146,6 +146,7 @@ export function TopSessionsCard({
                         tooltip="hover"
                         format="number"
                         subscriptionBadge="compact"
+                        precision="cents"
                         className="justify-end whitespace-nowrap"
                       />
                     </TableCell>

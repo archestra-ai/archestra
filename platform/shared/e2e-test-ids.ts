@@ -3,7 +3,6 @@ export const E2eTestId = {
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",
   CreateAgentCloseHowToConnectButton: "create-agent-how-to-connect-button",
-  ConsultAdvisorSwitch: "consult-advisor-switch",
   CloneAgentButton: "clone-agent-button",
   AgentVersionHistoryButton: "agent-version-history-button",
   DeleteAgentButton: "delete-agent-button",
@@ -19,7 +18,6 @@ export const E2eTestId = {
   InvitationLinkCopyButton: "invitation-link-copy-button",
   InvitationErrorMessage: "invitation-error-message",
   SidebarUserProfile: "sidebar-user-profile",
-  SidebarNavGuardrails: "sidebar-nav-tool-guardrails",
   ManageCredentialsDialog: "manage-credentials-dialog",
   ManageCredentialsDialogTable: "manage-credentials-dialog-table",
   CredentialRow: "credential-row",
@@ -43,7 +41,6 @@ export const E2eTestId = {
   McpServerCard: "mcp-server-card",
   McpServerSettingsButton: "mcp-server-settings-button",
   McpServerToolsCount: "mcp-server-tools-count",
-  McpServerAgentsCount: "mcp-server-agents-count",
   McpToolsDialog: "mcp-tools-dialog",
   TokenSelect: "token-select",
   ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
@@ -86,20 +83,9 @@ export const E2eTestId = {
   RemoveTeamBadge: "remove-team-badge",
   PromptOnInstallationCheckbox: "prompt-on-installation-checkbox",
   RevokeCredentialButton: "revoke-credential-button",
-  ExternalSecretSelector: "external-secret-selector",
   SelectEnvironmentVariableType: "select-environment-variable-type",
   SelectEnvironment: "select-environment",
   AddCatalogItemButton: "add-catalog-item-button",
-  ConfigureVaultFolderButton: "configure-vault-folder-button",
-  ExternalSecretSelectorTeamTrigger: "external-secret-selector-team-trigger",
-  ExternalSecretSelectorSecretTrigger:
-    "external-secret-selector-secret-trigger",
-  ExternalSecretSelectorSecretTriggerKey:
-    "external-secret-selector-secret-trigger-key",
-  InlineVaultSecretSelectorSecretTrigger:
-    "inline-vault-secret-selector-secret-trigger",
-  InlineVaultSecretSelectorSecretTriggerKey:
-    "inline-vault-secret-selector-secret-trigger-key",
   McpServerSettingsConnectionsNavButton:
     "mcp-server-settings-connections-nav-button",
   McpServerSettingsConnectionsContent:
@@ -138,13 +124,14 @@ export const E2eTestId = {
   VirtualKeyCreateDialog: "virtual-key-create-dialog",
   VirtualKeyDeleteDialog: "virtual-key-delete-dialog",
   VirtualKeyProviderSelect: "virtual-key-provider-select",
-  VirtualKeyParentKeySelect: "virtual-key-parent-key-select",
+  ProviderKeyPickerAvailableProvider: "provider-key-picker-available-provider",
   VirtualKeyValue: "virtual-key-value",
   // Chat Prompt Input
   ChatFileUploadButton: "chat-file-upload-button",
   ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
-  LockedChatNotice: "locked-chat-notice",
-  LockedChatToggle: "locked-chat-toggle",
+  EncryptedChatNotice: "encrypted-chat-notice",
+  EncryptedChatSetupHint: "encrypted-chat-setup-hint",
+  EncryptedChatToggle: "encrypted-chat-toggle",
   ChatContextUsageTrigger: "chat-context-usage-trigger",
   ChatContextUsagePanel: "chat-context-usage-panel",
   ChatContextUsageTooltip: "chat-context-usage-tooltip",
@@ -153,7 +140,8 @@ export const E2eTestId = {
   ChatApiKeySelectorSearchInput: "chat-api-key-selector-search-input",
   // Chat Model Selector
   ChatModelSelectorTrigger: "chat-model-selector-trigger",
-  ChatThinkingEffortSelector: "chat-thinking-effort-selector",
+  /** The composer's setup menu (model, agent, and key tabs). */
+  ChatSetupMenu: "chat-setup-menu",
   ChatPromptTextarea: "chat-prompt-textarea",
   // Queue of messages composed while a response was in-flight
   ChatMessageQueue: "chat-message-queue",
@@ -216,6 +204,10 @@ export function getChatItemUnreadIndicatorTestId(
   conversationId: string,
 ): string {
   return `${E2eTestId.ChatItemUnreadIndicator}-${conversationId}`;
+}
+
+export function getChatModelOptionTestId(modelId: string): string {
+  return `chat-model-option-${modelId}`;
 }
 
 export function getChatApiKeySelectorOptionTestId(keyId: string): string {

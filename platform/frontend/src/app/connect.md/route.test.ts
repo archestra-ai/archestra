@@ -3,106 +3,69 @@ import { describe, expect, it } from "vitest";
 import { GET } from "./route";
 
 describe("Connect agent instructions", () => {
-  it("keeps the full instructions when no client is specified", async () => {
-    const response = GET(new Request("http://localhost:3000/connect.md"));
-    const instructions = await response.text();
-
-    expect(instructions).toContain("## Claude Desktop");
-    expect(instructions).toContain("OpenCode: run opencode mcp list first.");
-    expect(instructions).toContain(
-      "Cursor: installation alone is not a complete connection.",
-    );
-    expect(instructions).toContain(
-      "the skills check, or proxy inference remain unverified, say so explicitly.",
-    );
-    expect(instructions).toContain(
-      "their own OpenAI API key in Cursor Settings; never ask for the key in chat.",
-    );
-    expect(instructions).toContain(
-      'find "Cursor model settings (manual step)"',
-    );
-    expect(instructions).toContain(
-      "curl --fail --silent --show-error http://localhost:3000/api/client-connections/installer",
-    );
-  });
-
-  it("focuses Cursor instructions on its own setup and native checks", async () => {
-    const response = GET(
-      new Request("http://localhost:3000/connect.md?client=cursor"),
-    );
-    const instructions = await response.text();
-
-    expect(instructions).toContain("# Connect Cursor");
-    expect(instructions).toContain("--client cursor");
-    expect(instructions).toContain("Customize > MCPs");
-    expect(instructions).toContain("Customize > Skills");
-    expect(instructions).toContain("Cursor model settings (manual step)");
-    expect(instructions).toContain("printed virtual key");
-    expect(instructions).toContain(
-      "otherwise they need their own OpenAI API key",
-    );
-    expect(instructions).toContain("A Cursor subscription cannot authenticate");
-    expect(instructions).not.toContain("Claude Desktop");
-    expect(instructions).not.toContain("opencode mcp auth");
-  });
-
   it.each([
-    ["claude-code", "Claude Code", "--client claude-code"],
-    ["codex", "Codex", "--client codex"],
-    ["copilot-cli", "Copilot CLI", "--client copilot-cli"],
-    ["opencode", "OpenCode", "--client opencode"],
-  ])("focuses %s instructions", async (client, label, command) => {
+    ["", "http://localhost:3000/connection,"],
+    ["?client=unknown", "http://localhost:3000/connection,"],
+    ["?client=cursor", "http://localhost:3000/connection?clientId=cursor,"],
+    [
+      "?client=claude-desktop&exclude=skills",
+      "http://localhost:3000/connection?clientId=claude-desktop,",
+    ],
+  ])("points %s to the Connect page", async (query, page) => {
     const response = GET(
-      new Request(`http://localhost:3000/connect.md?client=${client}`),
+      new Request(`http://localhost:3000/connect.md${query}`),
     );
     const instructions = await response.text();
 
-    expect(instructions).toContain(`# Connect ${label}`);
-    expect(instructions).toContain(command);
-    expect(instructions).not.toContain("## Claude Desktop");
-    expect(instructions).not.toContain("Cursor subscription");
-  });
-
-  it.each([
-    "http://localhost:3000/connect.md",
-    "http://localhost:3000/connect.md?client=opencode",
-  ])("leaves the OpenCode restart to the user in %s", async (url) => {
-    const instructions = await GET(new Request(url)).text();
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(instructions).toContain(`Ask the user to open ${page}`);
     expect(instructions).toContain(
-      "Do not stop or restart OpenCode from inside this conversation",
+      "Do not run an installer or change any configuration from this file.",
     );
-    expect(instructions).toContain(
-      "ask the user to save work, close OpenCode normally",
-    );
-    expect(instructions).not.toContain("Close every OpenCode process");
+    expect(instructions).not.toContain("/api/client-connections/installer");
   });
 
-  it.each([
-    "http://localhost:3000/connect.md",
-    "http://localhost:3000/connect.md?client=codex",
-  ])("keeps the bootstrap cleanup compatible with Codex direct tools in %s", async (url) => {
-    const instructions = await GET(new Request(url)).text();
-    expect(instructions).toContain("trap 'unlink \"$p\"' EXIT");
-    expect(instructions).not.toContain("trap 'rm -f \"$p\"' EXIT");
-    expect(instructions).toContain("or quoting the test response");
-  });
-
-  it("focuses Claude Desktop on its host installer", async () => {
+  it("sets up only what the generic prompt did not leave out", async () => {
     const response = GET(
-      new Request("http://localhost:3000/connect.md?client=claude-desktop"),
+      new Request(
+        "http://localhost:3000/connect.md?client=generic&gateway=team&exclude=skills&base=https://edge.example/v1/",
+      ),
     );
     const instructions = await response.text();
 
-    expect(instructions).toContain("# Connect Claude Desktop");
-    expect(instructions).toContain("/connection?clientId=claude-desktop");
-    expect(instructions).not.toContain("--client CLIENT_ID");
-    expect(instructions).not.toContain("opencode mcp auth");
+    expect(instructions).toContain(
+      "Gateway URL: https://edge.example/v1/mcp/team",
+    );
+    expect(instructions).toContain("### Model requests: LLM proxy");
+    expect(instructions).not.toContain("### Skills");
+    expect(instructions).toContain(
+      "http://localhost:3000/disconnect.md?client=generic&base=https://edge.example/v1 and follow it.",
+    );
   });
 
-  it("keeps the full instructions for an unknown client", async () => {
+  it("never mentions the LLM proxy when it is left out", async () => {
+    const instructions = await GET(
+      new Request(
+        "http://localhost:3000/connect.md?client=generic&gateway=team&exclude=proxy",
+      ),
+    ).text();
+
+    expect(instructions).not.toMatch(/proxy/i);
+  });
+
+  it("ignores a base that is not an http(s) URL", async () => {
     const response = GET(
-      new Request("http://localhost:3000/connect.md?client=unknown"),
+      new Request(
+        "http://localhost:3000/connect.md?client=generic&gateway=team&base=javascript:alert(1)",
+      ),
     );
-    expect(await response.text()).toContain("## Claude Desktop");
+    const instructions = await response.text();
+
+    expect(instructions).toContain(
+      "Gateway URL: http://localhost:3000/v1/mcp/team",
+    );
+    expect(instructions).toContain(
+      "disconnect.md?client=generic and follow it.",
+    );
   });
 });

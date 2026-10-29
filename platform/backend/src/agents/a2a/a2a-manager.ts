@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { coerceMalformedToolInputs } from "@archestra/shared";
+import { A2A_OAUTH_SCOPE, coerceMalformedToolInputs } from "@archestra/shared";
 import {
   convertToModelMessages,
   type FilePart,
@@ -7,13 +7,17 @@ import {
   type TextPart,
   type TextUIPart,
   type UIMessage,
+  type UIMessageChunk,
 } from "ai";
 import { z } from "zod";
+import { ensureToolCallsHaveResults } from "@/agents/tool-call-results";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import {
   A2AArtifactModel,
   A2AMessageModel,
   A2APushNotificationConfigModel,
+  A2ATaskApprovalRequestModel,
   A2ATaskModel,
   AgentModel,
   AgentRunModel,
@@ -22,6 +26,10 @@ import {
   UserModel,
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
+import {
+  attachHitlReviews,
+  decideCallerHitlReviews,
+} from "@/openappa/a2a-hitl-review";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import {
   resolveAgentRuntime,
@@ -56,10 +64,10 @@ import {
   A2ATaskManager,
   type A2ATaskWithData,
   getApprovalRequestsMap,
+  toApprovalRequest,
 } from "./a2a-model-manager";
 import {
   type A2AArchestraApprovalRequest,
-  A2AArchestraApprovalRequestSchema,
   type A2AArchestraTaskApprovalDecision,
   type A2AArchestraTaskOps,
   type A2AProtocolCancelTaskRequest,
@@ -82,6 +90,10 @@ import {
 } from "./a2a-protocol";
 import { extractProtocolPartsFromUIMessage } from "./a2a-response-parts";
 import { a2aTaskRunService } from "./a2a-task-run-service";
+import {
+  buildStatusReasonMessage,
+  settleFailedA2ATask,
+} from "./a2a-task-settlement";
 
 /** Wire name of the single text artifact carrying a tasked run's answer. */
 const RESPONSE_ARTIFACT_NAME = "agent-response";
@@ -146,6 +158,12 @@ interface A2AManagerConfig {
    *   mode.
    */
   taskMode?: "full" | "approval-only";
+  /**
+   * The caller answers OpenAPPA human reviews like any tool approval: a
+   * reviewed remedy call pauses the task, and the caller's
+   * `taskOps.approvalDecisions` becomes the reviewer's ruling.
+   */
+  callerAnswersOpenappaReviews?: boolean;
 }
 
 /**
@@ -161,12 +179,19 @@ interface A2AManagerConfig {
 export interface A2ASystemParams {
   /** New A2A task, retained runtime workspace: terminal tasks remain immutable. */
   resumeFromTaskId?: string;
+  /** Caller-owned runtime title; bypasses automatic title generation. */
+  runtimeTitle?: string;
   sessionId?: string;
   /** Project assigned by an interactive Chat execution launcher. */
   projectId?: string;
   source?: InteractionSource;
   routeCategory?: RouteCategory;
   completionTarget?: AgentRunCompletionTarget;
+  /** Awaited after persistence, before launch: register delivery without awaiting network I/O. */
+  onRuntimeSessionCreated?: (session: {
+    taskId: string;
+    workspaceId: string;
+  }) => Promise<void>;
   /**
    * Interactive is reserved for a person opening the execution terminal in
    * Chat. Every other durable task is one-shot so delegation surfaces can
@@ -181,6 +206,11 @@ export interface A2ASystemParams {
    * repeating the frame on every persisted turn.
    */
   ephemeralExecutionPrefix?: string;
+  /**
+   * Verified OpenAPPA source for a runtime spawn or steer. Server-built only.
+   * Protocol requests cannot set this.
+   */
+  runtimeCrossing?: import("@/services/agent-runtime/runtime-crossing").RuntimeCrossing;
 }
 
 /**
@@ -226,6 +256,7 @@ export class A2AManager {
     await this.runTaskLifecycle({
       task,
       contextId: task.contextId,
+      organizationId: params.session.organizationId,
       survivesRestart: true,
       executeRun: (runOpts) =>
         resumeAgentRun({
@@ -256,6 +287,12 @@ export class A2AManager {
      * response returned here is unchanged and remains authoritative.
      */
     onTextDelta?: (delta: string) => void;
+    /**
+     * Approval-only mode: forwarded to the executor so the caller sees every
+     * UI message chunk (text and tool-call progress) as the run produces it.
+     * Chatops streams these into the chat. Full-mode tasked runs ignore it.
+     */
+    onUiMessageChunk?: (chunk: UIMessageChunk) => Promise<void>;
     /**
      * Cancellation signal forwarded into the agent run (approval-only mode:
      * chatops aborts a muted thread's in-flight model requests). Full-mode
@@ -298,6 +335,18 @@ export class A2AManager {
       ]);
       if (!agent) {
         throw new A2AError(A2AErrorKind.AgentNotFound);
+      }
+
+      if (
+        fullTaskMode &&
+        actor.oauthExecution &&
+        resolveAgentRuntime(agent) &&
+        (params.taskRun?.createTask || request.message.taskId)
+      ) {
+        throw new A2AError(
+          A2AErrorKind.UnsupportedOperation,
+          "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
+        );
       }
 
       const contextAccessOptions = {
@@ -376,7 +425,7 @@ export class A2AManager {
             task: updatedTask,
             switchedToWorkingState,
             approvalDecisionsWasApplied,
-          } = await this.processTaskOps({ task, taskOps });
+          } = await this.processTaskOps({ task, taskOps, actor });
           task = updatedTask;
           taskWasSwitchedToWorkingState = switchedToWorkingState;
           taskApprovalDecisionsWasApplied = approvalDecisionsWasApplied;
@@ -408,8 +457,18 @@ export class A2AManager {
         }
       });
 
+      const runtime = resolveAgentRuntime(agent);
+      const resumeInteractiveSession = Boolean(
+        runtime &&
+          fullTaskMode &&
+          params.taskRun?.createTask &&
+          systemParams?.runtimeMode === "interactive" &&
+          systemParams.resumeFromTaskId,
+      );
       const needToExecute =
-        messageParts.length > 0 || taskWasSwitchedToWorkingState;
+        messageParts.length > 0 ||
+        taskWasSwitchedToWorkingState ||
+        resumeInteractiveSession;
       if (!needToExecute) {
         if (taskApprovalDecisionsWasApplied) {
           if (!task) {
@@ -425,7 +484,6 @@ export class A2AManager {
 
       // A detached run returns its task handle before execution. Reject an
       // incompatible model before compaction, context creation, or turn writes.
-      const runtime = resolveAgentRuntime(agent);
       // Protocol terminal tasks remain immutable. A new task addressed to
       // their context reuses the same owned workspace, just like MCP/UI
       // continuation, rather than silently creating another development box.
@@ -471,6 +529,7 @@ export class A2AManager {
       // the model-window threshold) before building the request.
       if (!this.config.stateless && context && contextDbMessages.length > 0) {
         const compactionResult = await applyA2AContextCompaction({
+          oauthExecution: actor.oauthExecution,
           contextId: context.id,
           messages: contextDbMessages,
           agent: {
@@ -493,8 +552,9 @@ export class A2AManager {
       const contextUiMessages = coerceMalformedToolInputs(
         contextDbMessages.map((m) => m.content as UIMessage),
       );
-      const requestMessages: ModelMessage[] =
-        await convertToModelMessages(contextUiMessages);
+      const requestMessages: ModelMessage[] = ensureToolCallsHaveResults(
+        await convertToModelMessages(contextUiMessages),
+      );
 
       // The executor owns building the current user turn: it applies
       // model-aware, provider-specific attachment handling, so we pass the
@@ -612,6 +672,7 @@ export class A2AManager {
       const executeRun = (runOpts: {
         abortSignal?: AbortSignal;
         onTextDelta?: (delta: string) => void;
+        onUiMessageChunk?: (chunk: UIMessageChunk) => Promise<void>;
         /** Present only under the task lifecycle; a plain send has no task. */
         taskId?: string;
       }) =>
@@ -642,11 +703,14 @@ export class A2AManager {
                 organizationId: actor.organizationId,
                 projectId: systemParams?.projectId,
                 completionTarget: systemParams?.completionTarget,
+                onRuntimeSessionCreated: systemParams?.onRuntimeSessionCreated,
                 task: executedTurnText,
+                title: systemParams?.runtimeTitle,
                 modelId: agent.modelId,
                 llmApiKeyId: agent.llmApiKeyId,
                 runMode: systemParams?.runtimeMode ?? "one_shot",
                 titleUserId: actor.kind === "user" ? actor.id : undefined,
+                runtimeCrossing: systemParams?.runtimeCrossing,
                 onTextDelta: runOpts.onTextDelta,
                 abortSignal: runOpts.abortSignal,
               });
@@ -660,12 +724,17 @@ export class A2AManager {
                   : undefined,
               messages: requestMessages,
               organizationId: actor.organizationId,
-              userId: actor.kind === "user" ? actor.id : "system",
-              actorTeamId: actor.kind === "team" ? actor.id : undefined,
+              userId: a2aActorUserId(actor),
+              oauthExecution: actor.oauthExecution,
               sessionId,
               source: systemParams?.source,
+              // A chat posts a paused review to the requester (see ChatOps).
+              // Detached tasks a chat starts report back without a form.
+              openappaReviewPause:
+                this.config.callerAnswersOpenappaReviews === true ||
+                (!fullTaskMode &&
+                  systemParams?.routeCategory === RouteCategory.CHATOPS),
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
-              blockOnApprovalRequired: false, // No need to block. We check approval flow availability below
               originalUiMessages: contextUiMessages,
               chatOpsBindingId:
                 systemParams?.completionTarget?.type === "chatops"
@@ -675,7 +744,12 @@ export class A2AManager {
                 systemParams?.completionTarget?.type === "chatops"
                   ? systemParams.completionTarget.threadId
                   : undefined,
+              chatOpsPinnedAgentId:
+                systemParams?.completionTarget?.type === "chatops"
+                  ? systemParams.completionTarget.pinnedAgentId
+                  : undefined,
               onTextDelta: runOpts.onTextDelta,
+              onUiMessageChunk: runOpts.onUiMessageChunk,
               abortSignal: runOpts.abortSignal,
             });
           },
@@ -723,6 +797,7 @@ export class A2AManager {
           this.runTaskLifecycle({
             task: runTask,
             contextId: runContextId,
+            organizationId: actor.organizationId,
             executeRun,
             survivesRestart: Boolean(runtime),
           });
@@ -751,6 +826,7 @@ export class A2AManager {
       const result = await executeRun({
         abortSignal,
         onTextDelta: params.onTextDelta,
+        onUiMessageChunk: params.onUiMessageChunk,
       });
 
       const approvalRequests = extractApprovalRequestsFromUiMessage(
@@ -804,6 +880,23 @@ export class A2AManager {
           }
         }
 
+        await this.attachCallerReviews({
+          organizationId: actor.organizationId,
+          taskId: task.id,
+          approvalRequests,
+        });
+        if (this.config.callerAnswersOpenappaReviews) {
+          // The reply shows each review's text, which only the stored rows carry.
+          task = {
+            ...task,
+            approvalRequests: (
+              await A2ATaskApprovalRequestModel.findByTaskId(task.id)
+            )
+              .sort((a, b) => a.approvalId.localeCompare(b.approvalId))
+              .map(toApprovalRequest),
+          };
+        }
+
         // In approval flow user message must be created in the db even in the stateless mode.
         await saveUserMessageInDb();
 
@@ -845,7 +938,7 @@ export class A2AManager {
       // it so pollers see a terminal outcome. If the run's own lifecycle
       // already settled it (or a cancel won), this CAS is a no-op.
       if (resumedWorkingTask) {
-        await this.settleFailedRun({
+        await settleFailedA2ATask({
           taskId: resumedWorkingTask.taskId,
           contextId: resumedWorkingTask.contextId,
           statusReason: error instanceof Error ? error.message : String(error),
@@ -880,6 +973,7 @@ export class A2AManager {
   private async runTaskLifecycle(params: {
     task: A2ATaskWithData;
     contextId: string;
+    organizationId: string;
     executeRun: (runOpts: {
       abortSignal?: AbortSignal;
       onTextDelta?: (delta: string) => void;
@@ -980,7 +1074,7 @@ export class A2AManager {
 
       if (approvalRequests.length > 0) {
         if (this.config.disableApprovalFlow) {
-          await this.settleFailedRun({
+          await settleFailedA2ATask({
             taskId,
             contextId,
             statusReason:
@@ -1011,6 +1105,13 @@ export class A2AManager {
             resolved: request.resolved,
           })),
           eventPayload: interruptEvent,
+        });
+        // Before announcing the pause, so a caller who answers at once
+        // answers a review, not a plain tool approval.
+        await this.attachCallerReviews({
+          organizationId: params.organizationId,
+          taskId,
+          approvalRequests,
         });
         a2aTaskRunService.notify(taskId, interruptEvent);
         // A CAS miss here means a cancellation landed while the run was
@@ -1111,7 +1212,7 @@ export class A2AManager {
           // subscribers read the cancellation now.
           a2aTaskRunService.wakeSubscribers(taskId);
         } else {
-          await this.settleFailedRun({
+          await settleFailedA2ATask({
             taskId,
             contextId,
             statusReason: reason,
@@ -1128,43 +1229,6 @@ export class A2AManager {
     } finally {
       run.finish();
     }
-  }
-
-  /** CAS the task to FAILED with its terminal event; no-op if already settled. */
-  private async settleFailedRun(params: {
-    taskId: string;
-    contextId: string;
-    statusReason: string;
-  }): Promise<void> {
-    await A2ATaskModel.transitionStateWithEvent({
-      id: params.taskId,
-      to: A2AProtocolTaskState.Failed,
-      allowedFrom: [
-        A2AProtocolTaskState.Submitted,
-        A2AProtocolTaskState.Working,
-      ],
-      statusReason: params.statusReason,
-      eventPayload: {
-        statusUpdate: {
-          taskId: params.taskId,
-          contextId: params.contextId,
-          status: {
-            state: A2AProtocolTaskState.Failed,
-            // Stream followers get the same diagnostics GetTask serves.
-            message: buildStatusReasonMessage({
-              taskId: params.taskId,
-              contextId: params.contextId,
-              reason: params.statusReason,
-            }),
-          },
-        },
-      },
-    });
-
-    // Inside the helper rather than at its call sites: a failure can settle a
-    // task from several escape paths, and a parked subscriber must learn about
-    // every one of them without waiting out its fallback interval.
-    a2aTaskRunService.wakeSubscribers(params.taskId);
   }
 
   /**
@@ -1271,9 +1335,24 @@ export class A2AManager {
     return { resultMessage: protocolMessage, context: updatedContext };
   }
 
+  /** Links paused remedy calls to their OpenAPPA reviews for the caller. */
+  private async attachCallerReviews(params: {
+    organizationId: string;
+    taskId: string;
+    approvalRequests: A2AArchestraApprovalRequest[];
+  }): Promise<void> {
+    if (!this.config.callerAnswersOpenappaReviews) return;
+    await attachHitlReviews({
+      ...params,
+      answerer: { kind: "caller" },
+      now: new Date(),
+    });
+  }
+
   async processTaskOps(params: {
     task: A2ATaskWithData;
     taskOps: A2AArchestraTaskOps;
+    actor: A2AActor;
   }): Promise<{
     task: A2ATaskWithData;
     switchedToWorkingState?: boolean;
@@ -1282,7 +1361,7 @@ export class A2AManager {
     const { taskOps } = params;
     let { task } = params;
 
-    const approvalDecisions = taskOps.approvalDecisions ?? [];
+    let approvalDecisions = taskOps.approvalDecisions ?? [];
     if (approvalDecisions.length > 0) {
       if (this.config.disableApprovalFlow) {
         throw new A2AError(A2AErrorKind.InputApprovalFlowIsDisabled);
@@ -1331,6 +1410,16 @@ export class A2AManager {
         );
       }
 
+      if (this.config.callerAnswersOpenappaReviews) {
+        approvalDecisions = await decideCallerHitlReviews({
+          organizationId: params.actor.organizationId,
+          taskId: task.id,
+          userId: a2aActorUserId(params.actor),
+          approvalDecisions,
+          now: new Date(),
+        });
+      }
+
       // The model applies the decisions, re-derives the message content from
       // its FRESH database state, and resumes the task in the same
       // transaction when the last pending decision lands. Deciding
@@ -1375,13 +1464,9 @@ export class A2AManager {
         ...task.history.slice(0, -1),
         { ...lastMessage, content: result.content },
       ];
-      const refreshedApprovals = z
-        .array(A2AArchestraApprovalRequestSchema)
-        .parse(
-          [...result.approvalRows].sort((a, b) =>
-            a.approvalId.localeCompare(b.approvalId),
-          ),
-        );
+      const refreshedApprovals = [...result.approvalRows]
+        .sort((a, b) => a.approvalId.localeCompare(b.approvalId))
+        .map(toApprovalRequest);
       task = {
         ...task,
         ...result.task,
@@ -1425,6 +1510,8 @@ export class A2AManager {
     actor: A2AActor;
     agentId: string;
     request: A2AProtocolCancelTaskRequest;
+    /** Why the task stopped, when the platform rather than the client cancels it. */
+    statusReason?: string;
   }): Promise<A2AProtocolTask> {
     const task = await this.findTaskForAgent({
       taskId: params.request.id,
@@ -1436,6 +1523,8 @@ export class A2AManager {
       throw new A2AError(A2AErrorKind.TaskNotCancelable);
     }
 
+    const statusReason =
+      params.statusReason ?? "The task was canceled by the client.";
     const canceled = await A2ATaskModel.transitionStateWithEvent({
       id: task.id,
       to: A2AProtocolTaskState.Canceled,
@@ -1446,7 +1535,7 @@ export class A2AManager {
         A2AProtocolTaskState.AuthRequired,
         A2AProtocolTaskState.Unspecified,
       ],
-      statusReason: "The task was canceled by the client.",
+      statusReason,
       clearApprovals: true,
       eventPayload: {
         statusUpdate: {
@@ -1457,7 +1546,7 @@ export class A2AManager {
             message: buildStatusReasonMessage({
               taskId: task.id,
               contextId: task.contextId,
-              reason: "The task was canceled by the client.",
+              reason: statusReason,
             }),
           },
         },
@@ -1682,7 +1771,7 @@ export class A2AManager {
     const { tasks, totalSize } = await A2ATaskModel.listForActor({
       actorKind: params.actor.kind,
       actorId: params.actor.id,
-      agentId: params.agentId,
+      agentIds: [params.agentId],
       contextId: request.contextId,
       state: request.status,
       statusChangedAfter: request.statusTimestampAfter
@@ -1720,12 +1809,32 @@ export class A2AManager {
     agentId: string,
     token: string,
   ): Promise<A2AActor> {
-    const tokenAuth = await validateMCPGatewayToken(agentId, token);
+    const tokenAuth = await validateMCPGatewayToken(
+      agentId,
+      token,
+      A2A_OAUTH_SCOPE,
+    );
     if (!tokenAuth) {
       throw new A2AError(A2AErrorKind.InvalidToken);
     }
 
     const organizationId = tokenAuth.organizationId;
+    const oauthExecution = tokenAuth.oauthClientId
+      ? {
+          tokenId: tokenAuth.tokenId,
+          clientId: tokenAuth.oauthClientId,
+          serviceAccountId: tokenAuth.serviceAccountId,
+        }
+      : undefined;
+
+    if (tokenAuth.serviceAccountId) {
+      return {
+        id: tokenAuth.serviceAccountId,
+        kind: "serviceAccount",
+        organizationId,
+        oauthExecution,
+      };
+    }
 
     if (tokenAuth.userId) {
       const user = await UserModel.getById(tokenAuth.userId);
@@ -1738,21 +1847,16 @@ export class A2AManager {
         kind: "user",
         organizationId,
       };
-    } else if (tokenAuth.teamId) {
-      const team = await TeamModel.findById(tokenAuth.teamId);
-      if (!team) {
-        throw new A2AError(A2AErrorKind.TeamNotFound);
-      }
+    }
+
+    if (tokenAuth.oauthClientId) {
+      // Machine credentials authenticate the application itself. Token or
+      // secret rotation must not change the owner of its retained tasks.
       return {
-        id: tokenAuth.teamId,
-        kind: "team",
+        id: tokenAuth.oauthClientId,
+        kind: "oauthClient",
         organizationId,
-      };
-    } else if (tokenAuth.isOrganizationToken) {
-      return {
-        id: tokenAuth.organizationId,
-        kind: "organization",
-        organizationId,
+        oauthExecution,
       };
     }
 
@@ -1761,6 +1865,22 @@ export class A2AManager {
       kind: "system",
       organizationId,
     };
+  }
+}
+
+/**
+ * The principal a turn runs as. A service account acts under its synthetic
+ * user id so the run is authorized against the account's own grants; every
+ * other non-user actor runs as the headless "system" sentinel.
+ */
+function a2aActorUserId(actor: A2AActor): string {
+  switch (actor.kind) {
+    case "user":
+      return actor.id;
+    case "serviceAccount":
+      return serviceAccountUserId(actor.id);
+    default:
+      return "system";
   }
 }
 
@@ -1827,21 +1947,6 @@ function toProtocolPushConfig(config: {
         ? { authentication: { scheme: config.authScheme } }
         : {}),
     },
-  };
-}
-
-/** TaskStatus.message carrying a terminal reason (same shape GetTask serves). */
-function buildStatusReasonMessage(params: {
-  taskId: string;
-  contextId: string;
-  reason: string;
-}): A2AProtocolMessage {
-  return {
-    messageId: `${params.taskId}-status`,
-    contextId: params.contextId,
-    taskId: params.taskId,
-    role: A2AProtocolRole.Agent,
-    parts: [{ text: params.reason }],
   };
 }
 

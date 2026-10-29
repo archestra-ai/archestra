@@ -15,7 +15,6 @@ The `archestra_client.py` module wraps every call with typed payloads and raises
 | MCP catalog item | `POST /api/internal_mcp_catalog` | `GET /api/internal_mcp_catalog` (filter client-side by name) |
 | MCP install | `POST /api/mcp_server` | `GET /api/mcp_server?catalogId=` |
 | LLM provider key | `POST /api/llm-provider-api-keys` | `GET /api/llm-provider-api-keys?search=&provider=` |
-| Tool-invocation policy | `POST /api/autonomy-policies/tool-invocation` | `GET /api/tools?search=` (resolve toolId) |
 | Lifecycle hook | `POST /api/hooks` | `GET /api/hooks?agentId=` (filter client-side by event+fileName) |
 | Enable skill tools | `POST /api/skills/enable-defaults` (idempotent) | — |
 
@@ -36,8 +35,6 @@ The `archestra_client.py` module wraps every call with typed payloads and raises
   For `scope:"team"`, send `teamId`. Send `agentIds[]` to attach discovered tools to migrated agents.
 - **LLM key**: `provider`, `scope`, `apiKey` (user-supplied; never read from the user's files silently),
   optional `baseUrl`, optional `isPrimary`, and `teamId` for `scope:"team"`.
-- **Tool policy**: `toolId` (must be a tool that exists in Archestra), `conditions[]` of
-  `{key, operator, value}` (operators incl. `regex`), `action` (`block_always` etc.), optional `reason`.
 - **Lifecycle hook**: `agentId` (the agent it attaches to), `event`
   (`session_start`|`pre_tool_use`|`post_tool_use` — Claude's other events have no equivalent),
   `fileName` (a plain basename matching `^[A-Za-z0-9][A-Za-z0-9._-]*\.(py|sh)$`, ≤255), `content`

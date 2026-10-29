@@ -2,7 +2,7 @@ import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
-import { LLM_OAUTH_CLIENT_METADATA_TYPE } from "@/types/llm-oauth-client";
+import { MANAGED_OAUTH_CLIENT_METADATA_TYPE } from "@/types/managed-oauth-client";
 import LlmOauthClientModel from "./llm-oauth-client";
 import OAuthAccessTokenModel from "./oauth-access-token";
 
@@ -335,7 +335,7 @@ describe("LlmOauthClientModel", () => {
     expect(stored.tokenEndpointAuthMethod).toBe("client_secret_post");
     expect(stored.public).toBe(false);
     expect(stored.metadata).toMatchObject({
-      type: LLM_OAUTH_CLIENT_METADATA_TYPE,
+      type: MANAGED_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: organization.id,
     });
   });

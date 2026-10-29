@@ -8,7 +8,7 @@ export function mcpServerAlertTarget({
   servers,
 }: {
   issue: McpServerIssue;
-  item: CatalogItem | undefined;
+  item: Pick<CatalogItem, "name"> | undefined;
   servers: InstalledServer[];
 }): DismissibleMcpAlert {
   const server = issue.serverId

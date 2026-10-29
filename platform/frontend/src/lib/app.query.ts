@@ -19,10 +19,11 @@ import {
 import { hasPermissions } from "@/lib/auth/auth.utils";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import {
-  generateLockedChatKey,
-  LOCKED_CHAT_KEY_HEADER,
-  storeLockedChatKey,
-} from "@/lib/chat/locked-chat";
+  ENCRYPTED_CHAT_KEY_HEADER,
+  generateEncryptedChatKey,
+  storeEncryptedChatKey,
+} from "@/lib/chat/encrypted-chat";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
@@ -61,7 +62,11 @@ type AppsParams = Pick<
   | "scope"
   | "authorIds"
   | "excludeAuthorIds"
+  | "access"
+  | "sharedWith"
+  | "owner"
   | "labels"
+  | "pinned"
 >;
 type AppDetailQueryOptions = { toastOnError?: boolean };
 
@@ -81,6 +86,21 @@ export function prefetchApps(queryClient: QueryClient) {
   return queryClient.prefetchQuery(appsQueryOptions(APPS_FIRST_PAGE, false));
 }
 
+/**
+ * The sidebar's read of the pinned apps. The server seeds a full page load of
+ * a shell-seeded route with it, under the same key.
+ */
+export const SIDEBAR_PINNED_APPS_QUERY = {
+  limit: 100,
+  offset: 0,
+  pinned: true,
+} as const satisfies AppsParams;
+
+/** The cache key of one page of the apps list. */
+export function appsQueryKey(params: AppsParams) {
+  return ["apps", "paginated", params] as const;
+}
+
 export function useApps(
   params: AppsParams,
   options?: { enabled?: boolean; toastOnError?: boolean },
@@ -91,6 +111,8 @@ export function useApps(
   return useQuery({
     ...appsQueryOptions(params, options?.toastOnError),
     enabled: (options?.enabled ?? true) && !!canReadApps,
+    // The sidebar's pinned list comes back on refresh with the rest of it.
+    meta: params.pinned === true ? PERSISTED_QUERY_META : undefined,
     placeholderData: (previousData) => previousData,
   });
 }
@@ -211,7 +233,7 @@ export function useCreateApp() {
 // already rendered and returns its id to navigate to. No cache to invalidate —
 // the caller navigates to `/chat/<conversationId>` on success.
 //
-// Pass `lockedChat` to open it as a locked chat. Opening an app is a browser
+// Pass `encryptedChat` to open it as an encrypted chat. Opening an app is a browser
 // POST, so it carries the conversation key on exactly the header the composer's
 // toggle uses: the key is generated here, the server fingerprints and
 // escrow-wraps it, and it is stored under the new conversation id before the
@@ -219,31 +241,33 @@ export function useCreateApp() {
 export function useOpenAppInChat() {
   return useMutation({
     mutationFn: async (params: string | OpenAppInChatParams) => {
-      const { appId, lockedChat } =
+      const { appId, encryptedChat } =
         typeof params === "string"
-          ? { appId: params, lockedChat: false }
+          ? { appId: params, encryptedChat: false }
           : params;
-      const lockedChatKey = lockedChat ? generateLockedChatKey() : null;
+      const encryptedChatKey = encryptedChat
+        ? generateEncryptedChatKey()
+        : null;
       const { data, error } = await openAppInChat({
         path: { appId },
-        headers: lockedChatKey
-          ? { [LOCKED_CHAT_KEY_HEADER]: lockedChatKey }
+        headers: encryptedChatKey
+          ? { [ENCRYPTED_CHAT_KEY_HEADER]: encryptedChatKey }
           : undefined,
       });
       if (error) {
         handleApiError(error);
         return null;
       }
-      if (data?.conversationId && lockedChatKey) {
-        storeLockedChatKey(data.conversationId, lockedChatKey);
+      if (data?.conversationId && encryptedChatKey) {
+        storeEncryptedChatKey(data.conversationId, encryptedChatKey);
       }
       return data;
     },
   });
 }
 
-/** Open an app in chat, optionally as a locked chat. */
-export type OpenAppInChatParams = { appId: string; lockedChat?: boolean };
+/** Open an app in chat, optionally as an encrypted chat. */
+export type OpenAppInChatParams = { appId: string; encryptedChat?: boolean };
 
 // Opens an external (MCP-server) app in chat against a concrete install: the
 // backend creates a conversation and returns its id plus how it was set up —
@@ -257,22 +281,24 @@ export function useOpenExternalAppInChat() {
       mcpServerId: string;
       resourceUri: string;
       /** See {@link useOpenAppInChat} — same key flow. */
-      lockedChat?: boolean;
+      encryptedChat?: boolean;
     }) => {
-      const lockedChatKey = params.lockedChat ? generateLockedChatKey() : null;
+      const encryptedChatKey = params.encryptedChat
+        ? generateEncryptedChatKey()
+        : null;
       const { data, error } = await openExternalAppInChat({
         path: { mcpServerId: params.mcpServerId },
         body: { resourceUri: params.resourceUri },
-        headers: lockedChatKey
-          ? { [LOCKED_CHAT_KEY_HEADER]: lockedChatKey }
+        headers: encryptedChatKey
+          ? { [ENCRYPTED_CHAT_KEY_HEADER]: encryptedChatKey }
           : undefined,
       });
       if (error) {
         handleApiError(error);
         return null;
       }
-      if (data?.conversationId && lockedChatKey) {
-        storeLockedChatKey(data.conversationId, lockedChatKey);
+      if (data?.conversationId && encryptedChatKey) {
+        storeEncryptedChatKey(data.conversationId, encryptedChatKey);
       }
       return data;
     },
@@ -597,7 +623,7 @@ export function useAssignToolToApp() {
 
 function appsQueryOptions(params: AppsParams, toastOnError?: boolean) {
   return queryOptions({
-    queryKey: ["apps", "paginated", params],
+    queryKey: appsQueryKey(params),
     queryFn: async ({ signal }) => {
       const { data, error } = await getApps({ query: params, signal });
       // TanStack aborts this request when its observer disappears (for example,

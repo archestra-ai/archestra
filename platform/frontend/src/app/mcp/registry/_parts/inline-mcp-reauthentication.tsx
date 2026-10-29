@@ -1,7 +1,7 @@
 "use client";
 
-import { KeyRound } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
@@ -46,7 +46,6 @@ export function InlineMcpReauthentication({
     environmentValues?: Record<string, string>;
     userConfigValues?: Record<string, string>;
     accessToken?: string;
-    isByosVault?: boolean;
   }) => {
     const updated = await reauthenticate.mutateAsync({
       id: server.id,
@@ -56,16 +55,26 @@ export function InlineMcpReauthentication({
     if (updated) onCompleted();
   };
 
-  if (pureOAuth) {
-    const reconnect = async () => {
+  // Pure OAuth has nothing to fill in, so asking first adds a step that says
+  // nothing: picking "Re-authenticate" or "Sign in" goes straight to the
+  // provider. Started once per mount; the return URL drops the server
+  // selection so a failed sign-in does not bounce straight back out.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!pureOAuth || started.current) return;
+    started.current = true;
+    void (async () => {
       try {
         setOAuthMcpServerId(server.id);
         const { authorizationUrl, state } = await initiateOAuth.mutateAsync({
           catalogId: item.id,
+          serverId: server.id,
         });
         setOAuthState(state);
         setOAuthCatalogId(item.id);
-        setOAuthReturnUrl(window.location.href);
+        const returnUrl = new URL(window.location.href);
+        returnUrl.searchParams.delete("server");
+        setOAuthReturnUrl(returnUrl.toString());
         window.location.href = authorizationUrl;
       } catch (error) {
         setOAuthMcpServerId(null);
@@ -74,36 +83,19 @@ export function InlineMcpReauthentication({
             ? error.message
             : "Failed to start re-authentication",
         );
+        onClose();
       }
-    };
+    })();
+  }, [pureOAuth, server.id, item.id, initiateOAuth, onClose]);
+
+  if (pureOAuth) {
     return (
-      <section
-        className="space-y-4"
+      <p
+        className="text-sm text-muted-foreground"
         data-testid="inline-mcp-reauthentication-form"
       >
-        <div className="flex items-start gap-3">
-          <KeyRound className="mt-0.5 h-4 w-4 text-muted-foreground" />
-          <div className="min-w-0 flex-1">
-            <h3 className="font-medium">Reconnect {server.name}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Sign in to the provider again for this existing connection. Tool
-              assignments and policies stay unchanged.
-            </p>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={() => void reconnect()}
-            disabled={initiateOAuth.isPending}
-          >
-            {initiateOAuth.isPending ? "Redirecting..." : "Sign in again"}
-          </Button>
-        </div>
-      </section>
+        Redirecting to sign in…
+      </p>
     );
   }
 
@@ -142,7 +134,6 @@ export function InlineMcpReauthentication({
           updateCredentials({
             environmentValues: result.environmentValues,
             userConfigValues: result.userConfigValues,
-            isByosVault: result.isByosVault,
           })
         }
         catalogItem={item}
@@ -163,7 +154,6 @@ export function InlineMcpReauthentication({
         updateCredentials(
           buildRemoteInstallCredentialPayload({
             metadata: result.metadata,
-            isByosVault: result.isByosVault,
           }),
         )
       }

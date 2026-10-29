@@ -1,3 +1,4 @@
+import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -8,10 +9,11 @@ describe("GET /api/mcp_server/auto_mode_agents", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
+    await makeMember(user.id, organizationId);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -76,6 +78,55 @@ describe("GET /api/mcp_server/auto_mode_agents", () => {
     expect(listResponse.statusCode).toBe(200);
     for (const server of listResponse.json()) {
       expect(server).not.toHaveProperty("autoModeAgents");
+    }
+  });
+
+  test("names to a member only the auto-mode agents they can open, and all of them to an editor or admin", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const colleague = await makeUser();
+    await makeMember(colleague.id, organizationId);
+    await makeAgent({
+      organizationId,
+      name: "Mine",
+      accessAllTools: true,
+      access: "personal",
+      authorId: user.id,
+    });
+    await makeAgent({
+      organizationId,
+      name: "Shared",
+      accessAllTools: true,
+      access: "org",
+      authorId: colleague.id,
+    });
+    await makeAgent({
+      organizationId,
+      name: "Theirs",
+      accessAllTools: true,
+      access: "personal",
+      authorId: colleague.id,
+    });
+    const names = async () =>
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/mcp_server/auto_mode_agents",
+        })
+      )
+        .json()
+        .map((agent: { name: string }) => agent.name)
+        .sort();
+
+    expect(await names()).toEqual(["Mine", "Shared"]);
+
+    for (const role of [EDITOR_ROLE_NAME, ADMIN_ROLE_NAME]) {
+      const viewer = await makeUser();
+      await makeMember(viewer.id, organizationId, { role });
+      user = viewer;
+      expect(await names()).toEqual(["Mine", "Shared", "Theirs"]);
     }
   });
 });

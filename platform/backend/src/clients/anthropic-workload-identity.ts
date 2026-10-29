@@ -39,12 +39,27 @@ class AnthropicWorkloadIdentityClient {
     const fetchFn = baseFetch ?? fetch;
 
     return (async (input: RequestInfo | URL, init?: RequestInit) => {
+      this.assertTrustedEndpoint(input);
       const token = await this.getAccessToken();
       const headers = mergeHeaders(input, init);
       headers.delete("x-api-key");
       headers.set("authorization", `Bearer ${token}`);
       return fetchFn(input, { ...init, headers });
     }) as typeof fetch;
+  }
+
+  /** Keep deployment-scoped bearer credentials on the configured upstream. */
+  assertTrustedEndpoint(input: RequestInfo | URL): void {
+    const target = requestUrl(input);
+    const configured = new URL(config.llm.anthropic.baseUrl);
+    if (
+      target.origin !== configured.origin ||
+      !isWithinConfiguredPath(target.pathname, configured.pathname)
+    ) {
+      throw new Error(
+        "Anthropic Workload Identity Federation can only authenticate requests to the configured Anthropic base URL",
+      );
+    }
   }
 
   async getAccessToken(): Promise<string> {
@@ -196,6 +211,20 @@ async function readIdentityToken(wif: {
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
+}
+
+function requestUrl(input: RequestInfo | URL): URL {
+  if (input instanceof Request) return new URL(input.url);
+  return new URL(String(input));
+}
+
+function isWithinConfiguredPath(targetPath: string, configuredPath: string) {
+  const basePath = configuredPath.replace(/\/+$/, "");
+  return (
+    basePath.length === 0 ||
+    targetPath === basePath ||
+    targetPath.startsWith(`${basePath}/`)
+  );
 }
 
 function mergeHeaders(

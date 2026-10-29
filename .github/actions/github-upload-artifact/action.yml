@@ -19,14 +19,19 @@ inputs:
     description: Zlib compression level for the artifact archive.
     required: false
     default: "6"
+  overwrite:
+    description: Replace a same-named artifact when rerunning its producer.
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
     - name: Upload artifact
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: ${{ inputs.name }}
         path: ${{ inputs.path }}
         if-no-files-found: ${{ inputs.if-no-files-found }}
         retention-days: ${{ inputs.retention-days }}
         compression-level: ${{ inputs.compression-level }}
+        overwrite: ${{ inputs.overwrite }}

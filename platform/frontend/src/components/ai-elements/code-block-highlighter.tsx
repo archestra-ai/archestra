@@ -6,6 +6,7 @@ import {
   oneDark,
   oneLight,
 } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { cn } from "@/lib/utils/tailwind";
 
 interface CodeBlockHighlighterProps {
   className?: string;
@@ -28,7 +29,10 @@ export function CodeBlockHighlighter({
 }: CodeBlockHighlighterProps) {
   return (
     <SyntaxHighlighter
-      className={className}
+      // Prism names tokens with plain classes, and some are Tailwind utilities
+      // too: TOML's `[table]` header gets `table` (display: table), which
+      // splits `[`, the name and `]` onto separate lines. Tokens are inline.
+      className={cn("[&_.token]:inline", className)}
       codeTagProps={{
         className: "font-mono text-sm",
       }}

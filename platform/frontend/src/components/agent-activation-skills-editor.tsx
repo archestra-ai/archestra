@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { accessModeCountStat } from "@/components/access-mode-cards";
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { SkillAccessModeEditor } from "@/components/skill-access-mode-editor";
 import {
@@ -337,11 +338,15 @@ export const AgentActivationSkillsEditor = forwardRef<
       <SkillAccessModeEditor
         mode={draft.mode}
         onModeChange={(mode) => setDraft((current) => ({ ...current, mode }))}
-        summary={policySummary({
-          draft,
-          hiddenAllowedCount,
-          hiddenExcludedCount,
-        })}
+        allRule="Every skill the person using this agent can load, including new ones. Exclude the ones you don't want."
+        allStat={accessModeCountStat(
+          draft.excludedReferences.length + hiddenExcludedCount,
+          "excluded",
+        )}
+        manualStat={accessModeCountStat(
+          draft.allowedReferences.length + hiddenAllowedCount,
+          "assigned",
+        )}
         availableSkillsView={
           <AvailableSkillsDialog
             source={{
@@ -354,11 +359,6 @@ export const AgentActivationSkillsEditor = forwardRef<
         }
         allEditor={
           <div className="space-y-2">
-            <p className="pt-1 text-xs text-muted-foreground">
-              Every skill available to the person using this agent can be
-              loaded, except the skills excluded below. Newly available skills
-              are included automatically.
-            </p>
             <SkillSelectionEditor
               items={items}
               selectedIds={excludedIds}
@@ -583,21 +583,4 @@ function diffReferences(
         : [{ op: "remove" as const, disposition, reference }],
     ),
   ];
-}
-
-function policySummary(params: {
-  draft: DraftPolicy;
-  hiddenAllowedCount: number;
-  hiddenExcludedCount: number;
-}) {
-  if (params.draft.mode === "all") {
-    const count =
-      params.draft.excludedReferences.length + params.hiddenExcludedCount;
-    return count === 0
-      ? "All available skills"
-      : `All available skills except ${count}`;
-  }
-  const count =
-    params.draft.allowedReferences.length + params.hiddenAllowedCount;
-  return `${count} assigned ${count === 1 ? "skill" : "skills"}`;
 }

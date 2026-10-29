@@ -4,14 +4,27 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
-import { CoverageCharts } from "./coverage-charts";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  test,
+  vi,
+} from "vitest";
+import { authClient } from "@/lib/clients/auth/auth-client";
+import { resolveOpenAppaLaunchPrompt } from "@/lib/openappa-chat-prompts";
+import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
+import { RulesCard } from "./coverage-charts";
 
 vi.mock("sonner");
 
 const origin = "http://localhost:9000";
+vi.mock("@/lib/clients/auth/auth-client");
+
 const server = setupServer(
-  http.get("http://localhost:9000/api/agents/all", () =>
+  http.get("http://localhost:9000/api/agents/chat-roster", () =>
     HttpResponse.json([
       {
         id: "appa-agent",
@@ -29,6 +42,17 @@ beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
   archestraApiClient.setConfig({ baseUrl: origin });
 });
+beforeEach(() => {
+  vi.mocked(authClient.getSession).mockResolvedValue({
+    data: makeSession(),
+    error: null,
+  } as Awaited<ReturnType<typeof authClient.getSession>>);
+  server.use(
+    http.get("http://localhost:9000/api/user/permissions", () =>
+      HttpResponse.json(makeUserPermissions()),
+    ),
+  );
+});
 afterEach(() => server.resetHandlers());
 afterAll(() => {
   server.close();
@@ -45,27 +69,32 @@ const totals = (counts: Partial<Totals>): Totals => ({
   root: 0,
   battery: 0,
   notEnforced: 0,
+  notCovered: 0,
   catchAll: 0,
-  builtInFallback: 0,
   ...counts,
 });
 
+const CURRENT: Summary["composition"] = {
+  kind: "current",
+  servedRootRevision: 3,
+  refusedRootRevision: null,
+  rulesMayDiffer: false,
+};
+
 function renderCharts({
   summary,
-  batteries = NO_BATTERIES,
-  catalog = [],
+  composition = CURRENT,
 }: {
   summary: Totals;
-  batteries?: Batteries;
-  /** The names of every battery package in the catalog. */
-  catalog?: string[];
+  composition?: Summary["composition"];
 }) {
   server.use(
     http.get(`${origin}/api/openappa/coverage/summary`, () =>
-      HttpResponse.json({ totals: summary, batteries }),
-    ),
-    http.get(`${origin}/api/openappa/batteries`, () =>
-      HttpResponse.json(catalog.map((name) => ({ name }))),
+      HttpResponse.json({
+        totals: summary,
+        batteries: NO_BATTERIES,
+        composition,
+      }),
     ),
   );
   render(
@@ -74,7 +103,7 @@ function renderCharts({
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <CoverageCharts />
+      <RulesCard />
     </QueryClientProvider>,
   );
 }
@@ -82,29 +111,30 @@ function renderCharts({
 const card = (inside: HTMLElement) =>
   within(inside.closest('[data-slot="card"]') as HTMLElement);
 
-test("splits every tool by what judges it, with the share a rule covers and a chat that improves it", async () => {
+test("splits every tool by what judges it, with the share a rule covers and a chat that fixes what runs unchecked", async () => {
   renderCharts({
     summary: totals({
       tools: 40,
       root: 4,
       battery: 6,
       notEnforced: 8,
-      catchAll: 21,
-      builtInFallback: 1,
+      notCovered: 21,
+      catchAll: 1,
     }),
   });
 
   const coverage = card(
     await screen.findByRole("img", {
-      name: "Custom rule: 4, Battery rule: 6, Not enforced: 8, No rule: 22",
+      name: "Custom rule: 4, Battery rule: 6, Catch-all rule: 1, Not enforced: 8, No rule: 21",
     }),
   );
-  expect(coverage.getByText("25%")).toBeVisible();
+  expect(coverage.getByText("28%")).toBeVisible();
   const legend = [
     ["Custom rule", "4", "10%"],
     ["Battery rule", "6", "15%"],
     ["Not enforced", "8", "20%"],
-    ["No rule", "22", "55%"],
+    ["Catch-all rule", "1", "3%"],
+    ["No rule", "21", "53%"],
   ];
   for (const [label, count, share] of legend) {
     const term = coverage.getByText(label as string);
@@ -114,121 +144,95 @@ test("splits every tool by what judges it, with the share a rule covers and a ch
     );
   }
 
+  expect(
+    coverage.getByText(
+      "21 tools have no rule and always run. Create rules for limits on what each tool can do.",
+    ),
+  ).toBeVisible();
+
   // A legend row explains its slice and puts its share in the middle.
   await userEvent.hover(coverage.getByText("No rule"));
   expect(await screen.findByRole("tooltip")).toHaveTextContent(
-    "No rule22 tools, 55%No rule names these tools, so your policy's catch-all decides their calls.",
+    "No rule21 tools, 53%Always allowed. Add rules to set limits.",
   );
   expect(coverage.getByText("no rule")).toBeVisible();
-  expect(
-    coverage.getByRole("link", { name: "Improve with chat" }),
-  ).toHaveAttribute(
-    "href",
-    expect.stringContaining("user_prompt=Help+me+improve"),
+  expect(chatPrompt(coverage.getByRole("link", { name: "Fix in chat" }))).toBe(
+    resolveOpenAppaLaunchPrompt("improveCoverage"),
   );
 });
 
-test("counts batteries by status, names them on hover, links each to its filter, and shows the coverage they would reach", async () => {
-  renderCharts({
-    summary: totals({ tools: 40, battery: 6, notEnforced: 10, catchAll: 24 }),
-    batteries: {
-      active: [
-        { name: "acme", tools: 4 },
-        { name: "microsoft-learn", tools: 2 },
-      ],
-      broken: [{ name: "github", status: "missing_credentials", tools: 10 }],
-      available: [
-        { name: "atlassian", servers: ["Jira", "Confluence"], tools: 5 },
-        { name: "posthog", servers: ["PostHog"], tools: 3 },
-      ],
-    },
-    catalog: [
-      "acme",
-      "microsoft-learn",
-      "github",
-      "atlassian",
-      "posthog",
-      "slack",
-      "linear",
-    ],
-  });
+test("asks for specific rules while the wildcard fallback covers half the tools", async () => {
+  renderCharts({ summary: totals({ tools: 4, battery: 2, catchAll: 2 }) });
 
-  const active = await screen.findByRole("link", { name: /^Active/ });
-  const batteries = card(active);
-  const tiles = [
-    ["Active", "Active26 tools enforced", "active"],
-    ["Broken", "Broken110 tools not enforced", "broken"],
-    ["Available", "Available2+8 tools", "fits"],
-  ];
-  for (const [label, text, group] of tiles) {
-    const tile = batteries.getByRole("link", {
-      name: new RegExp(`^${label}`),
-    });
-    expect(tile).toHaveTextContent(text as string);
-    expect(tile).toHaveAttribute("href", `/openappa/batteries?status=${group}`);
-  }
-  // Slack and Linear are in the catalog but fit no server.
+  expect(await screen.findByRole("img")).toBeVisible();
+  expect(screen.queryByText("Unchecked tools.")).not.toBeInTheDocument();
+  expect(screen.getByText("Few specific rules.")).toBeVisible();
   expect(
-    await batteries.findByRole("link", { name: "2 more in catalog" }),
-  ).toHaveAttribute("href", "/openappa/batteries?status=other");
-
-  await userEvent.hover(batteries.getByRole("link", { name: /^Broken/ }));
-  expect(await screen.findByRole("tooltip")).toHaveTextContent(
-    "Broken batteriesGitHubneeds a credential",
-  );
-
-  // Fixing github and installing the rest takes 15% to 60%.
-  expect(batteries.getByText("15% → 60%")).toBeVisible();
-  expect(
-    batteries.getByRole("img", {
-      name: "Battery rule: 6, Fixing broken batteries: 10, Installing available batteries: 8",
-    }),
-  ).toBeVisible();
-  expect(
-    batteries.getByRole("link", { name: "Configure with chat" }),
-  ).toHaveAttribute(
-    "href",
-    expect.stringContaining("user_prompt=Help+me+configure"),
-  );
-});
-
-test("offers no chat while every included battery is enforced and none fits", async () => {
-  renderCharts({
-    summary: totals({ tools: 4, battery: 4 }),
-    batteries: {
-      active: [{ name: "acme", tools: 4 }],
-      broken: [],
-      available: [],
-    },
-  });
-
-  expect(
-    await screen.findByText(
-      "Every included battery is enforced, and no other battery fits your MCP servers.",
+    screen.getByText(
+      "2 tools use the wildcard fallback. Create specific rules for precise control over each tool.",
     ),
   ).toBeVisible();
   expect(
-    screen.queryByRole("link", { name: "Configure with chat" }),
+    chatPrompt(await screen.findByRole("link", { name: "Fix in chat" })),
+  ).toBe(resolveOpenAppaLaunchPrompt("improveCoverage"));
+});
+
+test("warns nothing while specific rules cover most tools", async () => {
+  renderCharts({
+    summary: totals({ tools: 3, root: 1, battery: 1, catchAll: 1 }),
+  });
+
+  expect(await screen.findByRole("img")).toBeVisible();
+  expect(screen.queryByText("Few specific rules.")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("link", { name: "Fix in chat" }),
   ).not.toBeInTheDocument();
 });
 
-test("shows no batteries card while no battery is included or fits", async () => {
-  renderCharts({ summary: totals({ tools: 2, root: 2 }) });
-
-  expect(
-    await screen.findByRole("img", {
-      name: "Custom rule: 2, Battery rule: 0, Not enforced: 0, No rule: 0",
-    }),
-  ).toBeVisible();
-  expect(screen.queryByText("Batteries")).not.toBeInTheDocument();
-});
+function chatPrompt(link: HTMLElement): string | null {
+  return new URL(link.getAttribute("href") ?? "", origin).searchParams.get(
+    "user_prompt",
+  );
+}
 
 test("says so instead of charting while there is no tool", async () => {
   renderCharts({ summary: totals({}) });
 
   expect(await screen.findByText("No MCP server tools yet.")).toBeVisible();
-  expect(screen.queryByText("have a rule")).not.toBeInTheDocument();
+  expect(screen.queryByText("covered")).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("link", { name: "Improve with chat" }),
+    screen.queryByRole("link", { name: "Fix in chat" }),
   ).not.toBeInTheDocument();
+});
+
+test("names the earlier composition the chart describes while a refused revision keeps it enforced", async () => {
+  renderCharts({
+    summary: totals({ tools: 2, battery: 2 }),
+    composition: {
+      kind: "previous",
+      servedRootRevision: 3,
+      refusedRootRevision: 4,
+      rulesMayDiffer: true,
+    },
+  });
+  expect(
+    await screen.findByTestId("coverage-composition-caption"),
+  ).toHaveTextContent(
+    "Showing revision 3, which the runtime still enforces; revision 4 was refused. The rules below are the current text's and may differ from what runs.",
+  );
+});
+
+test("says nothing is enforced while only the root text alone is served", async () => {
+  renderCharts({
+    summary: totals({ tools: 2, notEnforced: 2 }),
+    composition: {
+      kind: "root_only",
+      servedRootRevision: null,
+      refusedRootRevision: 1,
+      rulesMayDiffer: false,
+    },
+  });
+  expect(
+    await screen.findByTestId("coverage-composition-caption"),
+  ).toHaveTextContent("Nothing is enforced");
 });

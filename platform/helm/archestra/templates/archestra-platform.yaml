@@ -127,6 +127,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      terminationGracePeriodSeconds: {{ .Values.archestra.terminationGracePeriodSeconds }}
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
       {{- if ne (include "archestra-platform.maintenanceModeEnabled" .) "true" }}
       initContainers:
@@ -191,7 +192,8 @@ spec:
             timeoutSeconds: {{ .Values.archestra.probes.liveness.timeoutSeconds }}
             failureThreshold: {{ .Values.archestra.probes.liveness.failureThreshold }}
           # Readiness probe - marks the container as ready to receive traffic
-          # Uses /ready endpoint which checks database connectivity
+          # Uses /ready endpoint which checks database connectivity and, with
+          # Guardrails enabled, that the OpenAPPA runtime is open
           readinessProbe:
             httpGet:
               path: /ready
@@ -200,12 +202,9 @@ spec:
             timeoutSeconds: {{ .Values.archestra.probes.readiness.timeoutSeconds }}
             failureThreshold: {{ .Values.archestra.probes.readiness.failureThreshold }}
           {{- include "archestra-platform.volumeMounts" . | nindent 10 }}
-      {{- with .Values.archestra.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.archestra.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
+      {{- include "archestra-platform.scheduling" (dict "global" .Values.archestra "tier" .Values.archestra.web) | nindent 6 }}
+      {{- with .Values.archestra.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- include "archestra-platform.topologySpreadConstraints" (dict "constraints" . "selectorLabels" (include "archestra-platform.selectorLabels" $)) | nindent 8 }}
       {{- end }}
       {{- include "archestra-platform.volumes" . | nindent 6 }}

@@ -1,24 +1,365 @@
+import { STARTUP_GUARD_INSTALL } from "./consts";
+import {
+  MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  PROVIDER_MODEL_TIERS,
+  type SupportedProvider,
+} from "./model-constants";
+import { OPENCODE_FAMILY, openCodeFamilyRecord } from "./opencode-family";
+import { OPENCODE_PRIMARY_PROVIDERS } from "./opencode-provider-routes";
+
+export {
+  isOpenCodeFamilyClient,
+  type OpenCodeFamilyClientId,
+} from "./opencode-family";
+
 /** Clients whose proxy requests carry a native conversation identity. */
 export const NATIVE_SESSION_CLIENT_LABELS = {
   "claude-code": "Claude Code",
+  "claude-desktop": "Claude Desktop",
   codex: "Codex",
-  opencode: "OpenCode",
+  pi: "Pi",
+  "kimi-code": "Kimi Code",
+  opencode: OPENCODE_FAMILY.opencode.label,
+  kilo: OPENCODE_FAMILY.kilo.label,
 } as const;
 
 export type NativeSessionClientId = keyof typeof NATIVE_SESSION_CLIENT_LABELS;
 
-export const CONNECTION_SETUP_WINDOW_MS = 10 * 60 * 1000;
-
-export function hasNativeSetupSession(
-  clientId: string,
-): clientId is NativeSessionClientId {
-  return Object.hasOwn(NATIVE_SESSION_CLIENT_LABELS, clientId);
+/** Connection defaults must be served by the selected provider's catalog. */
+export function defaultConnectionModel({
+  provider,
+  modelIds,
+}: {
+  provider: SupportedProvider;
+  modelIds: readonly string[];
+}): string | null {
+  if (provider === "openai") {
+    // Compatible routers can return provider-qualified IDs. Keep the original
+    // ID for requests; only strip the qualifier when comparing model families.
+    const name = (id: string) => id.replace(/^openai[:/]/, "");
+    const preferred =
+      modelIds.find((id) => /^gpt-6\.1(?:-|$)/.test(name(id))) ??
+      modelIds.find((id) => /^gpt-6(?:[.-]|$)/.test(name(id)));
+    if (preferred) return preferred;
+  }
+  return (
+    modelIds.find((id) => id === PROVIDER_MODEL_TIERS[provider].normal) ??
+    modelIds[0] ??
+    null
+  );
 }
 
-export function buildConnectionPrompt(params: {
-  origin: string;
-  clientId: string;
-  label: string;
-}): string {
-  return `Read ${params.origin}/connect.md?client=${encodeURIComponent(params.clientId)} and connect ${params.label}.`;
+export const CONNECTION_SETUP_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * Upper bound on skills delivered by one setup, share link, or static
+ * marketplace clone. All three read this one value, so including every org
+ * skill at /connection is never rejected by a tighter cap further along.
+ * The Connect page checks it too, so it can explain a selection over the cap
+ * instead of sending a request the backend refuses.
+ */
+export const CONNECTION_SETUP_MAX_SKILLS = 1111;
+
+/** Upper bound on plugins delivered by one setup or share link. */
+export const PLUGIN_DELIVERY_MAX_COUNT = 555;
+
+/** Parts of a setup the user can leave out on the connect page's review step. */
+export const CONNECT_SETUP_PARTS = [
+  "tools",
+  "skills",
+  "proxy",
+  "plugins",
+] as const;
+
+export type ConnectSetupPart = (typeof CONNECT_SETUP_PARTS)[number];
+
+/** Reads a comma-separated `exclude` value, dropping anything unknown. */
+export function parseConnectExclude(
+  value: string | null | undefined,
+): ConnectSetupPart[] {
+  const listed = new Set((value ?? "").split(","));
+  return CONNECT_SETUP_PARTS.filter((part) => listed.has(part));
+}
+
+/**
+ * Apps with a setup installer: the installer and disconnect.md accept these,
+ * and connect.md points them to the Connect page. The Connect page features
+ * them, in this order.
+ */
+export const INSTALLER_CLIENT_IDS = [
+  "claude-code",
+  "cursor",
+  "codex",
+  "claude-desktop",
+  "copilot-cli",
+  "opencode",
+  "kilo",
+  "pi",
+  "kimi-code",
+] as const;
+
+export type InstallerClientId = (typeof INSTALLER_CLIENT_IDS)[number];
+
+export const INSTALLER_CLIENT_LABELS: Record<InstallerClientId, string> = {
+  "claude-code": "Claude Code",
+  "claude-desktop": "Claude Desktop",
+  cursor: "Cursor",
+  codex: "Codex",
+  pi: "Pi",
+  "kimi-code": "Kimi Code",
+  "copilot-cli": "Copilot CLI",
+  ...openCodeFamilyRecord((client) => client.label),
+};
+
+/**
+ * Providers whose keys an admin can map to the virtual key a client's setup
+ * mints. Cursor sends every model through the Model Router, so any of its
+ * providers can back the key; OpenCode and Kilo Code can also take every
+ * primary provider.
+ */
+export const INSTALLER_CLIENT_KEY_PROVIDERS: Record<
+  InstallerClientId,
+  readonly SupportedProvider[]
+> = {
+  "claude-code": ["anthropic", "bedrock"],
+  "claude-desktop": ["anthropic"],
+  cursor: MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  codex: ["openai"],
+  pi: MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  "kimi-code": ["kimi-code", "kimi"],
+  "copilot-cli": [
+    "openai",
+    "azure",
+    "openrouter",
+    "vllm",
+    "ollama",
+    "groq",
+    "mistral",
+    "deepseek",
+    "xai",
+    "cerebras",
+  ],
+  ...openCodeFamilyRecord(() => OPENCODE_PRIMARY_PROVIDERS),
+};
+
+export function isInstallerClientId(id: string): id is InstallerClientId {
+  return (INSTALLER_CLIENT_IDS as readonly string[]).includes(id);
+}
+
+/**
+ * A client's MCP server name that is safe to quote in a prompt or pass in a
+ * link: letters, digits, `_`, `.` and `-`. Names with anything else (quotes,
+ * spaces, text a crafted link adds) are left out of prompts.
+ */
+export function isPlainMcpClientServerName(name: string): boolean {
+  return /^[A-Za-z0-9_.-]{1,64}$/.test(name);
+}
+
+/**
+ * The startup guard's file stem under ~/.archestra ("claude" for
+ * claude-startup-guard.sh); undefined for apps without a guard (Cursor,
+ * Claude Desktop).
+ */
+export function startupGuardStem(id: string): string | undefined {
+  // Pi invokes the guard from its native launcher, not a shell-profile wrapper.
+  if (id === "pi") return undefined;
+  const guard = STARTUP_GUARD_INSTALL[id as keyof typeof STARTUP_GUARD_INSTALL];
+  return guard?.scriptRelpath
+    .replace(/^\.archestra\//, "")
+    .replace(/-startup-guard\.sh$/, "");
+}
+
+/**
+ * What a setup leaves on the user's machine, one short line each, as the
+ * Connect page's disconnect dialogs list it. Kept in line with the
+ * inventories in frontend/src/app/disconnect.md/route.ts.
+ */
+export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
+  "claude-code": [
+    "MCP server entry (claude mcp add, user scope)",
+    "Plugin and skills",
+    "~/.claude/settings.json (model routing)",
+    "Startup check in your shell profile",
+  ],
+  cursor: ["~/.cursor/mcp.json", "~/.cursor/skills/"],
+  codex: [
+    "~/.codex/config.toml (gateway, model provider, skills marketplace)",
+    "Plugins from the skills marketplace",
+    "Startup check in your shell profile",
+  ],
+  pi: [
+    "arcpi launcher and connection checks on your user PATH",
+    "Private restoration snapshot (arcpi --disconnect)",
+    "Shared skills association (shared marketplace files are preserved)",
+    "~/.pi/agent/extensions/archestra-pi.js (native guardrails and model routing)",
+    "~/.pi/agent/mcp.json (gateway)",
+    "~/.archestra/pi/connection.json (model settings and access key)",
+  ],
+  "kimi-code": [
+    "~/.kimi-code/config.toml (model routing, permission mode and gateway tool rules)",
+    "~/.kimi-code/mcp.json (gateway)",
+    "~/.kimi-code/AGENTS.md (instructions block)",
+    "Skills in ~/.archestra/kimi-code/skills/",
+    "Startup check in your shell profile",
+  ],
+  "claude-desktop": ["A dedicated Claude Desktop profile"],
+  "copilot-cli": [
+    "MCP server entry (copilot mcp add)",
+    "~/.copilot/settings.json (skills marketplace)",
+    "Provider and model settings in ~/.copilot/providers.json and settings.json",
+    "Startup check in your shell profile",
+  ],
+  ...openCodeFamilyRecord((client) => [
+    `${client.configFile} (gateway and model routing)`,
+    `Skills folder in ~/.config/${client.dir}/skills/`,
+    "Routing plugin archestra-llm-proxy.js",
+    "~/.archestra state file",
+    "Startup check in your shell profile",
+  ]),
+};
+
+/**
+ * The profile id the Claude Desktop installer writes:
+ * uuid5(NAMESPACE_URL, "archestra-desktop:managed"). The installer computes it
+ * itself; a backend test pins this value to that computation.
+ */
+export const CLAUDE_DESKTOP_PROFILE_ID = "aa157426-f6a9-5ac5-8471-3b30b42bbe8f";
+
+/**
+ * One way the gateway tells an agent apart by its OAuth client; every field
+ * given must match. A CIMD agent by its client id (fixed, or a pattern when
+ * the metadata URL varies per login), a DCR agent by the name it registers
+ * and, when fixed, its redirect. Registered names are self-declared, which is
+ * enough here: a sign-in is only ever listed and revoked within its own
+ * user's grants, so a borrowed name can only mislabel that user's own agent.
+ */
+export interface OAuthAgentIdentity {
+  clientId?: string;
+  clientIdPattern?: string;
+  clientNamePattern?: string;
+  redirectUri?: string;
+}
+
+/**
+ * The agents the gateway recognises from their sign-in: the one place to add
+ * one. Their ids, names and the backend's sign-in matching all come from
+ * here. A recognised sign-in merges with the agent's setup and its proxy
+ * traffic into one connected agent. An agent not listed still shows as
+ * connected, under the name it registered, and can still be disconnected.
+ */
+export const OAUTH_AGENTS = {
+  "claude-code": {
+    label: "Claude Code",
+    identities: [
+      { clientId: "https://claude.ai/oauth/claude-code-client-metadata" },
+    ],
+  },
+  // CIMD at chatgpt.com/oauth/codex/client.json, with a per-login callback
+  // id in the path or not; DCR as "Codex" on a random loopback port (openai/
+  // codex rmcp-client, oauth_client_registration.rs).
+  codex: {
+    label: "Codex",
+    identities: [
+      {
+        clientIdPattern:
+          "^https://chatgpt\\.com/oauth/codex/([^/]+/)?client\\.json$",
+      },
+      { clientNamePattern: "^Codex$" },
+    ],
+  },
+  // The installer's managed profile signs in by DCR: Claude Desktop registers
+  // as "Claude Desktop (<version>)" with the one loopback redirect its docs
+  // fix for every device (captured from Claude Desktop 2.19675.1). The CIMD
+  // is its "hosted" mode: how claude.ai connectors sign in, from Desktop, the
+  // web or mobile alike.
+  "claude-desktop": {
+    label: "Claude Desktop",
+    identities: [
+      {
+        clientNamePattern: "^Claude Desktop \\(.*\\)$",
+        redirectUri: "http://127.0.0.1:53280/callback",
+      },
+      { clientId: "https://claude.ai/oauth/mcp-oauth-client-metadata" },
+    ],
+  },
+  // DCR with Cursor's own URL scheme as the redirect.
+  cursor: {
+    label: "Cursor",
+    identities: [
+      { redirectUri: "cursor://anysphere.cursor-mcp/oauth/callback" },
+    ],
+  },
+  "copilot-cli": {
+    label: "Copilot CLI",
+    identities: [
+      { clientId: "https://github.com/copilot/cli/client-metadata.json" },
+    ],
+  },
+  // DCR as "kimi-code (<server name>)", with a new loopback port for each
+  // sign-in (captured from Kimi Code 2.3.3).
+  "kimi-code": {
+    label: "Kimi Code",
+    identities: [{ clientNamePattern: "^kimi-code \\(.*\\)$" }],
+  },
+  // OpenCode and Kilo Code: a CIMD document, or DCR under the product name
+  // on a configured redirect port (see the family descriptor).
+  ...openCodeFamilyRecord((client) => ({
+    label: client.label,
+    identities: [
+      { clientId: client.oauth.clientId },
+      { clientNamePattern: client.oauth.clientNamePattern },
+    ],
+  })),
+  // Registers each install as "Amp MCP Client (<server name>)" with this
+  // redirect (captured from amp 0.0.1791201662).
+  amp: {
+    label: "Amp",
+    identities: [
+      {
+        clientNamePattern: "^Amp MCP Client \\(.*\\)$",
+        redirectUri: "http://localhost:41592/oauth/callback",
+      },
+    ],
+  },
+  droid: {
+    label: "Droid",
+    identities: [{ clientId: "https://api.factory.ai/mcp/oauth-client" }],
+  },
+} as const satisfies Record<
+  string,
+  { label: string; identities: readonly OAuthAgentIdentity[] }
+>;
+
+export type OAuthAgentId = keyof typeof OAUTH_AGENTS;
+
+export const OAUTH_RECOGNISED_CLIENT_IDS = Object.keys(
+  OAUTH_AGENTS,
+) as OAuthAgentId[];
+
+export function isOAuthRecognisedClient(id: string): id is OAuthAgentId {
+  return Object.hasOwn(OAUTH_AGENTS, id);
+}
+
+/**
+ * An agent known only from its OAuth client, by that client's id: how the
+ * connected list, the log and disconnect name an agent nobody listed.
+ */
+export function signedInAgentId(oauthClientId: string): string {
+  return `oauth:${oauthClientId}`;
+}
+
+/** The OAuth client id behind {@link signedInAgentId}, or null. */
+export function oauthClientIdOf(agentId: string): string | null {
+  return agentId.startsWith("oauth:") ? agentId.slice("oauth:".length) : null;
+}
+
+/** Whether revoking an agent signs it out of the gateway. */
+export function revokeSignsOut(agentId: string): boolean {
+  return isOAuthRecognisedClient(agentId) || oauthClientIdOf(agentId) !== null;
+}
+
+/** A known agent's name; null for one known only from its sign-in. */
+export function connectAgentLabel(id: string): string | null {
+  if (isInstallerClientId(id)) return INSTALLER_CLIENT_LABELS[id];
+  return isOAuthRecognisedClient(id) ? OAUTH_AGENTS[id].label : null;
 }

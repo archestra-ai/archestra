@@ -1,4 +1,5 @@
 import { type ReactNode, useId } from "react";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 
 /**
  * Primary source choice used at the beginning of catalog-backed create flows.
@@ -25,7 +26,7 @@ export function CatalogSourceCard({
   const disabledReasonId = useId();
 
   return (
-    <button
+    <UnstyledButton
       type="button"
       onClick={onClick}
       disabled={disabled}
@@ -49,6 +50,6 @@ export function CatalogSourceCard({
           </p>
         ) : null}
       </div>
-    </button>
+    </UnstyledButton>
   );
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -6,7 +7,6 @@ import {
   isAgentTypeAdmin,
   requireAgentModifyPermission,
   requireAgentTypePermission,
-  userHasPermission,
 } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import { A2aOutboundRunModel, A2aRemoteAgentModel, AgentModel } from "@/models";
@@ -23,6 +23,7 @@ import {
   updateA2aRemoteAgent,
 } from "@/services/a2a-outbound-registry";
 import { transferResourceOwnership } from "@/services/resource-ownership";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   A2aDelegationTargetSchema,
   A2aOutboundRunSummarySchema,
@@ -196,10 +197,6 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await listA2aRemoteAgents({
           organizationId,
           userId: user.id,
-          canManage: await canManageRemoteAgents({
-            userId: user.id,
-            organizationId,
-          }),
           ...query,
         }),
       ),
@@ -222,10 +219,6 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: params.id,
           organizationId,
           userId: user.id,
-          canManage: await canManageRemoteAgents({
-            userId: user.id,
-            organizationId,
-          }),
         }),
       ),
   );
@@ -245,12 +238,11 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(A2aOutboundRunSummarySchema)),
       },
     },
-    async ({ organizationId, user, params, query }, reply) => {
+    async ({ organizationId, params, query, user }, reply) => {
       const remoteAgent = await A2aRemoteAgentModel.findByIdVisible({
         id: params.id,
         organizationId,
         userId: user.id,
-        canManage: true,
       });
       if (!remoteAgent) {
         throw new ApiError(404, "Outbound A2A agent not found");
@@ -277,14 +269,32 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(PublicA2aRemoteAgentSchema),
       },
     },
-    async ({ organizationId, user, body }, reply) =>
-      reply.send(
+    async ({ organizationId, user, body }, reply) => {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (body.initialGrants?.length) {
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "externalAgent",
+          grants: body.initialGrants,
+          target: {
+            id: randomUUID(),
+            name: body.name ?? "External agent",
+            authorId: user.id,
+          },
+        });
+      }
+      // SPDX-SnippetEnd
+      return reply.send(
         await createA2aRemoteAgent({
           organizationId,
           authorId: user.id,
           input: body,
         }),
-      ),
+      );
+    },
   );
 
   fastify.put(
@@ -300,15 +310,21 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(PublicA2aRemoteAgentSchema),
       },
     },
-    async ({ organizationId, user, params, body }, reply) =>
-      reply.send(
+    async ({ organizationId, user, params, body }, reply) => {
+      await requireRemoteAgentAction({
+        id: params.id,
+        organizationId,
+        userId: user.id,
+        action: "update",
+      });
+      return reply.send(
         await updateA2aRemoteAgent({
           id: params.id,
           organizationId,
-          actorUserId: user.id,
           input: body,
         }),
-      ),
+      );
+    },
   );
 
   fastify.delete(
@@ -323,7 +339,13 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ organizationId, params }, reply) => {
+    async ({ organizationId, user, params }, reply) => {
+      await requireRemoteAgentAction({
+        id: params.id,
+        organizationId,
+        userId: user.id,
+        action: "delete",
+      });
       const affectedAgentIds = await deleteA2aRemoteAgent({
         id: params.id,
         organizationId,
@@ -336,14 +358,27 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
 export default a2aRemoteAgentRoutes;
 
-async function canManageRemoteAgents(params: {
-  userId: string;
+/**
+ * The agent's own policy decides who may change or remove it. An agent the
+ * caller cannot even see answers 404, so its existence does not leak.
+ */
+async function requireRemoteAgentAction(params: {
+  id: string;
   organizationId: string;
-}): Promise<boolean> {
-  return userHasPermission(
-    params.userId,
-    params.organizationId,
-    "agentSettings",
-    "update",
-  );
+  userId: string;
+  action: "update" | "delete";
+}): Promise<void> {
+  const visible = await A2aRemoteAgentModel.findByIdVisible(params);
+  if (!visible) throw new ApiError(404, "Outbound A2A agent not found");
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.require({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    resource: "externalAgent",
+    scope: params.id,
+    action: params.action,
+  });
+  // SPDX-SnippetEnd
 }

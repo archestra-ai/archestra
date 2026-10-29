@@ -1,29 +1,50 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolFullName,
   type ArchestraToolShortName,
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
+  isCodeRuntimeArchestraToolShortName,
+  isImplicitOpenAppaReadToolShortName,
   isSkillTool,
+  isYellToolShortName,
+  OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
+  SELF_FORK_TOOL_NAME,
   TOOL_ASK_USER_SHORT_NAME,
-  TOOL_CANCEL_RUN_SHORT_NAME,
+  TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_AGENT_RUN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
-  TOOL_GET_RUN_SHORT_NAME,
-  TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_LIST_AGENT_RUNS_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
+import AgentModel from "@/models/agent";
+import OpenAppaSessionModel from "@/models/openappa-session";
+import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
+import {
+  isObservedRead,
+  RUNTIME_TOOL_PROOF_ARGUMENT,
+  verifyRuntimeToolProof,
+} from "@/openappa/runtime-tool-claims";
 import {
   isAppaDelegatedRun,
   openappaEnabled,
   openappaYellEnabled,
 } from "@/openappa/service";
-import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import { authenticatedRuntimeSpender } from "@/services/agent-runtime/runtime-identity";
+import {
+  agentToolExclusionsService,
+  isToolIdentityExcluded,
+} from "@/services/agent-tool-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
@@ -45,7 +66,11 @@ import {
   toolEntries as credentialToolEntries,
   tools as credentialTools,
 } from "./credentials";
-import { delegationToolArgsSchema, handleDelegation } from "./delegation";
+import {
+  delegationToolArgsSchema,
+  handleDelegation,
+  selfForkToolArgsSchema,
+} from "./delegation";
 import { isArchestraToolAvailableToAgent } from "./dynamic-tools";
 import {
   type ArchestraRuntimeToolEntry,
@@ -81,10 +106,6 @@ import {
   toolEntries as pluginToolEntries,
   tools as pluginTools,
 } from "./plugins";
-import {
-  toolEntries as policyToolEntries,
-  tools as policyTools,
-} from "./policies";
 import {
   toolEntries as projectToolEntries,
   tools as projectTools,
@@ -174,7 +195,6 @@ function getToolEntries(): Partial<
       ...mcpServerToolEntries,
       ...teamToolEntries,
       ...limitToolEntries,
-      ...policyToolEntries,
       ...toolAssignmentToolEntries,
       ...knowledgeManagementToolEntries,
       ...chatToolEntries,
@@ -213,7 +233,6 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...mcpServerTools,
       ...teamTools,
       ...limitTools,
-      ...policyTools,
       ...toolAssignmentTools,
       ...knowledgeManagementTools,
       ...chatTools,
@@ -235,14 +254,6 @@ function getAllTools(): (typeof identityTools)[number][] {
   return allToolsCache;
 }
 
-let sandboxToolNamesCache: ReadonlySet<string> | undefined;
-function getSandboxToolNames(): ReadonlySet<string> {
-  if (!sandboxToolNamesCache) {
-    sandboxToolNamesCache = new Set(sandboxTools.map((tool) => tool.name));
-  }
-  return sandboxToolNamesCache;
-}
-
 let hookToolNamesCache: ReadonlySet<string> | undefined;
 function getHookToolNames(): ReadonlySet<string> {
   if (!hookToolNamesCache) {
@@ -251,17 +262,27 @@ function getHookToolNames(): ReadonlySet<string> {
   return hookToolNamesCache;
 }
 
-let pluginToolNamesCache: ReadonlySet<string> | undefined;
-function getPluginToolNames(): ReadonlySet<string> {
-  if (!pluginToolNamesCache) {
-    pluginToolNamesCache = new Set(pluginTools.map((tool) => tool.name));
-  }
-  return pluginToolNamesCache;
-}
-
 export function getArchestraMcpTools() {
   return brandTools(
-    getAllTools().filter((tool) => isToolRuntimeEnabled(tool.name)),
+    getAllTools()
+      .filter((tool) => isToolRuntimeEnabled(tool.name))
+      .map((tool) => {
+        const short = archestraMcpBranding.getToolShortName(tool.name);
+        if (!short || !runtimeToolNames.has(short)) return tool;
+        return {
+          ...tool,
+          inputSchema: {
+            ...tool.inputSchema,
+            properties: {
+              ...tool.inputSchema.properties,
+              [RUNTIME_TOOL_PROOF_ARGUMENT]: {
+                type: "string",
+                description: "Source-session proof supplied by the proxy.",
+              },
+            },
+          },
+        };
+      }),
   );
 }
 
@@ -278,9 +299,10 @@ export function getAllArchestraMcpTools() {
 /**
  * JSON input schema of a built-in Archestra tool, resolved by its published
  * (branding-aware) full name or canonical `archestra__` name — derived from the
- * same zod schema `tools/list` advertises. Returns undefined for names that are
- * not built-ins (agent delegations, third-party names). Consumed by run_tool's
- * schema-aware envelope repair.
+ * handler's full zod schema, which `tools/list` advertises unless the tool has
+ * a `publicSchema`. Returns undefined for names that are not built-ins (agent
+ * delegations, third-party names). Consumed by run_tool's schema-aware
+ * envelope repair.
  */
 export function getArchestraToolInputSchema(
   toolName: string,
@@ -304,25 +326,55 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
+  const runtimeProof = args?.[RUNTIME_TOOL_PROOF_ARGUMENT];
+  let proofAccepted = false;
+  if (runtimeProof !== undefined) {
+    // The proof is for the gateway only; the tool runs without it either way.
+    const { [RUNTIME_TOOL_PROOF_ARGUMENT]: _proof, ...original } = args ?? {};
+    const admitted = await admitRuntimeProof({
+      proof: runtimeProof,
+      toolName,
+      args: args ?? {},
+      context,
+    });
+    if (admitted.kind === "accepted") {
+      context = {
+        ...context,
+        openappaRuntimeCall: admitted.call,
+        currentToolCallId: admitted.call.toolCallId,
+      };
+      proofAccepted = true;
+    } else if (await isGuardrailsV2Active()) {
+      return errorResult(admitted.reason);
+    }
+    // While Guardrails are off a proof only matters for later crossings, so
+    // one that does not check out must not fail a call that runs without it.
+    args = original;
+  }
   if (
-    archestraMcpBranding.getToolShortName(toolName) === "yell" &&
+    isYellToolShortName(archestraMcpBranding.getToolShortName(toolName)) &&
     (!openappaYellEnabled() || !(await isGuardrailsV2Active()))
   ) {
-    throw { code: -32601, message: "OpenAPPA reporting is disabled" };
+    // An unavailable feedback tool is a recoverable tool refusal, not a
+    // failed agent run. Keep the result with the agent so it can continue.
+    return errorResult("OpenAPPA reporting is disabled");
   }
   // A child runs outside APPA and must not execute remedies on the parent's
   // shared logging session. Direct calls also respect the feature flag.
   const remedyShortName = archestraMcpBranding.getToolShortName(toolName);
   if (
     (remedyShortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
-      remedyShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME) &&
+      remedyShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
+      remedyShortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
+      remedyShortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME) &&
     !(await isGuardrailsV2Active())
   ) {
     throw { code: -32601, message: "Guardrails v2 is disabled" };
   }
   if (
     (!openappaEnabled() ||
-      isAppaDelegatedRun(context.agent.id, context.delegationChain)) &&
+      (!context.openappaSubagent &&
+        isAppaDelegatedRun(context.agent.id, context.delegationChain))) &&
     isOpenappaTool(archestraMcpBranding.getToolShortName(toolName))
   ) {
     throw {
@@ -333,13 +385,21 @@ export async function executeArchestraTool(
   // Agent delegation tools are dynamic (one per agent) and not in TOOL_PERMISSIONS,
   // so they bypass centralized RBAC. They enforce team-based access checks internally.
   if (isAgentTool(toolName)) {
-    const parsedArgs = validateToolArgs(
-      delegationToolArgsSchema,
+    const parsedArgs = validateToolArgs({
+      schema:
+        toolName === SELF_FORK_TOOL_NAME
+          ? selfForkToolArgsSchema
+          : delegationToolArgsSchema,
       args,
       toolName,
-    );
+    });
     if ("error" in parsedArgs) {
       return parsedArgs.error;
+    }
+    if (proofAccepted && !(await claimRuntimeDispatch(context))) {
+      return errorResult(
+        "This released runtime call was already claimed or is no longer executable. Do not redispatch it; retrieve its status before requesting a new action.",
+      );
     }
     return handleDelegation(toolName, parsedArgs.value, context);
   }
@@ -348,11 +408,11 @@ export async function executeArchestraTool(
   // agent-designated skill. Like agent delegation, they bypass centralized
   // RBAC and enforce skill + agent access checks internally.
   if (isSkillTool(toolName)) {
-    const parsedArgs = validateToolArgs(
-      delegationToolArgsSchema,
+    const parsedArgs = validateToolArgs({
+      schema: delegationToolArgsSchema,
       args,
       toolName,
-    );
+    });
     if ("error" in parsedArgs) {
       return parsedArgs.error;
     }
@@ -362,6 +422,11 @@ export async function executeArchestraTool(
   const admitted = await admitArchestraToolCall({ toolName, args, context });
   if ("error" in admitted) return admitted.error;
   const { toolEntry, resolvedToolName } = admitted;
+  if (proofAccepted && !(await claimRuntimeDispatch(context))) {
+    return errorResult(
+      "This released runtime call was already claimed or is no longer executable. Do not redispatch it; retrieve its status before requesting a new action.",
+    );
+  }
 
   // Mutating built-ins get an org-audit row, same event vocabulary as their
   // /api/* twins (the MCP surface bypasses the HTTP audit hook entirely).
@@ -424,6 +489,8 @@ export async function executeArchestraTool(
   }
 }
 
+const runtimeToolNames = new Set<string>(OPENAPPA_RUNTIME_TOOL_SHORT_NAMES);
+
 /**
  * Validates a built-in tool call without executing it.
  * Runs RBAC, tool assignment, tool existence, and argument validation checks.
@@ -445,22 +512,20 @@ export async function preflightArchestraToolCall(params: {
 }
 
 /**
- * Whether a built-in's runtime is configured on this deployment. Sandbox tools
- * materialize a Dagger container and lifecycle hooks execute inside that same
- * sandbox, so both are unusable without the code runtime and advertising them
- * would promise the model a capability the call cannot deliver. Plugin tools
- * follow the plugins beta flag for the same reason: the REST surface they
- * mirror is a 404 while the flag is off.
+ * Whether a built-in's runtime is configured on this deployment. The code
+ * runtime tools (run_command/upload_file/download_file) materialize a Dagger
+ * container and lifecycle hooks execute inside that same sandbox, so both are
+ * unusable without the code runtime and advertising them would promise the
+ * model a capability the call cannot deliver. The persistent-file tools only
+ * touch the file store, so they stay on.
  */
 function isToolRuntimeEnabled(canonicalName: string): boolean {
-  if (archestraMcpBranding.getToolShortName(canonicalName) === "yell")
-    return openappaYellEnabled();
-  if (isOpenappaTool(archestraMcpBranding.getToolShortName(canonicalName)))
-    return openappaEnabled();
-  if (getSandboxToolNames().has(canonicalName))
+  const shortName = archestraMcpBranding.getToolShortName(canonicalName);
+  if (isYellToolShortName(shortName)) return openappaYellEnabled();
+  if (isOpenappaTool(shortName)) return openappaEnabled();
+  if (shortName && isCodeRuntimeArchestraToolShortName(shortName))
     return config.skillsSandbox.enabled;
   if (getHookToolNames().has(canonicalName)) return config.hooks.enabled;
-  if (getPluginToolNames().has(canonicalName)) return config.plugins.enabled;
   return true;
 }
 
@@ -492,15 +557,16 @@ function brandTools(tools: ReturnType<typeof getAllTools>) {
 // tools are the other half of every delegated-run handle: the dynamic
 // per-Agent delegation tools have no assignment row, but their result promises
 // that the caller can observe and control the returned run. Access to the run
-// itself remains actor-scoped inside each handler.
+// itself remains actor-scoped inside each handler. list_agent_runs is exempt
+// only for the caller's own runs: by default it lists everyone's.
 const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_GET_RUN_SHORT_NAME,
-  TOOL_LIST_RUNS_SHORT_NAME,
-  TOOL_STEER_RUN_SHORT_NAME,
-  TOOL_CANCEL_RUN_SHORT_NAME,
+  TOOL_GET_AGENT_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
 ]);
 
 // Assignment gate with the dynamic-access relaxation: an unassigned built-in
@@ -508,11 +574,13 @@ const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
 // isDynamicallyAvailableArchestraTool passes (feature gates, per-agent
 // exclusions, and the query_knowledge_sources connector check) — nothing is
 // assigned. RBAC already ran before this gate, so e.g. the sandbox tools
-// still require sandbox:execute.
-async function resolveToolAssignment(
-  toolName: string,
-  context: ArchestraContext,
-): Promise<CallToolResult | null> {
+// still require agent:read.
+async function resolveToolAssignment(params: {
+  toolName: string;
+  args: Record<string, unknown> | undefined;
+  context: ArchestraContext;
+}): Promise<CallToolResult | null> {
+  const { toolName, context } = params;
   const shortName = archestraMcpBranding.getToolShortName(toolName);
   // Assignment is agent-scoped; org/team-token sessions rely on RBAC alone.
   if (!context.agentId || !shortName) return null;
@@ -522,9 +590,16 @@ async function resolveToolAssignment(
   // also rejected at write time).
   if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
   if (
+    shortName === TOOL_LIST_AGENT_RUNS_SHORT_NAME &&
+    params.args?.mine_only === true
+  )
+    return null;
+  if (
     (shortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
       shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
-      (shortName === "yell" && openappaYellEnabled())) &&
+      shortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
+      shortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME ||
+      (isYellToolShortName(shortName) && openappaYellEnabled())) &&
     (await isGuardrailsV2Active())
   )
     return null;
@@ -534,6 +609,18 @@ async function resolveToolAssignment(
   const exclusionSets = await agentToolExclusionsService.getActiveExclusionSets(
     context.agentId,
   );
+  if (
+    openappaEnabled() &&
+    isImplicitOpenAppaReadToolShortName(shortName) &&
+    !isToolIdentityExcluded(
+      {
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        name: archestraMcpBranding.getToolName(shortName),
+      },
+      exclusionSets,
+    )
+  )
+    return null;
   const available = await isArchestraToolAvailableToAgent({
     toolName,
     agentId: context.agentId,
@@ -542,11 +629,18 @@ async function resolveToolAssignment(
     exclusionSets,
   });
   if (available) return null;
+  // A model that reads another agent's tool list, or a skill that names a
+  // tool, calls names this caller does not have. Say whose tools these are
+  // and how the user gets one, not only that the name is wrong.
+  const caller =
+    (await AgentModel.getAgentType(context.agentId)) === "mcp_gateway"
+      ? `the "${context.agent.name}" MCP gateway`
+      : `the "${context.agent.name}" agent`;
   return structuredToolErrorResult({
     error: {
       type: "tool_state",
       code: "tool_not_assigned",
-      message: `Tool "${toolName}" is not assigned to this agent. ${toolDiscoverySteer()}`,
+      message: `Tool "${toolName}" is not available through ${caller}. Tools listed for other agents or named in a skill are not yours to call. ${toolDiscoverySteer()} If the user needs this tool, tell them it can be added to the tools of ${caller}.`,
       toolName,
     },
   });
@@ -580,7 +674,11 @@ async function admitArchestraToolCall(params: {
   // Archestra tool the user has RBAC for, regardless of assignment. Under
   // dynamic tool access ("access all tools") unassigned built-ins are exempt
   // (see resolveToolAssignment).
-  const assignmentDenied = await resolveToolAssignment(toolName, context);
+  const assignmentDenied = await resolveToolAssignment({
+    toolName,
+    args,
+    context,
+  });
   if (assignmentDenied) return { error: assignmentDenied };
 
   const resolvedToolName =
@@ -597,7 +695,12 @@ async function admitArchestraToolCall(params: {
     };
   }
 
-  const parsedArgs = validateToolArgs(toolEntry.schema, args, toolName);
+  const parsedArgs = validateToolArgs({
+    schema: toolEntry.schema,
+    publicSchema: toolEntry.publicSchema,
+    args,
+    toolName,
+  });
   if ("error" in parsedArgs) return parsedArgs;
   return { toolEntry, resolvedToolName, args: parsedArgs.value };
 }
@@ -644,11 +747,18 @@ export const __test = {
   zodValidationErrorResult,
 };
 
-function validateToolArgs(
-  schema: ZodType,
-  args: Record<string, unknown> | undefined,
-  toolName: string,
-): { value: Record<string, unknown> } | { error: CallToolResult } {
+function validateToolArgs(params: {
+  schema: ZodType;
+  /**
+   * The advertised schema. Errors describe it rather than `schema`, so a
+   * malformed call never shows the model members only the proxy writes.
+   */
+  publicSchema?: ZodType;
+  args: Record<string, unknown> | undefined;
+  toolName: string;
+}): { value: Record<string, unknown> } | { error: CallToolResult } {
+  const { schema, args, toolName } = params;
+  const describedSchema = params.publicSchema ?? schema;
   const parsed = schema.safeParse(args ?? {});
 
   if (parsed.success) {
@@ -674,13 +784,17 @@ function validateToolArgs(
       error: zodValidationErrorResult({
         toolName,
         error: reparsed.error,
-        schema,
+        schema: describedSchema,
       }),
     };
   }
 
   return {
-    error: zodValidationErrorResult({ toolName, error: parsed.error, schema }),
+    error: zodValidationErrorResult({
+      toolName,
+      error: parsed.error,
+      schema: describedSchema,
+    }),
   };
 }
 
@@ -706,6 +820,107 @@ function reparseStringifiedObjectArgs(
     }
   }
   return repaired;
+}
+
+async function claimRuntimeDispatch(
+  context: ArchestraContext,
+): Promise<boolean> {
+  const call = context.openappaRuntimeCall;
+  if (!call) return false;
+  // An observed call was claimed when its proof was admitted.
+  if (call.observed) return true;
+  return OpenAppaSpawnCorrelationModel.claimRuntimeDispatch({
+    organizationId: call.session.organization_id,
+    callerId: call.session.caller_id,
+    sessionId: call.session.session_id,
+    toolCallId: call.toolCallId,
+    spawn: call.spawn,
+  });
+}
+
+/**
+ * Checks a runtime proof against what the proxy recorded. A proof signed while
+ * enforcement was on must match a call the runtime released. One signed while
+ * it was off (`observed`) must match a read the session recorded making, and
+ * is claimed here: nothing ruled it, so it may only read, never launch,
+ * steer, or write.
+ */
+async function admitRuntimeProof(params: {
+  proof: unknown;
+  toolName: string;
+  args: Record<string, unknown>;
+  context: ArchestraContext;
+}): Promise<
+  | {
+      kind: "accepted";
+      call: NonNullable<ArchestraContext["openappaRuntimeCall"]>;
+    }
+  | { kind: "refused"; reason: string }
+> {
+  const { context } = params;
+  const action =
+    archestraMcpBranding.getToolShortName(params.toolName) ?? params.toolName;
+  const verified = context.organizationId
+    ? verifyRuntimeToolProof({
+        proof: params.proof,
+        organizationId: context.organizationId,
+        callerId: authenticatedRuntimeSpender({
+          userId: context.userId,
+          callerId: context.openappaSession?.caller_id,
+        }),
+        action,
+        arguments: params.args,
+        secret: config.openappa.offerSigningSecret,
+      })
+    : null;
+  if (!verified || (!runtimeToolNames.has(action) && !isAgentTool(action))) {
+    return {
+      kind: "refused",
+      reason: "OpenAPPA could not verify this runtime tool's source.",
+    };
+  }
+  const source = await OpenAppaSessionModel.familySession({
+    organizationId: verified.session.organization_id,
+    sessionId: verified.session.session_id,
+    callerId: verified.session.caller_id,
+  });
+  if (!source || source.parentId !== (verified.session.parent_id ?? null)) {
+    return {
+      kind: "refused",
+      reason: "OpenAPPA could not find the recorded source session.",
+    };
+  }
+  if (verified.observed) {
+    if (
+      verified.spawn ||
+      !isObservedRead({ action, args: params.args }) ||
+      !(await OpenAppaSpawnCorrelationModel.claimObservedRuntimeDispatch({
+        organizationId: verified.session.organization_id,
+        callerId: verified.session.caller_id,
+        sessionId: verified.session.session_id,
+        toolCallId: verified.toolCallId,
+      }))
+    ) {
+      return {
+        kind: "refused",
+        reason: "OpenAPPA has no unclaimed record of this runtime call.",
+      };
+    }
+    return { kind: "accepted", call: verified };
+  }
+  const released = await OpenAppaSpawnCorrelationModel.releasedCalls({
+    organizationId: verified.session.organization_id,
+    callerId: verified.session.caller_id,
+    sessionId: verified.session.session_id,
+    toolCallIds: [verified.toolCallId],
+  });
+  if (released.get(verified.toolCallId)?.spawn !== verified.spawn) {
+    return {
+      kind: "refused",
+      reason: "OpenAPPA has no matching released runtime call.",
+    };
+  }
+  return { kind: "accepted", call: verified };
 }
 
 /**
@@ -742,10 +957,10 @@ function zodValidationErrorResult(params: {
   if (skeleton) {
     const requiredNote =
       skeleton.required.length > 0
-        ? `; required: ${skeleton.required.map((key) => JSON.stringify(key)).join(", ")}`
-        : "";
+        ? `required: ${skeleton.required.map((key) => JSON.stringify(key)).join(", ")}`
+        : "none is required";
     lines.push(
-      `The tool's parameters are shaped like ${skeleton.skeleton} (replace each <…> with a real value${requiredNote}).`,
+      `The tool's parameters are shaped like ${skeleton.skeleton} (send only the parameters you need; ${requiredNote}).`,
     );
   }
   return {

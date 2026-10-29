@@ -23,10 +23,13 @@ export const ARCHESTRA_TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_T
 
 export const TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME = "execute_remedy_plan";
 export const TOOL_GET_REMEDY_PLANS_SHORT_NAME = "get_remedy_plans";
+export const TOOL_LIST_PEER_MESSAGES_SHORT_NAME = "list_peer_messages";
+export const TOOL_READ_PEER_MESSAGE_SHORT_NAME = "read_peer_message";
 export const TOOL_WHOAMI_SHORT_NAME = "whoami";
 export const TOOL_CREATE_AGENT_SHORT_NAME = "create_agent";
 export const TOOL_GET_AGENT_SHORT_NAME = "get_agent";
 export const TOOL_LIST_AGENTS_SHORT_NAME = "list_agents";
+export const TOOL_LIST_LLM_MODELS_SHORT_NAME = "list_llm_models";
 export const TOOL_EDIT_AGENT_SHORT_NAME = "edit_agent";
 export const TOOL_LIST_HOOKS_SHORT_NAME = "list_hooks";
 export const TOOL_CREATE_HOOK_SHORT_NAME = "create_hook";
@@ -71,28 +74,6 @@ export const TOOL_DELETE_LIMIT_SHORT_NAME = "delete_limit";
 export const TOOL_GET_AGENT_TOKEN_USAGE_SHORT_NAME = "get_agent_token_usage";
 export const TOOL_GET_LLM_PROXY_TOKEN_USAGE_SHORT_NAME =
   "get_llm_proxy_token_usage";
-export const TOOL_GET_AUTONOMY_POLICY_OPERATORS_SHORT_NAME =
-  "get_autonomy_policy_operators";
-export const TOOL_GET_TOOL_INVOCATION_POLICIES_SHORT_NAME =
-  "get_tool_invocation_policies";
-export const TOOL_CREATE_TOOL_INVOCATION_POLICY_SHORT_NAME =
-  "create_tool_invocation_policy";
-export const TOOL_GET_TOOL_INVOCATION_POLICY_SHORT_NAME =
-  "get_tool_invocation_policy";
-export const TOOL_UPDATE_TOOL_INVOCATION_POLICY_SHORT_NAME =
-  "update_tool_invocation_policy";
-export const TOOL_DELETE_TOOL_INVOCATION_POLICY_SHORT_NAME =
-  "delete_tool_invocation_policy";
-export const TOOL_GET_TRUSTED_DATA_POLICIES_SHORT_NAME =
-  "get_trusted_data_policies";
-export const TOOL_CREATE_TRUSTED_DATA_POLICY_SHORT_NAME =
-  "create_trusted_data_policy";
-export const TOOL_GET_TRUSTED_DATA_POLICY_SHORT_NAME =
-  "get_trusted_data_policy";
-export const TOOL_UPDATE_TRUSTED_DATA_POLICY_SHORT_NAME =
-  "update_trusted_data_policy";
-export const TOOL_DELETE_TRUSTED_DATA_POLICY_SHORT_NAME =
-  "delete_trusted_data_policy";
 export const TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME =
   "bulk_assign_tools_to_agents";
 export const TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME =
@@ -130,6 +111,13 @@ export const TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME =
   "unassign_knowledge_connector_from_agent";
 export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
 export const TOOL_ASK_USER_SHORT_NAME = "ask_user";
+/**
+ * The property `ask_user` adds to its requested schema for a typed answer.
+ * Chat renders only this property as an "Other" alternative to the options.
+ */
+export const ASK_USER_OTHER_ANSWER_FIELD = "archestra_other_answer";
+export const TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME =
+  "request_battery_credentials";
 // Turn the current chat into a project (moves the chat + its files into a new project).
 export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
@@ -139,6 +127,11 @@ export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
 // client on a gateway can pull a project's context into its own session.
 export const TOOL_LIST_PROJECTS_SHORT_NAME = "list_projects";
 export const TOOL_GET_PROJECT_SHORT_NAME = "get_project";
+// Link an existing app into a project, or remove that link. Headless like the
+// reads above; the app keeps its own permissions.
+export const TOOL_LINK_APP_TO_PROJECT_SHORT_NAME = "link_app_to_project";
+export const TOOL_UNLINK_APP_FROM_PROJECT_SHORT_NAME =
+  "unlink_app_from_project";
 // Scheduled tasks — the cron-driven agent triggers that live inside a project.
 // Tools manage project schedules and inspect their execution history.
 export const TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME =
@@ -153,6 +146,8 @@ export const TOOL_LIST_SCHEDULE_TRIGGER_RUNS_SHORT_NAME =
   "list_schedule_trigger_runs";
 export const TOOL_GET_SCHEDULE_TRIGGER_RUN_SHORT_NAME =
   "get_schedule_trigger_run";
+export const TOOL_GET_SCHEDULE_TRIGGER_RUN_TRANSCRIPT_SHORT_NAME =
+  "get_schedule_trigger_run_transcript";
 export const TOOL_ENABLE_SCHEDULE_TRIGGER_SHORT_NAME =
   "enable_schedule_trigger";
 export const TOOL_DISABLE_SCHEDULE_TRIGGER_SHORT_NAME =
@@ -179,16 +174,16 @@ export const TOOL_DELETE_PLUGIN_SHORT_NAME = "delete_plugin";
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
 // Durable Agent runs: delegated work uses Agent Runtime when the target Agent
 // configured it; direct chat remains foreground. The MCP face of the same A2A
-// machinery the A2A v2 protocol exposes — each run is tracked as an A2A task,
-// keyed by its `task_id` — so either kind of client can drive the identical
-// lifecycle.
-export const TOOL_START_RUN_SHORT_NAME = "start_run";
-export const TOOL_GET_RUN_SHORT_NAME = "get_run";
-export const TOOL_LIST_RUNS_SHORT_NAME = "list_runs";
+// machinery the A2A v2 protocol exposes, so either kind of client can drive
+// the identical lifecycle. Each turn is an A2A task; the model-facing `run_id`
+// is the run's stable session id.
+export const TOOL_START_AGENT_RUN_SHORT_NAME = "start_agent_run";
+export const TOOL_GET_AGENT_RUN_SHORT_NAME = "get_agent_run";
 export const TOOL_LIST_AGENT_RUNS_SHORT_NAME = "list_agent_runs";
-export const TOOL_STEER_RUN_SHORT_NAME = "steer_run";
-export const TOOL_CANCEL_RUN_SHORT_NAME = "cancel_run";
-export const TOOL_POST_RUN_FILE_SHORT_NAME = "post_run_file";
+export const TOOL_STEER_AGENT_RUN_SHORT_NAME = "steer_agent_run";
+export const TOOL_CANCEL_AGENT_RUN_SHORT_NAME = "cancel_agent_run";
+export const TOOL_POST_AGENT_RUN_FILE_SHORT_NAME = "post_agent_run_file";
+export const TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME = "post_agent_run_message";
 export const TOOL_READ_WORKSPACE_FILE_SHORT_NAME = "read_workspace_file";
 export const TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME = "write_workspace_file";
 export const TOOL_DELETE_WORKSPACE_SHORT_NAME = "delete_workspace";
@@ -229,6 +224,14 @@ export const TOOL_SET_APP_LABELS_SHORT_NAME = "set_app_labels";
 export const TOOL_SET_APP_LOCK_SHORT_NAME = "set_app_lock";
 export const TOOL_VALIDATE_APP_SHORT_NAME = "validate_app";
 export const TOOL_PUBLISH_APP_SHORT_NAME = "publish_app";
+export const TOOL_YELL_SHORT_NAME = "yell";
+/**
+ * What a yell tells the agent when break the glass turned OpenAPPA off. The
+ * chat composer reads it in the yell's result to show that guardrails no
+ * longer apply to the chat, so the wording is shared, not copied.
+ */
+export const YELL_RESULT_GUARDRAILS_OFF =
+  "Guardrails are now off for this session: its label is reset, and its calls are no longer checked.";
 export const TOOL_DELETE_APP_SHORT_NAME = "delete_app";
 export const TOOL_PREVIEW_APP_TOOL_SHORT_NAME = "preview_app_tool";
 export const TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME = "get_app_diagnostics";
@@ -243,13 +246,23 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   "yell",
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "get_guardrails_policy",
+  "get_openappa_policy_tests",
+  "run_openappa_policy_tests",
+  "preview_guardrails_validation_change",
+  "update_guardrails_validation",
   "get_openappa_yell",
+  "resolve_openappa_yell",
+  "list_openappa_yells",
+  "list_openappa_consults",
   "list_guardrails_battery_fits",
   "inspect_guardrails_server",
   "validate_guardrails_policy",
   "preview_guardrails_policy_change",
   "update_guardrails_policy",
+  "bind_guardrails_credential",
   "get_guardrails_policy_change_status",
   "list_runtime_credentials",
   "get_runtime_credential",
@@ -257,10 +270,14 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   "update_runtime_credential",
   "delete_runtime_credential",
   "request_runtime_credential_setup",
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   "create_guardrails_repository",
+  "connect_guardrails_repository",
+  "sync_guardrails_repository",
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
+  TOOL_LIST_LLM_MODELS_SHORT_NAME,
   TOOL_EDIT_AGENT_SHORT_NAME,
   TOOL_LIST_HOOKS_SHORT_NAME,
   TOOL_CREATE_HOOK_SHORT_NAME,
@@ -297,17 +314,6 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_DELETE_LIMIT_SHORT_NAME,
   TOOL_GET_AGENT_TOKEN_USAGE_SHORT_NAME,
   TOOL_GET_LLM_PROXY_TOKEN_USAGE_SHORT_NAME,
-  TOOL_GET_AUTONOMY_POLICY_OPERATORS_SHORT_NAME,
-  TOOL_GET_TOOL_INVOCATION_POLICIES_SHORT_NAME,
-  TOOL_CREATE_TOOL_INVOCATION_POLICY_SHORT_NAME,
-  TOOL_GET_TOOL_INVOCATION_POLICY_SHORT_NAME,
-  TOOL_UPDATE_TOOL_INVOCATION_POLICY_SHORT_NAME,
-  TOOL_DELETE_TOOL_INVOCATION_POLICY_SHORT_NAME,
-  TOOL_GET_TRUSTED_DATA_POLICIES_SHORT_NAME,
-  TOOL_CREATE_TRUSTED_DATA_POLICY_SHORT_NAME,
-  TOOL_GET_TRUSTED_DATA_POLICY_SHORT_NAME,
-  TOOL_UPDATE_TRUSTED_DATA_POLICY_SHORT_NAME,
-  TOOL_DELETE_TRUSTED_DATA_POLICY_SHORT_NAME,
   TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME,
   TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME,
   TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME,
@@ -333,6 +339,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_LIST_PROJECTS_SHORT_NAME,
   TOOL_GET_PROJECT_SHORT_NAME,
+  TOOL_LINK_APP_TO_PROJECT_SHORT_NAME,
+  TOOL_UNLINK_APP_FROM_PROJECT_SHORT_NAME,
   TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_UPDATE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_DELETE_SCHEDULE_TRIGGER_SHORT_NAME,
@@ -340,6 +348,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_GET_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_LIST_SCHEDULE_TRIGGER_RUNS_SHORT_NAME,
   TOOL_GET_SCHEDULE_TRIGGER_RUN_SHORT_NAME,
+  TOOL_GET_SCHEDULE_TRIGGER_RUN_TRANSCRIPT_SHORT_NAME,
   TOOL_ENABLE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_DISABLE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_RUN_SCHEDULE_TRIGGER_NOW_SHORT_NAME,
@@ -357,13 +366,13 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_EDIT_PLUGIN_SHORT_NAME,
   TOOL_DELETE_PLUGIN_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
-  TOOL_START_RUN_SHORT_NAME,
-  TOOL_GET_RUN_SHORT_NAME,
-  TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_GET_AGENT_RUN_SHORT_NAME,
   TOOL_LIST_AGENT_RUNS_SHORT_NAME,
-  TOOL_STEER_RUN_SHORT_NAME,
-  TOOL_CANCEL_RUN_SHORT_NAME,
-  TOOL_POST_RUN_FILE_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_FILE_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
@@ -423,7 +432,6 @@ export const ARCHESTRA_TOOL_GROUPS = [
   { id: "mcp_servers", label: "MCP Servers" },
   { id: "teams", label: "Teams" },
   { id: "limits", label: "Limits" },
-  { id: "policies", label: "Policies" },
   { id: "tool_assignment", label: "Tool Assignment" },
   { id: "knowledge_management", label: "Knowledge Management" },
   { id: "chat", label: "Chat" },
@@ -459,25 +467,39 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   execute_remedy_plan: "openappa",
   yell: "openappa",
   get_remedy_plans: "openappa",
+  list_peer_messages: "openappa",
+  read_peer_message: "openappa",
   get_guardrails_policy: "openappa",
+  get_openappa_policy_tests: "openappa",
+  run_openappa_policy_tests: "openappa",
+  preview_guardrails_validation_change: "openappa",
+  update_guardrails_validation: "openappa",
   get_openappa_yell: "openappa",
+  resolve_openappa_yell: "openappa",
+  list_openappa_yells: "openappa",
+  list_openappa_consults: "openappa",
   list_guardrails_battery_fits: "openappa",
   inspect_guardrails_server: "openappa",
   validate_guardrails_policy: "openappa",
   preview_guardrails_policy_change: "openappa",
   update_guardrails_policy: "openappa",
+  bind_guardrails_credential: "openappa",
   get_guardrails_policy_change_status: "openappa",
   create_guardrails_repository: "openappa",
+  connect_guardrails_repository: "openappa",
+  sync_guardrails_repository: "openappa",
   list_runtime_credentials: "openappa",
   get_runtime_credential: "openappa",
   create_runtime_credential: "openappa",
   update_runtime_credential: "openappa",
   delete_runtime_credential: "openappa",
   request_runtime_credential_setup: "openappa",
+  request_battery_credentials: "openappa",
 
   create_agent: "agents",
   get_agent: "agents",
   list_agents: "agents",
+  list_llm_models: "agents",
   edit_agent: "agents",
   list_hooks: "agents",
   create_hook: "agents",
@@ -519,18 +541,6 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   get_agent_token_usage: "limits",
   get_llm_proxy_token_usage: "limits",
 
-  get_autonomy_policy_operators: "policies",
-  get_tool_invocation_policies: "policies",
-  create_tool_invocation_policy: "policies",
-  get_tool_invocation_policy: "policies",
-  update_tool_invocation_policy: "policies",
-  delete_tool_invocation_policy: "policies",
-  get_trusted_data_policies: "policies",
-  create_trusted_data_policy: "policies",
-  get_trusted_data_policy: "policies",
-  update_trusted_data_policy: "policies",
-  delete_trusted_data_policy: "policies",
-
   bulk_assign_tools_to_agents: "tool_assignment",
   bulk_remove_tools_from_agents: "tool_assignment",
   bulk_assign_tools_to_mcp_gateways: "tool_assignment",
@@ -559,6 +569,8 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   create_project_from_conversation: "projects",
   list_projects: "projects",
   get_project: "projects",
+  link_app_to_project: "projects",
+  unlink_app_from_project: "projects",
   // Scheduled tasks are a project surface in the product (a project's
   // Schedules section and its run history), so they group with Projects.
   create_schedule_trigger: "projects",
@@ -568,6 +580,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   get_schedule_trigger: "projects",
   list_schedule_trigger_runs: "projects",
   get_schedule_trigger_run: "projects",
+  get_schedule_trigger_run_transcript: "projects",
   enable_schedule_trigger: "projects",
   disable_schedule_trigger: "projects",
   run_schedule_trigger_now: "projects",
@@ -589,13 +602,13 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   delete_plugin: "plugins",
 
   run_command: "skill_sandbox",
-  start_run: "tasks",
-  get_run: "tasks",
-  list_runs: "tasks",
+  start_agent_run: "tasks",
+  get_agent_run: "tasks",
   list_agent_runs: "tasks",
-  steer_run: "tasks",
-  cancel_run: "tasks",
-  post_run_file: "tasks",
+  steer_agent_run: "tasks",
+  cancel_agent_run: "tasks",
+  post_agent_run_file: "tasks",
+  post_agent_run_message: "tasks",
   read_workspace_file: "tasks",
   write_workspace_file: "tasks",
   transfer_workspace_file: "tasks",
@@ -706,28 +719,6 @@ export const TOOL_GET_AGENT_TOKEN_USAGE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_AGENT_TOKEN_USAGE_SHORT_NAME}` as const;
 export const TOOL_GET_LLM_PROXY_TOKEN_USAGE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_LLM_PROXY_TOKEN_USAGE_SHORT_NAME}` as const;
-export const TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_AUTONOMY_POLICY_OPERATORS_SHORT_NAME}` as const;
-export const TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_TOOL_INVOCATION_POLICIES_SHORT_NAME}` as const;
-export const TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_CREATE_TOOL_INVOCATION_POLICY_SHORT_NAME}` as const;
-export const TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_TOOL_INVOCATION_POLICY_SHORT_NAME}` as const;
-export const TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_UPDATE_TOOL_INVOCATION_POLICY_SHORT_NAME}` as const;
-export const TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_DELETE_TOOL_INVOCATION_POLICY_SHORT_NAME}` as const;
-export const TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_TRUSTED_DATA_POLICIES_SHORT_NAME}` as const;
-export const TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_CREATE_TRUSTED_DATA_POLICY_SHORT_NAME}` as const;
-export const TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_TRUSTED_DATA_POLICY_SHORT_NAME}` as const;
-export const TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_UPDATE_TRUSTED_DATA_POLICY_SHORT_NAME}` as const;
-export const TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_DELETE_TRUSTED_DATA_POLICY_SHORT_NAME}` as const;
 export const TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME}` as const;
 export const TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME =
@@ -798,22 +789,22 @@ export const TOOL_DELETE_PLUGIN_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DELETE_PLUGIN_SHORT_NAME}` as const;
 export const TOOL_RUN_COMMAND_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RUN_COMMAND_SHORT_NAME}` as const;
-export const TOOL_START_RUN_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_START_RUN_SHORT_NAME}` as const;
+export const TOOL_START_AGENT_RUN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_START_AGENT_RUN_SHORT_NAME}` as const;
 export const TOOL_TRANSFER_CREDENTIAL_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_TRANSFER_CREDENTIAL_SHORT_NAME}` as const;
-export const TOOL_GET_RUN_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_RUN_SHORT_NAME}` as const;
-export const TOOL_LIST_RUNS_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_RUNS_SHORT_NAME}` as const;
+export const TOOL_GET_AGENT_RUN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_AGENT_RUN_SHORT_NAME}` as const;
 export const TOOL_LIST_AGENT_RUNS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_AGENT_RUNS_SHORT_NAME}` as const;
-export const TOOL_STEER_RUN_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_STEER_RUN_SHORT_NAME}` as const;
-export const TOOL_CANCEL_RUN_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_CANCEL_RUN_SHORT_NAME}` as const;
-export const TOOL_POST_RUN_FILE_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_RUN_FILE_SHORT_NAME}` as const;
+export const TOOL_STEER_AGENT_RUN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_STEER_AGENT_RUN_SHORT_NAME}` as const;
+export const TOOL_CANCEL_AGENT_RUN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_CANCEL_AGENT_RUN_SHORT_NAME}` as const;
+export const TOOL_POST_AGENT_RUN_FILE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_AGENT_RUN_FILE_SHORT_NAME}` as const;
+export const TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME}` as const;
 export const TOOL_DOWNLOAD_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DOWNLOAD_FILE_SHORT_NAME}` as const;
 export const TOOL_UPLOAD_FILE_FULL_NAME =
@@ -843,8 +834,25 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
 export const REQUIRED_OPENAPPA_TOOL_SHORT_NAMES = [
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "yell",
 ] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * The OpenAPPA feedback tool. With break the glass on, a yell also turns
+ * OpenAPPA off for the session that sends it.
+ */
+export const YELL_TOOL_SHORT_NAMES = [
+  "yell",
+] as const satisfies readonly ArchestraToolShortName[];
+export type YellToolShortName = (typeof YELL_TOOL_SHORT_NAMES)[number];
+
+export function isYellToolShortName(
+  shortName: string | null | undefined,
+): shortName is YellToolShortName {
+  return (YELL_TOOL_SHORT_NAMES as readonly string[]).includes(shortName ?? "");
+}
 
 export function isRequiredOpenAppaToolShortName(shortName: string): boolean {
   return (REQUIRED_OPENAPPA_TOOL_SHORT_NAMES as readonly string[]).includes(
@@ -853,14 +861,38 @@ export function isRequiredOpenAppaToolShortName(shortName: string): boolean {
 }
 
 /**
- * Built-in tools that do NOT bypass policy evaluation. Most built-ins are
- * auto-trusted, but these ingest external content (e.g. knowledge-base
- * documents) that can carry prompt injection, so their invocations and
- * results are evaluated by tool invocation and trusted data policies just
- * like external tools.
+ * Side-effect-free OpenAPPA policy tools every agent and gateway may list and
+ * run while OpenAPPA is enabled, without an assignment. Per-tool RBAC,
+ * exclusions and the delegated-run gate still apply; policy writes stay
+ * assignment-only.
  */
-export const POLICY_EVALUATED_ARCHESTRA_TOOL_SHORT_NAMES: ReadonlySet<ArchestraToolShortName> =
-  new Set([TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME]);
+export const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES = [
+  "get_guardrails_policy",
+  "list_guardrails_battery_fits",
+  "inspect_guardrails_server",
+  "validate_guardrails_policy",
+  "preview_guardrails_policy_change",
+  "get_guardrails_policy_change_status",
+  "get_openappa_yell",
+] as const satisfies readonly ArchestraToolShortName[];
+
+const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
+  IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES,
+);
+
+/** Tools whose chat card renders a policy diff from the result's structuredContent. */
+export const OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES = [
+  "preview_guardrails_policy_change",
+  "update_guardrails_policy",
+  "preview_guardrails_validation_change",
+  "update_guardrails_validation",
+] as const satisfies readonly ArchestraToolShortName[];
+
+export function isImplicitOpenAppaReadToolShortName(
+  shortName: string | null | undefined,
+): boolean {
+  return IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAME_SET.has(shortName ?? "");
+}
 
 /**
  * Agent Skill tools — only assigned to agents once an org admin opts in via
@@ -880,9 +912,8 @@ const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(
 );
 
 /**
- * Plugin management tools. Never auto-assigned: the whole group follows the
- * `plugins` deployment beta flag (see `config.plugins.enabled`), stays out of
- * the default seed sets, and is reached through manual assignment or the
+ * Plugin management tools. Never auto-assigned: the group stays out of
+ * the default seed sets and is reached through manual assignment or the
  * search_tools/run_tool dynamic surface.
  */
 export const PLUGIN_ARCHESTRA_TOOL_SHORT_NAMES = [
@@ -938,11 +969,11 @@ export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * Code-execution runtime tools. Gated by `sandbox:execute` and only seeded when
+ * Code-execution runtime tools. Gated by `agent:read` and only seeded when
  * the skills-sandbox runtime is on (`config.skillsSandbox.enabled`). They
  * materialize a Dagger container, so they genuinely need the runtime, and they
  * participate in the `search_tools`/`run_tool` dynamic tool access relaxation
- * (see `dynamic-tools.ts`) so a user with `sandbox:execute` can reach them
+ * (see `dynamic-tools.ts`) so a user with `agent:read` can reach them
  * without a manual assignment.
  */
 export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
@@ -952,11 +983,9 @@ export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * Persistent-files ("My Files" / Projects) tools. Also gated by `sandbox:execute`,
+ * Persistent-files ("My Files" / Projects) tools. Also gated by `agent:read`,
  * but they operate purely on persistent file storage and never touch the Dagger
- * runtime — their exposure and dynamic-access participation follow the sandbox
- * runtime flag (`config.skillsSandbox.enabled`), like the runtime tools (see
- * `dynamic-tools.ts` and the backend `index.ts` registration gate).
+ * runtime, so they are available whether or not the code runtime is on.
  */
 export const PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SEARCH_FILES_SHORT_NAME,
@@ -989,16 +1018,22 @@ export function isAppRuntimeOnlyArchestraToolShortName(
 }
 
 /**
- * The file tools an MCP App's runtime may call: the persistent-files group plus
- * the two sandbox file-transfer tools. `run_command` is deliberately excluded —
- * an app is a UI surface, not an execution environment.
+ * The file tools an MCP App's runtime may call: the persistent-files group
+ * (minus `copy_file`) plus the two sandbox file-transfer tools. `run_command` is
+ * deliberately excluded — an app is a UI surface, not an execution environment.
+ * `copy_file` is the agent-side exchange between a chat and its open app; an
+ * app's namespace is hermetic, so only the agent may broker across it.
  *
  * Apps address these against their own per-(app, viewer) namespace rather than a
  * conversation's files, so the set is meaningful on every app surface (chat
  * inline, the standalone page, and the shareable connector).
  */
 export const APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
-  ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+  TOOL_SEARCH_FILES_SHORT_NAME,
+  TOOL_READ_FILE_SHORT_NAME,
+  TOOL_SAVE_FILE_SHORT_NAME,
+  TOOL_EDIT_FILE_SHORT_NAME,
+  TOOL_DELETE_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_READ_FILE_RAW_SHORT_NAME,
@@ -1006,7 +1041,7 @@ export const APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
 
 /**
  * The full sandbox tool group (runtime + persistent-files). All share the
- * `sandbox:execute` RBAC permission and require the runtime to execute.
+ * `agent:read` RBAC permission; only the runtime tools need the code runtime.
  */
 const SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES = [
   ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -1021,15 +1056,28 @@ export function isSandboxArchestraToolShortName(shortName: string): boolean {
   return SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
 }
 
+const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
+  new Set(SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES);
+
+/**
+ * Whether a built-in materializes a Dagger container, so it exists only while
+ * the code runtime is on (`config.skillsSandbox.enabled`).
+ */
+export function isCodeRuntimeArchestraToolShortName(
+  shortName: string,
+): boolean {
+  return SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
 /**
  * The built-in tool set assigned to a new agent at creation, composed from
  * the deployment/org feature flags:
  * - the always-on defaults (todo_write, query_knowledge_sources),
  * - the MCP App management tools (the apps feature is always on),
  * - the skill tools when the org opted in (`organization.skillToolsEnabled`),
- * - the sandbox runtime + persistent-files tools when the skills-sandbox
- *   runtime is on (`config.skillsSandbox.enabled`) — mirroring
- *   `assignSandboxToolsToAgent`.
+ * - the persistent-files tools (always on),
+ * - the sandbox runtime tools when the code runtime is on
+ *   (`config.skillsSandbox.enabled`) — mirroring `assignSandboxToolsToAgent`.
  *
  * Single source of truth for creation defaults: the backend assigns exactly
  * this set in `AgentModel.create`, and the frontend create form pre-selects
@@ -1050,9 +1098,9 @@ export function getCreationDefaultArchestraToolShortNames(params: {
     shortNames.push(...SKILL_ARCHESTRA_TOOL_SHORT_NAMES);
   }
   shortNames.push(...APP_ARCHESTRA_TOOL_SHORT_NAMES);
+  shortNames.push(...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
   if (sandboxEnabled) {
     shortNames.push(...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES);
-    shortNames.push(...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
   }
   return shortNames;
 }
@@ -1079,15 +1127,47 @@ const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES = [
 const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
   new Set(PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES);
 
+/**
+ * Agent Runtime handoff tools, additionally exempt from the pre-fill on a
+ * personal MCP gateway. The personal gateway is what a user's own client
+ * (Claude Code, Cursor, Codex) connects to, and handing a session over to the
+ * runtime is a core flow there — excluding these by default leaves a fresh
+ * install unable to start or retrieve a handoff. Custom All-tools agents keep
+ * the stricter default.
+ */
+const PERSONAL_GATEWAY_PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_LIST_AGENTS_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_GET_AGENT_RUN_SHORT_NAME,
+  TOOL_LIST_AGENT_RUNS_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
+  TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+const PERSONAL_GATEWAY_PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
+  new Set(PERSONAL_GATEWAY_PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES);
+
 export function isPrefillExemptArchestraToolShortName(
   shortName: string,
+  options?: { isPersonalGateway?: boolean },
 ): boolean {
-  return PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+  return (
+    PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName) ||
+    (options?.isPersonalGateway === true &&
+      PERSONAL_GATEWAY_PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(
+        shortName,
+      ))
+  );
 }
 
 /**
- * tools that stay top-level in `tools/list` regardless of an agent's
- * exposure mode. `ask_user` is a conversation primitive (choice form /
+ * Tools kept top-level by internal chat in progressive exposure mode.
+ * External MCP gateways keep only `ask_user` from this set; they discover the
+ * skill, sandbox and file capabilities through search_tools/run_tool.
+ * `ask_user` is a conversation primitive (choice form /
  * native elicitation), not a capability to discover. skills and sandbox
  * runtime interaction are progressive-disclosure mechanisms, so hiding their
  * discover/activate/read/run and file-transfer path behind
@@ -1119,6 +1199,39 @@ export function isAlwaysExposedArchestraToolShortName(
   return ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
 }
 
+// These tools need an internal chat and its open app; external MCP clients
+// cannot use them, whether called directly or through run_tool.
+const CHAT_ONLY_ARCHESTRA_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
+  TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_COPY_FILE_SHORT_NAME,
+]);
+
+export function isChatOnlyArchestraToolShortName(
+  shortName: string | null,
+): boolean {
+  return (
+    shortName !== null && CHAT_ONLY_ARCHESTRA_TOOL_SHORT_NAMES.has(shortName)
+  );
+}
+
+// Run handles remain usable without an assignment row. Gateways discover these
+// controls through search/run; internal chat keeps their direct declarations.
+export const RUN_CONTROL_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_GET_AGENT_RUN_SHORT_NAME,
+  TOOL_LIST_AGENT_RUNS_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_CANCEL_AGENT_RUN_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+export function isRunControlArchestraToolShortName(
+  shortName: string | null,
+): boolean {
+  return RUN_CONTROL_ARCHESTRA_TOOL_SHORT_NAMES.some(
+    (candidate) => candidate === shortName,
+  );
+}
+
 export function buildElicitationMandateInstruction(params?: {
   askUserToolName?: string;
   nativeQuestionToolName?: string;
@@ -1132,19 +1245,44 @@ export function buildElicitationMandateInstruction(params?: {
     tools.length > 1
       ? `${tools[0]} (or ${tools[1]})`
       : (tools[0] ?? TOOL_ASK_USER_SHORT_NAME);
-  return `When you ask the user a question, clarification, preference, or approval, call ${toolName}. Never ask multiple-choice questions or request user decisions in plain text.`;
+  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text. A link or command the user must open or run goes in your reply text, not in the question.`;
 }
 
 /**
  * Maps tools to arguments stamped by the OpenAPPA proxy before dispatching to the client.
- * Includes signed remedy offers on `ask_user` and execution receipts on `execute_remedy_plan`.
+ * Includes the current trajectory, peer-message proofs, and the remedy receipt.
  * The model never writes these arguments. The proxy strips them from provider history
  * and tool declarations to keep provider state clean.
  */
+export const OPENAPPA_RUNTIME_TOOL_SHORT_NAMES = [
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
+  TOOL_GET_AGENT_RUN_SHORT_NAME,
+  TOOL_LIST_AGENT_RUNS_SHORT_NAME,
+  TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_FILE_SHORT_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
 export const PROXY_STAMPED_TOOL_ARGUMENTS = {
-  [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers"],
+  [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers", "trajectory"],
+  [TOOL_LIST_PEER_MESSAGES_SHORT_NAME]: ["peer_proof"],
+  [TOOL_READ_PEER_MESSAGE_SHORT_NAME]: ["peer_proof"],
+  [TOOL_START_AGENT_RUN_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_STEER_AGENT_RUN_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_GET_AGENT_RUN_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_LIST_AGENT_RUNS_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_READ_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_POST_AGENT_RUN_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME]: ["runtime_proof"],
   [TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME]: [
     "execution",
+    "trajectory",
+    // Strip legacy signed fields from persisted history without trusting them.
     "protected",
     "payload",
     "signature",

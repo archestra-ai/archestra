@@ -1,9 +1,11 @@
 "use client";
 
 import { RotateCcw } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
 import { TerminalCard } from "@/components/terminal-surface";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -11,9 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardStep } from "@/components/wizard-step";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import {
   type CreateConnectionSetupResult,
   useCreateConnectionSetup,
@@ -58,19 +60,18 @@ export function PluginInstallDialog({
     isPending: organizationPending,
     isFetchedAfterMount,
   } = useOrganization(open, { fresh: true });
-  const pluginsFeatureEnabled = useFeature("plugins") === true;
   const pluginsOnConnectEnabled =
-    pluginsFeatureEnabled &&
-    isFetchedAfterMount &&
-    organization?.connectionPluginsEnabled === true;
+    isFetchedAfterMount && organization?.connectionPluginsEnabled === true;
   const pluginsOnConnectDisabled =
-    pluginsFeatureEnabled &&
-    isFetchedAfterMount &&
-    organization?.connectionPluginsEnabled === false;
+    isFetchedAfterMount && organization?.connectionPluginsEnabled === false;
   const { mutateAsync: createSetup, isPending: setupPending } =
     useCreateConnectionSetup();
   const compatibility = resolvePluginInstallSelection(plugins);
   const clientType = compatibility.clientType ?? "claude-code";
+  // A Claude Desktop setup writes its whole profile (gateway, tools, and
+  // plugins together), so a plugin-only setup would drop the rest. Desktop
+  // plugins install through Connect instead.
+  const installsThroughConnect = clientType === "claude-desktop";
   const pluginIdsKey = plugins.map((plugin) => plugin.id).join(",");
   const pluginIds = useMemo(
     () => pluginIdsKey.split(",").filter(Boolean),
@@ -126,7 +127,7 @@ export function PluginInstallDialog({
   }, [platforms]);
 
   const generate = useCallback(async () => {
-    if (!baseUrl || !pluginsOnConnectEnabled) return;
+    if (!baseUrl || !pluginsOnConnectEnabled || installsThroughConnect) return;
     setResult(null);
     setFailed(false);
     const created = await createSetup({
@@ -141,6 +142,7 @@ export function PluginInstallDialog({
     baseUrl,
     clientType,
     createSetup,
+    installsThroughConnect,
     platform,
     pluginIds,
     pluginsOnConnectEnabled,
@@ -175,7 +177,11 @@ export function PluginInstallDialog({
           ? `Install ${plugins[0]?.displayName}`
           : `Install ${plugins.length} plugins`
       }
-      description="Review the target, then run the setup command."
+      description={
+        installsThroughConnect
+          ? "Claude Desktop installs plugins with its Connect setup."
+          : "Review the target, then run the setup command."
+      }
       size="medium"
       className="sm:max-w-5xl"
       bodyClassName="overflow-y-auto"
@@ -261,6 +267,21 @@ export function PluginInstallDialog({
               plugin installs keep working.
             </div>
           </WizardStep>
+        ) : installsThroughConnect ? (
+          <WizardStep n={2} title="Set up Claude Desktop from Connect" last>
+            <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground">
+              <p className="max-w-2xl">
+                Desktop’s setup installs its approved plugins together with its
+                gateway and tools. Run it from Connect, or run it again there to
+                pick up new plugins.
+              </p>
+              <Button asChild size="sm">
+                <Link href="/connection?clientId=claude-desktop">
+                  Open Connect
+                </Link>
+              </Button>
+            </div>
+          </WizardStep>
         ) : (
           <WizardStep n={2} title="Run the setup script" last>
             <div className="flex flex-col gap-3">
@@ -291,7 +312,7 @@ export function PluginInstallDialog({
                   only {plugins.length === 1 ? "this plugin" : "these plugins"}{" "}
                   and leaves proxy and MCP configuration unchanged.
                 </span>
-                <button
+                <UnstyledButton
                   type="button"
                   onClick={generate}
                   disabled={!pluginsOnConnectEnabled || setupPending}
@@ -299,7 +320,7 @@ export function PluginInstallDialog({
                 >
                   <RotateCcw className="size-3" />
                   Regenerate
-                </button>
+                </UnstyledButton>
               </div>
             </div>
           </WizardStep>

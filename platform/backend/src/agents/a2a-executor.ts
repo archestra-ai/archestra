@@ -1,14 +1,15 @@
 import crypto from "node:crypto";
 import {
-  BUILT_IN_AGENT_IDS,
   type ChatUploadRejectionReason,
   chatUploadRejectionReason,
   getModelReadableMimeTypes,
   INLINE_TEXT_MAX_BYTES,
   type InteractionSource,
   isInlineableTextMimeType,
+  type ModelSelection,
   PLAYWRIGHT_MCP_CATALOG_ID,
   requiresOpenAiResponsesApi,
+  type SubagentModelTier,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { ModelMessage, UIMessage, UIMessageChunk, UserContent } from "ai";
@@ -21,6 +22,7 @@ import {
   type streamText,
   type ToolSet,
 } from "ai";
+import { authorizeA2AModel } from "@/agents/a2a/oauth-model";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
@@ -33,6 +35,7 @@ import {
 } from "@/agents/openai-reasoning-summary";
 import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentRunTracker } from "@/agents/subagent-run-tracker";
+import { canUseAgent } from "@/auth/permission-gated";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
@@ -46,6 +49,7 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, ModelModel } from "@/models";
+import type { SubagentBinding } from "@/openappa/subagent-binding";
 import {
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
@@ -53,15 +57,24 @@ import {
   ProviderError,
   SubagentProviderError,
 } from "@/routes/chat/errors";
+import { usesStepPromptCache } from "@/routes/chat/normalization/apply-prompt-cache";
 import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import { createToolCallRepair } from "@/routes/chat/tool-call-repair";
+import {
+  type A2AOAuthExecution,
+  authorizeA2AOAuthExecution,
+} from "@/routes/mcp-gateway/utils";
 import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
-import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import {
+  type ModelTrioTiers,
+  resolveForkParentSelection,
+  resolveSubagentTierSelection,
+} from "@/utils/llm-resolution";
 import {
   stripThinkingBlocks,
   THINKING_ONLY_NOTICE,
@@ -94,7 +107,25 @@ export interface A2AAttachment {
 export const MAX_DELEGATION_DEPTH = 5;
 
 /** @public — exported for testability */
-export interface A2AExecuteParams {
+/**
+ * The caller forks itself: a fresh-context copy of the calling agent. It may
+ * repeat its direct parent in the chain once, and never forks again. Only a
+ * fork starts from its parent's model, optionally moved to a tier.
+ */
+type ForkOptions =
+  | { selfFork?: false }
+  | {
+      selfFork: true;
+      /** The model and key the forking parent runs on. */
+      parentLlm?: ModelSelection;
+      /** The model tier the fork runs on, relative to `parentLlm`. */
+      tier?: SubagentModelTier;
+    };
+
+/** @public — exercised by the a2a route tests (knip --production ignores tests) */
+export type A2AExecuteParams = A2AExecuteParamsBase & ForkOptions;
+
+interface A2AExecuteParamsBase {
   /**
    * Agent ID to execute. Must be an internal agent (agentType='agent').
    */
@@ -115,8 +146,7 @@ export interface A2AExecuteParams {
 
   organizationId: string;
   userId: string;
-  /** Set when a team token made the call (userId is then "system") */
-  actorTeamId?: string;
+  oauthExecution?: A2AOAuthExecution;
   /** Session ID to group related LLM requests together in logs */
   sessionId?: string;
   /** Interaction source for tracking request origin in logs */
@@ -126,6 +156,8 @@ export interface A2AExecuteParams {
    * The current agentId will be appended to form the new chain.
    */
   parentDelegationChain?: string;
+  /** The child trajectory an OpenAPPA-governed spawn bound this run to. */
+  appaSubagent?: SubagentBinding;
   /**
    * Id of a persisted `conversations` row, when the execution belongs to one
    * (chat delegation). Tools may persist it as a foreign key — never pass a
@@ -147,21 +179,17 @@ export interface A2AExecuteParams {
   attachments?: A2AAttachment[];
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
+  /**
+   * Someone answers this run's OpenAPPA reviews, so a reviewed remedy call
+   * pauses the run (set by the A2A manager).
+   */
+  openappaReviewPause?: boolean;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
-  /** Whether the parent execution context was still trusted at delegation time */
-  parentContextIsTrusted?: boolean;
-  /**
-   * Environment of the delegating caller (null = Default). Only consumed when
-   * the executed agent is the advisor built-in: its own row is org-wide and
-   * env-less, so consultations bill to the caller's environment instead.
-   */
-  callerEnvironmentId?: string | null;
+  /** Set when the ChatOps conversation is with a Slack bot pinned to this agent */
+  chatOpsPinnedAgentId?: string;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
-
-  /** Whether to block execution when an approval-required tool is called (defaults to true) */
-  blockOnApprovalRequired?: boolean;
 
   /**
    * History of UI messages needed for persistance at new UIMessage generation
@@ -226,7 +254,6 @@ export async function executeA2AMessage(
     message,
     organizationId,
     userId,
-    actorTeamId,
     sessionId,
     source,
     parentDelegationChain,
@@ -234,7 +261,7 @@ export async function executeA2AMessage(
     attachments,
     chatOpsBindingId,
     chatOpsThreadId,
-    parentContextIsTrusted,
+    chatOpsPinnedAgentId,
     scheduleTriggerRunId,
     subagentToolStream,
     delegationToolCallId,
@@ -262,7 +289,11 @@ export async function executeA2AMessage(
   // I/O; `handleDelegation` turns the throw into a tool error the model can
   // recover from. Agent ids are uuids, so ":" cannot appear inside one.
   const ancestors = parentDelegationChain?.split(":") ?? [];
-  if (ancestors.includes(agentId)) {
+  const forksItsParent =
+    params.selfFork === true &&
+    ancestors.at(-1) === agentId &&
+    ancestors.filter((ancestor) => ancestor === agentId).length === 1;
+  if (ancestors.includes(agentId) && !forksItsParent) {
     throw new DelegationLoopError(
       "That agent is already in the current delegation chain. Answer directly instead of delegating back to it.",
     );
@@ -274,6 +305,16 @@ export async function executeA2AMessage(
   }
 
   // Fetch the internal agent
+  const authorizeOAuthExecution = async () => {
+    if (params.oauthExecution) {
+      await authorizeA2AOAuthExecution({
+        agentId,
+        organizationId,
+        execution: params.oauthExecution,
+      });
+    }
+  };
+  await authorizeOAuthExecution();
   const agent = await AgentModel.findById(agentId);
   if (!agent) {
     throw new Error(`Agent ${agentId} not found`);
@@ -284,6 +325,15 @@ export async function executeA2AMessage(
     throw new Error(
       `Agent ${agentId} is not an internal agent (A2A requires agents with agentType='agent')`,
     );
+  }
+
+  if (
+    !(await canUseAgent(agentId, {
+      userId,
+      organizationId: agent.organizationId,
+    }))
+  ) {
+    throw new Error(`Agent ${agentId} not found`);
   }
 
   // An agent set to block callers who cannot reach its MCP servers means it
@@ -306,27 +356,23 @@ export async function executeA2AMessage(
     await assertCallerMayStartTurn({ agentId, userId });
   }
 
-  // The advisor's row is env-less, so without this its spend would escape
-  // environment budgets entirely; every other agent bills to its own row's
-  // environment as usual.
-  const delegationBillingEnvironmentId =
-    agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR
-      ? (params.callerEnvironmentId ?? null)
-      : null;
-
-  const { selectedModel, selectedProvider: provider } =
-    await resolveConversationLlmSelectionForAgent({
-      agent: {
-        llmApiKeyId: agent.llmApiKeyId,
-        modelId: agent.modelId,
-      },
-      organizationId,
-      userId,
-      // A2A runs (chatops, scheduled triggers, external A2A, delegation) are not
-      // the user driving the /chat model selector, so they resolve from the
-      // agent's own configuration rather than the caller's personal chat default.
-      includeMemberChatDefault: false,
-    });
+  const {
+    modelId: resolvedModelId,
+    selectedModel,
+    selectedProvider: provider,
+    chatApiKeyId: resolvedApiKeyId,
+  } = await resolveRunLlmSelection({
+    agent,
+    organizationId,
+    userId,
+    ...(params.selfFork && { parentLlm: params.parentLlm, tier: params.tier }),
+  });
+  // Run on the key that was selected with the model (the agent's own, or the
+  // organization default's). Without it, key lookup prefers the caller's
+  // personal key and the run sends a key the selection never chose.
+  const llmApiKeyId = resolvedApiKeyId ?? agent.llmApiKeyId;
+  // An agent set to a pool runs on it; a fork runs on its parent's model.
+  const modelPoolId = params.selfFork ? null : agent.modelPoolId;
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -343,24 +389,33 @@ export async function executeA2AMessage(
     // Fetch MCP tools for the agent (including delegation tools)
     // Pass sessionId, delegationChain, and isolationKey for browser tab isolation
     const mcpTools = await getChatMcpTools({
+      oauthExecution: params.oauthExecution,
       agentName: agent.name,
       agentId: agent.id,
       userId,
-      actorTeamId,
       organizationId,
       chatOpsBindingId,
       chatOpsThreadId,
+      chatOpsPinnedAgentId,
       sessionId,
       delegationChain,
       conversationId: params.conversationId,
       isolationKey,
       abortSignal,
-      blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
       // Forward the same bridge so a nested delegation's tool calls surface too,
       // attributed to the nested delegation call (recursion through the chain).
       subagentToolStream,
       repeatTracker,
+      appaSubagent: params.appaSubagent,
+      parentLlm: resolvedModelId
+        ? { modelId: resolvedModelId, apiKeyId: resolvedApiKeyId }
+        : undefined,
+      // A delegated run's pause would never reach whoever answers the root.
+      openappaReviewPause:
+        params.openappaReviewPause === true &&
+        !parentDelegationChain &&
+        !params.appaSubagent,
     });
 
     const systemPrompt = await buildAgentSystemPrompt({
@@ -369,6 +424,7 @@ export async function executeA2AMessage(
       organizationId,
       userId,
       agentId: agent.id,
+      isFork: params.selfFork === true,
     });
 
     logger.info(
@@ -388,21 +444,32 @@ export async function executeA2AMessage(
     // Create LLM model using shared service
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
-    // Pass agent's llmApiKeyId so it can be used without user access check
-    const { model, anthropicNativeEndpoint, chatApiKeyId } =
-      await createLLMModelForAgent({
+    // Pass the resolved key so it can be used without user access check
+    const {
+      model: providerModel,
+      anthropicNativeEndpoint,
+      chatApiKeyId,
+    } = await createLLMModelForAgent({
+      organizationId,
+      userId,
+      agentId: agent.id,
+      model: selectedModel,
+      provider,
+      sessionId,
+      source,
+      externalAgentId: delegationChain,
+      agentLlmApiKeyId: llmApiKeyId,
+      modelPoolId,
+      appaSubagentToken: params.appaSubagent?.token,
+    });
+    const authorizeModel = (model: typeof providerModel) =>
+      authorizeA2AModel({
+        model,
+        agentId,
         organizationId,
-        userId,
-        agentId: agent.id,
-        model: selectedModel,
-        provider,
-        sessionId,
-        source,
-        externalAgentId: delegationChain,
-        agentLlmApiKeyId: agent.llmApiKeyId,
-        contextIsTrusted: parentContextIsTrusted,
-        delegationBillingEnvironmentId,
+        execution: params.oauthExecution,
       });
+    const model = authorizeModel(providerModel);
 
     // Which attachment mime types this model can read. A missing model row
     // (lookup failure or unknown model) falls back to the safe default set
@@ -419,7 +486,7 @@ export async function executeA2AMessage(
     // one is usable for this caller. Resolved only when there are attachments, so
     // text-only turns (the common case) skip the permission/DB chain. Skip the
     // lookup for the synthetic "system" actor (external A2A v2) — it can never
-    // hold `sandbox:execute`.
+    // hold `agent:read`.
     const sandboxAvailable =
       (attachments?.length ?? 0) > 0 && userId && userId !== "system"
         ? await isSkillSandboxAvailableForAgent({
@@ -522,6 +589,22 @@ export async function executeA2AMessage(
         openAiReasoningSummaryKey,
       ));
 
+    const stepContextGuard = createStepContextGuard({
+      model,
+      contextLength: modelRow
+        ? ModelModel.resolveEffectiveContextLength(modelRow)
+        : null,
+      systemPrompt,
+      abortSignal,
+      logContext: { agentId: agent.id, sessionId },
+      ...(usesStepPromptCache({ provider, anthropicNativeEndpoint }) && {
+        promptCache: {
+          provider,
+          model: selectedModel,
+          anthropicNativeEndpoint,
+        },
+      }),
+    });
     const baseConfig = {
       model,
       system: systemPrompt,
@@ -546,22 +629,26 @@ export async function executeA2AMessage(
         ...(abortSignal && { abortSignal }),
         // Its own interaction source, so a re-ask stays distinguishable from
         // the turn that provoked it.
-        createRepairModel: async () =>
-          (
-            await createLLMModelForAgent({
-              organizationId,
-              userId,
-              agentId: agent.id,
-              model: selectedModel,
-              provider,
-              sessionId,
-              source: "a2a:tool_call_repair",
-              externalAgentId: delegationChain,
-              agentLlmApiKeyId: agent.llmApiKeyId,
-              contextIsTrusted: parentContextIsTrusted,
-              delegationBillingEnvironmentId,
-            })
-          ).model,
+        createRepairModel: async () => {
+          await authorizeOAuthExecution();
+          return authorizeModel(
+            (
+              await createLLMModelForAgent({
+                organizationId,
+                userId,
+                agentId: agent.id,
+                model: selectedModel,
+                provider,
+                sessionId,
+                source: "a2a:tool_call_repair",
+                externalAgentId: delegationChain,
+                agentLlmApiKeyId: llmApiKeyId,
+                modelPoolId,
+                appaSubagentToken: params.appaSubagent?.token,
+              })
+            ).model,
+          );
+        },
       }),
       // Per-transport shape for the output budget resolved above.
       // - Native Ollama discards the top-level `maxOutputTokens` and reads the
@@ -610,15 +697,12 @@ export async function executeA2AMessage(
       // the older prefix into an LLM summary when it overflows. Overrides only
       // what each step sends to the model — the loop's own state (and the
       // persisted/streamed UIMessage) keeps the full tool outputs.
-      prepareStep: createStepContextGuard({
-        model,
-        contextLength: modelRow
-          ? ModelModel.resolveEffectiveContextLength(modelRow)
-          : null,
-        systemPrompt,
-        abortSignal,
-        logContext: { agentId: agent.id, sessionId },
-      }),
+      prepareStep: async (step: { messages: ModelMessage[] }) => {
+        await authorizeOAuthExecution();
+        const prepared = await stepContextGuard(step);
+        await authorizeOAuthExecution();
+        return prepared;
+      },
     };
     const currentTurn: { role: "user"; content: UserContent } | null =
       userContent !== null
@@ -667,6 +751,13 @@ export async function executeA2AMessage(
       });
       const stream = runStream.result;
       getCapturedStreamError = runStream.getCapturedStreamError;
+      const emitLiveSubagentToolCall =
+        subagentToolStream && delegationToolCallId
+          ? createLiveSubagentToolCallEmitter({
+              bridge: subagentToolStream,
+              parentToolCallId: delegationToolCallId,
+            })
+          : undefined;
 
       const uiMessageStreamConsumption = consumeReadableStream({
         stream: stream
@@ -699,6 +790,7 @@ export async function executeA2AMessage(
           .pipeThrough(
             new TransformStream<UIMessageChunk, UIMessageChunk>({
               async transform(chunk, controller) {
+                emitLiveSubagentToolCall?.(chunk);
                 await params.onUiMessageChunk?.(chunk);
                 controller.enqueue(chunk);
               },
@@ -890,6 +982,49 @@ type StageAttachmentsFn = (
 ) => Promise<StageResult[]>;
 
 /**
+ * Surface a child run's tool calls while it runs: each call when its input is
+ * ready, again when it settles. The final-message pass in
+ * {@link emitSubagentToolCalls} re-emits the terminal states afterwards.
+ * @public — exported for testability
+ */
+export function createLiveSubagentToolCallEmitter(params: {
+  bridge: SubagentToolStreamBridge;
+  parentToolCallId: string;
+}): (chunk: UIMessageChunk) => void {
+  const { bridge, parentToolCallId } = params;
+  const calls = new Map<string, { toolName: string; input: unknown }>();
+  return (chunk) => {
+    switch (chunk.type) {
+      case "tool-input-available": {
+        const call = { toolName: chunk.toolName, input: chunk.input };
+        calls.set(chunk.toolCallId, call);
+        bridge.emit({
+          parentToolCallId,
+          toolCallId: chunk.toolCallId,
+          ...call,
+          state: "input-available",
+        });
+        return;
+      }
+      case "tool-output-available":
+      case "tool-output-error": {
+        const call = calls.get(chunk.toolCallId);
+        if (!call) return;
+        bridge.emit({
+          parentToolCallId,
+          toolCallId: chunk.toolCallId,
+          ...call,
+          ...(chunk.type === "tool-output-available"
+            ? { state: "output-available", output: chunk.output }
+            : { state: "output-error", errorText: chunk.errorText }),
+        });
+        return;
+      }
+    }
+  };
+}
+
+/**
  * Emit one `data-subagent-tool-call` per tool part in a child run's final
  * message, attributed to the delegation call that invoked the child. The bridge
  * caps payloads and streams/collects each call. Skips non-tool parts (text,
@@ -954,7 +1089,9 @@ export function emitSubagentToolCalls(params: {
  * Build the current user turn's AI SDK content from a text message and optional
  * attachments, mirroring the chat-side attachment policy
  * (`chatUploadRejectionReason`):
- *   - images: kept inline, minus the tiny-broken-image filter;
+ *   - images: kept inline, minus the tiny-broken-image filter, and — when a
+ *     sandbox is available and the image fits the artifact limit — also staged
+ *     into the sandbox so tools can use the bytes;
  *   - inlineable text ≤ {@link INLINE_TEXT_MAX_BYTES}: kept inline (decoded per
  *     provider by `prepareMessagesForProvider`);
  *   - other model-ingestible types (PDF, audio, video): kept inline at any size;
@@ -997,7 +1134,7 @@ export async function buildUserContent(
   // Images are matched broadly by `image/*` and always kept (subject to the
   // tiny-broken-image filter), deliberately bypassing the mime classifier: a
   // model's readable set may omit a non-standard subtype (e.g. `image/jpg`) that
-  // the provider still renders, so images are never staged or rejected here.
+  // the provider still renders, so images are never rejected here.
   const imageAttachments = allAttachments.filter((a) =>
     a.contentType.startsWith("image/"),
   );
@@ -1038,22 +1175,33 @@ export async function buildUserContent(
     }
   }
 
-  // Stage the sandbox-bound attachments. A creation/upload failure surfaces as a
-  // note (no silent drop) and the turn continues with whatever else survived.
+  // Images stay inline (the model sees them) but are also copied into the
+  // sandbox when one is usable, mirroring chat-UI auto-staging: an inline image
+  // gives the model no bytes to act on, so without a sandbox copy it cannot hand
+  // the picture to a tool (attach it to a post, upload it elsewhere, edit it).
+  const imagesToStage = sandboxAvailable
+    ? validImageAttachments.filter(
+        (a) => estimateAttachmentBytes(a) <= sandboxByteLimit,
+      )
+    : [];
+
+  // Stage the sandbox-bound attachments in one call (one sandbox resolution). A
+  // creation/upload failure of a sandbox-only file surfaces as a note (no silent
+  // drop) and the turn continues with whatever else survived; a failed image
+  // copy needs no note because the image itself is still inline.
   const stagedPointers: Array<{ name: string; path: string }> = [];
   const stageFailed: A2AAttachment[] = [];
-  if (toStage.length > 0) {
+  const stageBatch = [...toStage, ...imagesToStage];
+  if (stageBatch.length > 0) {
     const results = opts.stageAttachments
-      ? await opts.stageAttachments(toStage)
-      : toStage.map(() => ({ error: true as const }));
+      ? await opts.stageAttachments(stageBatch)
+      : stageBatch.map(() => ({ error: true as const }));
     results.forEach((result, i) => {
+      const att = stageBatch[i];
       if ("path" in result) {
-        stagedPointers.push({
-          name: toStage[i].name ?? "unnamed",
-          path: result.path,
-        });
-      } else {
-        stageFailed.push(toStage[i]);
+        stagedPointers.push({ name: att.name ?? "unnamed", path: result.path });
+      } else if (i < toStage.length) {
+        stageFailed.push(att);
       }
     });
   }
@@ -1131,6 +1279,37 @@ export async function buildUserContent(
 // ============================================================================
 // Internal helper functions
 // ============================================================================
+
+/**
+ * A fork starts from its parent's model, moved to its tier when one is asked
+ * for; any other run resolves from the agent's own configuration.
+ */
+async function resolveRunLlmSelection(params: {
+  agent: {
+    llmApiKeyId: string | null;
+    modelId: string | null;
+  } & ModelTrioTiers;
+  organizationId: string;
+  userId: string;
+  parentLlm?: ModelSelection;
+  tier?: SubagentModelTier;
+}) {
+  const { llmApiKeyId, modelId } = params.agent;
+  const base = await resolveForkParentSelection({
+    agent: { llmApiKeyId, modelId },
+    organizationId: params.organizationId,
+    userId: params.userId,
+    parentLlm: params.parentLlm,
+  });
+  return params.tier
+    ? resolveSubagentTierSelection({
+        tier: params.tier,
+        parent: base,
+        agentTrio: params.agent,
+        organizationId: params.organizationId,
+      })
+    : base;
+}
 
 /** Estimate decoded byte size from base64 length: every 4 chars = 3 bytes. */
 function estimateAttachmentBytes(att: A2AAttachment): number {

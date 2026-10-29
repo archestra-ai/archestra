@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { isRateLimited, type RateLimitEntry } from "./utils";
 
-// The canonical Map-backed fake from src/__mocks__/cache-manager.ts; reads
-// and seeds below go through the fake's own get/set.
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 describe("isRateLimited", () => {
   const testConfig = { windowMs: 60_000, maxRequests: 3 };

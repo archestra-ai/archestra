@@ -29,8 +29,8 @@ export function FileDetailHeader({
       {expanded && (
         <Button
           variant="ghost"
-          size="sm"
-          className="-ml-2 h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground"
+          size="xs"
+          className="-ml-2 shrink-0 text-muted-foreground"
           onClick={onCollapse}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -44,15 +44,17 @@ export function FileDetailHeader({
         {title}
       </span>
       {!expanded && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
           onClick={onExpand}
           title="Expand to full panel"
-          className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="text-muted-foreground"
         >
           <Maximize2 className="h-4 w-4" />
           <span className="sr-only">Expand to full panel</span>
-        </button>
+        </Button>
       )}
       {children}
     </div>

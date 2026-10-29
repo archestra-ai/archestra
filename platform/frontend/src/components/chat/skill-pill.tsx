@@ -95,8 +95,11 @@ export function SkillPill({
     >
       {display.name ? (
         skillsHref ? (
+          // A new tab keeps the conversation in place.
           <Link
             href={skillsHref}
+            target="_blank"
+            rel="noreferrer"
             className="min-w-0 truncate text-xs font-medium text-foreground transition-colors hover:text-primary"
           >
             {display.name}

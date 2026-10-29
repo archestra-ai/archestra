@@ -1,7 +1,13 @@
 "use client";
 
 import { POPULAR_PLUGIN_MARKETPLACES } from "@archestra/shared";
-import { ArrowLeft, ArrowRight, FileText, Github } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  FileText,
+  GitBranch,
+  Github,
+} from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -16,9 +22,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
-import { useFeature } from "@/lib/config/config.query";
 import { useCreatePlugin } from "@/lib/plugins/plugin.query";
 import { ImportMarketplaceDialog } from "../_parts/import-marketplace-dialog";
 import {
@@ -37,7 +43,7 @@ const CREATE_STEPS: Array<{ id: CreateStep; title: string }> = [
 ];
 
 const STEP_DESCRIPTIONS: Record<CreateStep, string> = {
-  source: "Import from GitHub, or start blank.",
+  source: "Import from GitHub or GitLab, or start blank.",
   // The whole plugin is on one page, so the sentence names the whole of it —
   // and the plugin's own page says the same thing over the same form.
   configure:
@@ -48,32 +54,10 @@ export default function NewPluginPage() {
   return (
     <div className="h-full w-full">
       <ErrorBoundary>
-        <NewPluginGate />
+        <NewPluginWizard />
       </ErrorBoundary>
     </div>
   );
-}
-
-function NewPluginGate() {
-  const enabled = useFeature("plugins");
-
-  if (enabled === undefined) {
-    return null;
-  }
-
-  if (!enabled) {
-    return (
-      <PageLayout
-        title="Plugins"
-        description="Plugins are disabled for this deployment."
-        maxWidth="wizard"
-      >
-        <div />
-      </PageLayout>
-    );
-  }
-
-  return <NewPluginWizard />;
 }
 
 function NewPluginWizard() {
@@ -115,6 +99,7 @@ function NewPluginWizard() {
     const created = await createPlugin
       .mutateAsync({
         displayName: draft.displayName.trim(),
+        icon: draft.icon,
         description: draft.description,
         clientType: draft.clientType,
         supportedPlatforms: draft.supportedPlatforms,
@@ -190,9 +175,9 @@ function NewPluginWizard() {
             <div className="mx-auto max-w-3xl space-y-8">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <CatalogSourceCard
-                  icon={<Github className="size-5" />}
-                  title="Custom GitHub URL"
-                  description="Paste a GitHub marketplace URL."
+                  icon={<GitBranch className="size-5" />}
+                  title="Git repository"
+                  description="GitHub or GitLab, public or private."
                   onClick={openImport}
                 />
                 <CatalogSourceCard
@@ -240,7 +225,7 @@ function NewPluginWizard() {
                         return (
                           <li key={item.repo}>
                             {idx > 0 && <Separator />}
-                            <button
+                            <UnstyledButton
                               type="button"
                               onClick={() => importPopular(item.repo)}
                               className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
@@ -263,7 +248,7 @@ function NewPluginWizard() {
                                 </div>
                               </div>
                               <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                            </button>
+                            </UnstyledButton>
                           </li>
                         );
                       })}

@@ -4,6 +4,7 @@ import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import AgentModel from "@/models/agent";
+import OrganizationModel from "@/models/organization";
 import {
   afterAll,
   beforeAll,
@@ -40,6 +41,31 @@ describe("websocket browser-stream screenshot handling", () => {
     service.browserStreamContext.clearSubscriptions();
     // Mock Playwright tools as assigned so browser stream tests can proceed
     vi.spyOn(AgentModel, "hasPlaywrightToolsAssigned").mockResolvedValue(true);
+  });
+
+  test("rejects browser subscriptions while policy is disabled", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await OrganizationModel.patch(org.id, { playwrightMcpEnabled: false });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, { userId: user.id, organizationId: org.id });
+    const selectTab = vi.spyOn(browserStreamFeature, "selectOrCreateTab");
+    await service.handleMessage(
+      {
+        type: "subscribe_browser_stream",
+        payload: { conversationId: "disabled-conversation" },
+      },
+      ws,
+    );
+    expect(selectTab).not.toHaveBeenCalled();
+    expect(ws.send).toHaveBeenCalledWith(expect.stringContaining("disabled"));
   });
 
   test("sends an error when screenshot data is missing", async ({
@@ -96,7 +122,7 @@ describe("websocket browser-stream screenshot handling", () => {
     service.browserStreamContext.unsubscribeBrowserStream(ws);
   });
 
-  test("click sends an immediate screenshot update", async ({
+  test("click streams a quick frame, then a settled one", async ({
     makeAgent,
     makeConversation,
     makeOrganization,
@@ -125,10 +151,13 @@ describe("websocket browser-stream screenshot handling", () => {
       success: true,
       tabIndex: 0,
     });
-    vi.spyOn(browserStreamFeature, "takeScreenshot").mockResolvedValue({
-      screenshot: "img",
-      url: "http://example.com",
-    });
+    const takeScreenshot = vi
+      .spyOn(browserStreamFeature, "takeScreenshot")
+      .mockImplementation(async (_agentId, _conversationId, _user, options) =>
+        options?.fast
+          ? { screenshot: "quick" }
+          : { screenshot: "img", url: "http://example.com" },
+      );
     vi.spyOn(browserStreamFeature, "click").mockResolvedValue({
       success: true,
     });
@@ -163,17 +192,28 @@ describe("websocket browser-stream screenshot handling", () => {
         },
       }),
     );
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: "browser_screenshot",
-        payload: {
-          conversationId: conversation.id,
-          screenshot: "img",
-          url: "http://example.com",
-          canGoBack: true,
-        },
-      }),
-    );
+    takeScreenshot.mockClear();
+    // Quick frame shortly after the click, settled frame once input pauses
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    expect(
+      takeScreenshot.mock.calls.map(([, , , options]) => !!options?.fast),
+    ).toEqual([true, false]);
+    const frames = (
+      ws.send as unknown as { mock: { calls: string[][] } }
+    ).mock.calls
+      .map(([raw]) => JSON.parse(raw))
+      .filter((m) => m.type === "browser_screenshot")
+      .map((m) => m.payload);
+    expect(frames).toEqual([
+      { conversationId: conversation.id, screenshot: "quick" },
+      {
+        conversationId: conversation.id,
+        screenshot: "img",
+        url: "http://example.com",
+        canGoBack: true,
+      },
+    ]);
 
     service.browserStreamContext.unsubscribeBrowserStream(ws);
   });

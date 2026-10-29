@@ -298,6 +298,16 @@ describe("ModelsDevClient", () => {
     test("returns null for unknown providers", () => {
       expect(modelsDevClient.mapProvider("unknown-provider")).toBeNull();
     });
+
+    test("maps Moonshot's platform catalog to kimi and both Kimi Code plan catalogs to kimi-code", () => {
+      expect(modelsDevClient.mapProvider("moonshotai")).toBe("kimi");
+      expect(modelsDevClient.mapProvider("kimi-code-plan-global")).toBe(
+        "kimi-code",
+      );
+      expect(modelsDevClient.mapProvider("kimi-code-plan-cn")).toBe(
+        "kimi-code",
+      );
+    });
   });
 
   describe("convertToModel", () => {
@@ -487,6 +497,69 @@ describe("ModelsDevClient", () => {
       );
     });
 
+    test("keeps one Kimi Code plan model per id, from the global catalog", async () => {
+      // Both Kimi Code regions publish the same plan ids. The China catalog
+      // comes first here so the outcome shows the preference, not the input
+      // order. The platform catalog's ids belong to the kimi provider.
+      const mockResponse = createMockApiResponse({
+        "kimi-code-plan-cn": createMockProvider("kimi-code-plan-cn", {
+          "k3.1-pro": createMockModel({
+            id: "k3.1-pro",
+            name: "K3.1 Pro (kimi.com)",
+            cost: { input: 0, output: 0 },
+          }),
+        }),
+        "kimi-code-plan-global": createMockProvider("kimi-code-plan-global", {
+          "k3.1-pro": createMockModel({
+            id: "k3.1-pro",
+            name: "K3.1 Pro (kimi.ai)",
+            cost: { input: 0, output: 0, cache_read: 0 },
+          }),
+        }),
+        moonshotai: createMockProvider("moonshotai", {
+          "kimi-k3.1-pro": createMockModel({
+            id: "kimi-k3.1-pro",
+            name: "Kimi K3.1 Pro",
+            cost: { input: 2, output: 10 },
+          }),
+        }),
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const count = await modelsDevClient.syncModelMetadata(true);
+
+      expect(count).toBe(2);
+      const planModel = await ModelModel.findByProviderAndModelId(
+        "kimi-code",
+        "k3.1-pro",
+      );
+      expect(
+        await ModelModel.findByProviderAndModelId("kimi", "k3.1-pro"),
+      ).toBeFalsy();
+      expect(planModel?.externalId).toBe("kimi-code-plan-global/k3.1-pro");
+      expect(planModel?.description).toBe("K3.1 Pro (kimi.ai)");
+      // The plan's zero rates must persist as zeros (the column is a
+      // numeric(20, 12), read back as a decimal string): a null rate falls
+      // back to the estimated price and can exhaust a cost-capped run.
+      expect(planModel?.promptPricePerToken).not.toBeNull();
+      expect(Number(planModel?.promptPricePerToken)).toBe(0);
+      expect(planModel?.completionPricePerToken).not.toBeNull();
+      expect(Number(planModel?.completionPricePerToken)).toBe(0);
+      expect(planModel?.cacheReadPricePerToken).not.toBeNull();
+      expect(Number(planModel?.cacheReadPricePerToken)).toBe(0);
+      const platformModel = await ModelModel.findByProviderAndModelId(
+        "kimi",
+        "kimi-k3.1-pro",
+      );
+      expect(platformModel?.externalId).toBe("moonshotai/kimi-k3.1-pro");
+      expect(Number(platformModel?.promptPricePerToken)).toBe(0.000002);
+      expect(Number(platformModel?.completionPricePerToken)).toBe(0.00001);
+    });
+
     test("maps Google provider to Gemini", async () => {
       const mockResponse = createMockApiResponse({
         google: createMockProvider("google", {
@@ -512,14 +585,15 @@ describe("ModelsDevClient", () => {
       expect(metadata?.provider).toBe("gemini");
     });
 
-    test("returns 0 when API returns no providers", async () => {
+    test("fails when the API returns no providers", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({}),
       });
 
-      const count = await modelsDevClient.syncModelMetadata(true);
-      expect(count).toBe(0);
+      await expect(modelsDevClient.syncModelMetadata(true)).rejects.toThrow(
+        "No providers returned",
+      );
     });
 
     test("handles models with PDF input modality", async () => {
@@ -639,7 +713,7 @@ describe("ModelsDevClient", () => {
   });
 
   describe("syncIfNeeded with retry", () => {
-    test("calls syncModelMetadata in background", async () => {
+    test("syncs model metadata when no sync is recorded", async () => {
       const mockResponse = createMockApiResponse({
         openai: createMockProvider("openai", {
           "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
@@ -651,11 +725,7 @@ describe("ModelsDevClient", () => {
         json: () => Promise.resolve(mockResponse),
       });
 
-      // syncIfNeeded is non-blocking, so we need to wait a bit
-      modelsDevClient.syncIfNeeded();
-
-      // Wait for async operation to complete
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await modelsDevClient.syncIfNeeded();
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });

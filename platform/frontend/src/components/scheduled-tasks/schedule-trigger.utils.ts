@@ -1,6 +1,13 @@
 import type { UseMutationResult } from "@tanstack/react-query";
 import { Cron } from "croner";
 import type { ScheduleTriggerRunStatus } from "@/lib/schedule-trigger.query";
+import { browserTimeZone } from "@/lib/utils/time-zone";
+import { isScheduleTriggerRunActive } from "./schedule-run-state";
+
+export {
+  getScheduledRunChatState,
+  isScheduleTriggerRunActive,
+} from "./schedule-run-state";
 
 export type AgentOption = {
   value: string;
@@ -20,7 +27,7 @@ export const DEFAULT_FORM_STATE = (): ScheduleTriggerFormState => ({
   name: "",
   agentId: "",
   cronExpression: "0 9 * * 1-5",
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  timezone: browserTimeZone(),
   messageTemplate: "",
 });
 
@@ -215,31 +222,6 @@ export function getActiveMutationVariable<T>(
   >,
 ): T | null {
   return mutation.isPending ? (mutation.variables ?? null) : null;
-}
-
-export function isScheduleTriggerRunActive(
-  status: ScheduleTriggerRunStatus | null | undefined,
-): boolean {
-  return status === "running";
-}
-
-/**
- * Decides how the chat pane should present a conversation that backs a scheduled
- * run. Live output uses chat replay with the normal composer and Stop control.
- * `context` is the schedule context read
- * from the chat URL (null for an ordinary chat); `runStatus` is the pinned run's
- * status (undefined until it loads).
- */
-export function getScheduledRunChatState(params: {
-  context: { triggerId: string; runId: string | null } | null;
-  runStatus: ScheduleTriggerRunStatus | null | undefined;
-}): { isScheduledRunChat: boolean; isRunInProgress: boolean } {
-  const isScheduledRunChat = params.context !== null;
-  const isRunInProgress =
-    isScheduledRunChat &&
-    params.context?.runId != null &&
-    isScheduleTriggerRunActive(params.runStatus);
-  return { isScheduledRunChat, isRunInProgress };
 }
 
 export function getRunNowTrackingState(params: {

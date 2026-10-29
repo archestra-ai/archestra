@@ -86,6 +86,7 @@ export function ProxyCostPanel({
             {backButton}
             <QueryLoadError
               title="Could not load proxy costs"
+              error={query.error}
               onRetry={() => query.refetch()}
             />
           </>
@@ -111,10 +112,7 @@ export function ProxyCostPanel({
                   dollars(totals.subscriptionCost),
                 ],
                 ["Requests", totals.requests.toLocaleString()],
-                [
-                  "Tokens (input + output)",
-                  (totals.inputTokens + totals.outputTokens).toLocaleString(),
-                ],
+                ["Tokens", totals.totalTokens.toLocaleString()],
               ].map(([label, value]) => (
                 <div key={label}>
                   <p className="text-xs text-muted-foreground">{label}</p>
@@ -227,7 +225,7 @@ export function ProxyCostPanel({
                         {row.requests.toLocaleString()}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {(row.inputTokens + row.outputTokens).toLocaleString()}
+                        {row.totalTokens.toLocaleString()}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {dollars(row.billedCost)}
@@ -285,6 +283,7 @@ const METHOD_NAMES: Record<NonNullable<AuthMethod>, string> = {
   oauth_user: "OAuth user sign-in",
   jwks: "JWT / JWKS",
   provider_key: "Provider key",
+  personal_token: "Personal token",
   internal: "Internal",
   unknown: "Unknown / legacy",
 };

@@ -1,7 +1,16 @@
+import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
+
 export interface A2AActor {
   id: string;
-  kind: "user" | "team" | "organization" | "system";
+  kind:
+    | "user"
+    | "team"
+    | "organization"
+    | "oauthClient"
+    | "serviceAccount"
+    | "system";
   organizationId: string;
+  oauthExecution?: A2AOAuthExecution;
 }
 
 export enum A2AErrorKind {

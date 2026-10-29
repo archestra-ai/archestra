@@ -3,6 +3,7 @@ import { useTheme } from "next-themes";
 import { useAppearanceSettings } from "@/lib/organization.query";
 
 export const DEFAULT_APP_LOGO = "/logo-icon.svg";
+const DEFAULT_APP_LOGO_DARK = "/logo-icon-dark.svg";
 
 /**
  * Returns the configured app name, preferring authenticated organization data
@@ -24,5 +25,6 @@ export function useAppIconLogo(): string {
   const dark = appearance?.iconLogoDark;
   const light = appearance?.iconLogo;
   if (resolvedTheme === "dark" && dark) return dark;
-  return light ?? DEFAULT_APP_LOGO;
+  if (light) return light;
+  return resolvedTheme === "dark" ? DEFAULT_APP_LOGO_DARK : DEFAULT_APP_LOGO;
 }

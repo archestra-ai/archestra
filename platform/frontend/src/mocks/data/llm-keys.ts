@@ -26,8 +26,7 @@ export function makeLlmProviderApiKey(
     updatedAt: "2026-01-01T00:00:00.000Z",
     teamName: null,
     userName: "Test Admin",
-    vaultSecretPath: null,
-    vaultSecretKey: null,
+
     secretStorageType: "database",
     bestModelId: null,
     isAgentKey: false,
@@ -50,6 +49,7 @@ export function makeVirtualKey(
     name: "test-virtual-key",
     labels: [],
     keyType: "standard",
+    includeFutureProviders: false,
     secretId: "test-vk-secret",
     tokenStart: "archestra_test",
     scope: "personal",
@@ -60,6 +60,9 @@ export function makeVirtualKey(
     teams: [],
     authorName: "Test Admin",
     providerApiKeys: [],
+    billingTeamId: null,
+    billingTeam: null,
+    spendCap: null,
     ...overrides,
   };
 }

@@ -22,6 +22,8 @@ interface OverlappedIconsProps {
   className?: string;
   /** Tooltip text for overflow items (defaults to listing hidden tooltips) */
   overflowTooltip?: string;
+  /** Additional className for each circle, including the overflow badge */
+  itemClassName?: string;
 }
 
 export function OverlappedIcons({
@@ -30,6 +32,7 @@ export function OverlappedIcons({
   size = "md",
   className,
   overflowTooltip,
+  itemClassName,
 }: OverlappedIconsProps) {
   if (icons.length === 0) return null;
 
@@ -58,6 +61,7 @@ export function OverlappedIcons({
             className={cn(
               "flex shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background overflow-hidden",
               sizeClass,
+              itemClassName,
             )}
           >
             <div className={cn("flex items-center justify-center", iconSize)}>
@@ -86,6 +90,7 @@ export function OverlappedIcons({
                   "flex shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-background font-medium text-muted-foreground",
                   sizeClass,
                   overflowTextSize,
+                  itemClassName,
                 )}
               >
                 +{overflowCount}

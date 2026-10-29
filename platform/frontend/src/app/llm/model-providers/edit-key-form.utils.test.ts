@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
 import {
@@ -16,9 +17,7 @@ function makeValues(
     inferenceBaseUrl: null,
     extraHeaders: [],
     shared: false,
-    teamId: null,
-    vaultSecretPath: null,
-    vaultSecretKey: null,
+
     isPrimary: false,
     bedrockAuthMethod: "api-key",
     awsAccessKeyId: null,

@@ -15,6 +15,7 @@ import {
   ChatCompletionRequestSchema as OpenAIChatCompletionRequestSchema,
   ChatCompletionResponseSchema as OpenAIChatCompletionResponseSchema,
 } from "../openai/api";
+import { MessageParamSchema } from "./messages";
 
 export {
   ChatCompletionsHeadersSchema,
@@ -52,6 +53,7 @@ const ReasoningSchema = z.object({
 // OpenRouter plugins.
 export const ChatCompletionRequestSchema =
   OpenAIChatCompletionRequestSchema.extend({
+    messages: z.array(MessageParamSchema),
     response_format: ResponseFormatSchema.optional(),
     reasoning: ReasoningSchema.optional(),
   });

@@ -9,9 +9,8 @@ export function PluginClientIcon({
   clientType: string;
   size?: number;
 }) {
-  const filterValue = clientType === "claude-code" ? "claude" : clientType;
   const client = CLIENT_FILTER_OPTIONS.find(
-    (option) => option.value === filterValue,
+    (option) => option.value === clientType,
   );
   return client ? <ClientIcon client={client} size={size} /> : null;
 }

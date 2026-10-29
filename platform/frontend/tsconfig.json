@@ -48,7 +48,11 @@
     ".next-pw-shard-1/types/**/*.ts",
     ".next-pw-shard-1/dev/types/**/*.ts",
     ".next-pw-shard-2/types/**/*.ts",
-    ".next-pw-shard-2/dev/types/**/*.ts"
+    ".next-pw-shard-2/dev/types/**/*.ts",
+    ".next-pw-shard-3/types/**/*.ts",
+    ".next-pw-shard-3/dev/types/**/*.ts",
+    ".next-pw-shard-4/types/**/*.ts",
+    ".next-pw-shard-4/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

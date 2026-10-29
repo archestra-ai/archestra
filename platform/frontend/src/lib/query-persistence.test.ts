@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearPersistedQueryCache,
   PERSISTED_QUERY_META,
@@ -31,7 +31,7 @@ async function seed(
 
 /** Force the debounced writer to flush. */
 async function flushWrites() {
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  await vi.advanceTimersByTimeAsync(600);
 }
 
 describe("query persistence", () => {
@@ -39,6 +39,9 @@ describe("query persistence", () => {
   let stop: () => void;
 
   beforeEach(() => {
+    // Only the clock that drives the write debounce is faked; `Date` stays
+    // real so snapshot age checks behave as in the browser.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     // Also resets the module's notion of the active scope, so one test's
     // scope cannot leak into the next.
     clearPersistedQueryCache();
@@ -51,6 +54,7 @@ describe("query persistence", () => {
     stop();
     client.clear();
     window.sessionStorage.clear();
+    vi.useRealTimers();
   });
 
   it("restores only the queries that opted in", async () => {
@@ -64,6 +68,25 @@ describe("query persistence", () => {
 
     expect(restored.getQueryData(["shell"])).toEqual({ name: "Acme" });
     expect(restored.getQueryData(["volatile"])).toBeUndefined();
+  });
+
+  it("does not persist invalidated data before it has been refetched", async () => {
+    await seed(
+      client,
+      ["agents", "list"],
+      { data: [{ name: "Before" }] },
+      true,
+    );
+    await seed(client, ["shell"], { name: "Unchanged" }, true);
+    syncPersistedQueryCacheScope(client, "user-1:org-1");
+    await client.invalidateQueries({ queryKey: ["agents"] });
+    await flushWrites();
+
+    const restored = makeClient();
+    restorePersistedQueryCache(restored);
+    expect(restored.getQueryData(["agents", "list"])).toBeUndefined();
+    expect(restored.getQueryData(["shell"])).toEqual({ name: "Unchanged" });
+    restored.clear();
   });
 
   it("keeps credentials out of the snapshot", async () => {
@@ -159,6 +182,24 @@ describe("query persistence", () => {
     expect(window.sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
+  it("never replaces a value the page already holds with the snapshot", async () => {
+    await seed(client, ["shell"], { name: "Stale" }, true);
+    syncPersistedQueryCacheScope(client, "user-1:org-1");
+    await flushWrites();
+
+    const restored = makeClient();
+    // The document's server seed, stamped by a clock that runs behind the
+    // one that wrote the snapshot.
+    restored.setQueryData(
+      ["shell"],
+      { name: "Seeded" },
+      { updatedAt: Date.now() - 60_000 },
+    );
+    restorePersistedQueryCache(restored);
+
+    expect(restored.getQueryData(["shell"])).toEqual({ name: "Seeded" });
+  });
+
   it("leaves a fetch in flight free to replace the restored value", async () => {
     await seed(client, ["shell"], { name: "Stale" }, true);
     syncPersistedQueryCacheScope(client, "user-1:org-1");
@@ -177,6 +218,7 @@ describe("query persistence", () => {
     restorePersistedQueryCache(restored);
     expect(restored.getQueryData(["shell"])).toEqual({ name: "Stale" });
 
+    await vi.advanceTimersByTimeAsync(20);
     await inFlight;
     expect(restored.getQueryData(["shell"])).toEqual({ name: "Fresh" });
   });

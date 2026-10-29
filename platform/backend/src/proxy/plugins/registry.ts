@@ -1,16 +1,18 @@
+import { readRunToolArgs } from "@/archestra-mcp-server/run-tool-target";
 import config from "@/config";
 import logger from "@/logging";
 import {
   isDelegationMarkerItem,
   isDelegationMarkerLine,
 } from "@/openappa/delegation";
+import {
+  RUNTIME_TOOL_PROOF_ARGUMENT,
+  verifyRuntimeToolProof,
+} from "@/openappa/runtime-tool-claims";
+import type { OpenAppaSession } from "@/openappa/service";
+import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { canonicalJson } from "@/openappa/wire";
-import type {
-  CommonToolResult,
-  DualLlmAnalysis,
-  HostedToolCall,
-  UnsafeContextBoundary,
-} from "@/types";
+import type { CommonToolResult, HostedToolCall } from "@/types";
 import { ApiError } from "@/types";
 
 /**
@@ -58,6 +60,8 @@ type LlmProxyToolCall = {
    * stays on `id`; only what is written to the client changes.
    */
   wireId?: string;
+  /** Server-generated review to emit as text immediately before this call. */
+  reviewDetails?: string;
 };
 
 export type LlmProxyToolCallsContext = LlmProxyRequestContext & {
@@ -67,6 +71,8 @@ export type LlmProxyToolCallsContext = LlmProxyRequestContext & {
    * If false, the client receives raw streamed calls and plugins must not alter approved calls.
    */
   canRewriteToolCalls?: boolean;
+  /** The transport emits server review details before the native form. */
+  canShowToolCallReview?: boolean;
 };
 
 /** A plugin-provided tool-call refusal rendered by the proxy's adapters. */
@@ -91,17 +97,31 @@ export type LlmProxyToolCallAnnotation = {
   appended: string | Record<string, unknown>;
 };
 
+/** A signed execution proof added after the host approved the original arguments. */
+export type LlmProxyRuntimeToolProof = {
+  id: string;
+  name: string;
+  action: string;
+  session: OpenAppaSession;
+  spawn: boolean;
+  wrapped: boolean;
+};
+
 /**
  * Outcome of plugin tool call evaluation.
  * `blocked` lists calls replaced with notice calls.
+ * `rewritten` lists calls released in a form the policy authorized.
  * `annotated` lists approved calls with appended delegation markers.
+ * `runtimeProofs` lists approved calls with signed execution proofs.
  */
 export type LlmProxyToolCallsOutcome =
   | {
       decision: "allow";
       toolCalls: readonly LlmProxyToolCall[];
       blocked?: readonly { id: string; name: string; reason: string }[];
+      rewritten?: readonly { id: string; name: string }[];
       annotated?: readonly LlmProxyToolCallAnnotation[];
+      runtimeProofs?: readonly LlmProxyRuntimeToolProof[];
     }
   | { decision: "refuse"; refusal: LlmProxyToolCallRefusal };
 
@@ -127,20 +147,12 @@ export type LlmProxyToolResultsContext = LlmProxyRequestContext & {
   toolResults: readonly LlmProxyToolResult[];
 };
 
-export type LlmProxyContextTrust = {
-  contextIsTrusted: boolean;
-  dualLlmAnalyses: DualLlmAnalysis[];
-  unsafeContextBoundary: UnsafeContextBoundary | undefined;
-};
-
 /**
  * Uses the request adapter's existing provider-wire update path. Later plugins
  * receive the cumulative updates from earlier plugins in registration order.
  */
 export type LlmProxyToolResultsOutcome = {
   toolResultUpdates: Readonly<Record<string, string>>;
-  /** The final plugin-provided context trust decision, if one was made. */
-  contextTrust?: LlmProxyContextTrust;
 };
 
 export type LlmProxyModelResponseContext = LlmProxyRequestContext & {
@@ -167,7 +179,7 @@ export type LlmProxyErrorContext = LlmProxyRequestContext & {
 
 export interface LlmProxyPlugin {
   readonly id: string;
-  /** Finalizers reserve approved calls and run after the host's policy check. */
+  /** Finalizers reserve approved calls and run after rewriters and preparers. */
   readonly finalizesToolCalls?: boolean;
   onSessionInit?(context: LlmProxyRequestContext): Promise<void>;
   onPrompt?(context: LlmProxyPromptContext): Promise<void>;
@@ -285,14 +297,11 @@ export class LlmProxyPluginRegistry {
 
   async onToolCalls(
     context: LlmProxyToolCallsContext,
-    validate?: (
-      toolCalls: LlmProxyToolCallsContext["toolCalls"],
-    ) => Promise<LlmProxyToolCallRefusal | null>,
   ): Promise<LlmProxyToolCallsOutcome> {
     let toolCalls = context.toolCalls;
     const plugins = this.hasPlugins() ? this.getSessionPlugins(context) : [];
-    // Rewriters run first. The host checks exactly those calls before a
-    // finalizer such as APPA records any reservation for execution.
+    // Rewriters run first, then preparers; a finalizer such as APPA sees
+    // exactly those calls before it records any reservation for execution.
     for (const plugin of plugins.filter(
       (plugin) => !plugin.finalizesToolCalls,
     )) {
@@ -313,8 +322,6 @@ export class LlmProxyPluginRegistry {
       if (prepared.decision === "refuse") return prepared;
       toolCalls = prepared.toolCalls;
     }
-    const refusal = await validate?.(toolCalls);
-    if (refusal) return { decision: "refuse", refusal };
     let blocked: readonly { id: string; name: string; reason: string }[] = [];
     for (const plugin of plugins.filter(
       (plugin) => plugin.finalizesToolCalls,
@@ -328,6 +335,7 @@ export class LlmProxyPluginRegistry {
             name: call.name,
             namespace: call.namespace,
             arguments: canonicalJson(call.arguments),
+            reviewDetails: call.reviewDetails,
           },
         ]),
       );
@@ -340,18 +348,22 @@ export class LlmProxyPluginRegistry {
       // Every returned call must match one of the input calls:
       // - Untouched
       // - Reported as blocked (replaced with a platform notice call)
+      // - Reported as rewritten (released in a form the policy authorized)
       // - Reported as annotated (with only an approved delegation marker appended)
-      for (const entry of result.blocked ?? []) {
-        // Validate that reported blocked calls were part of the input batch.
+      // - Reported with a valid runtime proof and otherwise unchanged arguments
+      const blockedIds = new Set<string>();
+      for (const entry of [
+        ...(result.blocked ?? []),
+        ...(result.rewritten ?? []),
+      ]) {
+        // Validate that reported substitutions were part of the input batch.
         if (given.get(entry.id)?.name !== entry.name) {
           throw new Error(
             `Finalizer ${plugin.id} reported a block on a call the policies never saw: ${entry.id}`,
           );
         }
+        blockedIds.add(entry.id);
       }
-      const blockedIds = new Set(
-        (result.blocked ?? []).map((entry) => entry.id),
-      );
       const annotations = new Map<string, LlmProxyToolCallAnnotation>();
       for (const entry of result.annotated ?? []) {
         if (
@@ -365,6 +377,20 @@ export class LlmProxyPluginRegistry {
         }
         annotations.set(entry.id, entry);
       }
+      const runtimeProofs = new Map<string, LlmProxyRuntimeToolProof>();
+      for (const entry of result.runtimeProofs ?? []) {
+        if (
+          given.get(entry.id)?.name !== entry.name ||
+          blockedIds.has(entry.id) ||
+          annotations.has(entry.id) ||
+          runtimeProofs.has(entry.id)
+        ) {
+          throw new Error(
+            `Finalizer ${plugin.id} reported an invalid runtime proof: ${entry.id}`,
+          );
+        }
+        runtimeProofs.set(entry.id, entry);
+      }
       const returned = new Set<string>();
       for (const call of result.toolCalls) {
         const original = given.get(call.id);
@@ -374,11 +400,38 @@ export class LlmProxyPluginRegistry {
           );
         }
         returned.add(call.id);
+        if (
+          original.reviewDetails !== call.reviewDetails &&
+          !(
+            blockedIds.has(call.id) &&
+            (original.name !== call.name ||
+              original.namespace !== call.namespace)
+          )
+        ) {
+          throw new Error(
+            `Finalizer ${plugin.id} changed protected review text: ${call.id}`,
+          );
+        }
         const untouched =
           original.name === call.name &&
           original.namespace === call.namespace &&
           original.arguments === canonicalJson(call.arguments);
         if (untouched || blockedIds.has(call.id)) continue;
+        const runtimeProof = runtimeProofs.get(call.id);
+        if (
+          runtimeProof &&
+          original.name === call.name &&
+          original.namespace === call.namespace &&
+          addsOnlyRuntimeProof({
+            before: original.arguments,
+            after: canonicalJson(call.arguments),
+            attachment: runtimeProof,
+            organizationId: context.organizationId,
+          })
+        ) {
+          runtimeProofs.delete(call.id);
+          continue;
+        }
         const annotation = annotations.get(call.id);
         if (
           !annotation ||
@@ -403,6 +456,11 @@ export class LlmProxyPluginRegistry {
           `Finalizer ${plugin.id} reported an annotation it did not make: ${unapplied.value}`,
         );
       }
+      if (runtimeProofs.size > 0) {
+        throw new Error(
+          `Finalizer ${plugin.id} reported a runtime proof it did not attach`,
+        );
+      }
       toolCalls = result.toolCalls;
       if (result.blocked?.length) blocked = [...blocked, ...result.blocked];
     }
@@ -419,7 +477,6 @@ export class LlmProxyPluginRegistry {
     if (!this.hasPlugins()) return EMPTY_TOOL_RESULTS_OUTCOME;
     const updates: Record<string, string> = {};
     let toolResults = context.toolResults;
-    let contextTrust: LlmProxyContextTrust | undefined;
     for (const plugin of this.getSessionPlugins(context)) {
       const result = await this.invoke(plugin, "onToolResults", {
         ...context,
@@ -427,16 +484,12 @@ export class LlmProxyPluginRegistry {
       });
       if (!result) continue;
       Object.assign(updates, result.toolResultUpdates);
-      if (result.contextTrust) contextTrust = result.contextTrust;
       toolResults = toolResults.map((toolResult) => ({
         ...toolResult,
         content: result.toolResultUpdates[toolResult.id] ?? toolResult.content,
       }));
     }
-    return {
-      toolResultUpdates: updates,
-      ...(contextTrust ? { contextTrust } : {}),
-    };
+    return { toolResultUpdates: updates };
   }
 
   governsHostedToolCalls(context: LlmProxyRequestContext): boolean {
@@ -748,4 +801,59 @@ async function loadConfiguredLlmProxyPlugins(): Promise<
     }
   }
   return plugins;
+}
+
+/** Only the signed proof may differ from the arguments the policies approved. */
+function addsOnlyRuntimeProof(params: {
+  before: string;
+  after: string;
+  attachment: LlmProxyRuntimeToolProof;
+  organizationId: string;
+}): boolean {
+  const before = argumentRecord(params.before);
+  const after = argumentRecord(params.after);
+  if (!before || !after) return false;
+  const { attachment } = params;
+  const originalArgs = attachment.wrapped
+    ? readRunToolArgs(before.tool_args)
+    : before;
+  const signedArgs = attachment.wrapped
+    ? readRunToolArgs(after.tool_args)
+    : after;
+  if (
+    !originalArgs ||
+    !signedArgs ||
+    Object.hasOwn(originalArgs, RUNTIME_TOOL_PROOF_ARGUMENT)
+  )
+    return false;
+  const { [RUNTIME_TOOL_PROOF_ARGUMENT]: proof, ...remaining } = signedArgs;
+  if (canonicalJson(originalArgs) !== canonicalJson(remaining)) return false;
+  if (attachment.wrapped) {
+    const { tool_args: beforeArgs, ...beforeWrapper } = before;
+    const { tool_args: afterArgs, ...afterWrapper } = after;
+    // Missing tool_args are an empty object; the proof adds that object.
+    const beforeForm = beforeArgs === undefined ? "object" : typeof beforeArgs;
+    if (
+      beforeForm !== typeof afterArgs ||
+      canonicalJson(beforeWrapper) !== canonicalJson(afterWrapper)
+    )
+      return false;
+  }
+  if (attachment.session.organization_id !== params.organizationId)
+    return false;
+  const verified = verifyRuntimeToolProof({
+    proof,
+    organizationId: params.organizationId,
+    callerId: attachment.session.caller_id,
+    action: attachment.action,
+    arguments: originalArgs,
+    secret: config.openappa.offerSigningSecret,
+  });
+  return (
+    verified !== null &&
+    verified.toolCallId === withoutTrajectoryStamp(attachment.id) &&
+    verified.spawn === attachment.spawn &&
+    verified.session.session_id === attachment.session.session_id &&
+    verified.session.parent_id === attachment.session.parent_id
+  );
 }

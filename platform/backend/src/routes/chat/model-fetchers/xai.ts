@@ -114,7 +114,8 @@ function mapXaiModel(
       "created" in model && typeof model.created === "number"
         ? new Date(model.created * 1000).toISOString()
         : undefined,
-    capabilities: { supportedEndpoints: ["/chat/completions"] },
+    // The proxy serves both surfaces; Responses rides on chat completions.
+    capabilities: { supportedEndpoints: ["/chat/completions", "/responses"] },
   };
 }
 
@@ -151,7 +152,7 @@ export async function fetchXaiModels(
   if (subscriptionKind === "x-premium" && !subscriptionCredential) {
     throw new ApiError(
       401,
-      "Your xAI SuperSuperGrok sign-in is unreadable. Reconnect your Grok account to continue.",
+      "Your xAI SuperGrok sign-in is unreadable. Reconnect your Grok account to continue.",
       ArchestraInternalErrorCode.ProviderAuthRequired,
     );
   }

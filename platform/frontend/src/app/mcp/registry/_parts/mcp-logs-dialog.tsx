@@ -38,6 +38,8 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TabsContent } from "@/components/ui/tabs";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useAnimatedDots } from "@/lib/hooks/use-animated-dots";
 import websocketService from "@/lib/websocket/websocket";
@@ -54,24 +56,27 @@ import { hasNoPodToStream } from "./logs-streaming-indicator";
 import { McpExecTerminal } from "./mcp-exec-terminal";
 import { McpInspector } from "./mcp-inspector";
 
+/** One connection (installation) of an MCP server that diagnostics can target. */
+export interface McpLogsInstall {
+  id: string;
+  name: string;
+  ownerEmail?: string | null;
+  teamDetails?: { teamId: string; name: string } | null;
+  scope?: ResourceVisibilityScope | null;
+  /**
+   * Whether the viewer may present this install's credential upstream — its
+   * own connection, or one shared with it. Only the Inspector cares: it
+   * authenticates as the install, so it offers no one else's connection.
+   * Optional so callers that never reach the Inspector can omit it.
+   */
+  canUseCredential?: boolean;
+}
+
 interface McpLogsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   serverName: string;
-  installs: {
-    id: string;
-    name: string;
-    ownerEmail?: string | null;
-    teamDetails?: { teamId: string; name: string } | null;
-    scope?: ResourceVisibilityScope | null;
-    /**
-     * Whether the viewer may present this install's credential upstream — its
-     * own connection, or one shared with it. Only the Inspector cares: it
-     * authenticates as the install, so it offers no one else's connection.
-     * Optional so callers that never reach the Inspector can omit it.
-     */
-    canUseCredential?: boolean;
-  }[];
+  installs: McpLogsInstall[];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   /** Hide the installation dropdown selector */
   hideInstallationSelector?: boolean;
@@ -119,40 +124,28 @@ export function McpLogsDialog({
   );
 }
 
-export type McpLogsTab = "logs" | "debug" | "inspector";
+type McpLogsTab = "logs" | "debug" | "inspector";
 
 interface McpLogsContentProps {
   isActive: boolean;
   serverName: string;
-  installs: McpLogsDialogProps["installs"];
+  installs: McpLogsInstall[];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   hideInstallationSelector?: boolean;
-  hideHeader?: boolean;
-  /** When set, controls the active tab externally */
-  controlledTab?: McpLogsTab;
-  /** When true, hides the tab bar (use with controlledTab) */
-  hideTabBar?: boolean;
   onReinstall?: (serverId: string) => void | Promise<void>;
   initialServerId?: string | null;
 }
 
-export function McpLogsContent({
+function McpLogsContent({
   isActive,
   serverName,
   installs,
   deploymentStatuses,
   hideInstallationSelector = false,
-  hideHeader = false,
-  controlledTab,
-  hideTabBar = false,
   onReinstall,
   initialServerId = null,
 }: McpLogsContentProps) {
-  const [internalTab, setInternalTab] = useState<McpLogsTab>("logs");
-  const activeTab = controlledTab ?? internalTab;
-  const setActiveTab = (tab: McpLogsTab) => {
-    if (!controlledTab) setInternalTab(tab);
-  };
+  const [activeTab, setActiveTab] = useState<McpLogsTab>("logs");
   const [commandCopied, setCommandCopied] = useState(false);
   const [streamedLogs, setStreamedLogs] = useState("");
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -397,7 +390,7 @@ export function McpLogsContent({
       setCommand("");
       resetAutoScroll();
       setServerId(null); // Reset selection so it picks first on reopen
-      setInternalTab("logs");
+      setActiveTab("logs");
     }
   }, [isActive, resetAutoScroll, stopStreaming]);
 
@@ -420,22 +413,24 @@ export function McpLogsContent({
   }, [command]);
 
   const isDebugDisabled = currentDeploymentStatus?.state !== "running";
-  const contentTabClassName = hideHeader
-    ? "flex flex-1 min-h-0 flex-col pt-4"
-    : "mt-2 flex flex-1 min-h-0 flex-col";
+  // A shell runs commands inside the server's container in the cluster, so it
+  // stays with the people who manage installations; the backend refuses it to
+  // everyone else too.
+  const { data: canOpenShell } = useHasPermissions({
+    mcpServerInstallation: ["update"],
+  });
+  const contentTabClassName = "mt-2 flex flex-1 min-h-0 flex-col";
 
   return (
     <>
-      {!hideHeader && (
-        <DialogHeader className="flex-shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <DialogTitle className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
-              <Terminal className="h-5 w-5 flex-shrink-0" />
-              <span className="truncate">{serverName}</span>
-            </DialogTitle>
-          </div>
-        </DialogHeader>
-      )}
+      <DialogHeader className="flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <DialogTitle className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
+            <Terminal className="h-5 w-5 flex-shrink-0" />
+            <span className="truncate">{serverName}</span>
+          </DialogTitle>
+        </div>
+      </DialogHeader>
 
       {/* Pod selector */}
       {!hideInstallationSelector && selectableInstalls.length >= 1 && (
@@ -449,10 +444,7 @@ export function McpLogsContent({
 
       <DeploymentConsoleTabs
         value={activeTab}
-        onValueChange={(value) =>
-          setActiveTab(value as "logs" | "debug" | "inspector")
-        }
-        hideTabBar={hideTabBar}
+        onValueChange={(value) => setActiveTab(value as McpLogsTab)}
         tabs={[
           {
             value: "logs",
@@ -465,12 +457,17 @@ export function McpLogsContent({
             disabled: isDebugDisabled,
             disabledReason: "Pod must be running to inspect tools",
           },
-          {
-            value: "debug",
-            label: "Shell",
-            disabled: isDebugDisabled,
-            disabledReason: "Pod must be running to start a shell session",
-          },
+          ...(canOpenShell
+            ? [
+                {
+                  value: "debug",
+                  label: "Shell",
+                  disabled: isDebugDisabled,
+                  disabledReason:
+                    "Pod must be running to start a shell session",
+                },
+              ]
+            : []),
         ]}
       >
         <TabsContent value="logs" className={contentTabClassName}>
@@ -603,7 +600,7 @@ export function McpLogsContent({
         </TabsContent>
 
         <TabsContent value="debug" className={contentTabClassName}>
-          {serverId && (
+          {serverId && canOpenShell && (
             <McpExecTerminal
               serverId={serverId}
               isActive={activeTab === "debug" && isActive}
@@ -616,7 +613,7 @@ export function McpLogsContent({
 }
 
 interface InstanceSelectorProps {
-  installs: McpLogsContentProps["installs"];
+  installs: McpLogsInstall[];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   serverId: string | null;
   setServerId: (id: string) => void;
@@ -784,13 +781,13 @@ function InstanceSelector({
     <div className="flex-shrink-0">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button
+          <UnstyledButton
             type="button"
             className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
             aria-label="Switch instance"
           >
             {card}
-          </button>
+          </UnstyledButton>
         </PopoverTrigger>
         <PopoverContent
           align="start"
@@ -821,7 +818,7 @@ function InstanceSelector({
               const isActive = install.id === serverId;
 
               return (
-                <button
+                <UnstyledButton
                   key={install.id}
                   type="button"
                   onClick={() => {
@@ -848,7 +845,7 @@ function InstanceSelector({
                   {isActive && (
                     <Check className="h-3.5 w-3.5 text-foreground/70 flex-shrink-0" />
                   )}
-                </button>
+                </UnstyledButton>
               );
             })}
           </div>

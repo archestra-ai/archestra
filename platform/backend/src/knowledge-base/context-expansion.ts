@@ -1,5 +1,6 @@
 import logger from "@/logging";
 import type { VectorSearchResult } from "@/models/kb-chunk";
+import type { GrantPrincipal } from "@/models/resource-permission-subject";
 import type { AclEntry } from "@/types";
 import { stitchChunkContents } from "./parent-passage";
 import type { KnowledgeRetrievalBackend } from "./retrieval-backend";
@@ -37,6 +38,7 @@ export async function expandChunkContext(params: {
   results: VectorSearchResult[];
   radius: number;
   userAcl: AclEntry[];
+  grantPrincipals?: GrantPrincipal[] | null;
   bypassAcl?: boolean;
   environmentId?: string | null;
   retrievalBackend?: KnowledgeRetrievalBackend;
@@ -45,6 +47,7 @@ export async function expandChunkContext(params: {
     results,
     radius,
     userAcl,
+    grantPrincipals,
     bypassAcl = false,
     environmentId,
     retrievalBackend = knowledgeRetrievalBackend,
@@ -64,6 +67,7 @@ export async function expandChunkContext(params: {
     })),
     radius,
     userAcl,
+    grantPrincipals,
     bypassAcl,
     environmentId,
   };

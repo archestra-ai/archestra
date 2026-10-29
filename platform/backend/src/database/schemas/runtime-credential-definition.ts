@@ -27,6 +27,8 @@ const runtimeCredentialDefinitionsTable = pgTable(
     installationId: text("installation_id"),
     githubClientId: text("github_client_id"),
     githubAppCredentialKey: text("github_app_credential_key"),
+    /** GitLab web address for a `gitlab_token`, e.g. https://gitlab.com. */
+    gitlabUrl: text("gitlab_url"),
     description: text("description").notNull().default(""),
     icon: text("icon"),
     allowPersonal: boolean("allow_personal").notNull().default(true),

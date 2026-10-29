@@ -14,7 +14,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import type { QueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
+import { parseLabelsParam } from "@/lib/labels-param";
 import { cn } from "@/lib/utils/tailwind";
 
 export interface LabelSelectProps {
@@ -190,7 +192,7 @@ export function LabelKeyRowBase({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <button
+        <UnstyledButton
           type="button"
           className={cn(
             "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
@@ -208,7 +210,7 @@ export function LabelKeyRowBase({
               </span>
             </Badge>
           )}
-        </button>
+        </UnstyledButton>
       </PopoverTrigger>
       <PopoverContent
         className="w-[220px] p-0"
@@ -234,7 +236,7 @@ export function LabelKeyRowBase({
             filteredValues.map((value) => {
               const isSelected = selectedValues.includes(value);
               return (
-                <button
+                <UnstyledButton
                   type="button"
                   key={value}
                   onClick={() => onToggleValue(labelKey, value)}
@@ -250,7 +252,7 @@ export function LabelKeyRowBase({
                     )}
                   />
                   <span className="truncate">{value}</span>
-                </button>
+                </UnstyledButton>
               );
             })
           )}
@@ -285,13 +287,13 @@ export function LabelFilterBadges({
             className="gap-1 pr-1"
           >
             {key}: {value}
-            <button
+            <UnstyledButton
               type="button"
               onClick={() => onRemoveLabel(key, value)}
               className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
             >
               <X className="h-3 w-3" />
-            </button>
+            </UnstyledButton>
           </Badge>
         )),
       )}
@@ -308,26 +310,7 @@ export function useSelectedLabels(): Record<string, string[]> | null {
   return useMemo(() => parseLabelsParam(labelsParam), [labelsParam]);
 }
 
-export function parseLabelsParam(
-  labels: string | null,
-): Record<string, string[]> | null {
-  if (!labels) return null;
-  const result: Record<string, string[]> = {};
-  for (const entry of labels.split(LABELS_ENTRY_DELIMITER)) {
-    const colonIdx = entry.indexOf(":");
-    if (colonIdx === -1) continue;
-    const key = entry.slice(0, colonIdx).trim();
-    const values = entry
-      .slice(colonIdx + 1)
-      .split(LABELS_VALUE_DELIMITER)
-      .map((v) => v.trim())
-      .filter(Boolean);
-    if (key && values.length > 0) {
-      result[key] = values;
-    }
-  }
-  return Object.keys(result).length > 0 ? result : null;
-}
+export { parseLabelsParam };
 
 export function serializeLabels(
   labels: Record<string, string[]>,

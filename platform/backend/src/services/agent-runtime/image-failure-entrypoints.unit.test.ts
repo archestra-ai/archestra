@@ -15,7 +15,7 @@ import { expect, test } from "vitest";
 const exec = promisify(execFile);
 const binDirectory = path.resolve(
   import.meta.dirname,
-  "../../../../agent_images/bin",
+  "../../../../docker_images/agent/bin",
 );
 
 test.each([
@@ -23,6 +23,8 @@ test.each([
   "hermes",
   "opencode",
   "openclaw",
+  "grok",
+  "kimi",
 ])("%s reports incompatible protocols before starting the client", async (image) => {
   const root = await mkdtemp(path.join(tmpdir(), "image-protocol-"));
   try {
@@ -182,6 +184,7 @@ const fs = require("node:fs");
       ).resolves.toBeDefined();
     }
   } finally {
+    await exec("chmod", ["-R", "u+w", root]);
     await rm(root, { recursive: true, force: true });
   }
 });

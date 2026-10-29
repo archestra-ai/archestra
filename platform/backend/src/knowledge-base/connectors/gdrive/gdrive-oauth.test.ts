@@ -1,18 +1,5 @@
-import { describe, expect, test, vi } from "vitest";
-
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    frontendBaseUrl: "https://archestra.example.com",
-    auth: { secret: "test-signing-secret" },
-    kb: {
-      googleDriveOAuth: {
-        clientId: "client-abc.apps.googleusercontent.com",
-        clientSecret: "client-secret-xyz",
-      },
-    },
-  }),
-);
-
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import config from "@/config";
 import {
   buildGoogleDriveAuthorizationUrl,
   getGoogleDriveOAuthRedirectUri,
@@ -20,6 +7,15 @@ import {
   resolveGoogleDriveOAuthReturnTo,
   verifyGoogleDriveOAuthState,
 } from "./gdrive-oauth";
+
+beforeEach(() => {
+  config.frontendBaseUrl = "https://archestra.example.com";
+  config.auth.secret = "test-signing-secret";
+  config.kb.googleDriveOAuth = {
+    clientId: "client-abc.apps.googleusercontent.com",
+    clientSecret: "client-secret-xyz",
+  };
+});
 
 const state = {
   connectorId: "11111111-1111-4111-8111-111111111111",

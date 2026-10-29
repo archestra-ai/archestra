@@ -1,0 +1,1 @@
+ALTER TABLE "openappa_yells" ADD COLUMN "superyell" boolean DEFAULT false NOT NULL;

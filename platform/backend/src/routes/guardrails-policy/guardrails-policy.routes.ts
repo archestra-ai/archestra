@@ -1,31 +1,18 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { constructResponseSchema } from "@/types";
 import {
-  GuardrailsAnnotationRequestSchema,
-  GuardrailsAnnotationSchema,
   GuardrailsPolicySchema,
   GuardrailsValidationSchema,
   UpdateGuardrailsPolicySchema,
   ValidateGuardrailsPolicySchema,
 } from "@/types/guardrails-policy";
+import noopAnnotatorRoutes from "./guardrails-noop-annotator.routes";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
-  app.post(
-    GUARDRAILS_NOOP_ANNOTATOR_PATH,
-    {
-      schema: {
-        operationId: RouteId.AnnotateGuardrailsTool,
-        tags: ["Guardrails"],
-        body: GuardrailsAnnotationRequestSchema,
-        response: constructResponseSchema(GuardrailsAnnotationSchema),
-      },
-    },
-    async () => guardrailsPolicyService.annotate(),
-  );
+  await app.register(noopAnnotatorRoutes);
   app.get(
     "/api/guardrails-policy",
     {

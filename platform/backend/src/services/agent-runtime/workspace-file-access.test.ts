@@ -78,7 +78,7 @@ test("file access rejects other owners and resumes retained storage without an A
   ] as const) {
     await expect(
       accessAgentWorkspaceFile({ actor, taskId: task.id, request }),
-    ).rejects.toThrow("Workspace not found");
+    ).rejects.toThrow("Saved run not found");
   }
   expect(resume).not.toHaveBeenCalled();
   expect(read).not.toHaveBeenCalled();

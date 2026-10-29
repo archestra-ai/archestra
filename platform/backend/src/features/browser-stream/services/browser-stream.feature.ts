@@ -14,6 +14,7 @@ const BROWSER_WS_MESSAGE_TYPES = [
   "browser_click",
   "browser_type",
   "browser_press_key",
+  "browser_scroll",
   "browser_get_snapshot",
   "browser_set_zoom",
 ] as const;
@@ -140,11 +141,13 @@ class BrowserStreamFeature {
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
+    options?: { fast?: boolean },
   ) {
     return this.getService().takeScreenshot(
       agentId,
       conversationId,
       userContext,
+      options,
     );
   }
 
@@ -205,6 +208,20 @@ class BrowserStreamFeature {
       conversationId,
       userContext,
       key,
+    );
+  }
+
+  scroll(
+    agentId: string,
+    conversationId: string,
+    userContext: BrowserUserContext,
+    params: { x: number; y: number; deltaX: number; deltaY: number },
+  ) {
+    return this.getService().scroll(
+      agentId,
+      conversationId,
+      userContext,
+      params,
     );
   }
 

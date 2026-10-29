@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import { resolveOpenAppaLaunchPrompt } from "./openappa-chat-prompts";
 
@@ -21,4 +22,29 @@ test("a launch key resolves only to a known prompt, and a target prompt only wit
   expect(resolveOpenAppaLaunchPrompt("reviewCoverage")).toBeUndefined();
   expect(resolveOpenAppaLaunchPrompt("toString")).toBeUndefined();
   expect(resolveOpenAppaLaunchPrompt("unknown", gateway)).toBeUndefined();
+});
+
+const server = {
+  kind: "mcp_server" as const,
+  name: "GitHub",
+  id: "catalog-1",
+};
+
+test("a policy prompt given a target keeps its text and narrows to the target", () => {
+  const plain = resolveOpenAppaLaunchPrompt("improveCoverage");
+  const scoped = resolveOpenAppaLaunchPrompt("improveCoverage", server);
+  expect(scoped?.startsWith(`${plain} `)).toBe(true);
+  expect(scoped).toContain('Focus on the MCP server "GitHub".');
+  expect(scoped).toContain("Target ID: catalog-1");
+});
+
+test("a policy prompt given a tool narrows to that tool", () => {
+  const scoped = resolveOpenAppaLaunchPrompt("explainPolicy", {
+    ...server,
+    tool: "create_issue",
+  });
+  expect(scoped).toContain(
+    'Focus on the tool "create_issue" of the MCP server "GitHub".',
+  );
+  expect(scoped).toContain("Tool: create_issue");
 });

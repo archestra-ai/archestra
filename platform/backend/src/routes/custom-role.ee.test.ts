@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
-import { hasPermission } from "@/auth";
+import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -12,10 +12,6 @@ import TeamModel from "@/models/team";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import resourcePermissionRoutes from "./resource-permission/resource-permission.routes";
-
-vi.mock("@/auth");
-
-const hasPermissionMock = vi.mocked(hasPermission);
 
 describe("custom role routes", () => {
   let app: FastifyInstanceWithZod;
@@ -53,8 +49,10 @@ describe("custom role routes", () => {
       ).organizationId = organizationId;
     });
 
-    // Default: hasPermission grants admin access
-    hasPermissionMock.mockResolvedValue({ success: true, error: null });
+    // Permission checks resolve the authenticated user (an admin by default).
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: authenticatedUser.id } }) as never,
+    );
 
     const { default: organizationRoleRoutes } = await import(
       "./organization-role"
@@ -65,6 +63,7 @@ describe("custom role routes", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 
@@ -93,40 +92,6 @@ describe("custom role routes", () => {
     expect(response.statusCode).toBe(200);
     // Stored sanitized: the pair grants nothing, so it does not survive.
     expect(response.json().permission).toEqual({ agent: ["read"] });
-  });
-
-  test("accepts a UI-only permission the author's own role does not hold", async ({
-    makeCustomRole,
-    makeMember,
-    makeUser,
-  }) => {
-    // `simpleView:enable` is a display preference, not a privilege: admin
-    // deliberately holds less of it than member, so granting it is exempt
-    // from the no-escalation rule. An author without it must still be able to
-    // hand it to a role.
-    const author = await makeUser();
-    const authorRole = await makeCustomRole(organizationId, {
-      role: "role_maker",
-      name: "Role Maker",
-      permission: { ac: ["create"], agent: ["read"] },
-    });
-    await makeMember(author.id, organizationId, { role: authorRole.role });
-    authenticatedUser = author;
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/roles",
-      payload: {
-        name: "Collapsed Sidebar",
-        permission: { agent: ["read"], simpleView: ["enable"] },
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json().permission).toEqual({
-      agent: ["read"],
-      simpleView: ["enable"],
-    });
   });
 
   test("rejects creating a role with permissions the user does not have", async ({
@@ -525,7 +490,7 @@ describe("custom role routes", () => {
       url: "/api/roles",
       payload: {
         name: "Test Role",
-        permission: { agent: ["read"], toolPolicy: ["read", "create"] },
+        permission: { agent: ["read"], mcpRegistry: ["read", "create"] },
       },
     });
 
@@ -535,7 +500,7 @@ describe("custom role routes", () => {
     expect(role.name).toBe("Test Role");
     expect(role.permission).toEqual({
       agent: ["read"],
-      toolPolicy: ["read", "create"],
+      mcpRegistry: ["read", "create"],
     });
     expect(role.predefined).toBe(false);
     expect(
@@ -608,8 +573,8 @@ describe("custom role routes", () => {
 
   test("POST /api/roles creates role with multiple complex permissions", async () => {
     const complexPermissions = {
-      agent: ["read", "create", "update", "delete"],
-      toolPolicy: ["read", "create", "update", "delete"],
+      agent: ["read", "create", "delete"],
+      llmLimit: ["read", "create", "update", "delete"],
       log: ["read"],
       mcpServerInstallation: ["read", "create", "delete"],
     };
@@ -663,7 +628,7 @@ describe("custom role routes", () => {
 
     const newPermissions = {
       agent: ["read", "create"],
-      toolPolicy: ["read"],
+      mcpRegistry: ["read"],
     };
 
     const response = await app.inject({
@@ -683,8 +648,8 @@ describe("custom role routes", () => {
     makeMember,
     makeUser,
   }) => {
-    // Same divergence as on create: editing a role to switch on a UI-only
-    // preference, or leaving a vestigial action in place, is not escalation.
+    // Same as on create: leaving a vestigial action in place is not
+    // escalation.
     const author = await makeUser();
     const authorRole = await makeCustomRole(organizationId, {
       role: "role_editor",
@@ -705,17 +670,13 @@ describe("custom role routes", () => {
       payload: {
         permission: {
           agent: ["read"],
-          simpleView: ["enable"],
           invitation: ["read"],
         },
       },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().permission).toEqual({
-      agent: ["read"],
-      simpleView: ["enable"],
-    });
+    expect(response.json().permission).toEqual({ agent: ["read"] });
   });
 
   test("PUT /api/roles/admin rejects update to predefined role", async () => {

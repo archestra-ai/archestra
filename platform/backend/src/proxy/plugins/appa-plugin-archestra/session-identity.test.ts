@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  APPA_CLIENT_ADAPTERS,
   extractAppaSessionIdentity,
   nativeSpawnParentId,
 } from "./session-identity";
@@ -211,6 +212,253 @@ describe("client trajectory identity", () => {
           sessionId: CLAUDE_SESSION,
         }),
       ).toBeUndefined();
+    });
+  });
+
+  describe("Claude Desktop", () => {
+    const desktopHeaders = {
+      "user-agent": "claude-cli/2.1.258 (external, cli)",
+      "x-archestra-agent-id": "anthropic_claude_desktop",
+      "x-claude-code-session-id": CLAUDE_SESSION,
+    };
+
+    test("roots on Claude Desktop's session id as its own native client", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {},
+          headers: desktopHeaders,
+        }),
+      ).toMatchObject({
+        sessionId: CLAUDE_SESSION,
+        provenance: "claude-desktop-header",
+      });
+    });
+
+    test.each([
+      {
+        label: "cowork billing entrypoint",
+        system: [
+          {
+            type: "text",
+            text: "x-anthropic-billing-header: cc_version=2.1.195; cc_entrypoint=cowork;",
+          },
+        ],
+      },
+      {
+        label: "claude-desktop billing entrypoint",
+        system:
+          "x-anthropic-billing-header: cc_version=2.1.195; cc_entrypoint=claude-desktop;",
+      },
+      {
+        label: "local-agent billing entrypoint",
+        system: [
+          {
+            type: "text",
+            text: "x-anthropic-billing-header: cc_version=2.1.195.887; cc_entrypoint=local-agent; cch=00000;",
+          },
+        ],
+      },
+      {
+        label: "claude-desktop-3p billing entrypoint",
+        system:
+          "x-anthropic-billing-header: cc_version=2.1.195; cc_entrypoint=claude-desktop-3p;",
+      },
+    ])("recognizes Claude Desktop from its $label and metadata.user_id", ({
+      system,
+    }) => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            system,
+            metadata: {
+              user_id: JSON.stringify({ session_id: CLAUDE_SESSION }),
+            },
+          },
+          headers: { "user-agent": "claude-cli/2.1.258 (external, cli)" },
+        }),
+      ).toMatchObject({
+        sessionId: CLAUDE_SESSION,
+        provenance: "claude-desktop-metadata",
+      });
+    });
+
+    test("names a delegated child's parent like Claude Code does", () => {
+      expect(
+        nativeSpawnParentId({
+          headers: {
+            ...desktopHeaders,
+            "x-claude-code-agent-id": "child-agent",
+          },
+          body: {},
+          sessionId: CLAUDE_SESSION,
+        }),
+      ).toBe(CLAUDE_SESSION);
+    });
+
+    test("recognizes the advertised ClaudeDesktop/ User-Agent without installer headers", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            metadata: {
+              user_id: JSON.stringify({ session_id: CLAUDE_SESSION }),
+            },
+          },
+          headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+        }),
+      ).toMatchObject({
+        sessionId: CLAUDE_SESSION,
+        provenance: "claude-desktop-metadata",
+      });
+    });
+
+    test("requires a client-supplied conversation identifier for headerless Desktop Chat, isolates same-opener conversations, and leaves headerless Chat without an identifier unmatched", () => {
+      const chatOneTurnOne = extractAppaSessionIdentity({
+        family: "anthropic:messages",
+        body: {
+          system: "You are Claude.",
+          metadata: { conversation_id: "desktop-chat-1" },
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+      });
+      const chatOneTurnTwo = extractAppaSessionIdentity({
+        family: "anthropic:messages",
+        body: {
+          system: [
+            {
+              type: "text",
+              text: "You are Claude. Today is Wednesday.",
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+          metadata: { conversation_id: "desktop-chat-1" },
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Hello",
+                  cache_control: { type: "ephemeral" },
+                },
+              ],
+            },
+            { role: "assistant", content: "Hi! How can I help?" },
+            { role: "user", content: "Summarize Q1 report" },
+          ],
+        },
+        headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+      });
+      const chatTwoSameOpener = extractAppaSessionIdentity({
+        family: "anthropic:messages",
+        body: {
+          system: "You are Claude.",
+          metadata: { conversation_id: "desktop-chat-2" },
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+      });
+
+      expect(chatOneTurnOne).toMatchObject({
+        sessionId: "desktop-chat-1",
+        provenance: "claude-desktop-metadata",
+      });
+      expect(chatOneTurnTwo).toMatchObject({
+        sessionId: "desktop-chat-1",
+        provenance: "claude-desktop-metadata",
+      });
+      expect(chatTwoSameOpener).toMatchObject({
+        sessionId: "desktop-chat-2",
+        provenance: "claude-desktop-metadata",
+      });
+      expect(chatTwoSameOpener.sessionId).not.toBe(chatOneTurnOne.sessionId);
+
+      // Headerless Desktop Chat without a conversation identifier is not matched
+      // and never derives conversation identity from prompt content.
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            system: "You are Claude.",
+            messages: [{ role: "user", content: "Hello" }],
+          },
+          headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+        }),
+      ).toMatchObject({
+        provenance: "none",
+      });
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            system: "You are Claude.",
+            messages: [{ role: "user", content: "Hello" }],
+          },
+          headers: {
+            "x-archestra-agent-id": "anthropic_claude_desktop",
+          },
+        }),
+      ).toMatchObject({
+        provenance: "none",
+      });
+
+      expect(() =>
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            metadata: {
+              session_id: "desktop-chat-1",
+              conversation_id: "desktop-chat-2",
+            },
+            messages: [{ role: "user", content: "Hello" }],
+          },
+          headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+        }),
+      ).toThrow(
+        "OpenAPPA cannot bind contradictory Claude Desktop conversation metadata",
+      );
+
+      // Tool-free one-shot Desktop requests (connection probe, "." startup check,
+      // session title generation) match the Desktop adapter so block mode does not
+      // reject them, while tool-bearing headerless requests without a conversation
+      // identifier remain unmatched.
+      const desktopAdapter = APPA_CLIENT_ADAPTERS.find(
+        (adapter) => adapter.id === "claude-desktop",
+      );
+      expect(
+        desktopAdapter?.matches({
+          headers: { "x-archestra-agent-id": "anthropic_claude_desktop" },
+          requestBody: {
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 8,
+            messages: [{ role: "user", content: "Reply with exactly OK." }],
+          },
+        }),
+      ).toBe(true);
+      expect(
+        desktopAdapter?.matches({
+          headers: { "x-archestra-agent-id": "anthropic_claude_desktop" },
+          requestBody: {
+            model: "claude-haiku-5-5",
+            max_tokens: 200,
+            system: "You write short session titles.",
+            messages: [{ role: "user", content: "Summarize this session." }],
+          },
+        }),
+      ).toBe(true);
+      expect(
+        desktopAdapter?.matches({
+          headers: { "x-archestra-agent-id": "anthropic_claude_desktop" },
+          requestBody: {
+            model: "claude-sonnet-4-6",
+            messages: [{ role: "user", content: "Hello" }],
+            tools: [{ name: "get_weather", input_schema: { type: "object" } }],
+          },
+        }),
+      ).toBe(false);
     });
   });
 
@@ -523,6 +771,68 @@ describe("client trajectory identity", () => {
     });
   });
 
+  describe("Kilo Code", () => {
+    // The headers Kilo 7.8.8 sends on every provider request.
+    const kiloHeaders = {
+      "user-agent":
+        "kilo/latest/7.8.8/cli ai-sdk/provider-utils/4.0.46 runtime/bun/1.4.2",
+      "x-session-affinity": OPENCODE_SESSION,
+      "x-session-id": OPENCODE_SESSION,
+    };
+
+    test("roots on Kilo's session id as its own native client", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {},
+          headers: kiloHeaders,
+        }),
+      ).toMatchObject({
+        sessionId: OPENCODE_SESSION,
+        provenance: "kilo-session-header",
+      });
+    });
+
+    test("recognizes Kilo by the agent id its setup sends", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:chatCompletions",
+          body: {},
+          headers: {
+            "user-agent": "ai-sdk/openai-compatible/1.0.0",
+            "x-archestra-agent-id": "kilo",
+            "x-session-id": OPENCODE_SESSION,
+          },
+        }),
+      ).toMatchObject({ provenance: "kilo-session-header" });
+    });
+
+    test("names a subagent's parent like OpenCode does", () => {
+      expect(
+        nativeSpawnParentId({
+          headers: {
+            ...kiloHeaders,
+            "x-session-id": OPENCODE_FORK_SESSION,
+            "x-session-affinity": OPENCODE_FORK_SESSION,
+            "x-parent-session-id": OPENCODE_SESSION,
+          },
+          body: {},
+          sessionId: OPENCODE_FORK_SESSION,
+        }),
+      ).toBe(OPENCODE_SESSION);
+    });
+
+    test("refuses contradictory session headers under Kilo's name", () => {
+      expect(() =>
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {},
+          headers: { ...kiloHeaders, "x-session-affinity": "ses_other" },
+        }),
+      ).toThrow("OpenAPPA cannot bind contradictory Kilo Code session headers");
+    });
+  });
+
   describe("OpenCode", () => {
     test("roots on the session id from X-Session-Id", () => {
       expect(
@@ -777,6 +1087,51 @@ describe("client trajectory identity", () => {
 
       expect(identity.sessionId).toBeUndefined();
       expect(identity.provenance).toBe("none");
+    });
+  });
+
+  describe("a wire OpenAPPA does not read", () => {
+    test("reads a client's session from its headers", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: undefined,
+          body: { contents: [] },
+          headers: {
+            "user-agent": "kilo/7.8.12",
+            "x-archestra-agent-id": "kilo",
+            "x-opencode-session": OPENCODE_SESSION,
+          },
+        }),
+      ).toMatchObject({
+        sessionId: OPENCODE_SESSION,
+        provenance: "kilo-hosted-header",
+      });
+      expect(
+        extractAppaSessionIdentity({
+          family: undefined,
+          body: {},
+          headers: { "x-claude-code-session-id": CLAUDE_SESSION },
+        }),
+      ).toMatchObject({ sessionId: CLAUDE_SESSION });
+    });
+
+    test("reads no session from the body", () => {
+      for (const body of [
+        { prompt_cache_key: "cache-key" },
+        { metadata: { session_id: "s-2" } },
+        {
+          metadata: {
+            user_id: JSON.stringify({ session_id: CLAUDE_SESSION }),
+          },
+        },
+      ])
+        expect(
+          extractAppaSessionIdentity({
+            family: undefined,
+            body,
+            headers: { "user-agent": "claude-cli/2.1.0 (external, cli)" },
+          }).sessionId,
+        ).toBeUndefined();
     });
   });
 

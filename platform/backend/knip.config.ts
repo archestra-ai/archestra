@@ -12,8 +12,16 @@ const config: KnipConfig = {
     "src/standalone-scripts/**/*.ts!",
     // Container/Helm entrypoint; referenced outside the TypeScript module graph.
     "scripts/migrate-with-lock.mjs!",
-    // GitHub Actions runs this CLI to propose stable Codex version updates.
+    // Operator-run concurrent DDL, also shipped in the production image.
+    "scripts/create-statistics-index.mjs!",
+    // GitHub Actions runs these CLIs to propose stable client version updates.
+    "scripts/update-agent-runtime-clis.mjs!",
+    "scripts/update-playwright-mcp.mjs!",
     "scripts/update-codex-models-client-version.mjs!",
+    "scripts/update-copilot-chat-client-version.mjs!",
+    "scripts/update-grok-client-version.mjs!",
+    "scripts/update-vscode-client-version.mjs!",
+    "scripts/update-openappa-template.mjs!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
     // Loaded by `vitest run --config` for the opt-in session storage benchmark.
@@ -31,6 +39,7 @@ const config: KnipConfig = {
     "@archestra/app-runtime-rs",
     "@archestra/image-rs",
     "@archestra/openappa-rs",
+    "@archestra/router-rs",
   ],
   ignoreBinaries: [
     // biome and concurrently are in root package.json

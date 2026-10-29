@@ -1,15 +1,13 @@
 import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { MemberModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
+import TeamModel from "@/models/team";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
 
 describe("team routes", () => {
   let app: FastifyInstanceWithZod;
@@ -18,7 +16,9 @@ describe("team routes", () => {
 
   beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
     vi.clearAllMocks();
-    vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: adminUser.id } }) as never,
+    );
 
     adminUser = await makeAdmin();
     const organization = await makeOrganization();
@@ -91,16 +91,54 @@ describe("team routes", () => {
     expect(denied.statusCode).toBe(403);
   });
 
+  test("checks a team's organization without loading its members", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, adminUser.id);
+    const doomed = await makeTeam(organizationId, adminUser.id);
+    const loadMembers = vi.spyOn(TeamModel, "getTeamMembers");
+
+    const update = await app.inject({
+      method: "PUT",
+      url: `/api/teams/${team.id}`,
+      payload: { name: "Renamed team" },
+    });
+    expect(update.statusCode, update.body).toBe(200);
+    // Only the updated team in the response lists its members.
+    expect(loadMembers).toHaveBeenCalledTimes(1);
+    loadMembers.mockClear();
+
+    const added = await app.inject({
+      method: "POST",
+      url: `/api/teams/${team.id}/external-groups`,
+      payload: { groupIdentifier: "engineering" },
+    });
+    expect(added.statusCode, added.body).toBe(200);
+    const groups = await app.inject({
+      method: "GET",
+      url: `/api/teams/${team.id}/external-groups`,
+    });
+    expect(groups.statusCode, groups.body).toBe(200);
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/api/teams/${team.id}/external-groups/${added.json().id}`,
+    });
+    expect(removed.statusCode, removed.body).toBe(200);
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/teams/${doomed.id}`,
+    });
+    expect(deleted.statusCode, deleted.body).toBe(200);
+
+    expect(loadMembers).not.toHaveBeenCalled();
+  });
+
   describe("PUT /api/teams/:id", () => {
     test("team admins may edit their own team's metadata without organization-wide team update", async ({
       makeTeam,
       makeTeamMember,
     }) => {
       await MemberModel.updateRole(adminUser.id, organizationId, "member");
-      vi.mocked(hasPermission).mockResolvedValue({
-        success: false,
-        error: null,
-      });
       const own = await makeTeam(organizationId, adminUser.id);
       const other = await makeTeam(organizationId, adminUser.id);
       await makeTeamMember(own.id, adminUser.id, { role: "admin" });

@@ -252,10 +252,10 @@ const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
     },
     salesforce: {
       fieldName: "config.loginUrl",
-      label: "Login URL",
-      placeholder: "https://login.salesforce.com",
+      label: "My Domain URL",
+      placeholder: "https://your-domain.my.salesforce.com",
       description:
-        "Use https://login.salesforce.com for production and https://test.salesforce.com for sandbox.",
+        "Your Salesforce My Domain URL, including the sandbox domain for sandboxes. login.salesforce.com and test.salesforce.com are not supported.",
     },
     web_crawler: {
       fieldName: "config.startUrl",
@@ -340,6 +340,8 @@ export function getConnectorTypeLabel(type: ConnectorType): string {
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 type AutoSyncConnectorRequirement = {
+  /** Slug of this connector's page under the connectors docs. */
+  docsPage: string;
   /** Anchor of this connector's "… Auto-Sync Permissions" docs section. */
   docsAnchor: string;
   /**
@@ -386,36 +388,43 @@ const ATLASSIAN_API_TOKENS_URL =
  */
 const AUTO_SYNC_CONNECTOR_REQUIREMENTS = {
   jira: {
+    docsPage: "jira",
     docsAnchor: "jira-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs a Jira Cloud admin account that can browse every synced project.",
   },
   confluence: {
+    docsPage: "confluence",
     docsAnchor: "confluence-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs an account that can view every synced space and its page restrictions.",
   },
   github: {
+    docsPage: "github",
     docsAnchor: "github-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs extra repository and organization read permissions on this credential.",
   },
   gitlab: {
+    docsPage: "gitlab",
     docsAnchor: "gitlab-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs a read_api token with Reporter access on every private project.",
   },
   linear: {
+    docsPage: "linear",
     docsAnchor: "linear-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs a read key from a member of every private team.",
   },
   servicenow: {
+    docsPage: "servicenow",
     docsAnchor: "servicenow-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs extra roles, plus read ACLs on the user-criteria tables.",
   },
   notion: {
+    docsPage: "notion",
     docsAnchor: "notion-auto-sync-permissions",
     // No console link here: this field's help text already links the Notion
     // Developer portal, and one description should not offer the same
@@ -424,11 +433,13 @@ const AUTO_SYNC_CONNECTOR_REQUIREMENTS = {
       "Auto-sync permissions needs the integration's capability to read user email addresses.",
   },
   sharepoint: {
+    docsPage: "sharepoint",
     docsAnchor: "sharepoint-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs extra admin-consented Microsoft Graph application permissions.",
   },
   gdrive: {
+    docsPage: "google-drive",
     docsAnchor: "google-drive-auto-sync-permissions",
     requirement: (
       <>
@@ -442,36 +453,43 @@ const AUTO_SYNC_CONNECTOR_REQUIREMENTS = {
     ),
   },
   dropbox: {
+    docsPage: "dropbox",
     docsAnchor: "dropbox-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs sharing scopes on the app, plus team scopes to expand groups.",
   },
   asana: {
+    docsPage: "asana",
     docsAnchor: "asana-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs a token from a user with access to every synced private project and team.",
   },
   outline: {
+    docsPage: "outline",
     docsAnchor: "outline-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs a key scoped to users, groups, collections and shares.",
   },
   onedrive: {
+    docsPage: "onedrive",
     docsAnchor: "onedrive-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs extra admin-consented Microsoft Graph application permissions.",
   },
   salesforce: {
+    docsPage: "salesforce",
     docsAnchor: "salesforce-auto-sync-permissions",
     requirement:
-      "Auto-sync permissions needs view-all and share-table read permissions on this user.",
+      "Auto-sync permissions needs view-all and share-table read permissions on the app’s execution user.",
   },
   perforce: {
+    docsPage: "perforce",
     docsAnchor: "perforce-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs an account that can read the full protections table.",
   },
   mfiles: {
+    docsPage: "m-files",
     docsAnchor: "m-files-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs a vault account with full control of the vault.",
@@ -525,7 +543,7 @@ export function AdminApiKeyDescription({ type }: { type: ConnectorType }) {
       {getConnectorTypeLabel(type)} user whose profile hides it.{" "}
       <ExternalDocsLink
         href={getFrontendDocsUrl(
-          DocsPage.PlatformKnowledge,
+          `${DocsPage.PlatformKnowledgeConnectors}/${type}`,
           ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR,
         )}
         className="underline"
@@ -537,8 +555,8 @@ export function AdminApiKeyDescription({ type }: { type: ConnectorType }) {
   );
 }
 
-const ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR =
-  "atlassian-organization-admin-api-key";
+/** Section of the Jira and Confluence pages on the organization admin API key. */
+const ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR = "organization-admin-api-key";
 
 /**
  * Points at the setup this connector's credential needs upstream, shown under
@@ -562,7 +580,10 @@ export function AutoSyncCredentialRequirement({
     <span>
       {entry.requirement}{" "}
       <ExternalDocsLink
-        href={getFrontendDocsUrl(DocsPage.PlatformKnowledge, entry.docsAnchor)}
+        href={getFrontendDocsUrl(
+          `${DocsPage.PlatformKnowledgeConnectors}/${entry.docsPage}`,
+          entry.docsAnchor,
+        )}
         className="underline"
         showIcon={false}
       >
@@ -654,13 +675,23 @@ function getAutoSyncConnectorRequirement(
 
 export function getConnectorUrlConfig(
   type: ConnectorType,
+  authMethod?: string,
 ): ConnectorUrlConfig | null {
+  if (type === "salesforce" && authMethod === "soap_legacy") {
+    return {
+      fieldName: "config.loginUrl",
+      label: "Login URL",
+      placeholder: "https://login.salesforce.com",
+      description:
+        "The Salesforce login URL for this existing connector. Use https://test.salesforce.com for a sandbox.",
+    };
+  }
   return CONNECTOR_URL_CONFIGS[type];
 }
 
 export function getConnectorDocsUrl(type: ConnectorType): string | null {
   return getFrontendDocsUrl(
-    DocsPage.PlatformKnowledge,
+    DocsPage.PlatformKnowledgeConnectors,
     CONNECTOR_DOC_ANCHORS[type] ?? type,
   );
 }
@@ -697,7 +728,7 @@ export function getDefaultConnectorConfig(
     asana: { type },
     onedrive: { type, userIds: "", recursive: true },
     outline: { type, outlineUrl: "https://app.getoutline.com" },
-    salesforce: { type, loginUrl: "https://login.salesforce.com" },
+    salesforce: { type, authMethod: "oauth_client_credentials", loginUrl: "" },
     web_crawler: {
       type,
       maxPages: 250,
@@ -724,12 +755,7 @@ export function getDefaultConnectorConfig(
 }
 
 export function connectorNeedsEmail(type: ConnectorType): boolean {
-  return (
-    type === "jira" ||
-    type === "confluence" ||
-    type === "salesforce" ||
-    type === "mfiles"
-  );
+  return type === "jira" || type === "confluence" || type === "mfiles";
 }
 
 export function getConnectorCredentialConfig(params: {
@@ -770,6 +796,8 @@ export function getConnectorCredentialConfig(params: {
     params.type === "mfiles" &&
     (params.authMethod ?? "mfiles_password_token") ===
       "oauth_client_credentials";
+  const salesforceUsesLegacy =
+    params.type === "salesforce" && params.authMethod === "soap_legacy";
   const apiTokenLabels: Record<ConnectorType, string | undefined> = {
     servicenow: "Password",
     notion: "Integration Token",
@@ -786,7 +814,9 @@ export function getConnectorCredentialConfig(params: {
     linear: "Personal Access Token",
     asana: "Personal Access Token",
     onedrive: "Client Secret",
-    salesforce: "Password + Security Token",
+    salesforce: salesforceUsesLegacy
+      ? "Password + Security Token"
+      : "Consumer Secret",
     web_crawler: undefined,
     perforce: "Login Ticket",
     mfiles: mfilesUsesOAuth ? "Client Secret" : "Password",
@@ -811,7 +841,9 @@ export function getConnectorCredentialConfig(params: {
       linear: "Your personal access token",
       asana: "Your personal access token",
       onedrive: "Your Azure AD client secret",
-      salesforce: "Your Salesforce password followed by your security token",
+      salesforce: salesforceUsesLegacy
+        ? "Your Salesforce password followed by your security token"
+        : "Your Salesforce OAuth consumer secret",
       web_crawler: undefined,
       perforce: "Ticket from p4 login -a -p",
       mfiles: mfilesUsesOAuth
@@ -821,7 +853,9 @@ export function getConnectorCredentialConfig(params: {
 
   const editApiTokenPlaceholders: Record<ConnectorType, string | undefined> = {
     servicenow: "Leave empty to keep existing password",
-    salesforce: "Leave empty to keep existing password + security token",
+    salesforce: salesforceUsesLegacy
+      ? "Leave empty to keep existing password + security token"
+      : "Leave empty to keep existing consumer secret",
     notion: "Leave empty to keep existing token",
     sharepoint: "Leave empty to keep existing token",
     gdrive: gdriveUsesOAuth
@@ -863,7 +897,9 @@ export function getConnectorCredentialConfig(params: {
     linear: "Personal access token is required",
     asana: "Personal access token is required",
     onedrive: "Client secret is required",
-    salesforce: "Password and security token are required",
+    salesforce: salesforceUsesLegacy
+      ? "Password and security token are required"
+      : "Consumer secret is required",
     web_crawler: undefined,
     perforce: "Login ticket is required",
     mfiles: mfilesUsesOAuth
@@ -1056,6 +1092,18 @@ function getApiTokenHelpText(params: {
         </UpstreamConsoleLink>
         {"."}
       </>
+    );
+  }
+
+  if (type === "salesforce") {
+    if (params.authMethod === "soap_legacy")
+      return "Your Salesforce password immediately followed by the security token, with no separator.";
+    return (
+      <span>
+        Enable client credentials flow on an External Client App and assign its
+        execution user. Use the app's consumer secret, not a password or
+        security token.
+      </span>
     );
   }
 
@@ -1498,38 +1546,56 @@ const INLINE_CONFIG_FIELDS: Record<
       )}
     />
   ),
-  salesforce: ({ form, mode }) => (
-    <FormField
-      control={form.control}
-      name="email"
-      rules={mode === "create" ? { required: "Email is required" } : undefined}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>Email{mode === "edit" && " (optional)"}</FormLabel>
-          {mode === "edit" && (
+  salesforce: ({ form, mode }) =>
+    form.watch("config.authMethod") === "soap_legacy" ? (
+      <FormField
+        control={form.control}
+        name="email"
+        rules={
+          mode === "create" ? { required: "Username is required" } : undefined
+        }
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Username (optional)</FormLabel>
             <FormDescription>
-              Leave empty to keep existing credentials unchanged.
+              Leave empty to keep the existing Salesforce username.
             </FormDescription>
-          )}
-          <FormControl>
-            <Input
-              type="email"
-              placeholder={
-                mode === "create"
-                  ? "user@example.com"
-                  : "Leave empty to keep existing credentials"
-              }
-              autoComplete="off"
-              data-1p-ignore
-              data-lpignore="true"
-              {...field}
-            />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  ),
+            <FormControl>
+              <Input
+                autoComplete="off"
+                placeholder="Leave empty to keep existing username"
+                {...field}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    ) : (
+      <FormField
+        control={form.control}
+        name="config.clientId"
+        rules={{ required: "Consumer key is required" }}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Consumer Key</FormLabel>
+            <FormDescription>
+              The OAuth consumer key (client ID) of your Salesforce External
+              Client App.
+            </FormDescription>
+            <FormControl>
+              <Input
+                placeholder="Your Salesforce OAuth consumer key"
+                autoComplete="off"
+                {...field}
+                value={field.value ?? ""}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    ),
   perforce: ({ form, mode }) => (
     <>
       <FormField

@@ -8,6 +8,7 @@ import {
   buildAgentRuntimePlatformEgressPolicy,
   buildAgentRuntimeSandbox,
   buildAgentRuntimeSecret,
+  buildAgentRuntimeTerminalIntegrationScript,
   buildAgentRuntimeTurnScript,
   type KubernetesAgentRunLaunchSpec,
 } from "./manifests";
@@ -173,6 +174,7 @@ describe("buildAgentRuntimeSandbox", () => {
         { name: "LANG", value: "C.UTF-8" },
         { name: "LC_ALL", value: "C.UTF-8" },
         { name: "TERM", value: "xterm-256color" },
+        { name: "COLORTERM", value: "truecolor" },
       ]),
     );
     expect(
@@ -390,6 +392,16 @@ describe("the container bootstrap", () => {
     expect(bootstrap.indexOf('while [ ! -f "$turn.result" ]')).toBeLessThan(
       bootstrap.indexOf("archestra-readable-transcript=base64"),
     );
+  });
+
+  it("advertises truecolor to native TUIs and browser tmux clients", () => {
+    expect(
+      buildAgentRuntimeTurnScript({ ...SPEC, runtimeScope: SPEC.namespace }),
+    ).toContain("export COLORTERM='truecolor'");
+    const attach = buildAgentRuntimeTerminalIntegrationScript();
+    expect(attach).toContain("export TERM=xterm-256color COLORTERM=truecolor");
+    expect(attach).toContain("tmux set-option -s set-clipboard on");
+    expect(attach).toContain("tmux -T RGB,clipboard attach -t agent");
   });
 
   it("gives detached TUIs a browser-sized canvas before anyone attaches", () => {

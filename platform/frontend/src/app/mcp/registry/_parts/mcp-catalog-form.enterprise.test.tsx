@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -59,6 +59,7 @@ vi.mock("@/lib/auth/identity-provider-read.query", () => ({
 vi.mock("@/lib/teams/team.query");
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useK8sImagePullSecrets: useK8sImagePullSecretsMock,
 }));
 
@@ -93,7 +94,6 @@ describe("McpCatalogForm enterprise gating", () => {
     vi.mocked(useFeature).mockImplementation((feature: string) => {
       if (feature === "mcpServerBaseImage") return "";
       if (feature === "orchestratorK8sRuntime") return true;
-      if (feature === "byosEnabled") return false;
       return undefined;
     });
     vi.mocked(useEnterpriseFeature).mockReturnValue(false);
@@ -231,6 +231,95 @@ describe("McpCatalogForm enterprise gating", () => {
     );
   });
 
+  it("shows a details-only editor what describes the server, not what it connects to", async () => {
+    render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={vi.fn()}
+        detailsOnly
+        initialValues={
+          {
+            id: "catalog-1",
+            name: "Remote MCP",
+            description: "",
+            icon: null,
+            serverType: "remote",
+            serverUrl: "https://mcp.example.com",
+            oauthConfig: null,
+            userConfig: {},
+            enterpriseManagedConfig: null,
+            localConfig: null,
+            deploymentSpecYaml: null,
+            labels: [],
+          } as never
+        }
+      />,
+    );
+
+    expect(screen.getByLabelText(/^Name/)).toBeInTheDocument();
+    // The connection stays in the form, so its checks are unchanged; it is
+    // just not shown.
+    expect(
+      screen.getByRole("heading", { name: "Connection" }).closest("section"),
+    ).toHaveClass("hidden");
+    await userEvent.click(screen.getByRole("button", { name: /^Advanced/ }));
+    expect(
+      screen.getByRole("heading", { name: "Environment" }).closest("section"),
+    ).toHaveClass("hidden");
+    expect(
+      screen.getByRole("heading", { name: "Labels" }).closest("section"),
+    ).not.toHaveClass("hidden");
+  });
+
+  it("saves a details-only description change without offering a restart", async () => {
+    const onSubmit = vi.fn();
+    const localItem = {
+      id: "catalog-1",
+      name: "notes",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: null,
+      oauthConfig: null,
+      userConfig: {},
+      enterpriseManagedConfig: null,
+      localConfig: {
+        dockerImage: "ghcr.io/acme/notes:1",
+        command: "node",
+        arguments: ["cli.js", "--headless"],
+        transportType: "stdio",
+        environment: [
+          {
+            key: "MODE",
+            type: "plain_text",
+            value: "fast",
+            promptOnInstallation: false,
+          },
+        ],
+      },
+      deploymentSpecYaml: null,
+      labels: [],
+    } as never;
+    render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={onSubmit}
+        detailsOnly
+        affectedServerCount={1}
+        initialValues={localItem}
+        footer={() => <button type="submit">Save</button>}
+      />,
+    );
+
+    await userEvent.type(screen.getByLabelText(/^Description/), "Mine");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("button", { name: /Save and restart/ }),
+    ).toBeNull();
+  });
+
   it("disables browser autofill for MCP config forms and secret fields", () => {
     const { container } = render(
       <McpCatalogForm
@@ -285,13 +374,15 @@ describe("McpCatalogForm enterprise gating", () => {
     expect(fireEvent.cut(clientSecret)).toBe(false);
   });
 
-  it("shows a disabled default environment selector when no custom environments are available", () => {
+  it("reveals the disabled default environment selector under Advanced when no custom environments are available", async () => {
     vi.mocked(useEnvironments).mockReturnValue({
       data: { environments: [], defaultAssignedCatalogCount: 0 },
     } as never);
 
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
 
+    expect(screen.queryByText("Environment")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^Advanced/ }));
     expect(screen.getByText("Environment")).toBeInTheDocument();
     expect(screen.getAllByText("Default").length).toBeGreaterThan(0);
     expect(

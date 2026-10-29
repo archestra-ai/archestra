@@ -1,4 +1,5 @@
 import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import connectionSetupsTable from "./connection-setup";
 import organizationsTable from "./organization";
 import usersTable from "./user";
 
@@ -32,6 +33,12 @@ const skillMarketplaceCredentialsTable = pgTable(
     tokenHash: text("token_hash").notNull().unique(),
     /** Leading characters, for identifying a credential without revealing it. */
     tokenStart: text("token_start").notNull(),
+    /** The Connect page setup that minted it, naming the agent that syncs. */
+    connectionSetupId: uuid("connection_setup_id").references(
+      () => connectionSetupsTable.id,
+      { onDelete: "set null" },
+    ),
+    /** Last clone or refresh of the marketplace, at most a minute stale. */
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

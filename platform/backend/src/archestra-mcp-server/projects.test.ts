@@ -17,6 +17,8 @@ import { type ArchestraContext, executeArchestraTool } from ".";
 const TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_project_from_conversation`;
 const LIST_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_projects`;
 const GET_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_project`;
+const LINK_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}link_app_to_project`;
+const UNLINK_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}unlink_app_from_project`;
 
 describe("create_project_from_conversation tool", () => {
   let agent: Agent;
@@ -141,6 +143,27 @@ describe("project read tools (list_projects, get_project)", () => {
     return { project, strangerId: stranger.id as string };
   }
 
+  test("says how many projects matched when it lists only the first ones", async () => {
+    for (let i = 0; i < 101; i++) {
+      await projectService.create({
+        organizationId,
+        userId,
+        name: `bulk-${String(i).padStart(3, "0")}`,
+        description: null,
+      });
+    }
+
+    const result = await executeArchestraTool(LIST_TOOL_NAME, {}, baseContext);
+
+    expect(result.isError).toBe(false);
+    expect(
+      (result.structuredContent as { projects: unknown[] }).projects,
+    ).toHaveLength(100);
+    expect(JSON.stringify(result.content)).toContain(
+      "showing the first 100 of 101; narrow with query.",
+    );
+  });
+
   test("lists own and shared projects but not another member's private one", async ({
     makeUser,
     makeMember,
@@ -173,6 +196,56 @@ describe("project read tools (list_projects, get_project)", () => {
     expect(ids).toContain(mine.id);
     expect(ids).toContain(shared.id);
     expect(ids).not.toContain(hidden.id);
+  });
+
+  test("narrows a project admin's list by access, reaching oversight rows through others", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const admin = await makeUser();
+    await makeMember(admin.id, organizationId, { role: "admin" });
+    const adminContext = { ...baseContext, userId: admin.id };
+    const mine = await projectService.create({
+      organizationId,
+      userId: admin.id,
+      name: "admins-own",
+      description: null,
+    });
+    const { project: orgShared } = await makeForeignProject(
+      makeUser,
+      makeMember,
+      "shared-with-org",
+      true,
+    );
+    const { project: foreignPrivate } = await makeForeignProject(
+      makeUser,
+      makeMember,
+      "strangers-private",
+      false,
+    );
+
+    const listIds = async (access?: string[]) => {
+      const result = await executeArchestraTool(
+        LIST_TOOL_NAME,
+        access ? { access } : {},
+        adminContext,
+      );
+      expect(result.isError).toBe(false);
+      return (
+        result.structuredContent as { projects: { id: string }[] }
+      ).projects
+        .map((p) => p.id)
+        .sort();
+    };
+
+    // Omitted keeps today's behaviour: the admin's wildcard grant reaches
+    // every project.
+    expect(await listIds()).toEqual(
+      [mine.id, orgShared.id, foreignPrivate.id].sort(),
+    );
+    expect(await listIds(["mine"])).toEqual([mine.id]);
+    expect(await listIds(["org"])).toEqual([orgShared.id]);
+    expect(await listIds(["others"])).toEqual([foreignPrivate.id]);
   });
 
   test("narrows the list by query", async () => {
@@ -246,6 +319,40 @@ describe("project read tools (list_projects, get_project)", () => {
     expect(out.files.map((f) => f.filename)).toContain("spec.md");
   });
 
+  test("lists the project's linked apps", async ({ makeApp }) => {
+    const project = await projectService.create({
+      organizationId,
+      userId,
+      name: "with-apps",
+      description: null,
+    });
+    const tracker = await makeApp({
+      organizationId,
+      authorId: userId,
+      name: "Vendor tracker",
+    });
+    await projectService.linkApp({
+      id: project.id,
+      appId: tracker.id,
+      organizationId,
+      userId,
+    });
+
+    const result = await executeArchestraTool(
+      GET_TOOL_NAME,
+      { project_id: project.id },
+      baseContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(
+      (result.structuredContent as { apps: { id: string; name: string }[] })
+        .apps,
+    ).toEqual([
+      expect.objectContaining({ id: tracker.id, name: "Vendor tracker" }),
+    ]);
+  });
+
   test("flags truncation instead of inlining very long instructions", async () => {
     const project = await projectService.create({
       organizationId,
@@ -294,5 +401,78 @@ describe("project read tools (list_projects, get_project)", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("Project not found");
+  });
+});
+
+describe("project app link tools (link_app_to_project, unlink_app_from_project)", () => {
+  let userId: string;
+  let organizationId: string;
+  let context: ArchestraContext;
+
+  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
+    organizationId = (await makeOrganization()).id;
+    userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: "member" });
+    const agent = await makeAgent({ organizationId });
+    // No conversation: what an external MCP client on a gateway has.
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      userId,
+      organizationId,
+    };
+  });
+
+  const makeProject = (name: string) =>
+    projectService.create({ organizationId, userId, name, description: null });
+
+  const linkedAppIds = async (projectId: string) =>
+    (
+      await projectService.listApps({ id: projectId, organizationId, userId })
+    ).map((a) => a.id);
+
+  test("links and unlinks an app outside a chat", async ({ makeApp }) => {
+    const project = await makeProject("linkable");
+    const board = await makeApp({ organizationId, authorId: userId });
+
+    const linked = await executeArchestraTool(
+      LINK_TOOL_NAME,
+      { project_id: project.id, app_id: board.id },
+      context,
+    );
+    expect(linked.isError).toBe(false);
+    expect(await linkedAppIds(project.id)).toEqual([board.id]);
+
+    const unlinked = await executeArchestraTool(
+      UNLINK_TOOL_NAME,
+      { project_id: project.id, app_id: board.id },
+      context,
+    );
+    expect(unlinked.isError).toBe(false);
+    expect(await linkedAppIds(project.id)).toEqual([]);
+  });
+
+  test("refuses an app the caller cannot read", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+  }) => {
+    const project = await makeProject("guarded");
+    const stranger = await makeUser();
+    await makeMember(stranger.id, organizationId, { role: "member" });
+    const theirs = await makeApp({
+      organizationId,
+      authorId: stranger.id,
+      access: "personal",
+    });
+
+    const result = await executeArchestraTool(
+      LINK_TOOL_NAME,
+      { project_id: project.id, app_id: theirs.id },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("App not found");
+    expect(await linkedAppIds(project.id)).toEqual([]);
   });
 });

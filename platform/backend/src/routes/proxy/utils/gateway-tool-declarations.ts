@@ -1,5 +1,5 @@
+import { createHash } from "node:crypto";
 import {
-  mayHoldAttestationToken,
   removeAttestationTokens,
   takeLeadingAttestation,
 } from "@/archestra-mcp-server/tool-attestation";
@@ -9,7 +9,11 @@ import {
 } from "@/openappa/wire";
 
 /** A tool the request declares, with the attestation marker its description led with. */
-export type GatewayToolDeclaration = DeclaredToolSpelling & { marker?: string };
+export type GatewayToolDeclaration = DeclaredToolSpelling & {
+  marker?: string;
+  /** Lossless callable-contract fingerprint, before proxy parameters are stripped. */
+  contract?: string;
+};
 
 /**
  * Removes gateway attestation markers from a request body in place.
@@ -31,20 +35,12 @@ export function extractGatewayToolDeclarations(
 }
 
 /**
- * Removes attestation markers from a raw JSON body forwarded without proxy handling
- * (such as Anthropic count_tokens). Returns the parsed body with markers removed,
- * or null if the payload contains no markers or is invalid JSON.
+ * Removes attestation markers, in place, from a parsed body a catch-all proxy
+ * forwards without proxy handling (such as Anthropic count_tokens). Returns
+ * whether it removed any.
  */
-export function removeMarkersFromForwardedJson(raw: Buffer): object | null {
-  if (!mayHoldAttestationToken(raw)) return null;
-  let body: unknown;
-  try {
-    body = JSON.parse(raw.toString("utf8"));
-  } catch {
-    return null;
-  }
-  if (typeof body !== "object" || body === null) return null;
-  return takeMarkers(body).changed ? body : null;
+export function removeMarkersFromBody(body: object): boolean {
+  return takeMarkers(body).changed;
 }
 
 // === Internal helpers ===
@@ -54,7 +50,7 @@ function takeMarkers(body: unknown): {
   changed: boolean;
 } {
   const declarations: GatewayToolDeclaration[] = [];
-  for (const { holder, name, namespace } of declaredToolEntries(body)) {
+  for (const { holder, name, namespace, tool } of declaredToolEntries(body)) {
     if (!name) continue;
     let marker: string | undefined;
     if (holder && typeof holder.description === "string") {
@@ -69,6 +65,7 @@ function takeMarkers(body: unknown): {
       name,
       ...(namespace ? { namespace } : {}),
       ...(marker ? { marker } : {}),
+      ...(holder ? callableContract(tool, holder) : {}),
     });
   }
   const removedElsewhere = removeTokensEverywhere(body);
@@ -78,6 +75,40 @@ function takeMarkers(body: unknown): {
       removedElsewhere ||
       declarations.some((declaration) => declaration.marker !== undefined),
   };
+}
+
+function callableContract(
+  tool: unknown,
+  holder: Record<string, unknown>,
+): { contract?: string } {
+  const record = tool as Record<string, unknown> | null;
+  if (!record || record.type === "custom" || record.custom) return {};
+  const input =
+    holder.input_schema ??
+    holder.parameters ??
+    holder.parametersJsonSchema ??
+    (holder.inputSchema as Record<string, unknown> | undefined)?.json;
+  if (typeof input !== "object" || input === null || Array.isArray(input))
+    return {};
+  const { name: _name, description: _description, ...definition } = holder;
+  try {
+    // Unlike diagnostic canonicalization, this never truncates deep schemas.
+    // An unrepresentable contract provides no evidence for alias recovery.
+    const serialized = JSON.stringify(
+      { type: record.type ?? "function", definition },
+      (_key, value) =>
+        value && typeof value === "object" && !Array.isArray(value)
+          ? Object.fromEntries(
+              Object.keys(value)
+                .sort()
+                .map((key) => [key, value[key]]),
+            )
+          : value,
+    );
+    return { contract: createHash("sha256").update(serialized).digest("hex") };
+  } catch {
+    return {};
+  }
 }
 
 /**

@@ -1,7 +1,7 @@
 import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
-  entry: ["src/app/**/*.{ts,tsx}", "src/mocks/**/*.ts", "sentry.*.config.ts"],
+  entry: ["src/mocks/**/*.ts", "sentry.*.config.ts"],
   project: ["src/**/*.{ts,tsx}", "tests-integration/**/*.{ts,tsx}"],
   ignore: [],
   ignoreDependencies: [

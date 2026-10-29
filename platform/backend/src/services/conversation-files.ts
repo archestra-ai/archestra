@@ -2,6 +2,7 @@ import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import FileModel from "@/models/file";
+import { fileStore } from "@/skills-sandbox/file-store";
 import {
   type ProjectFileScope,
   resolveProjectFileScope,
@@ -11,7 +12,7 @@ import { ApiError } from "@/types";
 import type { ConversationContentKey } from "@/types/conversation";
 import type { ConversationFilesResponse } from "@/types/conversation-file";
 
-/** Shown for a locked chat's attachment when the reader has no key. */
+/** Shown for an encrypted chat's attachment when the reader has no key. */
 const LOCKED_ATTACHMENT_PLACEHOLDER_NAME = "Locked file";
 
 type ProjectFile = {
@@ -34,10 +35,10 @@ class ConversationFilesService {
     /** Who is asking; their project access gates the project files. */
     requestingUserId: string;
     /**
-     * The locked chat's browser-held key, when the request carried one. It
+     * The encrypted chat's browser-held key, when the request carried one. It
      * opens the attachment filenames; without it they stay sealed and the panel
      * lists each file under a neutral placeholder, which is what a reader who
-     * reaches a locked chat through project membership sees.
+     * reaches an encrypted chat through project membership sees.
      */
     conversationKey?: ConversationContentKey | null;
   }): Promise<ConversationFilesResponse> {
@@ -101,7 +102,7 @@ class ConversationFilesService {
           // A still-sealed name would render as a wall of base64; say the file
           // is there and unreadable instead.
           name:
-            a.lockedChat && !params.conversationKey
+            a.encryptedChat && !params.conversationKey
               ? LOCKED_ATTACHMENT_PLACEHOLDER_NAME
               : a.originalName,
           mimeType: a.mimeType,
@@ -177,12 +178,26 @@ class ConversationFilesService {
       return { files: [], projectId: null, projectName: null };
     }
 
-    const files = await FileModel.listByProject({
+    // The store, not the files table: with an external file store a project
+    // folder can also hold hand-placed objects (no row). The project page lists
+    // them, so the chat panel must too — addressed by their `obj_` ref, which the
+    // byte and delete endpoints both accept.
+    const files = await fileStore.search({
       organizationId: params.organizationId,
-      projectId: scope.projectId,
+      userId: params.requestingUserId,
+      scope: {
+        kind: "project",
+        projectId: scope.projectId,
+        projectName: scope.projectName,
+      },
     });
     return {
-      files,
+      files: files.map((f) => ({
+        id: f.downloadRef,
+        filename: f.filename,
+        mimeType: f.mimeType,
+        createdAt: f.createdAt,
+      })),
       projectId: scope.projectId,
       projectName: scope.projectName,
     };

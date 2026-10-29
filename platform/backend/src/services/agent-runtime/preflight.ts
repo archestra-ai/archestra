@@ -1,6 +1,8 @@
 import type { A2AActor } from "@/agents/a2a/a2a-base";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { AgentRuntimeCredentialsRequiredError, ApiError } from "@/types";
+import { prepareAgentRuntimeBackendDriver } from "./backends";
 import { claudeCodeAccountManager } from "./claude-code-account";
 import { preflightAgentRuntimeCredentials } from "./credentials";
 import { preflightAgentRuntimeModelCompatibility } from "./model-compatibility";
@@ -13,6 +15,7 @@ export async function preflightAgentRuntimeLaunch(params: {
 }) {
   const { runtime, agent, actor } = params;
   const userId = actor.kind === "user" ? actor.id : null;
+  await prepareAgentRuntimeBackendDriver(runtime.backend);
   const { usesClaudeCodeSubscription } =
     await preflightAgentRuntimeModelCompatibility({
       runtime,
@@ -24,6 +27,8 @@ export async function preflightAgentRuntimeLaunch(params: {
     runtime,
     organizationId: actor.organizationId,
     userId,
+    authorizationUserId:
+      actor.kind === "serviceAccount" ? serviceAccountUserId(actor.id) : userId,
   });
   if (credentials.misconfigured.length > 0) {
     throw new ApiError(

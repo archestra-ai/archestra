@@ -11,17 +11,15 @@
 
 import { APP_ID_HEADER } from "@archestra/shared";
 import { eq } from "drizzle-orm";
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
+import type { FastifyInstance } from "fastify";
 import type OpenAI from "openai";
 import { vi } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import db, { schema } from "@/database";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { openaiAdapterFactory } from "../adapters/openai";
 import openAiProxyRoutes from "./openai";
 
@@ -32,6 +30,24 @@ const OPENAI_HEADERS = {
   Authorization: "Bearer test-key",
   "Content-Type": "application/json",
 };
+
+/** A passthrough virtual key for a fresh member of `organizationId`. */
+async function passthroughHeaders(
+  organizationId: string,
+  fixtures: {
+    makeUser: () => Promise<{ id: string }>;
+    makeMember: (userId: string, organizationId: string) => Promise<unknown>;
+  },
+) {
+  const owner = await fixtures.makeUser();
+  await fixtures.makeMember(owner.id, organizationId);
+  return {
+    "x-archestra-virtual-key": await makePassthroughCredential({
+      organizationId,
+      ownerId: owner.id,
+    }),
+  };
+}
 
 const PAYLOAD = {
   model: "gpt-4o",
@@ -103,9 +119,7 @@ describe("app-runtime interaction attribution (integration)", () => {
   });
 
   async function setupRoute() {
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
+    app = createFastifyInstance();
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       () => fakeOpenAiClient() as never,
     );
@@ -116,6 +130,8 @@ describe("app-runtime interaction attribution (integration)", () => {
     makeOrganization,
     makeAgent,
     makeApp,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
@@ -123,13 +139,22 @@ describe("app-runtime interaction attribution (integration)", () => {
       name: "App Runtime LLM Agent",
     });
     const ownedApp = await makeApp({ organizationId: org.id });
+    const credential = await passthroughHeaders(org.id, {
+      makeUser,
+      makeMember,
+    });
 
     await setupRoute();
 
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: { ...OPENAI_HEADERS, [APP_ID_HEADER]: ownedApp.id },
+      headers: {
+        ...internalCallHeader(),
+        ...OPENAI_HEADERS,
+        ...credential,
+        [APP_ID_HEADER]: ownedApp.id,
+      },
       payload: PAYLOAD,
     });
 
@@ -141,10 +166,16 @@ describe("app-runtime interaction attribution (integration)", () => {
     makeOrganization,
     makeAgent,
     makeApp,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
     const ownedApp = await makeApp({ organizationId: org.id });
+    const credential = await passthroughHeaders(org.id, {
+      makeUser,
+      makeMember,
+    });
 
     await setupRoute();
 
@@ -154,7 +185,11 @@ describe("app-runtime interaction attribution (integration)", () => {
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       remoteAddress: "203.0.113.7",
-      headers: { ...OPENAI_HEADERS, [APP_ID_HEADER]: ownedApp.id },
+      headers: {
+        ...OPENAI_HEADERS,
+        ...credential,
+        [APP_ID_HEADER]: ownedApp.id,
+      },
       payload: PAYLOAD,
     });
 
@@ -166,6 +201,8 @@ describe("app-runtime interaction attribution (integration)", () => {
     makeOrganization,
     makeAgent,
     makeApp,
+    makeUser,
+    makeMember,
   }) => {
     const [org, otherOrg] = await Promise.all([
       makeOrganization(),
@@ -173,13 +210,21 @@ describe("app-runtime interaction attribution (integration)", () => {
     ]);
     const agent = await makeAgent({ organizationId: org.id });
     const foreignApp = await makeApp({ organizationId: otherOrg.id });
+    const credential = await passthroughHeaders(org.id, {
+      makeUser,
+      makeMember,
+    });
 
     await setupRoute();
 
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: { ...OPENAI_HEADERS, [APP_ID_HEADER]: foreignApp.id },
+      headers: {
+        ...OPENAI_HEADERS,
+        ...credential,
+        [APP_ID_HEADER]: foreignApp.id,
+      },
       payload: PAYLOAD,
     });
 
@@ -190,9 +235,15 @@ describe("app-runtime interaction attribution (integration)", () => {
   test("a malformed app header is ignored, not fatal", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
+    const credential = await passthroughHeaders(org.id, {
+      makeUser,
+      makeMember,
+    });
 
     await setupRoute();
 
@@ -200,7 +251,11 @@ describe("app-runtime interaction attribution (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: { ...OPENAI_HEADERS, [APP_ID_HEADER]: "not-a-uuid" },
+      headers: {
+        ...OPENAI_HEADERS,
+        ...credential,
+        [APP_ID_HEADER]: "not-a-uuid",
+      },
       payload: PAYLOAD,
     });
 
@@ -211,16 +266,22 @@ describe("app-runtime interaction attribution (integration)", () => {
   test("leaves the app id null on an ordinary request", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
+    const credential = await passthroughHeaders(org.id, {
+      makeUser,
+      makeMember,
+    });
 
     await setupRoute();
 
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: OPENAI_HEADERS,
+      headers: { ...OPENAI_HEADERS, ...credential },
       payload: PAYLOAD,
     });
 

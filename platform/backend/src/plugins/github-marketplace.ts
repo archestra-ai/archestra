@@ -1,19 +1,22 @@
-import { PLUGIN_MARKETPLACE_DISCOVERY_LIMIT } from "@archestra/shared";
-import { Octokit } from "@octokit/rest";
+import {
+  GIT_PROVIDER_LABELS,
+  type GitHost,
+  gitHostFromUrl,
+  PLUGIN_MARKETPLACE_DISCOVERY_LIMIT,
+} from "@archestra/shared";
+import type { GitAccess } from "@/git-hosts/git-access";
 import type {
   ClientType,
   PluginMarketplaceDiscovery,
   PluginMarketplaceDiscoveryEntry,
 } from "@/types";
-import { readResponseBodyWithLimit } from "./bounded-response";
+import type { GithubTreeItem } from "./github-tree";
 import {
-  isGithubRateLimitError,
-  resolvePublicGithubCommit,
-} from "./github-public-git";
-import {
-  type GithubTreeItem,
-  githubRepositoryTreeService,
-} from "./github-tree";
+  createPluginRepoReader,
+  isGithubCloud,
+  type PluginRepoReader,
+  parsePluginRepoUrl,
+} from "./plugin-repo-reader";
 import { collectPluginTreeFiles } from "./plugin-tree-files";
 
 const MARKETPLACE_PATHS = [
@@ -25,6 +28,7 @@ const MARKETPLACE_PATHS = [
 ] as const;
 
 const MAX_MARKETPLACE_BYTES = 1024 * 1024;
+const MAX_PLUGIN_MANIFEST_BYTES = 64 * 1024;
 const MARKETPLACE_RESOLVE_CONCURRENCY = 8;
 const MAX_MARKETPLACE_SOURCE_TREES = 25;
 const MAX_MARKETPLACE_SIZE_PROBES = 5_000;
@@ -40,30 +44,36 @@ export class MarketplaceDiscoveryError extends Error {
 /**
  * Reads marketplace metadata without fetching plugin payloads or executing any
  * repository content. Every usable source is pinned to an immutable commit.
+ *
+ * Works on GitHub and GitLab, cloud or self-hosted. A repository without a
+ * marketplace manifest is scanned for plugin folders instead: every folder
+ * holding a `plugin.json` (or `.claude-plugin/plugin.json`) becomes an entry,
+ * and the result reports `marketplacePath: null`.
  */
 export async function discoverGithubMarketplace(params: {
   repoUrl: string;
   ref?: string | null;
   marketplacePath?: string;
-  githubToken?: string;
+  /** Host and token; omitted means public github.com. */
+  access?: GitAccess;
 }): Promise<PluginMarketplaceDiscovery> {
   const deadlineAt = Date.now() + MARKETPLACE_DISCOVERY_DEADLINE_MS;
   const deadlineSignal = AbortSignal.timeout(MARKETPLACE_DISCOVERY_DEADLINE_MS);
-  const repository = parseRepositoryUrl(params.repoUrl);
-  const ref = repository.ref ?? params.ref ?? null;
-  const octokit = new Octokit({
-    ...(params.githubToken ? { auth: params.githubToken } : {}),
-    request: { timeout: 10_000 },
+  const readers = new MarketplaceReaders(params.access);
+  const reader = readers.main;
+  const repository = parseRepositoryUrl({
+    value: params.repoUrl,
+    host: reader.host,
   });
-  let anonymousRateLimited = false;
+  const ref = repository.ref ?? params.ref ?? null;
   const pendingCommits = new Map<string, Promise<string>>();
   const externalCommitKeys = new Set<string>();
-  const marketplaceCommitKey = `${repository.slug}@${ref ?? "HEAD"}`;
+  const marketplaceCommitKey = commitKey(repository, ref);
   const resolveRepositoryCommit = async (
     target: RepositoryLocation,
     targetRef: string | null,
   ): Promise<string> => {
-    const key = `${target.slug}@${targetRef ?? "HEAD"}`;
+    const key = commitKey(target, targetRef);
     const pending = pendingCommits.get(key);
     if (pending) return pending;
     if (key !== marketplaceCommitKey && !externalCommitKeys.has(key)) {
@@ -74,17 +84,15 @@ export async function discoverGithubMarketplace(params: {
       }
       externalCommitKeys.add(key);
     }
-    const resolution = resolveCommit({
-      octokit,
-      repository: target,
-      ref: targetRef,
-      githubToken: params.githubToken,
-      preferPublicGit: anonymousRateLimited,
-      signal: deadlineSignal,
-    })
-      .then(({ sha, usedPublicFallback }) => {
-        if (usedPublicFallback) anonymousRateLimited = true;
-        return sha;
+    const resolution = readers
+      .for(target.host)
+      .resolveCommit({
+        repo: target.path,
+        ref: targetRef,
+        signal: deadlineSignal,
+      })
+      .catch((error) => {
+        throw new MarketplaceDiscoveryError(errorMessage(error));
       })
       .finally(() => pendingCommits.delete(key));
     pendingCommits.set(key, resolution);
@@ -92,37 +100,72 @@ export async function discoverGithubMarketplace(params: {
   };
 
   const commitSha = await resolveRepositoryCommit(repository, ref);
-  const resolvedMarketplace = await resolveMarketplacePath({
-    octokit,
-    repository,
-    commitSha,
-    requestedPath: params.marketplacePath,
-    githubToken: params.githubToken,
-    preferPublicGit: anonymousRateLimited,
-  });
-  if (resolvedMarketplace.usedPublicFallback) anonymousRateLimited = true;
-  const marketplacePath = resolvedMarketplace.path;
+  const marketplacePath = await reader
+    .findFirstFile({
+      repo: repository.path,
+      commitSha,
+      paths: params.marketplacePath
+        ? [validateMarketplacePath(params.marketplacePath)]
+        : MARKETPLACE_PATHS,
+    })
+    .catch((error) => {
+      throw new MarketplaceDiscoveryError(errorMessage(error));
+    });
 
   if (!marketplacePath) {
+    if (params.marketplacePath) {
+      return {
+        repoUrl: repository.path,
+        ref,
+        commitSha,
+        marketplacePath: null,
+        entries: [],
+        reason: "No supported marketplace manifest was found",
+      };
+    }
+    const folders = await discoverPluginFolders({
+      reader,
+      repository,
+      ref,
+      commitSha,
+      signal: deadlineSignal,
+    });
+    if (folders.length === 0) {
+      return {
+        repoUrl: repository.path,
+        ref,
+        commitSha,
+        marketplacePath: null,
+        entries: [],
+        reason:
+          "No supported marketplace manifest or plugin folder (plugin.json) was found",
+      };
+    }
+    const entries = await attachFileCounts({
+      entries: markDuplicateNames(folders),
+      readers,
+      deadlineAt,
+      signal: deadlineSignal,
+    });
     return {
-      repoUrl: repository.slug,
+      repoUrl: repository.path,
       ref,
       commitSha,
       marketplacePath: null,
-      entries: [],
-      reason: "No supported marketplace manifest was found",
+      entries,
+      reason: null,
     };
   }
 
   const raw = await fetchManifest({
+    reader,
     repository,
     commitSha,
     marketplacePath,
-    githubToken: params.githubToken,
   });
   if (raw === null) {
     return {
-      repoUrl: repository.slug,
+      repoUrl: repository.path,
       ref,
       commitSha,
       marketplacePath,
@@ -136,7 +179,7 @@ export async function discoverGithubMarketplace(params: {
     manifest = JSON.parse(raw);
   } catch {
     return {
-      repoUrl: repository.slug,
+      repoUrl: repository.path,
       ref,
       commitSha,
       marketplacePath,
@@ -148,7 +191,7 @@ export async function discoverGithubMarketplace(params: {
   const plugins = marketplaceEntries(manifest);
   if (!plugins) {
     return {
-      repoUrl: repository.slug,
+      repoUrl: repository.path,
       ref,
       commitSha,
       marketplacePath,
@@ -177,29 +220,15 @@ export async function discoverGithubMarketplace(params: {
         resolveCommit: resolveRepositoryCommit,
       }),
   );
-  const nameCounts = new Map<string, number>();
-  for (const entry of normalized) {
-    if (entry.name)
-      nameCounts.set(entry.name, (nameCounts.get(entry.name) ?? 0) + 1);
-  }
-  const deduplicated = normalized.map((entry) =>
-    entry.name && (nameCounts.get(entry.name) ?? 0) > 1
-      ? {
-          ...entry,
-          supported: false,
-          reason: `Marketplace contains duplicate plugin name "${entry.name}"`,
-        }
-      : entry,
-  );
   const entries = await attachFileCounts({
-    entries: deduplicated,
-    githubToken: params.githubToken,
+    entries: markDuplicateNames(normalized),
+    readers,
     deadlineAt,
     signal: deadlineSignal,
   });
 
   return {
-    repoUrl: repository.slug,
+    repoUrl: repository.path,
     ref,
     commitSha,
     marketplacePath,
@@ -208,172 +237,104 @@ export async function discoverGithubMarketplace(params: {
   };
 }
 
+/**
+ * The repository and access an advertised entry is read with. Entries on the
+ * marketplace's host carry a bare repository path and use its access; a
+ * github.com source advertised by a marketplace elsewhere carries a full
+ * github.com URL and is read publicly, so a credential never leaves its host.
+ */
+export function marketplaceSourceAccess(params: {
+  sourceRepoUrl: string;
+  access?: GitAccess;
+}): { repoUrl: string; access?: GitAccess } {
+  if (
+    params.access &&
+    !isGithubCloud(params.access.host) &&
+    hasScheme(params.sourceRepoUrl) &&
+    new URL(params.sourceRepoUrl).host === GITHUB_CLOUD.host
+  ) {
+    return { repoUrl: params.sourceRepoUrl };
+  }
+  return { repoUrl: params.sourceRepoUrl, access: params.access };
+}
+
 // === Internal helpers ===
 
 interface RepositoryLocation {
-  owner: string;
-  repo: string;
-  slug: string;
+  host: GitHost;
+  /** `owner/repo`, or a nested GitLab `group/sub/project`. */
+  path: string;
   ref: string | null;
 }
 
-function parseRepositoryUrl(value: string): RepositoryLocation {
-  const withoutProtocol = value
-    .trim()
-    .replace(/^https?:\/\//i, "")
-    .replace(/^github\.com\//i, "")
-    .replace(/\.git$/, "");
-  const segments = withoutProtocol.split("/").filter(Boolean);
-  if (segments.length < 2 || segments[0].includes(".")) {
-    throw new MarketplaceDiscoveryError(
-      "Repository must be on github.com and include an owner and repository",
-    );
+const GITHUB_CLOUD = (() => {
+  const host = gitHostFromUrl({ provider: "github" });
+  return { gitHost: host, host: new URL(host.webUrl).host };
+})();
+
+/**
+ * The marketplace host's reader (with the caller's token) plus a public
+ * github.com reader for github.com sources advertised from another host.
+ */
+class MarketplaceReaders {
+  readonly main: PluginRepoReader;
+  private publicGithub: PluginRepoReader | null = null;
+
+  constructor(access: GitAccess | undefined) {
+    this.main = createPluginRepoReader(access);
   }
-  const [owner, repo, ...rest] = segments;
-  const ref = rest[0] === "tree" && rest[1] ? rest[1] : null;
-  return { owner, repo, slug: `${owner}/${repo}`, ref };
+
+  for(host: GitHost): PluginRepoReader {
+    if (host.webUrl === this.main.host.webUrl) return this.main;
+    this.publicGithub ??= createPluginRepoReader();
+    return this.publicGithub;
+  }
 }
 
-async function resolveCommit(params: {
-  octokit: Octokit;
-  repository: RepositoryLocation;
-  ref: string | null;
-  githubToken?: string;
-  preferPublicGit: boolean;
-  signal?: AbortSignal;
-}): Promise<{ sha: string; usedPublicFallback: boolean }> {
-  const ref = params.ref ?? "HEAD";
-  if (!params.githubToken && params.preferPublicGit) {
-    return {
-      sha: await resolvePublicGithubCommit({
-        repository: params.repository,
-        ref: params.ref,
-        signal: params.signal,
-      }),
-      usedPublicFallback: true,
-    };
-  }
+function parseRepositoryUrl(params: {
+  value: string;
+  host: GitHost;
+}): RepositoryLocation {
   try {
-    const response = await params.octokit.rest.repos.getCommit({
-      owner: params.repository.owner,
-      repo: params.repository.repo,
-      ref,
-      request: params.signal ? { signal: params.signal } : undefined,
+    const location = parsePluginRepoUrl({
+      repoUrl: params.value,
+      host: params.host,
     });
-    return { sha: response.data.sha, usedPublicFallback: false };
+    return { host: params.host, path: location.path, ref: location.ref };
   } catch (error) {
-    if (!params.githubToken && isGithubRateLimitError(error)) {
-      try {
-        return {
-          sha: await resolvePublicGithubCommit({
-            repository: params.repository,
-            ref: params.ref,
-            signal: params.signal,
-          }),
-          usedPublicFallback: true,
-        };
-      } catch (fallbackError) {
-        throw new MarketplaceDiscoveryError(
-          `Could not resolve ref "${ref}" in ${params.repository.slug} after the anonymous GitHub API quota was exhausted: ${errorMessage(fallbackError)}`,
-        );
-      }
-    }
-    throw new MarketplaceDiscoveryError(
-      `Could not resolve ref "${ref}" in ${params.repository.slug}: ${errorMessage(error)}`,
-    );
+    throw new MarketplaceDiscoveryError(errorMessage(error));
   }
 }
 
-async function resolveMarketplacePath(params: {
-  octokit: Octokit;
-  repository: RepositoryLocation;
-  commitSha: string;
-  requestedPath?: string;
-  githubToken?: string;
-  preferPublicGit: boolean;
-}): Promise<{ path: string | null; usedPublicFallback: boolean }> {
-  const paths = params.requestedPath
-    ? [validateMarketplacePath(params.requestedPath)]
-    : [...MARKETPLACE_PATHS];
-  if (!params.githubToken && params.preferPublicGit) {
-    return {
-      path: await resolveMarketplacePathFromRaw({
-        repository: params.repository,
-        commitSha: params.commitSha,
-        paths,
-      }),
-      usedPublicFallback: true,
-    };
-  }
-  try {
-    const response = await params.octokit.rest.git.getTree({
-      owner: params.repository.owner,
-      repo: params.repository.repo,
-      tree_sha: params.commitSha,
-      recursive: "true",
-    });
-    if (response.data.truncated) {
-      throw new MarketplaceDiscoveryError(
-        "Repository tree is too large for marketplace discovery",
-      );
-    }
-    const files = new Set(
-      response.data.tree
-        .filter((item) => item.type === "blob" && item.path)
-        .map((item) => item.path as string),
-    );
-    return {
-      path: paths.find((path) => files.has(path)) ?? null,
-      usedPublicFallback: false,
-    };
-  } catch (error) {
-    if (error instanceof MarketplaceDiscoveryError) throw error;
-    if (!params.githubToken && isGithubRateLimitError(error)) {
-      return {
-        path: await resolveMarketplacePathFromRaw({
-          repository: params.repository,
-          commitSha: params.commitSha,
-          paths,
-        }),
-        usedPublicFallback: true,
-      };
-    }
-    throw new MarketplaceDiscoveryError(
-      `Could not read repository tree: ${errorMessage(error)}`,
-    );
-  }
+/** The location behind an entry's `sourceRepoUrl` (see `marketplaceSourceAccess`). */
+function sourceLocation(params: {
+  sourceRepoUrl: string;
+  mainHost: GitHost;
+}): RepositoryLocation {
+  const host =
+    hasScheme(params.sourceRepoUrl) &&
+    new URL(params.sourceRepoUrl).host === GITHUB_CLOUD.host
+      ? GITHUB_CLOUD.gitHost
+      : params.mainHost;
+  return parseRepositoryUrl({ value: params.sourceRepoUrl, host });
 }
 
-async function resolveMarketplacePathFromRaw(params: {
-  repository: RepositoryLocation;
-  commitSha: string;
-  paths: string[];
-}): Promise<string | null> {
-  for (const path of params.paths) {
-    let response: Response;
-    try {
-      response = await fetch(
-        rawGithubUrl({
-          repository: params.repository,
-          commitSha: params.commitSha,
-          path,
-        }),
-        { method: "HEAD", signal: AbortSignal.timeout(10_000) },
-      );
-    } catch (error) {
-      throw new MarketplaceDiscoveryError(
-        `Could not probe ${path}: ${errorMessage(error)}`,
-      );
-    }
-    if (response.status === 404) continue;
-    if (!response.ok) {
-      throw new MarketplaceDiscoveryError(
-        `Could not probe ${path}: GitHub returned ${response.status}`,
-      );
-    }
-    return path;
-  }
-  return null;
+/** How an entry names its repository: a path on the marketplace's host, else a full URL. */
+function sourceRepoUrlFor(params: {
+  location: RepositoryLocation;
+  mainHost: GitHost;
+}): string {
+  return params.location.host.webUrl === params.mainHost.webUrl
+    ? params.location.path
+    : `${params.location.host.webUrl}/${params.location.path}`;
+}
+
+function commitKey(location: RepositoryLocation, ref: string | null): string {
+  return `${location.host.webUrl}|${location.path}@${ref ?? "HEAD"}`;
+}
+
+function hasScheme(value: string): boolean {
+  return /^[a-z][a-z\d+.-]*:\/\//i.test(value.trim());
 }
 
 function validateMarketplacePath(
@@ -388,51 +349,171 @@ function validateMarketplacePath(
 }
 
 async function fetchManifest(params: {
+  reader: PluginRepoReader;
   repository: RepositoryLocation;
   commitSha: string;
   marketplacePath: string;
-  githubToken?: string;
 }): Promise<string | null> {
-  const path = params.marketplacePath
-    .split("/")
-    .map(encodeURIComponent)
-    .join("/");
-  let response: Response;
+  let bytes: Buffer | null;
   try {
-    response = await fetch(
-      rawGithubUrl({
-        repository: params.repository,
-        commitSha: params.commitSha,
-        path,
-      }),
-      {
-        headers: params.githubToken
-          ? { Authorization: `Bearer ${params.githubToken}` }
-          : undefined,
-        signal: AbortSignal.timeout(10_000),
-      },
-    );
+    bytes = await params.reader.readFile({
+      repo: params.repository.path,
+      commitSha: params.commitSha,
+      path: params.marketplacePath,
+      maxBytes: MAX_MARKETPLACE_BYTES,
+      timeoutMs: 10_000,
+    });
   } catch (error) {
     throw new MarketplaceDiscoveryError(
       `Could not fetch ${params.marketplacePath}: ${errorMessage(error)}`,
     );
   }
-  if (!response.ok) {
+  return bytes ? decodeUtf8(bytes) : null;
+}
+
+/**
+ * Plugin folders in a repository without a marketplace manifest: every folder
+ * holding `plugin.json` or `.claude-plugin/plugin.json`. Each behaves like a
+ * relative-path marketplace entry pinned to the repository's commit.
+ */
+async function discoverPluginFolders(params: {
+  reader: PluginRepoReader;
+  repository: RepositoryLocation;
+  ref: string | null;
+  commitSha: string;
+  signal?: AbortSignal;
+}): Promise<MarketplaceEntry[]> {
+  let tree: GithubTreeItem[];
+  try {
+    tree = await params.reader.readTree({
+      repo: params.repository.path,
+      commitSha: params.commitSha,
+      signal: params.signal,
+    });
+  } catch (error) {
     throw new MarketplaceDiscoveryError(
-      `Could not fetch ${params.marketplacePath}: GitHub returned ${response.status}`,
+      `Could not read repository tree: ${errorMessage(error)}`,
     );
   }
-  const bytes = await readResponseBodyWithLimit(
-    response,
-    MAX_MARKETPLACE_BYTES,
+  const manifests = new Map<string, string>();
+  for (const item of tree) {
+    if (item.type !== "blob" || !item.path) continue;
+    const folder = pluginFolderOf(item.path);
+    if (folder === null) continue;
+    // `.claude-plugin/plugin.json` wins over a sibling `plugin.json`.
+    if (!manifests.has(folder) || item.path.includes(".claude-plugin/")) {
+      manifests.set(folder, item.path);
+    }
+  }
+  if (manifests.size > PLUGIN_MARKETPLACE_DISCOVERY_LIMIT) {
+    throw new MarketplaceDiscoveryError(
+      `Repository has ${manifests.size} plugin folders; the discovery limit is ${PLUGIN_MARKETPLACE_DISCOVERY_LIMIT}`,
+    );
+  }
+  const folders = [...manifests.entries()].sort(([a], [b]) =>
+    a.localeCompare(b),
   );
-  if (!bytes) return null;
+  return mapWithConcurrency(
+    folders,
+    MARKETPLACE_RESOLVE_CONCURRENCY,
+    async ([folder, manifestPath]) => {
+      const manifest = await readPluginManifest({
+        reader: params.reader,
+        repository: params.repository,
+        commitSha: params.commitSha,
+        path: manifestPath,
+      });
+      const fallbackName =
+        (folder || params.repository.path).split("/").pop() ?? "";
+      return {
+        marketplacePath: manifestPath,
+        name: stringValue(manifest?.name)?.trim() || fallbackName,
+        description: stringValue(manifest?.description) ?? "",
+        version: stringValue(manifest?.version) ?? "",
+        clientType:
+          clientTypeFromValue(
+            stringValue(manifest?.clientType) ?? stringValue(manifest?.client),
+          ) ?? "claude-code",
+        sourceRepoUrl: params.repository.path,
+        sourceRef: params.ref,
+        sourceSubdir: folder,
+        sourceCommitSha: params.commitSha,
+        fileCount: 0,
+        supported: true,
+        reason: null,
+      };
+    },
+  );
+}
+
+/**
+ * The plugin folder a `plugin.json` path declares, or null. Hidden folders
+ * (other than `.claude-plugin`) and dependency folders are skipped.
+ */
+function pluginFolderOf(path: string): string | null {
+  const segments = path.split("/");
+  if (segments.pop() !== "plugin.json") return null;
+  if (segments.at(-1) === ".claude-plugin") segments.pop();
+  if (
+    segments.some(
+      (segment) => segment.startsWith(".") || segment === "node_modules",
+    )
+  ) {
+    return null;
+  }
+  const folder = segments.join("/");
+  return normalizeLocalPath(folder) === folder ? folder : null;
+}
+
+async function readPluginManifest(params: {
+  reader: PluginRepoReader;
+  repository: RepositoryLocation;
+  commitSha: string;
+  path: string;
+}): Promise<Record<string, unknown> | null> {
+  try {
+    const bytes = await params.reader.readFile({
+      repo: params.repository.path,
+      commitSha: params.commitSha,
+      path: params.path,
+      maxBytes: MAX_PLUGIN_MANIFEST_BYTES,
+      timeoutMs: 10_000,
+    });
+    const text = bytes ? decodeUtf8(bytes) : null;
+    const parsed: unknown = text ? JSON.parse(text) : null;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    // An unreadable manifest still names its folder.
+    return null;
+  }
+}
+
+function markDuplicateNames(entries: MarketplaceEntry[]): MarketplaceEntry[] {
+  const nameCounts = new Map<string, number>();
+  for (const entry of entries) {
+    if (entry.name)
+      nameCounts.set(entry.name, (nameCounts.get(entry.name) ?? 0) + 1);
+  }
+  return entries.map((entry) =>
+    entry.name && (nameCounts.get(entry.name) ?? 0) > 1
+      ? {
+          ...entry,
+          supported: false,
+          reason: `Marketplace contains duplicate plugin name "${entry.name}"`,
+        }
+      : entry,
+  );
+}
+
+function decodeUtf8(bytes: Buffer): string | null {
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
     return null;
   }
 }
+
+type MarketplaceEntry = PluginMarketplaceDiscoveryEntry;
 
 function marketplaceEntries(manifest: unknown): unknown[] | null {
   if (Array.isArray(manifest)) return manifest;
@@ -470,10 +551,11 @@ function inferClientType(params: {
 
 async function attachFileCounts(params: {
   entries: PluginMarketplaceDiscoveryEntry[];
-  githubToken?: string;
+  readers: MarketplaceReaders;
   deadlineAt: number;
   signal?: AbortSignal;
 }): Promise<PluginMarketplaceDiscoveryEntry[]> {
+  const mainHost = params.readers.main.host;
   const sources = new Map<
     string,
     { repository: RepositoryLocation; commitSha: string }
@@ -483,8 +565,11 @@ async function attachFileCounts(params: {
     if (!entry.supported || !entry.sourceRepoUrl || !entry.sourceCommitSha) {
       continue;
     }
-    const repository = parseRepositoryUrl(entry.sourceRepoUrl);
-    const key = `${repository.slug}@${entry.sourceCommitSha}`;
+    const repository = sourceLocation({
+      sourceRepoUrl: entry.sourceRepoUrl,
+      mainHost,
+    });
+    const key = commitKey(repository, entry.sourceCommitSha);
     if (!sources.has(key) && sources.size >= MAX_MARKETPLACE_SOURCE_TREES) {
       sourcesOverBudget.add(key);
       continue;
@@ -500,11 +585,9 @@ async function attachFileCounts(params: {
           deadlineAt: params.deadlineAt,
           message: "Marketplace repository inspection timed out",
           operation: () =>
-            githubRepositoryTreeService.read({
-              owner: source.repository.owner,
-              repo: source.repository.repo,
+            params.readers.for(source.repository.host).readTree({
+              repo: source.repository.path,
               commitSha: source.commitSha,
-              githubToken: params.githubToken,
               signal: params.signal,
             }),
         });
@@ -527,8 +610,11 @@ async function attachFileCounts(params: {
       if (!entry.supported || !entry.sourceRepoUrl || !entry.sourceCommitSha) {
         return entry;
       }
-      const repository = parseRepositoryUrl(entry.sourceRepoUrl);
-      const sourceKey = `${repository.slug}@${entry.sourceCommitSha}`;
+      const repository = sourceLocation({
+        sourceRepoUrl: entry.sourceRepoUrl,
+        mainHost,
+      });
+      const sourceKey = commitKey(repository, entry.sourceCommitSha);
       if (sourcesOverBudget.has(sourceKey)) {
         // The marketplace already pinned this source to an immutable commit.
         // Defer expensive tree inspection until the user previews/imports the
@@ -576,11 +662,11 @@ async function attachFileCounts(params: {
             async (candidate) =>
               [
                 candidate.repoPath,
-                await fetchRawFileSize({
+                await fetchFileSize({
+                  reader: params.readers.for(repository.host),
                   repository,
                   commitSha: entry.sourceCommitSha as string,
                   path: candidate.repoPath,
-                  githubToken: params.githubToken,
                   deadlineAt: params.deadlineAt,
                   signal: params.signal,
                 }),
@@ -673,12 +759,16 @@ async function normalizeEntry(params: {
     return unsupportedEntry(base, "Could not infer a supported client type");
   }
 
-  const source = parsePluginSource(entry.source ?? entry.path);
+  const mainHost = params.repository.host;
+  const source = parsePluginSource({
+    value: entry.source ?? entry.path,
+    host: mainHost,
+  });
   if (source.kind === "invalid") return unsupportedEntry(base, source.reason);
   if (source.kind === "local") {
     return {
       ...base,
-      sourceRepoUrl: params.repository.slug,
+      sourceRepoUrl: params.repository.path,
       sourceRef: params.ref,
       sourceSubdir: source.path,
       sourceCommitSha: params.commitSha,
@@ -688,13 +778,17 @@ async function normalizeEntry(params: {
     };
   }
 
+  const sourceRepoUrl = sourceRepoUrlFor({
+    location: source.repository,
+    mainHost,
+  });
   try {
     const sourceCommitSha =
       source.commitSha ??
       (await params.resolveCommit(source.repository, source.ref));
     return {
       ...base,
-      sourceRepoUrl: source.repository.slug,
+      sourceRepoUrl,
       sourceRef: source.ref,
       sourceSubdir: source.path,
       sourceCommitSha,
@@ -707,7 +801,7 @@ async function normalizeEntry(params: {
       base,
       `Could not resolve external source: ${errorMessage(error)}`,
       {
-        sourceRepoUrl: source.repository.slug,
+        sourceRepoUrl,
         sourceRef: source.ref,
         sourceSubdir: source.path,
       },
@@ -745,7 +839,7 @@ function unsupportedEntry(
 type PluginSource =
   | { kind: "local"; path: string }
   | {
-      kind: "github";
+      kind: "remote";
       repository: RepositoryLocation;
       ref: string | null;
       commitSha: string | null;
@@ -753,19 +847,25 @@ type PluginSource =
     }
   | { kind: "invalid"; reason: string };
 
-function parsePluginSource(value: unknown): PluginSource {
+/**
+ * A marketplace entry's source: a relative path in the marketplace's
+ * repository, a URL on the marketplace's host (GitHub `/tree/<ref>/<path>` or
+ * GitLab `/-/tree/<ref>/<path>` forms), or a `{ source: "github", repo }`
+ * object, which always means github.com.
+ */
+function parsePluginSource(params: {
+  value: unknown;
+  host: GitHost;
+}): PluginSource {
+  const { value, host } = params;
+  const label = GIT_PROVIDER_LABELS[host.provider];
   if (typeof value === "string") {
-    if (
-      value.startsWith("https://github.com/") ||
-      value.startsWith("http://github.com/")
-    ) {
-      return githubSourceFromUrl(value);
-    }
+    if (hasScheme(value)) return sourceFromUrl({ value, host });
     const path = normalizeLocalPath(value);
     return path === null
       ? {
           kind: "invalid",
-          reason: "Plugin source must be a safe relative path or GitHub URL",
+          reason: `Plugin source must be a safe relative path or ${label} URL`,
         }
       : { kind: "local", path };
   }
@@ -789,20 +889,20 @@ function parsePluginSource(value: unknown): PluginSource {
     });
   }
   if (typeof value.url === "string") {
-    const source = githubSourceFromUrl(value.url);
-    if (source.kind !== "github") return source;
+    const source = sourceFromUrl({ value: value.url, host });
+    if (source.kind !== "remote") return source;
     const path = normalizeLocalPath(stringValue(value.path) ?? source.path);
     if (path === null) {
       return {
         kind: "invalid",
-        reason: "GitHub plugin source path must be safe",
+        reason: `${label} plugin source path must be safe`,
       };
     }
     const commitSha = stringValue(value.sha);
     if (commitSha && !isCommitSha(commitSha)) {
       return {
         kind: "invalid",
-        reason: "GitHub plugin source SHA must be a 40-character commit",
+        reason: `${label} plugin source SHA must be a 40-character commit`,
       };
     }
     return {
@@ -815,6 +915,7 @@ function parsePluginSource(value: unknown): PluginSource {
   return { kind: "invalid", reason: "Unsupported plugin source" };
 }
 
+/** `{ source: "github", repo }` entries name github.com repositories. */
 function githubSourceFromParts(params: {
   repo: string | null;
   ref: string | null;
@@ -829,7 +930,10 @@ function githubSourceFromParts(params: {
   }
   let repository: RepositoryLocation;
   try {
-    repository = parseRepositoryUrl(params.repo);
+    repository = parseRepositoryUrl({
+      value: params.repo,
+      host: GITHUB_CLOUD.gitHost,
+    });
   } catch {
     return {
       kind: "invalid",
@@ -850,7 +954,7 @@ function githubSourceFromParts(params: {
     };
   }
   return {
-    kind: "github",
+    kind: "remote",
     repository,
     ref: params.ref ?? repository.ref,
     commitSha: params.commitSha ?? null,
@@ -858,31 +962,32 @@ function githubSourceFromParts(params: {
   };
 }
 
-function githubSourceFromUrl(value: string): PluginSource {
-  let repository: RepositoryLocation;
+/** A repository URL on the marketplace's own host. */
+function sourceFromUrl(params: { value: string; host: GitHost }): PluginSource {
+  const label = GIT_PROVIDER_LABELS[params.host.provider];
+  let location: ReturnType<typeof parsePluginRepoUrl>;
   try {
-    repository = parseRepositoryUrl(value);
+    location = parsePluginRepoUrl({
+      repoUrl: params.value,
+      host: params.host,
+    });
   } catch {
-    return { kind: "invalid", reason: "GitHub plugin source URL is invalid" };
+    return {
+      kind: "invalid",
+      reason: `${label} plugin source URL is invalid or not on ${params.host.webUrl}`,
+    };
   }
-  const segments = value
-    .trim()
-    .replace(/^https?:\/\/github\.com\//i, "")
-    .replace(/\.git$/, "")
-    .split("/")
-    .filter(Boolean);
-  const path = segments[2] === "tree" ? segments.slice(4).join("/") : "";
-  const normalizedPath = normalizeLocalPath(path);
+  const normalizedPath = normalizeLocalPath(location.subpath);
   if (normalizedPath === null) {
     return {
       kind: "invalid",
-      reason: "GitHub plugin source path must be safe",
+      reason: `${label} plugin source path must be safe`,
     };
   }
   return {
-    kind: "github",
-    repository,
-    ref: repository.ref,
+    kind: "remote",
+    repository: { host: params.host, path: location.path, ref: location.ref },
+    ref: location.ref,
     commitSha: null,
     path: normalizedPath,
   };
@@ -911,6 +1016,9 @@ function clientTypeFromValue(value: string | null): ClientType | null {
     case "claude":
     case "claude-code":
       return "claude-code";
+    case "claude-desktop":
+    case "cowork":
+      return "claude-desktop";
     case "copilot":
     case "copilot-cli":
     case "github-copilot":
@@ -925,54 +1033,25 @@ function clientTypeFromValue(value: string | null): ClientType | null {
   }
 }
 
-function rawGithubUrl(params: {
+async function fetchFileSize(params: {
+  reader: PluginRepoReader;
   repository: RepositoryLocation;
   commitSha: string;
   path: string;
-}): string {
-  return `https://raw.githubusercontent.com/${encodeURIComponent(params.repository.owner)}/${encodeURIComponent(params.repository.repo)}/${params.commitSha}/${params.path}`;
-}
-
-async function fetchRawFileSize(params: {
-  repository: RepositoryLocation;
-  commitSha: string;
-  path: string;
-  githubToken?: string;
   deadlineAt: number;
   signal?: AbortSignal;
 }): Promise<number> {
-  const encodedPath = params.path.split("/").map(encodeURIComponent).join("/");
   const remainingMs = params.deadlineAt - Date.now();
   if (remainingMs <= 0) {
     throw new Error("Marketplace file-size inspection timed out");
   }
-  const response = await fetch(
-    rawGithubUrl({
-      repository: params.repository,
-      commitSha: params.commitSha,
-      path: encodedPath,
-    }),
-    {
-      method: "HEAD",
-      headers: params.githubToken
-        ? { Authorization: `Bearer ${params.githubToken}` }
-        : undefined,
-      signal: params.signal
-        ? AbortSignal.any([
-            params.signal,
-            AbortSignal.timeout(Math.min(10_000, remainingMs)),
-          ])
-        : AbortSignal.timeout(Math.min(10_000, remainingMs)),
-    },
-  );
-  if (!response.ok) {
-    throw new Error(`GitHub returned ${response.status} for ${params.path}`);
-  }
-  const size = Number(response.headers.get("content-length"));
-  if (!Number.isFinite(size) || size < 0) {
-    throw new Error(`GitHub omitted Content-Length for ${params.path}`);
-  }
-  return size;
+  return params.reader.fileSize({
+    repo: params.repository.path,
+    commitSha: params.commitSha,
+    path: params.path,
+    timeoutMs: Math.min(10_000, remainingMs),
+    signal: params.signal,
+  });
 }
 
 async function runWithDeadline<Value>(params: {

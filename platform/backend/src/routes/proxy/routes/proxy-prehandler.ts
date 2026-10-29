@@ -5,8 +5,16 @@ import {
   type FastifyRequest,
   type HookHandlerDoneFunction,
 } from "fastify";
+import { mayHoldAttestationToken } from "@/archestra-mcp-server/tool-attestation";
 import logger from "@/logging";
-import { removeMarkersFromForwardedJson } from "../utils/gateway-tool-declarations";
+import LlmThroughputModel from "@/models/llm-throughput";
+import {
+  mayHoldOpenAppaPayload,
+  sanitizeForwardedRequest,
+} from "@/openappa/request";
+import { ThroughputError } from "@/services/llm-throughput";
+import { captureClientRuntimeEvidence } from "../utils/client-runtime-evidence";
+import { removeMarkersFromBody } from "../utils/gateway-tool-declarations";
 
 const UUID_REGEX =
   /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i;
@@ -16,7 +24,8 @@ const UUID_REGEX =
  * 1. Rejects POST requests matching the custom-handled endpoint suffix with a 400
  * 2. Strips agent UUIDs from the URL path so the proxy forwards to the correct upstream
  * 3. Logs the rewrite or pass-through for debugging
- * 4. Takes the gateway's tool attestation markers out of a forwarded JSON body
+ * 4. Takes the gateway's tool attestation markers and OpenAPPA's provider-bound
+ *    payloads out of a forwarded JSON body
  *
  * `rejectUnhandledPaths` (GitHub Copilot): every supported endpoint has its own
  * explicit route, so anything reaching this catch-all proxy is unsupported.
@@ -32,6 +41,16 @@ export function createProxyPreHandler(params: {
   rewritePrefix?: string;
   skipErrorResponse?: Record<string, unknown>;
   rejectUnhandledPaths?: boolean;
+  beforeCleanBody?: (request: FastifyRequest, body: unknown) => Promise<void>;
+  /**
+   * Platform check that runs before anything else, so a rejected request never
+   * reaches the rewrite or the upstream. Receives the agent UUID from the URL,
+   * if any, because the rewrite strips it.
+   */
+  authenticate?: (params: {
+    request: FastifyRequest;
+    agentId?: string;
+  }) => Promise<void>;
 }) {
   const { apiPrefix, endpointSuffix, upstream, providerName } = params;
   const rewritePrefix = params.rewritePrefix ?? "";
@@ -42,11 +61,12 @@ export function createProxyPreHandler(params: {
     },
   };
 
-  return (
+  const rewritePreHandler = (
     request: FastifyRequest,
     reply: FastifyReply,
     next: HookHandlerDoneFunction,
   ) => {
+    captureClientRuntimeEvidence(request);
     const urlPath = request.url.split("?")[0];
     const endpointSuffixes =
       typeof endpointSuffix === "string" ? [endpointSuffix] : endpointSuffix;
@@ -128,25 +148,84 @@ export function createProxyPreHandler(params: {
       );
     }
 
-    removeForwardedAttestationMarkers(request).then(() => next(), next);
+    // Strip last: the body hooks (e.g. Claude Code's count observer) still
+    // read X-Archestra-* headers such as the agent id.
+    cleanForwardedBody(request, params.beforeCleanBody).then(() => {
+      stripArchestraRequestHeaders(request);
+      next();
+    }, next);
+  };
+
+  const { authenticate } = params;
+  return (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    next: HookHandlerDoneFunction,
+  ) => {
+    const agentId = request.url.replace(apiPrefix, "").match(UUID_REGEX)?.[1];
+    // .catch rather than a second .then argument, so a synchronous throw in
+    // the rewrite reaches Fastify instead of becoming an unhandled rejection.
+    Promise.resolve()
+      .then(async () => {
+        await authenticate?.({ request, agentId });
+        // Raw passthrough has neither resolved billing ownership nor a usage
+        // adapter. Fail explicitly rather than let it evade configured quotas.
+        // Metadata, stored results, file transfer and cancellation do not start
+        // inference. Keep these available even when another key has a quota.
+        if (isNonInferenceOperation(request)) return;
+        let configured: boolean;
+        try {
+          configured = await LlmThroughputModel.hasRules();
+        } catch {
+          throw new ThroughputError({
+            status: 503,
+            code: "archestra_quota_storage_unavailable",
+            message: "The gateway cannot verify its throughput quota.",
+          });
+        }
+        if (configured)
+          throw new ThroughputError({
+            status: 400,
+            code: "archestra_quota_unsupported_endpoint",
+            message:
+              "Throughput limits require a supported native inference endpoint. Unhandled inference operations are disabled while throughput limits are configured.",
+          });
+      })
+      .then(() => rewritePreHandler(request, reply, next))
+      .catch((error) => {
+        if (error instanceof ThroughputError) {
+          reply.code(error.status).send({
+            error: {
+              message: error.message,
+              type: "archestra_throughput_error",
+              code: error.code,
+            },
+          });
+          return;
+        }
+        next(error);
+      });
   };
 }
 
 /**
- * Takes the gateway's tool attestation markers out of a JSON body before a
- * catch-all proxy forwards it upstream, so they never reach a provider. The
- * dedicated routes strip them in handleLLMProxy, but clients also send their
- * tool list to endpoints only the catch-all serves: Anthropic's
+ * Cleans a JSON body before a catch-all proxy forwards it upstream: the
+ * gateway's tool attestation markers and OpenAPPA's provider-bound payloads
+ * (notice records and signed offers, control receipts, ask_user offers,
+ * trajectory stamps) never reach a provider. The
+ * dedicated routes do both in handleLLMProxy, but clients also send their tool
+ * list and history to endpoints only the catch-all serves: Anthropic's
  * `/v1/messages/count_tokens`, OpenAI's `/responses/input_tokens`, Gemini's
  * `:countTokens`.
  *
  * The catch-all hands its preHandler the raw body stream, so a JSON body is
  * read here, within the route's body limit, and put back: byte for byte when
- * it holds no marker, re-serialized when it did. Compressed and non-JSON
- * bodies are forwarded as they are.
+ * nothing in it changed, re-serialized when something did. Compressed and
+ * non-JSON bodies are forwarded as they are.
  */
-export async function removeForwardedAttestationMarkers(
+export async function cleanForwardedBody(
   request: FastifyRequest,
+  beforeCleanBody?: (request: FastifyRequest, body: unknown) => Promise<void>,
 ): Promise<void> {
   const body = request.body;
   if (!(body instanceof Readable) || !isUncompressedJson(request.headers)) {
@@ -160,11 +239,59 @@ export async function removeForwardedAttestationMarkers(
   // @fastify/reply-from pipes a stream upstream as it is, and serializes an
   // object for an application/json request with a fresh content-length.
   request.body =
-    removeMarkersFromForwardedJson(raw) ??
-    Readable.from([raw], { objectMode: false });
+    (await cleanedJson(
+      raw,
+      beforeCleanBody && ((body) => beforeCleanBody(request, body)),
+    )) ?? Readable.from([raw], { objectMode: false });
+}
+
+/**
+ * Removes every `X-Archestra-*` header before a catch-all proxy forwards the
+ * request. These headers carry Archestra's own credentials and routing hints
+ * (the passthrough key in `X-Archestra-Virtual-Key` above all), which must
+ * never reach a third-party provider. Runs after authentication has read them.
+ */
+export function stripArchestraRequestHeaders(request: FastifyRequest): void {
+  for (const headers of new Set([request.headers, request.raw.headers])) {
+    for (const name of Object.keys(headers)) {
+      if (
+        name.toLowerCase().startsWith("x-archestra-") ||
+        name.toLowerCase() === "provider-api-key-id"
+      ) {
+        delete headers[name];
+      }
+    }
+  }
 }
 
 // === Internal helpers ===
+
+/** The parsed body once something in it was removed; null to forward the bytes as they came. */
+async function cleanedJson(
+  raw: Buffer,
+  beforeCleanBody?: (body: unknown) => Promise<void>,
+): Promise<object | null> {
+  const markers = mayHoldAttestationToken(raw);
+  const payloads = mayHoldOpenAppaPayload(raw);
+  if (!markers && !payloads && !beforeCleanBody) return null;
+  let body: unknown;
+  try {
+    body = JSON.parse(raw.toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (typeof body !== "object" || body === null) return null;
+  if (beforeCleanBody) {
+    try {
+      await beforeCleanBody(body);
+    } catch {
+      // Optional observers must never prevent ordinary proxy forwarding.
+    }
+  }
+  const removedMarkers = markers && removeMarkersFromBody(body);
+  const removedPayloads = payloads && sanitizeForwardedRequest(body);
+  return removedMarkers || removedPayloads ? body : null;
+}
 
 function isUncompressedJson(headers: FastifyRequest["headers"]): boolean {
   const mediaType = headers["content-type"]?.split(";")[0].trim().toLowerCase();
@@ -219,4 +346,20 @@ function readBody(params: {
     stream.on("end", onEnd);
     stream.on("error", onError);
   });
+}
+
+function isNonInferenceOperation(request: FastifyRequest): boolean {
+  const path = request.url.split("?")[0].replace(/\/+$/, "");
+  // Realtime upgrades can start generation even though the handshake is GET.
+  if (request.headers.upgrade || /\/(?:realtime|live)(?:\/|$)/i.test(path))
+    return false;
+  if (["GET", "HEAD", "OPTIONS", "DELETE"].includes(request.method))
+    return true;
+  if (request.method !== "POST") return false;
+  return (
+    /(?:\/count_tokens|\/input_tokens|:countTokens)$/.test(path) ||
+    /\/files(?:\/[^/]+)?(?::upload)?$/.test(path) ||
+    /\/uploads(?:\/[^/]+(?:\/(?:parts|complete|cancel))?)?$/.test(path) ||
+    /\/(?:batches|responses)\/[^/]+\/cancel$/.test(path)
+  );
 }

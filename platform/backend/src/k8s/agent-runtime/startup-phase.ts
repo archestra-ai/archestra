@@ -41,7 +41,7 @@ export function describeAgentRuntimeStartupProgress(
       };
     }
 
-    const waiting = findWaitingContainer(pod);
+    const waiting = findContainerStartupProgress(pod);
     if (waiting) return waiting;
 
     // Scheduled, but no container has reported a state yet.
@@ -62,7 +62,7 @@ export function describeAgentRuntimeStartupProgress(
     // A Running pod can still hold a container that is not up: a crash loop
     // reports here, and silently calling that "starting" is how a broken image
     // spends the whole attach timeout looking like a slow one.
-    const waiting = findWaitingContainer(pod);
+    const waiting = findContainerStartupProgress(pod);
     if (waiting?.detail) {
       return { ...waiting, phase: "starting" };
     }
@@ -72,6 +72,9 @@ export function describeAgentRuntimeStartupProgress(
       detail: null,
     };
   }
+
+  const containerProgress = findContainerStartupProgress(pod);
+  if (containerProgress?.detail) return containerProgress;
 
   // Succeeded/Failed/Unknown: the callers that wait for a terminal treat these
   // as the end of the road, but a phase is still reported so a run that
@@ -114,6 +117,18 @@ export type AgentRuntimeStartupProgressReporter = (
   progress: AgentRuntimeStartupProgress & { resourceName?: string | null },
 ) => void;
 
+/** Whether a container is stuck because its image cannot be pulled. */
+export function hasAgentRuntimeImagePullFailure(
+  pod: k8s.V1Pod | null | undefined,
+): boolean {
+  return [
+    ...(pod?.status?.initContainerStatuses ?? []),
+    ...(pod?.status?.containerStatuses ?? []),
+  ].some((status) =>
+    IMAGE_WAITING_REASONS.has(status.state?.waiting?.reason ?? ""),
+  );
+}
+
 // ===================== internals =====================
 
 /**
@@ -136,45 +151,84 @@ const BENIGN_WAITING_REASONS = new Set([
   "PodInitializing",
 ]);
 
-function findWaitingContainer(
+function findContainerStartupProgress(
   pod: k8s.V1Pod,
 ): AgentRuntimeStartupProgress | null {
-  const statuses = [
-    ...(pod.status?.initContainerStatuses ?? []),
-    ...(pod.status?.containerStatuses ?? []),
-  ];
-
-  for (const status of statuses) {
-    const waiting = status.state?.waiting;
-    if (!waiting?.reason) continue;
-
-    if (BENIGN_WAITING_REASONS.has(waiting.reason)) {
+  // The runtime's PodInitializing state only says an init container has not
+  // finished. Inspect the init container itself before that generic wait so
+  // workspace setup (or its failure) is not presented as an image download.
+  for (const status of pod.status?.initContainerStatuses ?? []) {
+    if (status.state?.running) {
       return {
         phase: "pulling",
-        message: "Pulling the agent image",
+        message: "Preparing the Agent",
         detail: null,
       };
     }
-
-    const detail = joinReason(waiting.reason, waiting.message);
-    if (IMAGE_WAITING_REASONS.has(waiting.reason)) {
-      return { phase: "pulling", message: "Pulling the agent image", detail };
+    const terminated = status.state?.terminated;
+    if (terminated && terminated.exitCode !== 0) {
+      return {
+        phase: "pulling",
+        message: "Agent initialization failed",
+        detail: `${status.name} (exit code ${terminated.exitCode}): ${joinReason(terminated.reason, terminated.message) ?? "Init container exited"}`,
+      };
     }
-    // Anything else (CreateContainerConfigError, CrashLoopBackOff, a reason
-    // this build has never heard of) is still worth showing rather than
-    // flattening into a generic wait.
-    return { phase: "pulling", message: "Starting the container", detail };
+    const waiting = describeWaitingContainer(status);
+    if (waiting) return waiting;
   }
 
+  for (const status of pod.status?.containerStatuses ?? []) {
+    const waiting = describeWaitingContainer(status);
+    if (waiting) return waiting;
+  }
   return null;
 }
 
+function describeWaitingContainer(
+  status: k8s.V1ContainerStatus,
+): AgentRuntimeStartupProgress | null {
+  const waiting = status.state?.waiting;
+  if (!waiting?.reason) return null;
+
+  if (BENIGN_WAITING_REASONS.has(waiting.reason)) {
+    return {
+      phase: "pulling",
+      message:
+        waiting.reason === "PodInitializing"
+          ? "Preparing the Agent"
+          : "Preparing the agent container",
+      detail: null,
+    };
+  }
+
+  const detail = joinReason(waiting.reason, waiting.message);
+  if (IMAGE_WAITING_REASONS.has(waiting.reason)) {
+    return { phase: "pulling", message: "Pulling the agent image", detail };
+  }
+  // Anything else (CreateContainerConfigError, CrashLoopBackOff, a reason
+  // this build has never heard of) is still worth showing rather than
+  // flattening into a generic wait.
+  return { phase: "pulling", message: "Starting the container", detail };
+}
+
+/**
+ * The scheduler's own wording ("0/17 nodes are available: 11 Insufficient
+ * memory, 5 node(s) didn't match Pod's node affinity/selector…") is written
+ * for whoever runs the cluster. The person waiting on a run only needs to know
+ * the cluster is full and that the wait is expected to end.
+ */
 function findUnschedulableCondition(pod: k8s.V1Pod): string | null {
   const scheduled = pod.status?.conditions?.find(
     (condition) => condition.type === "PodScheduled",
   );
   if (!scheduled || scheduled.status === "True") return null;
-  return joinReason(scheduled.reason, scheduled.message) ?? "Not yet scheduled";
+  const message = scheduled.message ?? "";
+  const nodes = message.match(/\b\d+\/(\d+) nodes are available/)?.[1];
+  const where = nodes ? `None of the ${nodes} nodes` : "No node";
+  if (/insufficient (cpu|memory)/i.test(message)) {
+    return `${where} has enough free CPU or memory right now. The run starts when other runs finish or the cluster adds a node.`;
+  }
+  return `${where} can take this run yet. The run starts when the cluster has room for it.`;
 }
 
 function isScheduled(pod: k8s.V1Pod): boolean {

@@ -27,6 +27,7 @@ import {
   PROCESSED_EMAIL_RETENTION_MS,
 } from "./constants";
 import { OutlookEmailProvider } from "./outlook-provider";
+import { verifySenderAuthentication } from "./sender-authentication";
 
 export {
   EMAIL_SUBSCRIPTION_RENEWAL_INTERVAL,
@@ -537,6 +538,29 @@ export async function processIncomingEmail(
     },
     "[IncomingEmail] Applying security mode validation",
   );
+
+  // Private and internal modes trust the From address, so it must be authenticated.
+  if (securityMode === "private" || securityMode === "internal") {
+    const senderAuth = verifySenderAuthentication({
+      headers: email.headers,
+      fromAddress: senderEmail,
+    });
+    if (!senderAuth.authenticated) {
+      logger.warn(
+        {
+          messageId: email.messageId,
+          agentId,
+          securityMode,
+          senderEmail,
+          reason: senderAuth.reason,
+        },
+        "[IncomingEmail] Sender authentication failed",
+      );
+      throw new Error(
+        `Unauthorized: sender ${senderEmail} could not be authenticated (${senderAuth.reason})`,
+      );
+    }
+  }
 
   // Determine userId for the request (used for 'private' mode).
   let userId: string = "system";

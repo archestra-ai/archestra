@@ -7,7 +7,7 @@ import {
   deriveAgentUsage,
 } from "./mcp-server-agent-usage";
 
-type ApiAgent = Omit<AgentUsage, "access">;
+type ApiAgent = Omit<AgentUsage, "access"> & { pinned: boolean };
 
 const agent = (overrides: Partial<ApiAgent> = {}): ApiAgent => ({
   id: "a1",
@@ -16,6 +16,7 @@ const agent = (overrides: Partial<ApiAgent> = {}): ApiAgent => ({
   scope: "org",
   ownerId: null,
   ownerEmail: null,
+  pinned: false,
   ...overrides,
 });
 

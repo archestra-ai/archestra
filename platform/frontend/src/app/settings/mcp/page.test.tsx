@@ -52,6 +52,7 @@ function setPermission(hasPermission: boolean) {
 function setOrganization(
   settings: Partial<{
     onlineMcpCatalogEnabled: boolean;
+    defaultPersonalAgentAccessAllTools: boolean;
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -62,6 +63,7 @@ function setOrganization(
   vi.mocked(useOrganization).mockReturnValue({
     data: {
       onlineMcpCatalogEnabled: true,
+      defaultPersonalAgentAccessAllTools: true,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -114,6 +116,34 @@ function blockSelect(title: string) {
 }
 
 describe("McpSettingsPage", () => {
+  it("starts in All mode and saves Custom as a creation default", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    expect(blockSelect("Default personal tool mode")).toHaveTextContent("All");
+    await user.click(blockSelect("Default personal tool mode"));
+    await user.click(screen.getByRole("option", { name: /^Custom/ }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      defaultPersonalAgentAccessAllTools: false,
+    });
+  });
+
+  it("loads the saved default and cancels a tool mode change", async () => {
+    setOrganization({ defaultPersonalAgentAccessAllTools: false });
+    const user = userEvent.setup();
+    renderPage();
+    expect(blockSelect("Default personal tool mode")).toHaveTextContent(
+      "Custom",
+    );
+    await user.click(blockSelect("Default personal tool mode"));
+    await user.click(screen.getByRole("option", { name: /^All/ }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(blockSelect("Default personal tool mode")).toHaveTextContent(
+      "Custom",
+    );
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
   it("renders the online catalog setting", () => {
     renderPage();
 

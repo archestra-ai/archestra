@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   connectMock,
+  getMcpRegistryIssueIndexMock,
   getMcpServersMock,
   isConnectedMock,
   onConnectionChangeMock,
@@ -14,6 +15,7 @@ const {
   useFeatureMock,
 } = vi.hoisted(() => ({
   connectMock: vi.fn(),
+  getMcpRegistryIssueIndexMock: vi.fn(),
   getMcpServersMock: vi.fn(),
   isConnectedMock: vi.fn(),
   onConnectionChangeMock: vi.fn(),
@@ -57,6 +59,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
     archestraApiSdk: {
       ...actual.archestraApiSdk,
       getMcpServers: getMcpServersMock,
+      getMcpRegistryIssueIndex: getMcpRegistryIssueIndexMock,
     },
   };
 });
@@ -252,6 +255,16 @@ describe("useMcpDeploymentStatuses", () => {
 
     // The backend forgot the subscription with the closed socket.
     expect(sendMock).toHaveBeenCalledWith(SUBSCRIBE_MESSAGE);
+    // The statuses on screen are from before the gap until it answers, so
+    // nothing may treat them as current yet.
+    expect(result.current.state).toBe("reconnecting");
+    expect(result.current.statuses).toEqual({ "server-1": RUNNING_STATUS });
+    act(() => {
+      pushStatuses?.({
+        type: "mcp_deployment_statuses",
+        payload: { statuses: { "server-1": RUNNING_STATUS } },
+      });
+    });
     expect(result.current.state).toBe("ready");
 
     // A close and reopen too fast for any poll to sample still costs the
@@ -286,6 +299,41 @@ describe("useMcpDeploymentStatuses", () => {
 
     // The backend resolved the accessible-server list at subscribe time, so
     // server-2 is invisible to the feed until it is asked for again.
+    expect(sendMock).toHaveBeenCalledWith(SUBSCRIBE_MESSAGE);
+  });
+
+  it("re-subscribes from the registry issue index when no server list is cached", async () => {
+    // Pages that load only the sidebar's issue index never cache a full
+    // server list; the feed must still follow installs appearing.
+    getMcpRegistryIssueIndexMock.mockResolvedValue({
+      data: { catalogItems: [], servers: [{ id: "server-1" }] },
+    });
+    const { useMcpRegistryIssueIndex } = await import("./mcp-registry.query");
+    const { useMcpDeploymentFeedDriver, useMcpDeploymentStatuses } =
+      await import("./mcp-server.query");
+    renderHook(
+      () => {
+        useMcpRegistryIssueIndex();
+        useMcpDeploymentFeedDriver();
+        return useMcpDeploymentStatuses();
+      },
+      { wrapper },
+    );
+    await flushQueryNotifications();
+    expect(getMcpServersMock).not.toHaveBeenCalled();
+    sendMock.mockClear();
+
+    getMcpRegistryIssueIndexMock.mockResolvedValue({
+      data: {
+        catalogItems: [],
+        servers: [{ id: "server-1" }, { id: "server-2" }],
+      },
+    });
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ["mcp-registry"] });
+    });
+    await flushQueryNotifications();
+
     expect(sendMock).toHaveBeenCalledWith(SUBSCRIBE_MESSAGE);
   });
 

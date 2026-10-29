@@ -1,10 +1,11 @@
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
 import UserTokenModel from "@/models/user-token";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import type { FastifyInstanceWithZod } from "@/server";
 import type { AuditActorType, AuditEventName, AuditOutcome } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import {
   type AuditableRouteConfig,
   deriveAction,
@@ -82,93 +83,102 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
     return payload;
   });
 
-  fastify.addHook("onResponse", async (request, reply) => {
-    if (request.auditSkip) return;
-    // 4xx/5xx mutations are now recorded — outcome column carries the signal.
-    const routePattern = request.routeOptions.url;
-    if (shouldSkip(request.method, request.url, routePattern, request.user))
-      return;
+  fastify.addHook("onResponse", (request, reply) => {
+    // The response is already sent, so this write is background work. Track
+    // it (and the row insert it launches) so the test harness can drain it
+    // instead of sleeping; Fastify still awaits the hook as before.
+    const work = recordResponseAudit(request, reply);
+    trackBackgroundWork(work);
+    return work;
+  });
+}
 
-    const cfg = getEffectiveCfg(request);
-    const outcome = deriveOutcome(reply.statusCode);
-    if (cfg?.onlyWhenChanged && (outcome !== "success" || request.auditSkip)) {
-      return;
-    }
-    const action = resolveActionName(cfg, request.method);
+// === Internal helpers
 
-    const id =
-      (cfg ? await getAuditedResourceId(request, cfg) : null) ??
-      request.auditResponseBodyId ??
-      null;
+async function recordResponseAudit(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  if (request.auditSkip) return;
+  // 4xx/5xx mutations are now recorded — outcome column carries the signal.
+  const routePattern = request.routeOptions.url;
+  if (shouldSkip(request.method, request.url, routePattern, request.user))
+    return;
 
-    // A handler may supply the post-state directly (e.g. bulk creates whose
-    // result can't be represented by a single fetchById); prefer it.
-    const after =
-      outcome !== "success"
-        ? null
-        : request.auditAfter !== undefined
-          ? request.auditAfter
-          : await resolveAfterState({
-              method: request.method,
-              action,
-              id,
-              organizationId: request.organizationId,
-              cfg,
-              routeParams: request.params as
-                | Record<string, unknown>
-                | undefined,
-            });
+  const cfg = getEffectiveCfg(request);
+  const outcome = deriveOutcome(reply.statusCode);
+  if (cfg?.onlyWhenChanged && (outcome !== "success" || request.auditSkip)) {
+    return;
+  }
+  const action = request.auditAction ?? resolveActionName(cfg, request.method);
 
-    const sourceIp = extractIp(request);
-    const userAgent =
-      (request.headers["user-agent"] as string | undefined) ?? null;
-    const httpPath = stripQueryString(request.url).slice(0, 2048);
-    const actorType: AuditActorType =
-      request.authMethod === "api_key"
-        ? "api_key"
-        : request.authMethod === "service_account"
-          ? "service_account"
-          : "user";
+  const id =
+    (cfg ? await getAuditedResourceId(request, cfg) : null) ??
+    request.auditResponseBodyId ??
+    null;
 
-    const payload = {
-      organizationId: request.organizationId,
-      actorId: actorType === "service_account" ? null : request.user.id,
-      actorType,
-      actorName: request.user.name ?? null,
-      actorEmail: request.user.email,
-      impersonatedBy: request.impersonatedBy ?? null,
-      action,
-      outcome,
-      resourceType: cfg?.resourceType ?? null,
-      resourceId: id,
-      resourceName: extractAuditResourceName(
-        after,
-        request.auditBefore ?? null,
-      ),
-      // auditBefore is stored pre-sanitized by the preHandler hook.
-      before: request.auditBefore ?? null,
-      after: sanitizeAuditSnapshot(after),
-      httpMethod: request.method,
-      httpPath,
-      httpRoute: routePattern ?? null,
-      httpStatus: reply.statusCode,
-      requestId: request.id,
-      sourceIp,
-      userAgent,
-      occurredAt: request.auditOccurredAt ?? new Date(),
-    };
+  // A handler may supply the post-state directly (e.g. bulk creates whose
+  // result can't be represented by a single fetchById); prefer it.
+  const after =
+    outcome !== "success"
+      ? null
+      : request.auditAfter !== undefined
+        ? request.auditAfter
+        : await resolveAfterState({
+            method: request.method,
+            action,
+            id,
+            organizationId: request.organizationId,
+            cfg,
+            routeParams: request.params as Record<string, unknown> | undefined,
+          });
 
-    void AuditLogModel.create(payload).catch((err) => {
+  const sourceIp = extractIp(request);
+  const userAgent =
+    (request.headers["user-agent"] as string | undefined) ?? null;
+  const httpPath = stripQueryString(request.url).slice(0, 2048);
+  const actorType: AuditActorType =
+    request.authMethod === "api_key"
+      ? "api_key"
+      : request.authMethod === "service_account"
+        ? "service_account"
+        : "user";
+
+  const payload = {
+    organizationId: request.organizationId,
+    actorId: actorType === "service_account" ? null : request.user.id,
+    actorType,
+    actorName: request.user.name ?? null,
+    actorEmail: request.user.email,
+    impersonatedBy: request.impersonatedBy ?? null,
+    action,
+    outcome,
+    resourceType: cfg?.resourceType ?? null,
+    resourceId: id,
+    resourceName: extractAuditResourceName(after, request.auditBefore ?? null),
+    // auditBefore is stored pre-sanitized by the preHandler hook.
+    before: request.auditBefore ?? null,
+    after: sanitizeAuditSnapshot(after),
+    httpMethod: request.method,
+    httpPath,
+    httpRoute: routePattern ?? null,
+    httpStatus: reply.statusCode,
+    requestId: request.id,
+    sourceIp,
+    userAgent,
+    occurredAt: request.auditOccurredAt ?? new Date(),
+  };
+
+  trackBackgroundWork(
+    AuditLogModel.create(payload).catch((err) => {
       logger.error({ err }, "audit: failed to write audit log row");
       reportAuditWriteFailure({
         source: "http",
         resourceType: payload.resourceType,
       });
-    });
-  });
+    }),
+  );
 }
-
-// === Internal helpers
 
 /**
  * Resolve the effective audit route config once per request; the audit hooks
@@ -295,11 +305,6 @@ type AuditDenylistEntry = {
   value: string;
 };
 
-/** Exact route patterns audited despite a prefix denylist entry. */
-const AUDIT_DENYLIST_EXEMPT_ROUTES = new Set([
-  "/api/connection-setups/prompt-session",
-]);
-
 const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/auth/" },
   { kind: "prefix", value: "/api/health" },
@@ -313,11 +318,14 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/chat/" },
   { kind: "prefix", value: "/api/browser-stream/" },
   { kind: "prefix", value: "/api/secrets/check-connectivity" },
-  { kind: "prefix", value: "/api/members/default-model" },
   // GitHub skill read-only POSTs: discover/preview fetch remote repo data but
   // do not mutate org state — exclude them to avoid false-positive audit noise.
   { kind: "exact", value: "/api/skills/github/discover" },
   { kind: "exact", value: "/api/skills/github/preview" },
+  // The MCP registry list is a read sent as a POST body (its ranked ids can
+  // outgrow a URL); it changes nothing.
+  { kind: "exact", value: "/api/internal_mcp_catalog/registry/search" },
+  { kind: "exact", value: "/api/internal_mcp_catalog/registry/search/ids" },
   // Read-only embedding/reranker connection tests: probe the provider but mutate
   // no org state. Auditing them recorded a misleading "Success" outcome on failed
   // probes (they return HTTP 200 with `{ success: false }`).
@@ -346,7 +354,6 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // Deliberately-unaudited resource families (audited:false in AUDIT_DECISIONS):
   // ephemeral connection-setup render tickets (installer secrets), incoming-email
   // subscription config, oauth grant runtime (tokens are runtime state).
-  // POST /api/connection-setups/prompt-session is the sole exemption.
   { kind: "prefix", value: "/api/connection-setups" },
   { kind: "prefix", value: "/api/incoming-email" },
   { kind: "exact", value: "/api/oauth/initiate" },
@@ -358,9 +365,8 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/openai-codex-auth/" },
   // Ephemeral Telegram link code (the account-binding /link IS audited).
   { kind: "exact", value: "/api/chatops/telegram/link-code" },
-  // High-volume / best-effort artifact + recording surfaces.
+  // High-volume / best-effort artifact surfaces.
   { kind: "prefix", value: "/api/skill-sandbox/artifacts" },
-  { kind: "prefix", value: "/api/app-recordings" },
   // Read-only probes / navigational / suggestion routes — mutate no org state.
   {
     kind: "exact",
@@ -377,15 +383,11 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "route", value: "/api/projects/:id/pin" },
   { kind: "route", value: "/api/projects/:id/instructions" },
   { kind: "route", value: "/api/apps/:appId/diagnostics" },
+  // Read-only: prices a recompute without changing anything.
+  { kind: "route", value: "/api/llm-models/:id/cost-backfill/preview" },
   { kind: "route", value: "/api/apps/:appId/screenshot" },
   { kind: "route", value: "/api/apps/:appId/open-in-chat" },
   { kind: "route", value: "/api/apps/external/:mcpServerId/open-in-chat" },
-  {
-    kind: "route",
-    value: "/api/teams/:teamId/vault-folder/check-connectivity",
-  },
-  // Read-only: returns the key names of a secret in the team's vault folder.
-  { kind: "route", value: "/api/teams/:teamId/vault-folder/secrets/keys" },
   {
     kind: "route",
     value: "/api/schedule-triggers/:id/runs/:runId/conversation",
@@ -393,9 +395,6 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
 ];
 
 function isDenylisted(url: string, routePattern: string | undefined): boolean {
-  if (routePattern && AUDIT_DENYLIST_EXEMPT_ROUTES.has(routePattern)) {
-    return false;
-  }
   return AUDIT_DENYLIST.some((entry) => {
     switch (entry.kind) {
       case "exact":
@@ -546,7 +545,7 @@ const AUDIT_RESOURCE_NAME_MAX_LENGTH = 512;
  * (deletes), then to the snapshot's `email` for entities addressed by email
  * rather than name (invitations). Keep the key/snapshot precedence in sync
  * with the frontend's legacy-row fallback `resourceDisplayName`
- * (frontend/src/app/audit/logs/_components/audit-log-action-labels.ts).
+ * (frontend/src/app/audit/logs/_parts/audit-log-action-labels.ts).
  * @public — shared with the Archestra MCP tool dispatch's audit writer so
  * names resolve identically on both surfaces.
  */

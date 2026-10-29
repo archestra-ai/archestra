@@ -8,10 +8,12 @@ import {
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
+  TOOL_START_AGENT_RUN_FULL_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
+import AgentModel from "@/models/agent";
 import AgentExcludedToolModel from "@/models/agent-excluded-tool";
 import ToolModel from "@/models/tool";
 import { describe, expect, test } from "@/test";
@@ -242,6 +244,56 @@ describe("All-tools exclusion pre-fill", () => {
     expect(
       await AgentExcludedToolModel.findToolIdsByAgent(customAgent.id),
     ).toEqual([]);
+  });
+
+  test("personal MCP gateways keep the runtime handoff tools enabled", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const handoffToolIds = [
+      await builtInToolId(TOOL_START_AGENT_RUN_FULL_NAME),
+      await builtInToolId(TOOL_LIST_AGENTS_FULL_NAME),
+    ];
+
+    const gateway = await AgentModel.ensurePersonalMcpGateway({
+      userId: user.id,
+      organizationId: org.id,
+    });
+    const otherAgent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+
+    const gatewayExcluded = new Set(
+      await AgentExcludedToolModel.findToolIdsByAgent(gateway.id),
+    );
+    const otherExcluded = new Set(
+      await AgentExcludedToolModel.findToolIdsByAgent(otherAgent.id),
+    );
+    for (const toolId of handoffToolIds) {
+      expect(gatewayExcluded.has(toolId)).toBe(false);
+      // Other All-tools agents keep the stricter default.
+      expect(otherExcluded.has(toolId)).toBe(true);
+    }
+    // The rest of the pre-fill still applies to the personal gateway.
+    expect(
+      gatewayExcluded.has(await builtInToolId(TOOL_CREATE_AGENT_FULL_NAME)),
+    ).toBe(true);
+
+    // Seed-time backfill of "new" built-ins skips them on the gateway too.
+    await AgentExcludedToolModel.prefillNewBuiltInToolsForAllToolsAgents(
+      handoffToolIds,
+    );
+    const afterBackfill = new Set(
+      await AgentExcludedToolModel.findToolIdsByAgent(gateway.id),
+    );
+    for (const toolId of handoffToolIds) {
+      expect(afterBackfill.has(toolId)).toBe(false);
+    }
   });
 
   test("prefillNewBuiltInToolsForAllToolsAgents with no tool ids is a no-op", async () => {

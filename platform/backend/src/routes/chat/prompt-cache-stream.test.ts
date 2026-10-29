@@ -5,6 +5,12 @@ import { vi } from "vitest";
 import MessageModel from "@/models/message";
 import ModelModel from "@/models/model";
 import { describe, expect, test } from "@/test";
+import {
+  type AnthropicWireRequest,
+  anthropicRequestBlocks,
+  anthropicStreamResponse,
+  expectLongerTtlFirst,
+} from "@/test/anthropic-messages-wire";
 import { useMswServer } from "@/test/msw";
 import { useRouteTestApp } from "@/test/route-test-app";
 import chatRoutes from "./routes";
@@ -101,10 +107,10 @@ describe("POST /api/chat Anthropic tool-loop caching", () => {
         }),
       });
 
-      const requests: AnthropicRequest[] = [];
+      const requests: AnthropicWireRequest[] = [];
       server.use(
         http.post(`${UPSTREAM_BASE_URL}/messages`, async ({ request }) => {
-          const body = (await request.json()) as AnthropicRequest;
+          const body = (await request.json()) as AnthropicWireRequest;
           requests.push(body);
           if (contextTrimRetry && requests.length === 1) {
             return HttpResponse.json(
@@ -119,7 +125,7 @@ describe("POST /api/chat Anthropic tool-loop caching", () => {
               { status: 400 },
             );
           }
-          const toolResults = blocks(body).filter(
+          const toolResults = anthropicRequestBlocks(body).filter(
             (block) => block.type === "tool_result",
           );
           return anthropicResponse(toolResults.length);
@@ -175,20 +181,9 @@ describe("POST /api/chat Anthropic tool-loop caching", () => {
 
       for (const [requestIndex, request] of requests.entries()) {
         const step = Math.max(requestIndex - Number(contextTrimRetry), 0);
-        const requestBlocks = blocks(request);
+        const requestBlocks = anthropicRequestBlocks(request);
         const markers = requestBlocks.filter((block) => block.cache_control);
-        expect(markers.length).toBeLessThanOrEqual(4);
-        let sawFiveMinuteMarker = false;
-        for (const marker of markers) {
-          if (marker.cache_control?.ttl === "1h") {
-            expect(
-              sawFiveMinuteMarker,
-              `request ${requestIndex + 1} must put 1h markers before 5m markers`,
-            ).toBe(false);
-          } else {
-            sawFiveMinuteMarker = true;
-          }
-        }
+        expectLongerTtlFirst({ request, label: `request ${requestIndex + 1}` });
         const toolResults = requestBlocks.filter(
           (block) => block.type === "tool_result",
         );
@@ -240,83 +235,18 @@ const LARGE_SPEC = JSON.stringify({
   ),
 });
 
-interface ContentBlock {
-  type: string;
-  content?: string;
-  tool_use_id?: string;
-  cache_control?: { type: string; ttl?: string };
-}
-
-interface AnthropicRequest {
-  tools?: ContentBlock[];
-  system?: ContentBlock[];
-  messages: Array<{ role: string; content: ContentBlock[] }>;
-}
-
-function blocks(request: AnthropicRequest): ContentBlock[] {
-  return [
-    ...(request.tools ?? []),
-    ...(request.system ?? []),
-    ...request.messages.flatMap((message) => message.content),
-  ];
-}
-
 function anthropicResponse(completedSteps: number): Response {
-  const isFinal = completedSteps === 5;
   const nextStep = completedSteps + 1;
-  const events = [
-    {
-      type: "message_start",
-      message: {
-        id: `msg_${nextStep}`,
-        type: "message",
-        role: "assistant",
-        model: "claude-opus-4-6",
-        content: [],
-        stop_reason: null,
-        stop_sequence: null,
-        usage: { input_tokens: 100, output_tokens: 0 },
-      },
-    },
-    {
-      type: "content_block_start",
-      index: 0,
-      content_block: isFinal
-        ? { type: "text", text: "" }
+  return anthropicStreamResponse({
+    model: "claude-opus-4-6",
+    block:
+      completedSteps === 5
+        ? { type: "text", text: FINAL_TEXT }
         : {
             type: "tool_use",
             id: `tool_${nextStep}`,
             name: "inspect_api",
-            input: {},
+            input: { step: nextStep },
           },
-    },
-    {
-      type: "content_block_delta",
-      index: 0,
-      delta: isFinal
-        ? { type: "text_delta", text: FINAL_TEXT }
-        : {
-            type: "input_json_delta",
-            partial_json: JSON.stringify({ step: nextStep }),
-          },
-    },
-    { type: "content_block_stop", index: 0 },
-    {
-      type: "message_delta",
-      delta: {
-        stop_reason: isFinal ? "end_turn" : "tool_use",
-        stop_sequence: null,
-      },
-      usage: { output_tokens: 10 },
-    },
-    { type: "message_stop" },
-  ];
-  return new HttpResponse(
-    events
-      .map(
-        (event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-      )
-      .join(""),
-    { headers: { "content-type": "text/event-stream" } },
-  );
+  });
 }

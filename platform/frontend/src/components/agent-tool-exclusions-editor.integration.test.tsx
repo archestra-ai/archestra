@@ -29,7 +29,8 @@ const CATALOG_ID = "catalog-1";
 const TOOL_ID = "tool-1";
 
 type CatalogItem =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+  archestraApiTypes.SearchMcpRegistryResponses["200"]["data"][number];
+type SearchBody = NonNullable<archestraApiTypes.SearchMcpRegistryData["body"]>;
 
 const catalogItem = {
   id: CATALOG_ID,
@@ -41,9 +42,38 @@ const catalogItem = {
   labels: [],
   teams: [],
   skillCount: 0,
+  icon: null,
+  iconUrl: null,
 } as unknown as CatalogItem;
 
 const server = setupServer();
+
+/** The registry search route over `rows`, by id or by name. */
+function registrySearch(
+  rows: CatalogItem[],
+  onRequest?: (body: SearchBody) => unknown,
+) {
+  return http.post(
+    `${API_ORIGIN}/api/internal_mcp_catalog/registry/search`,
+    async ({ request }) => {
+      const body = (await request.json()) as SearchBody;
+      await onRequest?.(body);
+      const matching = rows.filter(
+        (row) =>
+          (!body.catalogIds || body.catalogIds.includes(row.id)) &&
+          (!body.search ||
+            row.name.toLowerCase().includes(body.search.toLowerCase())),
+      );
+      const limit = body.limit ?? 20;
+      return HttpResponse.json({
+        data: matching.slice(0, limit),
+        pagination: { total: matching.length, limit, currentPage: 1 },
+        selectableTotal: 0,
+        installs: [],
+      });
+    },
+  );
+}
 
 /**
  * Everything the editor reads EXCEPT the batched tool list, which each test
@@ -51,9 +81,7 @@ const server = setupServer();
  */
 function baseHandlers() {
   return [
-    http.get(`${API_ORIGIN}/api/internal_mcp_catalog`, () =>
-      HttpResponse.json([catalogItem]),
-    ),
+    registrySearch([catalogItem]),
     http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}/tool-exclusions`, () =>
       HttpResponse.json({ excludedToolIds: [TOOL_ID] }),
     ),
@@ -138,5 +166,119 @@ describe("AgentToolExclusionsEditor — batched tool list failure", () => {
     // The saved exclusion resolves to its server's pill, which is exactly what
     // the failed first attempt could not show.
     expect(await screen.findByText(/1\/1 disabled/)).toBeInTheDocument();
+  });
+});
+
+describe("AgentToolExclusionsEditor — catalogs", () => {
+  it("shows a disabled server beyond the first page, and finds others by searching", async () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      ...catalogItem,
+      id: `catalog-${String(i).padStart(2, "0")}`,
+      name: `server-${String(i).padStart(2, "0")}`,
+    }));
+    const requests: SearchBody[] = [];
+    server.use(
+      registrySearch(many, (body) => requests.push(body)),
+      http.get(`${API_ORIGIN}/api/internal_mcp_catalog/tools`, () =>
+        HttpResponse.json([
+          { id: TOOL_ID, name: "server_79__do_thing", catalogId: "catalog-79" },
+          { id: "tool-2", name: "server_65__x", catalogId: "catalog-65" },
+        ]),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderEditor();
+
+    // The saved exclusion's server is fetched by id, not found on a page.
+    expect(await screen.findByText("server-79")).toBeInTheDocument();
+    expect(
+      requests.some((body) => body.catalogIds?.includes("catalog-79")),
+    ).toBe(true);
+    expect(requests.every((body) => (body.limit ?? 0) <= 100)).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: /disable tools/i }));
+    // Beyond the first page of 50: only a server-side search finds it.
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /server-65/ }),
+    ).toBeNull();
+    await user.type(screen.getByPlaceholderText(/search mcp servers/i), "65");
+
+    expect(
+      await screen.findByRole("menuitemcheckbox", { name: /server-65/ }),
+    ).toBeInTheDocument();
+    expect(requests.some((body) => body.search === "65")).toBe(true);
+  });
+
+  it("waits for the rows of its disabled servers on first load", async () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      ...catalogItem,
+      id: `catalog-${String(i).padStart(2, "0")}`,
+      name: `server-${String(i).padStart(2, "0")}`,
+    }));
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      registrySearch(many, async (body) => {
+        if (body.catalogIds?.includes("catalog-79")) await gate;
+      }),
+      http.get(`${API_ORIGIN}/api/internal_mcp_catalog/tools`, () =>
+        HttpResponse.json([
+          { id: TOOL_ID, name: "server_79__do_thing", catalogId: "catalog-79" },
+        ]),
+      ),
+    );
+
+    renderEditor();
+
+    // Everything but the disabled server's row has answered.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(screen.getByText(/Loading exclusions/i)).toBeInTheDocument();
+
+    release();
+    expect(await screen.findByText("server-79")).toBeInTheDocument();
+    expect(screen.queryByText(/Loading exclusions/i)).toBeNull();
+  });
+
+  it("keeps the editor on screen while a newly disabled server's row loads", async () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      ...catalogItem,
+      id: `catalog-${String(i).padStart(2, "0")}`,
+      name: `server-${String(i).padStart(2, "0")}`,
+    }));
+    // The by-id read that adds server-65 waits until the test lets it go.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      registrySearch(many, async (body) => {
+        if (body.catalogIds?.includes("catalog-65")) await gate;
+      }),
+      http.get(`${API_ORIGIN}/api/internal_mcp_catalog/tools`, () =>
+        HttpResponse.json([
+          { id: TOOL_ID, name: "server_79__do_thing", catalogId: "catalog-79" },
+          { id: "tool-2", name: "server_65__x", catalogId: "catalog-65" },
+        ]),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderEditor();
+    expect(await screen.findByText("server-79")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /disable tools/i }));
+    await user.type(screen.getByPlaceholderText(/search mcp servers/i), "65");
+    await user.click(
+      await screen.findByRole("menuitemcheckbox", { name: /server-65/ }),
+    );
+
+    // The by-id set changed; the known pill stays and nothing reloads.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(/Loading exclusions/i)).not.toBeInTheDocument();
+    expect(screen.getByText("server-79")).toBeInTheDocument();
+    release();
   });
 });

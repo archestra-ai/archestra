@@ -1,3 +1,4 @@
+import type { ScopedPermission } from "@archestra/shared";
 import { withDbTransaction } from "@/database";
 import {
   AgentExcludedSkillModel,
@@ -7,6 +8,7 @@ import {
   SkillTeamModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import {
   explainAssignmentRejection,
   publishesSkills,
@@ -65,17 +67,29 @@ class AgentSkillAssignmentService {
     organizationId: string;
     userId: string;
     skillIds: string[];
+    /** The caller's skill grants, when the caller already holds them. */
+    grants?: ScopedPermission[];
+    /** These skills' policies, when the caller already holds them. */
+    policies?: Awaited<
+      ReturnType<typeof ResourcePermissionPolicyModel.findApplicableBatch>
+    >;
   }): Promise<Map<string, boolean>> {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     const [grants, policies] = await Promise.all([
-      ResourcePermissions.resolveAll(params),
-      ResourcePermissionPolicyModel.findApplicableBatch({
-        organizationId: params.organizationId,
-        resource: "skill",
-        scopes: params.skillIds,
-      }),
+      params.grants ??
+        ResourcePermissions.resolveAll({
+          organizationId: params.organizationId,
+          userId: params.userId,
+          resources: ["skill"],
+        }),
+      params.policies ??
+        ResourcePermissionPolicyModel.findApplicableBatch({
+          organizationId: params.organizationId,
+          resource: "skill",
+          scopes: params.skillIds,
+        }),
     ]);
     // SPDX-SnippetEnd
     const result = new Map<string, boolean>();
@@ -310,12 +324,17 @@ class AgentSkillAssignmentService {
       }
     }
 
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      organizationId: params.organizationId,
+      userId: params.userId,
+    });
     const accessible = await Promise.all(
       skills.map((skill) =>
         SkillTeamModel.userHasSkillAccess({
           organizationId: params.organizationId,
           userId: params.userId,
           skill,
+          principal,
         }),
       ),
     );

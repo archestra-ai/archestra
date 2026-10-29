@@ -367,7 +367,7 @@ describe("TableRowActions", () => {
     const item = screen.getByRole("menuitem", { name: /secure delete/i });
     expect(item).toHaveAttribute("aria-disabled", "true");
     expect(item).toHaveAccessibleDescription(
-      "Available to roles with the Agents (delete) permission",
+      "Missing permissions: Agents (delete)",
     );
   });
 

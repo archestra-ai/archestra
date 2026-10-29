@@ -81,19 +81,13 @@ export function PlainTextEditor({
         <div className="flex gap-2">
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
+            size="xs"
             onClick={onCancel}
             disabled={saving}
           >
             Cancel
           </Button>
-          <Button
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={onSave}
-            disabled={saving || overLimit}
-          >
+          <Button size="xs" onClick={onSave} disabled={saving || overLimit}>
             Save
           </Button>
         </div>

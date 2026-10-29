@@ -1,6 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { CredentialAccess } from "@/services/credential-access";
 import {
   createGithubPat,
   deleteGithubPat,
@@ -34,8 +35,14 @@ const githubPatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(PublicGithubPatSchema)),
       },
     },
-    async ({ organizationId }, reply) => {
-      return reply.send(await listGithubPats(organizationId));
+    async ({ organizationId, user }, reply) => {
+      return reply.send(
+        await CredentialAccess.filterReadable({
+          organizationId,
+          userId: user.id,
+          items: await listGithubPats(organizationId),
+        }),
+      );
     },
   );
 
@@ -51,8 +58,10 @@ const githubPatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(PublicGithubPatSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
-      return reply.send(await createGithubPat({ organizationId, data: body }));
+    async ({ organizationId, body, user }, reply) => {
+      return reply.send(
+        await createGithubPat({ organizationId, userId: user.id, data: body }),
+      );
     },
   );
 
@@ -69,7 +78,13 @@ const githubPatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(PublicGithubPatSchema),
       },
     },
-    async ({ organizationId, params, body }, reply) => {
+    async ({ organizationId, params, body, user }, reply) => {
+      await CredentialAccess.require({
+        organizationId,
+        userId: user.id,
+        id: params.id,
+        action: "update",
+      });
       return reply.send(
         await updateGithubPat({ id: params.id, organizationId, data: body }),
       );
@@ -88,7 +103,13 @@ const githubPatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ organizationId, params }, reply) => {
+    async ({ organizationId, params, user }, reply) => {
+      await CredentialAccess.require({
+        organizationId,
+        userId: user.id,
+        id: params.id,
+        action: "delete",
+      });
       await deleteGithubPat({ id: params.id, organizationId });
       return reply.send({ success: true });
     },

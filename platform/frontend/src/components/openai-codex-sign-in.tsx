@@ -187,9 +187,11 @@ export function OpenaiCodexSignIn({
               <OpenAiLogo className="mr-2 h-4 w-4" />
               Copy code &amp; open ChatGPT
             </Button>
-            <button
+            <Button
               type="button"
-              className="flex items-center gap-1 rounded bg-muted px-2 py-1 font-mono text-sm tracking-widest hover:bg-muted/70"
+              variant="secondary"
+              size="sm"
+              className="font-mono tracking-widest"
               aria-label="Copy code"
               onClick={async () => {
                 try {
@@ -206,7 +208,7 @@ export function OpenaiCodexSignIn({
               ) : (
                 <Copy className="h-4 w-4 text-muted-foreground" />
               )}
-            </button>
+            </Button>
           </div>
         </li>
         <li className="flex items-center gap-1">

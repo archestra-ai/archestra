@@ -16,6 +16,7 @@ export function ChatWithSkillButton({ skillId }: { skillId: string }) {
       permissions={action.permissions}
       permissionScope={skillId}
       variant="outline"
+      size="sm"
       asChild
     >
       <Link href={skillActionHref(action)}>

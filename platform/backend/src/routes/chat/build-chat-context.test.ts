@@ -44,6 +44,7 @@ describe("buildChatContext", () => {
       user: params.user,
       organizationId: params.organizationId,
       modelAcceptsImageToolResults: false,
+      parentLlm: undefined,
       hookSessionContext: undefined,
       projectInstructions: undefined,
       openedApp: undefined,
@@ -55,7 +56,7 @@ describe("buildChatContext", () => {
       taskBridge: {} as never,
       abortSignal: new AbortController().signal,
       suppressContentLogging: false,
-      lockedChatAudit: null,
+      encryptedChatAudit: null,
     });
 
   test("no custom selection fetches tools with enabledToolIds undefined", async ({
@@ -152,7 +153,7 @@ describe("buildChatContext", () => {
     });
 
     expect(result.systemPrompt).toContain(
-      `When you ask the user a question, clarification, preference, or approval, call ${askUser}. Never ask multiple-choice questions or request user decisions in plain text.`,
+      `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${askUser}. The user then answers in the client's question interface. Ask multiple-choice questions with ${askUser} too, not in plain text. A link or command the user must open or run goes in your reply text, not in the question.`,
     );
   });
 

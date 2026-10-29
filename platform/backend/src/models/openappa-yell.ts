@@ -3,14 +3,19 @@ import {
   count,
   desc,
   eq,
+  exists,
   getTableColumns,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
 import db from "@/database";
+import conversationsTable, {
+  notDeletedConversation,
+} from "@/database/schemas/conversation";
 import { openappaYellsTable as table } from "@/database/schemas/openappa-yell";
 import {
   createCursorPaginatedResult,
@@ -69,11 +74,7 @@ export default class OpenAppaYellModel {
       );
   }
 
-  static async findArchive(params: {
-    id: string;
-    organizationId: string;
-    callerId?: string;
-  }) {
+  static async findArchive(params: { id: string; organizationId: string }) {
     const [row] = await db
       .select({ archive: table.archive })
       .from(table)
@@ -81,7 +82,6 @@ export default class OpenAppaYellModel {
         and(
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
-          params.callerId ? eq(table.callerId, params.callerId) : undefined,
         ),
       );
     return row ? normalizeByteaField(row, "archive").archive : null;
@@ -106,11 +106,7 @@ export default class OpenAppaYellModel {
       );
   }
 
-  static async find(params: {
-    id: string;
-    organizationId: string;
-    callerId?: string;
-  }) {
+  static async find(params: { id: string; organizationId: string }) {
     const [row] = await db
       .select(metadataColumns())
       .from(table)
@@ -118,28 +114,35 @@ export default class OpenAppaYellModel {
         and(
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
-          params.callerId ? eq(table.callerId, params.callerId) : undefined,
         ),
       );
     return row ?? null;
   }
 
-  static async summary(params: { organizationId: string; callerId?: string }) {
+  static async summary(params: { organizationId: string }) {
     const [row] = await db
-      .select({ unresolved: count() })
+      .select({
+        unresolved: count(),
+        superyells:
+          sql<number>`count(*) filter (where ${table.superyell})`.mapWith(
+            Number,
+          ),
+      })
       .from(table)
       .where(
         and(
           eq(table.organizationId, params.organizationId),
           isNull(table.resolvedAt),
-          params.callerId ? eq(table.callerId, params.callerId) : undefined,
         ),
       );
-    return { unresolved: row?.unresolved ?? 0 };
+    return {
+      unresolved: row?.unresolved ?? 0,
+      superyells: row?.superyells ?? 0,
+    };
   }
 
   static async list(
-    params: OpenAppaYellQuery & { organizationId: string; callerId?: string },
+    params: OpenAppaYellQuery & { organizationId: string; sessionId?: string },
   ) {
     const position = decodeCursor(params.cursor);
     const validCursor =
@@ -152,12 +155,17 @@ export default class OpenAppaYellModel {
       .where(
         and(
           eq(table.organizationId, params.organizationId),
-          params.callerId ? eq(table.callerId, params.callerId) : undefined,
           params.status === "unresolved"
             ? isNull(table.resolvedAt)
             : params.status === "resolved"
               ? isNotNull(table.resolvedAt)
               : undefined,
+          params.sessionId ? eq(table.sessionId, params.sessionId) : undefined,
+          // OpenAPPA's session id is the caller scope, `|`, then the client's
+          // own session id, which is the LLM session id.
+          params.llmSessionId
+            ? sql`substr(${table.sessionId}, strpos(${table.sessionId}, '|') + 1) = ${params.llmSessionId}`
+            : undefined,
           params.search
             ? ilike(
                 table.message,
@@ -177,12 +185,71 @@ export default class OpenAppaYellModel {
     }));
   }
 
+  /** Links the yell to its investigation chat once; a later chat never replaces it. */
+  static async linkConversation(params: {
+    id: string;
+    organizationId: string;
+    conversationId: string;
+  }) {
+    await db
+      .update(table)
+      .set({ conversationId: params.conversationId })
+      .where(
+        and(
+          eq(table.id, params.id),
+          eq(table.organizationId, params.organizationId),
+          isNull(table.conversationId),
+          exists(
+            db
+              .select({ id: conversationsTable.id })
+              .from(conversationsTable)
+              .where(
+                and(
+                  eq(conversationsTable.id, params.conversationId),
+                  eq(conversationsTable.organizationId, params.organizationId),
+                ),
+              ),
+          ),
+        ),
+      );
+  }
+
+  static async findConversations(params: {
+    ids: string[];
+    organizationId: string;
+    userId: string;
+  }) {
+    if (params.ids.length === 0) return [];
+    return db
+      .select({
+        yellId: table.id,
+        id: conversationsTable.id,
+        title: conversationsTable.title,
+        createdAt: conversationsTable.createdAt,
+      })
+      .from(table)
+      .innerJoin(
+        conversationsTable,
+        and(
+          eq(conversationsTable.id, table.conversationId),
+          notDeletedConversation,
+          eq(conversationsTable.organizationId, params.organizationId),
+          eq(conversationsTable.userId, params.userId),
+        ),
+      )
+      .where(
+        and(
+          inArray(table.id, params.ids),
+          eq(table.organizationId, params.organizationId),
+        ),
+      );
+  }
+
   static async setResolved(params: {
     id: string;
     organizationId: string;
     userId: string;
     resolved: boolean;
-    callerId?: string;
   }) {
     const [row] = await db
       .update(table)
@@ -194,7 +261,6 @@ export default class OpenAppaYellModel {
         and(
           eq(table.id, params.id),
           eq(table.organizationId, params.organizationId),
-          params.callerId ? eq(table.callerId, params.callerId) : undefined,
         ),
       )
       .returning(metadataColumns());
@@ -203,6 +269,6 @@ export default class OpenAppaYellModel {
 }
 
 function metadataColumns() {
-  const { archive, ...columns } = getTableColumns(table);
+  const { archive, conversationId, ...columns } = getTableColumns(table);
   return { ...columns, hasArchive: sql<boolean>`${archive} IS NOT NULL` };
 }

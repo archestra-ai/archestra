@@ -4,6 +4,7 @@ import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { Info, Settings2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/tailwind";
@@ -32,6 +33,7 @@ export function DocumentOcrNotice({
   className?: string;
 }) {
   const storageKey = `${DISMISSED_STORAGE_PREFIX}:${dismissalScope}`;
+  const canSeeSettings = useSettingsAreaAccess() === true;
   // null until the stored dismissal has been read, so the note never flashes
   // on for a user who dismissed it.
   const [dismissed, setDismissed] = useState<boolean | null>(null);
@@ -71,7 +73,10 @@ export function DocumentOcrNotice({
           Scanned or image-only PDF pages in this source are skipped, so their
           text is not searchable.{" "}
           <ExternalDocsLink
-            href={getDocsUrl(DocsPage.PlatformKnowledge, "document-ocr")}
+            href={getDocsUrl(
+              DocsPage.PlatformKnowledgeSettings,
+              "document-ocr",
+            )}
             className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
             showIcon={false}
           >
@@ -80,12 +85,14 @@ export function DocumentOcrNotice({
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/settings/knowledge#document-ocr">
-            <Settings2 className="size-3.5" />
-            <span>OCR settings</span>
-          </Link>
-        </Button>
+        {canSeeSettings && (
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/settings/knowledge#document-ocr">
+              <Settings2 className="size-3.5" />
+              <span>OCR settings</span>
+            </Link>
+          </Button>
+        )}
         <Button variant="ghost" size="sm" onClick={handleDismiss}>
           <span>Dismiss</span>
         </Button>

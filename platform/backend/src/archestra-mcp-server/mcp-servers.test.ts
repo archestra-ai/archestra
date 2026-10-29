@@ -5,9 +5,11 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   BUILT_IN_AGENT_IDS,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  resourcePermissionPresets,
   TOOL_CREATE_MCP_SERVER_SHORT_NAME,
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_GET_MCP_SERVERS_SHORT_NAME,
+  TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
   TOOL_SEARCH_PRIVATE_MCP_REGISTRY_SHORT_NAME,
 } from "@archestra/shared";
 import {
@@ -16,9 +18,12 @@ import {
   InternalMcpCatalogModel,
   OrganizationModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import SecretModel from "@/models/secret";
 import { beforeEach, describe, expect, test } from "@/test";
 import { createRestrictedEnvironment } from "@/test/environments";
 import type { Agent } from "@/types";
+import { deriveKeyFromSecret, encryptSecretValueWithKey } from "@/utils/crypto";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
 describe("mcp server tool execution", () => {
@@ -37,6 +42,53 @@ describe("mcp server tool execution", () => {
       userId: user.id,
       organizationId: org.id,
     };
+  });
+
+  test("edit_mcp_config recovers unreadable credentials without exposing the replacement in its result", async () => {
+    const secret = await SecretModel.create({
+      name: "mcp-recovery",
+      secret: {},
+    });
+    await SecretModel.updateRawSecret(
+      secret.id,
+      encryptSecretValueWithKey(
+        { TOKEN: "old-token" },
+        deriveKeyFromSecret("unavailable-test-key"),
+      ),
+    );
+    const environment = [
+      { key: "TOKEN", type: "secret" as const, promptOnInstallation: false },
+    ];
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "mcp-recovery-catalog",
+        serverType: "local",
+        localConfigSecretId: secret.id,
+        localConfig: { command: "node", environment },
+      },
+      { organizationId, authorId: mockContext.userId },
+    );
+    const tool = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`;
+    const incomplete = await executeArchestraTool(
+      tool,
+      { id: catalog.id, environment },
+      mockContext,
+    );
+    expect(incomplete.isError).toBe(true);
+    const recovered = await executeArchestraTool(
+      tool,
+      {
+        id: catalog.id,
+        environment: [{ ...environment[0], value: "replacement-mcp-token" }],
+      },
+      mockContext,
+    );
+    expect(recovered.isError).toBe(false);
+    expect(JSON.stringify(recovered)).not.toContain("replacement-mcp-token");
+    expect(
+      (await InternalMcpCatalogModel.findByIdWithResolvedSecrets(catalog.id))
+        ?.localConfig?.environment?.[0].value,
+    ).toBe("replacement-mcp-token");
   });
 
   test("get_mcp_server_tools returns error when mcpServerId is missing", async () => {
@@ -149,6 +201,50 @@ describe("mcp server tool execution", () => {
     expect(text).toContain(catalog.id);
   });
 
+  test("search_private_mcp_registry narrows a query by access", async ({
+    makeInternalMcpCatalog,
+    makeMember,
+    makeUser,
+  }) => {
+    const callerId = mockContext.userId as string;
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId, { role: "member" });
+    const mine = await makeInternalMcpCatalog({
+      name: "AccessFilterServer Mine",
+      organizationId,
+      authorId: callerId,
+      access: "personal",
+    });
+    const othersPersonal = await makeInternalMcpCatalog({
+      name: "AccessFilterServer Other",
+      organizationId,
+      authorId: otherUser.id,
+      access: "personal",
+    });
+    await makeInternalMcpCatalog({
+      name: "Unrelated Mine",
+      organizationId,
+      authorId: callerId,
+      access: "personal",
+    });
+
+    const searchIds = async (access?: string[]) => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+        { query: "accessfilterserver", ...(access ? { access } : {}) },
+        mockContext,
+      );
+      expect(result.isError).toBe(false);
+      return (result.structuredContent as { items: { id: string }[] }).items
+        .map((item) => item.id)
+        .sort();
+    };
+
+    expect(await searchIds()).toEqual([mine.id, othersPersonal.id].sort());
+    expect(await searchIds(["mine"])).toEqual([mine.id]);
+    expect(await searchIds(["others"])).toEqual([othersPersonal.id]);
+  });
+
   test("get_mcp_server_tools returns tools for a catalog item", async ({
     makeInternalMcpCatalog,
     makeTool,
@@ -171,6 +267,44 @@ describe("mcp server tool execution", () => {
     const names = parsed.map((t: any) => t.name);
     expect(names).toContain("test_tool_1");
     expect(names).toContain("test_tool_2");
+  });
+
+  test("get_mcp_server_tools picker view retains tool metadata without assignment or parameter bodies", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "example__lookup",
+      parameters: { type: "object", properties: { query: { type: "string" } } },
+    });
+    const invoke = (view?: "picker") =>
+      executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_mcp_server_tools`,
+        { mcpServerId: catalog.id, ...(view ? { view } : {}) },
+        mockContext,
+      );
+    const full = await invoke();
+    const picker = await invoke("picker");
+    expect(full.isError).toBe(false);
+    expect(picker.isError).toBe(false);
+    const legacy = JSON.parse((full.content[0] as { text: string }).text);
+    expect(legacy[0]).toMatchObject({
+      id: tool.id,
+      parameters: tool.parameters,
+      assignedAgents: [],
+    });
+    expect(JSON.parse((picker.content[0] as { text: string }).text)).toEqual(
+      legacy.map(
+        ({
+          parameters: _parameters,
+          assignedAgents: _assignedAgents,
+          assignedAgentCount: _assignedAgentCount,
+          ...entry
+        }: Record<string, unknown>) => entry,
+      ),
+    );
   });
 
   test("get_mcp_server_tools steers an unknown id at the listing tool", async () => {
@@ -236,6 +370,47 @@ describe("mcp server tool execution", () => {
     );
     expect(createdCatalog?.serverType).toBe("remote");
     expect(createdCatalog?.serverUrl).toBe("https://example.com/mcp");
+  });
+
+  test("create_mcp_server ignores streamable-http transportType on a remote server", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server`,
+      {
+        name: "Remote With Transport",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        transportType: "streamable-http",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const createdCatalog = await InternalMcpCatalogModel.findByName(
+      "Remote With Transport",
+    );
+    expect(createdCatalog?.serverType).toBe("remote");
+    expect(createdCatalog?.serverUrl).toBe("https://example.com/mcp");
+    expect(createdCatalog?.localConfig).toBeNull();
+  });
+
+  test("create_mcp_server rejects stdio transportType on a remote server", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server`,
+      {
+        name: "Remote With Stdio",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        transportType: "stdio",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("transportType");
+    expect(
+      await InternalMcpCatalogModel.findByName("Remote With Stdio"),
+    ).toBeFalsy();
   });
 
   test("create_mcp_server persists environmentId", async () => {
@@ -326,6 +501,270 @@ describe("mcp server tool execution", () => {
       "@modelcontextprotocol/server-github",
     ]);
     expect(updatedCatalog?.localConfig?.transportType).toBe("stdio");
+  });
+
+  test("edit_mcp_config ignores streamable-http transportType on a remote server", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Remote Config Server",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`,
+      {
+        id: catalog.id,
+        serverUrl: "https://example.com/v2/mcp",
+        transportType: "streamable-http",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const updatedCatalog = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(updatedCatalog?.serverUrl).toBe("https://example.com/v2/mcp");
+    expect(updatedCatalog?.localConfig).toBeNull();
+  });
+
+  test("edit_mcp_config rejects stdio transportType when switching a server to remote", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Becoming Remote",
+      serverType: "local",
+      organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`,
+      {
+        id: catalog.id,
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        transportType: "stdio",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("transportType");
+
+    const unchanged = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(unchanged?.serverType).toBe("local");
+  });
+});
+
+describe("MCP server tools and custom deployment YAML", () => {
+  const EDIT_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`;
+  const CREATE_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_MCP_SERVER_SHORT_NAME}`;
+  const DEPLOYMENT_YAML = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: example.invalid/mcp-server:1.0
+`;
+
+  async function makeContext(
+    role: string,
+    fixtures: {
+      makeAgent: any;
+      makeMember: any;
+      makeOrganization: any;
+      makeUser: any;
+    },
+  ) {
+    const org = await fixtures.makeOrganization();
+    const user = await fixtures.makeUser();
+    await fixtures.makeMember(user.id, org.id, { role });
+    if (role === "editor") {
+      const policy = {
+        organizationId: org.id,
+        resource: "mcpRegistry" as const,
+        scope: "*",
+      };
+      const previous = await ResourcePermissionPolicyModel.find(policy);
+      await ResourcePermissionPolicyModel.replace({
+        ...policy,
+        revision: previous?.revision ?? 0,
+        grants: [
+          ...(previous?.grants ?? []),
+          {
+            subject: { type: "role", id: "editor" },
+            actions: [...resourcePermissionPresets.edit.actions],
+          },
+        ],
+      });
+    }
+    const agent = await fixtures.makeAgent({ organizationId: org.id });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    return { context, organizationId: org.id, userId: user.id };
+  }
+
+  test("an editor cannot set deployment YAML through edit_mcp_config", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const { context, organizationId, userId } = await makeContext("editor", {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+    });
+
+    const result = await executeArchestraTool(
+      EDIT_TOOL,
+      { id: catalog.id, deploymentSpecYaml: DEPLOYMENT_YAML },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "configure-deployment-spec",
+    );
+    const persisted = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(persisted?.deploymentSpecYaml).toBeNull();
+  });
+
+  test("an editor cannot create a server with deployment YAML through create_mcp_server", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const { context, organizationId } = await makeContext("editor", {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+
+    const result = await executeArchestraTool(
+      CREATE_TOOL,
+      {
+        name: "Editor Yaml Server",
+        serverType: "local",
+        command: "node",
+        deploymentSpecYaml: DEPLOYMENT_YAML,
+      },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "configure-deployment-spec",
+    );
+    expect(
+      await InternalMcpCatalogModel.findRootByNameInOrg({
+        name: "Editor Yaml Server",
+        organizationId,
+      }),
+    ).toBeFalsy();
+  });
+
+  test.for([
+    "create",
+    "edit",
+  ])("an editor cannot inject Secret references through the %s tool", async (operation, {
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+  }) => {
+    const { context, organizationId, userId } = await makeContext("editor", {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+
+      serverType: "local",
+    });
+    const result = await executeArchestraTool(
+      operation === "create" ? CREATE_TOOL : EDIT_TOOL,
+      {
+        ...(operation === "create"
+          ? {
+              name: "Secret Reference Attempt",
+              serverType: "local",
+              command: "node",
+            }
+          : { id: catalog.id }),
+        envFrom: [{ type: "secret", name: "platform-secret", prefix: "" }],
+      },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "configure-deployment-spec",
+    );
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+        ?.envFrom ?? [],
+    ).toEqual([]);
+    expect(
+      await InternalMcpCatalogModel.findRootByNameInOrg({
+        name: "Secret Reference Attempt",
+        organizationId,
+      }),
+    ).toBeFalsy();
+  });
+
+  test("an admin can set deployment YAML through edit_mcp_config", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const { context, organizationId } = await makeContext(ADMIN_ROLE_NAME, {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+    });
+
+    const result = await executeArchestraTool(
+      EDIT_TOOL,
+      { id: catalog.id, deploymentSpecYaml: DEPLOYMENT_YAML },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    const persisted = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(persisted?.deploymentSpecYaml).toBe(DEPLOYMENT_YAML);
   });
 });
 
@@ -1143,6 +1582,63 @@ describe("mcp server tools respect the agent's environment", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("not found");
+  });
+
+  test("list_mcp_server_deployments: only the config agent lists readable deployments across environments", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, orgId, { role: "member" });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, orgId, { role: "member" });
+    const prodCatalog = await makeInternalMcpCatalog({
+      name: "Production Server",
+      organizationId: orgId,
+      environmentId: prodEnvId,
+    });
+    const readable = await makeMcpServer({
+      catalogId: prodCatalog.id,
+      scope: "org",
+    });
+    const unreadable = await makeMcpServer({
+      catalogId: prodCatalog.id,
+      scope: "personal",
+      ownerId: otherUser.id,
+    });
+    const configAgent = await makeAgent({
+      agentType: "agent",
+      organizationId: orgId,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    const list = async (agent: { id: string; name: string }) => {
+      const result = await executeArchestraTool(
+        tool(TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME),
+        {},
+        { agent, userId: member.id, organizationId: orgId },
+      );
+      expect(result.isError).toBe(false);
+      const content = result.structuredContent as {
+        scope: string;
+        deployments: { id: string }[];
+      };
+      return {
+        scope: content.scope,
+        ids: content.deployments.map((deployment) => deployment.id),
+      };
+    };
+
+    const fromConfigAgent = await list(configAgent);
+    expect(fromConfigAgent.scope).toBe("organization");
+    expect(fromConfigAgent.ids).toContain(readable.id);
+    expect(fromConfigAgent.ids).not.toContain(unreadable.id);
+
+    const fromStagingAgent = await list(stagingContext.agent);
+    expect(fromStagingAgent.scope).toBe("agent");
+    expect(fromStagingAgent.ids).not.toContain(readable.id);
   });
 
   test("create_mcp_server defaults to the calling agent's environment", async () => {

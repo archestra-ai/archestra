@@ -1,6 +1,12 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, FileText, Github } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  FileText,
+  GitBranch,
+  Github,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
@@ -16,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { useOrganization } from "@/lib/organization.query";
@@ -46,7 +53,7 @@ const CREATE_STEPS: Array<{ id: CreateStep; title: string }> = [
 ];
 
 const STEP_DESCRIPTIONS: Record<CreateStep, string> = {
-  source: "Import from a GitHub repo or start from a blank template.",
+  source: "Import from GitHub or GitLab, or start blank.",
   // The whole skill is on one page, so the sentence names the whole of it —
   // and the skill's own page says the same thing over the same form.
   configure:
@@ -127,7 +134,10 @@ function NewSkillWizard() {
         fileCount: skill.fileCount,
       },
     });
-  const goToSkills = () => router.push("/skills");
+  const goToSkills = (skillIds: string[]) => {
+    const params = new URLSearchParams({ imported: skillIds.join(",") });
+    router.push(`/skills?${params.toString()}`);
+  };
   const goToConfigureStep = () => setStep("configure");
 
   const catalogSearch = useSearchSkillCatalog(search);
@@ -173,9 +183,9 @@ function NewSkillWizard() {
                 <div className="mx-auto max-w-3xl space-y-8">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <CatalogSourceCard
-                      icon={<Github className="size-5" />}
-                      title="Custom GitHub URL"
-                      description="Paste any repository with SKILL.md directories."
+                      icon={<GitBranch className="size-5" />}
+                      title="Git repository"
+                      description="GitHub or GitLab, public or private."
                       onClick={openImport}
                     />
                     <CatalogSourceCard
@@ -255,7 +265,7 @@ function NewSkillWizard() {
                             return (
                               <li key={item.repo}>
                                 {idx > 0 && <Separator />}
-                                <button
+                                <UnstyledButton
                                   type="button"
                                   onClick={() => importPopular(item.repo)}
                                   className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
@@ -278,7 +288,7 @@ function NewSkillWizard() {
                                     </div>
                                   </div>
                                   <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                                </button>
+                                </UnstyledButton>
                               </li>
                             );
                           })}
@@ -355,7 +365,7 @@ function SkillIndexResult({
 }) {
   const owner = skill.repo.split("/")[0];
   return (
-    <button
+    <UnstyledButton
       type="button"
       onClick={onClick}
       className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
@@ -383,6 +393,6 @@ function SkillIndexResult({
         </div>
       </div>
       <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-    </button>
+    </UnstyledButton>
   );
 }

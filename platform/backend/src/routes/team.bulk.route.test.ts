@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import { type Mock, vi } from "vitest";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -8,12 +9,6 @@ import { TeamModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-
-const mockHasPermission = hasPermission as Mock;
-
 describe("DELETE /api/teams/bulk", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
@@ -21,7 +16,9 @@ describe("DELETE /api/teams/bulk", () => {
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
@@ -94,10 +91,13 @@ describe("DELETE /api/teams/bulk", () => {
    * about each team they could not remove.
    */
   test("refuses the whole batch when the caller cannot delete teams", async ({
+    makeMember,
     makeTeam,
+    makeUser,
   }) => {
     const team = await makeTeam(organizationId, user.id, { name: "Safe" });
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "member" });
 
     const response = await bulkDelete([team.id]);
 

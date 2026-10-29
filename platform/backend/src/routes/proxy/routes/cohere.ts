@@ -13,6 +13,7 @@ import logger from "@/logging";
 import { Cohere, constructResponseSchema, UuidIdSchema } from "@/types";
 import { cohereAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -36,6 +37,7 @@ const cohereProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: CHAT_SUFFIX,
       upstream: cohereBaseUrl,
       providerName: "Cohere",
+      authenticate: createPassthroughAuthenticator("cohere"),
       skipErrorResponse: {
         error: {
           message: "Chat requests should use the dedicated endpoint",

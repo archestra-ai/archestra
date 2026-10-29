@@ -31,7 +31,7 @@ import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
-import SecretModel from "@/models/secret";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import {
   getSecretValueForLlmProviderApiKey,
   secretManager,
@@ -358,21 +358,6 @@ class OpenAiCodexTokenManager {
     if (!keyRow?.secretId) {
       return;
     }
-    // Inspect the secret ROW's storage flags before resolving the value:
-    // resolution dereferences BYOS Vault references, so a value-based
-    // isVaultReference() check on the resolved credential never fires and
-    // rotation would overwrite the stored reference with raw OAuth material.
-    const secretRow = await SecretModel.findById(keyRow.secretId);
-    if (!secretRow) {
-      return;
-    }
-    if (secretRow.isByosVault) {
-      logger.warn(
-        { providerApiKeyId },
-        "[OpenAiCodex] skipping rotated refresh token persistence for vault-referenced key",
-      );
-      return;
-    }
     const storedValue = await getSecretValueForLlmProviderApiKey(
       keyRow.secretId,
     );
@@ -534,11 +519,53 @@ export function createOpenAiCodexFetch(params: {
           credential,
         });
       }
-      return retried;
+      return normalizeCodexErrorResponse(retried);
     }
 
-    return response;
+    if (providerApiKeyId && response.status === 400) {
+      await forgetModelRejectedByPlan({ response, providerApiKeyId });
+    }
+    return normalizeCodexErrorResponse(response);
   };
+}
+
+/**
+ * The Codex backend reports some errors FastAPI-style as a top-level
+ * `{"detail": "..."}` (e.g. a model the ChatGPT plan does not support). The
+ * OpenAI SDK only reads `error.message`, so it would surface such a response as
+ * "400 status code (no body)". Rewrites that shape into `{"error": {"message"}}`
+ * so the upstream explanation survives; other responses pass through untouched.
+ */
+export async function normalizeCodexErrorResponse(
+  response: Response,
+): Promise<Response> {
+  if (response.ok) return response;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await response.clone().text());
+  } catch {
+    return response;
+  }
+  if (!parsed || typeof parsed !== "object" || "error" in parsed) {
+    return response;
+  }
+  const detail = (parsed as { detail?: unknown }).detail;
+  if (detail === undefined || detail === null || detail === "") {
+    return response;
+  }
+  await response.body?.cancel();
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+  headers.set("content-type", "application/json");
+  return new Response(
+    JSON.stringify({
+      error: {
+        message: typeof detail === "string" ? detail : JSON.stringify(detail),
+      },
+    }),
+    { status: response.status, statusText: response.statusText, headers },
+  );
 }
 
 /**
@@ -730,6 +757,44 @@ function redemptionErrorResponse(error: unknown): Response {
     );
   }
   throw error;
+}
+
+/** The Codex backend's 400 for a model the account's ChatGPT plan does not include. */
+const MODEL_REJECTED_BY_PLAN =
+  /The '([^']+)' model is not supported when using Codex with a ChatGPT account/;
+
+/**
+ * A model the plan rejects should leave the picker now, not after the key's next
+ * catalog sync: drop it from the key's synced list. Best effort — the request's
+ * own error response is returned either way.
+ */
+async function forgetModelRejectedByPlan(params: {
+  response: Response;
+  providerApiKeyId: string;
+}): Promise<void> {
+  const { response, providerApiKeyId } = params;
+  try {
+    const modelId = (await response.clone().text()).match(
+      MODEL_REJECTED_BY_PLAN,
+    )?.[1];
+    if (!modelId) {
+      return;
+    }
+    const removed = await LlmProviderApiKeyModelLinkModel.unlinkModelFromApiKey(
+      { apiKeyId: providerApiKeyId, provider: "openai", modelId },
+    );
+    if (removed) {
+      logger.info(
+        { providerApiKeyId, modelId },
+        "[OpenAiCodex] removed a model the ChatGPT plan rejected from the key's model list",
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      { providerApiKeyId, err: error },
+      "[OpenAiCodex] failed to drop a model the ChatGPT plan rejected",
+    );
+  }
 }
 
 /**

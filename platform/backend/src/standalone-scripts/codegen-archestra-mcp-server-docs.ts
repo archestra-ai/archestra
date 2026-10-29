@@ -10,7 +10,13 @@ import {
   getArchestraToolGroupId,
   getArchestraToolShortName,
   isAppRuntimeOnlyArchestraToolShortName,
+  type Resource,
+  resourceLabels,
 } from "@archestra/shared";
+import {
+  allAvailableActions,
+  roleActionResourceFor,
+} from "@archestra/shared/access-control";
 import { getAllArchestraMcpTools } from "@/archestra-mcp-server";
 import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
 import logger from "@/logging";
@@ -23,13 +29,40 @@ type ToolPermissionDisplay = string;
 // === Tool group definitions ===
 
 // Domain groups and their shortName→group mapping are the shared taxonomy in
-// `@archestra/shared` (also drives the agent tool-picker UI). Here we derive a
-// display label and a display order from the canonical ordered list.
+// `@archestra/shared` (also drives the agent tool-picker UI). The docs page
+// orders groups by what a reader looks for — the agent's own work first, then
+// the resources it manages, then organization administration — and renames the
+// two groups whose picker labels do not match the docs' product names. A
+// Record keyed by group id makes a new group a compile error until it is placed.
+const docsGroupOrder: Record<ArchestraToolGroupId, number> = {
+  identity: 0,
+  chat: 1,
+  meta: 2,
+  skills: 3,
+  files: 4,
+  skill_sandbox: 5,
+  apps: 6,
+  projects: 7,
+  tasks: 8,
+  agents: 9,
+  knowledge_management: 10,
+  mcp_servers: 11,
+  mcp_gateways: 12,
+  tool_assignment: 13,
+  openappa: 14,
+  limits: 15,
+  teams: 16,
+  plugins: 17,
+};
+const docsGroupLabelOverrides: Partial<Record<ArchestraToolGroupId, string>> = {
+  meta: "Tool Discovery",
+  openappa: "Guardrails",
+};
 const groupLabel = new Map<ArchestraToolGroupId, string>(
-  ARCHESTRA_TOOL_GROUPS.map((group) => [group.id, group.label]),
-);
-const groupOrder = new Map<ArchestraToolGroupId, number>(
-  ARCHESTRA_TOOL_GROUPS.map((group, index) => [group.id, index]),
+  ARCHESTRA_TOOL_GROUPS.map((group) => [
+    group.id,
+    docsGroupLabelOverrides[group.id] ?? group.label,
+  ]),
 );
 
 /**
@@ -50,22 +83,26 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
     "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
   remove_team_member:
     "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+  create_schedule_trigger:
+    "Requires an acting user. Omitting `project_id` creates a private project with the task prompt as its instructions. Repeating the same new-project task returns the existing schedule. An existing project must be accessible to the caller.",
   get_schedule_trigger:
-    "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+    "Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.",
   list_schedule_trigger_runs:
-    "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+    "Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.",
   get_schedule_trigger_run:
-    "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+    "Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.",
+  get_schedule_trigger_run_transcript:
+    "Requires a user token. The caller must be the schedule actor, or hold both organization-wide Projects **Can read** access and `log:admin`. Project membership or Projects read alone shows run status but not the transcript.",
   update_schedule_trigger:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   delete_schedule_trigger:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Full access** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   enable_schedule_trigger:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   disable_schedule_trigger:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   run_schedule_trigger_now:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can use** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   // Reads are scoped: non-managers only see teams they belong to.
   get_team:
     "Callers without organization-level team management (`team:create`) can only read teams they are a member of.",
@@ -89,14 +126,10 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
  * these tools are absent from their `tools/list`.
  */
 const CODE_RUNTIME_PREREQUISITE =
-  "served only when the code runtime is enabled — set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, or `ARCHESTRA_CODE_RUNTIME_ENABLED=true` together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`.";
+  "served only when the code runtime is enabled — set [`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`](/docs/admin/deployment/configuration#ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST), or [`ARCHESTRA_CODE_RUNTIME_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`.";
 
 const groupAvailabilityNotes: Partial<Record<ArchestraToolGroupId, string>> = {
-  skill_sandbox: `These tools are ${CODE_RUNTIME_PREREQUISITE} The [Code Sandbox](/docs/platform-code-sandbox) page covers what the runtime is and how an agent uses it.`,
-  // Same gate as the sandbox, since these tools ship from the same module —
-  // but they read and write saved files rather than entering a container, so
-  // the note says what they are instead of pointing at the runtime page.
-  files: `These tools are ${CODE_RUNTIME_PREREQUISITE} They operate on the conversation's persistent files, not inside the sandbox container.`,
+  skill_sandbox: `These tools are ${CODE_RUNTIME_PREREQUISITE} The [Code Sandbox](/docs/agents#code-sandbox) page covers what the runtime is and how an agent uses it.`,
 };
 
 const HOOK_RUNTIME_NOTE =
@@ -121,7 +154,7 @@ async function main() {
 
   const docsFilePath = path.join(
     __dirname,
-    "../../../../docs/pages/platform-archestra-mcp-server.md",
+    "../../../../docs/pages/reference/archestra-mcp-server.md",
   );
 
   const docsDir = path.dirname(docsFilePath);
@@ -135,7 +168,7 @@ async function main() {
   }
 
   const markdownContent = generateMarkdownContent(existingContent);
-  fs.writeFileSync(docsFilePath, markdownContent);
+  fs.writeFileSync(docsFilePath, `${markdownContent.trimEnd()}\n`);
 
   // App-runtime-only built-ins are not part of the agent-facing surface this
   // page documents (they are covered on the Apps page).
@@ -164,9 +197,8 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
 function generateFrontmatter(lastUpdated: string): string {
   return `---
 title: "Archestra MCP Server"
-category: MCP
-description: "Built-in MCP server providing tools for managing Archestra platform resources"
-order: 5
+description: "Every built-in tool an agent uses to manage Archestra, with its inputs and required permission"
+order: 4
 lastUpdated: ${lastUpdated}
 ---`;
 }
@@ -231,7 +263,7 @@ function generateMarkdownBody(): string {
 
   // Sort groups by order
   const sortedGroups = [...grouped.entries()].sort(
-    ([a], [b]) => (groupOrder.get(a) ?? 0) - (groupOrder.get(b) ?? 0),
+    ([a], [b]) => docsGroupOrder[a] - docsGroupOrder[b],
   );
 
   // Build unified Tools Reference sections (overview table + detailed schemas per group)
@@ -242,7 +274,7 @@ function generateMarkdownBody(): string {
     if (groupAvailabilityNote) {
       section += `${groupAvailabilityNote}\n\n`;
     }
-    section += "| Tool | Description | Required RBAC Permission |\n";
+    section += "| Tool | Description | Permission |\n";
     section += "|------|-------------|--------------------------|\n";
 
     for (const tool of groupTools) {
@@ -277,12 +309,9 @@ function generateMarkdownBody(): string {
     referenceSections.push(section);
   }
 
-  const preInstalledList = preInstalledShortNames
-    .map((n) => formatToolLink(n))
-    .join(", ");
-  const queryKnowledgeSourcesPermission = formatToolPermission(
-    "query_knowledge_sources",
-  );
+  const preInstalledList = new Intl.ListFormat("en", {
+    type: "conjunction",
+  }).format(preInstalledShortNames.map((n) => formatToolLink(n)));
 
   return `
 <!--
@@ -291,25 +320,22 @@ Do not edit manually.
 Renaming/deleting this page? Add a redirect in docs/redirects.json.
 -->
 
-The Archestra MCP Server is a built-in MCP server that ships with the platform and requires no installation. It exposes tools for managing platform resources such as agents, MCP servers, policies, and limits.
+Let an agent run Archestra for you: ask it to create an agent, install an MCP server, or build an app, and it calls these tools. The Archestra MCP Server is built into every deployment and acts as the person using the agent, with their permissions. Every tool name starts with \`archestra__\`. This page lists tools by their short name.
 
-Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: ${preInstalledList}.
+<span id="access"></span>
 
-${formatToolLink("query_knowledge_sources")} appears for Agents and MCP Gateways only when at least one [knowledge base or connector](/docs/platform-knowledge) is attached. To use it, the user must have ${queryKnowledgeSourcesPermission}.
+## Give an Agent These Tools
 
-All Archestra tools are prefixed with \`archestra__\`. Most built-in tools are always trusted — they bypass tool invocation and trusted data policies.
+Pick these tools like any other MCP server's tools, on an agent's **Tools, Skills & Knowledge** tab or a gateway's **Tools & Knowledge** settings:
 
-${formatToolLink("query_knowledge_sources")} is an exception: its output is treated as sensitive by default and is evaluated by trusted data policies. See [AI Tool Guardrails](/docs/platform-ai-tool-guardrails) for more details.
+- **Manual:** assign the tools you want.
+- **All:** the agent gets every tool the person can use, but built-in tools start out excluded. Remove a tool from the exclusions to allow it.
 
-## Auth
+New agents include ${preInstalledList}. Turning on a feature adds its own default tools. ${formatToolLink("query_knowledge_sources")} appears only when the agent or gateway has a [knowledge base or connector](/docs/knowledge) attached.
 
-Archestra tools are **trusted** by default, meaning they bypass [tool invocation and trusted data policies](/docs/platform-ai-tool-guardrails) — the tool will always execute without policy evaluation.
+## Permissions
 
-${formatToolLink("query_knowledge_sources")} is evaluated by trusted data policies and its results are treated as sensitive by default.
-
-However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without \`knowledgeSource:create\` permission will not see ${formatToolLink("create_knowledge_base")} in their tool list and cannot execute it.
-
-Some tools enforce an **additional access requirement** in their handler beyond this RBAC permission — for example, the team membership tools gate on \`team:read\` but then require the caller to be an organization-level team manager or an admin (team-member role) of the specific team. These tools are marked with a † in the tables below, and the requirement is spelled out in each tool's details.
+Each tool needs the permission in the last column of its table. A person sees only the tools their permissions allow: without \`knowledgeSource:create\`, for example, ${formatToolLink("create_knowledge_base")} is hidden. A tool marked † has an extra condition, described in its entry. [Guardrails](/docs/agents/guardrails) policies apply on top of these permissions.
 
 ## Tools Reference
 
@@ -328,7 +354,7 @@ function extractLastUpdatedFromMarkdown(content: string): string | null {
 }
 
 function generateMarkdownContent(existingContent: string | null): string {
-  const newBody = generateMarkdownBody();
+  const newBody = linkPermissionMentions(generateMarkdownBody());
 
   let lastUpdated: string;
 
@@ -402,9 +428,15 @@ export function formatToolPermission(
 ): ToolPermissionDisplay {
   const permission = TOOL_PERMISSIONS[toolShortName];
   if (!permission) {
-    return "None (no additional RBAC permission required)";
+    return "None";
   }
 
+  // No role holds this action: it is granted on the individual item.
+  const resource = roleActionResourceFor(permission.resource);
+  if (!allAvailableActions[resource]?.includes(permission.action as never)) {
+    const item = perItemNoun(resource);
+    return `\`${permission.action}\` on the ${item} (granted per item)`;
+  }
   return `\`${permission.resource}:${permission.action}\``;
 }
 
@@ -421,7 +453,7 @@ function isArchestraToolShortName(
 // === Input schema rendering ===
 
 interface JsonSchema {
-  type?: string;
+  type?: string | string[];
   properties?: Record<string, JsonSchema>;
   items?: JsonSchema;
   required?: string[];
@@ -501,8 +533,9 @@ export function renderSchemaRows(
     );
   }
 
-  const arrayItemObjectSchema = getObjectSchema(schema.items);
-  if (schema.type === "array" && arrayItemObjectSchema?.properties) {
+  const arraySchema = getArraySchema(schema);
+  const arrayItemObjectSchema = getObjectSchema(arraySchema?.items);
+  if (arrayItemObjectSchema?.properties) {
     return renderProperties(
       arrayItemObjectSchema.properties,
       new Set(arrayItemObjectSchema.required ?? []),
@@ -557,16 +590,17 @@ function renderProperties(
     }
 
     // Recurse into array item properties
-    const itemObjectVariants = getObjectUnionVariants(prop.items);
-    const itemObjectSchema = getObjectSchema(prop.items);
-    if (prop.type === "array" && itemObjectVariants) {
+    const arraySchema = getArraySchema(prop);
+    const itemObjectVariants = getObjectUnionVariants(arraySchema?.items);
+    const itemObjectSchema = getObjectSchema(arraySchema?.items);
+    if (itemObjectVariants) {
       rows.push(
         ...renderUnionObjectProperties(
           itemObjectVariants,
           `${qualifiedName}[]`,
         ),
       );
-    } else if (prop.type === "array" && itemObjectSchema?.properties) {
+    } else if (itemObjectSchema?.properties) {
       const itemRequired = new Set(itemObjectSchema.required ?? []);
       rows.push(
         ...renderProperties(
@@ -687,7 +721,7 @@ export function formatType(schema: JsonSchema): string {
     return "array";
   }
 
-  return schema.type ?? "any";
+  return typeof schema.type === "string" ? schema.type : "any";
 }
 
 function getObjectUnionVariants(schema?: JsonSchema): JsonSchema[] | undefined {
@@ -712,7 +746,48 @@ function getObjectSchema(schema?: JsonSchema): JsonSchema | undefined {
   );
 }
 
+function getArraySchema(schema: JsonSchema): JsonSchema | undefined {
+  if (schema.type === "array") {
+    return schema;
+  }
+  return getUnionVariants(schema)?.find((variant) => variant.type === "array");
+}
+
 function getUnionVariants(schema: JsonSchema): JsonSchema[] | undefined {
   const variants = schema.anyOf ?? schema.oneOf;
-  return variants && variants.length > 0 ? variants : undefined;
+  if (variants && variants.length > 0) {
+    return variants;
+  }
+  return Array.isArray(schema.type)
+    ? schema.type.map((type) => ({ ...schema, type }))
+    : undefined;
+}
+
+// A function, not a constant: this script runs while the module loads.
+function perItemNoun(resource: Resource): string {
+  switch (resource) {
+    case "mcpGateway":
+      return "MCP gateway";
+    case "mcpRegistry":
+      return "MCP registry entry";
+    default:
+      return resourceLabels[resource].toLowerCase().replace(/s$/, "");
+  }
+}
+
+/**
+ * Link every inline-code `resource:action` permission to its row on the
+ * Permissions reference, as `.github/scripts/check-docs-permission-links.py`
+ * requires of every docs page.
+ */
+function linkPermissionMentions(markdown: string): string {
+  return markdown.replace(
+    /(?<!\[)`([A-Za-z]+):([a-z-]+)`(?!\]\()/g,
+    (mention, resource: string, action: string) =>
+      (allAvailableActions as Record<string, readonly string[]>)[
+        resource
+      ]?.includes(action)
+        ? `[${mention}](/docs/reference/permissions#${resource}:${action})`
+        : mention,
+  );
 }

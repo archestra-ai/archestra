@@ -1,7 +1,7 @@
 import { E2eTestId } from "@archestra/shared";
 import { mergeTests } from "@playwright/test";
 import { expect, test as uiTest } from "../fixtures";
-import { selectAgentTableView, waitForElementWithReload } from "../utils";
+import { waitForAgentsTable, waitForElementWithReload } from "../utils";
 import { test as apiTest } from "./api-fixtures";
 
 const test = mergeTests(uiTest, apiTest);
@@ -25,7 +25,7 @@ test("restores a list page's search filter after visiting a detail page and navi
 
   try {
     await goToPage(page, "/agents");
-    await selectAgentTableView(page);
+    await waitForAgentsTable(page);
 
     const searchInput = page.getByPlaceholder("Search agents by name");
     await waitForElementWithReload(page, searchInput);

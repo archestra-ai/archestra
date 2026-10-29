@@ -56,8 +56,19 @@ function useIntegrationOrganization() {
   return useOrganization(true, { fresh: true });
 }
 
-export function useModelProviderCatalog(): NamedIntegrationCatalog<SupportedProvider> {
-  const { data: organization } = useIntegrationOrganization();
+/**
+ * The model provider catalog. Pages that configure provider-backed resources
+ * pass `fresh` to read availability the way {@link useIntegrationOrganization}
+ * does. Everywhere else — the chat composer above all — reads the cached
+ * organization: re-reading it on every mount put a `GET /api/organization` on
+ * each conversation switch, and those surfaces only narrow what is offered.
+ */
+export function useModelProviderCatalog(
+  options: { fresh?: boolean } = {},
+): NamedIntegrationCatalog<SupportedProvider> {
+  const { data: organization } = useOrganization(true, {
+    fresh: options.fresh === true,
+  });
   const overrides = organization?.modelProviderOverrides ?? null;
   return useMemo(
     () => ({

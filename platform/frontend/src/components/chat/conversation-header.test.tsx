@@ -1,8 +1,15 @@
 import type { archestraApiTypes } from "@archestra/shared";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { MOBILE_HEADER_TITLE_CONTAINER_ID } from "./chat-help-link";
 import { ConversationHeader } from "./conversation-header";
+
+const viewport = vi.hoisted(() => ({ isMobile: false }));
+
+vi.mock("@/lib/hooks/use-mobile", () => ({
+  useIsMobile: () => viewport.isMobile,
+}));
 
 vi.mock("@/lib/schedule-trigger.query", () => ({
   useScheduleTriggerRun: () => ({
@@ -33,8 +40,6 @@ function makePanel(overrides: Partial<Panel> = {}): Panel {
     isArtifactOpen: false,
     isBrowserVisible: false,
     isAppsVisible: false,
-    isReviewVisible: false,
-    hasReview: false,
     showBrowserButton: true,
     onClose: vi.fn(),
     onOpenTab: vi.fn(),
@@ -50,12 +55,6 @@ function renderHeader(panelOverrides: Partial<Panel> = {}) {
       conversation={makeConversation()}
       messageCount={2}
       isTitleAnimating={false}
-      canManageShare={false}
-      isShared={false}
-      canCreateProject={false}
-      onShare={vi.fn()}
-      onExportMarkdown={vi.fn()}
-      onCreateProject={vi.fn()}
       panel={panel}
     />,
   );
@@ -82,12 +81,6 @@ describe("ConversationHeader — top-bar tab strip", () => {
         scheduleTriggerId="trigger-1"
         messageCount={2}
         isTitleAnimating={false}
-        canManageShare={false}
-        isShared={false}
-        canCreateProject={false}
-        onShare={vi.fn()}
-        onExportMarkdown={vi.fn()}
-        onCreateProject={vi.fn()}
         panel={makePanel()}
       />,
     );
@@ -208,5 +201,41 @@ describe("ConversationHeader — mobile overflow menu", () => {
 
     expect(panel.onClose).toHaveBeenCalledTimes(1);
     expect(panel.onOpenTab).not.toHaveBeenCalled();
+  });
+});
+
+describe("ConversationHeader — mobile top bar", () => {
+  afterEach(() => {
+    viewport.isMobile = false;
+    document.getElementById(MOBILE_HEADER_TITLE_CONTAINER_ID)?.remove();
+  });
+
+  it("moves the title and its menu into the app shell's bar on phones", () => {
+    viewport.isMobile = true;
+    const shellBarSlot = document.createElement("div");
+    shellBarSlot.id = MOBILE_HEADER_TITLE_CONTAINER_ID;
+    document.body.appendChild(shellBarSlot);
+
+    renderHeader();
+
+    const slot = within(shellBarSlot);
+    expect(slot.getByRole("heading", { name: "My chat" })).toBeInTheDocument();
+    expect(
+      slot.getByRole("button", { name: "More options" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "My chat" })).toHaveLength(1);
+  });
+
+  it("keeps its own bar on wider screens", () => {
+    const shellBarSlot = document.createElement("div");
+    shellBarSlot.id = MOBILE_HEADER_TITLE_CONTAINER_ID;
+    document.body.appendChild(shellBarSlot);
+
+    renderHeader();
+
+    expect(shellBarSlot).toBeEmptyDOMElement();
+    expect(
+      screen.getByRole("heading", { name: "My chat" }),
+    ).toBeInTheDocument();
   });
 });

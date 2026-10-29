@@ -1,7 +1,6 @@
 import { generateKeyPairSync } from "node:crypto";
 import type { V1Secret } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
-import config from "@/config";
 import {
   A2AContextModel,
   A2ATaskModel,
@@ -10,9 +9,10 @@ import {
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { AGENT_RUNTIME_CREDENTIALS_SECRET_KEY } from "@/services/agent-runtime/runtime-contract";
-import { expect, test } from "@/test";
+import { expect, test, vi } from "@/test";
 import { useMswServer as setupMswServer } from "@/test/msw";
 import manager from "./manager";
+import { agentSandboxApi } from "./sandbox-api";
 
 const server = setupMswServer();
 
@@ -21,7 +21,6 @@ test("refreshes the frozen run binding and cannot restore a concurrently revoked
   makeUser,
   makeAgent,
 }) => {
-  config.agentRuntime.enabled = true;
   const organization = await makeOrganization();
   const user = await makeUser();
   const agent = await makeAgent({ organizationId: organization.id });
@@ -96,13 +95,11 @@ test("refreshes the frozen run binding and cannot restore a concurrently revoked
   };
   let revokeDuringWrite = false;
   let writes = 0;
-  const internals = manager as unknown as {
-    clients: unknown;
-    clusterReachable: boolean | null;
-  };
+  const internals = manager as unknown as { clients: unknown };
   const original = internals.clients;
-  const originalReachability = internals.clusterReachable;
-  internals.clusterReachable = true;
+  const sandboxInstalled = vi
+    .spyOn(agentSandboxApi, "isInstalled", "get")
+    .mockReturnValue(true);
   internals.clients = {
     coreApi: {
       listNamespacedPod: async () => ({ items: [] }),
@@ -157,6 +154,6 @@ test("refreshes the frozen run binding and cannot restore a concurrently revoked
     expect(writes).toBe(1);
   } finally {
     internals.clients = original;
-    internals.clusterReachable = originalReachability;
+    sandboxInstalled.mockRestore();
   }
 });

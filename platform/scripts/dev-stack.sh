@@ -58,8 +58,8 @@ require_platform_cwd() {
   fi
 }
 
-# The backend lazily loads three NAPI addons (@archestra/app-runtime-rs,
-# sandbox-rs, image-rs) whose compiled `.node` binaries are gitignored and are
+# The backend lazily loads NAPI addons (@archestra/app-runtime-rs, sandbox-rs,
+# image-rs, router-rs) whose compiled `.node` binaries are gitignored and are
 # never built by `pnpm install` (install scripts are disabled repo-wide), so a
 # fresh worktree fails with "Unable to load @archestra/<crate> for <platform>"
 # the first time an app/sandbox/image feature is touched. Build the missing
@@ -68,7 +68,7 @@ require_platform_cwd() {
 # — so restarts stay fast.
 ensure_native_addons() {
   local platform_dir="$1" crate filters=()
-  for crate in app-runtime-rs sandbox-rs image-rs; do
+  for crate in app-runtime-rs sandbox-rs image-rs router-rs; do
     if ! ls "$platform_dir/archestra-rs/$crate"/*.node >/dev/null 2>&1; then
       filters+=("--filter" "@archestra/$crate")
     fi
@@ -99,6 +99,18 @@ cmd_up() {
   local platform_dir; platform_dir="$(pwd)"
   local worktree_dir; worktree_dir="$(cd .. && pwd)"
   local env_file="$platform_dir/.env"
+
+  # The worktree bootstrap links .env to the main checkout's file. The port
+  # rewrite below would write through that link and repoint the main stack,
+  # so give this stack its own copy first.
+  if [ -L "$env_file" ] && [ -f "$env_file" ]; then
+    local env_copy; env_copy="$(mktemp "$platform_dir/.env.XXXXXX")"
+    cp "$env_file" "$env_copy"
+    mv -f "$env_copy" "$env_file"
+    echo "→ Replaced the linked .env with a copy for this stack" >&2
+  elif [ -L "$env_file" ]; then
+    rm -f "$env_file"
+  fi
 
   if [ ! -f "$env_file" ]; then
     # Auto-copy from the main worktree (the original clone, where .git is a

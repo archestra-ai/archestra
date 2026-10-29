@@ -12,7 +12,7 @@ import {
 /**
  * Process-wide search over the crawled public-GitHub skill catalog (the
  * `skill-catalog.generated.json` produced by
- * standalone-scripts/generate-skill-index.ts). The decoded entries and the
+ * scripts/generate-skill-index.ts). The decoded entries and the
  * inverted index are built lazily on the first query and then reused for the
  * life of the process: the catalog is a static, redeploy-time asset, so there
  * is nothing to invalidate.

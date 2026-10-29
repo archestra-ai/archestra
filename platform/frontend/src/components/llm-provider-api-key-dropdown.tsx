@@ -4,15 +4,20 @@ import {
   E2eTestId,
   getChatApiKeySelectorOptionTestId,
   getChatApiKeySelectorProviderGroupTestId,
-  type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@archestra/shared";
-import { CheckIcon, ChevronDown, Key, Plus, TriangleAlert } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronDown,
+  Key,
+  LayersIcon,
+  Plus,
+  TriangleAlert,
+} from "lucide-react";
 import Image from "next/image";
 import { useMemo } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
-import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
 import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
 import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +38,13 @@ import {
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
+import type { AvailableModelPool } from "@/lib/model-pools.query";
+import {
+  isOrganizationSubscription,
+  ORGANIZATION_SUBSCRIPTIONS_HEADING,
+  organizationSubscriptionName,
+  organizationSubscriptionSubtitle,
+} from "@/lib/organization-subscription";
 import { cn } from "@/lib/utils/tailwind";
 
 type DropdownLlmProviderApiKey = Pick<
@@ -42,7 +54,12 @@ type DropdownLlmProviderApiKey = Pick<
   Partial<
     Pick<
       LlmProviderApiKey,
-      "scope" | "teamName" | "subscriptionKind" | "requiresReauthentication"
+      | "scope"
+      | "teamName"
+      | "subscriptionKind"
+      | "requiresReauthentication"
+      | "isGithubAppKey"
+      | "githubOrganization"
     >
   > & {
     connectRequired?: boolean;
@@ -80,6 +97,10 @@ interface LlmProviderApiKeyDropdownProps {
   allowOrganizationDefault?: boolean;
   organizationDefaultSelected?: boolean;
   onSelectOrganizationDefault?: () => void;
+  /** Model pools offered before the keys; a picked pool replaces the key. */
+  pools?: AvailableModelPool[];
+  selectedPoolId?: string | null;
+  onSelectPool?: (poolId: string) => void;
 }
 
 export function LlmProviderApiKeyDropdown({
@@ -107,6 +128,9 @@ export function LlmProviderApiKeyDropdown({
   allowOrganizationDefault = false,
   organizationDefaultSelected = false,
   onSelectOrganizationDefault,
+  pools = [],
+  selectedPoolId = null,
+  onSelectPool,
 }: LlmProviderApiKeyDropdownProps) {
   const selectableKeys = useMemo(
     () =>
@@ -122,8 +146,16 @@ export function LlmProviderApiKeyDropdown({
     () => selectableKeys.filter(isPersonalSubscription),
     [selectableKeys],
   );
+  const organizationKeys = useMemo(
+    () => selectableKeys.filter(isOrganizationSubscription),
+    [selectableKeys],
+  );
   const apiKeys = useMemo(
-    () => selectableKeys.filter((key) => !isPersonalSubscription(key)),
+    () =>
+      selectableKeys.filter(
+        (key) =>
+          !isPersonalSubscription(key) && !isOrganizationSubscription(key),
+      ),
     [selectableKeys],
   );
   const keysByProvider = useMemo(() => groupKeysByProvider(apiKeys), [apiKeys]);
@@ -135,7 +167,11 @@ export function LlmProviderApiKeyDropdown({
       }),
     [keysByProvider, currentProvider],
   );
-  const selectedKey = availableKeys.find((key) => key.id === selectedApiKeyId);
+  const selectedPool = pools.find((pool) => pool.id === selectedPoolId);
+  const selectedKey = selectedPool
+    ? undefined
+    : availableKeys.find((key) => key.id === selectedApiKeyId);
+  const checkedKeyId = selectedPool ? null : selectedApiKeyId;
   const selectedKeyIsSubscription =
     selectedKey !== undefined && isPersonalSubscription(selectedKey);
   const fallbackTriggerLabel =
@@ -151,10 +187,11 @@ export function LlmProviderApiKeyDropdown({
         {triggerVariant === "button" || triggerVariant === "select" ? (
           <Button
             variant="outline"
-            size="sm"
             disabled={disabled}
             className={cn(
-              "h-9 min-w-0 justify-start gap-1.5 px-3 text-sm",
+              // Default (input) height and `--input` edge: it stands in for a
+              // Select in forms and filter bars.
+              "min-w-0 justify-start gap-1.5 border-input px-3",
               triggerVariant === "select" && "justify-between",
               triggerClassName,
             )}
@@ -162,14 +199,23 @@ export function LlmProviderApiKeyDropdown({
             data-testid={triggerTestId}
           >
             <span className="flex min-w-0 items-center gap-1.5">
-              {selectedKey ? (
+              {selectedPool ? (
+                <>
+                  <LayersIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate font-medium">
+                    {selectedPool.name}
+                  </span>
+                </>
+              ) : selectedKey ? (
                 <>
                   <SubscriptionBrandIcon
                     kind={selectedKey.subscriptionKind}
                     provider={selectedKey.provider}
                   />
                   <span className="truncate font-medium">
-                    {selectedKey.name}
+                    {isOrganizationSubscription(selectedKey)
+                      ? organizationSubscriptionName(selectedKey)
+                      : selectedKey.name}
                   </span>
                   {selectedKeyIsSubscription && (
                     <Badge
@@ -268,6 +314,36 @@ export function LlmProviderApiKeyDropdown({
                 </CommandItem>
               </CommandGroup>
             )}
+            {onSelectPool && pools.length > 0 && (
+              <CommandGroup
+                heading={
+                  <div className="space-y-0.5">
+                    <div className="text-foreground">Model pools</div>
+                    <div className="font-normal">
+                      Fail over across every member
+                    </div>
+                  </div>
+                }
+              >
+                {pools.map((pool) => (
+                  <CommandItem
+                    key={pool.id}
+                    value={`pool:${pool.id}`}
+                    keywords={[pool.name, "model pool", ...pool.providers]}
+                    onSelect={() => onSelectPool(pool.id)}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <LayersIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{pool.name}</span>
+                    </div>
+                    {selectedPoolId === pool.id && (
+                      <CheckIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
             {subscriptionKeys.length > 0 && (
               <CommandGroup
                 heading={
@@ -317,6 +393,48 @@ export function LlmProviderApiKeyDropdown({
                             : "Per-user"}
                       </Badge>
                     </div>
+                    {checkedKeyId === key.id && (
+                      <CheckIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {organizationKeys.length > 0 && (
+              <CommandGroup heading={ORGANIZATION_SUBSCRIPTIONS_HEADING}>
+                {organizationKeys.map((key) => (
+                  <CommandItem
+                    key={key.id}
+                    data-testid={
+                      showChatTestIds
+                        ? getChatApiKeySelectorOptionTestId(key.id)
+                        : undefined
+                    }
+                    value={key.id}
+                    keywords={[
+                      key.provider,
+                      key.name,
+                      key.githubOrganization ?? "",
+                      "enterprise plan",
+                    ]}
+                    disabled={providerFilter?.(key.provider) === false}
+                    onSelect={() => onSelectKey(key.id)}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <SubscriptionBrandIcon
+                        kind={null}
+                        provider={key.provider}
+                      />
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate">
+                          {organizationSubscriptionName(key)}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {organizationSubscriptionSubtitle(key)}
+                        </span>
+                      </div>
+                    </div>
                     {selectedApiKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
@@ -328,7 +446,7 @@ export function LlmProviderApiKeyDropdown({
               <div className="border-t px-3 pb-1 pt-2 text-xs">
                 <div className="font-medium text-foreground">API keys</div>
                 <div className="text-muted-foreground">
-                  Stored credentials shared according to scope
+                  Stored credentials shared through permissions
                 </div>
               </div>
             )}
@@ -359,24 +477,15 @@ export function LlmProviderApiKeyDropdown({
                         : undefined
                     }
                     value={key.id}
-                    keywords={[provider, key.name, key.teamName ?? ""]}
+                    keywords={[provider, key.name]}
                     disabled={providerFilter?.(key.provider) === false}
                     onSelect={() => onSelectKey(key.id)}
                     className="cursor-pointer"
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-2">
-                      {key.scope ? <ScopeIcon scope={key.scope} /> : null}
                       <span className="truncate">{key.name}</span>
-                      {key.scope === "team" && key.teamName ? (
-                        <Badge
-                          variant="outline"
-                          className="px-1 py-0 text-[10px]"
-                        >
-                          {key.teamName}
-                        </Badge>
-                      ) : null}
                     </div>
-                    {selectedApiKeyId === key.id && (
+                    {checkedKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
                   </CommandItem>
@@ -429,23 +538,6 @@ function ProviderIcon({ provider }: { provider: SupportedProvider }) {
       height={14}
       className="shrink-0 rounded dark:invert"
     />
-  );
-}
-
-/**
- * The scope glyph next to a key's name. It is the only thing distinguishing a
- * personal key from an organization one here, and there is no room for text in
- * this popover, so it carries the scope label as its accessible name (and as a
- * hover title) rather than being a mute 12px decoration.
- */
-function ScopeIcon({ scope }: { scope: ResourceVisibilityScope }) {
-  const Icon = SCOPE_META[scope].icon;
-  const label = scopeLabel(scope);
-
-  return (
-    <span role="img" aria-label={label} title={label} className="inline-flex">
-      <Icon className="h-3 w-3" />
-    </span>
   );
 }
 

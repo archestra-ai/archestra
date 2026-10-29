@@ -3,10 +3,12 @@ import {
   anthropicEffortForThinkingEffort,
   anthropicSupportsThinkingEffort,
   anthropicThinksByDefault,
+  findTierDefault,
   getAgentRuntimeAllowedProtocols,
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
   getProvidersWithOptionalApiKey,
+  isClaudeOnBedrock,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   isSmallModel,
@@ -109,6 +111,17 @@ describe("requiresOpenAiResponsesApi", () => {
     expect(requiresOpenAiResponsesApi("openai/gpt-5.6-sol")).toBe(true);
   });
 
+  test("matches the gpt-6 family, including point releases", () => {
+    expect(requiresOpenAiResponsesApi("gpt-6")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6-luna")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6-sol")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6-astra")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6.1-sol")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6.1-terra")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6-sol-2026-09-01")).toBe(true);
+    expect(requiresOpenAiResponsesApi("openai/gpt-6.1-sol")).toBe(true);
+  });
+
   test("matches Codex models and their variants", () => {
     expect(requiresOpenAiResponsesApi("gpt-5.3-codex")).toBe(true);
     expect(requiresOpenAiResponsesApi("gpt-5.2-codex-mini")).toBe(true);
@@ -121,6 +134,7 @@ describe("requiresOpenAiResponsesApi", () => {
     expect(requiresOpenAiResponsesApi("gpt-4o")).toBe(false);
     expect(requiresOpenAiResponsesApi("babbage-002")).toBe(false);
     expect(requiresOpenAiResponsesApi("gpt-5.61")).toBe(false);
+    expect(requiresOpenAiResponsesApi("gpt-60")).toBe(false);
     expect(requiresOpenAiResponsesApi("gpt-5.3-codexical")).toBe(false);
   });
 });
@@ -159,6 +173,31 @@ describe("getAgentRuntimeModelCompatibility", () => {
       compatible: false,
       message: expect.stringContaining("Codex runtime requires an OpenAI"),
     });
+  });
+
+  test("runs the maintained Kimi Code runtime on Kimi Code models only", () => {
+    const runtime = {
+      inferenceProtocol: "openai_chat" as const,
+      runtimeCommand: ["archestra-kimi"],
+    };
+    expect(
+      getAgentRuntimeModelCompatibility({
+        ...runtime,
+        provider: "kimi-code",
+        modelId: "k3.1-pro",
+      }),
+    ).toEqual({ compatible: true });
+    // A Kimi API Platform key is the Moonshot (Kimi) provider, not Kimi Code.
+    for (const provider of ["kimi", "gemini"] as const) {
+      expect(
+        getAgentRuntimeProviderCompatibility({ ...runtime, provider }),
+      ).toMatchObject({
+        compatible: false,
+        message: expect.stringContaining(
+          "Kimi Code runtime requires a Kimi Code model",
+        ),
+      });
+    }
   });
 
   test("allows only Claude Bedrock models for the maintained Claude Code runtime", () => {
@@ -207,6 +246,10 @@ describe("getAgentRuntimeModelCompatibility", () => {
         runtimeCommand: ["archestra-openclaw"],
         inferenceProtocol: "openai_chat",
       },
+      {
+        runtimeCommand: ["archestra-grok"],
+        inferenceProtocol: "openai_chat",
+      },
     ] as const) {
       expect(
         getAgentRuntimeModelCompatibility({
@@ -216,6 +259,41 @@ describe("getAgentRuntimeModelCompatibility", () => {
           modelId: "gemini-2.5-pro",
         }),
       ).toEqual({ compatible: true });
+    }
+  });
+
+  test("serves Chat Completions-only router providers on Chat Completions images only", () => {
+    // The router refuses Kimi on /responses because its translation drops
+    // the reasoning Kimi thinking models replay on tool-call turns, so the
+    // picker and the launch preflight must refuse the same pairing.
+    for (const provider of ["kimi", "kimi-code"] as const) {
+      for (const runtimeCommand of [null, ["archestra-opencode"]] as const) {
+        expect(
+          getAgentRuntimeModelCompatibility({
+            inferenceProtocol: "openai_responses",
+            runtimeCommand,
+            provider,
+            modelId: "k3.1-pro",
+          }),
+        ).toMatchObject({
+          compatible: false,
+          message: expect.stringContaining("Chat Completions endpoint only"),
+        });
+      }
+      for (const runtimeCommand of [
+        null,
+        ["archestra-hermes"],
+        ["archestra-grok"],
+      ] as const) {
+        expect(
+          getAgentRuntimeModelCompatibility({
+            inferenceProtocol: "openai_chat",
+            runtimeCommand,
+            provider,
+            modelId: "k3.1-pro",
+          }),
+        ).toEqual({ compatible: true });
+      }
     }
   });
 
@@ -414,6 +492,23 @@ describe("resolveClaudeContextVariant", () => {
   });
 });
 
+describe("findTierDefault", () => {
+  test("picks Kimi K3.1 Pro from Moonshot's catalog, not its Highspeed variant", () => {
+    // The default matches as a substring, so `kimi-k3.1-pro-highspeed` matches
+    // too; the plain model must still win.
+    const models = [
+      "kimi-k3.1-pro-highspeed",
+      "kimi-k3",
+      "kimi-k3.1-pro",
+      "kimi-k2.6",
+    ].map((modelId) => ({ modelId }));
+
+    expect(findTierDefault(models, "kimi", "normal")?.modelId).toBe(
+      "kimi-k3.1-pro",
+    );
+  });
+});
+
 describe("isSmallModel", () => {
   test("makes no claim when the serving backend reported no size", () => {
     // Only Ollama reports a parameter count today; everywhere else this is null
@@ -469,6 +564,12 @@ describe("getAgentRuntimeAllowedProtocols", () => {
       "openai_responses",
       "openai_chat",
     ]);
+    expect(getAgentRuntimeAllowedProtocols(["archestra-grok"])).toEqual([
+      "openai_chat",
+    ]);
+    expect(getAgentRuntimeAllowedProtocols(["archestra-kimi"])).toEqual([
+      "openai_chat",
+    ]);
     for (const command of [
       null,
       [],
@@ -499,5 +600,20 @@ describe("getAgentRuntimeAllowedProtocols", () => {
         message: expect.stringContaining("requires the Anthropic API"),
       });
     }
+  });
+});
+
+describe("isClaudeOnBedrock", () => {
+  test("reads Claude from plain ids, cross-region profiles and their ARNs", () => {
+    expect(isClaudeOnBedrock("anthropic.claude-haiku-4-5-20251001-v1:0")).toBe(
+      true,
+    );
+    expect(isClaudeOnBedrock("global.anthropic.claude-opus-4-8")).toBe(true);
+    expect(
+      isClaudeOnBedrock(
+        "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      ),
+    ).toBe(true);
+    expect(isClaudeOnBedrock("us.zai.glm-5")).toBe(false);
   });
 });

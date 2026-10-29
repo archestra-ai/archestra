@@ -1,0 +1,437 @@
+import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runInNewContext } from "node:vm";
+import { CLAUDE_DESKTOP_PROFILE_ID } from "@archestra/shared/connection-setup";
+import { expect, test } from "vitest";
+import { uuidv5 } from "@/utils/uuid";
+import { DESKTOP_CONNECTION_INSTALLER } from "./connection-desktop-installer";
+
+const require = createRequire(import.meta.url);
+const token = "sk-ant-oat01-test-subscription";
+
+test.each([
+  {
+    targetOs: "darwin",
+    quotaFailure: false,
+    insecureMcp: false,
+    invalidMarketplace: false,
+    withProxy: false,
+    withMcp: true,
+  },
+  {
+    targetOs: "darwin",
+    quotaFailure: false,
+    insecureMcp: false,
+    invalidMarketplace: false,
+    withProxy: true,
+    withMcp: false,
+  },
+  {
+    targetOs: "darwin",
+    quotaFailure: false,
+    insecureMcp: false,
+    invalidMarketplace: false,
+  },
+  {
+    targetOs: "darwin",
+    quotaFailure: true,
+    insecureMcp: false,
+    invalidMarketplace: false,
+  },
+  {
+    targetOs: "win32",
+    quotaFailure: false,
+    insecureMcp: false,
+    invalidMarketplace: false,
+  },
+  {
+    targetOs: "darwin",
+    quotaFailure: false,
+    insecureMcp: true,
+    invalidMarketplace: false,
+  },
+  {
+    targetOs: "darwin",
+    quotaFailure: false,
+    insecureMcp: false,
+    invalidMarketplace: true,
+  },
+])("Desktop $targetOs browser setup without developer tools (quota failure=$quotaFailure)", async ({
+  targetOs,
+  quotaFailure,
+  insecureMcp,
+  invalidMarketplace,
+  withProxy = true,
+  withMcp = true,
+}) => {
+  const home = await mkdtemp(join(tmpdir(), "desktop-browser-setup-"));
+  const opened: string[] = [];
+  const native: string[] = [];
+  const module = { exports: null };
+  let verifier: string | undefined;
+  let challenge: string | null = null;
+  let cachedQuotaFailure = false;
+  const network = async (url: string, options: RequestInit) => {
+    if (url.includes("/api/connection-setups/script/")) {
+      expect(options.headers).toEqual({
+        Accept: "application/vnd.archestra.desktop-setup+json",
+      });
+      return Response.json({
+        clientId: "claude-desktop",
+        appName: "Test Platform",
+        proxy: withProxy
+          ? {
+              url: "https://proxy.example/v1/anthropic",
+              authMode: "provider-key",
+              passthroughVirtualKey: "test-user-key",
+            }
+          : undefined,
+        mcp: withMcp
+          ? {
+              serverName: "test_gateway",
+              toolPrefix: "archestra__",
+              legacyServerNames: ["old_gateway"],
+              url: insecureMcp
+                ? "http://localhost:9000/v1/mcp/test"
+                : "https://proxy.example/v1/mcp/test",
+            }
+          : undefined,
+        skills: {
+          cloneUrl: "https://proxy.example/marketplace.git",
+          marketplaceName: "shared",
+        },
+      });
+    }
+    if (url.endsWith("/info/refs?service=git-upload-pack")) {
+      if (invalidMarketplace) return new Response("not a git repository");
+      return new Response(
+        `001e# service=git-upload-pack\n0000003f${"a".repeat(40)} HEAD\0symref=HEAD:refs/heads/main\n0000`,
+      );
+    }
+    const body = JSON.parse(options.body as string);
+    if (url.endsWith("/v1/oauth/token")) {
+      verifier = body.code_verifier;
+      expect(
+        createHash("sha256")
+          .update(verifier ?? "")
+          .digest("base64url"),
+      ).toBe(challenge);
+      expect(body.grant_type).toBe("authorization_code");
+      expect(body.expires_in).toBe(31536000);
+      expect(body.code).toBe("test-code");
+      return Response.json({ access_token: token });
+    }
+    expect(url).toBe("https://proxy.example/v1/anthropic/v1/messages");
+    expect(options.headers).toMatchObject({
+      Authorization: `Bearer ${token}`,
+      "X-Claude-Code-Session-Id": expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      "X-Archestra-Virtual-Key": "test-user-key",
+      "anthropic-beta": "oauth-2025-04-20",
+    });
+    expect(body.messages).toHaveLength(1);
+    return quotaFailure || cachedQuotaFailure
+      ? new Response("quota", { status: 429 })
+      : Response.json({
+          type: "message",
+          content: [{ type: "text", text: "OK" }],
+        });
+  };
+  runInNewContext(DESKTOP_CONNECTION_INSTALLER, {
+    module,
+    require: (name: string) => {
+      if (name === "node:os")
+        return { homedir: () => home, tmpdir: () => home };
+      if (name === "node:child_process")
+        return {
+          spawn: (file: string) => {
+            native.push(file);
+            const child = Object.assign(new EventEmitter(), { unref() {} });
+            queueMicrotask(() => child.emit("spawn"));
+            return child;
+          },
+          execFile: (
+            file: string,
+            args: string[],
+            optionsOrCallback:
+              | object
+              | ((error: Error | null, result?: object) => void),
+            optionalCallback?: (error: Error | null, result?: object) => void,
+          ) => {
+            const callback =
+              optionalCallback ??
+              (optionsOrCallback as (
+                error: Error | null,
+                result?: object,
+              ) => void);
+            native.push(file);
+            if (file === "/usr/bin/open" && args[0] !== "-a")
+              opened.push(args[0]);
+            if (file === "rundll32.exe") opened.push(args[1]);
+            if (file === "/usr/bin/pgrep")
+              callback(Object.assign(new Error("not running"), { code: 1 }));
+            else callback(null, { stdout: "S-1-test-user" });
+          },
+        };
+      return require(name);
+    },
+    process: { platform: targetOs, env: { PATH: "", LOCALAPPDATA: home } },
+    Buffer,
+    URL,
+    URLSearchParams,
+    fetch: network,
+    AbortSignal,
+    setTimeout,
+    clearTimeout,
+  });
+  const Installer = module.exports as unknown as new (
+    ticket: object,
+  ) => { start(): Promise<void>; close(): void };
+  const installer = new Installer({
+    origin: "https://proxy.example",
+    rawToken: "test-ticket",
+  });
+  try {
+    await installer.start();
+    const page = opened[0];
+    const origin = new URL(page).origin;
+    const status = async () => (await fetch(`${page}/status`)).json();
+    if (insecureMcp) {
+      expect(await status()).toMatchObject({
+        phase: "error",
+        message: expect.stringContaining("requires HTTPS for MCP sign-in"),
+      });
+      expect(await readdir(home)).toEqual([]);
+      expect(opened).toHaveLength(1);
+      return;
+    }
+    expect((await status()).thirdPartyInference).toBe(withProxy);
+    if (withProxy) {
+      expect((await status()).phase).toBe("signin");
+      expect(
+        (await fetch(page)).headers.get("content-security-policy"),
+      ).toContain("frame-ancestors 'none'");
+      expect(
+        (
+          await fetch(`${page}/continue`, {
+            method: "POST",
+            headers: { Origin: "https://untrusted.example" },
+          })
+        ).status,
+      ).toBe(404);
+      expect(opened).toHaveLength(1);
+      await fetch(`${page}/continue`, {
+        method: "POST",
+        headers: { Origin: origin },
+      });
+      await expect.poll(() => opened.length).toBe(2);
+      const oauth = new URL(opened[1]);
+      expect(oauth.origin).toBe("https://claude.ai");
+      expect(oauth.searchParams.get("scope")).toBe("user:inference");
+      challenge = oauth.searchParams.get("code_challenge");
+      const callback = new URL(oauth.searchParams.get("redirect_uri") ?? "");
+      callback.search = new URLSearchParams({
+        state: "wrong-state",
+        code: "test-code",
+      }).toString();
+      expect((await fetch(callback)).status).toBe(400);
+      expect(verifier).toBeUndefined();
+      callback.searchParams.set("state", oauth.searchParams.get("state") ?? "");
+      expect((await fetch(callback, { redirect: "manual" })).status).toBe(303);
+      await expect
+        .poll(async () => (await status()).phase)
+        .toBe(quotaFailure || invalidMarketplace ? "error" : "ready");
+      expect(JSON.stringify(await status())).not.toContain(token);
+      expect((await fetch(callback)).status).toBe(400);
+    } else {
+      expect((await status()).phase).toBe("ready");
+    }
+    const library = join(
+      home,
+      targetOs === "win32"
+        ? "Claude-3p/configLibrary"
+        : "Library/Application Support/Claude-3p/configLibrary",
+    );
+    if (quotaFailure || invalidMarketplace) {
+      expect((await status()).message).toContain(
+        quotaFailure ? "429" : "valid Git revision",
+      );
+      expect(native).not.toContain("/usr/bin/osascript");
+      expect(await readdir(home)).toEqual([]);
+    } else {
+      await fetch(`${page}/continue`, {
+        method: "POST",
+        headers: { Origin: origin },
+      });
+      await expect.poll(async () => (await status()).phase).toBe("restarting");
+      const metadata = JSON.parse(
+        await readFile(join(library, "_meta.json"), "utf8"),
+      );
+      const profileFile = join(library, `${metadata.appliedId}.json`);
+      const profile = JSON.parse(await readFile(profileFile, "utf8"));
+      expect(profile.inferenceGatewayApiKey).toBe(
+        withProxy ? token : undefined,
+      );
+      expect(profile.inferenceGatewayBaseUrl).toBe(
+        withProxy ? "https://proxy.example/v1/anthropic" : undefined,
+      );
+      expect(
+        profile.inferenceCustomHeaders?.["X-Claude-Code-Session-Id"],
+      ).toBeUndefined();
+      // Third-party mode keeps its own history, so proxy setups enable the
+      // Claude.ai import. Tools-only setups stay in standard mode.
+      expect(profile.coworkEgressAllowedHosts).toEqual(
+        withProxy ? ["*"] : undefined,
+      );
+      expect(profile.claudeAiImport).toEqual(
+        withProxy ? { enabled: true, bannerBehavior: "show" } : undefined,
+      );
+      expect(profile.managedMcpServers?.[0]?.oauth).toEqual(
+        withMcp ? { mode: "dcr" } : undefined,
+      );
+      if (withMcp) {
+        const expectedAppaRules = [
+          "mcp__test_gateway__archestra__run_tool",
+          "mcp__test_gateway__archestra__get_remedy_plans",
+          "mcp__test_gateway__archestra__execute_remedy_plan",
+          "mcp__test_gateway__archestra__list_peer_messages",
+          "mcp__test_gateway__archestra__read_peer_message",
+          "mcp__test_gateway__archestra__yell",
+          "mcp__test_gateway__archestra__ask_user",
+        ];
+        const settings = JSON.parse(
+          await readFile(join(home, ".claude", "settings.json"), "utf8"),
+        );
+        const state = JSON.parse(
+          await readFile(
+            join(home, ".archestra", "claude-appa-permissions.json"),
+            "utf8",
+          ),
+        );
+        expect(settings.permissions.allow).toEqual(expectedAppaRules);
+        expect(state).toEqual({ test_gateway: expectedAppaRules });
+        const desktopDir = join(library, "..");
+        const antDid = Buffer.from(
+          (await readFile(join(desktopDir, "ant-did"), "utf8")).trim(),
+          "base64",
+        ).toString("utf8");
+        const coworkScope = join(
+          desktopDir,
+          "local-agent-mode-sessions",
+          antDid.slice(0, 8),
+          "00000000",
+        );
+        const coworkSettings = JSON.parse(
+          await readFile(join(coworkScope, "cowork_settings.json"), "utf8"),
+        );
+        expect(
+          coworkSettings.enabledPlugins[
+            "archestra-appa-permissions@local-desktop-app-uploads"
+          ],
+        ).toBe(true);
+        const hooksCfg = JSON.parse(
+          await readFile(
+            join(
+              coworkScope,
+              "cowork_plugins",
+              "marketplaces",
+              "local-desktop-app-uploads",
+              "archestra-appa-permissions",
+              "hooks",
+              "hooks.json",
+            ),
+            "utf8",
+          ),
+        );
+        expect(hooksCfg.hooks.PreToolUse[0].matcher).toMatch(
+          /^\^mcp__test_gateway__archestra__\(/,
+        );
+      } else {
+        expect(await readdir(home)).not.toContain(".claude");
+        expect(await readdir(home)).not.toContain(".archestra");
+      }
+      expect(profile.allowedPluginMarketplaces[0]).toMatchObject({
+        expectedName: "shared",
+        ref: "a".repeat(40),
+        installationPreference: "auto_install",
+      });
+      expect((await stat(profileFile)).mode & 0o777).toBe(0o600);
+      expect(native).toContain(
+        targetOs === "win32" ? "powershell.exe" : "/bin/sh",
+      );
+      expect(
+        native.every((command) =>
+          targetOs === "win32"
+            ? ["powershell.exe", "icacls.exe", "rundll32.exe"].includes(command)
+            : command.startsWith("/usr/bin/") || command === "/bin/sh",
+        ),
+      ).toBe(true);
+      const completionDir = (await readdir(home)).find((name) =>
+        name.startsWith("desktop-connection-result-"),
+      );
+      expect(completionDir).toBeDefined();
+      for (const file of ["connected.html", "restart-needed.html"]) {
+        const html = await readFile(
+          join(home, completionDir ?? "", file),
+          "utf8",
+        );
+        expect(html.includes("+ → Connectors")).toBe(withMcp);
+        expect(html.includes("Ask Claude to list the tools")).toBe(withMcp);
+        expect(html.includes("Anthropic sign-in")).toBe(withProxy);
+        expect(html.includes("Settings → Import")).toBe(withProxy);
+        if (!withProxy) expect(html).not.toContain("LLM Proxy Logs");
+      }
+      // A rerun reuses a verified subscription without a second browser sign-in.
+      const repeated = new Installer({
+        origin: "https://proxy.example",
+        rawToken: "second-ticket",
+      });
+      try {
+        await repeated.start();
+        const secondPage = opened.at(-1);
+        expect((await (await fetch(`${secondPage}/status`)).json()).phase).toBe(
+          "ready",
+        );
+      } finally {
+        repeated.close();
+      }
+      if (withProxy) {
+        // A rate-limited cached subscription token falls back to fresh sign-in instead of failing setup.
+        cachedQuotaFailure = true;
+        const rateLimitedCached = new Installer({
+          origin: "https://proxy.example",
+          rawToken: "third-ticket",
+        });
+        try {
+          await rateLimitedCached.start();
+          const thirdPage = opened.at(-1);
+          expect(
+            (await (await fetch(`${thirdPage}/status`)).json()).phase,
+          ).toBe("signin");
+        } finally {
+          rateLimitedCached.close();
+          cachedQuotaFailure = false;
+        }
+      }
+    }
+  } finally {
+    installer.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("the Desktop profile id disconnect.md names is the one the installer writes", () => {
+  // The installer derives it at runtime: uuid5(NAMESPACE_URL, name).
+  expect(DESKTOP_CONNECTION_INSTALLER).toContain(
+    "uuid('archestra-desktop:managed')",
+  );
+  expect(DESKTOP_CONNECTION_INSTALLER).toContain(
+    "6ba7b8119dad11d180b400c04fd430c8",
+  );
+  expect(
+    uuidv5("archestra-desktop:managed", "6ba7b811-9dad-11d1-80b4-00c04fd430c8"),
+  ).toBe(CLAUDE_DESKTOP_PROFILE_ID);
+});

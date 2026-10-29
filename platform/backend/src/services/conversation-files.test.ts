@@ -1,5 +1,10 @@
+import * as fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import config from "@/config";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
+import ProjectModel from "@/models/project";
 import SkillSandboxModel from "@/models/skill-sandbox";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
@@ -464,4 +469,78 @@ test("project chat: a requester without project access sees no project files", a
   });
   expect(result.projectFiles).toEqual([]);
   expect(result.projectName).toBeNull();
+});
+
+test("project chat: projectFiles includes the project's hand-placed files", async ({
+  makeUser,
+  makeMember,
+  makeOrganization,
+  makeAgent,
+}) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "files-panel-overlay-"));
+  const savedProvider = config.fileStorage.provider;
+  const savedRoot = config.fileStorage.filesystemRoot;
+  config.fileStorage.provider = "filesystem";
+  config.fileStorage.filesystemRoot = root;
+  try {
+    const org = await makeOrganization();
+    const owner = await makeUser({});
+    await makeMember(owner.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const project = await projectService.create({
+      organizationId: org.id,
+      userId: owner.id,
+      name: "dropped",
+      description: null,
+    });
+    const conv = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      projectId: project.id,
+    });
+    const tracked = await fileStore.put({
+      organizationId: org.id,
+      userId: owner.id,
+      projectId: project.id,
+      conversationId: null,
+      filename: "tracked.txt",
+      mimeType: "text/plain",
+      sizeBytes: 1,
+      data: Buffer.from("t"),
+    });
+    // copied straight into the project folder: no files row
+    const stored = await ProjectModel.findById(project.id);
+    const folder = path.join(root, stored?.slug ?? "");
+    await fs.mkdir(folder, { recursive: true });
+    await fs.writeFile(path.join(folder, "dropped.md"), "by hand");
+
+    const result = await conversationFilesService.list({
+      conversationId: conv.id,
+      organizationId: org.id,
+      requestingUserId: owner.id,
+    });
+
+    const byName = Object.fromEntries(
+      result.projectFiles.map((f) => [f.name, f]),
+    );
+    expect(Object.keys(byName).sort()).toEqual(["dropped.md", "tracked.txt"]);
+    expect(byName["tracked.txt"].id).toBe(tracked.id);
+    // the rowless file is addressed by its obj_ ref, which the byte endpoint serves
+    const dropped = byName["dropped.md"];
+    expect(dropped.id.startsWith("obj_")).toBe(true);
+    expect(dropped.contentUrl).toBe(
+      `/api/skill-sandbox/artifacts/${dropped.id}`,
+    );
+    const bytes = await fileStore.get({
+      ref: dropped.id,
+      organizationId: org.id,
+      userId: owner.id,
+    });
+    expect(bytes?.data.toString()).toBe("by hand");
+  } finally {
+    config.fileStorage.provider = savedProvider;
+    config.fileStorage.filesystemRoot = savedRoot;
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });

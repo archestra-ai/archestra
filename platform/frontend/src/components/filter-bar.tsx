@@ -4,8 +4,15 @@ import { ChevronDown, Funnel, SlidersHorizontal, X } from "lucide-react";
 import {
   Children,
   type ComponentProps,
+  createContext,
   Fragment,
   type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
   useSyncExternalStore,
 } from "react";
 import {
@@ -69,6 +76,46 @@ export function CollectionFilters({
 }
 
 /**
+ * Hands a page-level control (the logs pages' time range) to the filter bar
+ * on compact screens, so it sits in the filter popover with the other filters
+ * instead of crowding the page header. The first bar on the page that can
+ * show it — one with a filter popover — claims it; `claimed` tells the owner
+ * to drop it from its usual spot. With no bar to claim it, it stays put.
+ */
+export function CompactFilterExtrasProvider({
+  extras,
+  children,
+}: {
+  extras: ReactNode;
+  children: (params: { claimed: boolean }) => ReactNode;
+}) {
+  const [claimants, setClaimants] = useState<string[]>([]);
+  const claim = useCallback((id: string) => {
+    setClaimants((current) => [...current, id]);
+    return () =>
+      setClaimants((current) => current.filter((entry) => entry !== id));
+  }, []);
+  const value = useMemo(
+    () => ({ extras, owner: claimants[0] ?? null, claim }),
+    [extras, claimants, claim],
+  );
+  return (
+    <CompactFilterExtrasContext.Provider value={value}>
+      {children({ claimed: claimants.length > 0 && !!extras })}
+    </CompactFilterExtrasContext.Provider>
+  );
+}
+
+/** Whether the filter bars are in their compact, popover layout. */
+export function useCompactFilters(): boolean {
+  return useSyncExternalStore(
+    subscribeToCompactFilters,
+    getCompactFiltersSnapshot,
+    () => false,
+  );
+}
+
+/**
  * One compact row of table filters: search, then the filter controls, then any
  * trailing view/sort actions. Every filtered list page uses this so the bars
  * read the same everywhere.
@@ -91,6 +138,9 @@ export function CollectionFilters({
  * currently narrowing the table — a hidden active filter reads as an empty
  * table with no explanation.
  * @param actions - Trailing controls (sort, view toggle) pinned to the right.
+ * @param tuckActionsWhenCompact - On compact screens, move `actions` into the
+ * filter popover instead of giving them a row of their own. For secondary
+ * actions such as an export, not for controls people reach for constantly.
  * @param contextualActions - Selection actions rendered in the same grid cell
  * as the filters. Presenting them swaps the bar in place instead of reserving
  * an empty slot or moving the collection once rows are ticked.
@@ -117,6 +167,7 @@ export function FilterBar({
   onClearFilters,
   moreFilters,
   actions,
+  tuckActionsWhenCompact = false,
   leading = false,
 }: {
   children?: ReactNode;
@@ -129,13 +180,10 @@ export function FilterBar({
   onClearFilters?: () => void;
   moreFilters?: OverflowFilter[];
   actions?: ReactNode;
+  tuckActionsWhenCompact?: boolean;
   leading?: boolean;
 }) {
-  const compact = useSyncExternalStore(
-    subscribeToCompactFilters,
-    getCompactFiltersSnapshot,
-    () => false,
-  );
+  const compact = useCompactFilters();
   const hasFilters =
     Children.toArray(children).length > 0 || !!moreFilters?.length;
   const hasActiveFilters =
@@ -143,6 +191,20 @@ export function FilterBar({
   const bulkActionsScope = useBulkActionsScope();
   const actionsTargetId =
     contextualActionsTargetId ?? bulkActionsScope?.targetId;
+  const barId = useId();
+  const compactExtras = useContext(CompactFilterExtrasContext);
+  const canClaimExtras = compact && hasFilters && !!compactExtras;
+  const claimExtras = compactExtras?.claim;
+  useEffect(() => {
+    if (!canClaimExtras || !claimExtras) return;
+    return claimExtras(barId);
+  }, [canClaimExtras, claimExtras, barId]);
+  const extrasInPopover =
+    canClaimExtras && compactExtras?.owner === barId
+      ? compactExtras.extras
+      : null;
+  const actionsInPopover =
+    tuckActionsWhenCompact && compact && hasFilters && !!actions;
   const appliedOverflow = moreFilters?.filter((filter) => filter.active) ?? [];
   const tuckedAway = moreFilters?.filter((filter) => !filter.active) ?? [];
 
@@ -199,7 +261,23 @@ export function FilterBar({
               aria-label="Table filters"
               className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 overflow-y-auto [&>button]:w-full [&>button]:max-w-none"
             >
-              <span className="text-sm font-medium">Filters</span>
+              {/* Clear rides the title row as a small link-weight action;
+                  a direct child button would stretch to the full width. */}
+              <div className="flex min-h-7 items-center justify-between gap-2">
+                <span className="text-sm font-medium">Filters</span>
+                {onClearFilters && (
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={onClearFilters}
+                    className="-mr-1.5 text-muted-foreground hover:text-foreground"
+                  >
+                    <X aria-hidden className="size-3.5" />
+                    <span>Clear</span>
+                  </Button>
+                )}
+              </div>
+              {extrasInPopover}
               {children}
               {moreFilters?.map((filter) => (
                 <div
@@ -212,11 +290,10 @@ export function FilterBar({
                   {filter.control}
                 </div>
               ))}
-              {onClearFilters && (
-                <Button variant="ghost" size="sm" onClick={onClearFilters}>
-                  <X aria-hidden className="size-3.5" />
-                  <span>Clear</span>
-                </Button>
+              {actionsInPopover && (
+                <div className="flex flex-col gap-1.5 border-t pt-3 [&>button]:w-full">
+                  {actions}
+                </div>
               )}
             </PopoverContent>
           </Popover>
@@ -264,19 +341,14 @@ export function FilterBar({
               </Popover>
             )}
             {onClearFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onClearFilters}
-                className="h-8 gap-1.5 px-2"
-              >
+              <Button variant="ghost" size="sm" onClick={onClearFilters}>
                 <X className="h-3.5 w-3.5" />
                 <span>Clear</span>
               </Button>
             )}
           </>
         )}
-        {actions && (
+        {actions && !actionsInPopover && (
           <div className="flex basis-full items-center justify-start gap-1.5 md:ml-auto md:basis-auto">
             {actions}
           </div>
@@ -334,9 +406,17 @@ export function FilterBarContextualActions({
  * `Select`, an `AgentSelector`, a bespoke popover); `FilterSelect` applies it
  * for you.
  *
- * `active` styling stays on the border and background: the label itself keeps
- * the foreground colour rather than dimming to `muted-foreground` when idle,
- * which dips under the 4.5:1 contrast minimum on some themes (WCAG 1.4.3).
+ * It normalises whatever the underlying trigger is (Select, SearchableSelect,
+ * an outline Button opening a popover or menu) so every filter on every page
+ * looks the same:
+ *   - State is shown on the border and background only. The value text is the
+ *     foreground colour whether it reads "All …", a placeholder-like default
+ *     ("Labels") or a selection; muted text dips under 4.5:1 on some themes
+ *     (WCAG 1.4.3) and made defaults look disabled next to Select values.
+ *   - One height, padding, gap and chevron. Triggers ship their chevron with
+ *     their own margin, size and opacity; those are reset here so the gap is
+ *     the flex `gap` alone.
+ *   - The Select/Input `--input` edge, since every filter picks a value.
  */
 export function filterControlClass({
   active = false,
@@ -348,7 +428,10 @@ export function filterControlClass({
   return cn(
     // `min-h-8` matters as much as `h-8`: AgentSelector's trigger sets
     // `h-auto min-h-9` for its two-line rows, and a bare `h-8` would lose to it.
-    "h-8 min-h-8 w-auto min-w-0 max-w-[15rem] gap-1.5 px-2.5 text-sm font-normal",
+    // `has-[>svg]:px-2.5` cancels Button's wider padding when it holds an icon.
+    "h-8 min-h-8 w-auto min-w-0 max-w-[15rem] gap-1.5 px-2.5 has-[>svg]:px-2.5 text-sm font-normal shadow-none",
+    "border-input bg-transparent text-foreground data-[placeholder]:text-foreground [&_span.text-muted-foreground]:text-foreground",
+    "[&_svg.lucide-chevron-down]:ml-0 [&_svg.lucide-chevron-down]:size-4 [&_svg.lucide-chevron-down]:text-muted-foreground [&_svg.lucide-chevron-down]:opacity-100",
     active && "border-primary/50 bg-primary/10 font-medium",
     className,
   );
@@ -399,6 +482,12 @@ export function FilterSelect({
 }
 
 // Keep this breakpoint aligned with Tailwind's lg layout.
+const CompactFilterExtrasContext = createContext<{
+  extras: ReactNode;
+  owner: string | null;
+  claim: (id: string) => () => void;
+} | null>(null);
+
 function subscribeToCompactFilters(onChange: () => void) {
   if (typeof window.matchMedia !== "function") return () => {};
   const query = window.matchMedia("(max-width: 1023px)");

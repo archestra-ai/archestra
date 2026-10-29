@@ -1,0 +1,210 @@
+"use client";
+
+import { code } from "@streamdown/code";
+import { type ComponentProps, memo, useMemo } from "react";
+import remarkBreaks from "remark-breaks";
+import {
+  defaultRehypePlugins,
+  defaultRemarkPlugins,
+  Streamdown,
+} from "streamdown";
+import { cn } from "@/lib/utils/tailwind";
+import { isSameOriginUrl } from "./response";
+
+export type ResponseProps = ComponentProps<typeof Streamdown> & {
+  isStreaming?: boolean;
+  /**
+   * Keep every line break the author wrote, as plain text would. Markdown
+   * otherwise joins the lines of a paragraph; a question or a short note an
+   * agent wrote line by line reads wrong that way.
+   */
+  preserveLineBreaks?: boolean;
+};
+
+// An app's standalone-page link with the leading slash dropped (`a/<segment>`,
+// where the segment is the app's uuid or its custom slug). A weak model
+// sometimes emits this instead of `/a/<segment>`; left as-is it resolves
+// against the chat path (`/chat/<id>/a/...`) instead of the app page. The slug
+// alternative matches AppSlugSchema, so this stays as narrow as the uuid form
+// was — an arbitrary relative `a/...` link is still left untouched.
+// Case-sensitive: a uuid may be written in either case, but a slug is lowercase
+// by definition, so repairing an uppercase one would only produce a dead link.
+const APP_LINK_WITHOUT_LEADING_SLASH =
+  /^a\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[a-z0-9]+(?:-[a-z0-9]+)*)$/;
+
+// Repair that exact owned-app shape at the markdown (mdast) stage — before
+// rehype-harden, which without a base origin blocks a slash-less relative link
+// and renders it as `[blocked]`. Scoped to inline `link` nodes — the shape the
+// model actually produces; every other node (images, code, reference
+// definitions) is left untouched.
+function canonicalizeAppLinkNode(node: unknown): void {
+  if (node === null || typeof node !== "object") return;
+  const link = node as { type?: unknown; url?: unknown; children?: unknown };
+  if (
+    link.type === "link" &&
+    typeof link.url === "string" &&
+    APP_LINK_WITHOUT_LEADING_SLASH.test(link.url)
+  ) {
+    link.url = `/${link.url}`;
+  }
+  if (Array.isArray(link.children)) {
+    for (const child of link.children) canonicalizeAppLinkNode(child);
+  }
+}
+
+const remarkCanonicalizeAppLinks = () => (tree: unknown) =>
+  canonicalizeAppLinkNode(tree);
+
+// streamdown exports its defaults as a name-keyed record; passing remarkPlugins
+// replaces them, so re-include the defaults and append our repair.
+const REMARK_PLUGINS: ResponseProps["remarkPlugins"] = [
+  ...Object.values(defaultRemarkPlugins),
+  remarkCanonicalizeAppLinks,
+];
+
+const REMARK_PLUGINS_WITH_BREAKS: ResponseProps["remarkPlugins"] = [
+  ...REMARK_PLUGINS,
+  remarkBreaks,
+];
+
+// Scrollable code regions must be reachable and scrollable by keyboard
+// (WCAG 2.1.1). Streamdown spreads a fenced block's <pre> properties onto its
+// code-block wrapper div, so tagging the hast node makes the rendered scroll
+// container focusable and named; a bare <pre> receives the attributes directly.
+function tagPreAsFocusableRegion(node: unknown): void {
+  if (node === null || typeof node !== "object") return;
+  const element = node as {
+    type?: unknown;
+    tagName?: unknown;
+    properties?: Record<string, unknown>;
+    children?: unknown;
+  };
+  if (element.type === "element" && element.tagName === "pre") {
+    element.properties = {
+      ...element.properties,
+      tabIndex: 0,
+      role: "region",
+      ariaLabel: "Code block",
+    };
+  }
+  if (Array.isArray(element.children)) {
+    for (const child of element.children) tagPreAsFocusableRegion(child);
+  }
+}
+
+const rehypeFocusablePre = () => (tree: unknown) =>
+  tagPreAsFocusableRegion(tree);
+
+// Appended after the defaults so the sanitizing passes can't strip the
+// attributes we add.
+const REHYPE_PLUGINS: ResponseProps["rehypePlugins"] = [
+  ...Object.values(defaultRehypePlugins),
+  rehypeFocusablePre,
+];
+
+const ResponseMarkdown = memo(
+  ({
+    className,
+    linkSafety,
+    isStreaming = false,
+    preserveLineBreaks = false,
+    ...props
+  }: ResponseProps) => {
+    const mergedLinkSafety = useMemo(
+      () => ({
+        enabled: true,
+        ...linkSafety,
+        onLinkCheck: async (url: string) => {
+          if (isSameOriginUrl(url)) return true;
+          if (linkSafety?.onLinkCheck) return linkSafety.onLinkCheck(url);
+          return false;
+        },
+      }),
+      [linkSafety],
+    );
+
+    return (
+      <Streamdown
+        mode={isStreaming ? "streaming" : "static"}
+        isAnimating={isStreaming}
+        animated={isStreaming ? { animation: "fadeIn", sep: "word" } : false}
+        caret={isStreaming ? "block" : undefined}
+        controls={{
+          code: { copy: true, download: true },
+          table: { copy: true, download: true },
+        }}
+        plugins={{ code }}
+        className={cn(
+          "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+          // Add proper list styling
+          "[&_ul]:list-inside [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:my-2",
+          "[&_ol]:list-inside [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:my-2",
+          "[&_li]:my-1 [&_li>p]:inline",
+          // Add proper heading styling
+          "[&_h1]:text-2xl [&_h1]:font-bold [&_h1]:my-4",
+          "[&_h2]:text-xl [&_h2]:font-bold [&_h2]:my-3",
+          "[&_h3]:text-lg [&_h3]:font-semibold [&_h3]:my-2",
+          // Add proper paragraph spacing
+          "[&_p]:my-2",
+          // Add proper code block styling
+          // Only style inline code, not code inside pre elements
+          "[&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:text-foreground [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5 [&_:not(pre)>code]:rounded",
+          "[&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded [&_pre]:my-2 [&_pre]:overflow-x-auto",
+          // The focusable element for fenced code is the code-block wrapper
+          // (see rehypeFocusablePre), so it must be the horizontal scroller —
+          // otherwise arrow keys can't scroll the focused region. The inner
+          // <pre> overflows visibly into it instead of clipping.
+          "[&_[data-streamdown='code-block-body']]:overflow-x-auto",
+          "[&_[data-streamdown='code-block-body']_pre]:overflow-x-visible",
+          // …but the <pre> is the tinted, padded panel the code sits on, so at
+          // the body's width a long line spilled out of its own background and
+          // was cut against the card edge instead of the panel's. Size the
+          // panel to the code it holds (never narrower than the body) so the
+          // tint and the trailing padding follow the line the whole way.
+          "[&_[data-streamdown='code-block-body']_pre]:w-fit",
+          "[&_[data-streamdown='code-block-body']_pre]:min-w-full",
+          // Fix streamdown code blocks - remove padding from code elements inside them
+          "[&_[data-streamdown='code-block']_code]:p-0 [&_[data-streamdown='code-block']_code]:bg-transparent",
+          // Streamdown mats tables in an opaque bg-sidebar card (and ignores its
+          // className prop), which clashes with the surface behind it (the
+          // user's themed bubble, or the page background for flat assistant
+          // turns); flatten the mat so only the inner bg-background table card
+          // stays.
+          "[&_[data-streamdown='table-wrapper']]:bg-transparent [&_[data-streamdown='table-wrapper']]:border-0 [&_[data-streamdown='table-wrapper']]:p-0",
+          // With the mat gone the toolbar sits on the bubble itself, where
+          // text-muted-foreground can vanish (theme-twitter's secondary equals
+          // muted-foreground); inherit the bubble's paired text color instead.
+          "[&_[data-streamdown='table-wrapper']_button]:text-inherit",
+          // Text inside the wrapper otherwise inherits the surrounding bubble
+          // text color (e.g. the user bubble's primary-foreground), which is
+          // unreadable on the opaque bg-background surfaces (table card,
+          // copy-menu panel); re-pair those surfaces with text-foreground.
+          "[&_[data-streamdown='table-wrapper']_.bg-background]:text-foreground",
+          // Keep large markdown tables readable without letting them dominate the chat scroll.
+          "[&_[data-streamdown='table-wrapper']>div:last-child]:max-h-[420px]",
+          "[&_[data-streamdown='table-header']]:sticky [&_[data-streamdown='table-header']]:top-0 [&_[data-streamdown='table-header']]:z-10",
+          // Fix button link styling - use group variant to match parent's is-user/is-assistant class
+          "group-[.is-user]:[&_[data-streamdown='link']]:text-primary-foreground",
+          "group-[.is-assistant]:[&_[data-streamdown='link']]:text-foreground",
+          className,
+        )}
+        remarkPlugins={
+          preserveLineBreaks ? REMARK_PLUGINS_WITH_BREAKS : REMARK_PLUGINS
+        }
+        rehypePlugins={REHYPE_PLUGINS}
+        linkSafety={mergedLinkSafety}
+        {...props}
+      />
+    );
+  },
+  (prevProps, nextProps) =>
+    prevProps.children === nextProps.children &&
+    prevProps.isStreaming === nextProps.isStreaming &&
+    prevProps.preserveLineBreaks === nextProps.preserveLineBreaks,
+);
+
+ResponseMarkdown.displayName = "ResponseMarkdown";
+
+// Loaded lazily by ./response, so streamdown and its highlighter are only
+// fetched once a transcript has something to render.
+export default ResponseMarkdown;

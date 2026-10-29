@@ -1,0 +1,379 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+
+import type { Locator, Page } from "@playwright/test";
+import type { ResourcePermissions } from "@/lib/resource-permissions.query";
+import { expect, test } from "./fixtures";
+
+const actions: ResourcePermissions["effectiveActions"] = [
+  "read",
+  "use",
+  "update",
+  "delete",
+  "manage-permissions",
+];
+const policy: ResourcePermissions = {
+  resource: "mcpRegistry",
+  scope: "*",
+  name: "All MCP registry entries",
+  ownerId: null,
+  revision: 1,
+  grants: [
+    { subject: { type: "role", id: "admin" }, name: "Admin", actions },
+    {
+      subject: { type: "team", id: "platform-maintainers" },
+      name: "Platform maintainers",
+      actions,
+    },
+  ],
+  inheritedGrants: [],
+  effectiveActions: actions,
+  canShareOrganizationWide: true,
+  actorSubjects: [{ type: "role", id: "admin" }],
+};
+const title = "Permissions for all MCP registry entries";
+
+for (const width of [320, 390]) {
+  test(`creation permissions fit a ${width}px import dialog and retain accordion drafts`, async ({
+    page,
+    skillsNewPage,
+    mswControl,
+  }) => {
+    await page.setViewportSize({ width, height: 740 });
+    const team =
+      "Engineering team with a long display name for access management";
+    await mswControl.registerMany([
+      {
+        method: "post",
+        url: "/api/skills/github/discover",
+        body: {
+          repoUrl: "https://github.com/example/skills",
+          ref: "main",
+          skills: [
+            {
+              skillPath: "skills/example",
+              name: "Example skill",
+              description: "An example skill",
+              compatibility: null,
+              allowedTools: null,
+              templated: false,
+              fileCount: 1,
+              exists: false,
+            },
+          ],
+        },
+      },
+      {
+        method: "get",
+        url: "/api/resource-permissions/skill/creation-subjects",
+        body: [{ subject: { type: "team", id: "engineering" }, name: team }],
+      },
+    ]);
+    await skillsNewPage.goto();
+    await skillsNewPage.gitRepositoryCard.click();
+    const source = page.getByRole("dialog", { name: "Import skills" });
+    await source.getByRole("button", { name: /^GitHub/ }).click();
+    await source.getByRole("button", { name: "Continue" }).click();
+    await source
+      .getByPlaceholder("github.com/owner/repo")
+      .fill("example/skills");
+    await source
+      .getByRole("button", { name: "Find skills", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Select skills to import",
+    });
+    const settings = dialog.getByRole("button", {
+      name: "Import settings",
+      exact: true,
+    });
+    await settings.press("Enter");
+    const sync = dialog.getByRole("combobox", { name: "Keep in sync" });
+    await sync.click();
+    await page.getByRole("option", { name: "Every hour", exact: true }).click();
+    const author = dialog.getByTestId("author-grant");
+    const userLabel = await author
+      .getByText("User", { exact: true })
+      .boundingBox();
+    const authorName = await author
+      .getByText("Test Admin", { exact: true })
+      .boundingBox();
+    expect(userLabel?.y).toBeGreaterThanOrEqual(
+      (authorName?.y ?? 0) + (authorName?.height ?? 0),
+    );
+    const add = dialog.getByRole("combobox", {
+      name: "Add access",
+      exact: true,
+    });
+    await add.scrollIntoViewIfNeeded();
+    await expectInsideViewport(page, add);
+    await expect(add).toHaveText("Add access");
+    await add.click();
+    const recipients = page.getByRole("listbox", { name: "Recipients" });
+    await expectInsideViewport(page, recipients);
+    const picker = recipients.locator("..").locator("..");
+    expect((await picker.boundingBox())?.width).toBeCloseTo(
+      (await add.boundingBox())?.width ?? 0,
+      0,
+    );
+    await page.getByRole("option", { name: team, exact: true }).click();
+    const permission = dialog.getByRole("combobox", {
+      name: `Permission for ${team}`,
+    });
+    await permission.click();
+    await page.getByRole("option", { name: "Can update", exact: true }).click();
+    await settings.press("Space");
+    await expect(settings).toHaveAttribute("aria-expanded", "false");
+    await settings.press("Enter");
+    await expect(sync).toHaveText("Every hour");
+    await expect(permission).toHaveText("Can update");
+    await permission.scrollIntoViewIfNeeded();
+    await expectInsideViewport(page, permission);
+    await expectInsideViewport(
+      page,
+      dialog.getByRole("button", { name: `Remove access for ${team}` }),
+    );
+    expect(
+      await dialog
+        .getByText(team, { exact: true })
+        .evaluate((el) => el.scrollWidth <= el.clientWidth),
+    ).toBe(true);
+    expect(
+      await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth),
+    ).toBe(true);
+    await dialog.screenshot({
+      path: `test-results/import-permissions-${width}.png`,
+    });
+  });
+}
+
+async function expectInsideViewport(page: Page, element: Locator) {
+  await expect(element).toBeVisible();
+  await expect
+    .poll(async () => {
+      const box = await element.boundingBox();
+      const viewport = page.viewportSize();
+      return (
+        !!box &&
+        !!viewport &&
+        box.x >= 0 &&
+        box.y >= 0 &&
+        box.x + box.width <= viewport.width + 1 &&
+        box.y + box.height <= viewport.height + 1
+      );
+    })
+    .toBe(true);
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("theme", "dark"));
+});
+
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 390, height: 844 },
+  { width: 667, height: 375 },
+]) {
+  test(`read-only permissions stay usable at ${viewport.width}×${viewport.height}`, async ({
+    page,
+    mswControl,
+  }) => {
+    await page.setViewportSize(viewport);
+    await mswControl.use({
+      method: "get",
+      url: "/api/resource-permissions/mcpRegistry/:scope",
+      body: { ...policy, effectiveActions: ["read"] },
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/user/permissions",
+      body: { mcpRegistry: ["read"], accessPolicies: ["read"] },
+    });
+    await page.goto("/mcp/registry?permissions=all");
+    const dialog = page.getByRole("dialog", { name: title, exact: true });
+    await expect(
+      dialog.getByText("Platform maintainers", { exact: true }),
+    ).toBeVisible();
+    await expectInsideViewport(page, dialog);
+    await expectInsideViewport(
+      page,
+      dialog.getByRole("button", { name: "Done", exact: true }),
+    );
+    await expect(
+      dialog.getByRole("combobox", { name: "Permission for Admin" }),
+    ).toBeDisabled();
+    await expect(
+      dialog.getByRole("button", { name: "Add access" }),
+    ).toHaveCount(0);
+    const description = dialog.locator('[data-slot="dialog-description"]');
+    const descriptionBox = await description.boundingBox();
+    const dialogBox = await dialog.boundingBox();
+    expect(descriptionBox?.width).toBeGreaterThan((dialogBox?.width ?? 0) - 64);
+    expect(
+      await description.evaluate(
+        (element) => getComputedStyle(element).textAlign,
+      ),
+    ).toBe("left");
+    expect(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+  });
+}
+
+test("phone controls stay reachable through the permission handoff confirmation", async ({
+  page,
+  mswControl,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await mswControl.use({
+    method: "get",
+    url: "/api/resource-permissions/mcpRegistry/:scope",
+    body: policy,
+  });
+  await page.goto("/mcp/registry?permissions=all");
+  const dialog = page.getByRole("dialog", { name: title, exact: true });
+  const permission = dialog.getByRole("combobox", {
+    name: "Permission for Platform maintainers",
+  });
+  await expect(permission).toBeVisible();
+  const nameBox = await dialog
+    .getByText("Platform maintainers", { exact: true })
+    .boundingBox();
+  const controlBox = await permission.boundingBox();
+  expect(controlBox?.y).toBeGreaterThanOrEqual(
+    (nameBox?.y ?? 0) + (nameBox?.height ?? 0),
+  );
+  await expect
+    .poll(async () => (await permission.boundingBox())?.height ?? 0)
+    .toBeGreaterThanOrEqual(43.99);
+  await dialog.getByRole("combobox", { name: "Permission for Admin" }).click();
+  await page.getByRole("option", { name: "Can read", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "You won’t be able to edit or delete MCP registry entries that other people created.",
+  );
+  const save = dialog.getByRole("button", { name: "Save permissions" });
+  await expectInsideViewport(page, save);
+  await save.click();
+  const confirm = page.getByRole("dialog", {
+    name: "Give up the ability to change permissions?",
+    exact: true,
+  });
+  await expectInsideViewport(page, confirm);
+  await expectInsideViewport(
+    page,
+    confirm.getByRole("button", { name: "Save changes anyway" }),
+  );
+  await confirm.getByRole("button", { name: "Keep editing" }).click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "You won’t be able to edit or delete MCP registry entries that other people created.",
+  );
+});
+
+test("long permission lists scroll without losing the phone footer", async ({
+  page,
+  mswControl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 568 });
+  await mswControl.use({
+    method: "get",
+    url: "/api/resource-permissions/mcpRegistry/:scope",
+    body: {
+      ...policy,
+      grants: [
+        ...policy.grants,
+        ...Array.from({ length: 15 }, (_, index) => ({
+          subject: { type: "team", id: `team-${index}` },
+          name: `A long team name for resource access ${index}`,
+          actions,
+        })),
+      ],
+    },
+  });
+  await page.goto("/mcp/registry?permissions=all");
+  const dialog = page.getByRole("dialog", { name: title, exact: true });
+  const last = dialog.getByRole("combobox", {
+    name: "Permission for A long team name for resource access 14",
+  });
+  await last.scrollIntoViewIfNeeded();
+  await expectInsideViewport(page, last);
+  await expectInsideViewport(
+    page,
+    dialog.getByRole("heading", { name: title }),
+  );
+  await expectInsideViewport(
+    page,
+    dialog.getByRole("button", { name: "Done", exact: true }),
+  );
+  expect(
+    await dialog.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
+});
+
+test("a phone draft cannot remove the last permission manager", async ({
+  page,
+  mswControl,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mswControl.use({
+    method: "get",
+    url: "/api/resource-permissions/mcpRegistry/:scope",
+    body: { ...policy, grants: [policy.grants[0]] },
+  });
+  await page.goto("/mcp/registry?permissions=all");
+  const dialog = page.getByRole("dialog", { name: title, exact: true });
+  await dialog
+    .getByRole("button", { name: "Remove direct access for Admin" })
+    .click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Someone must keep Manage access.",
+  );
+  const save = dialog.getByRole("button", { name: "Save permissions" });
+  await expect(save).toBeDisabled();
+  await expectInsideViewport(page, save);
+  await dialog.getByRole("button", { name: "Discard changes" }).click();
+  await expect(
+    dialog.getByRole("combobox", { name: "Permission for Admin" }),
+  ).toBeEnabled();
+});
+
+test("the Add access field sits in the body and is a full touch target on a phone", async ({
+  page,
+  mswControl,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mswControl.registerMany([
+    {
+      method: "get",
+      url: "/api/resource-permissions/mcpRegistry/:scope",
+      body: policy,
+    },
+    {
+      method: "get",
+      url: "/api/resource-permissions/mcpRegistry/:scope/subjects",
+      body: [],
+    },
+  ]);
+  await page.goto("/mcp/registry?permissions=all");
+  const dialog = page.getByRole("dialog", { name: title, exact: true });
+  const body = dialog.locator('[data-slot="dialog-body"]');
+  const add = body.getByRole("combobox", { name: "Add access", exact: true });
+  await expect(add).toBeVisible();
+  await expect(
+    dialog.getByRole("combobox", { name: "Add access", exact: true }),
+  ).toHaveCount(1);
+  await page.screenshot({ path: test.info().outputPath("desktop-body.png") });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectInsideViewport(page, add);
+  await expect
+    .poll(async () => (await add.boundingBox())?.height ?? 0)
+    .toBeGreaterThanOrEqual(43.99);
+  await page.screenshot({ path: test.info().outputPath("mobile-body.png") });
+  await add.click();
+  await expect(page.getByRole("listbox", { name: "Recipients" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(add).toBeFocused();
+});

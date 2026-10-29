@@ -4,6 +4,11 @@ import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
+  type ResourceAccessRelation,
+  ResourceOwnerQuerySchema,
+  ResourceSharedWithQuerySchema,
+  type ResourceVisibilityScope,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -26,13 +31,15 @@ import {
   AppToolModel,
   AppVersionModel,
   CreatedByModel,
+  InternalMcpCatalogModel,
   lookupCreator,
   McpCatalogLabelModel,
   McpServerModel,
   UserModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
-import { resolveLockedChatCreationIfRequested } from "@/routes/chat/locked-chat";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
+import { resolveEncryptedChatCreationIfRequested } from "@/routes/chat/encrypted-chat";
 import {
   assignToolToApp,
   type ToolAssignmentError,
@@ -71,6 +78,7 @@ import {
   AppTemplateSchema,
   AppVersionSummarySchema,
   type AppViewerRole,
+  AssignedToolSchema,
   CreateAppSchema,
   CredentialResolutionModeSchema,
   constructResponseSchema,
@@ -78,12 +86,17 @@ import {
   ExternalAppResolutionSchema,
   PublicAppSchema,
   SelectAppVersionSchema,
-  SelectToolSchema,
   UpdateAppSchema,
   UuidIdSchema,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import { externalAppLabel } from "@/utils/external-app-label";
+import {
+  appIconUrl,
+  externalAppIconUrl,
+  replyWithIconImage,
+  splitListIcon,
+} from "@/utils/servable-icon";
 import {
   BulkDeleteBodySchema,
   BulkOutcomeSchema,
@@ -208,6 +221,16 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
+          pinned: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value === "true" : value),
+              z.boolean(),
+            )
+            .optional()
+            .describe("Only return apps the current user has pinned."),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(AppListItemSchema),
@@ -226,10 +249,20 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "app",
         "read",
       );
-      const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
-        organizationId,
-        userId: user.id,
-      });
+      const [reachableAppIds, pins] = await Promise.all([
+        AppAccessModel.getUserAccessibleAppIds({
+          organizationId,
+          userId: user.id,
+          access: resourceAccessSelection(query),
+        }),
+        query.pinned ? AppPinModel.getPinnedRefs(user.id) : undefined,
+      ]);
+      // A pinned-only listing loads just the pinned apps instead of building
+      // every card and dropping the unpinned ones at the end.
+      const pinnedAppIds = pins ? new Set(pins.appIds) : undefined;
+      const accessibleAppIds = pinnedAppIds
+        ? reachableAppIds.filter((id) => pinnedAppIds.has(id))
+        : reachableAppIds;
       // Grants are the only way to reach an app, so there is no longer a set
       // an administrator sees only through oversight.
       const nonAdminAccessibleIds = new Set(accessibleAppIds);
@@ -240,7 +273,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       };
       const [ownedCount, external] = await Promise.all([
         AppModel.countByOrganization(ownedFilters),
-        hasBaseRead
+        hasBaseRead && (!pins || pins.hasExternal)
           ? McpServerModel.findUiCapableForCaller({
               userId: user.id,
               organizationId,
@@ -355,9 +388,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           cspOrigin: "platform-pinned" as const,
           pinnedAt: ownedPins.get(app.id) ?? null,
           labels: app.labels,
-          // The app's own icon (emoji or data URL), so a card can show what the
-          // app is instead of the same generic glyph on every row.
-          icon: app.icon,
+          // The app's own icon, so a card can show what the app is instead of
+          // the same generic glyph on every row.
+          ...splitListIcon(app.icon, (version) => appIconUrl(app.id, version)),
         }))
         .filter((item) => {
           if (query.scope !== undefined && item.scope !== query.scope)
@@ -397,9 +430,11 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description: catalogApp.toolDescription,
           resourceUri: catalogApp.resourceUri,
           toolName: catalogApp.toolName,
-          // The server's registry icon (emoji or data URL) so the card can
-          // show which server the app comes from.
-          icon: catalogApp.serverIcon,
+          // The server's registry icon so the card can show which server the
+          // app comes from.
+          ...splitListIcon(catalogApp.serverIcon, (version) =>
+            externalAppIconUrl(catalogApp.catalogId, version),
+          ),
           requiresInput: catalogApp.requiresInput,
           executionModel: "server-scoped" as const,
           cspOrigin: "author-declared" as const,
@@ -421,10 +456,23 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // have no comparable author and none are oversight-only, so drop them
           // whenever an author filter is active rather than mis-attributing them.
           if (authorFilterActive) return false;
+          // Nor do they carry a policy of their own, so the "Shared with" and
+          // "Owner" filters never match one.
+          if (query.sharedWith?.length || query.owner?.length) return false;
+          // An install the caller reaches is their own personal one, one
+          // shared with a team of theirs, or the organization's; never
+          // oversight-only, so `others` holds no external app.
+          if (
+            query.access &&
+            !query.access.includes(EXTERNAL_APP_ACCESS_RELATION[item.scope])
+          )
+            return false;
           return true;
         });
 
-      const items: AppListItem[] = [...ownedItems, ...externalItems];
+      const items: AppListItem[] = [...ownedItems, ...externalItems].filter(
+        (item) => !query.pinned || item.pinnedAt !== null,
+      );
       items.sort((a, b) => a.name.localeCompare(b.name));
 
       return reply.send({
@@ -456,6 +504,65 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Not found");
       }
       return reply.send(resolved);
+    },
+  );
+
+  fastify.get(
+    "/api/apps/external/:catalogId/icon",
+    {
+      schema: {
+        operationId: RouteId.GetExternalAppIcon,
+        description:
+          "The image icon of an external app's backing server, for the apps list, which links image icons instead of carrying them inline.",
+        tags: ["Apps"],
+        params: z.object({ catalogId: UuidIdSchema }),
+        querystring: z.object({
+          v: z.string().optional().describe("Content version; any value."),
+        }),
+      },
+    },
+    async (request, reply) => {
+      // The same gate as resolving the app itself: a catalog the caller can
+      // reach that provides a UI.
+      const resolved = await McpServerModel.findCatalogAppForCaller({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        catalogId: request.params.catalogId,
+      });
+      if (!resolved) {
+        throw new ApiError(404, "Icon not found");
+      }
+      return replyWithIconImage({
+        request,
+        reply,
+        icon: await InternalMcpCatalogModel.findIconById(
+          request.params.catalogId,
+        ),
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/apps/:appId/icon",
+    {
+      schema: {
+        operationId: RouteId.GetAppIcon,
+        description:
+          "The image icon of an app the caller may view, for the apps list, which links image icons instead of carrying them inline.",
+        tags: ["Apps"],
+        params: z.object({ appId: UuidIdSchema }),
+        querystring: z.object({
+          v: z.string().optional().describe("Content version; any value."),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const app = await loadViewableApp({
+        appId: request.params.appId,
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      return replyWithIconImage({ request, reply, icon: app.icon });
     },
   );
 
@@ -694,10 +801,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         // Present only when the client generated a conversation key and sent
-        // it — the same header the composer's locked-chat toggle uses. Opening
+        // it — the same header the composer's encrypted-chat toggle uses. Opening
         // an app is a browser POST, so the key reaches the server on exactly
         // the flow that creates the conversation.
-        lockedChat: resolveLockedChatCreationIfRequested(request),
+        encryptedChat: resolveEncryptedChatCreationIfRequested(request),
       });
       return reply.send({ conversationId });
     },
@@ -730,7 +837,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         resourceUri,
         userId: user.id,
         organizationId,
-        lockedChat: resolveLockedChatCreationIfRequested(request),
+        encryptedChat: resolveEncryptedChatCreationIfRequested(request),
       });
       return reply.send(result);
     },
@@ -1003,6 +1110,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const updated = await AppModel.update({
         id: appId,
+        expectedLatestVersion: body.baseVersion,
         ...(Object.keys(patch).length > 0 ? { patch } : {}),
         ...(version ? { version } : {}),
       }).catch((error) => {
@@ -1373,10 +1481,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetAppTools,
-        description: "List the tools assigned to an app.",
+        description:
+          "List the tools assigned to an app, including each assignment's " +
+          "stored server pin and credential resolution mode.",
         tags: ["Apps"],
         params: z.object({ appId: UuidIdSchema }),
-        response: constructResponseSchema(z.array(SelectToolSchema)),
+        response: constructResponseSchema(z.array(AssignedToolSchema)),
       },
     },
     async ({ params: { appId }, user, organizationId }, reply) => {
@@ -1564,6 +1674,16 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/** Which "Show" relation an external app's install reaches the caller in. */
+const EXTERNAL_APP_ACCESS_RELATION: Record<
+  ResourceVisibilityScope,
+  ResourceAccessRelation
+> = {
+  personal: "mine",
+  team: "shared",
+  org: "org",
+};
 
 /**
  * Map a write that tripped one of the `apps` unique indexes to the 409 naming

@@ -31,7 +31,8 @@ import virtualApiKeysTable from "./virtual-api-key";
  * in `tokenHash` and the first 22 characters in `tokenStart` for display.
  *
  * The script endpoint consumes a row exactly once (`consumedAt` is an atomic
- * claim); rows also expire via `expiresAt`. Expired/consumed rows are inert.
+ * claim); render tickets expire via `expiresAt`. Consumed rows also anchor
+ * installation-scoped read-only instruction credentials, which recheck live access.
  */
 const connectionSetupsTable = pgTable(
   "connection_setups",
@@ -91,11 +92,23 @@ const connectionSetupsTable = pgTable(
     tokenStart: varchar("token_start", { length: 22 }).notNull(),
     expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
     consumedAt: timestamp("consumed_at", { mode: "date" }),
+    /** Set when the user (or an admin) disconnects this setup's client. */
+    revokedAt: timestamp("revoked_at", { mode: "date" }),
+    /** Hostname the installer reported, so the user can tell machines apart. */
+    deviceName: text("device_name"),
+    revokedByUserId: text("revoked_by_user_id").references(
+      () => usersTable.id,
+      {
+        onDelete: "set null",
+      },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("connection_setups_token_hash_idx").on(table.tokenHash),
     index("connection_setups_org_id_idx").on(table.organizationId),
+    // The Connect page lists one user's setups.
+    index("connection_setups_user_id_idx").on(table.userId),
     index("connection_setups_token_start_idx").on(table.tokenStart),
   ],
 );

@@ -31,7 +31,12 @@ import {
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
+import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -40,6 +45,7 @@ import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import {
   useKnowledgeFileLabelKeys,
@@ -97,6 +103,9 @@ export default function KnowledgeFilesPage() {
   } = useDataTableQueryParams();
   // Label filtering is server-side, so the value rides the list query.
   const labelsFilter = searchParams.get("labels") || undefined;
+  // The access filters narrow documents; directories arrive whole.
+  const { hasActiveScopeFilters, access, sharedWith, owner } =
+    useScopeFilterParams();
 
   /** null = the top level, which lists directories plus unfiled documents. */
   const [openDirectoryId, setOpenDirectoryId] = useState<string | null>(null);
@@ -125,6 +134,9 @@ export default function KnowledgeFilesPage() {
     directoryId: openDirectoryId ?? ROOT_DIRECTORY,
     search: search || undefined,
     labels: labelsFilter,
+    access,
+    sharedWith,
+    owner,
   });
 
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -176,6 +188,9 @@ export default function KnowledgeFilesPage() {
     openDirectoryId,
     search,
     labelsFilter,
+    access,
+    sharedWith,
+    owner,
   });
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
   const allMatchingSelected = escalatedFor === viewSignature;
@@ -222,6 +237,9 @@ export default function KnowledgeFilesPage() {
         directoryId: openDirectoryId ?? ROOT_DIRECTORY,
         search: search || undefined,
         labels: labelsFilter,
+        access,
+        sharedWith,
+        owner,
       },
       { enabled: allMatchingSelected },
     );
@@ -280,10 +298,18 @@ export default function KnowledgeFilesPage() {
     setEscalatedFor(null);
   }, []);
 
-  const hasActiveFilters = Boolean(search || labelsFilter);
+  const hasActiveFilters = Boolean(
+    search || labelsFilter || hasActiveScopeFilters,
+  );
   const clearFilters = useCallback(() => {
     setSearch("");
-    updateQueryParams({ labels: null, page: "1" });
+    updateQueryParams({
+      labels: null,
+      ...Object.fromEntries(
+        RESOURCE_ACCESS_FILTER_PARAMS.map((param) => [param, null]),
+      ),
+      page: "1",
+    });
   }, [updateQueryParams]);
 
   const columns: ColumnDef<Row>[] = useMemo(
@@ -304,7 +330,7 @@ export default function KnowledgeFilesPage() {
           if (row.original.kind === "directory") {
             const directory = row.original.directory;
             return (
-              <button
+              <UnstyledButton
                 type="button"
                 onClick={() => {
                   setOpenDirectoryId(directory.id);
@@ -320,7 +346,7 @@ export default function KnowledgeFilesPage() {
                 <span className="shrink-0 text-muted-foreground text-xs">
                   {directory.fileCount}
                 </span>
-              </button>
+              </UnstyledButton>
             );
           }
           const file = row.original.file;
@@ -328,7 +354,7 @@ export default function KnowledgeFilesPage() {
             // Opens the document itself — PDFs in the browser's viewer, text
             // and images inline — so checking what a file says never requires
             // downloading it.
-            <button
+            <UnstyledButton
               type="button"
               className="flex w-full min-w-0 items-center gap-2 text-left"
               onClick={() =>
@@ -347,7 +373,7 @@ export default function KnowledgeFilesPage() {
                 {file.filename}
               </span>
               <LabelTags labels={file.labels} />
-            </button>
+            </UnstyledButton>
           );
         },
       },
@@ -519,6 +545,7 @@ export default function KnowledgeFilesPage() {
               <span className="font-medium text-sm">{openDirectory.name}</span>
             )}
 
+            <ResourceAccessFilter resource="knowledgeFile" noun="documents" />
             <EntityLabelFilter
               useLabelKeys={useKnowledgeFileLabelKeys}
               useLabelValues={useKnowledgeFileLabelValues}

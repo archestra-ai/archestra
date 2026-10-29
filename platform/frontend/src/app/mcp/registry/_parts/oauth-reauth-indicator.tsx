@@ -4,6 +4,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 
 const LABEL = "Needs re-authentication";
@@ -44,7 +45,7 @@ export function OAuthReauthIndicator({
   );
 
   const marker = onActivate ? (
-    <button
+    <UnstyledButton
       type="button"
       onClick={onActivate}
       className={cn(
@@ -55,7 +56,7 @@ export function OAuthReauthIndicator({
       aria-label={`${LABEL}, open credentials`}
     >
       {body}
-    </button>
+    </UnstyledButton>
   ) : (
     <span className={containerClassName} data-testid="oauth-reauth-state">
       {body}

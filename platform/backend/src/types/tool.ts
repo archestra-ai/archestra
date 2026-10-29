@@ -108,9 +108,6 @@ export const ToolWithAssignmentsSchema = z.object({
   catalogId: z.string().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
-  policiesAutoConfiguredAt: z.date().nullable(),
-  policiesAutoConfiguredReasoning: z.string().nullable(),
-  policiesAutoConfiguredModel: z.string().nullable(),
   assignmentCount: z.number(),
   assignments: z.array(ToolAssignmentSchema),
   /** Set only for agent delegation tools; null for catalog and observed tools. */

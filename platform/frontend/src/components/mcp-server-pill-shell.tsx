@@ -87,7 +87,7 @@ export function McpServerPillShell({
             variant="outline"
             size="sm"
             className={cn(
-              "h-8 min-w-0 max-w-full flex-1 gap-1.5 px-3 text-xs",
+              "min-w-0 max-w-full flex-1",
               isEmpty && "border-dashed opacity-50",
               isEmpty && "rounded-r-none border-r-0",
               highlighted && "border-primary opacity-100",
@@ -109,8 +109,8 @@ export function McpServerPillShell({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="h-8 w-8 p-0 rounded-l-none border-dashed opacity-50 hover:opacity-100"
+            size="icon-sm"
+            className="rounded-l-none border-dashed opacity-50 hover:opacity-100"
             onClick={(e) => {
               e.stopPropagation();
               onRemove();
@@ -147,8 +147,8 @@ export function McpServerPillShell({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 shrink-0"
+            size="icon-xs"
+            className="shrink-0"
             onClick={() => onOpenChange(false)}
             aria-label="Close"
           >

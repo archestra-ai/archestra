@@ -94,7 +94,7 @@ export class BedrockClient {
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
+      const errorBody = await response.text().catch(() => "");
       logger.error(
         { status: response.status, errorBody },
         "[BedrockClient] converse error",
@@ -139,7 +139,7 @@ export class BedrockClient {
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
+      const errorBody = await response.text().catch(() => "");
       logger.error(
         { status: response.status, errorBody },
         "[BedrockClient] converseStream error",
@@ -205,7 +205,7 @@ export class BedrockClient {
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
+      const errorBody = await response.text().catch(() => "");
       logger.error(
         { status: response.status, errorBody },
         "[BedrockClient] invoke error",
@@ -251,7 +251,7 @@ export class BedrockClient {
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
+      const errorBody = await response.text().catch(() => "");
       logger.error(
         { status: response.status, errorBody },
         "[BedrockClient] invokeStream error",
@@ -518,13 +518,20 @@ export class BedrockClient {
                 const detail = extractBedrockErrorDetail(
                   textDecoder.decode(decoded.body),
                 );
-                throw new Error(
+                const exceptionType =
+                  typeof exceptionTypeValue === "string"
+                    ? exceptionTypeValue
+                    : "unknown";
+                const error = new Error(
                   `Bedrock invoke stream error (${
-                    typeof exceptionTypeValue === "string"
-                      ? exceptionTypeValue
-                      : "unknown"
+                    exceptionType
                   })${detail ? `: ${detail}` : ""}`,
                 );
+                // This is a provider error event, not a socket failure, even
+                // when the provider's message mentions a connection reset.
+                throw Object.assign(error, {
+                  error: { type: exceptionType, message: error.message },
+                });
               }
 
               if (messageType !== "event" || eventType !== "chunk") {

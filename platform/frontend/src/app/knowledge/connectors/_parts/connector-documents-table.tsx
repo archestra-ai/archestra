@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -201,7 +202,7 @@ export function ConnectorDocumentsTable({
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <button
+            <UnstyledButton
               type="button"
               className="truncate text-sm font-medium hover:underline cursor-pointer border-none bg-transparent p-0 text-left outline-none"
               onClick={(event) => {
@@ -215,7 +216,7 @@ export function ConnectorDocumentsTable({
               }
             >
               {row.original.title}
-            </button>
+            </UnstyledButton>
           </div>
         ),
       },

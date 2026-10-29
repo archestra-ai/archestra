@@ -11,7 +11,7 @@ import {
 } from "@archestra/shared";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type {
@@ -30,6 +30,21 @@ export type IntegrationOverrideColumns = {
 };
 
 class OrganizationModel {
+  /** Read only when provisioning a new personal assistant or gateway. */
+  static async getDefaultPersonalAgentAccessAllTools(
+    organizationId: string,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({
+        accessAllTools:
+          schema.organizationsTable.defaultPersonalAgentAccessAllTools,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, organizationId))
+      .limit(1);
+    return row?.accessAllTools ?? true;
+  }
+
   /**
    * Process-local cache for {@link getAppearanceSettings}. The appearance
    * settings back white-labeling on the unauthenticated login page (and every
@@ -135,6 +150,19 @@ class OrganizationModel {
   }
 
   /**
+   * Serializes writers that check-then-insert per-organization rows (e.g.
+   * built-in provisioning) across replicas until `tx` ends. NO KEY UPDATE
+   * still lets other transactions insert rows referencing the organization.
+   */
+  static async lockRowForUpdate(id: string, tx: Transaction): Promise<void> {
+    await tx
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .for("no key update");
+  }
+
+  /**
    * Get or create the default organization
    */
   static async getOrCreateDefaultOrganization(): Promise<Organization> {
@@ -163,7 +191,10 @@ class OrganizationModel {
           slug: "default",
           createdAt: new Date(),
         })
+        // A concurrently booting replica may have created it first.
+        .onConflictDoNothing()
         .returning();
+      if (!organization) return null;
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -174,6 +205,15 @@ class OrganizationModel {
       // SPDX-SnippetEnd
       return organization;
     });
+    if (!createdOrg) {
+      const winner = await OrganizationModel.getFirst();
+      if (!winner) {
+        throw new Error(
+          "Default organization creation conflicted, but none exists",
+        );
+      }
+      return winner;
+    }
 
     logger.debug(
       { organizationId: createdOrg.id },
@@ -259,16 +299,34 @@ class OrganizationModel {
       return OrganizationModel.getById(id);
     }
 
-    const [updatedOrganization] = await db
-      .update(schema.organizationsTable)
-      .set(data)
-      .where(eq(schema.organizationsTable.id, id))
-      .returning();
+    const updatedOrganization = await OrganizationModel.patchInTransaction({
+      id,
+      data,
+    });
 
     logger.debug(
       { id, updated: !!updatedOrganization },
       "OrganizationModel.patch: completed",
     );
+    await OrganizationModel.invalidateSettingsCaches(id);
+    return updatedOrganization || null;
+  }
+
+  /** Used by the browser policy's cluster fence; cache invalidation follows commit. */
+  static async patchInTransaction(params: {
+    id: string;
+    data: Partial<Organization>;
+    tx?: Transaction;
+  }): Promise<Organization | null> {
+    const [row] = await (params.tx ?? db)
+      .update(schema.organizationsTable)
+      .set(params.data)
+      .where(eq(schema.organizationsTable.id, params.id))
+      .returning();
+    return row ?? null;
+  }
+
+  static async invalidateSettingsCaches(id: string): Promise<void> {
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
     await cacheManager.delete(getOrganizationOnlineSkillCatalogCacheKey(id));
@@ -286,7 +344,6 @@ class OrganizationModel {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     OrganizationModel.mcpIdleHibernationCache.clear();
     // SPDX-SnippetEnd
-    return updatedOrganization || null;
   }
 
   /**
@@ -570,6 +627,24 @@ class OrganizationModel {
   }
 
   /**
+   * Whether LLM proxy requests may run without a platform credential. Read
+   * straight from the row: it gates the proxy hot path, so it stays a single
+   * primary-key lookup rather than a cache entry that every patch must evict.
+   */
+  static async allowsUnauthenticatedLlmProxyRequests(
+    id: string,
+  ): Promise<boolean> {
+    const [organization] = await db
+      .select({
+        allowed: schema.organizationsTable.allowUnauthenticatedLlmProxyRequests,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+    return organization?.allowed ?? false;
+  }
+
+  /**
    * Cached per-request read of the org's auth-enforcement policies
    * (require-2FA, session max age). Same cache key as the other org
    * settings, so any OrganizationModel.patch invalidates it.
@@ -820,14 +895,18 @@ class OrganizationModel {
       defaultMemberRole: org.defaultMemberRole ?? null,
       onboardingComplete: org.onboardingComplete,
       onlineMcpCatalogEnabled: org.onlineMcpCatalogEnabled,
+      defaultPersonalAgentAccessAllTools:
+        org.defaultPersonalAgentAccessAllTools,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       mcpIdleHibernationEnabled: org.mcpIdleHibernationEnabled,
       // SPDX-SnippetEnd
       onlineSkillCatalogEnabled: org.onlineSkillCatalogEnabled,
+      playwrightMcpEnabled: org.playwrightMcpEnabled,
       allowChatFileUploads: org.allowChatFileUploads,
-      appsHackathonRecorderEnabled: org.appsHackathonRecorderEnabled,
+      allowUnauthenticatedLlmProxyRequests:
+        org.allowUnauthenticatedLlmProxyRequests,
       allowToolAutoAssignment: org.allowToolAutoAssignment,
       embeddingModel: org.embeddingModel ?? null,
       kbContextualRetrievalMode: org.kbContextualRetrievalMode ?? null,
@@ -841,9 +920,8 @@ class OrganizationModel {
         : null,
       defaultLlmProvider: defaultKeyRows[0]?.provider ?? null,
       defaultAgentId: org.defaultAgentId ?? null,
-      defaultDiscoveredToolInvocationPolicy:
-        org.defaultDiscoveredToolInvocationPolicy,
-      defaultDiscoveredToolResultPolicy: org.defaultDiscoveredToolResultPolicy,
+      defaultFastModelId: org.defaultFastModelId ?? null,
+      defaultSmartModelId: org.defaultSmartModelId ?? null,
       rerankerModel: org.rerankerModel ?? null,
       ocrModel: org.ocrModel ?? null,
       requireTwoFactor: org.requireTwoFactor,

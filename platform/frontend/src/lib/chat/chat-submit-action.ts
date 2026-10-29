@@ -27,6 +27,11 @@ export function classifyChatSubmitAction(params: {
   directSendPending: boolean;
   /** A context compaction (auto or manual) is rewriting the thread. */
   isCompacting: boolean;
+  /**
+   * The conversation's live chat session does not exist yet: its machinery
+   * loads after the composer, and it starts once the conversation has loaded.
+   */
+  sessionPending?: boolean;
 }): ChatSubmitAction {
   const { status, queueEnabled, directSendPending, isCompacting } = params;
   const isStreaming = status === "submitted" || status === "streaming";
@@ -41,6 +46,12 @@ export function classifyChatSubmitAction(params: {
   // just issued is settling, or a compaction is rewriting the thread. Either
   // way the follow-up queues rather than racing it.
   if (queueEnabled && (directSendPending || isCompacting)) {
+    return "queue";
+  }
+
+  // Typed and sent before the session could take it: queue it, and the
+  // session sends it as soon as it starts, instead of dropping it.
+  if (queueEnabled && params.sessionPending) {
     return "queue";
   }
 

@@ -15,6 +15,7 @@ export interface OpenAiStreamUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  completion_tokens_details?: { reasoning_tokens: number };
   /**
    * OpenAI reports prompt-cache hits as a subset of `prompt_tokens`. Providers
    * that count cache reads separately (Anthropic, Bedrock, Gemini) must publish
@@ -23,7 +24,11 @@ export interface OpenAiStreamUsage {
    * the way this codebase does (`prompt_tokens - cached_tokens`, see the openai
    * adapter's `getUsageTokens`) attributes the whole prompt to full-price input.
    */
-  prompt_tokens_details?: { cached_tokens: number };
+  prompt_tokens_details?: {
+    cached_tokens: number;
+    cache_write_tokens?: number;
+    cache_write_1h_tokens?: number;
+  };
 }
 
 /**
@@ -59,8 +64,7 @@ export function toOpenAiStreamUsage(
  * writes back into a gross `prompt_tokens` and publishes the cache-read
  * subset via `prompt_tokens_details.cached_tokens` — the shape
  * `@ai-sdk/openai` (and any OpenAI-compatible client) reads cache hits from.
- * Cache *writes* have no OpenAI counterpart, so they land in the uncached
- * remainder: a cache write is billed at more than the input rate, never less.
+ * Providers that report cache writes retain the disjoint write count too.
  */
 export function toOpenAiStreamUsageWithCache(
   usage: UsageView | null | undefined,
@@ -76,9 +80,19 @@ export function toOpenAiStreamUsageWithCache(
     completion_tokens: usage.outputTokens,
     total_tokens: promptTokens + usage.outputTokens,
     // Omitted rather than zeroed when nothing was cached, so the field's
-    // presence still means "this provider reported cache hits".
-    ...(cacheReadTokens > 0
-      ? { prompt_tokens_details: { cached_tokens: cacheReadTokens } }
+    // presence still means "this provider reported cache usage".
+    ...(cacheReadTokens > 0 || cacheWriteTokens > 0
+      ? {
+          prompt_tokens_details: {
+            cached_tokens: cacheReadTokens,
+            ...(cacheWriteTokens > 0
+              ? { cache_write_tokens: cacheWriteTokens }
+              : {}),
+            ...(usage.cacheWrite1hTokens !== undefined
+              ? { cache_write_1h_tokens: usage.cacheWrite1hTokens }
+              : {}),
+          },
+        }
       : {}),
   };
 }

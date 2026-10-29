@@ -2,6 +2,7 @@ import type { RowSelectionState } from "@tanstack/react-table";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
+import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FilterBar } from "@/components/filter-bar";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -10,6 +11,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-context";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import {
+  SavedTableCardViewModesProvider,
   TableCard,
   TableCardList,
   TableCardSelectionScope,
@@ -21,6 +23,8 @@ import {
 describe("TableCardView", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    // biome-ignore lint/suspicious/noDocumentCookie: resetting the view cookie between tests
+    document.cookie = "test-view=; path=/; max-age=0";
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       value: 1024,
@@ -47,6 +51,34 @@ describe("TableCardView", () => {
 
     expect(window.localStorage.getItem("test-view")).toBe("cards");
     expect(screen.getByText("Cards")).toBeVisible();
+  });
+
+  it("keeps the view cookie in step with the saved layout", async () => {
+    window.localStorage.setItem("test-view", "table");
+
+    render(<TestView />);
+
+    // A preference saved before the cookie existed is mirrored on mount.
+    await waitFor(() => expect(document.cookie).toContain("test-view=table"));
+
+    fireEvent.click(screen.getByLabelText("View as cards"));
+
+    expect(window.localStorage.getItem("test-view")).toBe("cards");
+    expect(document.cookie).toContain("test-view=cards");
+  });
+
+  it("renders the layout a server render read from the cookie, from the first render", () => {
+    const serverRender = (mode?: "cards" | "table") =>
+      renderToString(
+        <SavedTableCardViewModesProvider modes={{ "test-view": mode }}>
+          <TestView />
+        </SavedTableCardViewModesProvider>,
+      );
+
+    expect(serverRender("table")).toContain("Table");
+    expect(serverRender("table")).not.toContain("Cards");
+    expect(serverRender("cards")).toContain("Cards");
+    expect(serverRender("cards")).not.toContain("Table");
   });
 
   it("keeps cards rendered for mobile when table mode is selected", async () => {

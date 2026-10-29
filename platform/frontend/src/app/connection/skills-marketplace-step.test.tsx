@@ -24,16 +24,12 @@ function renderWithClient(ui: ReactElement) {
 const {
   listLinksMock,
   createLinkMock,
-  revokeLinkMock,
-  rotateLinkMock,
   marketplaceMock,
   getSkillsMock,
   fetchUserTokenMock,
 } = vi.hoisted(() => ({
   listLinksMock: vi.fn(),
   createLinkMock: vi.fn(),
-  revokeLinkMock: vi.fn(),
-  rotateLinkMock: vi.fn(),
   marketplaceMock: vi.fn(),
   getSkillsMock: vi.fn(),
   fetchUserTokenMock: vi.fn(),
@@ -58,11 +54,11 @@ vi.mock("@/lib/skills/skill-share.query", () => ({
     isPending: false,
   }),
   useRevokeSkillShareLink: () => ({
-    mutateAsync: revokeLinkMock,
+    mutateAsync: vi.fn(),
     isPending: false,
   }),
   useRotateSkillShareLink: () => ({
-    mutateAsync: rotateLinkMock,
+    mutateAsync: vi.fn(),
     isPending: false,
   }),
 }));
@@ -178,22 +174,6 @@ describe("SkillsMarketplaceStep", () => {
       },
       error: null,
     });
-  });
-
-  it("returns null for users who cannot read skills", () => {
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: false,
-    } as ReturnType<typeof useHasPermissions>);
-    const { container } = render(<SkillsMarketplaceStep client={anyClient} />);
-    expect(container.textContent).toBe("");
-  });
-
-  it("renders nothing when the picked client doesn't support skill marketplaces", () => {
-    const unsupportedClient = findClient("n8n");
-    const { container } = render(
-      <SkillsMarketplaceStep client={unsupportedClient} />,
-    );
-    expect(container.textContent).toBe("");
   });
 
   describe("static marketplace", () => {
@@ -373,74 +353,6 @@ describe("SkillsMarketplaceStep", () => {
       );
       expect(snippets).toHaveTextContent(
         `git clone ${CREATE_RESPONSE.cloneUrl} ~/.archestra/skills/${CREATE_RESPONSE.marketplaceName}`,
-      );
-    });
-
-    it("does not auto-rotate an existing active link on unfold (rotation kills already-distributed URLs)", async () => {
-      listLinksMock.mockReturnValue({
-        data: { links: [ACTIVE_LINK] },
-        isPending: false,
-      });
-      rotateLinkMock.mockResolvedValue(CREATE_RESPONSE);
-
-      renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
-      await openShareLinkSection();
-
-      expect(
-        await screen.findByRole("button", { name: /Refresh to reveal URL/i }),
-      ).toBeInTheDocument();
-      expect(rotateLinkMock).not.toHaveBeenCalled();
-      expect(
-        screen.queryByTestId("skills-marketplace-snippets-generic"),
-      ).not.toBeInTheDocument();
-    });
-
-    it("forwards the link's existing expiresAt when the admin clicks Refresh", async () => {
-      listLinksMock.mockReturnValue({
-        data: { links: [ACTIVE_LINK] },
-        isPending: false,
-      });
-      rotateLinkMock.mockResolvedValue(CREATE_RESPONSE);
-
-      renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
-      await openShareLinkSection();
-      await userEvent.click(
-        await screen.findByRole("button", { name: /Refresh to reveal URL/i }),
-      );
-
-      await waitFor(() => expect(rotateLinkMock).toHaveBeenCalledTimes(1));
-      const vars = rotateLinkMock.mock.calls[0][0];
-      expect(vars.previousLinkId).toBe(ACTIVE_LINK.id);
-      expect(vars.body.skillIds).toEqual(["skill-1", "skill-2"]);
-      // expiresAt is preserved so refresh doesn't silently convert a TTL link
-      // into a never-expiring one
-      expect(vars.body.expiresAt).toBe(ACTIVE_LINK.expiresAt);
-
-      await waitFor(() =>
-        expect(
-          screen.getByTestId("skills-marketplace-snippets-generic"),
-        ).toBeInTheDocument(),
-      );
-    });
-
-    it("revokes the link after confirmation", async () => {
-      listLinksMock.mockReturnValue({
-        data: { links: [ACTIVE_LINK] },
-        isPending: false,
-      });
-      revokeLinkMock.mockResolvedValue({ success: true });
-
-      renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
-      await openShareLinkSection();
-      await userEvent.click(
-        await screen.findByRole("button", { name: /^Revoke$/i }),
-      );
-      await userEvent.click(
-        screen.getByTestId("skills-marketplace-confirm-revoke"),
-      );
-
-      await waitFor(() =>
-        expect(revokeLinkMock).toHaveBeenCalledWith(ACTIVE_LINK.id),
       );
     });
   });

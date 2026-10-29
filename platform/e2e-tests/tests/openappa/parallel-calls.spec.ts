@@ -23,10 +23,10 @@
  *    releases only once.
  *
  * Policy settling:
- * The runtime recomposes policy rules asynchronously after updates. A conversation
- * uses the policy version active at creation time. Each test uses
- * `openSettledConversation` to verify that the runtime enforces the new policy
- * before running test assertions.
+ * The runtime recomposes policy rules asynchronously after updates, and every
+ * conversation decides its next call under the policy in force then. Each test
+ * uses `openSettledConversation` to verify that the runtime enforces the new
+ * policy before running test assertions.
  *
  * Requirements:
  * The test stack must run with `ARCHESTRA_BETA=true`.
@@ -353,7 +353,7 @@ test("releases allowed call immediately, returns notice for denied call, and rel
     const allowedOutput = textOf(outputFor(toolOutputs, allowedCallId));
     expect(allowedOutput).not.toContain("[appa] Blocked");
     expect(allowedOutput).not.toContain("Tool output withheld");
-    expect(allowedOutput).not.toContain("The tool was not executed");
+    expect(allowedOutput).not.toContain("The tool did not run. If the ruling");
 
     const ruling = textOf(outputFor(toolOutputs, notice.toolCallId));
     const offerId = readOfferId(ruling);
@@ -363,7 +363,7 @@ test("releases allowed call immediately, returns notice for denied call, and rel
     const released = textOf(outputFor(toolOutputs, retry.toolCallId));
     expect(released).not.toContain("[appa] Blocked");
     expect(released).not.toContain("Tool output withheld");
-    expect(released).not.toContain("The tool was not executed");
+    expect(released).not.toContain("The tool did not run. If the ruling");
 
     expect(assistantText(events)).toContain(finalAnswer);
   } finally {
@@ -573,7 +573,7 @@ test("evaluates two denied calls independently, emits two notices, and releases 
       const released = textOf(outputFor(toolOutputs, retryId));
       expect(released).not.toContain("[appa] Blocked");
       expect(released).not.toContain("Tool output withheld");
-      expect(released).not.toContain("The tool was not executed");
+      expect(released).not.toContain("The tool did not run. If the ruling");
     }
 
     expect(assistantText(events)).toContain(finalAnswer);
@@ -744,7 +744,7 @@ test("prevents duplicate remedy execution and releases retried call only once", 
     const released = textOf(outputFor(toolOutputs, retry.toolCallId));
     expect(released).not.toContain("[appa] Blocked");
     expect(released).not.toContain("Tool output withheld");
-    expect(released).not.toContain("The tool was not executed");
+    expect(released).not.toContain("The tool did not run. If the ruling");
 
     expect(assistantText(events)).toContain(finalAnswer);
   } finally {
@@ -847,7 +847,12 @@ async function setupGovernedChat(params: {
     request,
     method: "put",
     urlSuffix: `/api/agents/${agentId}`,
-    data: { llmApiKeyId: apiKeyId, modelId: runtimeModel.dbId },
+    // These policies and WireMock turns exercise directly advertised calls.
+    data: {
+      llmApiKeyId: apiKeyId,
+      modelId: runtimeModel.dbId,
+      toolExposureMode: "full",
+    },
   });
 
   const toolsResponse = await makeApiRequest({
@@ -905,8 +910,8 @@ async function openConversation(params: {
 /**
  * Opens a conversation and confirms that the runtime enforces the new policy.
  *
- * The runtime updates policy rules asynchronously after a policy update.
- * A conversation uses the policy version active at conversation creation.
+ * The runtime updates policy rules asynchronously after a policy update, and
+ * a turn decides under the policy in force when it runs.
  * This helper tests the initial turn and verifies that observed tool calls
  * match the expected policy. If the policy has not settled yet, it deletes
  * the conversation and retries until the runtime applies the new policy.

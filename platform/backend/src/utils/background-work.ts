@@ -2,8 +2,8 @@
  * Registry for fire-and-forget async work (e.g. the usage-tracking update
  * InteractionModel.create launches without awaiting).
  *
- * Production behavior is unchanged — callers still don't await the work. The
- * registry exists so the test teardown can DRAIN it: in shared vitest workers
+ * Callers don't await the work. Shutdown and test teardown drain the registry
+ * before disposing persistence dependencies: in shared vitest workers
  * each file swaps in its own PGlite behind the getDb() proxy, so a background
  * promise that outlives its file executes its next query against the *next*
  * file's database — interleaving writes with that file's tests or wedging its
@@ -11,7 +11,7 @@
  * test timeouts.
  */
 
-/** Track a fire-and-forget promise so tests can drain it at file teardown. */
+/** Track a fire-and-forget promise for shutdown and test teardown. */
 export function trackBackgroundWork(work: Promise<unknown>): void {
   pending.add(work);
   const remove = () => pending.delete(work);

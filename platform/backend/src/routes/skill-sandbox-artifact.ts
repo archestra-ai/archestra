@@ -215,7 +215,7 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   // Overwrite a text file's content from the browser editor — the REST analog of
-  // the project-instructions write, for any row-backed `.md`/`.txt` file. Auth
+  // the project-instructions write, for any `.md`/`.txt` file in the panel. Auth
   // and the editability/instructions guards live in the store (parity with the
   // GET/DELETE above, whose authority is also `fileStore`).
   fastify.put(
@@ -224,13 +224,12 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateSkillSandboxArtifactContent,
         description:
-          "Overwrite the full text content of a row-backed Markdown/plain-text " +
-          "file. Allowed for the file's author, or anyone with access to the " +
+          "Overwrite the full text content of a Markdown/plain-text file. " +
+          "Allowed for the file's author, or anyone with access to the " +
           "project owning the file.",
         tags: ["Skills"],
-        // Row-backed files only — a rowless (`obj_`) object has no row to
-        // update, so a strict UUID (not the GET/DELETE `ARTIFACT_REF`).
-        params: z.object({ artifactId: z.string().uuid() }),
+        // a row UUID, or an `obj_` ref for an untracked (hand-placed) object.
+        params: z.object({ artifactId: ARTIFACT_REF }),
         body: z.object({
           // Coarse payload guard; the store's UTF-8 `byteLength` check is the
           // precise authority (a multi-byte character is more than one byte).

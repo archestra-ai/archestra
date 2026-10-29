@@ -7,9 +7,11 @@ import {
   ImageIcon,
   Layers,
   Network,
+  Puzzle,
   Route,
   Server,
   SmileIcon,
+  Sparkles,
   Upload,
   X,
 } from "lucide-react";
@@ -29,6 +31,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 import { ServiceLogoPicker } from "./service-logo-picker";
 
@@ -47,7 +50,9 @@ export type AgentIconPickerFallback =
   | AgentIconVariant
   | "server"
   | "project"
-  | "app";
+  | "app"
+  | "skill"
+  | "plugin";
 
 interface AgentIconPickerProps {
   value: string | null;
@@ -138,7 +143,11 @@ export function AgentIconPicker({
             ? Folder
             : fallbackType === "app"
               ? AppWindow
-              : Bot;
+              : fallbackType === "skill"
+                ? Sparkles
+                : fallbackType === "plugin"
+                  ? Puzzle
+                  : Bot;
 
   return (
     <Popover
@@ -148,7 +157,7 @@ export function AgentIconPicker({
       }}
     >
       <PopoverTrigger asChild>
-        <button
+        <UnstyledButton
           type="button"
           aria-label={disabled ? "Icon" : value ? "Change icon" : "Choose icon"}
           disabled={disabled}
@@ -192,7 +201,7 @@ export function AgentIconPicker({
               <X className="h-2.5 w-2.5" />
             </div>
           )}
-        </button>
+        </UnstyledButton>
       </PopoverTrigger>
       <PopoverContent
         className="w-[352px] overflow-hidden rounded-lg p-0"

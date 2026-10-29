@@ -1,5 +1,6 @@
 import { OAUTH_TOKEN_TYPE, PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
+import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { hasPermission, userHasPermission } from "@/auth/utils";
 import db, { schema } from "@/database";
@@ -10,9 +11,17 @@ import { enterpriseTier } from "@/enterprise-tier";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 // SPDX-SnippetEnd
-import { McpServerModel, PlaywrightRuntimeModel } from "@/models";
+import {
+  InternalMcpCatalogModel,
+  McpServerModel,
+  PlaywrightRuntimeModel,
+} from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
 import { secretManager } from "@/secrets-manager";
+import {
+  getMcpOAuthCallerBinding,
+  issueMcpOAuthCredentialGrant,
+} from "@/services/mcp-oauth-credential-grant";
 import {
   afterEach,
   beforeEach,
@@ -21,9 +30,12 @@ import {
   mustExist,
   test,
 } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { grantEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 import { ApiError } from "@/types";
+
+setupTestCacheManager();
 
 const {
   connectAndGetToolsMock,
@@ -163,6 +175,11 @@ describe("mcp server inspect route", () => {
           organizationId: string;
         }
       ).organizationId = organizationId;
+      request.authMethod = "session";
+      request.sessionInfo = {
+        id: "test-mcp-session",
+        createdAt: new Date(),
+      };
     });
 
     const { default: mcpServerRoutes } = await import("./mcp-server");
@@ -666,6 +683,145 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  test("install does not reuse a caller-supplied secret from another connection", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const existingSecret = await secretManager().createSecret(
+      { access_token: "fake-existing-token" },
+      "existing-connection-secret",
+    );
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+      serverUrl: "http://127.0.0.1:30082/mcp",
+    });
+    connectAndGetToolsMock.mockResolvedValue([
+      { name: "ping", inputSchema: { type: "object", properties: {} } },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "new-connection",
+        catalogId: catalog.id,
+        scope: "personal",
+        secretId: existingSecret.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(connectAndGetToolsMock).not.toHaveBeenCalled();
+    expect(
+      (await secretManager().getSecret(existingSecret.id))?.secret,
+    ).toEqual({ access_token: "fake-existing-token" });
+  });
+
+  test("OAuth callback credentials can be installed and rotated once by their caller", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+      serverUrl: "http://127.0.0.1:30082/mcp",
+      oauthConfig: {
+        name: "OAuth MCP",
+        server_url: "http://127.0.0.1:30082/mcp",
+        grant_type: "authorization_code",
+        client_id: "test-oauth-client",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["read"],
+        default_scopes: ["read"],
+        supports_resource_metadata: false,
+      },
+    });
+    connectAndGetToolsMock.mockResolvedValue([
+      { name: "ping", inputSchema: { type: "object", properties: {} } },
+    ]);
+    const callerBinding = getMcpOAuthCallerBinding({
+      user,
+      organizationId,
+      authMethod: "session",
+      sessionInfo: { id: "test-mcp-session" },
+    } as FastifyRequest);
+    const initialSecret = await secretManager().createSecret(
+      { access_token: "fake-first-token" },
+      "oauth-first-token",
+    );
+    await issueMcpOAuthCredentialGrant({
+      secretId: initialSecret.id,
+      catalogId: catalog.id,
+      callerBinding,
+    });
+
+    const install = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: catalog.name,
+        catalogId: catalog.id,
+        secretId: initialSecret.id,
+      },
+    });
+    expect(install.statusCode, install.body).toBe(200);
+    const serverId = install.json().id;
+    expect(install.json().secretId).toBe(initialSecret.id);
+
+    const rotatedSecret = await secretManager().createSecret(
+      { access_token: "fake-rotated-token" },
+      "oauth-rotated-token",
+    );
+    await issueMcpOAuthCredentialGrant({
+      secretId: rotatedSecret.id,
+      catalogId: catalog.id,
+      serverId,
+      callerBinding,
+    });
+    const reauth = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${serverId}/reauthenticate`,
+      payload: { secretId: rotatedSecret.id },
+    });
+    expect(reauth.statusCode, reauth.body).toBe(200);
+    expect(reauth.json().secretId).toBe(rotatedSecret.id);
+    expect(await secretManager().getSecret(initialSecret.id)).toBeNull();
+
+    const replay = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${serverId}/reauthenticate`,
+      payload: { secretId: rotatedSecret.id },
+    });
+    expect(replay.statusCode).toBe(400);
+    expect((await McpServerModel.findById(serverId))?.secretId).toBe(
+      rotatedSecret.id,
+    );
+
+    const otherSessionSecret = await secretManager().createSecret(
+      { access_token: "fake-other-session-token" },
+      "oauth-other-session-token",
+    );
+    await issueMcpOAuthCredentialGrant({
+      secretId: otherSessionSecret.id,
+      catalogId: catalog.id,
+      serverId,
+      callerBinding: getMcpOAuthCallerBinding({
+        user,
+        organizationId,
+        authMethod: "session",
+        sessionInfo: { id: "other-session" },
+      } as FastifyRequest),
+    });
+    const foreignSession = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${serverId}/reauthenticate`,
+      payload: { secretId: otherSessionSecret.id },
+    });
+    expect(foreignSession.statusCode).toBe(400);
+    expect((await McpServerModel.findById(serverId))?.secretId).toBe(
+      rotatedSecret.id,
+    );
+  });
+
   test("installs a remote MCP server with static additional headers from the catalog", async ({
     makeInternalMcpCatalog,
   }) => {
@@ -908,6 +1064,44 @@ describe("mcp server inspect route", () => {
     expect(k8sStartServerMock.mock.calls[0]?.[1]).toEqual({
       header_x_api_key: "header-value",
     });
+  });
+
+  test("personal install cannot override the catalog-owned Kubernetes service account", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Catalog-Owned Runtime Identity",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+        serviceAccount: "default",
+      },
+    });
+
+    hasPermissionMock.mockResolvedValue({ success: false, error: null });
+    userHasPermissionMock.mockResolvedValue(false);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Catalog-Owned Runtime Identity",
+        catalogId: catalog.id,
+        scope: "personal",
+        serviceAccount: "request-supplied-runtime",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const updatedCatalog = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(updatedCatalog?.localConfig?.serviceAccount).toBe("default");
+    expect(k8sStartServerMock).toHaveBeenCalledTimes(1);
   });
 
   test("installs a local MCP server with both secret env vars and prompted header user config", async ({
@@ -1349,6 +1543,68 @@ describe("mcp server inspect route", () => {
     // work cannot leak into the next test in the file, where its async
     // write could fire after the test database is gone.
     await drainPendingReinstall(mcpServer.id);
+  });
+
+  test("reinstall cannot overwrite a credential still used by another connection", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeUser,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Remote Connection",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Connection credential",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: true,
+          headerName: "x-api-key",
+        },
+      },
+    });
+    const otherOwner = await makeUser();
+    const target = await makeMcpServer({
+      ownerId: otherOwner.id,
+      catalogId: catalog.id,
+    });
+    const current = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    const shared = await secretManager().createSecret(
+      { header_x_api_key: "original-value" },
+      "shared-credential",
+    );
+    await db
+      .update(schema.mcpServersTable)
+      .set({ secretId: shared.id, serverType: "remote" })
+      .where(eq(schema.mcpServersTable.id, current.id));
+    await db
+      .update(schema.mcpServersTable)
+      .set({ secretId: shared.id, serverType: "remote" })
+      .where(eq(schema.mcpServersTable.id, target.id));
+    await McpServerUserModel.assignUserToMcpServer(current.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${current.id}/reinstall`,
+      payload: {
+        userConfigValues: { header_x_api_key: "replacement-value" },
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect((await secretManager().getSecret(shared.id))?.secret).toMatchObject({
+      header_x_api_key: "original-value",
+    });
+    expect((await McpServerModel.findById(target.id))?.secretId).toBe(
+      shared.id,
+    );
   });
 
   // A partial reinstall (user fills only a newly-added required header) must
@@ -4420,6 +4676,7 @@ describe("mcp server core route coverage", () => {
       });
       const tool = await makeTool({ catalogId: catalog.id });
       const agent = await makeAgent({
+        organizationId,
         name: "Server Consumer",
         access: "personal",
         authorId: user.id,
@@ -4428,7 +4685,7 @@ describe("mcp server core route coverage", () => {
 
       const response = await app.inject({
         method: "GET",
-        url: "/api/mcp_server",
+        url: "/api/mcp_server?includeAssignedAgents=true",
       });
 
       expect(response.statusCode).toBe(200);
@@ -4442,11 +4699,139 @@ describe("mcp server core route coverage", () => {
           id: agent.id,
           name: "Server Consumer",
           agentType: agent.agentType,
+          accessAllTools: agent.accessAllTools,
+          organizationId,
           scope: "personal",
           ownerId: user.id,
           ownerEmail: user.email,
+          // Unpinned: resolves to an install at call time.
+          pinned: false,
         },
       ]);
+      // Without the explicit opt-in, and with an explicit false, the list
+      // carries no agents.
+      for (const url of [
+        "/api/mcp_server",
+        "/api/mcp_server?includeAssignedAgents=false",
+      ]) {
+        const compact = await app.inject({ method: "GET", url });
+        expect(compact.statusCode).toBe(200);
+        expect(compact.json()).toEqual(
+          servers.map((entry: { assignedAgents: unknown[] }) => ({
+            ...entry,
+            assignedAgents: [],
+          })),
+        );
+      }
+    });
+
+    test("names to a member only the agents they can open, on the list and on one server", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+      makeAgent,
+      makeAgentTool,
+      makeUser,
+      makeMember,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "local",
+      });
+      const server = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+      });
+      const tool = await makeTool({ catalogId: catalog.id });
+      const colleague = await makeUser();
+      await makeMember(colleague.id, organizationId);
+      const agents = [
+        await makeAgent({
+          organizationId,
+          name: "Mine",
+          access: "personal",
+          authorId: user.id,
+        }),
+        await makeAgent({
+          organizationId,
+          name: "Shared",
+          access: "org",
+          authorId: colleague.id,
+        }),
+        // Someone else's personal agent: its name and owner are not the
+        // caller's to see, even though it uses the caller's server.
+        await makeAgent({
+          organizationId,
+          name: "Theirs",
+          access: "personal",
+          authorId: colleague.id,
+        }),
+      ];
+      for (const agent of agents) {
+        await makeAgentTool(agent.id, tool.id);
+      }
+      // A member: no shared installations to manage.
+      userHasPermissionMock.mockImplementation(
+        async (_userId, _organizationId, resource, action) =>
+          !(resource === "mcpServerInstallation" && action === "update"),
+      );
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/mcp_server?includeAssignedAgents=true",
+      });
+      const listed = list
+        .json()
+        .find((s: { id: string }) => s.id === server.id);
+      expect(
+        listed.assignedAgents.map((a: { name: string }) => a.name).sort(),
+      ).toEqual(["Mine", "Shared"]);
+
+      // Visibility is checked for the agents the response names, never by
+      // listing every agent the member can reach; a status-only list (the
+      // default) names none and checks nothing.
+      const { default: AgentModel } = await import("@/models/agent");
+      const accessibleIds = vi.spyOn(AgentModel, "findAccessibleIdsForUser");
+      await app.inject({
+        method: "GET",
+        url: "/api/mcp_server?includeAssignedAgents=false",
+      });
+      expect(accessibleIds).not.toHaveBeenCalled();
+      await app.inject({ method: "GET", url: "/api/mcp_server" });
+      expect(accessibleIds).not.toHaveBeenCalled();
+      await app.inject({
+        method: "GET",
+        url: "/api/mcp_server?includeAssignedAgents=true",
+      });
+      expect(accessibleIds).toHaveBeenCalledTimes(1);
+      expect(
+        [...(accessibleIds.mock.calls[0]?.[3]?.among ?? [])].sort(),
+      ).toEqual(agents.map((agent) => agent.id).sort());
+      accessibleIds.mockRestore();
+
+      const single = await app.inject({
+        method: "GET",
+        url: `/api/mcp_server/${server.id}`,
+      });
+      expect(
+        single
+          .json()
+          .assignedAgents.map((a: { name: string }) => a.name)
+          .sort(),
+      ).toEqual(["Mine", "Shared"]);
+
+      // Someone who manages shared installations keeps the full list.
+      userHasPermissionMock.mockResolvedValue(true);
+      const managed = await app.inject({
+        method: "GET",
+        url: `/api/mcp_server/${server.id}`,
+      });
+      expect(
+        managed
+          .json()
+          .assignedAgents.map((a: { name: string }) => a.name)
+          .sort(),
+      ).toEqual(["Mine", "Shared", "Theirs"]);
     });
 
     // The registry lists other members' personal connections to an
@@ -4719,7 +5104,7 @@ describe("mcp server core route coverage", () => {
       await expect(McpServerModel.findById(runtime.id)).resolves.not.toBeNull();
     });
 
-    test("uninstalling the last connection retains tools, policies, and assignments (binding retained)", async ({
+    test("uninstalling the last connection retains tools and assignments (binding retained)", async ({
       makeInternalMcpCatalog,
     }) => {
       const { default: AgentModel } = await import("@/models/agent");
@@ -4772,12 +5157,6 @@ describe("mcp server core route coverage", () => {
       expect(assignmentBefore).toHaveLength(1);
       expect(assignmentBefore[0].mcpServerId).toBe(installedServer.id);
 
-      const policiesBefore = await db
-        .select()
-        .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
-      expect(policiesBefore.length).toBeGreaterThan(0);
-
       const deleteResponse = await app.inject({
         method: "DELETE",
         url: `/api/mcp_server/${installedServer.id}`,
@@ -4794,12 +5173,6 @@ describe("mcp server core route coverage", () => {
         .from(schema.toolsTable)
         .where(eq(schema.toolsTable.catalogId, catalog.id));
       expect(toolsAfter).toHaveLength(1);
-
-      const policiesAfter = await db
-        .select()
-        .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
-      expect(policiesAfter).toHaveLength(policiesBefore.length);
 
       const assignmentAfter = await db
         .select({ mcpServerId: schema.agentToolsTable.mcpServerId })
@@ -4847,6 +5220,43 @@ describe("mcp server core route coverage", () => {
   });
 
   describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
+    test("does not attach another connection's secret", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "remote",
+        serverUrl: "http://127.0.0.1:30082/mcp",
+      });
+      const ownServer = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+      const ownSecret = await secretManager().createSecret(
+        { access_token: "fake-own-token" },
+        "own-connection-secret",
+      );
+      const otherSecret = await secretManager().createSecret(
+        { access_token: "fake-other-token" },
+        "other-connection-secret",
+      );
+      await McpServerModel.update(ownServer.id, { secretId: ownSecret.id });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/mcp_server/${ownServer.id}/reauthenticate`,
+        payload: { secretId: otherSecret.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect((await McpServerModel.findById(ownServer.id))?.secretId).toBe(
+        ownSecret.id,
+      );
+      expect(await secretManager().getSecret(ownSecret.id)).not.toBeNull();
+      expect(await secretManager().getSecret(otherSecret.id)).not.toBeNull();
+    });
     test("rejects a request with no credential fields (400)", async () => {
       const response = await app.inject({
         method: "PATCH",

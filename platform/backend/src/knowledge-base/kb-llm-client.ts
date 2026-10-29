@@ -17,6 +17,7 @@ import {
   OrganizationModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { resolveModelOutputBudget } from "@/utils/llm-resolution";
 import {
   getEmbeddingClientAcceptedImageMimeTypes,
   getEmbeddingClientInputModalities,
@@ -70,6 +71,8 @@ export interface OcrConfig {
   modelName: string;
   provider: SupportedProvider;
   llmModel: LLMModel;
+  /** The model's own output budget; a page request never asks for more. */
+  maxOutputTokens: number;
 }
 
 /**
@@ -207,6 +210,15 @@ export async function resolveOcrConfig(
       modelName: org.ocrModel,
       baseUrl: resolved.baseUrl,
     }),
+    maxOutputTokens: (
+      await resolveModelOutputBudget({
+        provider: resolved.provider,
+        modelName: org.ocrModel,
+        // Older vision models cap output at 4096 and some providers (Bedrock)
+        // reject a larger request instead of clamping it.
+        unknownOutputLength: 4_096,
+      })
+    ).tokens,
   };
 }
 

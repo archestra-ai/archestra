@@ -3,9 +3,6 @@ import type { PartialUIMessage } from "../types";
 
 export type Interaction =
   archestraApiTypes.GetInteractionsResponses["200"]["data"][number];
-export type DualLlmAnalysis = NonNullable<
-  Interaction["dualLlmAnalyses"]
->[number];
 
 export interface InteractionUtils {
   modelName: string;
@@ -25,17 +22,13 @@ export interface InteractionUtils {
    */
   getToolNamesUsed(): string[];
 
-  getToolNamesRefused(): string[];
-
   /**
    * Get the names of the tools requested in the response (tool calls that LLM wants to execute)
    */
   getToolNamesRequested(): string[];
 
-  getToolRefusedCount(): number;
-
   getLastUserMessage(): string;
   getLastAssistantResponse(): string;
 
-  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[];
+  mapToUiMessages(): PartialUIMessage[];
 }

@@ -4,20 +4,25 @@ import { MESSAGING_CHANNEL_LABELS } from "@archestra/shared";
 import { Info } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { TelegramSetupDialog } from "@/components/telegram-setup-dialog";
 import { Button } from "@/components/ui/button";
 import {
   useChatOpsBindings,
   useChatOpsStatus,
 } from "@/lib/chatops/chatops.query";
-import { useGenerateTelegramLinkCode } from "@/lib/chatops/chatops-config.query";
+import {
+  useGenerateTelegramLinkCode,
+  useUnlinkTelegramAccount,
+} from "@/lib/chatops/chatops-config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { CredentialField } from "../_components/credential-field";
-import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
-import { SetupSection } from "../_components/setup-section";
-import { SetupStep } from "../_components/setup-step";
-import { useTriggerStatuses } from "../_components/use-trigger-statuses";
+import { CredentialField } from "../_parts/credential-field";
+import { LlmKeySetupStep } from "../_parts/llm-key-setup-step";
+import { ProviderChannels } from "../_parts/provider-channels";
+import { SetupSection } from "../_parts/setup-section";
+import { SetupStep } from "../_parts/setup-step";
+import { useTriggerStatuses } from "../_parts/use-trigger-statuses";
 
 /**
  * The one interactive step that makes Telegram usable: tie this Telegram
@@ -26,7 +31,9 @@ import { useTriggerStatuses } from "../_components/use-trigger-statuses";
  */
 function LinkTelegramAccountStep({ botUsername }: { botUsername?: string }) {
   const generateCode = useGenerateTelegramLinkCode();
+  const unlink = useUnlinkTelegramAccount();
   const [link, setLink] = useState<string | null>(null);
+  const [unlinkOpen, setUnlinkOpen] = useState(false);
 
   // The user's own DM binding; a non-pending channelId means it's linked.
   const { data: bindingsResponse } = useChatOpsBindings({
@@ -61,6 +68,10 @@ function LinkTelegramAccountStep({ botUsername }: { botUsername?: string }) {
       onAction={handleGenerate}
       doneActionLabel="Relink"
       onDoneAction={handleGenerate}
+      secondaryDoneAction={{
+        label: "Unlink",
+        onClick: () => setUnlinkOpen(true),
+      }}
     >
       <div className="flex flex-col gap-2">
         {link && !linked && (
@@ -82,6 +93,24 @@ function LinkTelegramAccountStep({ botUsername }: { botUsername?: string }) {
           sign-in link it replies with.
         </span>
       </div>
+      <DeleteConfirmDialog
+        open={unlinkOpen}
+        onOpenChange={setUnlinkOpen}
+        title="Unlink Telegram account?"
+        description="The bot will stop recognizing your Telegram account and won't route your messages to your agent until you link it again."
+        confirmLabel="Unlink"
+        pendingLabel="Unlinking..."
+        isPending={unlink.isPending}
+        onConfirm={() =>
+          unlink.mutate(undefined, {
+            onSuccess: (data) => {
+              if (!data?.success) return;
+              setLink(null);
+              setUnlinkOpen(false);
+            },
+          })
+        }
+      />
     </SetupStep>
   );
 }
@@ -123,7 +152,7 @@ export default function TelegramPage() {
         allStepsCompleted={allStepsCompleted}
         isLoading={statusLoading}
         providerLabel={channelLabel}
-        docsUrl={getFrontendDocsUrl("platform-telegram")}
+        docsUrl={getFrontendDocsUrl("agents/triggers-and-channels/telegram")}
       >
         <LlmKeySetupStep />
         <SetupStep
@@ -148,6 +177,8 @@ export default function TelegramPage() {
           />
         )}
       </SetupSection>
+
+      {telegram?.configured && <ProviderChannels provider="telegram" />}
 
       <TelegramSetupDialog open={setupOpen} onOpenChange={setSetupOpen} />
     </div>

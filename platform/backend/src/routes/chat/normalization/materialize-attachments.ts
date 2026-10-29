@@ -63,7 +63,7 @@ export async function materializeAttachments({
   // request limit. Keep an oversized image in the Files panel instead of
   // sending a request the provider will reject.
   inlineImageByteLimit = inlineByteLimit,
-  // The locked chat's browser-held key. Its attachment rows hold sealed bytes
+  // The encrypted chat's browser-held key. Its attachment rows hold sealed bytes
   // and filenames, so rehydrating one for the provider needs the key; null for
   // an ordinary chat, whose rows are plaintext.
   conversationKey = null,

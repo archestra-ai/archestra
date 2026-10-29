@@ -27,6 +27,11 @@ export const SelectTeamSchema = createSelectSchema(schema.teamsTable).extend({
     .array(z.object({ id: z.string(), name: z.string() }))
     .optional(),
 });
+// Rows of the paginated team list. `memberCount` is always present, so list
+// consumers do not need to load member arrays to show a count.
+export const SelectTeamListItemSchema = SelectTeamSchema.extend({
+  memberCount: z.number().int(),
+});
 
 export const InsertTeamSchema = createInsertSchema(schema.teamsTable);
 export const UpdateTeamSchema = createUpdateSchema(schema.teamsTable);
@@ -84,6 +89,7 @@ export const AddTeamExternalGroupBodySchema = z.object({
 });
 
 export type Team = z.infer<typeof SelectTeamSchema>;
+export type TeamListItem = z.infer<typeof SelectTeamListItemSchema>;
 export type InsertTeam = z.infer<typeof InsertTeamSchema>;
 export type UpdateTeam = z.infer<typeof UpdateTeamSchema>;
 export type TeamMember = z.infer<typeof SelectTeamMemberSchema>;
@@ -98,26 +104,4 @@ export type InsertTeamExternalGroup = z.infer<
 >;
 export type AddTeamExternalGroupBody = z.infer<
   typeof AddTeamExternalGroupBodySchema
->;
-
-// Team Vault Folder schemas for BYOS (Bring Your Own Secrets) feature
-export const SelectTeamVaultFolderSchema = createSelectSchema(
-  schema.teamVaultFoldersTable,
-);
-export const InsertTeamVaultFolderSchema = createInsertSchema(
-  schema.teamVaultFoldersTable,
-);
-export const UpdateTeamVaultFolderSchema = createUpdateSchema(
-  schema.teamVaultFoldersTable,
-);
-
-export const SetTeamVaultFolderBodySchema = z.object({
-  vaultPath: z.string().min(1, "Vault path is required"),
-});
-
-export type TeamVaultFolder = z.infer<typeof SelectTeamVaultFolderSchema>;
-export type InsertTeamVaultFolder = z.infer<typeof InsertTeamVaultFolderSchema>;
-export type UpdateTeamVaultFolder = z.infer<typeof UpdateTeamVaultFolderSchema>;
-export type SetTeamVaultFolderBody = z.infer<
-  typeof SetTeamVaultFolderBodySchema
 >;

@@ -6,10 +6,11 @@ import {
   parseFullToolName,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon, WebhookIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Tool,
   ToolContent,
@@ -26,17 +27,25 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useSession } from "@/lib/auth/auth.query";
 import {
   getCompactToolState,
   getHumanRulingDisplay,
+  getToolErrorText,
   getToolHeaderState,
+  withParsedArguments,
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils/tailwind";
 import { useApps } from "./apps-context";
 import {
+  BatteryCredentialsTool,
+  parseBatteryCredentialRequest,
+} from "./battery-credentials-tool";
+import {
   type AppEntryRender,
+  getToolCardTitle,
   resolveAppEntryRender,
   resolveRunToolTargetName,
 } from "./chat-messages.utils";
@@ -49,14 +58,25 @@ import {
   useElapsedSince,
 } from "./mcp-task-status";
 import {
+  getOpenAppaSaveResult,
   isOpenAppaPolicyChange,
   OpenAppaPolicyChange,
   OpenAppaPolicyCompletion,
+  OpenAppaValidationCompletion,
 } from "./openappa-policy-change";
+import {
+  RemedyChainCard,
+  RemedyGuardrailsSteps,
+} from "./openappa-remedy-chain-card";
+import {
+  getRemedyChainStatus,
+  type RemedyChain,
+} from "./openappa-remedy-chains";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { RuntimeCredentialSetupTool } from "./runtime-credential-setup-tool";
 import { getSkillPillDisplay, SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import type { ToolIconMap } from "./tool-icon-map";
 import { ToolStatusRow } from "./tool-status-row";
 
 type CompactToolEntry = {
@@ -69,6 +89,8 @@ type CompactToolEntry = {
   /** A delegation call's surfaced subagent tool calls, rendered between its
    * Request and Result once the circle is expanded. */
   nestedToolCalls?: React.ReactNode;
+  /** The whole guarded call this circle stands for. */
+  remedyChain?: RemedyChain;
 };
 
 type CompactAppEntry = {
@@ -81,6 +103,8 @@ type CompactAppEntry = {
   errorText: string | undefined;
   /** Never set for app entries; present so ExpandedToolCard can take either. */
   nestedToolCalls?: React.ReactNode;
+  /** Set when the app call is the released attempt of a guarded call. */
+  remedyChain?: RemedyChain;
 };
 
 type CompactHookEntry = {
@@ -157,13 +181,16 @@ function CompactCircle({
           : state === "denied"
             ? " (denied)"
             : "";
-  const accessibleName = `${parseFullToolName(toolName).toolName.replace(/_/g, " ")}${stateSuffix}`;
+  const label =
+    getToolCardTitle(toolName) ??
+    parseFullToolName(toolName).toolName.replace(/_/g, " ");
+  const accessibleName = `${label}${stateSuffix}`;
 
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <UnstyledButton
             type="button"
             onClick={onClick}
             disabled={!isExpandable}
@@ -198,10 +225,10 @@ function CompactCircle({
                 state === "denied" && "bg-orange-500",
               )}
             />
-          </button>
+          </UnstyledButton>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          <span>{parseFullToolName(toolName).toolName.replace(/_/g, " ")}</span>
+          <span>{label}</span>
           {isCancelled ? (
             <span>{" (cancelled)"}</span>
           ) : isBackground ? (
@@ -247,29 +274,32 @@ function ToolCallSkillPill({
     return target;
   })();
 
+  const pill = (
+    <SkillPill
+      skillName={skillName}
+      data-tool-name={toolName}
+      role="status"
+      aria-label={tooltipLabel}
+      tabIndex={display.source ? 0 : undefined}
+      showNativeTitle={false}
+    >
+      {state === "running" || state === "error" ? (
+        <span
+          className={cn(
+            "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
+            state === "running" && "bg-blue-500 animate-pulse",
+            state === "error" && "bg-destructive",
+          )}
+        />
+      ) : null}
+    </SkillPill>
+  );
+  // The pill already shows the name; a tooltip only helps when it says more.
+  if (tooltipLabel === display.name) return pill;
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <SkillPill
-            skillName={skillName}
-            data-tool-name={toolName}
-            role="status"
-            aria-label={tooltipLabel}
-            tabIndex={display.source ? 0 : undefined}
-            showNativeTitle={false}
-          >
-            {state === "running" || state === "error" ? (
-              <span
-                className={cn(
-                  "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
-                  state === "running" && "bg-blue-500 animate-pulse",
-                  state === "error" && "bg-destructive",
-                )}
-              />
-            ) : null}
-          </SkillPill>
-        </TooltipTrigger>
+        <TooltipTrigger asChild>{pill}</TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           {tooltipLabel}
         </TooltipContent>
@@ -308,7 +338,7 @@ function HookCircle({
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <UnstyledButton
             type="button"
             onClick={onClick}
             disabled={!isExpandable}
@@ -334,7 +364,7 @@ function HookCircle({
                   "bg-destructive",
               )}
             />
-          </button>
+          </UnstyledButton>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           {tooltip}
@@ -344,19 +374,17 @@ function HookCircle({
   );
 }
 
-export type ToolIconMap = Map<
-  string,
-  { icon?: string | null; catalogId?: string }
->;
-
 export function CompactToolGroup({
   tools,
   toolIconMap,
   canExpandToolCalls = true,
   onToolApprovalResponse,
   appContext,
+  turnActive = false,
 }: {
   tools: CompactEntry[];
+  /** The row's turn is still running, so guarded calls read as running. */
+  turnActive?: boolean;
   toolIconMap?: ToolIconMap;
   canExpandToolCalls?: boolean;
   onToolApprovalResponse?: (params: {
@@ -369,9 +397,38 @@ export function CompactToolGroup({
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const { isToolName, getToolShortName } = useArchestraMcpIdentity();
   const { isAppOpen, toggleAppOpen, portalTarget } = useApps();
+  // A saved guardrails change opens its circle once, so its result shows
+  // without a click; a circle the user picked is left alone.
+  const userToggledRef = useRef(false);
+  const autoOpenedRef = useRef(new Set<string>());
+  const savedChangeKey = canExpandToolCalls
+    ? tools.findLast((entry) => {
+        if (entry.kind === "hook") return false;
+        const call = releasedCall(entry);
+        return (
+          call !== null &&
+          !call.errorText &&
+          !autoOpenedRef.current.has(entry.key) &&
+          getOpenAppaSaveResult({
+            shortName: getToolShortName(
+              resolveRunToolTargetName(call.part, call.toolName, {
+                getToolShortName,
+              }),
+            ),
+            output: call.toolResultPart?.output ?? call.part.output,
+          }) !== null
+        );
+      })?.key
+    : undefined;
+  useEffect(() => {
+    if (!savedChangeKey) return;
+    autoOpenedRef.current.add(savedChangeKey);
+    if (!userToggledRef.current) setExpandedKey(savedChangeKey);
+  }, [savedChangeKey]);
 
   const handleToggle = (key: string) => {
     if (!canExpandToolCalls) return;
+    userToggledRef.current = true;
     // Expanding a tool card collapses any inline app open in this row — the
     // mirror of an app pill collapsing an expanded tool card, so only one
     // thing unfolds under the row at a time. Panel-hosted apps are untouched
@@ -433,6 +490,29 @@ export function CompactToolGroup({
                 isExpanded={expandedKey === entry.key}
                 isExpandable={canExpandToolCalls}
                 onClick={() => handleToggle(entry.key)}
+              />
+            );
+          }
+          // A guarded call reads as one call of its target tool; the
+          // Guardrails negotiation shows only once it is expanded.
+          if (
+            entry.remedyChain &&
+            !(entry.kind === "app" && appRenders.has(entry.key))
+          ) {
+            const status = getRemedyChainStatus(entry.remedyChain, {
+              turnActive,
+            });
+            return (
+              <CompactCircle
+                key={entry.key}
+                toolName={entry.remedyChain.targetToolName}
+                toolCallId={entry.remedyChain.finalAttempt?.part.toolCallId}
+                state={status.state}
+                stateLabel={status.label}
+                isExpanded={expandedKey === entry.key}
+                isExpandable={canExpandToolCalls}
+                onClick={() => handleToggle(entry.key)}
+                {...circleIconProps(entry.remedyChain.targetToolName)}
               />
             );
           }
@@ -545,33 +625,45 @@ export function CompactToolGroup({
         })}
       </div>
       {tools.map((entry) => {
-        if (entry.kind === "hook" || entry.errorText) return null;
-        const name = resolveRunToolTargetName(entry.part, entry.toolName, {
-          getToolShortName,
-        });
-        if (getToolShortName(name) !== "update_guardrails_policy") return null;
-        return (
-          <OpenAppaPolicyCompletion
-            key={entry.key}
-            output={entry.toolResultPart?.output ?? entry.part.output}
-          />
-        );
-      })}
-      {tools.map((entry) => {
-        if (entry.kind === "hook" || entry.errorText) return null;
-        const name = resolveRunToolTargetName(entry.part, entry.toolName, {
+        if (entry.kind === "hook") return null;
+        const call = releasedCall(entry);
+        if (!call || call.errorText) return null;
+        const name = resolveRunToolTargetName(call.part, call.toolName, {
           getToolShortName,
         });
         if (
           getToolShortName(name) !== "request_runtime_credential_setup" ||
-          (entry.part.state !== "output-available" && !entry.toolResultPart)
+          (call.part.state !== "output-available" && !call.toolResultPart)
         )
           return null;
         return (
           <RuntimeCredentialSetupTool
             key={entry.key}
             ready
-            toolCallId={entry.part.toolCallId}
+            toolCallId={call.part.toolCallId}
+            onSendMessage={appContext?.onSendMessage}
+          />
+        );
+      })}
+      {tools.map((entry) => {
+        if (entry.kind === "hook") return null;
+        const call = releasedCall(entry);
+        if (!call || call.errorText) return null;
+        const name = resolveRunToolTargetName(call.part, call.toolName, {
+          getToolShortName,
+        });
+        const request =
+          getToolShortName(name) === TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME
+            ? parseBatteryCredentialRequest(
+                call.toolResultPart?.output ?? call.part.output,
+              )
+            : null;
+        if (!request) return null;
+        return (
+          <BatteryCredentialsTool
+            key={entry.key}
+            request={request}
+            toolCallId={call.part.toolCallId}
             onSendMessage={appContext?.onSendMessage}
           />
         );
@@ -581,8 +673,9 @@ export function CompactToolGroup({
           {expandedEntry.kind === "hook" ? (
             <HookRunChip data={expandedEntry.data} defaultOpen />
           ) : (
-            <ExpandedToolCard
-              tool={expandedEntry}
+            <EntryToolCard
+              entry={expandedEntry}
+              turnActive={turnActive}
               onToolApprovalResponse={onToolApprovalResponse}
             />
           )}
@@ -621,8 +714,9 @@ export function CompactToolGroup({
                 // Surfaced only when the app renders nothing to display, so the
                 // call stays inspectable instead of the section going blank.
                 toolDetails={
-                  <ExpandedToolCard
-                    tool={entry}
+                  <EntryToolCard
+                    entry={entry}
+                    turnActive={turnActive}
                     onToolApprovalResponse={onToolApprovalResponse}
                   />
                 }
@@ -632,6 +726,86 @@ export function CompactToolGroup({
           })
         : null}
     </div>
+  );
+}
+
+/**
+ * The call a tool entry stands for: the entry itself, or for a guarded call
+ * its released attempt (null until the model released it).
+ */
+function releasedCall(
+  entry: CompactToolEntry | CompactAppEntry,
+): Pick<
+  CompactToolEntry,
+  "toolName" | "part" | "toolResultPart" | "errorText"
+> | null {
+  if (!entry.remedyChain) return entry;
+  const { finalAttempt } = entry.remedyChain;
+  if (!finalAttempt) return null;
+  return {
+    toolName: finalAttempt.toolName,
+    part: finalAttempt.part,
+    toolResultPart: finalAttempt.toolResultPart,
+    errorText: getToolErrorText(finalAttempt),
+  };
+}
+
+/**
+ * The expanded card for a tool entry. A released guarded call is its
+ * attempt's own card, with the Guardrails negotiation (and the attempt's
+ * subagent calls) between Request and Result; an unreleased one is the
+ * chain card.
+ */
+function EntryToolCard({
+  entry,
+  turnActive,
+  onToolApprovalResponse,
+}: {
+  entry: CompactToolEntry | CompactAppEntry;
+  turnActive: boolean;
+  onToolApprovalResponse?: (params: {
+    id: string;
+    approved: boolean;
+    reason?: string;
+  }) => void;
+}) {
+  const chain = entry.remedyChain;
+  const call = releasedCall(entry);
+  if (!chain) {
+    return (
+      <ExpandedToolCard
+        tool={entry}
+        onToolApprovalResponse={onToolApprovalResponse}
+      />
+    );
+  }
+  if (!call) {
+    return (
+      <RemedyChainCard
+        chain={chain}
+        turnActive={turnActive}
+        onToolApprovalResponse={onToolApprovalResponse}
+      />
+    );
+  }
+  return (
+    <ExpandedToolCard
+      tool={{
+        kind: "tool",
+        key: entry.key,
+        ...call,
+        nestedToolCalls: (
+          <>
+            <RemedyGuardrailsSteps
+              steps={chain.steps}
+              onToolApprovalResponse={onToolApprovalResponse}
+            />
+            {entry.nestedToolCalls}
+          </>
+        ),
+      }}
+      onToolApprovalResponse={onToolApprovalResponse}
+    />
   );
 }
 
@@ -657,15 +831,31 @@ function ExpandedToolCard({
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const toolShortName = getToolShortName(toolName);
   const policyOutput = toolResultPart?.output ?? part.output;
+  const resolvedPolicyToolName = resolveRunToolTargetName(part, toolName, {
+    getToolShortName,
+  });
+  const policyToolName = parseFullToolName(resolvedPolicyToolName).toolName;
+  const validationChange = [
+    "preview_guardrails_validation_change",
+    "update_guardrails_validation",
+  ].includes(getToolShortName(resolvedPolicyToolName) ?? "");
+  // A save reports its result in one line, not the diff it saved.
+  const saveResult = errorText
+    ? null
+    : getOpenAppaSaveResult({
+        shortName: getToolShortName(resolvedPolicyToolName),
+        output: policyOutput,
+      });
   const policyChange =
-    ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
-      parseFullToolName(
-        resolveRunToolTargetName(part, toolName, { getToolShortName }),
-      ).toolName,
-    ) &&
+    !saveResult &&
+    (validationChange ||
+      ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
+        policyToolName,
+      )) &&
     !errorText &&
-    isOpenAppaPolicyChange(policyOutput);
+    isOpenAppaPolicyChange(policyOutput, validationChange);
   const input = withoutProxyTransportArguments({
+    toolName,
     shortName: toolShortName,
     input:
       toolShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME
@@ -697,18 +887,21 @@ function ExpandedToolCard({
     <Tool open>
       <ToolHeader
         type={`tool-${toolName}`}
+        title={getToolCardTitle(toolName)}
         state={headerState}
         statusLabel={humanRuling?.label}
         isCollapsible={false}
         actionButton={logsButton}
         identityBadge={
-          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            Called as
-            <ExecutedAsBadge
-              executedAs={executedAs}
-              meUserId={session?.user?.id}
-            />
-          </span>
+          executedAs ? (
+            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              Called as
+              <ExecutedAsBadge
+                executedAs={executedAs}
+                meUserId={session?.user?.id}
+              />
+            </span>
+          ) : undefined
         }
       />
       <ToolContent>
@@ -719,7 +912,9 @@ function ExpandedToolCard({
             isCancelling={isCancellingTask}
           />
         ) : null}
-        {hasInput ? <ToolInput input={input} defaultOpen /> : null}
+        {hasInput && !policyChange && !saveResult ? (
+          <ToolInput input={input} defaultOpen />
+        ) : null}
         {nestedToolCalls}
         {isApprovalRequested &&
           onToolApprovalResponse &&
@@ -756,40 +951,35 @@ function ExpandedToolCard({
             />
           )}
         {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
-        {policyChange && <OpenAppaPolicyChange output={policyOutput} />}
-        {toolResultPart && !policyChange && (
+        {policyChange && (
+          <OpenAppaPolicyChange
+            output={policyOutput}
+            validationChange={validationChange}
+          />
+        )}
+        {saveResult === "validation" ? (
+          <OpenAppaValidationCompletion output={policyOutput} />
+        ) : saveResult === "policy" ? (
+          <OpenAppaPolicyCompletion output={policyOutput} />
+        ) : null}
+        {toolResultPart && !policyChange && !saveResult && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
             output={toolResultPart.output}
             errorText={errorText}
           />
         )}
-        {!toolResultPart && !policyChange && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
-        )}
+        {!toolResultPart &&
+          !policyChange &&
+          !saveResult &&
+          Boolean(part.output) && (
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={part.output}
+              errorText={errorText}
+            />
+          )}
       </ToolContent>
     </Tool>
   );
-}
-
-/**
- * A denial notice carries the blocked call's arguments in their wire form.
- * When that form is a JSON string, show the object it holds.
- */
-function withParsedArguments(input: ToolUIPart["input"]): ToolUIPart["input"] {
-  if (typeof input !== "object" || input === null) return input;
-  const { arguments: args } = input as { arguments?: unknown };
-  if (typeof args !== "string") return input;
-  try {
-    return {
-      ...(input as Record<string, unknown>),
-      arguments: JSON.parse(args),
-    };
-  } catch {
-    return input;
-  }
 }

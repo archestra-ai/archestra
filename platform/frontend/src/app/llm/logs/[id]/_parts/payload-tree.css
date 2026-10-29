@@ -1,0 +1,76 @@
+/*
+ * Disclosure for the payload tree, DevTools style: every branch gets a
+ * chevron in the gutter to its left, pointing right while folded and down
+ * while open. A branch row is the library's root, a key/value pair, or a
+ * group of a large array, and it holds its fold button (`.jv-button`) or its
+ * children (`.jv-indent`) as direct children.
+ */
+.payload-tree :is(.json-view, .json-view--pair, .jv-indent > div) {
+  position: relative;
+}
+
+.payload-tree
+  :is(.json-view, .json-view--pair, .jv-indent > div):has(
+    > .jv-button,
+    > .jv-indent
+  )::before {
+  content: "";
+  position: absolute;
+  top: 0.25rem;
+  left: -1rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  cursor: pointer;
+  background-color: var(--muted-foreground);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  transition: transform 120ms ease;
+}
+
+.payload-tree
+  :is(.json-view, .json-view--pair, .jv-indent > div):has(
+    > .jv-indent
+  )::before {
+  transform: rotate(90deg);
+}
+
+.payload-tree
+  :is(.json-view, .json-view--pair, .jv-indent > div):has(
+    > .jv-button,
+    > .jv-indent
+  ):hover::before {
+  background-color: var(--foreground);
+}
+
+/* A branch's key name and its summary toggle it too. */
+.payload-tree
+  .json-view--pair:has(> .jv-button, > .jv-indent)
+  > :is(.json-view--property, .json-view--index),
+.payload-tree [data-branch-summary] {
+  cursor: pointer;
+}
+
+.payload-tree
+  .json-view--pair:has(> .jv-button, > .jv-indent)
+  > :is(.json-view--property, .json-view--index):hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* The gutter chevron replaces the library's own one after an open bracket. */
+.payload-tree .jv-size-chevron {
+  display: none;
+}
+
+/* The folded body, "…" or a group's "0 ... 99", reads as a button. */
+.payload-tree .jv-button {
+  margin: 0 0.25em;
+  padding: 0 0.375em;
+  border-radius: 0.25rem;
+  background-color: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.payload-tree .jv-button:hover {
+  color: var(--foreground);
+}

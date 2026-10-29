@@ -45,6 +45,12 @@ export function useDataTableQueryParams(params?: {
       }
 
       const nextParams = new URLSearchParams(searchParams.toString());
+      // A keyset cursor belongs to the listing it was issued for, so any
+      // other change starts that listing over from the newest page.
+      if (!("cursor" in updates) && nextParams.has("cursor")) {
+        nextParams.delete("cursor");
+        nextParams.delete("page");
+      }
       for (const [key, value] of Object.entries(updates)) {
         if (value === null || value === undefined || value === "") {
           nextParams.delete(key);

@@ -38,6 +38,11 @@ interface ChatOpsThreadKey {
    * run is registered under a key a mute can never target.
    */
   threadId: string;
+  /**
+   * The bot this run answers for, when several bots share a thread (Slack bots
+   * pinned to an agent): stopping one bot leaves the others' runs alone.
+   */
+  scope?: string;
 }
 
 /**
@@ -59,6 +64,16 @@ interface ChatOpsRunSupersede {
 interface ChatOpsRunEntry {
   controller: AbortController;
   supersede?: ChatOpsRunSupersede;
+}
+
+/**
+ * Whether a run was aborted because the sender's follow-up superseded it, as
+ * opposed to the thread being stopped or muted. A superseded run's partial
+ * output is noise; a stopped run's partial output is what the user chose to
+ * keep.
+ */
+export function wasRunSuperseded(signal: AbortSignal): boolean {
+  return signal.aborted && signal.reason === SUPERSEDED_ABORT_REASON;
 }
 
 class ChatOpsRunRegistry {
@@ -107,7 +122,7 @@ class ChatOpsRunRegistry {
           existing.supersede.sequence <= entry.supersede.sequence
             ? existing
             : entry;
-        loser.controller.abort();
+        loser.controller.abort(SUPERSEDED_ABORT_REASON);
         logger.info(
           {
             provider: key.provider,
@@ -166,7 +181,7 @@ class ChatOpsRunRegistry {
           threadId: key.threadId,
           aborted,
         },
-        "[ChatOps] Cancelled in-flight runs after thread was muted",
+        "[ChatOps] Cancelled in-flight runs after thread was stopped or muted",
       );
     }
 
@@ -174,8 +189,10 @@ class ChatOpsRunRegistry {
   }
 
   private threadCacheKey(key: ChatOpsThreadKey): string {
-    return `${key.provider}::${key.channelId}::${key.threadId}`;
+    return `${key.provider}::${key.channelId}::${key.threadId}::${key.scope ?? ""}`;
   }
 }
 
 export const chatOpsRunRegistry = new ChatOpsRunRegistry();
+
+const SUPERSEDED_ABORT_REASON = "superseded";

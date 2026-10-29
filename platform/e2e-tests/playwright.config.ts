@@ -12,7 +12,6 @@ const projectNames = {
   setupAdmin: "setup-admin",
   setupUsers: "setup-users",
   setupTeams: "setup-teams",
-  credentialsWithVault: "credentials-with-vault",
   quickstart: "quickstart",
   quickstartRecovery: "quickstart-recovery",
   chromium: "chromium",
@@ -41,7 +40,6 @@ const testPatterns = {
   teamsSetup: /auth\.teams\.setup\.ts/,
   quickstart: "**/quickstart.spec.ts",
   // Special test files that need isolated execution
-  credentialsWithVault: "**/credentials-with-vault.ee.spec.ts",
   identityProviders: "**/identity-providers.ee.spec.ts",
   // Vault K8s startup test — runs in a dedicated CI job with Vault K8s auth
   vaultK8s: "**/vault-k8s-startup.spec.ts",
@@ -50,7 +48,7 @@ const testPatterns = {
   // which the ordinary lite stack is deliberately NOT: with it on the proxy
   // rejects any tool-declaring request that omits the two APPA tools, which
   // other lite specs rely on. So these live in their own project, run by
-  // their own CI leg against their own stack, and must stay out of every
+  // CI against their own stack (in the quickstart job), and must stay out of every
   // other project's testMatch.
   openappa: "**/openappa/**/*.spec.ts",
 };
@@ -73,7 +71,6 @@ const uiTestMatch = [
   "**/context-window.spec.ts",
   "**/connection.spec.ts",
   "**/cost-chart-legend-mobile.spec.ts",
-  "**/credentials-with-vault.ee.spec.ts",
   "**/dynamic-credentials.spec.ts",
   "**/identity-providers.ee.spec.ts",
   "**/invitation.spec.ts",
@@ -92,7 +89,6 @@ const uiTestMatch = [
   "**/skill-version-history.spec.ts",
   "**/skills-bulk-actions.spec.ts",
   "**/static-credentials-management.spec.ts",
-  "**/tool-guardrails.spec.ts",
   "**/users-role-filter.spec.ts",
 ];
 
@@ -102,7 +98,6 @@ const uiTestMatch = [
 // orchestrator.
 const apiTestMatch = [
   "**/a2a-public-origin.spec.ts",
-  "**/built-in-agents.spec.ts",
   "**/knowledge-permission-sync.spec.ts",
   "**/custom-yaml-restart.spec.ts",
   "**/mcp-gateway-jwks-credential-priority.ee.spec.ts",
@@ -156,12 +151,50 @@ const quickstartTestMatch = [
  * These tests run in their own dedicated projects for isolation.
  */
 const browserTestIgnore = [
-  testPatterns.credentialsWithVault,
   testPatterns.identityProviders,
   testPatterns.quickstart,
   testPatterns.llmProxy,
   testPatterns.openappa,
 ];
+
+// CI splits the chromium project across two lite stacks by FILE, not with
+// Playwright's --shard: --shard cuts the alphabetical test list in half by test
+// COUNT, which piled the MCP-install-heavy specs onto one runner (~196s vs
+// ~115s of tests). E2E_CHROMIUM_SHARD=2 runs exactly the files below;
+// E2E_CHROMIUM_SHARD=1 runs every other uiTestMatch file — so a new spec lands
+// on shard 1 by default and can never be silently skipped. Shard 1 also hosts
+// the api and identity-providers projects after chromium, which this list is
+// balanced against. Unset (local runs) keeps the whole project.
+const chromiumShard2TestMatch = [
+  "**/dynamic-credentials.spec.ts",
+  "**/invitation.spec.ts",
+  "**/loading-states.spec.ts",
+  "**/mcp-edit.spec.ts",
+  "**/model-limits.spec.ts",
+  "**/outbound-a2a.spec.ts",
+  "**/resource-creation-footer.spec.ts",
+  "**/skill-page-editing.spec.ts",
+  "**/skill-share.spec.ts",
+  "**/skill-version-history.spec.ts",
+  "**/skills-bulk-actions.spec.ts",
+  "**/static-credentials-management.spec.ts",
+  "**/users-role-filter.spec.ts",
+];
+const chromiumShard = process.env.E2E_CHROMIUM_SHARD;
+const chromiumTestFiles =
+  chromiumShard === "2"
+    ? {
+        testMatch: chromiumShard2TestMatch.filter((f) =>
+          uiTestMatch.includes(f),
+        ),
+        testIgnore: browserTestIgnore,
+      }
+    : chromiumShard === "1"
+      ? {
+          testMatch: uiTestMatch,
+          testIgnore: [...browserTestIgnore, ...chromiumShard2TestMatch],
+        }
+      : { testMatch: uiTestMatch, testIgnore: browserTestIgnore };
 
 /**
  * Common dependency configurations
@@ -171,7 +204,6 @@ const browserTestIgnore = [
  * to distribute test files across shards without pulling in entire project chains.
  *
  * The setup-teams project is the final setup step that all tests depend on.
- * Previously, we had inter-test dependencies (chromium → credentials-with-vault → identity-providers → api)
  * which caused each shard to run the same tests.
  */
 const dependencies = {
@@ -235,18 +267,6 @@ export default defineConfig({
       // Teams setup needs users to be created first
       dependencies: [projectNames.setupUsers],
     },
-    // Vault integration tests - tests BYOS (Bring Your Own Secrets) with HashiCorp Vault
-    // Note: This test file manages its own secrets manager state (switches to Vault, then back to DB)
-    {
-      name: projectNames.credentialsWithVault,
-      testMatch: testPatterns.credentialsWithVault,
-      testDir: "./tests",
-      use: {
-        ...devices["Desktop Chrome"],
-        storageState: adminAuthFile,
-      },
-      dependencies: dependencies.testProjects,
-    },
     // SAML is kept executable but off the merge queue until its previously
     // quarantined Keycloak flow has a green scheduled/manual history.
     {
@@ -288,8 +308,7 @@ export default defineConfig({
     {
       name: projectNames.chromium,
       testDir: "./tests",
-      testMatch: uiTestMatch,
-      testIgnore: browserTestIgnore,
+      ...chromiumTestFiles,
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,
@@ -347,7 +366,7 @@ export default defineConfig({
     },
     // OpenAPPA root tool flow (lite environment, but a stack booted with
     // ARCHESTRA_BETA=true — see scripts/e2e-lite.sh and the
-    // `openappa` leg of the lite E2E matrix). Never add these specs to another
+    // OpenAPPA half of the quickstart CI job). Never add these specs to another
     // project: against an OpenAPPA-off stack they cannot pass.
     {
       name: projectNames.openappa,

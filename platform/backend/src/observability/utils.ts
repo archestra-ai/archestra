@@ -38,6 +38,22 @@ export function isNoisyTransactionName(transactionName: string): boolean {
   );
 }
 
+/**
+ * MCP methods whose response is a stream that stays open until the client
+ * disconnects or a proxy closes it. The request's duration is how long the
+ * connection lived, not how long the request took.
+ */
+const LONG_LIVED_MCP_STREAM_METHODS: ReadonlySet<string> = new Set([
+  "subscriptions/listen",
+]);
+
+/** True for the value of `mcp.method.name` on a long-lived MCP stream. */
+export function isLongLivedMcpStream(method: unknown): boolean {
+  return (
+    typeof method === "string" && LONG_LIVED_MCP_STREAM_METHODS.has(method)
+  );
+}
+
 /** @public — exported for testability */
 export function isNoisyMcpGatewayTransactionName(
   transactionName: string,

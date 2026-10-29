@@ -2,7 +2,6 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import {
-  formatCost,
   formatPercent,
   formatTokens,
   percentOf,
@@ -14,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { formatCurrency } from "@/lib/utils/format-currency";
 
 type TokenMix =
   archestraApiTypes.GetMyUsageBreakdownResponses["200"]["tokenMix"];
@@ -145,16 +145,16 @@ export function TokenMixCard({ mix }: { mix: TokenMix }) {
               <p className="text-muted-foreground mt-2 text-sm">
                 {cachingLostMoney ? (
                   <span>
-                    Caching cost {formatCost(Math.abs(mix.cacheSavings))} more
-                    than paying full input price for the same tokens. That
+                    Caching cost {formatCurrency(Math.abs(mix.cacheSavings))}{" "}
+                    more than paying full input price for the same tokens. That
                     happens when something near the start of each request keeps
                     changing, so every turn writes a new cache instead of
                     reading the last one.
                   </span>
                 ) : (
                   <span>
-                    Caching saved {formatCost(mix.cacheSavings)} against paying
-                    full input price for the same tokens.
+                    Caching saved {formatCurrency(mix.cacheSavings)} against
+                    paying full input price for the same tokens.
                   </span>
                 )}
               </p>

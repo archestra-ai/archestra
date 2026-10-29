@@ -59,6 +59,18 @@ ensure_dagger_cli() {
   chmod +x "$tmp" || { rm -f "$tmp"; echo "failed to prepare Dagger CLI v${version}" >&2; return 1; }
   mv -f "$tmp" "$bin" || { rm -f "$tmp"; echo "failed to install Dagger CLI v${version}" >&2; return 1; }
 }
+# fresh worktrees have no platform/.env, so anything that loads config (backend
+# knip via drizzle.config.ts, dev servers) fails. Symlink the main checkout's
+# copy so there is one source of truth; never touch an existing file.
+link_main_env() {
+  local root="$1" main_env
+  main_env="$(main_repo_root)/platform/.env"
+  if [ -e "$root/platform/.env" ] || [ -L "$root/platform/.env" ] || [ ! -f "$main_env" ]; then
+    return 0
+  fi
+  ln -s "$main_env" "$root/platform/.env"
+  echo "Linked $root/platform/.env -> $main_env" >&2
+}
 bootstrap() {
   local root
   root="$(repo_root)"
@@ -72,6 +84,7 @@ bootstrap() {
     echo "ERROR: no platform/pnpm-lock.yaml under $root" >&2
     exit 1
   fi
+  link_main_env "$root"
   CI=true pnpm --dir "$root/platform" install --frozen-lockfile --prefer-offline
   ensure_dagger_cli || echo "WARNING: Dagger CLI bootstrap failed; deps are installed. Re-run: pnpm worktree:bootstrap" >&2
 }

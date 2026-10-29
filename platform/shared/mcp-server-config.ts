@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ImagePullPolicySchema } from "./mcp-image-pull-policy";
 
 export const OAuthConfigSchema = z
   .object({
@@ -77,14 +78,29 @@ export const OAuthConfigSchema = z
     }
   });
 
+/** An absolute http(s) URL, for servers Archestra connects to. */
+export const HttpUrlSchema = z.url({
+  protocol: /^https?$/,
+  error: "Must be an http(s) URL",
+});
+
 export const LocalConfigEnvironmentDefaultSchema = z
   .union([z.string(), z.number(), z.boolean()])
   .meta({
     id: "LocalConfigEnvironmentDefault",
   });
 
+// Kubernetes rejects other container environment variable names.
+const ENVIRONMENT_VARIABLE_KEY_REGEX = /^[-._a-zA-Z][-._a-zA-Z0-9]*$/;
+
 export const EnvironmentVariableSchema = z.object({
-  key: z.string().min(1, "Key is required"),
+  key: z
+    .string()
+    .min(1, "Key is required")
+    .regex(
+      ENVIRONMENT_VARIABLE_KEY_REGEX,
+      "Use only letters, digits, _, - and ., not starting with a digit",
+    ),
   type: z.enum(["plain_text", "secret", "boolean", "number"]),
   value: z.string().optional(),
   credentialId: z.string().min(1).max(128).optional(),
@@ -130,11 +146,12 @@ export const LocalConfigSchema = z
     envFrom: z.array(EnvFromSchema).optional(),
     dockerImage: z.string().optional(),
     transportType: z.enum(["stdio", "streamable-http"]).optional(),
-    httpPort: z.number().optional(),
-    httpPath: z.string().optional(),
+    httpPort: z.number().int().min(1).max(65535).optional(),
+    httpPath: z.string().startsWith("/", "Must start with /").optional(),
     nodePort: z.number().optional(),
     serviceAccount: z.string().optional(),
     imagePullSecrets: z.array(ImagePullSecretConfigSchema).optional(),
+    imagePullPolicy: ImagePullPolicySchema.optional(),
   })
   .refine((data) => data.command || data.dockerImage, {
     message:
@@ -153,4 +170,5 @@ export const LocalConfigFormSchema = z.object({
   httpPath: z.string().optional(),
   serviceAccount: z.string().optional(),
   imagePullSecrets: z.array(ImagePullSecretConfigSchema).optional(),
+  imagePullPolicy: ImagePullPolicySchema.optional(),
 });

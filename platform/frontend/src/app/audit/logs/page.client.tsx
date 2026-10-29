@@ -1,7 +1,7 @@
 "use client";
 
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { AuditLogTable } from "./_components/audit-log-table";
+import { AuditLogTable } from "./_parts/audit-log-table";
 
 export default function AuditLogsPage() {
   return (

@@ -11,11 +11,6 @@ import type {
   UpdateTeamToken,
 } from "@/types";
 
-/**
- * Team tokens always use DB storage (forceDB: true) because:
- * 1. They are seeded on archestra startup
- * 2. They might not work with BYOS Vault (which is read-only from customer's Vault)
- */
 const FORCE_DB = true;
 
 /**
@@ -399,6 +394,35 @@ class TeamTokenModel {
 
     const { token } = await TeamTokenModel.createTeamToken(teamId, teamName);
     return token;
+  }
+
+  /**
+   * Backfill missing team tokens during startup without looking up every
+   * existing token separately. Keep the normal ensure path for missing teams
+   * so a token created since this snapshot is reused.
+   */
+  static async ensureTeamTokensForOrganization(
+    organizationId: string,
+  ): Promise<number> {
+    const teamsWithoutTokens = await db
+      .select({ id: schema.teamsTable.id, name: schema.teamsTable.name })
+      .from(schema.teamsTable)
+      .leftJoin(
+        schema.teamTokensTable,
+        eq(schema.teamTokensTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.teamsTable.organizationId, organizationId),
+          isNull(schema.teamTokensTable.id),
+        ),
+      );
+
+    for (const team of teamsWithoutTokens) {
+      await TeamTokenModel.ensureTeamToken(team.id, team.name);
+    }
+
+    return teamsWithoutTokens.length;
   }
 
   /**

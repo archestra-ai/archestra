@@ -45,7 +45,13 @@ async fn live_command_sees_stdin_and_secret_after_replayed_history() {
         stdin: Some("hello".into()),
     };
     let execution = sandbox_core::run_sandbox(input).await.unwrap();
-    assert_eq!(execution.exit_code, 0, "stderr: {}", execution.stderr);
+    // stderr is not printed: the command handles the secret, so its stderr may echo it.
+    assert_eq!(
+        execution.exit_code,
+        0,
+        "command failed; stderr withheld ({} bytes)",
+        execution.stderr.len()
+    );
     assert_eq!(
         execution.stdout.trim_end(),
         format!("hello replayed {SECRET_SHA256}")

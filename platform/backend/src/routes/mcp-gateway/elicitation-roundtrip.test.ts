@@ -17,20 +17,26 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel } from "@/models";
+import { UserTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
-import { pendingInboundRequests } from "./pending-inbound-requests";
+import { PendingInboundRequests } from "./pending-inbound-requests";
+import { cachedPendingRequests } from "./pending-inbound-shared";
 import { MCP_CLIENT_CAPABILITIES_META_KEY } from "./protocol";
+
+// Pending forms are shared through the cache so any replica can take an answer.
+setupTestCacheManager();
 
 describe("MCP Gateway - in-band elicitation round trip", () => {
   let app: FastifyInstance;
+  let pendingInboundRequests: PendingInboundRequests;
 
   beforeEach(async () => {
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
-    await app.register(mcpGatewayRoutes);
+    pendingInboundRequests = new PendingInboundRequests({
+      shared: cachedPendingRequests,
+    });
+    app = await gatewayApp(pendingInboundRequests);
   });
 
   afterEach(async () => {
@@ -40,16 +46,12 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("a client on the stateless revision gets its question as an input request, never mid-call", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const organizationId = (await makeOrganization()).id;
     // The token must belong to the agent's organization.
     const agent = await makeAgent({ organizationId });
-    const token = await TeamTokenModel.create({
-      organizationId,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
@@ -127,16 +129,12 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("a legacy client that declared elicitation at initialize gets the same round trip", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     // The token must belong to the agent's organization.
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
@@ -245,19 +243,102 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     });
   });
 
+  test("a legacy client's answer reaches the replica that asked when the load balancer sends it to another", async ({
+    makeAgent,
+    makeOrganization,
+    makeServiceAccountToken,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
+    // A second replica: its own routes and registry, the same shared cache.
+    const otherReplica = await gatewayApp(
+      new PendingInboundRequests({ shared: cachedPendingRequests }),
+    );
+    try {
+      const urlOf = async (replica: FastifyInstance) => {
+        await replica.listen({ port: 0, host: "127.0.0.1" });
+        const { port } = replica.server.address() as AddressInfo;
+        return `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
+      };
+      const asking = await urlOf(app);
+      const other = await urlOf(otherReplica);
+      const post = (url: string, body: unknown) =>
+        fetch(url, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+            authorization: `Bearer ${token.value}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+      await (
+        await post(asking, {
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-06-18",
+            capabilities: { elicitation: {} },
+            clientInfo: { name: "legacy-test-client", version: "1" },
+          },
+          id: 1,
+        })
+      ).arrayBuffer();
+      const call = readEvents(
+        await post(asking, {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__ask_user",
+            arguments: {
+              question: "Accept this change for the rest of this session?",
+              options: [
+                { label: "Accept for this session" },
+                { label: "Do not accept" },
+              ],
+            },
+          },
+          id: 2,
+        }),
+      );
+      const question = await call.next();
+      expect(question.method).toBe("elicitation/create");
+
+      const answer = await post(other, {
+        jsonrpc: "2.0",
+        id: question.id,
+        result: {
+          action: "accept",
+          content: { choice: "Accept for this session" },
+        },
+      });
+      expect(answer.status).toBe(202);
+
+      expect(await call.next()).toMatchObject({
+        id: 2,
+        result: {
+          structuredContent: {
+            action: "accept",
+            selected: ["Accept for this session"],
+          },
+        },
+      });
+    } finally {
+      await otherReplica.close();
+    }
+  });
+
   test("a client without elicitation keeps a plain JSON response", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     // The token must belong to the agent's organization.
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
@@ -302,27 +383,22 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("routes client cancellation to the original pending transport", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const organizationId = (await makeOrganization()).id;
     // The token must belong to the agent's organization.
     const agent = await makeAgent({ organizationId });
-    const token = await TeamTokenModel.create({
-      organizationId,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId });
     const onmessage = vi.fn();
     const transport = {
       onmessage,
     } as unknown as StreamableHTTPServerTransport;
-    const storedToken = await TeamTokenModel.validateToken(token.value);
-    if (!storedToken) throw new Error("token was not persisted");
-    const caller = `token:${storedToken.id}`;
-    const wireId = pendingInboundRequests.register({
+    const caller = `token:${token.tokenId}`;
+    const wireId = await pendingInboundRequests.register({
       id: 17,
       transport,
       agentId: agent.id,
+      organizationId,
       caller,
     });
 
@@ -352,19 +428,121 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     ).toBeUndefined();
   });
 
+  test("a user token answers a request bound to that user, not to the token row", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const user = await makeUser();
+    const stranger = await makeUser();
+    await makeMember(user.id, organizationId, { role: "member" });
+    await makeMember(stranger.id, organizationId, { role: "member" });
+    const agent = await makeAgent({ organizationId });
+    const { value: token } = await UserTokenModel.create(
+      user.id,
+      organizationId,
+      "Caller token",
+    );
+    const { value: otherToken } = await UserTokenModel.create(
+      stranger.id,
+      organizationId,
+      "Other token",
+    );
+    const onmessage = vi.fn();
+    const transport = {
+      onmessage,
+    } as unknown as StreamableHTTPServerTransport;
+    const wireId = await pendingInboundRequests.register({
+      id: 21,
+      transport,
+      agentId: agent.id,
+      organizationId,
+      caller: `user:${user.id}`,
+    });
+    const payload = {
+      jsonrpc: "2.0",
+      id: wireId,
+      result: { action: "accept", content: { choice: "Approve" } },
+    };
+    const post = (bearer: string) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          accept: "application/json, text/event-stream",
+        },
+        payload,
+      });
+
+    await post(otherToken);
+    expect(onmessage).not.toHaveBeenCalled();
+    const owner = await post(token);
+    expect(owner.statusCode).toBe(202);
+    expect(onmessage).toHaveBeenCalledTimes(1);
+    expect(onmessage).toHaveBeenCalledWith({ ...payload, id: 21 });
+  });
+
+  test("a storage failure while claiming an answer is not acknowledged", async ({
+    makeAgent,
+    makeOrganization,
+    makeServiceAccountToken,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const agent = await makeAgent({ organizationId });
+    const token = await makeServiceAccountToken({ organizationId });
+    const onmessage = vi.fn();
+    const transport = {
+      onmessage,
+    } as unknown as StreamableHTTPServerTransport;
+    const failing = new PendingInboundRequests({
+      shared: {
+        ...cachedPendingRequests,
+        claim: async () => {
+          throw new Error("db down");
+        },
+      },
+    });
+    const broken = await gatewayApp(failing);
+    try {
+      const wireId = await failing.register({
+        id: 22,
+        transport,
+        agentId: agent.id,
+        organizationId,
+        caller: `token:${token.tokenId}`,
+      });
+      const response = await broken.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: {
+          authorization: `Bearer ${token.value}`,
+          accept: "application/json, text/event-stream",
+        },
+        payload: {
+          jsonrpc: "2.0",
+          id: wireId,
+          result: { action: "accept" },
+        },
+      });
+      expect(response.statusCode).not.toBe(202);
+      expect(onmessage).not.toHaveBeenCalled();
+    } finally {
+      await broken.close();
+    }
+  });
+
   test("a client without elicitation on the same token does not take another client's forms away", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const organizationId = (await makeOrganization()).id;
     // The token must belong to the agent's organization.
     const agent = await makeAgent({ organizationId });
-    const token = await TeamTokenModel.create({
-      organizationId,
-      name: "Shared Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
@@ -432,23 +610,14 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("a legacy client keeps its forms when this process no longer remembers it", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const organizationId = (await makeOrganization()).id;
     // The token must belong to the agent's organization.
     const agent = await makeAgent({ organizationId });
-    const token = await TeamTokenModel.create({
-      organizationId,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId });
     // Another caller who can reach the same agent.
-    const otherToken = await TeamTokenModel.create({
-      organizationId,
-      name: "Other Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const otherToken = await makeServiceAccountToken({ organizationId });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
@@ -550,22 +719,13 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("only the caller that was asked can answer, under an id no other question shares", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     // Both tokens reach the agent: they share its organization.
     const organizationId = (await makeOrganization()).id;
     const agent = await makeAgent({ organizationId });
-    const ownerToken = await TeamTokenModel.create({
-      organizationId,
-      name: "Owner Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
-    const otherToken = await TeamTokenModel.create({
-      organizationId,
-      name: "Other Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const ownerToken = await makeServiceAccountToken({ organizationId });
+    const otherToken = await makeServiceAccountToken({ organizationId });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
@@ -657,7 +817,171 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
       result: { structuredContent: { selected: ["Do not accept"] } },
     });
   });
+
+  test("conflicting answers from two replicas deliver one choice", async ({
+    makeAgent,
+    makeOrganization,
+    makeServiceAccountToken,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
+    const otherReplica = await gatewayApp(
+      new PendingInboundRequests({ shared: cachedPendingRequests }),
+    );
+    try {
+      const urlOf = async (replica: FastifyInstance) => {
+        await replica.listen({ port: 0, host: "127.0.0.1" });
+        const { port } = replica.server.address() as AddressInfo;
+        return `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
+      };
+      const asking = await urlOf(app);
+      const other = await urlOf(otherReplica);
+      const post = (url: string, body: unknown) =>
+        fetch(url, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+            authorization: `Bearer ${token.value}`,
+          },
+          body: JSON.stringify(body),
+        });
+      await (
+        await post(asking, {
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-06-18",
+            capabilities: { elicitation: {} },
+            clientInfo: { name: "legacy-test-client", version: "1" },
+          },
+          id: 1,
+        })
+      ).arrayBuffer();
+      const call = readEvents(
+        await post(asking, {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__ask_user",
+            arguments: {
+              question: "Accept this change for the rest of this session?",
+              options: [
+                { label: "Accept for this session" },
+                { label: "Do not accept" },
+              ],
+            },
+          },
+          id: 2,
+        }),
+      );
+      const question = await call.next();
+      expect(question.method).toBe("elicitation/create");
+      const choice = (label: string) => ({
+        jsonrpc: "2.0",
+        id: question.id,
+        result: { action: "accept", content: { choice: label } },
+      });
+
+      await Promise.all([
+        post(asking, choice("Accept for this session")),
+        post(other, choice("Do not accept")),
+      ]);
+
+      const result = await call.next();
+      const selected = (
+        result.result as { structuredContent?: { selected?: string[] } }
+      ).structuredContent?.selected;
+      expect(selected).toHaveLength(1);
+      expect(["Accept for this session", "Do not accept"]).toContain(
+        selected?.[0],
+      );
+    } finally {
+      await otherReplica.close();
+    }
+  });
+
+  test("a failed registration does not send the form", async ({
+    makeAgent,
+    makeOrganization,
+    makeServiceAccountToken,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
+    const broken = await gatewayApp(
+      new PendingInboundRequests({
+        shared: {
+          ...cachedPendingRequests,
+          remember: async () => {
+            throw new Error("db down");
+          },
+        },
+      }),
+    );
+    try {
+      await broken.listen({ port: 0, host: "127.0.0.1" });
+      const { port } = broken.server.address() as AddressInfo;
+      const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
+      const headers = {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${token.value}`,
+      };
+      const init = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-03-26",
+            capabilities: { elicitation: {} },
+            clientInfo: { name: "legacy-test-client", version: "1" },
+          },
+          id: 1,
+        }),
+      });
+      expect(init.status).toBe(200);
+      await init.arrayBuffer();
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__ask_user",
+            arguments: {
+              question: "Accept this change for the rest of this session?",
+              options: [
+                { label: "Accept for this session" },
+                { label: "Do not accept" },
+              ],
+            },
+          },
+          id: 2,
+        }),
+      });
+      const body = await response.text();
+      expect(body).not.toContain("elicitation/create");
+    } finally {
+      await broken.close();
+    }
+  });
 });
+
+/** One replica: the gateway routes with its own pending-request registry. */
+async function gatewayApp(
+  pendingRequests: PendingInboundRequests,
+): Promise<FastifyInstance> {
+  const app = Fastify().withTypeProvider<ZodTypeProvider>();
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+  await app.register(mcpGatewayRoutes, { pendingRequests });
+  return app;
+}
 
 /** Reads the SSE frames of a gateway response one JSON-RPC message at a time. */
 function readEvents(response: Response) {

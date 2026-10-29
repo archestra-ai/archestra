@@ -31,6 +31,7 @@ import pg from "pg";
 import { withTransactionRetry } from "@/database/retry";
 import * as schema from "@/database/schemas";
 import logger from "@/logging";
+import { assertMatchingHydrationSchemas } from "./hydration-schema";
 
 const sourceUrl = process.env.SOURCE_DATABASE_URL;
 const targetUrl = process.env.ARCHESTRA_DATABASE_URL;
@@ -56,6 +57,11 @@ const source = drizzle(sourcePool, { schema });
 const target = drizzle(targetPool, { schema });
 
 try {
+  await assertMatchingHydrationSchemas({
+    source: sourcePool,
+    target: targetPool,
+  });
+
   // Resolve target admin's user + org. Without a member row the user can't own
   // a chat_api_key (organization_id is NOT NULL), so we fail loudly if either
   // is missing rather than guessing. The admin email is overridable in .env;
@@ -173,7 +179,6 @@ try {
             set: {
               secret: sql`excluded.secret`,
               isVault: sql`excluded.is_vault`,
-              isByosVault: sql`excluded.is_byos_vault`,
             },
           })
           .returning({ id: schema.secretsTable.id });

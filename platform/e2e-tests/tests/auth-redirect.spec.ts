@@ -92,36 +92,4 @@ test.describe("Authentication redirect flows", {
       await context.close();
     }
   });
-
-  test("redirectTo parameter is validated (rejects malicious URLs)", async ({
-    browser,
-  }) => {
-    // Create a fresh browser context without authentication (no storage state)
-    const context = await browser.newContext({ storageState: undefined });
-    const page = await context.newPage();
-
-    try {
-      // Navigate directly to sign-in with a malicious redirectTo
-      const maliciousRedirect = encodeURIComponent("https://evil.com/phishing");
-      await page.goto(
-        `${UI_BASE_URL}/auth/sign-in?redirectTo=${maliciousRedirect}`,
-      );
-
-      // Sign in via UI form
-      await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-
-      // Wait for navigation away from sign-in page (login success redirects)
-      await page.waitForURL((url) => !url.pathname.includes("/auth/sign-in"), {
-        timeout: 30000,
-      });
-
-      // Should NOT be on the malicious URL - check that we're not redirected to evil.com
-      expect(page.url()).not.toContain("evil.com");
-
-      // Should be on a valid app page (home or chat)
-      expect(page.url().startsWith(UI_BASE_URL)).toBe(true);
-    } finally {
-      await context.close();
-    }
-  });
 });

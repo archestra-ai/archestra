@@ -9,13 +9,13 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasPermission, userHasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth/agent-type-permissions";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
 } from "@/clients/mcp-client";
-import config from "@/config";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -44,7 +44,7 @@ import {
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { secretManager } from "@/secrets-manager";
 import {
   filterMcpServersAssignableToTarget,
   isPredefinedAdmin,
@@ -63,10 +63,18 @@ import {
   findExternalIdentityProviderByProviderId,
 } from "@/services/identity-providers/oidc";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
+import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
+import {
+  assertLifecycleRoutePermission,
+  assertScopedLifecycleAuthorization,
+  findMcpServerInOrganization,
+} from "@/services/mcp-installation-access";
+import { consumeMcpOAuthCredentialGrant } from "@/services/mcp-oauth-credential-grant";
 import {
   autoReinstallServer,
   reloadToolsForServer,
 } from "@/services/mcp-reinstall";
+import { decorateMcpServerListEntries } from "@/services/mcp-server-list";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
@@ -82,7 +90,6 @@ import {
   LocalMcpServerInstallationStatusSchema,
   type McpServer,
   McpServerAgentUsageSchema,
-  type McpServerAlertMute,
   McpServerAlertMuteSchema,
   type McpServerDismissibleAlertKind,
   // SPDX-SnippetEnd
@@ -105,8 +112,10 @@ import {
   broadcastMcpServersChanged,
 } from "@/websocket";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
+import mcpServerAgentUsageRoutes from "./mcp-server-agent-usage";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await fastify.register(mcpServerAgentUsageRoutes);
   fastify.get(
     "/api/mcp_server/auto_mode_agents",
     {
@@ -120,11 +129,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(McpServerAgentUsageSchema)),
       },
     },
-    async ({ organizationId }, reply) => {
+    async ({ user, organizationId }, reply) => {
       const byOrg = await AgentModel.getAutoModeAgentDetailsByOrganizations([
         organizationId,
       ]);
-      return reply.send(byOrg.get(organizationId) ?? []);
+      const agents = byOrg.get(organizationId) ?? [];
+      const canSeeAgent = await getVisibleAgentFilter({
+        userId: user.id,
+        organizationId,
+        agentIds: agents.map((agent) => agent.id),
+      });
+      return reply.send(agents.filter((agent) => canSeeAgent(agent.id)));
     },
   );
 
@@ -137,6 +152,33 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["MCP Server"],
         querystring: z.object({
           catalogId: z.string().optional(),
+          catalogIds: z
+            .preprocess(
+              (val) =>
+                typeof val === "string" ? val.split(",").filter(Boolean) : val,
+              z.array(z.string().uuid()).max(100),
+            )
+            .optional()
+            .describe(
+              "Only installs of these catalog items (comma-separated, at most 100).",
+            ),
+          catalogSlug: z
+            .string()
+            .min(1)
+            .max(256)
+            .optional()
+            .describe(
+              "Only installs of catalog items whose name, slugified as in tool names (lowercase, spaces as _, other characters dropped), is this.",
+            ),
+          includeAssignedAgents: z
+            .preprocess(
+              (value) => value === "true" || value === true,
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Include each listed install's assigned agents. Defaults to false, which returns an empty `assignedAgents` for every install. The lookup covers every install in the response, so narrow the list with `catalogId` when you need only some. GET /api/mcp_server/{id} returns the agents of one install.",
+            ),
           assignmentScope: AgentScopeSchema.optional(),
           assignmentTeamIds: z
             .preprocess(
@@ -148,42 +190,78 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .enum(["active", "deleted"])
             .default("active")
             .describe(
-              "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the manage-deleted permission (granted to admins by default).",
+              "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires delete permission and is limited to connections you can uninstall.",
             ),
         }),
         response: constructResponseSchema(z.array(McpServerListEntrySchema)),
       },
     },
     async ({ user, headers, query, organizationId }, reply) => {
-      const { assignmentScope, assignmentTeamIds, catalogId, status } = query;
+      const {
+        assignmentScope,
+        assignmentTeamIds,
+        catalogId,
+        catalogIds,
+        catalogSlug,
+        status,
+        includeAssignedAgents,
+      } = query;
 
-      // Soft-deleted installs are visible only to holders of the dedicated
-      // manage-deleted capability (admins by default): the listing is org-wide
-      // (it includes other users' personal installs), so the ordinary delete
-      // permission — which members hold for their own uninstalls — must not
-      // unlock it. It is a backend affordance for discovering restorable ids —
-      // there is no UI toggle this change.
       if (status === "deleted") {
-        const { success: canManageDeleted } = await hasPermission(
-          { mcpServerInstallation: ["manage-deleted"] },
+        const { success: canDelete } = await hasPermission(
+          { mcpServerInstallation: ["delete"] },
           headers,
         );
-        if (!canManageDeleted) {
+        if (!canDelete) {
           throw new ApiError(
             403,
             "You do not have permission to list deleted MCP servers.",
           );
         }
-        let deleted =
-          await McpServerModel.findDeletedForOrganization(organizationId);
-        if (catalogId) {
-          deleted = deleted.filter((s) => s.catalogId === catalogId);
+        const [deleted, admin, update, teams] = await Promise.all([
+          McpServerModel.findDeletedForOrganization(organizationId),
+          isMcpInstallationAdmin({ userId: user.id, organizationId }),
+          hasPermission({ mcpServerInstallation: ["update"] }, headers),
+          TeamModel.getUserTeamsForOrganization({
+            userId: user.id,
+            organizationId,
+          }),
+        ]);
+        const authorization = {
+          isAdmin: admin,
+          canUpdate: update.success,
+          teamIds: teams.map((team) => team.id),
+        };
+        const allowed = [];
+        for (const server of deleted) {
+          if (
+            server.serverType === "builtin" ||
+            (catalogId && server.catalogId !== catalogId) ||
+            (catalogIds && !catalogIds.includes(server.catalogId ?? ""))
+          )
+            continue;
+          try {
+            await assertScopedLifecycleAuthorization({
+              mcpServer: server,
+              userId: user.id,
+              organizationId,
+              headers,
+              action: "restore",
+              authorization,
+            });
+            allowed.push(server);
+          } catch (error) {
+            if (
+              error instanceof ApiError &&
+              [403, 404].includes(error.statusCode)
+            )
+              continue;
+            throw error;
+          }
         }
-        // An uninstalled connection reports no alerts, so it carries no mutes,
-        // and there is nothing left to authenticate against.
         return reply.send(
-          deleted.map((s) => ({
-            ...s,
+          allowed.map((server) => ({
+            ...server,
             alertMutes: [],
             canUseCredential: false,
           })),
@@ -206,6 +284,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // post-filtering made that request load and decorate every install
           // in the organization before discarding all but one.
           catalogId,
+          // The registry asks for the installs of the catalog rows on screen.
+          catalogIds,
+          // A tool's server prefix, for its logs.
+          catalogSlug,
+          // Agent usage is included only when the caller asks for it.
+          includeAssignedAgents: includeAssignedAgents === true,
           // serverType:"app" backings are managed on the Apps surface, not
           // listed as MCP servers — keep them out of the user-facing server
           // list (and its consumers like the agent tool-assignment picker).
@@ -227,28 +311,28 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      const [alertMutesByCatalogId, credentialUsableIds] = await Promise.all([
-        config.mcpServer.alertingEnabled
-          ? McpServerAlertMuteModel.findForViewer({
-              userId: user.id,
-              catalogIds: [
-                ...new Set(allServers.map((server) => server.catalogId)),
-              ],
-            })
-          : new Map<string, McpServerAlertMute[]>(),
-        McpServerModel.getCredentialUsableServerIds(
-          user.id,
-          allServers.map((server) => server.id),
-        ),
+      const [decorated, canSeeAgent] = await Promise.all([
+        decorateMcpServerListEntries({ servers: allServers, userId: user.id }),
+        getVisibleAgentFilter({
+          userId: user.id,
+          organizationId,
+          agentIds: [
+            ...new Set(
+              allServers.flatMap(
+                (server) =>
+                  server.assignedAgents?.map((agent) => agent.id) ?? [],
+              ),
+            ),
+          ],
+        }),
       ]);
 
       return reply.send(
-        allServers.map((server) => ({
+        decorated.map((server) => ({
           ...server,
-          alertMutes: (
-            alertMutesByCatalogId.get(server.catalogId) ?? []
-          ).filter((mute) => mute.mcpServerId === server.id),
-          canUseCredential: credentialUsableIds.has(server.id),
+          assignedAgents: server.assignedAgents?.filter((agent) =>
+            canSeeAgent(agent.id),
+          ),
         })),
       );
     },
@@ -282,7 +366,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server not found");
       }
 
-      return reply.send(server);
+      const canSeeAgent = await getVisibleAgentFilter({
+        userId: user.id,
+        organizationId,
+        agentIds: server.assignedAgents?.map((agent) => agent.id) ?? [],
+      });
+      return reply.send({
+        ...server,
+        assignedAgents: server.assignedAgents?.filter((agent) =>
+          canSeeAgent(agent.id),
+        ),
+      });
     },
   );
 
@@ -302,23 +396,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // For PAT tokens (like GitHub), send the token directly
           // and we'll create a secret for it
           accessToken: z.string().optional(),
-          // When true, environmentValues and userConfigValues contain vault references in "path#key" format
-          isByosVault: z.boolean().optional(),
-          // Kubernetes service account override for local MCP servers
-          serviceAccount: z.string().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ body, user, headers, organizationId }, reply) => {
+    async (request, reply) => {
+      const { body, user, headers, organizationId } = request;
       let {
         agentIds,
         secretId,
         accessToken,
-        isByosVault,
+
         userConfigValues,
         environmentValues,
-        serviceAccount,
         ...restDataFromRequestBody
       } = body;
       const serverData: typeof restDataFromRequestBody & {
@@ -476,6 +566,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (existingPersonal) {
             const catalogTools = await ToolModel.findByCatalogId(
               serverData.catalogId,
+              { kind: "internal", purpose: "install" },
             );
             const toolIds = catalogTools.map((t) => t.id);
             if (toolIds.length > 0) {
@@ -532,26 +623,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // secret/deployment work, so a blocked install has no side effects beyond
         // the pending flag.
         await assertInstallAllowedOrBlock({ catalogItem, organizationId });
+      }
 
-        // Update catalog's serviceAccount if user provided a different value
-        const normalizedServiceAccount =
-          serviceAccount === "" ? undefined : serviceAccount;
-        if (
-          catalogItem?.serverType === "local" &&
-          normalizedServiceAccount !== undefined &&
-          catalogItem.localConfig?.serviceAccount !== normalizedServiceAccount
-        ) {
-          await InternalMcpCatalogModel.update(catalogItem.id, {
-            localConfig: {
-              ...catalogItem.localConfig,
-              serviceAccount: normalizedServiceAccount,
-            },
-          });
-          // Update local reference for deployment
-          if (catalogItem.localConfig) {
-            catalogItem.localConfig.serviceAccount = normalizedServiceAccount;
-          }
-        }
+      if (
+        secretId &&
+        (!catalogItem?.oauthConfig ||
+          !(await consumeMcpOAuthCredentialGrant({
+            request,
+            secretId,
+            catalogId: catalogItem.id,
+          })) ||
+          (await McpServerModel.hasSecretReference(secretId)))
+      ) {
+        throw new ApiError(400, "Credential references cannot be supplied");
       }
 
       // For REMOTE servers: create secrets and validate connection
@@ -564,41 +648,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues,
         });
 
-        // If isByosVault flag is set, use vault references from userConfigValues
-        if (isByosVault && installUserConfigValues && !secretId) {
-          if (!isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Readonly Vault is not enabled. " +
-                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-            );
-          }
-
-          // userConfigValues already contains vault references in "path#key" format
-          const secret = await secretManager().createSecret(
-            {
-              ...catalogStaticUserConfigValues,
-              ...installUserConfigValues,
-            } as Record<string, unknown>,
-            `${serverData.name}-vault-secret`,
-          );
-          secretId = secret.id;
-          createdSecretId = secret.id;
-          logger.info(
-            { keyCount: Object.keys(installUserConfigValues).length },
-            "Created Readonly Vault secret with per-field references for remote server",
-          );
-        }
-
         // If accessToken is provided (PAT flow), create a secret for it
-        // Not allowed when Readonly Vault is enabled - use vault secrets instead
         if (accessToken && !secretId) {
-          if (isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Manual PAT token input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
-            );
-          }
           const secret = await secretManager().createSecret(
             { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${serverData.name}-token`,
@@ -725,57 +776,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // If isByosVault flag is set, use vault references from environmentValues for secret env vars
-        if (isByosVault && !secretId && catalogItem.localConfig?.environment) {
-          if (!isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Readonly Vault is not enabled. " +
-                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-            );
-          }
-
-          // Collect secret env vars with vault references from environmentValues
-          const secretEnvVars: Record<string, string> = {
-            ...catalogStaticUserConfigValues,
-          };
-          for (const envDef of catalogItem.localConfig.environment) {
-            if (envDef.type === "secret" && !envDef.credentialId) {
-              const value = envDef.promptOnInstallation
-                ? environmentValues?.[envDef.key]
-                : envDef.value;
-              if (value) {
-                // Value should already be in "path#key" format from frontend
-                secretEnvVars[envDef.key] = value;
-              }
-            }
-          }
-
-          if (installUserConfigValues) {
-            Object.assign(secretEnvVars, installUserConfigValues);
-          }
-
-          if (Object.keys(secretEnvVars).length > 0) {
-            const secret = await secretManager().createSecret(
-              secretEnvVars,
-              `${serverData.name}-vault-secret`,
-            );
-            secretId = secret.id;
-            createdSecretId = secret.id;
-            logger.info(
-              { keyCount: Object.keys(secretEnvVars).length },
-              "Created Readonly Vault secret with per-field references for local server",
-            );
-          }
-        } else if (!secretId) {
+        if (!secretId) {
           // Collect and store static catalog headers, prompted header values, and secret-type env vars.
-          // When Readonly Vault is enabled, only static (non-prompted) secrets are allowed to be stored in DB.
-          // User-prompted secrets must use Vault references via the isByosVault flow above.
           const secretEnvVars: Record<string, string> = {
             ...catalogStaticUserConfigValues,
             ...(installUserConfigValues ?? {}),
           };
-          let hasPromptedSecrets = false;
 
           // Collect all secret-type env vars (static and prompted).
           for (const envDef of catalogItem.localConfig?.environment ?? []) {
@@ -785,9 +791,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               if (envDef.promptOnInstallation) {
                 // Prompted during installation - get from environmentValues
                 value = environmentValues?.[envDef.key];
-                if (value) {
-                  hasPromptedSecrets = true;
-                }
               } else {
                 // Static value from catalog - get from envDef.value
                 value = envDef.value;
@@ -799,14 +802,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
 
-          // Block user-prompted secrets when Readonly Vault is enabled (they should use Vault)
           // Static secrets from catalog are allowed since they're not manual user input
-          if (hasPromptedSecrets && isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Manual secret input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
-            );
-          }
 
           // Create secret in database if there are any secret env vars
           if (Object.keys(secretEnvVars).length > 0) {
@@ -1001,18 +997,27 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   rawToolName: tool.name,
                   description: tool.description ?? null,
                   parameters: tool.inputSchema,
-                  meta: { _meta: tool._meta, annotations: tool.annotations },
+                  meta: {
+                    _meta: tool._meta,
+                    annotations: tool.annotations,
+                    outputSchema: tool.outputSchema,
+                  },
                   catalogId: capturedCatalogId,
                 }));
 
                 // Bulk create tools to avoid N+1 queries
                 const createdTools =
                   await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+                await recordInstallToolDescriptions({
+                  mcpServerId: mcpServer.id,
+                  syncedTools: createdTools,
+                  reported: toolsToCreate,
+                });
 
                 // Clone reconciliation: if this catalog has provisional cloned
                 // tools (first install of a clone), confirm the ones the server
                 // actually exposes and drop the rest. Genuinely-new tools were
-                // just created above with default policies (+ configurator).
+                // just created above.
                 const provisionalCount =
                   await ToolModel.countProvisionalForCatalog(capturedCatalogId);
                 let confirmedClonedToolIds: string[] = [];
@@ -1174,18 +1179,27 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           rawToolName: tool.name,
           description: tool.description ?? null,
           parameters: tool.inputSchema,
-          meta: { _meta: tool._meta, annotations: tool.annotations },
+          meta: {
+            _meta: tool._meta,
+            annotations: tool.annotations,
+            outputSchema: tool.outputSchema,
+          },
           catalogId: catalogItem.id,
         }));
 
         // Bulk create tools to avoid N+1 queries
         const createdTools =
           await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+        await recordInstallToolDescriptions({
+          mcpServerId: mcpServer.id,
+          syncedTools: createdTools,
+          reported: toolsToCreate,
+        });
 
         // Clone reconciliation: if this catalog has provisional cloned
         // tools (first install of a clone), confirm the ones the server
         // actually exposes and drop the rest. Genuinely-new tools were
-        // just created above with default policies (+ configurator).
+        // just created above.
         const provisionalCount = await ToolModel.countProvisionalForCatalog(
           catalogItem.id,
         );
@@ -1307,27 +1321,23 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           accessToken: z.string().optional(),
           userConfigValues: z.record(z.string(), z.string()).optional(),
           environmentValues: z.record(z.string(), z.string()).optional(),
-          isByosVault: z.boolean().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async (
-      {
+    async (request, reply) => {
+      const {
         params: { id },
         body: {
           secretId: providedSecretId,
           accessToken,
           userConfigValues,
           environmentValues,
-          isByosVault,
         },
         user,
         headers,
         organizationId,
-      },
-      reply,
-    ) => {
+      } = request;
       // Validate that at least one credential field is provided
       if (
         !providedSecretId &&
@@ -1367,7 +1377,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
         action: "re-authenticate",
       });
-
       const catalogItem = mcpServer.catalogId
         ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
         : null;
@@ -1395,6 +1404,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertInstallAllowedOrBlock({ catalogItem, organizationId });
       }
 
+      if (
+        providedSecretId &&
+        (!catalogItem?.oauthConfig ||
+          !(await consumeMcpOAuthCredentialGrant({
+            request,
+            secretId: providedSecretId,
+            catalogId: catalogItem.id,
+            serverId: id,
+          })) ||
+          (await McpServerModel.hasSecretReference(providedSecretId)))
+      ) {
+        throw new ApiError(400, "Credential references cannot be supplied");
+      }
+
       // Resolve the new secret ID: either provided directly, or create from raw credentials
       let newSecretId = providedSecretId;
 
@@ -1409,12 +1432,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (accessToken) {
           // PAT token flow
-          if (isByosVault && isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Manual PAT token input is not allowed when Readonly Vault is enabled",
-            );
-          }
+
           const secret = await secretManager().createSecret(
             { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${mcpServer.name}-token`,
@@ -1422,22 +1440,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           newSecretId = secret.id;
         } else if (installUserConfigValues) {
           // Remote server user config fields
-          if (isByosVault) {
-            if (!isByosEnabled()) {
-              throw new ApiError(
-                400,
-                "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-              );
-            }
-          }
+
           const secret = await secretManager().createSecret(
             {
               ...catalogStaticUserConfigValues,
               ...installUserConfigValues,
             } as Record<string, unknown>,
-            isByosVault
-              ? `${mcpServer.name}-vault-secret`
-              : `${mcpServer.name}-secret`,
+            `${mcpServer.name}-secret`,
           );
           newSecretId = secret.id;
 
@@ -1483,24 +1492,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userConfig: catalogItem?.userConfig,
             userConfigValues,
           });
-          if (isByosVault) {
-            if (!isByosEnabled()) {
-              throw new ApiError(
-                400,
-                "Readonly Vault is not enabled. Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-              );
-            }
-            // Vault references for secret env vars
-            const secret = await secretManager().createSecret(
-              {
-                ...catalogStaticUserConfigValues,
-                ...(environmentValues ?? {}),
-                ...(localInstallUserConfigValues ?? {}),
-              },
-              `${mcpServer.name}-vault-secret`,
-            );
-            newSecretId = secret.id;
-          } else if (catalogItem?.localConfig?.environment) {
+          if (catalogItem?.localConfig?.environment) {
             // Collect only secret-type env vars
             const secretEnvVars: Record<string, string> = {
               ...catalogStaticUserConfigValues,
@@ -1545,8 +1537,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Could not resolve credentials");
       }
 
-      // Delete the old secret if it exists
-      if (mcpServer.secretId) {
+      // Update the server with new secret and clear OAuth error fields
+      const updatedServer = await McpServerModel.update(id, {
+        secretId: newSecretId,
+        oauthRefreshError: null,
+        oauthRefreshErrorMessage: null,
+        oauthRefreshErrorDescription: null,
+        oauthRefreshFailedAt: null,
+      });
+      if (!updatedServer) {
+        throw new ApiError(500, "Failed to update MCP server");
+      }
+
+      // Delete the old secret only after the install no longer references it.
+      // A pre-existing shared reference must not revoke another connection.
+      if (
+        mcpServer.secretId &&
+        mcpServer.secretId !== newSecretId &&
+        !(await McpServerModel.hasSecretReference(mcpServer.secretId))
+      ) {
         try {
           await secretManager().deleteSecret(mcpServer.secretId);
           logger.info(
@@ -1558,18 +1567,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             { err: error, mcpServerId: id },
             "Failed to delete old secret during re-authentication",
           );
-          // Continue with update even if old secret deletion fails
         }
       }
-
-      // Update the server with new secret and clear OAuth error fields
-      const updatedServer = await McpServerModel.update(id, {
-        secretId: newSecretId,
-        oauthRefreshError: null,
-        oauthRefreshErrorMessage: null,
-        oauthRefreshErrorDescription: null,
-        oauthRefreshFailedAt: null,
-      });
 
       // The failure episode every mute on this connection was pinned to is
       // over, so the mutes go with it. Dropped after the clear, never before:
@@ -1596,10 +1595,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Failed to restart pod after re-authentication (may not be running)",
           );
         }
-      }
-
-      if (!updatedServer) {
-        throw new ApiError(500, "Failed to update MCP server");
       }
 
       logger.info(
@@ -1815,7 +1810,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id: mcpServerId }, organizationId }, reply) => {
+    async (
+      { params: { id: mcpServerId }, organizationId, user, headers },
+      reply,
+    ) => {
       const mcpServer = await McpServerModel.findDeletedByIdForOrganization(
         mcpServerId,
         organizationId,
@@ -1837,9 +1835,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Authorization is the route-level manage-deleted permission (admin-only
-      // by default): deleted-resource lifecycle is one org-scoped capability,
-      // not derived from per-scope ownership of the live resource.
+      await assertScopedLifecycleAuthorization({
+        mcpServer,
+        userId: user.id,
+        organizationId,
+        headers,
+        action: "restore",
+      });
 
       // A standalone server-restore requires its parent catalog to be active:
       // tools resolve through the catalog, and catalog reads filter notDeleted, so
@@ -1893,7 +1895,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      assertMcpServerAlertingEnabled();
       const {
         params: { id: mcpServerId, kind },
         body: { issueFingerprint, reason },
@@ -1950,7 +1951,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      assertMcpServerAlertingEnabled();
       const {
         params: { id: mcpServerId, kind },
         query: { issueFingerprint },
@@ -2070,7 +2070,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Query tools by catalogId — all MCP servers have a catalogId
       const tools = mcpServer.catalogId
-        ? await ToolModel.findByCatalogId(mcpServer.catalogId)
+        ? await ToolModel.findByCatalogId(mcpServer.catalogId, {
+            kind: "caller",
+            userId: user.id,
+            organizationId,
+          })
         : [];
 
       return reply.send(tools);
@@ -2168,6 +2172,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       try {
         const result = await mcpClient.inspectServer({
+          caller: { kind: "caller", userId: user.id, organizationId },
           catalogItem,
           mcpServerId: mcpServer.id,
           secrets,
@@ -2204,22 +2209,21 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Reinstall an MCP server without losing tool assignments and policies.
+   * Reinstall an MCP server without losing tool assignments.
    *
    * Unlike delete + install, this endpoint:
    * 1. Keeps the MCP server record (and its ID)
    * 2. Updates secrets if new environment values are provided
    * 3. Restarts the K8s deployment (for local servers)
    * 4. Syncs tools (updates existing, creates new) instead of deleting
-   * 5. Preserves tool_invocation_policies, trusted_data_policies, and agent_tools
+   * 5. Preserves agent_tools
    */
   fastify.post(
     "/api/mcp_server/:id/reinstall",
     {
       schema: {
         operationId: RouteId.ReinstallMcpServer,
-        description:
-          "Reinstall an MCP server without losing tool assignments and policies",
+        description: "Reinstall an MCP server without losing tool assignments",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,
@@ -2228,10 +2232,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Environment values for local servers (when new prompted env vars were added)
           environmentValues: z.record(z.string(), z.string()).optional(),
           userConfigValues: z.record(z.string(), z.string()).optional(),
-          // Whether environmentValues contains vault references in path#key format
-          isByosVault: z.boolean().optional(),
-          // Kubernetes service account override
-          serviceAccount: z.string().optional(),
+
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -2246,8 +2247,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const {
         environmentValues,
         userConfigValues,
-        isByosVault,
-        serviceAccount,
+
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -2306,7 +2306,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // pins the SHARED pod awake for everyone. Owning one connection must not
       // authorize an action with shared blast radius — the same rationale as
       // hard-reset — and the org-wide toggle this would override already takes
-      // mcpSettings:update to change.
+      // organizationSettings:update to change.
       if (hibernationMode !== undefined && catalogItem.multitenant) {
         const isMcpServerInstallationAdmin = await isMcpInstallationAdmin({
           userId: user.id,
@@ -2386,23 +2386,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Fetch the existing secret bag once so validation and the non-BYOS
-      // merge below can both consult it. BYOS replaces the bag wholesale
-      // (vault references are re-supplied per request), so it doesn't need
-      // the existing state.
-      const existingSecrets: Record<string, unknown> =
-        !isByosVault && mcpServer.secretId
-          ? ((await secretManager().getSecret(mcpServer.secretId))?.secret ??
-            {})
-          : {};
+      // Reuse the stored bag for validation and partial credential updates.
+      const existingSecrets: Record<string, unknown> = mcpServer.secretId
+        ? ((await secretManager().getSecret(mcpServer.secretId))?.secret ?? {})
+        : {};
 
       // Validate required env vars against the effective post-merge state
       // regardless of whether the body carried values — an empty reinstall
       // body must still 400 when a newly-added required var is unsatisfied
-      // rather than failing later at pod start. Plain types come from
-      // `mergedPlainEnv` (column + body, empty = clear); non-BYOS secret types
-      // are satisfied by the existing bag when the body omits them; BYOS
-      // requires the body alone.
+      // rather than failing later at pod start. Plain values come from the
+      // merged environment; omitted secret values reuse the stored bag.
       if (catalogItem.localConfig?.environment) {
         const requiredEnvVars = catalogItem.localConfig.environment.filter(
           (env) =>
@@ -2412,9 +2405,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const missingEnvVars = requiredEnvVars.filter((env) => {
           if (env.type === "secret") {
             const submitted = submittedEnv[env.key];
-            if (isByosVault) {
-              return !submitted?.trim();
-            }
+
             if (submitted === "") {
               return true;
             }
@@ -2441,12 +2432,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Validate required userConfig (connection-setting) fields on the same
-      // terms as env vars above. For non-BYOS a field already on the install's
-      // bag stays satisfied when the body omits it, so a partial reinstall that
-      // only touches env doesn't 400 on an unchanged stored header; "" is an
-      // explicit clear. BYOS validates against the body alone since vault
-      // references are re-supplied on every reinstall.
+      // Validate connection settings against the same merged state. An omitted
+      // field preserves its stored value; an empty string explicitly clears it.
       if (catalogItem.userConfig) {
         const requiredUserConfigFields = Object.entries(
           catalogItem.userConfig,
@@ -2457,9 +2444,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const missingUserConfigFields = requiredUserConfigFields.filter(
           ([fieldName]) => {
             const submitted = userConfigValues?.[fieldName];
-            if (isByosVault) {
-              return !submitted?.trim();
-            }
+
             if (submitted === "") {
               return true;
             }
@@ -2487,6 +2472,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         (environmentValues && Object.keys(environmentValues).length > 0) ||
         (userConfigValues && Object.keys(userConfigValues).length > 0)
       ) {
+        if (
+          mcpServer.secretId &&
+          (await McpServerModel.hasOtherSecretReference({
+            secretId: mcpServer.secretId,
+            mcpServerId: id,
+          }))
+        ) {
+          throw new ApiError(
+            409,
+            "Re-authenticate this connection before changing its credentials",
+          );
+        }
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
           catalogItem.userConfig,
         );
@@ -2496,94 +2493,45 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
 
         // Update or create secret with new values
-        if (isByosVault) {
-          // BYOS mode: values are vault references
-          if (!isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Readonly Vault is not enabled. " +
-                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-            );
-          }
 
-          // BYOS vault bags hold only vault references. Plain (non-secret) env
-          // values are literals that belong on the install row's column
-          // (persisted below); spreading them here would have vault resolution
-          // misread a literal as a `path#key` reference. Restrict the env
-          // contribution to secret-typed keys.
-          const secretEnvKeys = new Set(
-            (catalogItem.localConfig?.environment ?? [])
-              .filter((envDef) => envDef.type === "secret")
-              .map((envDef) => envDef.key),
-          );
-          const submittedSecretEnv: Record<string, string> = {};
-          for (const [key, value] of Object.entries(submittedEnv)) {
-            if (secretEnvKeys.has(key)) {
-              submittedSecretEnv[key] = value;
-            }
+        // Merge new values with the existing bag. An empty string is
+        // an explicit clear and an omitted field preserves the stored value;
+        // static catalog-only headers are owned by the catalog static spread
+        // and can't be overridden by an installer request.
+        const mergedSecrets: Record<string, unknown> = {
+          ...existingSecrets,
+          ...catalogStaticUserConfigValues,
+          ...submittedEnv,
+        };
+        for (const [fieldName, fieldConfig] of Object.entries(
+          catalogItem.userConfig ?? {},
+        )) {
+          if (
+            fieldConfig?.headerName &&
+            fieldConfig?.promptOnInstallation === false
+          ) {
+            continue;
           }
+          const submitted = userConfigValues?.[fieldName];
+          if (submitted === "") {
+            // Explicit clear.
+            delete mergedSecrets[fieldName];
+          } else if (typeof submitted === "string" && submitted.trim()) {
+            mergedSecrets[fieldName] = submitted;
+          }
+          // A whitespace-only submission is treated as "no change" (matching
+          // validation's existing-bag fallback) so an accidental blank can't
+          // clobber a valid stored header.
+        }
 
-          if (mcpServer.secretId) {
-            await secretManager().updateSecret(mcpServer.secretId, {
-              ...catalogStaticUserConfigValues,
-              ...submittedSecretEnv,
-              ...(installUserConfigValues ?? {}),
-            });
-          } else {
-            const secret = await secretManager().createSecret(
-              {
-                ...catalogStaticUserConfigValues,
-                ...submittedSecretEnv,
-                ...(installUserConfigValues ?? {}),
-              },
-              `${mcpServer.name}-vault-secret`,
-            );
-            await McpServerModel.update(id, { secretId: secret.id });
-          }
+        if (mcpServer.secretId) {
+          await secretManager().updateSecret(mcpServer.secretId, mergedSecrets);
         } else {
-          // Non-BYOS: merge new values with the existing bag (fetched above for
-          // validation). userConfig is applied per field so an empty string is
-          // an explicit clear and an omitted field preserves the stored value;
-          // static catalog-only headers are owned by the catalog static spread
-          // and can't be overridden by an installer request.
-          const mergedSecrets: Record<string, unknown> = {
-            ...existingSecrets,
-            ...catalogStaticUserConfigValues,
-            ...submittedEnv,
-          };
-          for (const [fieldName, fieldConfig] of Object.entries(
-            catalogItem.userConfig ?? {},
-          )) {
-            if (
-              fieldConfig?.headerName &&
-              fieldConfig?.promptOnInstallation === false
-            ) {
-              continue;
-            }
-            const submitted = userConfigValues?.[fieldName];
-            if (submitted === "") {
-              // Explicit clear.
-              delete mergedSecrets[fieldName];
-            } else if (typeof submitted === "string" && submitted.trim()) {
-              mergedSecrets[fieldName] = submitted;
-            }
-            // A whitespace-only submission is treated as "no change" (matching
-            // validation's existing-bag fallback) so an accidental blank can't
-            // clobber a valid stored header.
-          }
-
-          if (mcpServer.secretId) {
-            await secretManager().updateSecret(
-              mcpServer.secretId,
-              mergedSecrets,
-            );
-          } else {
-            const secret = await secretManager().createSecret(
-              mergedSecrets,
-              `mcp-server-${mcpServer.name}-env`,
-            );
-            await McpServerModel.update(id, { secretId: secret.id });
-          }
+          const secret = await secretManager().createSecret(
+            mergedSecrets,
+            `mcp-server-${mcpServer.name}-env`,
+          );
+          await McpServerModel.update(id, { secretId: secret.id });
         }
 
         logger.info(
@@ -2606,19 +2554,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // an empty-body (auto-cascade) reinstall.
       if (catalogItem.serverType === "local") {
         await McpServerModel.update(id, { environmentValues: mergedPlainEnv });
-      }
-
-      // Update service account if provided
-      if (
-        serviceAccount !== undefined &&
-        catalogItem.localConfig?.serviceAccount !== serviceAccount
-      ) {
-        await InternalMcpCatalogModel.update(catalogItem.id, {
-          localConfig: {
-            ...catalogItem.localConfig,
-            serviceAccount: serviceAccount || undefined,
-          },
-        });
       }
 
       // Set status to "pending" immediately so UI shows progress bar
@@ -2666,6 +2601,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       inputSchema: tool.inputSchema,
                       _meta: tool._meta,
                       annotations: tool.annotations,
+                      outputSchema: tool.outputSchema,
                     }))
                 : undefined,
           });
@@ -2944,8 +2880,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Re-discover an MCP server's tools from the LIVE upstream server and
    * reconcile the stored tool snapshot — no pod restart, no reinstall.
    * Adds newly-advertised tools, updates changed descriptions/input schemas,
-   * and removes tools the server no longer exposes, preserving policies and
-   * agent assignments. Tools are shared per catalog item, so the refresh
+   * and removes tools the server no longer exposes, preserving agent
+   * assignments. Tools are shared per catalog item, so the refresh
    * applies to every install of the same server.
    */
   fastify.post(
@@ -3086,19 +3022,6 @@ async function findAccessibleMcpServer(params: {
   );
 }
 
-async function findMcpServerInOrganization(
-  id: string,
-  organizationId: string,
-): Promise<McpServer | null> {
-  const server = await McpServerModel.findByIdInOrg(id, organizationId);
-  if (!server) return null;
-  const catalog = await InternalMcpCatalogModel.findById(server.catalogId);
-  if (catalog?.organizationId && catalog.organizationId !== organizationId) {
-    return null;
-  }
-  return server;
-}
-
 async function assertNotManagedPlaywrightRuntime(
   server: McpServer,
 ): Promise<void> {
@@ -3185,12 +3108,6 @@ function currentRuntimeAlert(mcpServer: McpServer): {
 // =============================================================================
 // Internal helpers
 // =============================================================================
-
-function assertMcpServerAlertingEnabled(): void {
-  if (!config.mcpServer.alertingEnabled) {
-    throw new ApiError(404, "Not found");
-  }
-}
 
 /**
  * The runtime's handle on a reset that is under way. Taken from the method
@@ -3315,125 +3232,6 @@ async function failHardReset(
     "Hard reset of an MCP server deployment failed",
   );
   return message;
-}
-
-/**
- * Re-authentication repeats the route-level capability check because it
- * replaces credentials. Installation admin subsumes create permission.
- */
-async function assertLifecycleRoutePermission(params: {
-  headers: IncomingHttpHeaders;
-  userId: string;
-  organizationId: string;
-  ordinaryAction: "create";
-  verb: string;
-}): Promise<void> {
-  const [ordinary, admin] = await Promise.all([
-    hasPermission(
-      { mcpServerInstallation: [params.ordinaryAction] },
-      params.headers,
-    ),
-    isMcpInstallationAdmin(params),
-  ]);
-  if (ordinary.success || admin) return;
-  throw new ApiError(
-    403,
-    `You do not have permission to ${params.verb} this MCP server`,
-  );
-}
-
-/**
- * Gate the three destructive lifecycle actions (revoke / reauth / reinstall)
- * on an already-fetched MCP server by its scope. Rules:
- *   - personal:
- *       - revoke: owner OR mcpServerInstallation:update
- *       - re-authenticate / reinstall: owner only (these replace the
- *         connection's secret, so they must not be available to editors)
- *   - team:     mcpServerInstallation:admin OR (mcpServerInstallation:update AND user-in-team)
- *   - org:      mcpServerInstallation:admin (no owner fallback)
- */
-async function assertScopedLifecycleAuthorization(params: {
-  mcpServer: {
-    id: string;
-    scope: "personal" | "team" | "org";
-    ownerId: string | null;
-    teamId: string | null;
-  };
-  userId: string;
-  organizationId: string;
-  headers: IncomingHttpHeaders;
-  action: "revoke" | "re-authenticate" | "reinstall" | "reload tools for";
-}): Promise<void> {
-  const { mcpServer, userId, organizationId, headers, action } = params;
-
-  switch (mcpServer.scope) {
-    case "personal": {
-      if (mcpServer.ownerId === userId) return;
-      if (action === "revoke") {
-        const { success: hasMcpServerUpdate } = await hasPermission(
-          { mcpServerInstallation: ["update"] },
-          headers,
-        );
-        if (hasMcpServerUpdate) return;
-        throw new ApiError(
-          403,
-          `Only the connection owner or an editor/admin can ${action} personal connections`,
-        );
-      }
-      throw new ApiError(
-        403,
-        `Only the connection owner can ${action} personal connections`,
-      );
-    }
-    case "team": {
-      // A deleted team no longer supplies an organization link. Resolve the
-      // retained connection through its owner and catalog before granting access.
-      if (
-        !mcpServer.teamId &&
-        !(await findMcpServerInOrganization(mcpServer.id, organizationId))
-      ) {
-        throw new ApiError(404, "MCP server not found");
-      }
-      if (await isMcpInstallationAdmin({ userId, organizationId })) return;
-
-      // Team deletion clears the FK but retains the connection. Installation
-      // admins can still manage it; former team membership grants no access.
-      if (!mcpServer.teamId) {
-        throw new ApiError(
-          403,
-          `Only installation admins can ${action} connections whose team was deleted`,
-        );
-      }
-
-      const { success: hasMcpServerUpdate } = await hasPermission(
-        { mcpServerInstallation: ["update"] },
-        headers,
-      );
-      if (!hasMcpServerUpdate) {
-        throw new ApiError(
-          403,
-          `You don't have permission to ${action} team connections`,
-        );
-      }
-      const isMember = await TeamModel.isUserInTeam(mcpServer.teamId, userId);
-      if (!isMember) {
-        throw new ApiError(
-          403,
-          `You can only ${action} connections for teams you are a member of`,
-        );
-      }
-      return;
-    }
-    case "org": {
-      if (!(await isMcpInstallationAdmin({ userId, organizationId }))) {
-        throw new ApiError(
-          403,
-          `Only mcpServerInstallation admins can ${action} organization-scoped connections`,
-        );
-      }
-      return;
-    }
-  }
 }
 
 async function connectAndGetToolsForInstallation(params: {
@@ -3867,13 +3665,6 @@ function getCatalogStaticUserConfigValues(
   );
 }
 
-/**
- * Select the prompted config values an environment's allowlist regex governs:
- * non-secret, free-text fields (userConfig string/directory/file; env
- * plain_text). Secret fields — including BYOS vault references, which live on
- * secret-typed fields — and typed boolean/number fields are excluded, since the
- * rule targets free-text values. Mirrors the frontend's per-field filtering.
- */
 function collectValidatableInstallValues(params: {
   catalogItem: {
     userConfig?: Record<string, { type?: string; sensitive?: boolean }> | null;
@@ -3938,6 +3729,41 @@ function filterInstallUserConfigValues(params: {
   return Object.fromEntries(filteredEntries);
 }
 
+/**
+ * Which agents a server's usage may name to the caller. Anyone who manages
+ * shared installations, or is an agent admin, sees every agent. A member sees
+ * only the agents they can open themselves, so another person's personal
+ * agent never appears in their usage (the agent half matches the tools list,
+ * `ToolModel.findAll`).
+ */
+async function getVisibleAgentFilter(params: {
+  userId: string;
+  organizationId: string;
+  /** The agents the response would name; only these are checked. */
+  agentIds: string[];
+}): Promise<(agentId: string) => boolean> {
+  // Status-only lists (includeAssignedAgents=false) name no agents at all.
+  if (params.agentIds.length === 0) return () => false;
+  const [managesSharedInstalls, isAgentAdmin] = await Promise.all([
+    userHasPermission(
+      params.userId,
+      params.organizationId,
+      "mcpServerInstallation",
+      "update",
+    ),
+    hasAnyAgentTypeAdminPermission(params),
+  ]);
+  if (managesSharedInstalls || isAgentAdmin) {
+    return () => true;
+  }
+  const accessibleAgentIds = new Set(
+    await AgentModel.findAccessibleIdsForUser(params.userId, false, undefined, {
+      among: params.agentIds,
+    }),
+  );
+  return (agentId) => accessibleAgentIds.has(agentId);
+}
+
 async function validateScopeAndAuthorization(params: {
   scope: ResourceVisibilityScope;
   teamId: string | null | undefined;
@@ -3969,7 +3795,7 @@ async function validateScopeAndAuthorization(params: {
   }
 
   if (scope === "team" && teamId) {
-    const team = await TeamModel.findById(teamId);
+    const team = await TeamModel.findById(teamId, { includeMembers: false });
     if (!team) {
       throw new ApiError(404, "Team not found");
     }

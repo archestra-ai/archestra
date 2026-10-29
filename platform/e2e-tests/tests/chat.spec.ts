@@ -67,15 +67,6 @@ const geminiConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
-// Cerebras - Uses OpenAI-compatible streaming format
-// Note: Cerebras filters out models with "llama" in the name for chat, so we use cerebras-gpt
-const cerebrasConfig: ChatProviderTestConfig = {
-  providerName: "cerebras",
-  providerDisplayName: "Cerebras",
-  wiremockStubId: "chat-ui-e2e-test",
-  expectedResponse: "This is a mocked response for the chat UI e2e test.",
-};
-
 // Cohere - Uses Cohere v2 streaming format
 const cohereConfig: ChatProviderTestConfig = {
   providerName: "cohere",
@@ -103,34 +94,10 @@ const perplexityConfig: ChatProviderTestConfig = {
   matchModel: ({ id }) => !requiresPerplexityAgentApi(id),
 };
 
-// Ollama - Uses OpenAI-compatible streaming format
-const ollamaConfig: ChatProviderTestConfig = {
-  providerName: "ollama",
-  providerDisplayName: "Ollama",
-  wiremockStubId: "chat-ui-e2e-test",
-  expectedResponse: "This is a mocked response for the chat UI e2e test.",
-};
-
-// vLLM - Uses OpenAI-compatible streaming format
-const vllmConfig: ChatProviderTestConfig = {
-  providerName: "vllm",
-  providerDisplayName: "vLLM",
-  wiremockStubId: "chat-ui-e2e-test",
-  expectedResponse: "This is a mocked response for the chat UI e2e test.",
-};
-
 // ZhipuAI - Uses OpenAI-compatible streaming format
 const zhipuaiConfig: ChatProviderTestConfig = {
   providerName: "zhipuai",
   providerDisplayName: "ZhipuAI",
-  wiremockStubId: "chat-ui-e2e-test",
-  expectedResponse: "This is a mocked response for the chat UI e2e test.",
-};
-
-// DeepSeek - Uses OpenAI-compatible streaming format
-const deepseekConfig: ChatProviderTestConfig = {
-  providerName: "deepseek",
-  providerDisplayName: "DeepSeek",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
@@ -174,21 +141,20 @@ const azureConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked Azure AI Foundry response.",
 };
 
+// Cerebras, DeepSeek, Ollama and vLLM are deliberately absent: their adapters
+// are plain createOpenAiCompatibleAdapterFactory configs, owned by the backend
+// provider-matrix and llm-client tests rather than a browser round trip each.
 const testConfigs: ChatProviderTestConfig[] = [
   anthropicConfig,
   openaiConfig,
   geminiConfig,
-  cerebrasConfig,
   cohereConfig,
   mistralConfig,
   perplexityConfig,
   groqConfig,
   xaiConfig,
   openrouterConfig,
-  ollamaConfig,
-  vllmConfig,
   zhipuaiConfig,
-  deepseekConfig,
   minimaxConfig,
   azureConfig,
 ];
@@ -240,7 +206,7 @@ for (const config of testConfigs) {
       await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
       await modelSelectorTrigger.click();
 
-      const modelDialog = page.getByRole("dialog", { name: "Select Model" });
+      const modelDialog = page.getByTestId(E2eTestId.ChatSetupMenu);
       await expect(modelDialog).toBeVisible({ timeout: 5_000 });
 
       await selectRuntimeModelFromDialog(page, runtimeModel);
@@ -306,7 +272,7 @@ test.describe("Chat active run reconnect", () => {
     await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
     await modelSelectorTrigger.click();
 
-    const modelDialog = page.getByRole("dialog", { name: "Select Model" });
+    const modelDialog = page.getByTestId(E2eTestId.ChatSetupMenu);
     await expect(modelDialog).toBeVisible({ timeout: 5_000 });
     await selectRuntimeModelFromDialog(page, runtimeModel);
 
@@ -381,7 +347,7 @@ test.describe("Chat thinking block layout", () => {
     await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
     await modelSelectorTrigger.click();
 
-    const modelDialog = page.getByRole("dialog", { name: "Select Model" });
+    const modelDialog = page.getByTestId(E2eTestId.ChatSetupMenu);
     await expect(modelDialog).toBeVisible({ timeout: 5_000 });
     await selectRuntimeModelFromDialog(page, runtimeModel);
 
@@ -391,9 +357,12 @@ test.describe("Chat thinking block layout", () => {
       .fill(`Test message ${testMessageId}: think it through.`);
     await page.keyboard.press("Enter");
 
-    // A live block is expanded while it streams, so this is the state the
-    // overflow shows up in. Wait for the widest content — the long code line —
-    // to be on screen before measuring.
+    // Thinking stays collapsed while it streams; the reader opens it. Then wait
+    // for the widest content — the long code line — before measuring.
+    await page
+      .getByText(/^(Thinking\.\.\.|Thought for)/)
+      .first()
+      .click({ timeout: 90_000 });
     const thinkingCodeLine = page.getByText("reconcileEverything").first();
     await expect(thinkingCodeLine).toBeVisible({ timeout: 90_000 });
     expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
@@ -406,17 +375,12 @@ test.describe("Chat thinking block layout", () => {
     expect(streaming.proseOverflow).toBeLessThanOrEqual(1);
     expect(streaming.codePanelOverflow).toBeLessThanOrEqual(1);
 
-    // And again once the block has settled and the reader reopens it. Wait for
-    // the block's own auto-collapse rather than racing it: clicking the trigger
-    // while it is still open would close the block instead of reopening it.
+    // And again once the block has settled. A block the reader opened stays
+    // open when streaming ends; nothing collapses it behind their back.
     await expect(
       page.getByText("The helper reconciles every knob").first(),
     ).toBeVisible({ timeout: 90_000 });
-    await expect(thinkingCodeLine).toBeHidden({ timeout: 30_000 });
-    await page
-      .getByText(/Thought for/)
-      .first()
-      .click();
+    await expect(page.getByText(/Thought for/).first()).toBeVisible();
     await expect(thinkingCodeLine).toBeVisible({ timeout: 10_000 });
     expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
 
@@ -560,8 +524,11 @@ async function fetchConversationTranscript(page: Page, conversationId: string) {
   }, conversationId);
 }
 
+// The space keeps the random suffix out of one 20+ char token: joined with a
+// hyphen, ~2.5% of ids trip the composer's high-entropy secret scan and the
+// "Possible sensitive data detected" dialog swallows the send.
 function makeTestMessageId(prefix: string): string {
-  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix} ${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function extractConversationId(url: string): string | null {

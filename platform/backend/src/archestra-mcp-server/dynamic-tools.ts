@@ -1,12 +1,13 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
-  isPluginArchestraToolShortName,
+  isCodeRuntimeArchestraToolShortName,
   isSandboxArchestraToolShortName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
+import type { RequestLookups } from "@/auth/request-lookups";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import {
@@ -184,6 +185,7 @@ export async function isDynamicallyAvailableArchestraTool(params: {
   /** Pre-loaded per-agent exclusion sets, so a handler that already fetched
    * them (executeArchestraTool's assignment gate) does not re-query. */
   exclusionSets?: AgentToolExclusionSets;
+  lookups?: RequestLookups;
 }): Promise<boolean> {
   const shortName = archestraMcpBranding.getToolShortName(params.toolName);
   if (shortName == null) {
@@ -232,14 +234,24 @@ export async function isArchestraToolAvailableToAgent(params: {
   userId?: string;
   organizationId?: string;
   exclusionSets?: AgentToolExclusionSets;
+  lookups?: RequestLookups;
 }): Promise<boolean> {
   const shortName = archestraMcpBranding.getToolShortName(params.toolName);
   if (shortName == null) return false;
 
+  const agent =
+    (params.lookups && (await params.lookups.gatewayAgent(params.agentId))) ??
+    undefined;
   const exclusionSets =
     params.exclusionSets ??
-    (await agentToolExclusionsService.getActiveExclusionSets(params.agentId));
-  const assignedTools = await ToolModel.getMcpToolsByAgent(params.agentId);
+    (await agentToolExclusionsService.getActiveExclusionSets(
+      params.agentId,
+      agent,
+    ));
+  const assignedTools = await ToolModel.getMcpToolsByAgent(
+    params.agentId,
+    agent,
+  );
   if (
     assignedTools.some(
       (tool) =>
@@ -270,6 +282,7 @@ export async function getUnassignedDiscoverableTools(params: {
   /** Pre-loaded per-agent exclusion sets, so a handler that already fetched
    * them (search_tools, run_tool recovery) does not re-query. */
   exclusionSets?: AgentToolExclusionSets;
+  lookups?: RequestLookups;
 }): Promise<Tool[]> {
   const { assignedToolNames } = params;
   const ctx = await dynamicAccessContext(params);
@@ -315,18 +328,23 @@ export async function dynamicAccessContext(params: {
   agentId: string;
   userId?: string;
   organizationId?: string;
+  lookups?: RequestLookups;
 }): Promise<{
   userId: string;
   organizationId: string;
   agentEnvironmentId: string | null;
 } | null> {
-  const { agentId, organizationId, userId } = params;
+  const { agentId, organizationId, userId, lookups } = params;
   if (!userId || !organizationId || userId === "system") {
     return null;
   }
   const [accessAllTools, agentEnvironmentId] = await Promise.all([
-    AgentModel.getAccessAllTools(agentId),
-    AgentModel.findEnvironmentId(agentId),
+    lookups
+      ? lookups.agentAccessAllTools(agentId)
+      : AgentModel.getAccessAllTools(agentId),
+    lookups
+      ? lookups.agentEnvironmentId(agentId)
+      : AgentModel.findEnvironmentId(agentId),
   ]);
   if (!accessAllTools) {
     return null;
@@ -378,13 +396,15 @@ async function agentHasSearchableKnowledgeConnectors(params: {
 }
 
 // Whether a sandbox-group tool is enabled for discovery/dynamic dispatch under
-// the current deployment config. Both the runtime tools
-// (run_command/upload_file/download_file) and the persistent-files tools
-// (search_files/read_file/…) follow the skills-sandbox runtime flag. Non-sandbox
+// the current deployment config. The runtime tools
+// (run_command/upload_file/download_file) follow the code runtime flag; the
+// persistent-files tools (search_files/read_file/…) are always on. Non-sandbox
 // tools are never enabled by this predicate.
 function isSandboxToolEnabled(shortName: string): boolean {
+  if (!isSandboxArchestraToolShortName(shortName)) return false;
   return (
-    config.skillsSandbox.enabled && isSandboxArchestraToolShortName(shortName)
+    !isCodeRuntimeArchestraToolShortName(shortName) ||
+    config.skillsSandbox.enabled
   );
 }
 
@@ -429,17 +449,13 @@ function isExcludedFromDiscovery(
 
 // Whether a built-in's feature group is live under the current deployment
 // config, mirroring the registration/execution gates in index.ts
-// (getArchestraMcpTools + executeArchestraTool): the sandbox group (runtime +
-// persistent-files) follows the skills-sandbox flag (see
-// isSandboxToolEnabled), and the plugin group follows the plugins beta flag.
-// Everything else — including the skill, app, and Projects tools, which are
+// (getArchestraMcpTools + executeArchestraTool): the sandbox runtime tools
+// follow the code runtime flag (see isSandboxToolEnabled).
+// Everything else — including the plugin, skill, app, and Projects tools, which are
 // registered unconditionally — is always on.
 function isBuiltInFeatureEnabled(shortName: string): boolean {
   if (isSandboxArchestraToolShortName(shortName)) {
     return isSandboxToolEnabled(shortName);
-  }
-  if (isPluginArchestraToolShortName(shortName)) {
-    return config.plugins.enabled;
   }
   return true;
 }

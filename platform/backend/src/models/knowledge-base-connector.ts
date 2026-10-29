@@ -9,6 +9,7 @@ import {
   inArray,
   isNotNull,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
@@ -26,7 +27,12 @@ import type {
 } from "@/types/knowledge-connector";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
+import InteractionUserActivityModel from "./interaction-user-activity";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+  type ResourceAccessFilter,
+} from "./resource-permission-subject";
 
 class KnowledgeBaseConnectorModel {
   static async findByOrganization(params: {
@@ -36,6 +42,7 @@ class KnowledgeBaseConnectorModel {
     canReadAll?: boolean;
     viewerTeamIds?: string[];
     viewerUserId?: string;
+    viewerPrincipal?: GrantPrincipal;
     visibilityScope?: ConnectorVisibilityScope;
     /**
      * When provided (including explicit `null` = Default), restrict to connectors
@@ -54,9 +61,11 @@ class KnowledgeBaseConnectorModel {
             schema.knowledgeBaseConnectorsTable.organizationId,
             params.organizationId,
           ),
-          buildVisibilityFilter({
+          await buildVisibilityFilter({
+            organizationId: params.organizationId,
             canReadAll: params.canReadAll,
             userId: params.viewerUserId,
+            principal: params.viewerPrincipal,
             teamIds: params.viewerTeamIds,
             scope: params.visibilityScope,
           }),
@@ -112,8 +121,13 @@ class KnowledgeBaseConnectorModel {
     canReadAll?: boolean;
     viewerTeamIds?: string[];
     viewerUserId?: string;
+    viewerPrincipal?: GrantPrincipal;
     visibilityScope?: ConnectorVisibilityScope;
     status?: "active" | "deleted";
+    /** The list's `access`, `sharedWith`, and `owner` filters. */
+    access?: ResourceAccessFilter;
+    /** Restrict to these connector ids; omit when not filtering. */
+    ids?: string[];
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
     const {
       organizationId,
@@ -126,6 +140,7 @@ class KnowledgeBaseConnectorModel {
       viewerTeamIds,
       visibilityScope,
       status,
+      access,
     } = params;
     const searchPattern = search ? `%${escapeLikePattern(search)}%` : null;
 
@@ -138,12 +153,17 @@ class KnowledgeBaseConnectorModel {
         ? isNotNull(schema.knowledgeBaseConnectorsTable.deletedAt)
         : notDeleted(schema.knowledgeBaseConnectorsTable),
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
-      buildVisibilityFilter({
+      await buildVisibilityFilter({
+        organizationId,
         canReadAll,
         userId: params.viewerUserId,
+        principal: params.viewerPrincipal,
         teamIds: viewerTeamIds,
         scope: visibilityScope,
       }),
+      ...(params.ids
+        ? [inArray(schema.knowledgeBaseConnectorsTable.id, params.ids)]
+        : []),
       ...(connectorType
         ? [eq(schema.knowledgeBaseConnectorsTable.connectorType, connectorType)]
         : []),
@@ -166,6 +186,19 @@ class KnowledgeBaseConnectorModel {
             ),
           ]
         : []),
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      access
+        ? ResourcePermissionPolicyModel.accessRelationCondition({
+            ...access,
+            organizationId,
+            resource: "knowledgeConnector",
+            scopeColumn: schema.knowledgeBaseConnectorsTable.id,
+            ownerColumn: schema.knowledgeBaseConnectorsTable.createdBy,
+          })
+        : undefined,
+      // SPDX-SnippetEnd
     ];
 
     const [data, totalResult] = await Promise.all([
@@ -211,6 +244,7 @@ class KnowledgeBaseConnectorModel {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
       viewerUserId?: string;
+      viewerPrincipal?: GrantPrincipal;
       visibilityScope?: ConnectorVisibilityScope;
       /** When provided (incl. `null` = Default), restrict to this environment. */
       environmentId?: string | null;
@@ -268,9 +302,10 @@ class KnowledgeBaseConnectorModel {
             schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
             knowledgeBaseId,
           ),
-          buildVisibilityFilter({
+          await buildVisibilityFilter({
             canReadAll: params?.canReadAll,
             userId: params?.viewerUserId,
+            principal: params?.viewerPrincipal,
             teamIds: params?.viewerTeamIds,
             scope: params?.visibilityScope,
           }),
@@ -282,12 +317,32 @@ class KnowledgeBaseConnectorModel {
       .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt));
   }
 
+  /**
+   * The viewer's read reach over `knowledge_base_connectors`, as
+   * findByKnowledgeBaseIds applies it without a `visibilityScope`, for a
+   * statement that embeds the same filter. Undefined when it filters nothing.
+   */
+  static async visibilityCondition(params: {
+    canReadAll?: boolean;
+    viewerTeamIds?: string[];
+    viewerUserId?: string;
+    viewerPrincipal?: GrantPrincipal;
+  }): Promise<SQL | undefined> {
+    return await buildVisibilityFilter({
+      canReadAll: params.canReadAll,
+      userId: params.viewerUserId,
+      principal: params.viewerPrincipal,
+      teamIds: params.viewerTeamIds,
+    });
+  }
+
   static async findByKnowledgeBaseIds(
     knowledgeBaseIds: string[],
     params?: {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
       viewerUserId?: string;
+      viewerPrincipal?: GrantPrincipal;
       visibilityScope?: ConnectorVisibilityScope;
     },
   ): Promise<(KnowledgeBaseConnector & { knowledgeBaseId: string })[]> {
@@ -346,9 +401,10 @@ class KnowledgeBaseConnectorModel {
             schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
             knowledgeBaseIds,
           ),
-          buildVisibilityFilter({
+          await buildVisibilityFilter({
             canReadAll: params?.canReadAll,
             userId: params?.viewerUserId,
+            principal: params?.viewerPrincipal,
             teamIds: params?.viewerTeamIds,
             scope: params?.visibilityScope,
           }),
@@ -717,6 +773,7 @@ class KnowledgeBaseConnectorModel {
     organizationId: string;
   }): Promise<boolean> {
     return await withDbTransaction(async (tx) => {
+      await InteractionUserActivityModel.lifecycleFence(tx);
       // `sql.raw`: SET is a utility command and takes no bind parameters, so
       // `= $1` is a syntax error. The value is a module constant, never input.
       await tx.execute(
@@ -745,6 +802,15 @@ class KnowledgeBaseConnectorModel {
         schema.knowledgeBaseConnectorsTable,
         eq(schema.knowledgeBaseConnectorsTable.id, params.id),
       );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["knowledgeConnector"],
+        scope: params.id,
+      });
+      // SPDX-SnippetEnd
       return count > 0;
     });
   }
@@ -1065,6 +1131,43 @@ class KnowledgeBaseConnectorModel {
       knowledgeBases,
       memberOverrides,
       configKeys,
+      ...(row.config?.type === "github"
+        ? {
+            githubRepositorySettings: {
+              defaults: {
+                includeIssues: row.config.includeIssues ?? true,
+                includePullRequests: row.config.includePullRequests ?? true,
+                includeRepositoryFiles:
+                  row.config.includeRepositoryFiles ?? false,
+                labelsToSkip: row.config.labelsToSkip ?? [],
+                fileTypes: row.config.fileTypes ?? [],
+                includePaths: row.config.includePaths ?? [],
+                excludePaths: row.config.excludePaths ?? [],
+              },
+              repositories: (row.config.repositoryOverrides ?? []).map(
+                ({
+                  repository,
+                  includeIssues,
+                  includePullRequests,
+                  includeRepositoryFiles,
+                  labelsToSkip,
+                  fileTypes,
+                  includePaths,
+                  excludePaths,
+                }) => ({
+                  repository,
+                  includeIssues: includeIssues ?? null,
+                  includePullRequests: includePullRequests ?? null,
+                  includeRepositoryFiles: includeRepositoryFiles ?? null,
+                  labelsToSkip: labelsToSkip ?? null,
+                  fileTypes: fileTypes ?? null,
+                  includePaths: includePaths ?? null,
+                  excludePaths: excludePaths ?? null,
+                }),
+              ),
+            },
+          }
+        : {}),
       permissionSyncIntervalSeconds: row.permissionSyncIntervalSeconds ?? null,
       environmentId: row.environmentId ?? null,
       createdAt: row.createdAt.toISOString(),
@@ -1087,9 +1190,13 @@ type ConnectorVisibilityScope = "management" | "query";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-function buildVisibilityFilter(params: {
+async function buildVisibilityFilter(params: {
+  /** Omitted by lookups keyed by knowledge base, which are not fenced to one. */
+  organizationId?: string;
   canReadAll?: boolean;
   userId?: string;
+  /** The caller's already-resolved subjects, when the request has them. */
+  principal?: GrantPrincipal;
   teamIds?: string[];
   scope?: ConnectorVisibilityScope;
 }) {
@@ -1104,9 +1211,15 @@ function buildVisibilityFilter(params: {
   };
   const reach = or(
     params.userId
-      ? ResourcePermissionPolicyModel.grantCondition({
+      ? ResourcePermissionPolicyModel.grantConditionForAny({
           ...context,
-          userId: params.userId,
+          organizationColumn: table.organizationId,
+          principals: params.principal
+            ? [params.principal]
+            : await ResourcePermissionSubjectModel.resolvePrincipals({
+                userId: params.userId,
+                organizationId: params.organizationId,
+              }),
         })
       : // A caller with no user of its own reaches what is published to the
         // organization at large, plus what its teams were granted.

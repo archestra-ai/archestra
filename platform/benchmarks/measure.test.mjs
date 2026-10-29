@@ -5,10 +5,68 @@ import test from "node:test";
 import {
   CompletionReader,
   measureRequest,
+  readGatewayTiming,
   runBlock,
   summarize,
 } from "./measure.mjs";
-import { createMockServer, MOCK_CONTENT } from "./mock-upstream.mjs";
+import {
+  createMockServer,
+  MOCK_CONTENT,
+  MOCK_MCP_TOOL,
+} from "./mock-upstream.mjs";
+
+test("server timing accepts per-request durations and rejects misleading or partial measurements", () => {
+  assert.deepEqual(
+    readGatewayTiming(
+      "archestra_gateway;dur=80, archestra_upstream;dur=60, archestra_overhead;dur=20",
+    ),
+    { gatewayMs: 80, upstreamMs: 60, overheadMs: 20 },
+  );
+  assert.equal(readGatewayTiming(undefined), null);
+  assert.equal(readGatewayTiming("cache;dur=1"), null);
+  for (const header of [
+    "archestra_gateway;dur=10",
+    "archestra_gateway;dur=10, archestra_upstream;dur=20, archestra_overhead;dur=0",
+    "archestra_gateway;dur=NaN, archestra_upstream;dur=0, archestra_overhead;dur=0",
+    "archestra_gateway;dur=10, archestra_gateway;dur=10, archestra_upstream;dur=5, archestra_overhead;dur=5",
+  ])
+    assert.throws(() => readGatewayTiming(header), /gateway timing/);
+});
+
+test("real HTTP measurements require gateway timing when requested and keep it separate from client time", async (t) => {
+  const server = http.createServer((req, res) => {
+    if (req.url === "/timed")
+      res.setHeader(
+        "server-timing",
+        "archestra_gateway;dur=8, archestra_upstream;dur=6, archestra_overhead;dur=2",
+      );
+    res.end(
+      JSON.stringify({ choices: [{ message: { content: MOCK_CONTENT } }] }),
+    );
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const options = {
+    body: {},
+    expectedContent: MOCK_CONTENT,
+    requireGatewayTiming: true,
+  };
+  const root = `http://127.0.0.1:${server.address().port}`;
+  const timed = await measureRequest({ ...options, url: `${root}/timed` });
+  assert.equal(timed.ok, true);
+  assert.deepEqual(timed.gatewayTiming, {
+    gatewayMs: 8,
+    upstreamMs: 6,
+    overheadMs: 2,
+  });
+  const missing = await measureRequest({ ...options, url: `${root}/missing` });
+  assert.equal(missing.ok, false);
+  assert.match(missing.error, /Missing per-request gateway timing/);
+});
 
 test("SSE first content ignores comments, role, usage and arbitrary UTF-8 boundaries", () => {
   let events = 0;
@@ -170,4 +228,31 @@ test("warmup failure stops scheduling and never starts a measured block", async 
     /Warmup failed/,
   );
   assert.equal(requests, 3);
+});
+
+test("the mock MCP server answers tools/call with the content an MCP measurement expects", async (t) => {
+  const server = createMockServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const url = `http://127.0.0.1:${server.address().port}/mcp`;
+  const call = (name) =>
+    measureRequest({
+      url,
+      body: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name, arguments: { name: "widget" } },
+      },
+      expectedContent: MOCK_CONTENT,
+    });
+
+  assert.equal((await call(MOCK_MCP_TOOL)).ok, true);
+  const unknown = await call("unknown_tool");
+  assert.equal(unknown.ok, false);
+  assert.match(unknown.error, /Unexpected mock response content/);
 });

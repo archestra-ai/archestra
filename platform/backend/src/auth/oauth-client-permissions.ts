@@ -19,14 +19,11 @@ import { ApiError } from "@/types";
 export async function requireOauthClientAccess(params: {
   organizationId: string;
   userId: string;
-  resource: "llmOauthClient" | "mcpOauthClient";
+  resource: "oauthClient";
   id: string;
   action: ResourcePermissionAction;
 }): Promise<void> {
-  const notFound =
-    params.resource === "mcpOauthClient"
-      ? "MCP OAuth client not found"
-      : "LLM OAuth client not found";
+  const notFound = "OAuth client not found";
   const context = {
     organizationId: params.organizationId,
     userId: params.userId,

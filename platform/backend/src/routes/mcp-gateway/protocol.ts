@@ -497,8 +497,10 @@ export function buildDiscoverResult(params: {
   agentId: string;
   version: string;
   revision: McpProtocolRevision;
+  /** From {@link buildGatewayInstructions}; omitted from the result when absent. */
+  instructions?: string;
 }) {
-  const { agentId, version, revision } = params;
+  const { agentId, version, revision, instructions } = params;
   const serverInfo = { name: `archestra-agent-${agentId}`, version };
   return {
     resultType: COMPLETE_RESULT_TYPE,
@@ -511,11 +513,30 @@ export function buildDiscoverResult(params: {
     protocolVersion: revision,
     serverInfo,
     capabilities: buildGatewayServerCapabilities(revision),
+    ...(instructions && { instructions }),
     // A discover result is cacheable like the lists, and names the server in
     // `_meta` as every other result does.
     ...buildPrivateListCacheHint(),
     _meta: { [MCP_SERVER_INFO_META_KEY]: serverInfo },
   };
+}
+
+/**
+ * The server `instructions` both handshakes return (`initialize` under
+ * 2025-11-25, `server/discover` under 2026-07-28). Clients put them in the
+ * model's context to say what the server is for, so the gateway sends the
+ * description its owner wrote. Tool usage stays in the tool descriptions,
+ * which the spec asks instructions not to repeat. Capped because clients add
+ * the text to every prompt (some truncate past ~2 KB).
+ */
+export function buildGatewayInstructions(
+  description: string | null | undefined,
+): string | undefined {
+  const trimmed = description?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > GATEWAY_INSTRUCTIONS_MAX_LENGTH
+    ? `${trimmed.slice(0, GATEWAY_INSTRUCTIONS_MAX_LENGTH - 1)}…`
+    : trimmed;
 }
 
 /**
@@ -546,6 +567,8 @@ export function isResourceUnavailableError(params: {
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+const GATEWAY_INSTRUCTIONS_MAX_LENGTH = 2000;
 
 const NOT_FOUND_MESSAGE =
   /resource not found|not found|unknown (resource|uri)/i;

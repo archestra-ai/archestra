@@ -1,5 +1,7 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import LimitModel from "@/models/limit";
+import { ApiError } from "@/types";
 import { OPENAI_HANDLED_ENDPOINT_SUFFIXES } from "../common";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -10,12 +12,15 @@ describe("createProxyPreHandler", () => {
   let mockUpstream: FastifyInstance;
   let upstreamPort: number;
   let upstreamHits: number;
+  let upstreamHeaders: Record<string, string | string[] | undefined>;
 
   beforeEach(async () => {
     mockUpstream = Fastify();
     upstreamHits = 0;
-    mockUpstream.addHook("onRequest", async () => {
+    upstreamHeaders = {};
+    mockUpstream.addHook("onRequest", async (request) => {
       upstreamHits++;
+      upstreamHeaders = request.headers;
     });
 
     mockUpstream.get("/v1/models", async () => ({
@@ -37,6 +42,16 @@ describe("createProxyPreHandler", () => {
     mockUpstream.get("/chat/completions", async () => ({
       result: "proxied",
     }));
+    for (const url of [
+      "/files",
+      "/uploads",
+      "/uploads/file-1/parts",
+      "/batches/job-1/cancel",
+    ]) {
+      mockUpstream.post(url, async () => ({ result: "proxied" }));
+    }
+    mockUpstream.get("/batches/job-1", async () => ({ status: "completed" }));
+    mockUpstream.delete("/files/file-1", async () => ({ deleted: true }));
 
     await mockUpstream.listen({ port: 0 });
     const address = mockUpstream.server.address();
@@ -48,6 +63,50 @@ describe("createProxyPreHandler", () => {
     await mockUpstream?.close();
   });
 
+  test("a model-scoped quota on another key preserves metadata, files, status and cancellation but blocks unhandled inference", async () => {
+    await LimitModel.create({
+      entityType: "virtual_key",
+      entityId: TEST_UUID,
+      limitType: "requests_per_minute",
+      limitValue: 1,
+      model: ["model-a"],
+    });
+    await setupProxy({
+      apiPrefix: "/v1/openai",
+      endpointSuffix: "/chat/completions",
+      providerName: "OpenAI",
+    });
+    for (const [method, path] of [
+      ["GET", "/v1/models/model-b"],
+      ["GET", "/batches/job-1"],
+      ["POST", "/files"],
+      ["POST", "/uploads"],
+      ["POST", "/uploads/file-1/parts"],
+      ["POST", "/batches/job-1/cancel"],
+      ["DELETE", "/files/file-1"],
+    ] as const) {
+      const response = await app.inject({ method, url: `/v1/openai${path}` });
+      expect(response.statusCode, response.body).toBe(200);
+    }
+    const hits = upstreamHits;
+    for (const path of [
+      "/images/generations",
+      "/audio/speech",
+      "/batches",
+      "/realtime",
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai${path}`,
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: { code: "archestra_quota_unsupported_endpoint" },
+      });
+    }
+    expect(upstreamHits).toBe(hits);
+  });
+
   async function setupProxy(params: {
     apiPrefix: string;
     endpointSuffix: string | readonly string[];
@@ -55,6 +114,10 @@ describe("createProxyPreHandler", () => {
     providerName: string;
     skipErrorResponse?: Record<string, unknown>;
     rejectUnhandledPaths?: boolean;
+    authenticate?: (params: {
+      request: FastifyRequest;
+      agentId?: string;
+    }) => Promise<void>;
   }) {
     const {
       apiPrefix,
@@ -63,6 +126,7 @@ describe("createProxyPreHandler", () => {
       providerName,
       skipErrorResponse,
       rejectUnhandledPaths,
+      authenticate,
     } = params;
     const upstream = `http://localhost:${upstreamPort}`;
 
@@ -82,11 +146,89 @@ describe("createProxyPreHandler", () => {
         rewritePrefix,
         skipErrorResponse,
         rejectUnhandledPaths,
+        authenticate,
       }),
     });
 
     return app;
   }
+
+  describe("authentication", () => {
+    test("a rejected request never reaches the upstream", async () => {
+      await setupProxy({
+        apiPrefix: "/v1/openai",
+        endpointSuffix: "/chat/completions",
+        providerName: "OpenAI",
+        authenticate: async () => {
+          throw new ApiError(401, "Authentication required");
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/openai/chat/completions",
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(upstreamHits).toBe(0);
+    });
+
+    test("runs before the UUID rewrite and receives the agent id from the URL", async () => {
+      const seen: Array<string | undefined> = [];
+      await setupProxy({
+        apiPrefix: "/v1/openai",
+        endpointSuffix: "/chat/completions",
+        providerName: "OpenAI",
+        authenticate: async ({ agentId }) => {
+          seen.push(agentId);
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/openai/${TEST_UUID}/chat/completions`,
+      });
+
+      expect(seen).toEqual([TEST_UUID]);
+      expect(response.statusCode).toBe(200);
+      expect(upstreamHits).toBe(1);
+    });
+
+    // The passthrough key authenticates the caller to Archestra; forwarding it
+    // would hand an Archestra credential to a third-party provider.
+    test("forwards the caller's provider key but no X-Archestra headers", async () => {
+      const seenKeys: Array<string | undefined> = [];
+      await setupProxy({
+        apiPrefix: "/v1/openai",
+        endpointSuffix: "/chat/completions",
+        providerName: "OpenAI",
+        authenticate: async ({ request }) => {
+          seenKeys.push(
+            request.headers["x-archestra-virtual-key"] as string | undefined,
+          );
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/openai/chat/completions",
+        headers: {
+          authorization: "Bearer sk-provider-key",
+          "x-archestra-virtual-key": "arch_passthrough_token",
+          "x-archestra-source": "chatops:slack",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(seenKeys).toEqual(["arch_passthrough_token"]);
+      expect(upstreamHeaders.authorization).toBe("Bearer sk-provider-key");
+      expect(
+        Object.keys(upstreamHeaders).filter((name) =>
+          name.startsWith("x-archestra-"),
+        ),
+      ).toEqual([]);
+    });
+  });
 
   describe("endpoint skipping", () => {
     test("returns 400 for POST to the custom-handled endpoint suffix", async () => {

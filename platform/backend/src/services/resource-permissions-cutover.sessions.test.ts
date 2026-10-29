@@ -8,6 +8,7 @@ import ProjectModel from "@/models/project";
 import ProjectAccessModel from "@/models/project-access";
 import ResourcePermissionAccessModel from "@/models/resource-permission-access";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { projectService } from "@/services/project";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { expect, test } from "@/test";
 import { seedLegacyShareForTest } from "@/test/sharing";
@@ -137,7 +138,7 @@ for (const resource of ["conversation", "agentRun"] as const) {
   }
 }
 
-test("new chat grants support mixed principals and cannot expose locked chats", async ({
+test("new chat grants support mixed principals and cannot expose encrypted chats", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -218,7 +219,7 @@ test("new chat grants support mixed principals and cannot expose locked chats", 
     userId: owner.id,
     organizationId: org.id,
     agentId: agent.id,
-    lockedChat: true,
+    encryptedChat: true,
   });
   await expect(
     ResourcePermissions.updatePolicy({
@@ -276,10 +277,12 @@ test("project permission revocation removes inherited session reads and project 
     });
   expect(await readChat()).not.toBeNull();
   expect(
-    await ProjectAccessModel.listAccessibleProjects({
-      organizationId: org.id,
-      userId: reader.id,
-    }),
+    (
+      await projectService.list({
+        organizationId: org.id,
+        userId: reader.id,
+      })
+    ).data,
   ).toEqual(
     expect.arrayContaining([expect.objectContaining({ id: project.id })]),
   );
@@ -304,10 +307,12 @@ test("project permission revocation removes inherited session reads and project 
   });
   expect(await readChat()).toBeNull();
   expect(
-    await ProjectAccessModel.listAccessibleProjects({
-      organizationId: org.id,
-      userId: reader.id,
-    }),
+    (
+      await projectService.list({
+        organizationId: org.id,
+        userId: reader.id,
+      })
+    ).data,
   ).toEqual([]);
 });
 
@@ -443,7 +448,7 @@ test("a chat share naming somebody outside the organization still converts to a 
   ).toBe(false);
 });
 
-test("a locked chat keeps its owner alone even when an organization share exists", async ({
+test("an encrypted chat keeps its owner alone even when an organization share exists", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -460,7 +465,7 @@ test("a locked chat keeps its owner alone even when an organization share exists
     userId: owner.id,
     organizationId: org.id,
     agentId: agent.id,
-    lockedChat: true,
+    encryptedChat: true,
   });
   // A chat that predates the upgrade: drop the policy creation wrote.
   await removeObjectPolicies(org.id);

@@ -31,7 +31,7 @@ export type RunStatusInput = Pick<AgentRunSession, "state"> &
       | "lastModelActivityAt"
       | "terminalRetained"
     >
-  > & { workspace?: { state: WorkspaceState } | null };
+  > & { workspace?: { state: WorkspaceState; expiresAt?: string } | null };
 
 export function runStatusMarks(
   run: RunStatusInput,
@@ -39,6 +39,17 @@ export function runStatusMarks(
 ): RunStatusMarks {
   const endedAt = run.endedAt ?? null;
   const lastModelActivityAt = run.lastModelActivityAt ?? null;
+  // Expiry is a normal end to the workspace lifetime. Compare the end time,
+  // not today's clock, so an earlier genuine failure stays visible forever.
+  const expiresAt = run.workspace?.expiresAt ?? run.hardDeadlineAt;
+  if (
+    endedAt &&
+    expiresAt &&
+    new Date(endedAt).getTime() >= new Date(expiresAt).getTime() &&
+    (run.state === "TASK_STATE_FAILED" || run.state === "TASK_STATE_CANCELED")
+  ) {
+    return marks({ glyph: "off", dot: null, label: "Expired" });
+  }
   switch (run.state) {
     case "TASK_STATE_FAILED":
     case "TASK_STATE_REJECTED":

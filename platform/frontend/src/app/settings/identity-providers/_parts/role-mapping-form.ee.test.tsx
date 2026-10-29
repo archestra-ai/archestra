@@ -126,28 +126,8 @@ beforeEach(() => {
 });
 
 describe("RoleMappingForm", () => {
-  it("distinguishes itself from External Group Sync", () => {
-    render(<TestWrapper identityProviderId="idp-1" />);
-
-    const note = screen
-      .getByText(/Sets the organization-wide roles only/i)
-      .closest("p") as HTMLElement;
-    expect(note).toHaveTextContent(
-      /Team membership is synced per team via each team's External Group Sync\./,
-    );
-  });
-
-  it("shows the template debugger without token claims", async () => {
-    render(<TestWrapper identityProviderId="idp-1" />);
-    expect(screen.getByText("Template Debugger")).toBeInTheDocument();
-    expect(screen.queryByText(/admin@example.com/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/app-admin/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/raw signed tokens/i)).not.toBeInTheDocument();
-  });
-
-  it("shows a live template test result for the selected role mapping rule", async () => {
+  it("automatically previews the first matching rule and updates when rules change", async () => {
     const user = userEvent.setup();
-
     render(
       <TestWrapper
         identityProviderId="idp-1"
@@ -163,23 +143,18 @@ describe("RoleMappingForm", () => {
         ]}
       />,
     );
-    expect(screen.getByText("Live Template Test")).toBeInTheDocument();
+    // The first preview lazily imports Handlebars, which can exceed the
+    // default one-second DOM wait while the full suite loads its modules.
     expect(
-      screen.getByText(/runs role mapping rule 1 \(member\)/i),
+      await screen.findByText("Rule 2 → Admin", {}, { timeout: 5_000 }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("No match")).toBeInTheDocument();
-
-    await user.click(
-      screen.getAllByTestId(E2eTestId.IdpRoleMappingRuleTemplate)[1],
-    );
-
-    expect(
-      screen.getByText(/runs role mapping rule 2 \(admin\)/i),
-    ).toBeInTheDocument();
-    expect(await screen.findByText("Match")).toBeInTheDocument();
-    expect(
-      screen.getByText(/you would be assigned Admin/i),
-    ).toBeInTheDocument();
+    const first = screen.getAllByTestId(
+      E2eTestId.IdpRoleMappingRuleTemplate,
+    )[0];
+    await user.clear(first);
+    await user.type(first, "true");
+    expect(await screen.findByText("Rule 1 → Member")).toBeInTheDocument();
+    expect(screen.queryByText("Tested below")).not.toBeInTheDocument();
   });
 
   it("shows the default role assignment when no role mapping rules match and strict mode is off", async () => {
@@ -196,9 +171,8 @@ describe("RoleMappingForm", () => {
       />,
     );
 
-    expect(await screen.findByText("No match")).toBeInTheDocument();
     expect(
-      screen.getByText(/you would be assigned Member/i),
+      await screen.findByText("Default roles → Member"),
     ).toBeInTheDocument();
   });
 
@@ -217,9 +191,8 @@ describe("RoleMappingForm", () => {
       />,
     );
 
-    expect(await screen.findByText("No match")).toBeInTheDocument();
     expect(
-      screen.getByText(/sign-in would be denied by strict mode/i),
+      await screen.findByText("No matching rule · Sign-in denied"),
     ).toBeInTheDocument();
   });
 
@@ -244,22 +217,6 @@ describe("RoleMappingForm", () => {
     );
     expect(templates[0]).toHaveValue("second");
     expect(templates[1]).toHaveValue("first");
-  });
-
-  it("shows the Okta groups claim hint", async () => {
-    render(<TestWrapper providerId="Okta" />);
-    expect(
-      screen.getByText(/Okta group-based role rules commonly read/i),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText(/groups/).length).toBeGreaterThan(0);
-  });
-
-  it("shows the Entra roles and groups claim hint", async () => {
-    render(<TestWrapper providerId="EntraID" />);
-    expect(
-      screen.getByText(/Microsoft Entra ID role rules commonly read/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/App role assignments/i)).toBeInTheDocument();
   });
 
   it("adds a rule when clicking Add Rule", async () => {
@@ -296,24 +253,6 @@ describe("RoleMappingForm", () => {
       E2eTestId.IdpRoleMappingRuleTemplate,
     );
     expect(templateInputs).toHaveLength(2);
-  });
-
-  it("lays out each rule with the template, role select, and delete button in one row", async () => {
-    render(
-      <TestWrapper
-        defaultRules={[{ expression: "rule-one", role: "admin" }]}
-      />,
-    );
-    const row = screen.getByTestId("role-mapping-rule-0");
-    const templateInput = screen.getByTestId(
-      E2eTestId.IdpRoleMappingRuleTemplate,
-    );
-    const roleTrigger = screen.getByTestId(E2eTestId.IdpRoleMappingRuleRole);
-    const deleteButton = getDeleteButtons()[0];
-
-    expect(row).toContainElement(templateInput);
-    expect(row).toContainElement(roleTrigger);
-    expect(row).toContainElement(deleteButton);
   });
 
   it("removes a rule without causing validation errors on remaining rules", async () => {

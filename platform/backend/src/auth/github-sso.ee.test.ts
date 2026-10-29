@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { needsRuntimeDiscovery } from "@better-auth/sso";
 import { HttpResponse, http } from "msw";
-import { vi } from "vitest";
-import { describe, expect, test } from "@/test";
+import config from "@/config";
+import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { auth } from "./better-auth";
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    enterpriseFeatures: { core: true },
-  }),
-);
+beforeEach(() => {
+  config.enterpriseFeatures.core = true;
+});
 
-const { auth } = await import("./better-auth");
 describe("GitHub OAuth SSO", () => {
   const server = useMswServer();
 

@@ -32,7 +32,7 @@ vi.mock("@/k8s/mcp-server-runtime/manager", () => ({
 
 import { hasPermission } from "@/auth";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
-import { InternalMcpCatalogModel } from "@/models";
+import { EnvironmentModel, InternalMcpCatalogModel } from "@/models";
 
 const mockHasPermission = hasPermission as Mock;
 
@@ -169,6 +169,119 @@ describe("environment routes", () => {
       namespace: "prod-eu",
     });
     expect(auditRows[2].after).toBeNull();
+  });
+
+  test("updates and clears labels without changing environment fields and audits both changes", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/environments",
+      payload: { name: "Label test", description: "Keep this description" },
+    });
+    expect(created.statusCode).toBe(200);
+    const environment = created.json();
+    const labels = [{ key: "region", value: "west" }];
+
+    for (const nextLabels of [labels, []]) {
+      const updated = await app.inject({
+        method: "PATCH",
+        url: `/api/environments/${environment.id}`,
+        payload: { labels: nextLabels },
+      });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json()).toMatchObject({
+        name: environment.name,
+        description: environment.description,
+      });
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/environments",
+      });
+      expect(list.statusCode).toBe(200);
+      const saved = list.json().environments[0];
+      expect(saved.labels).toHaveLength(nextLabels.length);
+      expect(saved.labels).toMatchObject(nextLabels);
+    }
+
+    await settleAuditWrites();
+    const updates = (await getAuditRows(organizationId)).filter(
+      (row) => row.action === "environment.updated",
+    );
+    expect(updates).toHaveLength(2);
+    expect(updates[0]).toMatchObject({
+      resourceId: environment.id,
+      outcome: "success",
+      before: { labels: [] },
+      after: { labels },
+    });
+    expect(updates[1]).toMatchObject({
+      resourceId: environment.id,
+      outcome: "success",
+      before: { labels },
+      after: { labels: [] },
+    });
+  });
+
+  test("empty updates preserve the row and cannot access another organization's environment", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+    const environment = await EnvironmentModel.create({
+      organizationId,
+      name: "Unchanged environment",
+    });
+
+    const unchanged = await app.inject({
+      method: "PATCH",
+      url: `/api/environments/${environment.id}`,
+      payload: {},
+    });
+    expect(unchanged.statusCode).toBe(200);
+    expect(unchanged.json()).toMatchObject({
+      id: environment.id,
+      name: environment.name,
+      updatedAt: environment.updatedAt.toISOString(),
+    });
+
+    const otherOrganization = await makeOrganization();
+    const otherEnvironment = await EnvironmentModel.create({
+      organizationId: otherOrganization.id,
+      name: "Other environment",
+    });
+    for (const id of [otherEnvironment.id, crypto.randomUUID()]) {
+      for (const payload of [
+        {},
+        { labels: [{ key: "region", value: "west" }] },
+      ]) {
+        const response = await app.inject({
+          method: "PATCH",
+          url: `/api/environments/${id}`,
+          payload,
+        });
+        expect(response.statusCode).toBe(404);
+      }
+    }
+    expect(
+      await EnvironmentModel.findByIdForAudit(
+        otherEnvironment.id,
+        organizationId,
+      ),
+    ).toBeNull();
   });
 
   test("persists, updates, and clears a validation regex; rejects an invalid one", async ({

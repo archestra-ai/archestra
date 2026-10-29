@@ -155,6 +155,74 @@ describe("entraOboStrategy", () => {
   });
 
   test.each([
+    400, 401,
+  ])("reports provider credential rejection (%i) as a configuration error", async (status) => {
+    const identityProvider = makeIdentityProvider({
+      oidcConfig: {
+        clientId: "synthetic-client",
+        clientSecret: "synthetic-secret",
+        tokenEndpoint: "https://identity.example.com/token",
+        enterpriseManagedCredentials: { exchangeStrategy: "entra_obo" },
+      },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: "invalid_grant",
+          error_description: "The supplied assertion has the wrong audience",
+        }),
+        { status, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await expect(
+      entraOboStrategy.exchangeCredential({
+        identityProvider,
+        assertion: "synthetic-wrong-audience-token",
+        enterpriseManagedConfig: {
+          requestedCredentialType: "bearer_token",
+          scopes: ["api://synthetic-resource/.default"],
+          tokenInjectionMode: "authorization_bearer",
+        },
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: "The supplied assertion has the wrong audience",
+    });
+  });
+
+  test.each([
+    429, 500, 503,
+  ])("keeps provider availability failures (%i) as server errors", async (status) => {
+    const identityProvider = makeIdentityProvider({
+      oidcConfig: {
+        clientId: "synthetic-client",
+        clientSecret: "synthetic-secret",
+        tokenEndpoint: "https://identity.example.com/token",
+        enterpriseManagedCredentials: { exchangeStrategy: "entra_obo" },
+      },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "temporarily_unavailable" }), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const result = await entraOboStrategy
+      .exchangeCredential({
+        identityProvider,
+        assertion: "synthetic-session-token",
+        enterpriseManagedConfig: {
+          requestedCredentialType: "bearer_token",
+          scopes: ["api://synthetic-resource/.default"],
+          tokenInjectionMode: "authorization_bearer",
+        },
+      })
+      .catch((error: unknown) => error);
+    expect(result).toBeInstanceOf(Error);
+    expect(result).not.toHaveProperty("statusCode");
+  });
+
+  test.each([
     { resourceIdentifier: "api://downstream-app-id" },
     { audience: "api://downstream-app-id" },
     { resourceIdentifier: " ", audience: " api://downstream-app-id/ " },

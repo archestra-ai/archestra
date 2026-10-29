@@ -1,3 +1,4 @@
+// @vitest-environment node
 import {
   MAX_CONFIGURABLE_NUM_CTX,
   MAX_CUSTOM_MODEL_TOKEN_LIMIT,

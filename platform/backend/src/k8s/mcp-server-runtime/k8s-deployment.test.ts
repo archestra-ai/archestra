@@ -956,6 +956,29 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
         "Never",
       );
     });
+
+    // `:latest` moves, so a restart must ask the registry what it points at
+    // now instead of reusing the node's copy.
+    test("a :latest registry image pulls on every rollout", () => {
+      const k8sDeployment = makeDeployment();
+
+      expect(
+        pullPolicyOf(k8sDeployment, "ghcr.io/my-org/custom-mcp-server:latest"),
+      ).toBe("Always");
+    });
+
+    test("the catalog's pull policy setting overrides the image default", () => {
+      const k8sDeployment = makeDeployment();
+
+      const policy = k8sDeployment.generateDeploymentSpec(
+        "ghcr.io/my-org/custom-mcp-server:latest",
+        { command: "node", imagePullPolicy: "IfNotPresent" },
+        false,
+        8080,
+      ).spec?.template.spec?.containers[0]?.imagePullPolicy;
+
+      expect(policy).toBe("IfNotPresent");
+    });
   });
 
   test("generates deploymentSpec with resource governance (memory limit + ephemeral-storage request/limit)", () => {
@@ -2755,6 +2778,46 @@ spec:
     });
   });
 
+  test("falls back to an isolated generated pod when custom YAML requests restricted fields", () => {
+    const deployment = createK8sDeploymentWithYaml(`
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: platform
+spec:
+  template:
+    spec:
+      serviceAccountName: platform-control-plane
+      hostPID: true
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+      containers:
+        - name: mcp-server
+          image: test:latest
+          securityContext:
+            privileged: true
+`);
+
+    const spec = deployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+    );
+    const podSpec = spec.spec?.template.spec;
+
+    expect(podSpec?.serviceAccountName).toBeUndefined();
+    expect(podSpec?.hostPID).toBeUndefined();
+    expect(podSpec?.volumes).toBeUndefined();
+    expect(podSpec?.containers[0]?.securityContext).toBeUndefined();
+    expect(spec.metadata?.labels).not.toHaveProperty(
+      "app.kubernetes.io/component",
+    );
+  });
+
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -3199,6 +3262,25 @@ ${imagePullPolicy ? `          imagePullPolicy: ${imagePullPolicy}\n` : ""}     
       deployment.requestFreshImagePull();
       expect(pullPolicyOf(deployment)).toBe("Always");
       expect(pullPolicyOf(deployment)).toBe("IfNotPresent");
+    });
+
+    // A saved YAML always spells out a policy because it starts from the
+    // generated template; the catalog setting is the deliberate choice.
+    test("the catalog's pull policy setting wins over the YAML", () => {
+      const deployment = createK8sDeploymentWithYaml(yamlWith("IfNotPresent"));
+
+      const policy = deployment.generateDeploymentSpec(
+        registryImage,
+        {
+          command: "node",
+          arguments: ["server.js"],
+          imagePullPolicy: "Always",
+        },
+        false,
+        8080,
+      ).spec?.template.spec?.containers[0]?.imagePullPolicy;
+
+      expect(policy).toBe("Always");
     });
   });
 });

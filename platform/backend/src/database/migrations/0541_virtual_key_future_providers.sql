@@ -1,0 +1,2 @@
+ALTER TABLE "organization" ADD COLUMN "connection_client_future_providers" jsonb;--> statement-breakpoint
+ALTER TABLE "virtual_api_keys" ADD COLUMN "include_future_providers" boolean DEFAULT false NOT NULL;

@@ -58,6 +58,10 @@ export const StartWorkspaceTransferSchema = z.discriminatedUnion("direction", [
     path: TransferPathSchema,
     size: z.number().int().nonnegative(),
     sha256: z.string().regex(/^[0-9a-f]{64}$/, "Expected a hex sha256 digest"),
+    /** `attachments` hands a file to the live run without touching its
+     * workspace: `path` is only a file name, and the reply carries the
+     * absolute path it will land at. */
+    location: z.enum(["workspace", "attachments"]).optional(),
   }),
 ]);
 

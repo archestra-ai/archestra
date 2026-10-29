@@ -15,6 +15,7 @@ import {
   test,
   vi,
 } from "@/test";
+import type { RevisionPayloadFile } from "@/types/skill-share-link-revision";
 import {
   MarketplaceMaterializationConflictError,
   MarketplaceMaterializer,
@@ -155,16 +156,11 @@ describe("MarketplaceMaterializer", () => {
       "plugins/org-abcd1234-skills/skills/pdf-helper/scripts/run.sh",
     ];
     for (const rel of expected) {
-      await expect(
-        fs.access(path.join(result.repoPath, rel)),
-      ).resolves.toBeUndefined();
+      await expect(existsAtHead(result.repoPath, rel)).resolves.toBeUndefined();
     }
 
     const claudeManifest = JSON.parse(
-      await fs.readFile(
-        path.join(result.repoPath, ".claude-plugin/marketplace.json"),
-        "utf8",
-      ),
+      await readAtHead(result.repoPath, ".claude-plugin/marketplace.json"),
     );
     expect(claudeManifest.name).toBe("org-abcd1234-skills");
     expect(claudeManifest.plugins).toHaveLength(1);
@@ -175,10 +171,7 @@ describe("MarketplaceMaterializer", () => {
     expect(claudeManifest.plugins[0].version).toBe("0.1.0");
 
     const codexManifest = JSON.parse(
-      await fs.readFile(
-        path.join(result.repoPath, ".agents/plugins/marketplace.json"),
-        "utf8",
-      ),
+      await readAtHead(result.repoPath, ".agents/plugins/marketplace.json"),
     );
     expect(codexManifest.displayName).toBe("Acme Skills");
     expect(codexManifest.plugins).toHaveLength(1);
@@ -258,12 +251,9 @@ describe("MarketplaceMaterializer", () => {
     });
     const result = await materializer.materialize(req);
 
-    const raw = await fs.readFile(
-      path.join(
-        result.repoPath,
-        "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md",
-      ),
-      "utf8",
+    const raw = await readAtHead(
+      result.repoPath,
+      "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md",
     );
     const parsed = parseSkillManifest(raw);
     expect(parsed.name).toBe("pdf-helper");
@@ -300,12 +290,9 @@ describe("MarketplaceMaterializer", () => {
       ],
     });
     const result = await materializer.materialize(req);
-    const skillMd = await fs.readFile(
-      path.join(
-        result.repoPath,
-        "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md",
-      ),
-      "utf8",
+    const skillMd = await readAtHead(
+      result.repoPath,
+      "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md",
     );
     expect(skillMd).toContain("name: pdf-helper");
     expect(skillMd).not.toContain("attacker-controlled content");
@@ -333,20 +320,15 @@ describe("MarketplaceMaterializer", () => {
       ],
     });
     const result = await materializer.materialize(req);
-    const skillMd = await fs.readFile(
-      path.join(
-        result.repoPath,
-        "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md",
-      ),
-      "utf8",
+    const skillMd = await readAtHead(
+      result.repoPath,
+      "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md",
     );
     expect(skillMd).toContain("name: pdf-helper");
     await expect(
-      fs.access(
-        path.join(
-          result.repoPath,
-          "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md/injected.txt",
-        ),
+      existsAtHead(
+        result.repoPath,
+        "plugins/org-abcd1234-skills/skills/pdf-helper/SKILL.md/injected.txt",
       ),
     ).rejects.toThrow();
   });
@@ -398,11 +380,10 @@ describe("MarketplaceMaterializer", () => {
       ],
     });
     const result = await materializer.materialize(req);
-    const written = await fs.readFile(
-      path.join(
-        result.repoPath,
-        "plugins/org-abcd1234-skills/skills/pdf-helper/assets/icon.bin",
-      ),
+    const written = await readAtHead(
+      result.repoPath,
+      "plugins/org-abcd1234-skills/skills/pdf-helper/assets/icon.bin",
+      "buffer",
     );
     expect(Buffer.compare(written, original)).toBe(0);
   });
@@ -452,12 +433,9 @@ describe("MarketplaceMaterializer", () => {
       ),
     ).toMatch(/^100644 blob /);
 
-    const raw = await fs.readFile(
-      path.join(
-        result.repoPath,
-        "plugins/session-attribution-12345678/hooks/hooks.json",
-      ),
-      "utf8",
+    const raw = await readAtHead(
+      result.repoPath,
+      "plugins/session-attribution-12345678/hooks/hooks.json",
     );
     expect(raw).toBe('  {\n    "hooks": {}\n  }  \n');
   });
@@ -470,10 +448,7 @@ describe("MarketplaceMaterializer", () => {
     const req = makeRequest(linkId, { skills });
     const result = await materializer.materialize(req);
     const manifest = JSON.parse(
-      await fs.readFile(
-        path.join(result.repoPath, ".claude-plugin/marketplace.json"),
-        "utf8",
-      ),
+      await readAtHead(result.repoPath, ".claude-plugin/marketplace.json"),
     );
     // exactly one skills plugin regardless of how many skills are shared
     expect(manifest.plugins.map((p: { name: string }) => p.name)).toEqual([
@@ -481,14 +456,10 @@ describe("MarketplaceMaterializer", () => {
     ]);
     // each shared skill gets its own subdirectory inside the skills plugin
     await expect(
-      fs.access(
-        path.join(result.repoPath, "plugins/org-abcd1234-skills/skills/beta"),
-      ),
+      existsAtHead(result.repoPath, "plugins/org-abcd1234-skills/skills/beta"),
     ).resolves.toBeUndefined();
     await expect(
-      fs.access(
-        path.join(result.repoPath, "plugins/org-abcd1234-skills/skills/alpha"),
-      ),
+      existsAtHead(result.repoPath, "plugins/org-abcd1234-skills/skills/alpha"),
     ).resolves.toBeUndefined();
   });
 
@@ -663,6 +634,395 @@ describe("MarketplaceMaterializer", () => {
     }
   });
 
+  describe("a second replica with its own cache dir", () => {
+    let cacheDirB: string;
+    let replicaB: MarketplaceMaterializer;
+    const ref = () => ({ kind: "link" as const, id: linkId });
+    const v1 = () => makeRequest(linkId);
+    const v2 = () =>
+      makeRequest(linkId, {
+        skills: [makeSkill({ content: "# Updated body" })],
+      });
+    const markerPath = () =>
+      path.join(replicaB.repoPathFor(ref()), ".git", "rebuild-marker");
+
+    beforeEach(async () => {
+      cacheDirB = await fs.mkdtemp(
+        path.join(tmpdir(), "archestra-materialize-test-"),
+      );
+      replicaB = new MarketplaceMaterializer({ cacheDir: cacheDirB });
+    });
+
+    afterEach(async () => {
+      await fs.rm(cacheDirB, { recursive: true, force: true });
+    });
+
+    /** Both replicas on revision 1, then A appends revision 2. */
+    async function replicaBOneBehind() {
+      const first = await materializer.materialize(v1());
+      await replicaB.materialize(v1());
+      await fs.writeFile(markerPath(), "");
+      const second = await materializer.materialize(v2());
+      return { first, second };
+    }
+
+    test("catches up a replica one revision behind without rebuilding", async () => {
+      const { first, second } = await replicaBOneBehind();
+      const listSpy = vi.spyOn(SkillShareLinkRevisionModel, "list");
+      const listAfterSpy = vi.spyOn(SkillShareLinkRevisionModel, "listAfter");
+
+      try {
+        const result = await replicaB.materialize(v2());
+
+        expect(result.commitHash).toBe(second.commitHash);
+        expect(await diskHead(result.repoPath)).toBe(second.commitHash);
+        expect(await readParent(result.repoPath)).toBe(first.commitHash);
+        await expect(fs.access(markerPath())).resolves.toBeUndefined();
+        // only the revision newer than the disk HEAD was loaded with payload
+        expect(listSpy).not.toHaveBeenCalled();
+        expect(listAfterSpy).toHaveBeenCalledTimes(1);
+        await expect(listAfterSpy.mock.results[0].value).resolves.toHaveLength(
+          1,
+        );
+      } finally {
+        listSpy.mockRestore();
+        listAfterSpy.mockRestore();
+      }
+    });
+
+    test("an up-to-date request loads no revision payload", async () => {
+      await materializer.materialize(v1());
+      await replicaB.materialize(v1());
+      const headSpy = vi.spyOn(SkillShareLinkRevisionModel, "getLatestHead");
+      const payloadSpies = [
+        vi.spyOn(SkillShareLinkRevisionModel, "list"),
+        vi.spyOn(SkillShareLinkRevisionModel, "listAfter"),
+      ];
+
+      try {
+        const result = await replicaB.materialize(v1());
+
+        expect(result.reused).toBe(true);
+        for (const spy of payloadSpies) expect(spy).not.toHaveBeenCalled();
+        expect(headSpy).toHaveBeenCalledTimes(1);
+        const head = await headSpy.mock.results[0].value;
+        expect(Object.keys(head ?? {}).sort()).toEqual([
+          "commitSha",
+          "contentHash",
+          "sequence",
+        ]);
+      } finally {
+        headSpy.mockRestore();
+        for (const spy of payloadSpies) spy.mockRestore();
+      }
+    });
+
+    test("drops an orphan commit left on top of a stored revision", async () => {
+      const first = await materializer.materialize(v1());
+      const onB = await replicaB.materialize(v1());
+      // a lost append race leaves a commit on disk that never got stored
+      const orphan = await gitWithIdentity(
+        onB.repoPath,
+        "commit-tree",
+        "HEAD^{tree}",
+        "-p",
+        "HEAD",
+        "-m",
+        "orphan",
+      );
+      await git(onB.repoPath, "update-ref", "refs/heads/main", orphan);
+      await fs.writeFile(markerPath(), "");
+      const second = await materializer.materialize(v2());
+
+      const result = await replicaB.materialize(v2());
+
+      expect(result.commitHash).toBe(second.commitHash);
+      expect(await diskHead(result.repoPath)).toBe(second.commitHash);
+      expect(await readParent(result.repoPath)).toBe(first.commitHash);
+      await expect(fs.access(markerPath())).resolves.toBeUndefined();
+    });
+
+    test("rebuilds a disk history unrelated to the stored chain", async () => {
+      const first = await materializer.materialize(v1());
+      const onB = await replicaB.materialize(v1());
+      const unrelated = await gitWithIdentity(
+        onB.repoPath,
+        "commit-tree",
+        "HEAD^{tree}",
+        "-m",
+        "unrelated root",
+      );
+      await git(onB.repoPath, "update-ref", "refs/heads/main", unrelated);
+      await fs.writeFile(markerPath(), "");
+      const second = await materializer.materialize(v2());
+
+      const result = await replicaB.materialize(v2());
+
+      expect(result.commitHash).toBe(second.commitHash);
+      expect(await diskHead(result.repoPath)).toBe(second.commitHash);
+      expect(await readParent(result.repoPath)).toBe(first.commitHash);
+      await expect(fs.access(markerPath())).rejects.toThrow();
+    });
+
+    test("falls back to a full rebuild when the disk base commit is corrupt", async () => {
+      const { first, second } = await replicaBOneBehind();
+      const repoB = replicaB.repoPathFor(ref());
+      // remove the base commit object so walking the disk history fails
+      await fs.rm(
+        path.join(
+          repoB,
+          ".git",
+          "objects",
+          first.commitHash.slice(0, 2),
+          first.commitHash.slice(2),
+        ),
+      );
+
+      const result = await replicaB.materialize(v2());
+
+      expect(result.commitHash).toBe(second.commitHash);
+      expect(await diskHead(result.repoPath)).toBe(second.commitHash);
+      expect(await readParent(result.repoPath)).toBe(first.commitHash);
+      await expect(fs.access(markerPath())).rejects.toThrow();
+    });
+  });
+
+  test("fast-import writes the same commit SHAs as the earlier commit-tree writer", async () => {
+    const identity = {
+      name: "Compat Marketplace",
+      email: "compat@example.com",
+    };
+    const ref = { kind: "link" as const, id: linkId };
+    const legacyRepo = await fs.mkdtemp(
+      path.join(tmpdir(), "archestra-legacy-"),
+    );
+    const replicaDir = await fs.mkdtemp(
+      path.join(tmpdir(), "archestra-materialize-test-"),
+    );
+    try {
+      // revision 3 is unchanged from 2; 2 removes a file and flips a mode bit
+      const revisions = compatRevisions();
+      const legacyShas: string[] = [];
+      await legacyInitRepo(legacyRepo);
+      for (const [i, files] of revisions.entries()) {
+        const sequence = i + 1;
+        const parentSha = legacyShas.at(-1) ?? null;
+        const contentHash = `${sequence}`.repeat(64).slice(0, 64);
+        const createdAt = new Date(Date.UTC(2026, 0, 1, 0, 0, sequence));
+        const commitSha = await legacyCommitOnDisk({
+          repoPath: legacyRepo,
+          files,
+          parentSha,
+          date: createdAt,
+          message: `Snapshot ${sequence}\n\ncontent-hash: ${contentHash}\n`,
+          identity,
+        });
+        legacyShas.push(commitSha);
+        await SkillShareLinkRevisionModel.append(
+          {
+            ref,
+            contentHash,
+            commitSha,
+            parentSha,
+            createdAt,
+            payload: { files },
+          },
+          sequence,
+        );
+      }
+      const stored = await SkillShareLinkRevisionModel.list(ref);
+      const head = stored.at(-1);
+      if (!head) throw new Error("no stored revisions");
+      const replica = new MarketplaceMaterializer({
+        cacheDir: replicaDir,
+        identity,
+      });
+      const internals = replica as unknown as MaterializerInternals;
+      const repoPath = replica.repoPathFor(ref);
+
+      // full rebuild: every replayed commit must equal the stored SHA
+      await internals.syncDiskToRevisions(ref, head);
+      expect((await git(repoPath, "rev-list", "HEAD")).split("\n")).toEqual(
+        [...legacyShas].reverse(),
+      );
+
+      // incremental replay from revision 1 (diff-only commits after the first)
+      await fs.writeFile(path.join(repoPath, ".git", "rebuild-marker"), "");
+      await git(repoPath, "update-ref", "refs/heads/main", legacyShas[0]);
+      await internals.syncDiskToRevisions(ref, head);
+      expect(await diskHead(repoPath)).toBe(legacyShas.at(-1));
+      await expect(
+        fs.access(path.join(repoPath, ".git", "rebuild-marker")),
+      ).resolves.toBeUndefined();
+
+      // a new revision on top of a parent (the doMaterialize write path)
+      const nextFiles = revisions[0];
+      const nextDate = new Date(Date.UTC(2026, 0, 1, 0, 1, 0));
+      const nextHash = "f".repeat(64);
+      const legacyNext = await legacyCommitOnDisk({
+        repoPath: legacyRepo,
+        files: nextFiles,
+        parentSha: legacyShas.at(-1) ?? null,
+        date: nextDate,
+        message: `Snapshot 5\n\ncontent-hash: ${nextHash}\n`,
+        identity,
+      });
+      const marks = await internals.importRevisions({
+        repoPath,
+        parentSha: legacyShas.at(-1) ?? null,
+        pages: [
+          [
+            {
+              sequence: 5,
+              contentHash: nextHash,
+              createdAt: nextDate,
+              payload: { files: nextFiles },
+            },
+          ],
+        ],
+      });
+      expect(marks.get(5)).toBe(legacyNext);
+      expect(await diskHead(repoPath)).toBe(legacyNext);
+    } finally {
+      await fs.rm(legacyRepo, { recursive: true, force: true });
+      await fs.rm(replicaDir, { recursive: true, force: true });
+    }
+  });
+
+  test("a full rebuild replays across revision pages to the stored SHAs", async () => {
+    const identity = {
+      name: "Compat Marketplace",
+      email: "compat@example.com",
+    };
+    const ref = { kind: "link" as const, id: linkId };
+    const legacyRepo = await fs.mkdtemp(
+      path.join(tmpdir(), "archestra-legacy-"),
+    );
+    const replicaDir = await fs.mkdtemp(
+      path.join(tmpdir(), "archestra-materialize-test-"),
+    );
+    try {
+      await legacyInitRepo(legacyRepo);
+      let parentSha: string | null = null;
+      // more than one 50-revision page; a file appears and goes away mid-chain
+      for (let sequence = 1; sequence <= 53; sequence++) {
+        const files: RevisionPayloadFile[] = [
+          {
+            path: "a.md",
+            content: `rev ${sequence}\n`,
+            encoding: "utf8",
+            mode: "100644",
+          },
+          ...(sequence >= 49 && sequence <= 51
+            ? [
+                {
+                  path: "page-edge.md",
+                  content: "x\n",
+                  encoding: "utf8" as const,
+                  mode: "100644" as const,
+                },
+              ]
+            : []),
+        ];
+        const contentHash = sequence.toString(16).padStart(64, "0");
+        const createdAt = new Date(Date.UTC(2026, 0, 1, 0, 0, sequence));
+        const commitSha = await legacyCommitOnDisk({
+          repoPath: legacyRepo,
+          files,
+          parentSha,
+          date: createdAt,
+          message: `Snapshot ${sequence}\n\ncontent-hash: ${contentHash}\n`,
+          identity,
+        });
+        await SkillShareLinkRevisionModel.append(
+          {
+            ref,
+            contentHash,
+            commitSha,
+            parentSha,
+            createdAt,
+            payload: { files },
+          },
+          sequence,
+        );
+        parentSha = commitSha;
+      }
+      const result = await new MarketplaceMaterializer({
+        cacheDir: replicaDir,
+        identity,
+      }).materialize(makeRequest(linkId));
+
+      // the request's own content appends revision 54 on top of the replayed chain
+      expect(await readParent(result.repoPath)).toBe(parentSha);
+      expect(await commitCount(result.repoPath)).toBe(54);
+    } finally {
+      await fs.rm(legacyRepo, { recursive: true, force: true });
+      await fs.rm(replicaDir, { recursive: true, force: true });
+    }
+  });
+
+  for (const [outcome, stop] of [
+    ["is killed", "kill -9 $$"],
+    ["exits early", "exit 0"],
+  ] as const) {
+    test(`a fast-import that ${outcome} mid-stream fails the write and stores no revision`, async () => {
+      const binDir = await fs.mkdtemp(
+        path.join(tmpdir(), "archestra-git-wrapper-"),
+      );
+      try {
+        // real git for everything else; fast-import reads a little, then stops
+        const wrapper = path.join(binDir, "git");
+        await fs.writeFile(
+          wrapper,
+          `#!/bin/sh\nif [ "$1" = "fast-import" ]; then head -c 64 > /dev/null; ${stop}; fi\nexec git "$@"\n`,
+          { mode: 0o755 },
+        );
+        const broken = new MarketplaceMaterializer({
+          cacheDir,
+          gitBinaryPath: wrapper,
+        });
+
+        // Exceed the pipe buffer so an early exit also interrupts a write
+        // waiting for backpressure, rather than only a subsequent write.
+        await expect(
+          broken.materialize(
+            makeRequest(linkId, {
+              skills: [makeSkill({ content: "x".repeat(1024 * 1024) })],
+            }),
+          ),
+        ).rejects.toThrow(/fast-import/);
+        expect(
+          await SkillShareLinkRevisionModel.list({ kind: "link", id: linkId }),
+        ).toEqual([]);
+      } finally {
+        await fs.rm(binDir, { recursive: true, force: true });
+      }
+    });
+  }
+
+  test("consolidates pack files once git's auto-gc limit is crossed", async () => {
+    const first = await materializer.materialize(makeRequest(linkId));
+    // every later import writes a pack; more than 3 packs triggers gc --auto
+    await git(first.repoPath, "config", "fastimport.unpackLimit", "1");
+    await git(first.repoPath, "config", "gc.autoPackLimit", "3");
+
+    let last = first;
+    for (let i = 0; i < 6; i++) {
+      last = await materializer.materialize(
+        makeRequest(linkId, {
+          skills: [makeSkill({ content: `# PDF Helper\n\nRevision ${i}.` })],
+        }),
+      );
+    }
+
+    const packs = (
+      await fs.readdir(path.join(first.repoPath, ".git", "objects", "pack"))
+    ).filter((name) => name.endsWith(".pack"));
+    expect(packs.length).toBeLessThanOrEqual(3);
+    expect(await commitCount(last.repoPath)).toBe(7);
+    await git(last.repoPath, "fsck", "--no-progress");
+  });
+
   test("commit author and committer use the configured identity", async () => {
     const identity = { name: "Test Marketplace", email: "test@example.com" };
     const m = new MarketplaceMaterializer({ cacheDir, identity });
@@ -682,6 +1042,202 @@ const execFileAsync = promisify(execFile);
 async function git(repoPath: string, ...args: string[]): Promise<string> {
   const { stdout } = await execFileAsync("git", args, { cwd: repoPath });
   return stdout.trim();
+}
+
+async function gitWithIdentity(
+  repoPath: string,
+  ...args: string[]
+): Promise<string> {
+  const identity = {
+    GIT_AUTHOR_NAME: "Other Replica",
+    GIT_AUTHOR_EMAIL: "other@example.com",
+    GIT_COMMITTER_NAME: "Other Replica",
+    GIT_COMMITTER_EMAIL: "other@example.com",
+  };
+  const { stdout } = await execFileAsync("git", args, {
+    cwd: repoPath,
+    env: { ...process.env, ...identity },
+  });
+  return stdout.trim();
+}
+
+/** The bytes a clone receives: content at HEAD, not the working tree. */
+async function readAtHead(repoPath: string, rel: string): Promise<string>;
+async function readAtHead(
+  repoPath: string,
+  rel: string,
+  as: "buffer",
+): Promise<Buffer>;
+async function readAtHead(
+  repoPath: string,
+  rel: string,
+  as?: "buffer",
+): Promise<string | Buffer> {
+  const { stdout } = await execFileAsync("git", ["show", `HEAD:${rel}`], {
+    cwd: repoPath,
+    encoding: "buffer",
+  });
+  return as === "buffer" ? stdout : stdout.toString("utf8");
+}
+
+/** Resolves when `rel` exists in the HEAD tree, rejects otherwise. */
+async function existsAtHead(repoPath: string, rel: string): Promise<void> {
+  await execFileAsync("git", ["cat-file", "-e", `HEAD:${rel}`], {
+    cwd: repoPath,
+  });
+}
+
+type MaterializerInternals = {
+  syncDiskToRevisions(
+    ref: { kind: "link"; id: string },
+    head: { sequence: number; contentHash: string; commitSha: string },
+  ): Promise<void>;
+  importRevisions(params: {
+    repoPath: string;
+    parentSha: string | null;
+    pages: Array<
+      Array<{
+        sequence: number;
+        contentHash: string;
+        createdAt: Date;
+        payload: { files: RevisionPayloadFile[] };
+      }>
+    >;
+  }): Promise<Map<number, string>>;
+};
+
+function compatRevisions(): RevisionPayloadFile[][] {
+  const file = (
+    filePath: string,
+    content: string,
+    extra: Partial<RevisionPayloadFile> = {},
+  ): RevisionPayloadFile => ({
+    path: filePath,
+    content,
+    encoding: "utf8",
+    mode: "100644",
+    ...extra,
+  });
+  const binary = (bytes: number[]) => Buffer.from(bytes).toString("base64");
+  const first = [
+    file("README.md", "# Compat\n"),
+    file("bin/run.sh", "#!/bin/sh\ntrue\n", { mode: "100755" }),
+    file("assets/logo.bin", binary([0, 1, 2, 255, 254, 10, 13]), {
+      encoding: "base64",
+    }),
+    file("deep/nested/dir/tree/file.md", "nested\n"),
+    file("unicodé/ファイル.md", "unicode path\n"),
+    file('with space/a "quoted" name.md', "spaces and quotes\n"),
+    file('"leading-quote.md', "leading quote\n"),
+    file("back\\slash.md", "backslash\n"),
+    file("empty.txt", ""),
+    file("to-remove.md", "removed next\n"),
+  ];
+  const second = first
+    .filter((f) => f.path !== "to-remove.md")
+    .map((f) =>
+      f.path === "bin/run.sh"
+        ? { ...f, mode: "100644" as const }
+        : f.path === "README.md"
+          ? { ...f, content: "# Compat v2\n" }
+          : f,
+    );
+  const fourth = second.map((f) =>
+    f.path === "bin/run.sh"
+      ? { ...f, mode: "100755" as const }
+      : f.path === "assets/logo.bin"
+        ? { ...f, content: binary([9, 8, 7, 0, 128]) }
+        : f,
+  );
+  return [first, second, second, fourth];
+}
+
+/**
+ * The commit writer as of 1324e1bca (working tree + `git add` +
+ * `update-index --chmod` + `write-tree` + `commit-tree`). Stored revisions in
+ * existing databases carry SHAs it produced, so the current writer must match.
+ */
+async function legacyCommitOnDisk(params: {
+  repoPath: string;
+  files: RevisionPayloadFile[];
+  parentSha: string | null;
+  date: Date;
+  message: string;
+  identity: { name: string; email: string };
+}): Promise<string> {
+  for (const entry of await fs.readdir(params.repoPath)) {
+    if (entry === ".git") continue;
+    await fs.rm(path.join(params.repoPath, entry), {
+      recursive: true,
+      force: true,
+    });
+  }
+  for (const file of params.files) {
+    const target = path.join(params.repoPath, ...file.path.split("/"));
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(
+      target,
+      Buffer.from(file.content, file.encoding === "base64" ? "base64" : "utf8"),
+    );
+  }
+  await legacyGit(params.repoPath, ["add", "--all", "."]);
+  for (const executable of [true, false]) {
+    const paths = params.files
+      .filter((file) => (file.mode === "100755") === executable)
+      .map((file) => file.path);
+    if (paths.length === 0) continue;
+    await legacyGit(
+      params.repoPath,
+      [
+        "update-index",
+        executable ? "--chmod=+x" : "--chmod=-x",
+        "-z",
+        "--stdin",
+      ],
+      {},
+      `${paths.join("\0")}\0`,
+    );
+  }
+  const tree = await legacyGit(params.repoPath, ["write-tree"]);
+  const date = `${Math.floor(params.date.getTime() / 1000)} +0000`;
+  const args = ["commit-tree", tree];
+  if (params.parentSha) args.push("-p", params.parentSha);
+  args.push("-m", params.message);
+  const sha = await legacyGit(params.repoPath, args, {
+    GIT_AUTHOR_NAME: params.identity.name,
+    GIT_AUTHOR_EMAIL: params.identity.email,
+    GIT_AUTHOR_DATE: date,
+    GIT_COMMITTER_NAME: params.identity.name,
+    GIT_COMMITTER_EMAIL: params.identity.email,
+    GIT_COMMITTER_DATE: date,
+  });
+  await legacyGit(params.repoPath, ["update-ref", "refs/heads/main", sha]);
+  return sha;
+}
+
+async function legacyInitRepo(repoPath: string): Promise<void> {
+  await legacyGit(repoPath, ["init", "--quiet", "--initial-branch=main"]);
+  await legacyGit(repoPath, ["config", "core.fileMode", "false"]);
+}
+
+function legacyGit(
+  cwd: string,
+  args: string[],
+  env: Record<string, string> = {},
+  input?: string,
+): Promise<string> {
+  const scrubbed = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+  );
+  return new Promise((resolve, reject) => {
+    const child = execFile(
+      "git",
+      args,
+      { cwd, env: { ...scrubbed, ...env } },
+      (error, stdout) => (error ? reject(error) : resolve(stdout.trim())),
+    );
+    child.stdin?.end(input);
+  });
 }
 
 async function readParent(repoPath: string): Promise<string | null> {

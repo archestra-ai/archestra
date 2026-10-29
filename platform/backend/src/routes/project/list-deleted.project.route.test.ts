@@ -42,12 +42,14 @@ describe("projectService.list (status=deleted)", () => {
       userId: ownerB.id,
     });
 
-    const deleted = await projectService.list({
-      organizationId,
-      userId: ownerA.id,
-      isProjectAdmin: true,
-      status: "deleted",
-    });
+    const deleted = (
+      await projectService.list({
+        organizationId,
+        userId: ownerA.id,
+        isProjectAdmin: true,
+        status: "deleted",
+      })
+    ).data;
     const ids = deleted.map((p) => p.id);
     // both deleted projects — including another member's — are visible
     expect(ids).toContain(goneA.id);
@@ -62,11 +64,13 @@ describe("projectService.list (status=deleted)", () => {
     }
 
     // and the default (active) list still excludes soft-deleted projects
-    const activeList = await projectService.list({
-      organizationId,
-      userId: ownerA.id,
-      isProjectAdmin: true,
-    });
+    const activeList = (
+      await projectService.list({
+        organizationId,
+        userId: ownerA.id,
+        isProjectAdmin: true,
+      })
+    ).data;
     const activeIds = activeList.map((p) => p.id);
     expect(activeIds).toContain(active.id);
     expect(activeIds).not.toContain(goneA.id);
@@ -93,12 +97,14 @@ describe("projectService.list (status=deleted)", () => {
       userId: owner.id,
     });
 
-    const deleted = await projectService.list({
-      organizationId,
-      userId: owner.id,
-      isProjectAdmin: false,
-      status: "deleted",
-    });
+    const deleted = (
+      await projectService.list({
+        organizationId,
+        userId: owner.id,
+        isProjectAdmin: false,
+        status: "deleted",
+      })
+    ).data;
     expect(deleted).toEqual([]);
   });
 });

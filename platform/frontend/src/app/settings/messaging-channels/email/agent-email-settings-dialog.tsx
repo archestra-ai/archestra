@@ -51,7 +51,7 @@ import {
   describeIncomingEmailSecurityMode,
 } from "./email-trigger.utils";
 
-type AgentRecord = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type AgentRecord = archestraApiTypes.GetAgentResponses["200"];
 
 interface AgentEmailSettingsDialogProps {
   agent: AgentRecord | null;
@@ -298,6 +298,7 @@ export function AgentEmailSettingsDialog({
               <PermissionButton
                 type="submit"
                 permissions={{ agent: ["update"] }}
+                permissionScope={agent?.id ?? ""}
                 disabled={updateAgentMutation.isPending}
               >
                 {updateAgentMutation.isPending ? "Saving..." : "Save settings"}

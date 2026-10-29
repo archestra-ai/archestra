@@ -1,9 +1,12 @@
 import { describe, expect, test, vi } from "vitest";
+import config from "@/config";
+import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import {
   type LlmProxyPlugin,
   LlmProxyPluginInitializer,
   LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
+  type LlmProxyRuntimeToolProof,
   type LlmProxyToolCallsContext,
 } from "./registry";
 
@@ -23,6 +26,96 @@ function requestContext(): LlmProxyRequestContext {
 }
 
 describe("LlmProxyPluginRegistry", () => {
+  test.each([
+    false,
+    true,
+  ])("only a blocked replacement can remove review text (replacement=%s)", async (replacement) => {
+    const registry = new LlmProxyPluginRegistry();
+    registry.register({
+      id: "block-review",
+      finalizesToolCalls: true,
+      async onToolCalls({ toolCalls }) {
+        return {
+          decision: "allow",
+          toolCalls: toolCalls.map((call) => ({
+            ...call,
+            name: replacement ? "archestra__get_remedy_plans" : call.name,
+            reviewDetails: undefined,
+          })),
+          blocked: toolCalls.map((call) => ({
+            id: call.id,
+            name: call.name,
+            reason: "review denied",
+          })),
+        };
+      },
+    });
+    const context = requestContext();
+    await registry.onSessionInit(context);
+    try {
+      const response = registry.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "review-call",
+            name: "AskUserQuestion",
+            arguments: "{}",
+            reviewDetails: "Complete immutable review",
+          },
+        ],
+      });
+      if (replacement)
+        await expect(response).resolves.toMatchObject({
+          decision: "allow",
+          toolCalls: [{ name: "archestra__get_remedy_plans" }],
+        });
+      else
+        await expect(response).rejects.toThrow("changed protected review text");
+    } finally {
+      await registry.complete(context);
+    }
+  });
+
+  test.each([
+    false,
+    true,
+  ])("finalizers cannot strip a native card's full review (in-place=%s)", async (inPlace) => {
+    const registry = new LlmProxyPluginRegistry();
+    registry.register({
+      id: "strip-review",
+      finalizesToolCalls: true,
+      async onToolCalls({ toolCalls }) {
+        if (inPlace) {
+          delete toolCalls[0].reviewDetails;
+          return { decision: "allow", toolCalls };
+        }
+        return {
+          decision: "allow",
+          toolCalls: toolCalls.map((call) => ({
+            ...call,
+            reviewDetails: undefined,
+          })),
+        };
+      },
+    });
+    const context = requestContext();
+    await registry.onSessionInit(context);
+    await expect(
+      registry.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "review-call",
+            name: "AskUserQuestion",
+            arguments: "{}",
+            reviewDetails: "Complete immutable review",
+          },
+        ],
+      }),
+    ).rejects.toThrow("changed protected review text");
+    await registry.complete(context);
+  });
+
   test("does not allocate lifecycle state or invoke callbacks when empty", async () => {
     const registry = new LlmProxyPluginRegistry();
     const context = requestContext();
@@ -161,6 +254,7 @@ describe("LlmProxyPluginRegistry", () => {
       answer: (toolCalls: Calls) => {
         toolCalls: Calls;
         blocked?: readonly { id: string; name: string; reason: string }[];
+        rewritten?: readonly { id: string; name: string }[];
       },
     ) => {
       const registry = new LlmProxyPluginRegistry();
@@ -190,6 +284,22 @@ describe("LlmProxyPluginRegistry", () => {
       decision: "allow",
       toolCalls: [{ id: "call-1", name: "notice" }],
     });
+
+    // An authorized rewrite is released, and is not reported as a block.
+    const rewrite = await finalize((toolCalls) => ({
+      toolCalls: [{ id: "call-1", name: "read", arguments: { path: "b" } }],
+      rewritten: [{ id: "call-1", name: toolCalls[0].name }],
+    }));
+    expect(rewrite).toEqual({
+      decision: "allow",
+      toolCalls: [{ id: "call-1", name: "read", arguments: { path: "b" } }],
+    });
+    await expect(
+      finalize((toolCalls) => ({
+        toolCalls,
+        rewritten: [{ id: "call-9", name: "read" }],
+      })),
+    ).rejects.toThrow("reported a block on a call the policies never saw");
 
     await expect(
       finalize(() => ({
@@ -511,7 +621,7 @@ describe("LlmProxyPluginRegistry", () => {
     });
   });
 
-  test("validates prepared transport arguments before a finalizer can reserve calls", async () => {
+  test("prepares transport arguments before a finalizer can reserve calls", async () => {
     const registry = new LlmProxyPluginRegistry();
     const phases: string[] = [];
     registry.register({
@@ -539,18 +649,11 @@ describe("LlmProxyPluginRegistry", () => {
     const context = requestContext();
     await registry.onSessionInit(context);
     const original = [{ id: "call-1", name: "read", arguments: { path: "a" } }];
-    const result = await registry.onToolCalls(
-      { ...context, toolCalls: original },
-      async (calls) => {
-        phases.push("validate");
-        expect(calls[0].arguments).toEqual({
-          path: "a",
-          execution: "transport-record",
-        });
-        return null;
-      },
-    );
-    expect(phases).toEqual(["prepare", "validate", "reserve"]);
+    const result = await registry.onToolCalls({
+      ...context,
+      toolCalls: original,
+    });
+    expect(phases).toEqual(["prepare", "reserve"]);
     expect(result).toMatchObject({ decision: "allow" });
     if (result.decision !== "allow") throw new Error("expected allowed calls");
     expect(result.toolCalls).not.toBe(original);
@@ -802,4 +905,239 @@ describe("LlmProxyPluginRegistry", () => {
     }
     await expect(registry.onSessionInit(context)).resolves.toBeUndefined();
   });
+});
+
+describe("runtime proof attachments", () => {
+  const args = { run_id: "run-1", nested: { path: "notes.txt" } };
+  const session = {
+    organization_id: "organization-1",
+    caller_id: "user:owner",
+    session_id: "session-1",
+    parent_id: "parent-1",
+  };
+  const attachment: LlmProxyRuntimeToolProof = {
+    id: "call-1",
+    name: "archestra__get_agent_run",
+    action: "get_agent_run",
+    session,
+    spawn: false,
+    wrapped: false,
+  };
+
+  async function finalize(
+    params: {
+      wrapped?: boolean | "string";
+      stringInput?: boolean;
+      report?: boolean;
+      change?: (
+        call: LlmProxyToolCallsContext["toolCalls"][number],
+        entry: LlmProxyRuntimeToolProof,
+      ) => void;
+      sign?: Partial<Parameters<typeof signRuntimeToolProof>[0]>;
+      skipProof?: boolean;
+    } = {},
+  ) {
+    config.openappa.offerSigningSecret = "runtime-proof-test-secret";
+    const entry = {
+      ...attachment,
+      session: { ...session },
+      wrapped: Boolean(params.wrapped),
+      name: params.wrapped ? "archestra__run_tool" : attachment.name,
+    };
+    const proof = signRuntimeToolProof({
+      session,
+      toolCallId: entry.id,
+      action: entry.action,
+      arguments: args,
+      spawn: false,
+      secret: config.openappa.offerSigningSecret,
+      ...params.sign,
+    });
+    const wrap = (value: Record<string, unknown>) =>
+      params.wrapped
+        ? {
+            tool_name: attachment.name,
+            tool_args:
+              params.wrapped === "string" ? JSON.stringify(value) : value,
+          }
+        : value;
+    const original = wrap(args);
+    const incoming = {
+      id: entry.id,
+      name: entry.name,
+      arguments: params.stringInput ? JSON.stringify(original) : original,
+    };
+    const registry = new LlmProxyPluginRegistry();
+    registry.register({
+      id: "proof-finalizer",
+      finalizesToolCalls: true,
+      async onToolCalls() {
+        const call = {
+          ...incoming,
+          arguments: wrap(
+            params.skipProof ? args : { ...args, runtime_proof: proof },
+          ),
+        };
+        params.change?.(call, entry);
+        return {
+          decision: "allow",
+          toolCalls: [call],
+          ...(params.report === false ? {} : { runtimeProofs: [entry] }),
+        };
+      },
+    });
+    const context = requestContext();
+    await registry.onSessionInit(context);
+    return registry.onToolCalls({ ...context, toolCalls: [incoming] });
+  }
+
+  test.each([
+    {},
+    { stringInput: true },
+    { wrapped: true },
+    { wrapped: "string" as const },
+    { wrapped: true, stringInput: true },
+  ])("releases the approved arguments with a signed proof: %j", async (params) => {
+    await expect(finalize(params)).resolves.toMatchObject({
+      decision: "allow",
+    });
+  });
+
+  test.each([
+    { toolCallId: "another-call" },
+    { session: { ...session, session_id: "another-session" } },
+    { session: { ...session, caller_id: "user:other" } },
+    { session: { ...session, parent_id: "another-parent" } },
+    { action: "write_workspace_file" },
+    { arguments: { run_id: "another-run" } },
+    { spawn: true },
+    { secret: "another-secret" },
+    { now: Math.floor(Date.now() / 1000) - 600 },
+  ])("rejects a proof for different authority or expired approval: %j", async (sign) => {
+    await expect(finalize({ sign })).rejects.toThrow("rewrote a call");
+  });
+
+  test("rejects unreported proof insertion", async () => {
+    await expect(finalize({ report: false })).rejects.toThrow("rewrote a call");
+  });
+  test("rejects malformed proof contents", async () => {
+    await expect(
+      finalize({
+        change(call) {
+          (call.arguments as Record<string, unknown>).runtime_proof =
+            "malformed";
+        },
+      }),
+    ).rejects.toThrow("rewrote a call");
+  });
+  test("rejects reporting a proof for a call outside the approved batch", async () => {
+    await expect(
+      finalize({
+        change(_call, entry) {
+          entry.id = "other-call";
+        },
+      }),
+    ).rejects.toThrow("reported an invalid runtime proof");
+  });
+  test("rejects reported proof insertion that never happened", async () => {
+    await expect(finalize({ skipProof: true })).rejects.toThrow(
+      "runtime proof it did not attach",
+    );
+  });
+  test.each([
+    false,
+    true,
+  ])("rejects argument changes alongside a proof, wrapped=%s", async (wrapped) => {
+    await expect(
+      finalize({
+        wrapped,
+        change(call) {
+          const outer = call.arguments as Record<string, unknown>;
+          const target = wrapped
+            ? (outer.tool_args as Record<string, unknown>)
+            : outer;
+          target.nested = { path: "changed.txt" };
+        },
+      }),
+    ).rejects.toThrow("rewrote a call");
+  });
+  test("rejects changing a wrapper's target alongside its proof", async () => {
+    await expect(
+      finalize({
+        wrapped: true,
+        change(call) {
+          (call.arguments as Record<string, unknown>).tool_name =
+            "archestra__write_workspace_file";
+        },
+      }),
+    ).rejects.toThrow("rewrote a call");
+  });
+  test("rejects changing the call name", async () => {
+    await expect(
+      finalize({
+        change(call) {
+          call.name = "other-tool";
+        },
+      }),
+    ).rejects.toThrow("rewrote a call");
+  });
+});
+
+test("runtime proofs cannot move an approved call to another namespace", async () => {
+  config.openappa.offerSigningSecret = "runtime-proof-namespace-key";
+  const session = {
+    organization_id: "organization-1",
+    session_id: "session-1",
+  };
+  const args = { run_id: "run-1" };
+  const proof = signRuntimeToolProof({
+    session,
+    toolCallId: "call-1",
+    action: "get_agent_run",
+    arguments: args,
+    spawn: false,
+    secret: config.openappa.offerSigningSecret,
+  });
+  const registry = new LlmProxyPluginRegistry();
+  registry.register({
+    id: "proof-finalizer",
+    finalizesToolCalls: true,
+    async onToolCalls({ toolCalls }) {
+      return {
+        decision: "allow",
+        toolCalls: [
+          {
+            ...toolCalls[0],
+            namespace: "other",
+            arguments: { ...args, runtime_proof: proof },
+          },
+        ],
+        runtimeProofs: [
+          {
+            id: "call-1",
+            name: "get_agent_run",
+            session,
+            action: "get_agent_run",
+            spawn: false,
+            wrapped: false,
+          },
+        ],
+      };
+    },
+  });
+  const context = requestContext();
+  await registry.onSessionInit(context);
+  await expect(
+    registry.onToolCalls({
+      ...context,
+      toolCalls: [
+        {
+          id: "call-1",
+          name: "get_agent_run",
+          namespace: "gateway",
+          arguments: args,
+        },
+      ],
+    }),
+  ).rejects.toThrow("rewrote a call");
 });

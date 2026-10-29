@@ -12,19 +12,21 @@ import {
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
-import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { DEFAULT_FILTER_ALL } from "@/consts";
+import type { OpenAppaLaunchTarget } from "@/lib/openappa-chat-prompts";
 import {
   type CoverageTool,
   useCoverageTools,
 } from "@/lib/openappa-coverage.query";
 import { GovernedByPill } from "./coverage-badges";
+import { ImproveChatButton } from "./improve-chat-button";
+import { policyLineHref } from "./policy-line-href";
 
 type ToolTableProps = {
   catalogId?: string;
-  entityId?: string;
-  autoMode?: boolean;
+  /** Adds an Improve action per tool, scoped to this target. */
+  target?: OpenAppaLaunchTarget;
 };
 
 const FIRST_PAGE = { pageIndex: 0, pageSize: 10 };
@@ -41,12 +43,8 @@ function coverageToolRowId(tool: CoverageTool, index: number): string {
   ]);
 }
 
-/** Tools reachable through an entity, with the policy source for each rule. */
-export function ToolTable({
-  catalogId,
-  entityId,
-  autoMode = false,
-}: ToolTableProps) {
+/** A server's tools, or every visible server's, with the policy source for each rule. */
+export function ToolTable({ catalogId, target }: ToolTableProps) {
   const [search, setSearch] = useState("");
   const [serverId, setServerId] = useState<string | undefined>();
   const [policySource, setPolicySource] = useState<string | undefined>();
@@ -74,7 +72,6 @@ export function ToolTable({
     : undefined;
   const tools = useCoverageTools({
     catalogId: catalogId ?? serverId,
-    entityId,
     search: search || undefined,
     governedBy: battery
       ? "battery"
@@ -82,7 +79,7 @@ export function ToolTable({
           | "root"
           | "battery"
           | "catchall"
-          | "built_in"
+          | "not_covered"
           | undefined),
     battery,
     limit: pagination.pageSize,
@@ -90,41 +87,66 @@ export function ToolTable({
   });
   const columns = useMemo<ColumnDef<CoverageTool>[]>(
     () => [
-      {
-        id: "server",
-        header: "MCP server",
-        size: 190,
-        cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            <McpCatalogIcon
-              icon={row.original.catalogIcon}
-              catalogId={row.original.catalogId}
-              size={18}
-            />
-            <span>{row.original.catalogName || row.original.prefix}</span>
-          </div>
-        ),
-      },
+      // One server's tools all share it, so the column only shows for many.
+      ...(catalogId
+        ? []
+        : [
+            {
+              id: "server",
+              header: "MCP server",
+              size: 190,
+              cell: ({ row }) => (
+                <div className="flex items-center gap-2">
+                  <McpCatalogIcon
+                    icon={row.original.catalogIcon}
+                    catalogId={row.original.catalogId}
+                    size={18}
+                  />
+                  <span>{row.original.catalogName || row.original.prefix}</span>
+                </div>
+              ),
+            } satisfies ColumnDef<CoverageTool>,
+          ]),
       {
         id: "tool",
-        header: "Tool name",
+        header: "Tool",
         size: 230,
         cell: ({ row }) => <ToolNameCell tool={row.original} />,
       },
       {
         id: "policy",
-        header: "Policy source",
+        header: "Coverage",
         size: 240,
         cell: ({ row }) => <PolicySourceCell tool={row.original} />,
       },
+      ...(target
+        ? [
+            {
+              id: "actions",
+              // Buttons label themselves, so the title is for screen readers. Cells pad
+              // less on the right; the cell's pr-2 evens that edge with the left.
+              header: () => <span className="sr-only">Actions</span>,
+              size: 120,
+              cell: ({ row }) => (
+                <div className="flex justify-end pr-2">
+                  <ImproveChatButton
+                    size="xs"
+                    target={{ ...target, tool: row.original.name }}
+                  />
+                </div>
+              ),
+            } satisfies ColumnDef<CoverageTool>,
+          ]
+        : []),
     ],
-    [],
+    [catalogId, target],
   );
 
   if (tools.isLoadingError)
     return (
       <QueryLoadError
         title="Could not load the tools"
+        error={tools.error}
         onRetry={() => tools.refetch()}
         className="rounded-md border py-10"
       />
@@ -166,19 +188,19 @@ export function ToolTable({
           <FilterSelect
             value={policySource ?? DEFAULT_FILTER_ALL}
             onValueChange={updatePolicySource}
-            placeholder="Policy source"
-            ariaLabel="Policy source"
+            placeholder="Coverage"
+            ariaLabel="Coverage"
             showSearch={false}
             items={[
-              { value: DEFAULT_FILTER_ALL, label: "All policy sources" },
+              { value: DEFAULT_FILTER_ALL, label: "All coverage types" },
               { value: "root", label: "Custom rule" },
-              { value: "battery", label: "Battery" },
+              { value: "battery", label: "Battery rule" },
               ...(tools.data?.batteries ?? []).map((name) => ({
                 value: `battery:${name}`,
                 label: `${name} battery`,
               })),
-              { value: "catchall", label: "No rule" },
-              { value: "built_in", label: "Built-in fallback" },
+              { value: "catchall", label: "Catch-all rule" },
+              { value: "not_covered", label: "No rule" },
             ]}
           />
         </FilterBar>
@@ -193,14 +215,12 @@ export function ToolTable({
           total: tools.data?.pagination.total ?? 0,
         }}
         onPaginationChange={setPagination}
+        fixedWidthColumnIds={["server", "actions"]}
+        flexibleColumnIds={["tool", "policy"]}
         isLoading={tools.isFetching}
         emptyIcon={Wrench}
         emptyMessage="No tools available"
-        emptyDescription={
-          autoMode
-            ? "No tools are currently reachable by you through this entity."
-            : "Tools appear here once they are assigned or synced."
-        }
+        emptyDescription="Tools appear here once they are synced."
         hasActiveFilters={Boolean(search || serverId || policySource)}
         filteredEmptyMessage="No tool matches these filters."
         onClearFilters={clearFilters}
@@ -221,30 +241,44 @@ function ToolNameCell({ tool }: { tool: CoverageTool }) {
 }
 
 function PolicySourceCell({ tool }: { tool: CoverageTool }) {
-  if (!tool.rule)
-    return tool.policySource === "built_in" ? (
-      <Badge variant="outline">Built-in fallback</Badge>
-    ) : (
-      <GovernedByPill
-        governedBy={{ source: "catchall" }}
-        href={tool.fallbackLine ? policyHref(tool.fallbackLine) : undefined}
-        line={tool.fallbackLine}
-      />
+  if (tool.policySource === "not_covered" || tool.rule?.source === "catchall") {
+    const line = tool.rule?.line ?? tool.fallbackLine;
+    return (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <GovernedByPill
+          governedBy={{
+            source:
+              tool.policySource === "not_covered" ? "not_covered" : "catchall",
+          }}
+          href={line ? policyLineHref({ entry: null, line }) : undefined}
+          line={line}
+        />
+        <div className="text-xs text-muted-foreground">
+          {tool.policySource === "not_covered"
+            ? tool.rule?.annotator === "noop"
+              ? "Allowed without restrictions"
+              : "No matching rule"
+            : (tool.rule?.annotator ?? "Static rule")}
+        </div>
+        {tool.rule && !tool.enforced && (
+          <div className="text-xs text-muted-foreground">Not enforced</div>
+        )}
+      </div>
     );
+  }
+  if (!tool.rule) return null;
 
+  // A rule links to its line only while it runs: a rule of a battery the
+  // enforced composition does not hold, or of a root text alone, has no
+  // enforced line to open.
   const href =
-    tool.rule.source === "battery" &&
-    tool.rule.batteryEntry &&
-    tool.rule.batteryStatus !== "refused"
-      ? `/openappa/policy?${new URLSearchParams({
-          entry: tool.rule.batteryEntry,
-          ...(tool.rule.line ? { line: String(tool.rule.line) } : {}),
-        })}`
+    tool.rule.source === "battery" && tool.rule.batteryEntry && tool.enforced
+      ? policyLineHref({ entry: tool.rule.batteryEntry, line: tool.rule.line })
       : tool.rule.source === "root" && tool.enforced
-        ? policyHref(tool.rule.line)
+        ? policyLineHref({ entry: null, line: tool.rule.line })
         : undefined;
   return (
-    <div className="space-y-1">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       {tool.rule.source === "root" ? (
         <GovernedByPill
           governedBy={{ source: "root" }}
@@ -267,8 +301,4 @@ function PolicySourceCell({ tool }: { tool: CoverageTool }) {
       )}
     </div>
   );
-}
-
-function policyHref(line: number | null) {
-  return line ? `/openappa/policy?line=${line}` : "/openappa/policy";
 }

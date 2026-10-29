@@ -1,17 +1,20 @@
-import { timingSafeEqual } from "node:crypto";
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import config from "@/config";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import { withDeadline } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OrganizationModel from "@/models/organization";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { resolveCredentialValue } from "@/services/credentials";
 import { skillRootPath } from "@/skills-sandbox/runtime-image";
 import { shellQuote } from "@/utils/shell-quote";
 import { archestraAudience } from "./archestra-audience";
+import { deployedFromRow } from "./battery-target";
+import { servedHelperSource } from "./composition-view";
 import { openappaDeclarations } from "./declarations";
+import { draftHelperSource } from "./draft-helper-sources";
 
 /**
  * The last line a helper wrote to stderr, safe as a header value. Untrusted:
@@ -44,15 +47,6 @@ class OpenAppaHelperBridge {
   /** Consults in flight, a raced-out run included until it settles. */
   private inFlight = 0;
 
-  presentsBridgeToken(authorization: string | undefined): boolean {
-    const expected = Buffer.from(`Bearer ${openappaDeclarations.bridgeToken}`);
-    const presented = Buffer.from(authorization ?? "");
-    return (
-      presented.length === expected.length &&
-      timingSafeEqual(presented, expected)
-    );
-  }
-
   async consult(params: {
     installId: string;
     externalName: string;
@@ -63,39 +57,29 @@ class OpenAppaHelperBridge {
       installId: params.installId,
       externalName: params.externalName,
     };
+    const work = this.run(params);
     let outcome: HelperConsultOutcome;
-    // Helpers share the sandbox pool with every other consumer; they may take
-    // at most half of it, and a raced-out run holds its share until it settles.
-    if (this.inFlight >= helperConsultCap()) outcome = { kind: "busy" };
-    else {
-      this.inFlight++;
-      const work = this.run(params);
-      const release = () => {
-        this.inFlight--;
-      };
-      work.then(release, release);
-      try {
-        outcome = await withDeadline(
-          work,
-          HELPER_DEADLINE_MS,
-          () => new HelperDeadlineError(),
-        );
-      } catch (error) {
-        if (!(error instanceof HelperDeadlineError)) throw error;
-        work.then(
-          (late) =>
-            logger.info(
-              { ...context, outcome: late.kind },
-              "OpenAPPA battery helper settled after its deadline",
-            ),
-          (late) =>
-            logger.warn(
-              { ...context, error: late },
-              "OpenAPPA battery helper failed after its deadline",
-            ),
-        );
-        outcome = { kind: "timed_out" };
-      }
+    try {
+      outcome = await withDeadline(
+        work,
+        HELPER_DEADLINE_MS,
+        () => new HelperDeadlineError(),
+      );
+    } catch (error) {
+      if (!(error instanceof HelperDeadlineError)) throw error;
+      work.then(
+        (late) =>
+          logger.info(
+            { ...context, outcome: late.kind },
+            "OpenAPPA battery helper settled after its deadline",
+          ),
+        (late) =>
+          logger.warn(
+            { ...context, error: late },
+            "OpenAPPA battery helper failed after its deadline",
+          ),
+      );
+      outcome = { kind: "timed_out" };
     }
     logger.info(
       { ...context, outcome: outcome.kind, durationMs: Date.now() - startedAt },
@@ -109,20 +93,25 @@ class OpenAppaHelperBridge {
     externalName: string;
     request: string;
   }): Promise<HelperConsultOutcome> {
-    const install = await OpenAppaBatteryInstallModel.findById(
-      params.installId,
-    );
-    // A row the recompose deleted takes its helper endpoint with it.
+    const install = await this.helperSource(params.installId);
     if (!install) return { kind: "not_found" };
     const battery = await openappaDeclarations.resolveInstalled({
       organizationId: install.organizationId,
       name: install.batteryName,
       packageHash: install.packageHash,
     });
-    const external = battery?.externals.find(
-      (candidate) => candidate.name === params.externalName,
-    );
-    if (!battery || !external) return { kind: "not_found" };
+    // The row records the target the composition deployed, whose helpers it serves.
+    const deployed = battery && deployedFromRow(battery, install.target);
+    const matches =
+      deployed?.externals.filter(
+        (candidate) => candidate.name === params.externalName,
+      ) ?? [];
+    const kind = consultKind(params.request);
+    const external =
+      matches.length === 1
+        ? matches[0]
+        : matches.find((candidate) => candidate.kind === sectionForKind(kind));
+    if (!battery || !deployed || !external) return { kind: "not_found" };
     if (
       archestraAudience.serves({
         batteryName: install.batteryName,
@@ -136,7 +125,7 @@ class OpenAppaHelperBridge {
       });
 
     const resolved = await Promise.all(
-      battery.credentials.map((credential) =>
+      deployed.credentials.map((credential) =>
         this.resolveCredential({ install, credential }),
       ),
     );
@@ -152,58 +141,108 @@ class OpenAppaHelperBridge {
 
     const environment = await this.organizationEngine(install.organizationId);
     const cwd = skillRootPath(battery.name);
-    let executed: Awaited<ReturnType<typeof sandboxRuntimeService.runCommand>>;
+    // Only sandbox execution consumes this share. In-process audience reads,
+    // missing helpers and credential validation do not occupy sandbox workers.
+    if (this.inFlight >= helperConsultCap()) return { kind: "busy" };
+    this.inFlight++;
     try {
-      await sandboxRuntimeService.attach(CONSUMER_ID);
-      executed = await sandboxRuntimeService.runCommand({
-        command: external.command.map(shellQuote).join(" "),
-        cwd,
-        timeoutSeconds: HELPER_EXEC_TIMEOUT_SECONDS,
-        replayEntries: [
-          {
-            kind: "skill_mount",
-            skillMount: {
-              skillName: battery.name,
-              files: battery.files.map((file) => ({
+      let executed: Awaited<
+        ReturnType<typeof sandboxRuntimeService.runCommand>
+      >;
+      try {
+        await sandboxRuntimeService.attach(CONSUMER_ID);
+        executed = await sandboxRuntimeService.runCommand({
+          // Helpers are short-lived; lazy imports (Python 3.15+, ignored before)
+          // skip loading modules a consult never touches.
+          command: `PYTHON_LAZY_IMPORTS=all ${external.command.map(shellQuote).join(" ")}`,
+          cwd,
+          timeoutSeconds: HELPER_EXEC_TIMEOUT_SECONDS,
+          replayEntries: [
+            {
+              kind: "skill_mount",
+              skillMount: {
                 skillName: battery.name,
-                path: file.path,
-                encoding: "utf8",
-                content: file.text,
-              })),
+                files: battery.files.map((file) => ({
+                  skillName: battery.name,
+                  path: file.path,
+                  encoding: "utf8",
+                  content: file.text,
+                })),
+              },
             },
-          },
-        ],
-        secretEnv,
-        environment,
-        stdin: params.request,
-        outputBytesLimit: config.skillsSandbox.outputBytesLimit,
-        fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
-        cpuSeconds: config.skillsSandbox.cpuLimit,
-        memoryBytes: config.skillsSandbox.memoryLimit,
-      });
-    } catch (error) {
-      logger.warn(
-        { installId: install.id, externalName: external.name, error },
-        "OpenAPPA battery helper could not run",
-      );
-      return { kind: "failed", reason: "the helper sandbox is unavailable" };
-    }
-    const diagnostics = helperDiagnostics(executed.stderr);
-    if (executed.timedOut) return { kind: "timed_out", diagnostics };
-    if (executed.exitCode !== 0)
-      return {
-        kind: "failed",
-        reason: `the helper exited with status ${executed.exitCode}`,
-        diagnostics,
-      };
-    const answer = parseJsonObject(executed.stdout);
-    return answer
-      ? { kind: "answered", answer, diagnostics }
-      : {
+          ],
+          secretEnv,
+          environment,
+          stdin: params.request,
+          outputBytesLimit: config.skillsSandbox.outputBytesLimit,
+          fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
+          cpuSeconds: config.skillsSandbox.cpuLimit,
+          memoryBytes: config.skillsSandbox.memoryLimit,
+        });
+      } catch (error) {
+        logger.warn(
+          { installId: install.id, externalName: external.name, error },
+          "OpenAPPA battery helper could not run",
+        );
+        return { kind: "failed", reason: "the helper sandbox is unavailable" };
+      }
+      const diagnostics = helperDiagnostics(executed.stderr);
+      if (executed.timedOut) return { kind: "timed_out", diagnostics };
+      if (executed.exitCode !== 0)
+        return {
           kind: "failed",
-          reason: "the helper did not print a JSON object",
+          reason: `the helper exited with status ${executed.exitCode}`,
           diagnostics,
         };
+      const answer = parseJsonObject(executed.stdout);
+      return answer
+        ? { kind: "answered", answer, diagnostics }
+        : {
+            kind: "failed",
+            reason: "the helper did not print a JSON object",
+            diagnostics,
+          };
+    } finally {
+      // A timed-out consult still holds its share until the underlying run ends.
+      this.inFlight--;
+    }
+  }
+
+  /**
+   * The install a helper URL names, as the composition the runtime enforces
+   * deployed it. While a refusal holds, the install rows already describe
+   * the refused plan, so the enforced composition's record answers: its
+   * package, target and credential keys, even for a row the refused plan
+   * deleted. Otherwise the row answers, and a deleted row takes its helper
+   * endpoint with it. A draft replay's battery has no row; the source it
+   * registered answers while that replay runs.
+   */
+  private async helperSource(installId: string): Promise<{
+    id: string;
+    organizationId: string;
+    batteryName: string;
+    packageHash: string | null;
+    target: "multi-user" | null;
+    credentialBindings: Record<string, string>;
+  } | null> {
+    const draft = draftHelperSource(installId);
+    if (draft) return draft;
+    const row = await OpenAppaBatteryInstallModel.findById(installId);
+    const stored = row
+      ? await OpenAppaEffectivePolicyModel.findServed(row.organizationId)
+      : await OpenAppaEffectivePolicyModel.findServingInstall(installId);
+    const served = stored ? servedHelperSource(stored, installId) : null;
+    if (served) return served;
+    return row
+      ? {
+          id: row.id,
+          organizationId: row.organizationId,
+          batteryName: row.batteryName,
+          packageHash: row.packageHash,
+          target: row.target,
+          credentialBindings: row.credentialBindings,
+        }
+      : null;
   }
 
   private async resolveCredential(params: {
@@ -277,6 +316,32 @@ const HELPER_EXEC_TIMEOUT_SECONDS = 4;
  * silent NoAnswer upstream.
  */
 const HELPER_DEADLINE_MS = HELPER_EXEC_TIMEOUT_SECONDS * 1000 + 500;
+
+function consultKind(request: string): string | undefined {
+  try {
+    const parsed = JSON.parse(request) as { kind?: unknown };
+    return typeof parsed.kind === "string" ? parsed.kind : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function sectionForKind(kind: string | undefined): string | undefined {
+  switch (kind) {
+    case "annotation":
+      return "annotators";
+    case "authority":
+      return "authorities";
+    case "sanitizer":
+      return "sanitizers";
+    case "audience":
+      return "audience";
+    case "context":
+      return "context";
+    default:
+      return undefined;
+  }
+}
 
 function helperConsultCap(): number {
   return Math.max(1, Math.floor(config.daggerRuntime.maxConcurrent / 2));

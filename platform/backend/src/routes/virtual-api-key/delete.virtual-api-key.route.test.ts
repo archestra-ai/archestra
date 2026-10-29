@@ -1,15 +1,8 @@
-import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { userHasPermission } from "@/auth";
 import { grantEverywhere } from "@/test/wildcard-grants";
-
-const mockUserHasPermission = vi.mocked(userHasPermission);
+import type { User } from "@/types";
 
 describe("DELETE /api/llm-virtual-keys/:id", () => {
   let app: FastifyInstanceWithZod;
@@ -21,8 +14,6 @@ describe("DELETE /api/llm-virtual-keys/:id", () => {
     organizationId = organization.id;
     user = await makeUser();
     await makeMember(user.id, organizationId);
-    mockUserHasPermission.mockReset();
-    mockUserHasPermission.mockResolvedValue(false);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -49,7 +40,6 @@ describe("DELETE /api/llm-virtual-keys/:id", () => {
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });

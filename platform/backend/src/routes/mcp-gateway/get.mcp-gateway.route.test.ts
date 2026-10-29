@@ -7,22 +7,14 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { vi } from "vitest";
-import { TeamTokenModel } from "@/models";
-import {
-  CONNECTION_SETUP_CONTEXT_PARAM,
-  issueConnectionSetupContext,
-} from "@/services/connection-setup-context";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import oauthServerRoutes from "../oauth-server";
 import mcpGatewayRoutes from "./index";
 
-// The standalone GET stream records its session in the shared cache, which is
-// Keyv over a real PostgreSQL connection — the unit suite runs on PGlite and
-// never starts it, so the real manager would throw on the first write. The
-// canonical fake has real cache semantics.
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 describe("MCP Gateway GET transport", () => {
   let app: FastifyInstance;
@@ -102,18 +94,14 @@ describe("MCP Gateway GET transport", () => {
   test("declines GET for UUID and slug URLs unless an event stream is requested", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
     });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Gateway token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     for (const identifier of [agent.id, agent.slug]) {
       for (const accept of ["application/json", "*/*", undefined]) {
@@ -160,19 +148,13 @@ describe("MCP Gateway GET transport", () => {
     }
   });
 
-  test("unauthenticated setup-context gateway URL challenges advertise the query-free metadata URL", async ({
+  test("unauthenticated gateway URL challenges with a query string advertise the query-free metadata URL", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({ agentType: "mcp_gateway" });
-    const setupContext = issueConnectionSetupContext({
-      userId: crypto.randomUUID(),
-      organizationId: agent.organizationId,
-      gatewayId: agent.id,
-      setupId: crypto.randomUUID(),
-      secret: "test-setup-signing-key",
-    });
+    const queryValue = "query-secret-value";
     const gatewayUrl = new URL(`http://localhost:9000/v1/mcp/${agent.slug}`);
-    gatewayUrl.searchParams.set(CONNECTION_SETUP_CONTEXT_PARAM, setupContext);
+    gatewayUrl.searchParams.set("client_hint", queryValue);
     const requestUrl = `${gatewayUrl.pathname}${gatewayUrl.search}`;
     const canonicalMetadataUrl = `http://localhost:9000/.well-known/oauth-protected-resource/v1/mcp/${agent.slug}`;
 
@@ -207,8 +189,7 @@ describe("MCP Gateway GET transport", () => {
       expect(challenge, method).toBe(
         `Bearer resource_metadata="${canonicalMetadataUrl}"`,
       );
-      expect(challenge, method).not.toContain("cs1_");
-      expect(challenge, method).not.toContain(setupContext);
+      expect(challenge, method).not.toContain(queryValue);
       expect(challenge, method).not.toContain("?");
     }
   });
@@ -227,6 +208,7 @@ describe("MCP Gateway GET transport", () => {
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
+      toolExposureMode: "full",
       organizationId: org.id,
       agentType: "mcp_gateway",
     });

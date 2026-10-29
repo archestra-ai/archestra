@@ -21,6 +21,12 @@ import {
 import { batteryDisplayName } from "./_parts/battery-display-name";
 import { BatteryPolicySourceView } from "./_parts/battery-policy-source-view";
 import { BATTERY_STATUS, batteriesHref } from "./_parts/battery-status";
+import {
+  batteryWorks,
+  compositionNotice,
+  compositionOf,
+  enforcedStatus,
+} from "./_parts/composition-view";
 import { EffectivePolicyView } from "./_parts/effective-policy-view";
 import { GithubManagedPolicyNotice } from "./_parts/github-managed-policy-notice";
 import {
@@ -68,25 +74,29 @@ export function GuardrailsPolicyEditor({
               }
               ariaLabel="Policy source file"
               searchPlaceholder="Search included batteries"
-              className="h-8 w-64 max-w-full"
+              // On phones the picker takes its own full-width row under the
+              // view toggle and the guide link, instead of a ragged middle row.
+              className="order-last h-8 w-full sm:order-none sm:w-64"
               pinnedItems={[{ value: "root", label: "Organization policy" }]}
               items={(declarations.data?.batteries ?? []).map((battery) => ({
                 value: battery.entry,
                 label: batteryDisplayName(battery.name),
                 description:
                   BATTERY_STATUS[
-                    declarations.data?.lastError ? "refused" : battery.status
+                    declarations.data
+                      ? enforcedStatus(declarations.data, battery)
+                      : battery.status
                   ].label,
                 disabled: battery.status === "unavailable",
               }))}
             />
           )}
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:gap-x-3">
             {tab === "effective" ? (
               effective.data &&
               (effective.data.lastError !== null ? (
                 <span className="text-xs font-medium">
-                  Last composed policy
+                  {servedHeading(compositionOf(effective.data))}
                 </span>
               ) : (
                 <span className="text-xs text-muted-foreground">
@@ -104,7 +114,21 @@ export function GuardrailsPolicyEditor({
               </>
             ) : (
               <>
-                <Button asChild variant="ghost" size="sm">
+                {policy.data && (
+                  <output className="text-xs text-muted-foreground">
+                    {policy.data.revision === 0
+                      ? "Not yet saved"
+                      : `Revision ${policy.data.revision}`}
+                  </output>
+                )}
+                {/* Last, so on a phone the bare icon sits on the card's edge
+                    above the picker's end rather than floating mid-row. */}
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="-mr-2 w-8 has-[>svg]:px-0 sm:mr-0 sm:w-auto sm:has-[>svg]:px-2.5"
+                >
                   <a
                     href={getDocsUrl(
                       DocsPage.PlatformAiToolGuardrails,
@@ -113,17 +137,10 @@ export function GuardrailsPolicyEditor({
                     target="_blank"
                     rel="noreferrer"
                   >
-                    <span>Policy guide</span>
+                    <span className="sr-only sm:not-sr-only">Policy guide</span>
                     <ExternalLink className="size-3.5" />
                   </a>
                 </Button>
-                {policy.data && (
-                  <output className="text-xs text-muted-foreground">
-                    {policy.data.revision === 0
-                      ? "Not yet saved"
-                      : `Revision ${policy.data.revision}`}
-                  </output>
-                )}
               </>
             )}
           </div>
@@ -164,6 +181,7 @@ function RootPolicySource({
     return (
       <QueryLoadError
         title="Could not load policy"
+        error={policy.error}
         onRetry={() => policy.refetch()}
       />
     );
@@ -179,11 +197,8 @@ function RootPolicySource({
             : null
         }
       />
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-4 py-3 text-xs text-muted-foreground">
-        <span>
-          Saved changes apply to new conversations. Existing conversations keep
-          their original policy.
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t px-4 py-3 text-xs text-muted-foreground">
+        <span>Conversations follow saved changes.</span>
         <CompositionSummary declarations={declarations} />
       </div>
     </div>
@@ -240,45 +255,61 @@ function CompositionSummary({
   declarations: PolicyDeclarations | null | undefined;
 }) {
   if (!declarations) return null;
-  if (declarations.lastError)
+  const { served } = compositionOf(declarations);
+  if (served.kind === "root_only")
     return (
       <output
         data-testid="composition-summary"
         data-failed="true"
         className="text-destructive"
       >
-        Composition failed: not enforced
+        Composition failed: nothing is enforced
       </output>
     );
   const total = declarations.batteries.length;
   const notEnforced = declarations.batteries.filter(
-    (battery) => battery.status !== "active",
+    (battery) => !batteryWorks(declarations, battery),
   ).length;
+  const stale = served.kind === "previous";
   return (
     <output
       data-testid="composition-summary"
       data-batteries={total}
       data-not-enforced={notEnforced}
-      className="flex items-center gap-1"
+      data-stale={stale}
+      // Each part keeps to one line and they wrap as wholes, so a phone
+      // never strands a separator or splits "1 not enforced".
+      className="flex flex-wrap items-center gap-x-3 gap-y-1"
     >
-      <span>
-        {total === 1
-          ? "1 battery composes into this policy"
-          : `${total} batteries compose into this policy`}
+      <span className={stale ? undefined : "whitespace-nowrap"}>
+        {stale
+          ? `${compositionNotice(declarations)?.title ?? "The latest revision was refused"} · an earlier composition stays enforced`
+          : total === 1
+            ? "1 battery composes into this policy"
+            : `${total} batteries compose into this policy`}
       </span>
       {notEnforced > 0 && (
-        <>
-          <span>·</span>
-          {/* Every included battery that is not active is in the Broken group. */}
-          <Link
-            href={batteriesHref("broken")}
-            className="inline-flex items-center gap-1 text-destructive underline underline-offset-2 hover:no-underline"
-          >
-            <TriangleAlert className="size-3.5" />
-            <span>{notEnforced} not enforced</span>
-          </Link>
-        </>
+        // Every included battery with a problem is in the Needs attention group.
+        <Link
+          href={batteriesHref("attention")}
+          className="inline-flex items-center gap-1 whitespace-nowrap font-medium text-destructive underline-offset-2 hover:underline"
+        >
+          <TriangleAlert className="size-3.5" />
+          <span>{notEnforced} not enforced</span>
+        </Link>
       )}
     </output>
   );
+}
+
+/** What the effective tab says it shows while the latest attempt is refused. */
+function servedHeading(composition: PolicyDeclarations["composition"]): string {
+  const { served, refusal } = composition;
+  if (served.kind === "root_only")
+    return "Nothing is enforced: the root text alone";
+  if (served.kind === "current" || served.rootRevision === null)
+    return "Still enforced: the last composition that opened";
+  return served.rootRevision === refusal?.rootRevision
+    ? `Still enforced: the earlier composition of revision ${served.rootRevision}`
+    : `Still enforced: revision ${served.rootRevision}`;
 }

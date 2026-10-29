@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { ConnectorIdentityCache } from "./identity-cache";
 
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 describe("ConnectorIdentityCache", () => {
   const credentials = { email: "admin@example.com", apiToken: "tok-a" };

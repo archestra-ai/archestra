@@ -67,8 +67,13 @@ test("loads models using subscription authentication and preserves the runtime d
   );
   expect(await claudeCodeOAuth.models(RESPONSE.access_token)).toEqual([
     {
+      value: "opus",
+      displayName: "Opus",
+      description: "Default for new Claude Code runs",
+    },
+    {
       value: "default",
-      displayName: "Default",
+      displayName: "Claude account default",
       description: "Claude Code's default model for your account",
     },
     { value: "example-model", displayName: "Example model", description: "" },

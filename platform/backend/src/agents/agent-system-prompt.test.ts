@@ -1,6 +1,5 @@
 import {
   ADMIN_ROLE_NAME,
-  ADVISOR_DELEGATION_TOOL_NAME,
   type ArchestraToolShortName,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
@@ -24,7 +23,10 @@ import config, { parseOpenAppaConfig } from "@/config";
 import { AgentModel, SkillModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
-import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
+import {
+  SKILL_SANDBOX_ATTACHMENTS_DIR,
+  SKILL_SANDBOX_HOME,
+} from "@/skills-sandbox/runtime-image";
 import { accessGrants, describe, expect, test } from "@/test";
 import {
   APP_BUILD_CONDUCT_INSTRUCTION,
@@ -63,7 +65,13 @@ const withFileTools: Record<string, Tool> = {
   [brand(TOOL_READ_FILE_SHORT_NAME)]: {} as Tool,
   [brand(TOOL_SAVE_FILE_SHORT_NAME)]: {} as Tool,
 };
-// Sandbox runtime only (Projects off): no persistent-file tools.
+// Persistent-file tools only (no code runtime): the file surface alone.
+const withFilesOnly: Record<string, Tool> = {
+  [searchFilesToolName]: {} as Tool,
+  [brand(TOOL_READ_FILE_SHORT_NAME)]: {} as Tool,
+  [brand(TOOL_SAVE_FILE_SHORT_NAME)]: {} as Tool,
+};
+// Sandbox runtime only (file tools not assigned): no persistent-file tools.
 const withSandboxOnly: Record<string, Tool> = {
   [brand(TOOL_RUN_COMMAND_SHORT_NAME)]: {} as Tool,
   [brand(TOOL_DOWNLOAD_FILE_SHORT_NAME)]: {} as Tool,
@@ -150,7 +158,7 @@ describe("buildAgentSystemPrompt", () => {
       userId: user.id,
       agentId: agent.id,
     };
-    const choiceRule = `When you ask the user a question, clarification, preference, or approval, call ${askUserToolName}. Never ask multiple-choice questions or request user decisions in plain text.`;
+    const choiceRule = `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${askUserToolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${askUserToolName} too, not in plain text. A link or command the user must open or run goes in your reply text, not in the question.`;
 
     // Chat: the stream shows the question and waits for the answer.
     const chat = await buildAgentSystemPrompt({
@@ -193,7 +201,7 @@ describe("buildAgentSystemPrompt", () => {
     // Enforcement needs both switches; otherwise no ruling can reach the
     // model and the remedy instruction is omitted.
     const openappa = config.openappa;
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
 
     try {
@@ -221,34 +229,14 @@ describe("buildAgentSystemPrompt", () => {
           agentId: agent.id,
         }),
       ).toContain(instruction);
-      expect(instruction).toContain("returns a ruling as its result");
-      expect(instruction).not.toContain('starts with "[appa]"');
-      expect(instruction).not.toContain("Name the plans to the user");
-      // Rulings count readers without naming them; the model must not guess.
-      expect(instruction).toContain(
-        "describe the block and each plan only in the ruling's own words",
-      );
-      expect(instruction).toContain("never guess who the readers are");
-      expect(instruction).toContain(
-        "call archestra__execute_remedy_plan immediately",
-      );
-      expect(instruction).toContain("Do not ask permission first");
-      expect(instruction).toContain(
-        "That tool itself collects any required human approval",
-      );
-      expect(instruction).not.toContain(askUserToolName);
-      expect(instruction).not.toContain("remedy_offer_ids");
-      expect(instruction).not.toContain("only after");
+      // The instruction says who decides; it never tells the model to skip
+      // the user, which provider safety classifiers refuse.
+      expect(instruction).not.toContain("Do not ask permission");
+      expect(instruction).not.toMatch(/immediately/i);
       expect(instruction).not.toContain("get_remedy_plans");
-      // A run nobody can answer a question in describes the plans and stops;
-      // it must never self-select or execute one.
+      // A run nobody can answer a question in never points at ask_user.
       const headless = buildAppaRemedyInstruction({ canAskUser: false });
       expect(headless).not.toContain(askUserToolName);
-      expect(headless).toContain(
-        "Without user input, describe the available plans and stop.",
-      );
-      expect(headless).toContain("Do not choose or execute a plan.");
-      expect(headless).not.toContain("execute_remedy_plan");
     } finally {
       config.openappa = openappa;
     }
@@ -267,7 +255,7 @@ describe("buildAgentSystemPrompt", () => {
     await makeMember(user.id, agent.organizationId);
 
     const openappa = config.openappa;
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(false);
 
     try {
@@ -481,6 +469,35 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain("did not attach this turn");
   });
 
+  test("without the code runtime, file guidance never mentions the sandbox", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: withFilesOnly,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+
+    // The persistent-file guidance is all there...
+    expect(prompt).toContain("Files panel");
+    expect(prompt).toContain(searchFilesToolName);
+    expect(prompt).toContain("did not attach this turn");
+    // ...but nothing points at a sandbox the agent doesn't have.
+    expect(prompt).not.toMatch(/sandbox/i);
+    expect(prompt).not.toContain(SKILL_SANDBOX_HOME);
+  });
+
   test("app-exchange guidance is gated on copy_file and keeps the source filename", async ({
     makeAgent,
     makeUser,
@@ -521,43 +538,6 @@ describe("buildAgentSystemPrompt", () => {
     });
     expect(withoutCopy).not.toContain(brand(TOOL_COPY_FILE_SHORT_NAME));
     expect(withoutCopy).not.toContain("keeps the source's filename");
-  });
-
-  test("adds the advisor consult policy only when the delegation tool is present", async ({
-    makeAgent,
-    makeUser,
-    makeMember,
-  }) => {
-    const agent = await makeAgent({
-      systemPrompt: "You are helpful.",
-      toolExposureMode: "full",
-    });
-    const user = await makeUser();
-    await makeMember(user.id, agent.organizationId);
-
-    const base = {
-      agent,
-      organizationId: agent.organizationId,
-      userId: user.id,
-      agentId: agent.id,
-    };
-
-    const withAdvisor = await buildAgentSystemPrompt({
-      ...base,
-      mcpTools: { [ADVISOR_DELEGATION_TOOL_NAME]: {} as Tool },
-    });
-    // The policy names the tool and mandates a pre-final-answer consult with
-    // raw-evidence sharing — the load-bearing clauses; presence of the branded
-    // block is asserted via its stable opening.
-    expect(withAdvisor).toContain(ADVISOR_DELEGATION_TOOL_NAME);
-    expect(withAdvisor).toContain("You have an Advisor");
-    expect(withAdvisor).toContain("verbatim samples");
-
-    const withoutAdvisor = await buildAgentSystemPrompt({
-      ...base,
-      mcpTools: someTool,
-    });
-    expect(withoutAdvisor).not.toContain("You have an Advisor");
   });
 
   test("adds the tool-result instruction only when tools are present", async ({

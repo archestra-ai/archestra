@@ -39,7 +39,9 @@ const TOGGLE_OPTION_LABELS = {
   disabled: "Disabled",
 } as const;
 
-const MCP_SETTINGS_PERMISSIONS: Permissions = { mcpSettings: ["update"] };
+const MCP_SETTINGS_PERMISSIONS: Permissions = {
+  organizationSettings: ["update"],
+};
 
 export default function McpSettingsPage() {
   const { data: organization, isPending } = useOrganization();
@@ -57,6 +59,11 @@ export default function McpSettingsPage() {
   );
 
   const serverCatalogEnabled = organization?.onlineMcpCatalogEnabled ?? true;
+  const serverPersonalAccessAllTools =
+    organization?.defaultPersonalAgentAccessAllTools ?? true;
+  const [personalAccessAllTools, setPersonalAccessAllTools] = useState(
+    serverPersonalAccessAllTools,
+  );
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -75,6 +82,9 @@ export default function McpSettingsPage() {
   useEffect(() => {
     if (organization) {
       setCatalogEnabled(organization.onlineMcpCatalogEnabled);
+      setPersonalAccessAllTools(
+        organization.defaultPersonalAgentAccessAllTools ?? true,
+      );
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -84,6 +94,8 @@ export default function McpSettingsPage() {
   }, [organization]);
 
   const catalogChanged = !isPending && catalogEnabled !== serverCatalogEnabled;
+  const personalToolModeChanged =
+    !isPending && personalAccessAllTools !== serverPersonalAccessAllTools;
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -91,6 +103,7 @@ export default function McpSettingsPage() {
     !isPending && hibernationEnabled !== serverHibernationEnabled;
   // SPDX-SnippetEnd
   const hasChanges =
+    personalToolModeChanged ||
     catalogChanged /* SPDX-SnippetBegin */ ||
     /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
     /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */ hibernationChanged /* SPDX-SnippetEnd */;
@@ -102,6 +115,9 @@ export default function McpSettingsPage() {
     // not be allowed to set.
     await updateMcpSettingsMutation.mutateAsync({
       ...(catalogChanged ? { onlineMcpCatalogEnabled: catalogEnabled } : {}),
+      ...(personalToolModeChanged
+        ? { defaultPersonalAgentAccessAllTools: personalAccessAllTools }
+        : {}),
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -114,6 +130,7 @@ export default function McpSettingsPage() {
 
   const handleCancel = () => {
     setCatalogEnabled(serverCatalogEnabled);
+    setPersonalAccessAllTools(serverPersonalAccessAllTools);
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -135,6 +152,51 @@ export default function McpSettingsPage() {
       )}
       {/* SPDX-SnippetEnd */}
       <SettingsSectionStack>
+        <SettingsBlock
+          title="Default personal tool mode"
+          description="Applies to new My Assistant agents and personal MCP gateways. Existing objects are unchanged."
+          control={
+            <WithPermissions
+              permissions={MCP_SETTINGS_PERMISSIONS}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <Select
+                  value={personalAccessAllTools ? "all" : "custom"}
+                  onValueChange={(value) =>
+                    setPersonalAccessAllTools(value === "all")
+                  }
+                  disabled={
+                    updateMcpSettingsMutation.isPending || !hasPermission
+                  }
+                >
+                  <SelectTrigger
+                    className="w-48"
+                    aria-label="Default personal tool mode"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    align="end"
+                    side="bottom"
+                    className="w-48 whitespace-nowrap"
+                  >
+                    <SelectItem value="all" description="All accessible tools">
+                      All
+                    </SelectItem>
+                    <SelectItem
+                      value="custom"
+                      description="Assigned tools only"
+                    >
+                      Custom
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </WithPermissions>
+          }
+        />
         <SettingsBlock
           title="Online MCP catalog"
           description="Let people add MCP servers from the public online catalog. When disabled, new servers are always configured manually."

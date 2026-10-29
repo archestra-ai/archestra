@@ -199,6 +199,7 @@ class AgentExcludedToolModel {
     const candidates = await executor
       .select({
         agentId: schema.agentsTable.id,
+        isPersonalGateway: schema.agentsTable.isPersonalGateway,
         toolId: schema.toolsTable.id,
         toolName: schema.toolsTable.name,
       })
@@ -218,7 +219,9 @@ class AgentExcludedToolModel {
         );
         return (
           shortName === null ||
-          !isPrefillExemptArchestraToolShortName(shortName)
+          !isPrefillExemptArchestraToolShortName(shortName, {
+            isPersonalGateway: candidate.isPersonalGateway,
+          })
         );
       })
       .map(({ agentId, toolId }) => ({ agentId, toolId }));

@@ -1,17 +1,28 @@
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
+import config from "@/config";
 import db, { schema } from "@/database";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { secretManager } from "@/secrets-manager";
-import { afterEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
 import {
   makeAgentCard,
+  serveAgentCard,
   startA2aDiscoveryFixture,
 } from "./a2a-remote-agent.test-helpers";
 
 describe("POST /api/a2a/remote-agents", () => {
   const ctx = useRouteTestApp(a2aRemoteAgentRoutes);
+  beforeEach(async ({ makeMember }) => {
+    // Grants resolve through membership; an administrator reaches every
+    // external agent through the organization-wide grant.
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+  });
   let closeFixture: (() => Promise<void>) | undefined;
 
   afterEach(async () => {
@@ -40,9 +51,6 @@ describe("POST /api/a2a/remote-agents", () => {
       name: "External researcher",
       authorId: ctx.user.id,
       authorName: ctx.user.name,
-      scope: "personal",
-      teams: [],
-      users: [],
       discoveryMode: "inline_card",
       discoveryUrl: null,
       connection: {
@@ -106,7 +114,7 @@ describe("POST /api/a2a/remote-agents", () => {
     expect(JSON.stringify(response.json())).not.toContain("fixture-api-key");
   });
 
-  test("round-trips team visibility and rejects invalid team audiences", async ({
+  test("writes the author and the starting grants to the agent's permission policy", async ({
     makeOrganization,
     makeTeam,
   }) => {
@@ -119,30 +127,27 @@ describe("POST /api/a2a/remote-agents", () => {
       payload: {
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        scope: "team",
-        teams: [team.id],
+        initialGrants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
       },
     });
 
-    expect(created.statusCode).toBe(200);
-    expect(created.json()).toMatchObject({
-      authorId: ctx.user.id,
-      scope: "team",
-      teams: [{ id: team.id, name: "Research Team" }],
-      users: [],
+    expect(created.statusCode, created.body).toBe(200);
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: ctx.organizationId,
+      resource: "externalAgent",
+      scope: created.json().id,
     });
-
-    const noTeam = await ctx.app.inject({
-      method: "POST",
-      url: "/api/a2a/remote-agents",
-      payload: {
-        source: { type: "inline_card", agentCard: makeAgentCard("none") },
-        auth: { type: "none" },
-        scope: "team",
-        teams: [],
-      },
-    });
-    expect(noTeam.statusCode).toBe(400);
+    expect(policy?.grants).toEqual(
+      expect.arrayContaining([
+        {
+          subject: { type: "user", id: ctx.user.id },
+          actions: expect.arrayContaining(["read", "update", "delete"]),
+        },
+        { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+      ]),
+    );
 
     const foreignOrganization = await makeOrganization();
     const foreignTeam = await makeTeam(foreignOrganization.id, ctx.user.id);
@@ -152,11 +157,40 @@ describe("POST /api/a2a/remote-agents", () => {
       payload: {
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        scope: "team",
-        teams: [foreignTeam.id],
+        initialGrants: [
+          {
+            subject: { type: "team", id: foreignTeam.id },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
     expect(foreign.statusCode).toBe(400);
+  });
+
+  test("removes the permission policy with the agent", async () => {
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const key = {
+      organizationId: ctx.organizationId,
+      resource: "externalAgent" as const,
+      scope: created.json().id,
+    };
+    expect(await ResourcePermissionPolicyModel.find(key)).not.toBeNull();
+
+    const removed = await ctx.app.inject({
+      method: "DELETE",
+      url: `/api/a2a/remote-agents/${created.json().id}`,
+    });
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect(await ResourcePermissionPolicyModel.find(key)).toBeNull();
   });
 
   test("rejects an auth method the Agent Card does not advertise", async () => {
@@ -294,5 +328,95 @@ describe("POST /api/a2a/remote-agents", () => {
       .where(eq(schema.toolsTable.id, response.json().toolId));
     expect(tool.name).toHaveLength(64);
     expect(tool.name).toMatch(/^agent__.+__[0-9a-f]{32}$/);
+  });
+
+  // Admins register internal agents (a cluster Service, a VPC address) that
+  // have no public IP and often no TLS. The non-public 127.0.0.1 fixture stands
+  // in for them here.
+  describe("in production", () => {
+    const original = {
+      production: config.production,
+      enableE2eTestEndpoints: config.test.enableE2eTestEndpoints,
+    };
+
+    beforeEach(() => {
+      config.production = true;
+      config.test.enableE2eTestEndpoints = false;
+    });
+
+    afterEach(() => {
+      config.production = original.production;
+      config.test.enableE2eTestEndpoints = original.enableE2eTestEndpoints;
+    });
+
+    test("registers an agent at a plain-http, non-public address", async () => {
+      const fixture = await startA2aDiscoveryFixture("bearer");
+      closeFixture = fixture.close;
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/a2a/remote-agents",
+        payload: {
+          source: { type: "well_known", url: fixture.baseUrl },
+          auth: { type: "bearer", credential: "fixture-bearer-token" },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        name: "Deterministic A2A Test Agent",
+        discoveryMode: "well_known",
+        discoveryUrl: fixture.baseUrl,
+        connection: {
+          authType: "bearer",
+          hasCredential: true,
+          selectedInterface: { url: `${fixture.baseUrl}/a2a` },
+        },
+      });
+    });
+
+    test("registers a pasted card whose interface is a non-public address", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/a2a/remote-agents",
+        payload: {
+          source: { type: "inline_card", agentCard: makeAgentCard("none") },
+          auth: { type: "none" },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        connection: {
+          selectedInterface: { url: "http://127.0.0.1:9191/a2a" },
+        },
+      });
+    });
+
+    test("rejects a discovered card that redirects calls to another non-public origin", async () => {
+      // The admin trusts the origin they typed, not wherever the remote card
+      // points: a card must not steer the stored credential elsewhere.
+      const fixture = await serveAgentCard(makeAgentCard("none"));
+      closeFixture = fixture.close;
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/a2a/remote-agents",
+        payload: {
+          source: { type: "well_known", url: fixture.baseUrl },
+          auth: { type: "none" },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: { message: "A2A URL was rejected: scheme_not_https" },
+      });
+      const list = await ctx.app.inject({
+        method: "GET",
+        url: "/api/a2a/remote-agents",
+      });
+      expect(list.json()).toEqual([]);
+    });
   });
 });

@@ -1,9 +1,10 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentConnectorAssignment } from "@/types";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentVersionModel from "./agent-version";
+import { idArrayCondition } from "./id-array-condition";
 
 class AgentConnectorAssignmentModel {
   static async findByAgent(
@@ -231,6 +232,41 @@ class AgentConnectorAssignmentModel {
     return map;
   }
 
+  /** Live org agents assigned to each connector, in one grouped query. */
+  static async countAgentsForConnectors(params: {
+    connectorIds: string[];
+    organizationId: string;
+  }): Promise<Map<string, number>> {
+    if (params.connectorIds.length === 0) return new Map();
+
+    const rows = await db
+      .select({
+        connectorId: schema.agentConnectorAssignmentsTable.connectorId,
+        count: count(),
+      })
+      .from(schema.agentConnectorAssignmentsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(
+          schema.agentConnectorAssignmentsTable.agentId,
+          schema.agentsTable.id,
+        ),
+      )
+      .where(
+        and(
+          inArray(
+            schema.agentConnectorAssignmentsTable.connectorId,
+            params.connectorIds,
+          ),
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .groupBy(schema.agentConnectorAssignmentsTable.connectorId);
+
+    return new Map(rows.map((row) => [row.connectorId, row.count]));
+  }
+
   /**
    * Batch fetch: for a list of agent IDs, return a map of agentId → connectorId[].
    */
@@ -256,7 +292,10 @@ class AgentConnectorAssignmentModel {
       )
       .where(
         and(
-          inArray(schema.agentConnectorAssignmentsTable.agentId, agentIds),
+          idArrayCondition(
+            schema.agentConnectorAssignmentsTable.agentId,
+            agentIds,
+          ),
           notDeleted(schema.knowledgeBaseConnectorsTable),
         ),
       );

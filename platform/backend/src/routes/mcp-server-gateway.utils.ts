@@ -8,9 +8,10 @@ import {
   ReadResourceRequestSchema,
   type ReadResourceResult,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { GatedCaller } from "@/auth/permission-gated";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
-import { ToolModel } from "@/models";
+import { McpServerToolDescriptionModel, ToolModel } from "@/models";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { RESOURCE_NOT_FOUND_ERROR_CODE } from "./mcp-gateway/protocol";
 import { normalizeToolInputSchema } from "./mcp-gateway/utils";
@@ -25,14 +26,15 @@ type McpListTool = ListToolsResult["tools"][number];
  * route's `mcpServerId`, with no agent/owner context. `resources/read` refuses
  * any non-`ui://` URI so sandboxed app code cannot read the installed server's
  * model-facing data resources through the install's own credentials. Access
- * (`mcpServerInstallation:read`), the `_meta.ui.visibility` model-only tool
- * gate, and tool-invocation policy are enforced by the route before here.
+ * (`mcpServerInstallation:read`) and the `_meta.ui.visibility` model-only tool
+ * gate are enforced by the route before here.
  */
 export function createServerScopedServer(params: {
   mcpServerId: string;
   catalogId: string;
+  caller: GatedCaller;
 }): { server: McpServer } {
-  const { mcpServerId, catalogId } = params;
+  const { mcpServerId, catalogId, caller } = params;
   const mcpServer = new McpServer(
     {
       name: `archestra-mcp-server-${mcpServerId}`,
@@ -49,7 +51,14 @@ export function createServerScopedServer(params: {
   const { server } = mcpServer;
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const tools = await ToolModel.findByCatalogIdWithMeta(catalogId);
+    const tools = await ToolModel.findByCatalogIdWithMeta(catalogId, caller);
+    // This connection runs every call through one installation, so describe
+    // its tools the way that installation does.
+    const ownDescriptions = (
+      await McpServerToolDescriptionModel.findForPairs(
+        tools.map((tool) => ({ mcpServerId, toolId: tool.id })),
+      )
+    ).get(mcpServerId);
     const listed: McpListTool[] = tools.map((tool) => {
       const meta = tool.meta as {
         annotations?: McpListTool["annotations"];
@@ -60,7 +69,10 @@ export function createServerScopedServer(params: {
         // its own native (raw) tool names. Strip Archestra's discovery prefix so
         // the app's tools/call (raw name) and the upstream agree.
         name: ToolModel.unslugifyName(tool.name),
-        description: tool.description ?? undefined,
+        description:
+          (ownDescriptions?.has(tool.id)
+            ? ownDescriptions.get(tool.id)
+            : tool.description) ?? undefined,
         inputSchema: normalizeToolInputSchema(tool.parameters),
         annotations: meta?.annotations ?? {},
         _meta: meta?._meta ?? {},
@@ -84,6 +96,7 @@ export function createServerScopedServer(params: {
         };
       }
       return (await mcpClient.readResourceForServer({
+        caller,
         mcpServerId,
         uri,
       })) as ReadResourceResult;
@@ -94,6 +107,7 @@ export function createServerScopedServer(params: {
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) =>
       (await mcpClient.callToolForServer({
+        caller,
         mcpServerId,
         name,
         arguments: args,

@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "default_personal_agent_access_all_tools" boolean DEFAULT true NOT NULL;

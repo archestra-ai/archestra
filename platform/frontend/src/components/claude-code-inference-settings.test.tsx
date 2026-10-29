@@ -14,6 +14,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { ClaudeCodeAccount } from "./claude-code-account";
 import { ClaudeCodeInferenceSettings } from "./claude-code-inference-settings";
 
 vi.mock("sonner");
@@ -58,6 +59,11 @@ beforeEach(() => {
       modelRequests++;
       return HttpResponse.json({
         models: [
+          {
+            value: "opus",
+            displayName: "Opus",
+            description: "Runtime default",
+          },
           {
             value: "runtime-choice",
             displayName: "Runtime model",
@@ -110,7 +116,7 @@ describe("Claude Code authentication", () => {
     );
     render(
       <QueryClientProvider client={client}>
-        <Settings />
+        <Account />
       </QueryClientProvider>,
     );
     await waitFor(() =>
@@ -121,10 +127,8 @@ describe("Claude Code authentication", () => {
     expect(
       screen.queryByRole("button", { name: "Provider key" }),
     ).not.toBeInTheDocument();
+    // Sign in starts Claude's flow at once; there is no second button.
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Sign in with Claude" }),
-    );
     await screen.findByLabelText("Authorization code");
     expect(modelRequests).toBe(0);
     fireEvent.change(screen.getByLabelText("Authorization code"), {
@@ -134,9 +138,7 @@ describe("Claude Code authentication", () => {
     await screen.findByText("Signed in for you");
     await waitFor(() => expect(modelRequests).toBe(1));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: /Select model|default/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /Opus/i }));
     fireEvent.click(
       await screen.findByRole("option", { name: /Runtime model/ }),
     );
@@ -170,7 +172,7 @@ describe("Claude Code authentication", () => {
     );
     render(
       <QueryClientProvider client={client}>
-        <Settings />
+        <Account />
       </QueryClientProvider>,
     );
     await screen.findByText("Sign in to use this agent.");
@@ -182,70 +184,40 @@ describe("Claude Code authentication", () => {
     );
   });
 
-  it("connects a read-only Vault reference and shows expired connections as requiring sign-in", async () => {
-    let reference: unknown;
-    server.use(
-      http.get(accountUrl, () =>
-        HttpResponse.json({ state: "expired", requiresVaultReference: true }),
-      ),
-      http.post(accountUrl, async ({ request }) => {
-        reference = await request.json();
-        return HttpResponse.json({
-          state: "connecting",
-          flowId: pendingSignIn.flowId,
-          requiresVaultReference: true,
-        });
-      }),
-    );
-    render(
-      <QueryClientProvider client={client}>
-        <Settings />
-      </QueryClientProvider>,
-    );
-    await screen.findByText("Connection expired. Sign in again.");
-    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    const button = screen.getByRole("button", {
-      name: "Connect Vault credential",
-    });
-    expect(button).toBeDisabled();
-    expect(
-      screen.queryByRole("button", { name: "Sign in with Claude" }),
-    ).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Vault reference"), {
-      target: { value: "secret/data/personal#token" },
-    });
-    fireEvent.click(button);
-    await waitFor(() =>
-      expect(reference).toEqual({
-        vaultReference: "secret/data/personal#token",
-      }),
-    );
-  });
-
   it("switches to provider billing without treating Vertex configuration as a personal sign-in", async () => {
     render(
       <QueryClientProvider client={client}>
         <Settings vertexEnabled />
       </QueryClientProvider>,
     );
-    await screen.findByText("Sign in to use this agent.");
-    fireEvent.click(
-      screen.getByRole("radio", { name: /API key or cloud provider/ }),
+    // Signing in belongs to the setup banner; the settings stay quiet.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("radio", {
+          name: /Each person's Claude subscription/,
+        }),
+      ).toBeChecked(),
     );
+    expect(
+      screen.queryByRole("button", { name: "Sign in" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: /A company API key/ }));
     expect(screen.getByRole("button", { name: "Provider key" })).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Provider model" }),
     ).toBeVisible();
     expect(
-      screen.getByText(/Google Cloud \(Vertex AI\) billing/),
+      screen.getByText(/Billed through Google Cloud \(Vertex AI\)/),
     ).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Sign in" }),
     ).not.toBeInTheDocument();
     fireEvent.click(
-      screen.getByRole("radio", { name: /Personal Claude subscription/ }),
+      screen.getByRole("radio", { name: /Each person's Claude subscription/ }),
     );
-    await screen.findByText("Sign in to use this agent.");
+    expect(
+      screen.queryByRole("button", { name: "Provider key" }),
+    ).not.toBeInTheDocument();
     expect(modelRequests).toBe(0);
   });
 
@@ -260,7 +232,7 @@ describe("Claude Code authentication", () => {
     );
     render(
       <QueryClientProvider client={client}>
-        <Settings />
+        <Account />
       </QueryClientProvider>,
     );
     await screen.findByText("Could not check connection");
@@ -272,6 +244,19 @@ describe("Claude Code authentication", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+/** The account control the agent's setup banner shows until sign-in. */
+function Account() {
+  const [model, setModel] = useState<string>();
+  return (
+    <ClaudeCodeAccount
+      agentId="agent-1"
+      variant="compact"
+      model={model}
+      onModelChange={setModel}
+    />
+  );
+}
 
 function Settings({ vertexEnabled = false }: { vertexEnabled?: boolean }) {
   const [authentication, setAuthentication] = useState<

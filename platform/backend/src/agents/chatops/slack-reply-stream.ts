@@ -1,0 +1,601 @@
+import type { AnyChunk, WebClient } from "@slack/web-api";
+import type { UIMessageChunk } from "ai";
+import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
+import logger from "@/logging";
+import type { ChatOpsReplyStream, ChatReplyOptions } from "@/types";
+import { CHATOPS_NO_REPLY_SENTINEL } from "./constants";
+import { slackTaskText, toolArgumentsDetail } from "./slack-task-details";
+import { errorMessage, stripDuplicateAgentFooter } from "./utils";
+
+type FinalReply = Pick<ChatReplyOptions, "text" | "footer" | "hint">;
+
+/**
+ * Streams an agent reply into a Slack thread with chat.startStream /
+ * appendStream / stopStream: text renders as the model writes it, and every
+ * tool call shows as a task card that flips to done or failed.
+ *
+ * The stream is a preview. The final reply the manager hands to `finish` is
+ * authoritative: when it is the streamed text plus a tail, only the tail is
+ * appended; when it differs (an inline thinking block, a rewritten launch
+ * message, an echoed footer, or a reply too long for one message), the
+ * streamed message is replaced with the ordinary rendering of the final reply.
+ *
+ * Every Slack call is best-effort. A stream that cannot start leaves `isLive`
+ * false, so the manager posts the reply the ordinary way; one that breaks
+ * midway is still replaced on `finish`.
+ */
+export class SlackReplyStream implements ChatOpsReplyStream {
+  private ts: string | null = null;
+  private broken = false;
+  private closed = false;
+  /** Raw model text, thinking blocks and all. */
+  private rawText = "";
+  /** The prefix of the visible text already handed to Slack. */
+  private shownText = "";
+  /** Set once the shown text stopped tracking the visible text. */
+  private textDiverged = false;
+  private queue: AnyChunk[] = [];
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private sending: Promise<void> = Promise.resolve();
+  /** Tool calls shown as task cards, by toolCallId, until they settle. */
+  private readonly openTasks = new Map<string, string>();
+  /** Slack appends details for an id rather than replacing them on updates. */
+  private readonly tasksWithDetails = new Set<string>();
+  /** Open tool calls paused on a human approval. */
+  private readonly awaitingApproval = new Set<string>();
+
+  constructor(private readonly deps: SlackReplyStreamDeps) {}
+
+  get isLive(): boolean {
+    return this.ts !== null && !this.closed;
+  }
+
+  push(chunk: UIMessageChunk): void {
+    if (this.closed || (this.broken && !this.ts)) return;
+    switch (chunk.type) {
+      case "text-delta":
+        this.rawText += chunk.delta;
+        this.scheduleFlush();
+        return;
+      case "tool-input-start": {
+        const title = slackTaskText(chunk.toolName);
+        this.openTasks.set(chunk.toolCallId, title);
+        this.enqueueTask({ id: chunk.toolCallId, title, status: "pending" });
+        return;
+      }
+      case "tool-input-available": {
+        // `run_tool` is a dispatch wrapper — name the tool it actually runs.
+        const { toolName, toolInput } = resolveRunToolTarget({
+          toolName: chunk.toolName,
+          args: chunk.input,
+        });
+        const details = this.tasksWithDetails.has(chunk.toolCallId)
+          ? undefined
+          : toolArgumentsDetail(toolInput);
+        if (details) this.tasksWithDetails.add(chunk.toolCallId);
+        const title = slackTaskText(toolName);
+        this.openTasks.set(chunk.toolCallId, title);
+        this.enqueueTask({
+          id: chunk.toolCallId,
+          title,
+          ...(details && { details }),
+          status: "in_progress",
+        });
+        return;
+      }
+      case "tool-output-available":
+        if (chunk.preliminary) return;
+        // MCP failures arrive as results too. Only expose the failure state:
+        // result bodies can carry private output or guardrail-withheld data.
+        this.settleTask(
+          chunk.toolCallId,
+          typeof chunk.output === "object" &&
+            chunk.output !== null &&
+            "isError" in chunk.output &&
+            chunk.output.isError === true
+            ? { status: "error", output: "Tool reported an error" }
+            : { status: "complete" },
+        );
+        return;
+      case "tool-input-error":
+        this.openTasks.set(chunk.toolCallId, slackTaskText(chunk.toolName));
+        this.settleTask(chunk.toolCallId, {
+          status: "error",
+          output: slackTaskText(chunk.errorText),
+        });
+        return;
+      case "tool-output-error":
+        this.settleTask(chunk.toolCallId, {
+          status: "error",
+          output: slackTaskText(chunk.errorText),
+        });
+        return;
+      case "tool-output-denied":
+        this.settleTask(chunk.toolCallId, {
+          status: "error",
+          output: "Denied",
+        });
+        return;
+      case "tool-approval-request": {
+        const title = this.openTasks.get(chunk.toolCallId);
+        if (title !== undefined) {
+          this.awaitingApproval.add(chunk.toolCallId);
+          this.enqueueTask({
+            id: chunk.toolCallId,
+            title,
+            status: "pending",
+          });
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  async finish(options: FinalReply): Promise<void> {
+    if (this.closed) return;
+    await this.drain();
+    this.closed = true;
+
+    const finalText = options.footer
+      ? stripDuplicateAgentFooter(options.text, options.footer)
+      : options.text;
+
+    if (!this.ts) {
+      await this.deps.postReply(options);
+      return;
+    }
+    const ts = this.ts;
+
+    // Approval pauses stay pending; other unfinished calls close with a reason.
+    const pausedTaskIds = [...this.awaitingApproval];
+    const leftoverTasks = this.closeOpenTasks({ status: "pending" });
+    const tail = this.textDiverged
+      ? null
+      : appendableTail(this.shownText, finalText);
+    if (!this.broken && tail !== null && this.deps.fitsOneMessage(finalText)) {
+      try {
+        await this.deps.client.chat.stopStream({
+          channel: this.deps.channelId,
+          ts,
+          ...(tail || leftoverTasks.length > 0
+            ? {
+                chunks: [
+                  ...(tail
+                    ? [{ type: "markdown_text" as const, text: tail }]
+                    : []),
+                  ...leftoverTasks,
+                ],
+              }
+            : {}),
+          blocks: this.deps.buildTrailingBlocks(options),
+        });
+        if (pausedTaskIds.length > 0) {
+          await updatePausedTasks({
+            client: this.deps.client,
+            channelId: this.deps.channelId,
+            threadTs: this.deps.threadTs,
+            messageTs: ts,
+            taskIds: pausedTaskIds,
+            outcome: "awaiting_approval",
+          });
+        }
+        return;
+      } catch (error) {
+        logger.debug(
+          { error: errorMessage(error), channelId: this.deps.channelId },
+          "[SlackReplyStream] chat.stopStream failed; replacing the streamed message",
+        );
+      }
+    }
+
+    await this.stopQuietly(ts);
+    try {
+      await this.deps.postReply(options, ts);
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), channelId: this.deps.channelId },
+        "[SlackReplyStream] Could not replace the streamed message; posting the reply anew",
+      );
+      await this.deps.postReply(options);
+    }
+  }
+
+  async abandon(options: { keepContent: boolean }): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
+    this.clearFlushTimer();
+    this.queue = [];
+    // A startStream in flight may still land and hand us a ts to clean up.
+    await this.sending;
+    if (!this.ts) return;
+    const ts = this.ts;
+
+    if (options.keepContent) {
+      await this.stopQuietly(
+        ts,
+        this.closeOpenTasks({ status: "error", output: "Stopped" }),
+      );
+      return;
+    }
+    await this.stopQuietly(ts);
+    try {
+      await this.deps.client.chat.delete({ channel: this.deps.channelId, ts });
+    } catch (error) {
+      logger.debug(
+        { error: errorMessage(error), channelId: this.deps.channelId },
+        "[SlackReplyStream] Failed to delete an abandoned streamed message",
+      );
+    }
+  }
+
+  // ===========================================================================
+  // Private Methods
+  // ===========================================================================
+
+  private enqueueTask(task: TaskUpdate): void {
+    // Text written before the tool call renders above its card.
+    this.captureText();
+    this.queue.push({ type: "task_update", ...task });
+    this.scheduleFlush();
+  }
+
+  private settleTask(
+    toolCallId: string,
+    result: Pick<TaskUpdate, "status" | "output">,
+  ): void {
+    const title = this.openTasks.get(toolCallId);
+    if (title === undefined) return;
+    this.openTasks.delete(toolCallId);
+    this.awaitingApproval.delete(toolCallId);
+    this.enqueueTask({ id: toolCallId, title, ...result });
+  }
+
+  private closeOpenTasks(
+    result: Pick<TaskUpdate, "status" | "output">,
+  ): AnyChunk[] {
+    const updates = [...this.openTasks].map(([id, title]) => ({
+      type: "task_update" as const,
+      id,
+      title,
+      ...result,
+      ...(result.status === "pending" && !this.awaitingApproval.has(id)
+        ? { status: "error" as const, output: "Tool did not finish" }
+        : {}),
+    }));
+    this.openTasks.clear();
+    return updates;
+  }
+
+  /**
+   * Move newly visible text into the send queue. Text is withheld while it
+   * could still turn out to be the agent's no-reply sentinel or an inline
+   * thinking block, and abandoned (left to `finish` to replace) once it grows
+   * past what one Slack message can hold or stops extending what was shown.
+   */
+  private captureText(): void {
+    if (this.textDiverged) return;
+    const visible = visibleStreamText(this.rawText);
+    if (mightBeSilence(visible)) return;
+    if (!visible.startsWith(this.shownText)) {
+      this.textDiverged = true;
+      return;
+    }
+    const delta = visible.slice(this.shownText.length);
+    if (!delta) return;
+    if (!this.deps.fitsOneMessage(visible)) {
+      this.textDiverged = true;
+      return;
+    }
+    this.shownText = visible;
+    this.queue.push({ type: "markdown_text", text: delta });
+  }
+
+  private scheduleFlush(): void {
+    if (this.flushTimer || this.closed) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      this.flush();
+    }, FLUSH_INTERVAL_MS);
+  }
+
+  private clearFlushTimer(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+  }
+
+  private flush(): void {
+    this.captureText();
+    const chunks = this.queue;
+    this.queue = [];
+    if (chunks.length === 0) return;
+    this.sending = this.sending.then(() => this.send(chunks));
+  }
+
+  /** Send everything captured so far and wait for it to land. */
+  private async drain(): Promise<void> {
+    this.clearFlushTimer();
+    this.flush();
+    await this.sending;
+  }
+
+  private async send(chunks: AnyChunk[]): Promise<void> {
+    if (this.broken) return;
+    const { client, channelId, threadTs, recipient } = this.deps;
+    try {
+      if (!this.ts) {
+        const result = await client.chat.startStream({
+          channel: channelId,
+          thread_ts: threadTs,
+          chunks: coalesceText(chunks),
+          // One compact plan block for all tool calls: "timeline" gives every
+          // call its own card, with gaps between them.
+          task_display_mode: "plan",
+          ...(recipient && {
+            recipient_user_id: recipient.userId,
+            recipient_team_id: recipient.teamId,
+          }),
+        });
+        if (!result.ts) throw new Error("chat.startStream returned no ts");
+        this.ts = result.ts;
+        return;
+      }
+      await client.chat.appendStream({
+        channel: channelId,
+        ts: this.ts,
+        chunks: coalesceText(chunks),
+      });
+    } catch (error) {
+      // stopped_by_user lands here too: the run is being aborted already.
+      this.broken = true;
+      logger.debug(
+        { error: errorMessage(error), channelId, started: Boolean(this.ts) },
+        "[SlackReplyStream] Streaming call failed; falling back to a posted reply",
+      );
+    }
+  }
+
+  private async stopQuietly(
+    ts: string,
+    chunks: AnyChunk[] = [],
+  ): Promise<void> {
+    try {
+      await this.deps.client.chat.stopStream({
+        channel: this.deps.channelId,
+        ts,
+        ...(chunks.length > 0 && { chunks }),
+      });
+    } catch {
+      // Already stopped (by the user, or a broken stream) — nothing to close.
+    }
+  }
+}
+
+/**
+ * Rewrite the task cards of a streamed reply that paused on an approval. Slack
+ * turns a task still pending at chat.stopStream into an error ("Something went
+ * wrong"), and a resumed run answers in a new message, so nothing else ever
+ * touches these cards: the pause marks them as waiting for approval, and the
+ * reviewer's decision settles them.
+ *
+ * Best-effort: a reply that cannot be found or edited is left as it is.
+ */
+export async function updatePausedTasks(params: {
+  client: WebClient;
+  channelId: string;
+  threadTs: string;
+  taskIds: string[];
+  outcome: "awaiting_approval" | "approved" | "declined";
+  /** The streamed reply; looked up in the thread by task id when omitted. */
+  messageTs?: string;
+}): Promise<void> {
+  const { client, channelId, threadTs, outcome } = params;
+  const taskIds = new Set(params.taskIds);
+  try {
+    const message = await findPlanMessage({
+      client,
+      channelId,
+      threadTs,
+      taskIds,
+      messageTs: params.messageTs,
+    });
+    if (!message?.ts || !message.blocks) return;
+
+    const status: TaskUpdate["status"] =
+      outcome === "awaiting_approval"
+        ? "pending"
+        : outcome === "approved"
+          ? "complete"
+          : "error";
+    const blocks = (message.blocks as StoredBlock[]).map((block) => {
+      if (block.type !== "plan") return block;
+      const tasks = (block.tasks ?? []).map((task) => ({
+        ...task,
+        type: "task_card",
+        ...(taskIds.has(task.task_id) && { status }),
+      }));
+      return { ...block, title: pausedPlanTitle(tasks, outcome), tasks };
+    });
+    await client.chat.update({
+      channel: channelId,
+      ts: message.ts,
+      text: message.text ?? "",
+      blocks: blocks as SlackBlock[],
+    });
+  } catch (error) {
+    logger.debug(
+      { error: errorMessage(error), channelId, outcome },
+      "[SlackReplyStream] Could not update the tasks of a paused reply",
+    );
+  }
+}
+
+// =============================================================================
+// Internal Helpers
+// =============================================================================
+
+interface SlackReplyStreamDeps {
+  client: WebClient;
+  channelId: string;
+  threadTs: string;
+  /** Required by Slack when streaming outside a DM. */
+  recipient?: { userId: string; teamId: string };
+  /** Whether this text renders as a single Slack message. */
+  fitsOneMessage: (text: string) => boolean;
+  /** Context blocks (hint, footer) that close out a finished reply. */
+  buildTrailingBlocks: (options: FinalReply) => SlackBlock[];
+  /**
+   * Post the reply the ordinary way; with `replaceTs`, its first message
+   * replaces that one instead of posting a new one.
+   */
+  postReply: (options: FinalReply, replaceTs?: string) => Promise<void>;
+}
+
+type SlackBlock = NonNullable<
+  Parameters<WebClient["chat"]["stopStream"]>[0]["blocks"]
+>[number];
+
+type SlackThreadMessage = NonNullable<
+  Awaited<ReturnType<WebClient["conversations"]["replies"]>>["messages"]
+>[number];
+
+/** A block as conversations.replies returns it; the SDK types omit `plan`. */
+interface StoredBlock {
+  type: string;
+  tasks?: SlackPlanTask[];
+  [key: string]: unknown;
+}
+
+interface SlackPlanTask {
+  task_id: string;
+  status: TaskUpdate["status"];
+  [key: string]: unknown;
+}
+
+interface TaskUpdate {
+  id: string;
+  title: string;
+  status: "pending" | "in_progress" | "complete" | "error";
+  output?: string;
+  details?: string;
+}
+
+/**
+ * conversations.replies pages (1000 messages each, Slack's maximum) scanned
+ * for a paused reply; one further back is left as it is.
+ */
+const PAUSED_REPLY_MAX_PAGES = 5;
+const SLACK_REPLIES_PAGE_LIMIT = 1000;
+
+/** appendStream is Tier 4 (100+/min); one call per interval stays well under. */
+const FLUSH_INTERVAL_MS = 750;
+
+const THINKING_BLOCK = /<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi;
+const THINKING_OPEN = /<think(?:ing)?>/i;
+
+/**
+ * The part of the raw model text that is safe to show while it is still being
+ * written: closed thinking blocks removed (as stripThinkingBlocks does), and
+ * everything from an unclosed thinking tag — or a trailing `<` that could open
+ * one — held back until it resolves.
+ */
+function visibleStreamText(raw: string): string {
+  let text = raw.replace(THINKING_BLOCK, "");
+  const open = text.search(THINKING_OPEN);
+  if (open >= 0) text = text.slice(0, open);
+  const lastAngle = text.lastIndexOf("<");
+  if (lastAngle >= 0 && "<thinking>".startsWith(text.slice(lastAngle))) {
+    text = text.slice(0, lastAngle);
+  }
+  return text.trimStart();
+}
+
+/** Whether the text so far could still be the agent declining to reply. */
+function mightBeSilence(visible: string): boolean {
+  const text = visible.trim();
+  return (
+    !text ||
+    CHATOPS_NO_REPLY_SENTINEL.startsWith(text) ||
+    text.startsWith(CHATOPS_NO_REPLY_SENTINEL)
+  );
+}
+
+/**
+ * What to append so the streamed text becomes the final text, or null when the
+ * final text does not simply extend it.
+ */
+function appendableTail(shown: string, final: string): string | null {
+  if (final.startsWith(shown)) return final.slice(shown.length);
+  if (shown.trimEnd() === final) return "";
+  return null;
+}
+
+/** Merge adjacent markdown_text chunks so a flush carries one per run. */
+function coalesceText(chunks: AnyChunk[]): AnyChunk[] {
+  const merged: AnyChunk[] = [];
+  for (const chunk of chunks) {
+    const last = merged.at(-1);
+    if (chunk.type === "markdown_text" && last?.type === "markdown_text") {
+      merged[merged.length - 1] = {
+        type: "markdown_text",
+        text: last.text + chunk.text,
+      };
+    } else {
+      merged.push(chunk);
+    }
+  }
+  return merged;
+}
+
+/**
+ * The thread message whose plan holds any of these tasks: the given one, or
+ * the latest in the thread.
+ */
+async function findPlanMessage(params: {
+  client: WebClient;
+  channelId: string;
+  threadTs: string;
+  taskIds: Set<string>;
+  messageTs?: string;
+}): Promise<SlackThreadMessage | undefined> {
+  const { client, channelId, threadTs, taskIds, messageTs } = params;
+  const holdsTask = (message: SlackThreadMessage) =>
+    ((message.blocks ?? []) as StoredBlock[]).some(
+      (block) =>
+        block.type === "plan" &&
+        (block.tasks ?? []).some((task) => taskIds.has(task.task_id)),
+    );
+
+  let found: SlackThreadMessage | undefined;
+  let cursor: string | undefined;
+  for (let page = 0; page < PAUSED_REPLY_MAX_PAGES; page++) {
+    const result = await client.conversations.replies({
+      channel: channelId,
+      ts: threadTs,
+      ...(messageTs && { oldest: messageTs, latest: messageTs }),
+      inclusive: true,
+      limit: SLACK_REPLIES_PAGE_LIMIT,
+      cursor,
+    });
+    for (const message of result.messages ?? []) {
+      if (messageTs && message.ts !== messageTs) continue;
+      if (holdsTask(message)) found = message;
+    }
+    cursor = result.response_metadata?.next_cursor || undefined;
+    if (!cursor || messageTs) break;
+  }
+  return found;
+}
+
+function pausedPlanTitle(
+  tasks: SlackPlanTask[],
+  outcome: "awaiting_approval" | "approved" | "declined",
+): string {
+  if (tasks.some((task) => task.status === "pending")) {
+    return "Waiting for approval";
+  }
+  return outcome === "declined" ? "Declined" : "Approved";
+}

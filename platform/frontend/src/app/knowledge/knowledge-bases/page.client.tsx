@@ -33,6 +33,10 @@ import {
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ResourceDeletedStatusFilter,
@@ -61,6 +65,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import {
@@ -77,6 +82,7 @@ import {
   useConnectors as useAllConnectors,
   useAssignConnectorToKnowledgeBases,
   useConnector,
+  useConnectorsByIds,
   useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/knowledge/connector.query";
 import {
@@ -196,13 +202,18 @@ function KnowledgeBasesList() {
   const { startChat, isCreating: isChatCreating } = useChatWithKnowledgeBase();
   const items = knowledgeBases?.data ?? [];
   const pagination = knowledgeBases?.pagination;
-  // One query for every connector on the page, rather than one per knowledge
-  // base as the expandable sub-table did. It also polls while any connector is
-  // syncing, so the status dots stay live.
-  const { data: allConnectorRecords } = useAllConnectors();
+  // Status for the connectors on this page only; polls while one is syncing.
+  const pageConnectorIds = useMemo(
+    () => items.flatMap((kb) => kb.connectors.map((c) => c.id)),
+    [items],
+  );
+  const { data: pageConnectorRecords } = useConnectorsByIds(pageConnectorIds, {
+    enabled: !isDeletedView,
+    pollWhileSyncing: true,
+  });
   const connectorsById = useMemo(
-    () => new Map((allConnectorRecords ?? []).map((c) => [c.id, c])),
-    [allConnectorRecords],
+    () => new Map((pageConnectorRecords ?? []).map((c) => [c.id, c])),
+    [pageConnectorRecords],
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -277,6 +288,7 @@ function KnowledgeBasesList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
+      ...RESOURCE_ACCESS_FILTER_PARAMS,
     ]) {
       params.delete(key);
     }
@@ -384,9 +396,7 @@ function KnowledgeBasesList() {
       header: "Agents",
       size: 110,
       cell: ({ row }) => (
-        <span className="tabular-nums">
-          {row.original.assignedAgents.length}
-        </span>
+        <span className="tabular-nums">{row.original.assignedAgentCount}</span>
       ),
     },
     {
@@ -499,6 +509,12 @@ function KnowledgeBasesList() {
                 />
               }
             >
+              {!isDeletedView && (
+                <ResourceAccessFilter
+                  resource="knowledgeBase"
+                  noun="knowledge bases"
+                />
+              )}
               <ResourceDeletedStatusFilter
                 deletePermission={{ knowledgeSource: ["delete"] }}
               />
@@ -941,8 +957,7 @@ function AddConnectorDialog({
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-7 w-7"
+                size="icon-xs"
                 onClick={() => {
                   setStep("choose");
                   setSelectedIds(new Set());
@@ -987,7 +1002,7 @@ function AddConnectorDialog({
       >
         {step === "choose" && (
           <div className="grid grid-cols-2 gap-3">
-            <button
+            <UnstyledButton
               type="button"
               onClick={() => setStep("reuse")}
               disabled={availableConnectors.length === 0}
@@ -1004,8 +1019,8 @@ function AddConnectorDialog({
                     : `${availableConnectors.length} available`}
                 </div>
               </div>
-            </button>
-            <button
+            </UnstyledButton>
+            <UnstyledButton
               type="button"
               onClick={() => setStep("create")}
               className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer"
@@ -1019,7 +1034,7 @@ function AddConnectorDialog({
                   Set up a new Connector
                 </div>
               </div>
-            </button>
+            </UnstyledButton>
           </div>
         )}
 
@@ -1039,7 +1054,7 @@ function AddConnectorDialog({
                 availableConnectors.map((connector) => {
                   const isSelected = selectedIds.has(connector.id);
                   return (
-                    <button
+                    <UnstyledButton
                       key={connector.id}
                       type="button"
                       onClick={() => toggleSelected(connector.id)}
@@ -1067,7 +1082,7 @@ function AddConnectorDialog({
                           {connector.connectorType}
                         </div>
                       </div>
-                    </button>
+                    </UnstyledButton>
                   );
                 })
               ) : (

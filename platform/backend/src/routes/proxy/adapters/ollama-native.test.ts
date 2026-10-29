@@ -133,7 +133,7 @@ describe("request adapter", () => {
     expect(toolMsg?.toolCalls?.[0]?.name).toBe("read_file");
   });
 
-  test("toProviderRequest applies tool-result updates (trusted-data)", () => {
+  test("toProviderRequest applies tool-result updates", () => {
     const adapter = factory.createRequestAdapter(
       request({
         messages: [
@@ -626,7 +626,7 @@ describe("execute / executeStream — upstream transport", () => {
   });
 });
 
-describe("trusted-data correlation on the native wire (no ids)", () => {
+describe("tool-result correlation on the native wire (no ids)", () => {
   // Ollama's own clients send `tool_name` and no ids at all. Every fixture in
   // the suites above supplies explicit ids, which is exactly how this shape
   // went untested.
@@ -653,9 +653,8 @@ describe("trusted-data correlation on the native wire (no ids)", () => {
     const adapter = factory.createRequestAdapter(nativeToolTurn());
     const toolMessage = adapter.getMessages().find((m) => m.role === "tool");
 
-    // A missing tool call here reads as "no tool calls in this context", which
-    // evaluateIfContextIsTrusted treats as trusted — disabling trusted-data
-    // policies and dual-LLM sanitization with no other signal.
+    // A missing tool call here reads as "no tool calls in this context", so
+    // common-format readers would lose the result with no other signal.
     expect(toolMessage?.toolCalls).toHaveLength(1);
     expect(toolMessage?.toolCalls?.[0].name).toBe("fetch_url");
     expect(toolMessage?.toolCalls?.[0].content).toBe(
@@ -725,10 +724,10 @@ describe("streaming details", () => {
   test("formatTextDeltaSSE emits created_at before any upstream chunk", () => {
     const adapter = factory.createStreamAdapter();
 
-    // The dual-LLM progress callbacks run before executeStream. `created_at` is
-    // required by the client's stream schema, and JSON.stringify drops
-    // undefined keys — so an unset value fails the parse and ends the whole
-    // stream with finishReason: "error" on the first progress line.
+    // A line can be formatted before executeStream. `created_at` is required
+    // by the client's stream schema, and JSON.stringify drops undefined keys —
+    // so an unset value fails the parse and ends the whole stream with
+    // finishReason: "error" on the first such line.
     const line = JSON.parse(String(adapter.formatTextDeltaSSE("Analyzing…")));
     expect(typeof line.created_at).toBe("string");
     expect(line.message.content).toBe("Analyzing…");

@@ -286,9 +286,42 @@ export function credentialRequiresPerUserScope(params: {
   provider: SupportedProvider;
   apiKey: string | null | undefined;
 }): boolean {
+  if (isSharedGithubAppCredential(params)) return false;
   return (
     providerRequiresPerUserCredential(params.provider) ||
     isSubscriptionCredential(params.apiKey)
+  );
+}
+
+/**
+ * Prefix of a GitHub App credential (App ID, installation ID, private key) on
+ * the `github-copilot` provider. Unlike a personal Copilot sign-in, it belongs
+ * to the organization that installed the App and is billed to it, so it may be
+ * shared like an ordinary API key.
+ */
+export const GITHUB_APP_CREDENTIAL_MARKER = "github-app:";
+
+/** True when a stored secret is a GitHub App credential. */
+export function isGithubAppCredential(
+  value: string | null | undefined,
+): boolean {
+  const credential = stripBearerTransportPrefix(value);
+  return (
+    typeof credential === "string" &&
+    credential.startsWith(GITHUB_APP_CREDENTIAL_MARKER)
+  );
+}
+
+/**
+ * True for the one credential on a per-user provider that is not per-user: a
+ * GitHub App credential on `github-copilot`.
+ */
+export function isSharedGithubAppCredential(params: {
+  provider: SupportedProvider;
+  apiKey: string | null | undefined;
+}): boolean {
+  return (
+    params.provider === "github-copilot" && isGithubAppCredential(params.apiKey)
   );
 }
 

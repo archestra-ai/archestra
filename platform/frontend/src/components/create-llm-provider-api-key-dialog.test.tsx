@@ -117,11 +117,10 @@ describe("CreateLlmProviderApiKeyDialog", () => {
       baseUrl: undefined,
       inferenceBaseUrl: undefined,
       extraHeaders: undefined,
-      shared: false,
+      shared: true,
       initialGrants: [],
       isPrimary: false,
-      vaultSecretPath: undefined,
-      vaultSecretKey: undefined,
+
       awsAccessKeyId: undefined,
       awsSecretAccessKey: undefined,
       awsSessionToken: undefined,
@@ -251,7 +250,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     await user.click(screen.getByRole("button", { name: /test & create/i }));
 
     expect(mutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ shared: false, initialGrants: [] }),
+      expect.objectContaining({ shared: true, initialGrants: [] }),
     );
   });
 

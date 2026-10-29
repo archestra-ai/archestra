@@ -8,9 +8,10 @@ import OpenAppaYellModel from "@/models/openappa-yell";
 import {
   downloadOpenAppaYell,
   getOpenAppaYell,
-  yellVisibility,
+  listOpenAppaYells,
+  resolveOpenAppaYell,
 } from "@/services/openappa-yells";
-import { ApiError, constructResponseSchema } from "@/types";
+import { constructResponseSchema } from "@/types";
 import {
   OpenAppaYellQuerySchema,
   OpenAppaYellSchema,
@@ -31,12 +32,10 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) =>
       reply.send(
-        await OpenAppaYellModel.list({
+        await listOpenAppaYells({
           ...request.query,
-          ...(await yellVisibility({
-            organizationId: request.organizationId,
-            userId: request.user.id,
-          })),
+          organizationId: request.organizationId,
+          userId: request.user.id,
         }),
       ),
   );
@@ -46,17 +45,16 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenAppaYellsSummary,
         tags: ["OpenAPPA"],
-        response: constructResponseSchema(z.object({ unresolved: z.number() })),
+        response: constructResponseSchema(
+          z.object({ unresolved: z.number(), superyells: z.number() }),
+        ),
       },
     },
     async (request, reply) =>
       reply.send(
-        await OpenAppaYellModel.summary(
-          await yellVisibility({
-            organizationId: request.organizationId,
-            userId: request.user.id,
-          }),
-        ),
+        await OpenAppaYellModel.summary({
+          organizationId: request.organizationId,
+        }),
       ),
   );
   app.get(
@@ -116,22 +114,17 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
-      const scope = await yellVisibility({
-        organizationId: request.organizationId,
-        userId: request.user.id,
-      });
       const before = await getOpenAppaYell({
         ...request.params,
         organizationId: request.organizationId,
         userId: request.user.id,
       });
-      const row = await OpenAppaYellModel.setResolved({
-        ...scope,
+      const row = await resolveOpenAppaYell({
+        organizationId: request.organizationId,
         id: before.id,
         userId: request.user.id,
         resolved: request.body.resolved,
       });
-      if (!row) throw new ApiError(404, "Yell not found");
       request.auditBefore = {
         resolvedAt: before.resolvedAt,
         resolvedBy: before.resolvedBy,

@@ -34,6 +34,7 @@ class SkillMarketplaceCredentialModel {
   static async create(params: {
     organizationId: string;
     userId: string;
+    connectionSetupId?: string;
     tx?: Transaction;
   }): Promise<{ credential: SkillMarketplaceCredential; rawToken: string }> {
     const rawToken = generateToken();
@@ -42,6 +43,7 @@ class SkillMarketplaceCredentialModel {
       .values({
         organizationId: params.organizationId,
         userId: params.userId,
+        connectionSetupId: params.connectionSetupId,
         tokenHash: hashToken(rawToken),
         tokenStart: rawToken.slice(0, TOKEN_START_LENGTH),
       })

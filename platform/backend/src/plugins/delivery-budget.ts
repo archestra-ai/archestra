@@ -1,6 +1,7 @@
 import {
   PLUGIN_DELIVERY_MAX_BYTES,
   PLUGIN_DELIVERY_MAX_COUNT,
+  PLUGIN_DELIVERY_MAX_MIB,
   type PluginFileEncoding,
 } from "@/types";
 
@@ -39,7 +40,7 @@ export function pluginDeliveryBudgetError(
     return `Plugin delivery is limited to ${PLUGIN_DELIVERY_MAX_COUNT} plugins`;
   }
   if (stats.totalBytes > PLUGIN_DELIVERY_MAX_BYTES) {
-    return `Plugin delivery exceeds ${PLUGIN_DELIVERY_MAX_BYTES} decoded bytes`;
+    return `Plugin delivery is limited to ${PLUGIN_DELIVERY_MAX_MIB} MiB of plugin files`;
   }
   return null;
 }

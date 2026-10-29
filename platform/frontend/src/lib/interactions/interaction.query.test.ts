@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("sonner");
 
 const getInteractionsMock = vi.hoisted(() => vi.fn());
+const getUniqueUserIdsMock = vi.hoisted(() => vi.fn());
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
   return {
@@ -13,11 +14,58 @@ vi.mock("@archestra/shared", async (importOriginal) => {
     archestraApiSdk: {
       ...actual.archestraApiSdk,
       getInteractions: getInteractionsMock,
+      getUniqueUserIds: getUniqueUserIdsMock,
     },
   };
 });
 
-import { isSessionId, useExportSessionInteractions } from "./interaction.query";
+import {
+  isSessionId,
+  useExportSessionInteractions,
+  useInteractionUserOptions,
+} from "./interaction.query";
+
+describe("useInteractionUserOptions freshness", () => {
+  it("revalidates an open default picker and cached results when it is reopened", async () => {
+    vi.useFakeTimers();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 300_000 } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client }, children);
+    const initial = [{ id: "synthetic", name: "Before" }];
+    const updated = [{ id: "synthetic", name: "After" }];
+    client.setQueryData(["interactions", "userIds", "options", ""], initial);
+    getUniqueUserIdsMock.mockResolvedValue({ data: updated });
+    const picker = renderHook(
+      ({ enabled }) => useInteractionUserOptions({ search: "", enabled }),
+      { wrapper, initialProps: { enabled: false } },
+    );
+    try {
+      getUniqueUserIdsMock.mockClear();
+      picker.rerender({ enabled: true });
+      await act(() => vi.advanceTimersByTimeAsync(10));
+      expect(picker.result.current.data).toEqual(updated);
+      expect(getUniqueUserIdsMock).toHaveBeenCalledTimes(1);
+      getUniqueUserIdsMock.mockResolvedValue({ data: initial });
+      await act(() => vi.advanceTimersByTimeAsync(20_010));
+      expect(picker.result.current.data).toEqual(initial);
+      expect(getUniqueUserIdsMock).toHaveBeenCalledTimes(2);
+      picker.rerender({ enabled: false });
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(getUniqueUserIdsMock).toHaveBeenCalledTimes(2);
+      getUniqueUserIdsMock.mockResolvedValue({ data: updated });
+      picker.rerender({ enabled: true });
+      await act(() => vi.advanceTimersByTimeAsync(10));
+      expect(picker.result.current.data).toEqual(updated);
+      expect(getUniqueUserIdsMock).toHaveBeenCalledTimes(3);
+    } finally {
+      picker.unmount();
+      client.clear();
+      vi.useRealTimers();
+    }
+  });
+});
 
 // The logs search box only filters by session ID (free-text content search was
 // removed), so this predicate decides whether a typed term filters or is

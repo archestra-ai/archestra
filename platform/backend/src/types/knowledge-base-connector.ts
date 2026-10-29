@@ -21,7 +21,7 @@ import {
 // ===== Knowledge Base Schemas =====
 
 // `deletedAt` is exposed in responses for the trash views: null on active
-// rows, non-null only in the manage-deleted `status=deleted` listings, where
+// rows, non-null only in the delete `status=deleted` listings, where
 // it drives the "Deleted N ago" label and the retention countdown. It stays
 // out of every write payload (see the Insert/Update schemas) — soft-delete is
 // the delete routes' business, never a client-supplied value.

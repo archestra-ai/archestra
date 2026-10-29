@@ -18,10 +18,17 @@ import {
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { useTheme } from "next-themes";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AppSessionRecorderRuntimeHooks } from "@/components/app-session-recording/use-app-session-recorder";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
 import { normalizeMcpAppExternalUrl } from "@/components/mcp-app/external-link";
+import { withGenericFontFallback } from "@/components/mcp-app/font-stack";
 import { McpAppAuthBanner } from "@/components/mcp-app/mcp-app-auth-banner";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,6 +78,46 @@ const AVAILABLE_DISPLAY_MODES: McpUiDisplayMode[] = ["inline", "fullscreen"];
 const MAX_SCREENSHOT_DATA_URL_LENGTH = 2_000_000;
 const SCREENSHOT_DATA_URL_PREFIX = /^data:image\/(png|jpeg|webp);base64,/;
 
+// Guest UI filter/parameter state snapshots forwarded from the sandbox proxy.
+// Bounded in size and entry count so an untrusted guest cannot grow host memory.
+const MAX_GUEST_STATE_JSON_LENGTH = 256_000;
+const MAX_CACHED_GUEST_STATES = 200;
+const guestStateByInstanceKey = new Map<string, Record<string, unknown>>();
+
+function setCachedGuestState(
+  instanceKey: string,
+  state: Record<string, unknown>,
+) {
+  if (guestStateByInstanceKey.has(instanceKey)) {
+    guestStateByInstanceKey.delete(instanceKey);
+  } else if (guestStateByInstanceKey.size >= MAX_CACHED_GUEST_STATES) {
+    const oldestKey = guestStateByInstanceKey.keys().next().value;
+    if (oldestKey !== undefined) {
+      guestStateByInstanceKey.delete(oldestKey);
+    }
+  }
+  guestStateByInstanceKey.set(instanceKey, state);
+}
+
+function parseGuestStateSync(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== "object") return null;
+  const state = (data as { state?: unknown }).state;
+  if (!state || typeof state !== "object" || Array.isArray(state)) {
+    return null;
+  }
+  try {
+    if (JSON.stringify(state).length > MAX_GUEST_STATE_JSON_LENGTH) return null;
+  } catch {
+    return null;
+  }
+  return state as Record<string, unknown>;
+}
+
+/** Clear cached MCP App guest UI state snapshots (used by tests). */
+export function clearMcpAppGuestState(): void {
+  guestStateByInstanceKey.clear();
+}
+
 /** Default pre-report iframe height on surfaces that supply no inline ceiling
  * (standalone run page, app preview) — those fill their own layout instead. */
 const UNCAPPED_INITIAL_HEIGHT = 600;
@@ -107,9 +154,9 @@ export const McpAppRuntime = function McpAppRuntime({
   reloadNonce,
   inlineInitialHeight,
   onReload,
-  recorder,
   filesRevision,
   onModelContextUpdate,
+  instanceId,
 }: {
   toolResourceUri: string;
   endpoint: McpAppEndpoint;
@@ -138,19 +185,16 @@ export const McpAppRuntime = function McpAppRuntime({
   inlineInitialHeight?: number;
   /** Retry the resource load by rebuilding the runtime. */
   onReload?: () => void;
-  /**
-   * Session-recorder hooks from {@link useAppSessionRecorder}: the runtime
-   * reports its proxied MCP exchanges, the served HTML it renders, the live
-   * sandbox iframe, and the input-event batches the injected SDK posts up.
-   * All no-ops while the user isn't recording.
-   */
-  recorder?: AppSessionRecorderRuntimeHooks;
   /** Per-app count of agent-side file-store writes; threaded to the sandbox so
    * a bump nudges the running app to re-list its files. */
   filesRevision?: number;
   /** Called when the app reports what it is showing (ui/update-model-context);
    * the chat stamps the latest report onto outgoing message metadata. */
   onModelContextUpdate?: (text: string) => void;
+  /** Logical instance identifier (e.g. appId ?? toolCallId) so distinct
+   * tool-call renders of the same resource keep isolated UI state while reload
+   * and inline <-> panel transitions of the same instance share it. */
+  instanceId?: string;
 }) {
   const { resolvedTheme } = useTheme();
   // The host only ever caps height (width is unbounded); unpack the SEP-shaped
@@ -213,6 +257,33 @@ export const McpAppRuntime = function McpAppRuntime({
   // this height (instead of the default) avoids a collapse-then-grow jump while
   // the reloaded app re-reports its size.
   const lastReportedHeightRef = useRef<number | null>(null);
+  // Last UI filter/parameter snapshot reported by the guest. Preserved across
+  // reloads and surface transitions (inline <-> right panel) for the same app
+  // instance so reloading an app keeps user-selected filters and parameters
+  // without leaking state across distinct tool-call instances.
+  const fallbackInstanceId = useId();
+  const effectiveInstanceId =
+    instanceId ??
+    (endpoint.kind === "app" ? endpoint.appId : fallbackInstanceId);
+  const instanceKey = `${endpointKey}::${toolResourceUri}::${effectiveInstanceId}`;
+  const guestStateRef = useRef<Record<string, unknown> | null>(
+    guestStateByInstanceKey.get(instanceKey) ?? null,
+  );
+  const lastInstanceKeyRef = useRef(instanceKey);
+  if (lastInstanceKeyRef.current !== instanceKey) {
+    lastInstanceKeyRef.current = instanceKey;
+    guestStateRef.current = guestStateByInstanceKey.get(instanceKey) ?? null;
+  }
+
+  const handleStateSync = useCallback(
+    (data: unknown) => {
+      const state = parseGuestStateSync(data);
+      if (!state) return;
+      guestStateRef.current = state;
+      setCachedGuestState(instanceKey, state);
+    },
+    [instanceKey],
+  );
 
   // Render-loop diagnostics (owned apps only): runtime errors / CSP violations
   // forwarded by the sandbox proxy are validated and collected per
@@ -220,8 +291,6 @@ export const McpAppRuntime = function McpAppRuntime({
   const ownedAppId = endpoint.kind === "app" ? endpoint.appId : null;
   const appVersionRef = useRef(appVersion);
   appVersionRef.current = appVersion;
-  const recorderRef = useRef(recorder);
-  recorderRef.current = recorder;
   const containerMaxHeightRef = useRef(containerMaxHeight);
   containerMaxHeightRef.current = containerMaxHeight;
 
@@ -386,28 +455,11 @@ export const McpAppRuntime = function McpAppRuntime({
           : `/api/mcp/app/${endpoint.appId}`;
 
     // Proxy a JSON-RPC method to the backend MCP gateway (agent or app endpoint).
-    // Every exchange (request, response, latency) is reported to the session
-    // recorder — these captures are the "mocked MCP responses" a recorded demo
-    // replays instead of a live gateway. No-op unless the user is recording.
     const mcpProxy = async (
       method: string,
       params: unknown,
       signal?: AbortSignal,
     ) => {
-      const proxyStartedAt = Date.now();
-      const recordExchange = (result: unknown, isError: boolean) => {
-        recorderRef.current?.captureMcp({
-          method,
-          toolName:
-            method === "tools/call"
-              ? (params as { name?: string } | undefined)?.name
-              : undefined,
-          params,
-          result,
-          isError: isError || undefined,
-          durationMs: Date.now() - proxyStartedAt,
-        });
-      };
       const response = await fetch(mcpUrl, {
         method: "POST",
         headers: {
@@ -427,15 +479,12 @@ export const McpAppRuntime = function McpAppRuntime({
         signal,
       });
       if (!response.ok) {
-        recordExchange({ message: response.statusText }, true);
         throw new Error(`Failed to fetch ${method}: ${response.statusText}`);
       }
       const json = await response.json();
       if (json.error) {
-        recordExchange(json.error, true);
         throw new Error(json.error.message);
       }
-      recordExchange(json.result, false);
       return json.result;
     };
 
@@ -709,18 +758,6 @@ export const McpAppRuntime = function McpAppRuntime({
     // reconnect the already-connected bridge and throw.
   }, [endpointKey, toolResourceUri, reloadNonce]);
 
-  // Report the served HTML to the session recorder: the first snapshot seeds
-  // segment 0 when a recording starts; a mid-recording change (reload after an
-  // app edit) appends a new version segment on the timeline.
-  useEffect(() => {
-    if (appResource) {
-      recorderRef.current?.captureSnapshot(
-        appResource.html,
-        appVersionRef.current ?? null,
-      );
-    }
-  }, [appResource]);
-
   // If preloadedResource arrives as a prop update after initial mount (race
   // condition: tool part rendered before the SSE event was processed), apply it.
   // Only set if no resource is loaded yet to avoid overwriting a fetch result.
@@ -881,8 +918,8 @@ export const McpAppRuntime = function McpAppRuntime({
           maxHeight={containerMaxHeight}
           onDiagnostic={ownedAppId ? handleDiagnostic : undefined}
           onScreenshot={ownedAppId ? handleScreenshot : undefined}
-          onIframeElement={recorder ? recorder.bindIframe : undefined}
-          onRecordingEvents={recorder ? recorder.onRecordingEvents : undefined}
+          onStateSync={handleStateSync}
+          restoredState={guestStateRef.current}
           ownedApp={ownedAppId != null}
           filesRevision={filesRevision}
         />
@@ -939,11 +976,8 @@ const RENDER_SETTLE_POST_MS = 1_500;
  * Replaces @mcp-ui/client's AppFrame which hardcodes allow-same-origin on the
  * iframe — incompatible with single-port deployments where the sandbox must
  * have an opaque origin to prevent access to the host's cookies/storage.
- *
- * Exported for the session-recording player, which drives it with a replay
- * bridge (recorded MCP responses) instead of a live gateway.
  */
-export function SandboxIframe({
+function SandboxIframe({
   html,
   sandboxUrl,
   csp,
@@ -958,8 +992,8 @@ export function SandboxIframe({
   maxHeight,
   onDiagnostic,
   onScreenshot,
-  onIframeElement,
-  onRecordingEvents,
+  onStateSync,
+  restoredState,
   onConnected,
   onInitialized,
   onContentLoaded,
@@ -991,15 +1025,14 @@ export function SandboxIframe({
   onDiagnostic?: (data: unknown) => void;
   /** Raw screenshot payload forwarded by the sandbox proxy. */
   onScreenshot?: (data: unknown) => void;
-  /** The live iframe element (null on teardown) — recording/replay control
-   * messages are posted to its contentWindow through the sandbox proxy relay. */
-  onIframeElement?: (el: HTMLIFrameElement | null) => void;
-  /** Raw recorder batch (`mcp-apps:recording-event`) forwarded by the proxy. */
-  onRecordingEvents?: (data: unknown, frame?: HTMLIFrameElement) => void;
+  /** Raw UI filter/parameter state snapshot forwarded by the sandbox proxy. */
+  onStateSync?: (data: unknown) => void;
+  /** Previously captured UI filter/parameter state to restore on reload/remount. */
+  restoredState?: Record<string, unknown> | null;
   /** Fired when the guest bridge connects. A PROXY-level signal: it can
    * resolve while the inner app document is still being written, so it says
    * nothing about the app being on screen — gate on `onInitialized` (or the
-   * replay announcement) for that. */
+   * content-loaded announcement) for that. */
   onConnected?: () => void;
   /** Fired when the app inside the inner document reports `initialized` —
    * the injected SDK has actually run in the document that is on screen. */
@@ -1033,8 +1066,8 @@ export function SandboxIframe({
   const onErrorRef = useRef(onError);
   const onDiagnosticRef = useRef(onDiagnostic);
   const onScreenshotRef = useRef(onScreenshot);
-  const onIframeElementRef = useRef(onIframeElement);
-  const onRecordingEventsRef = useRef(onRecordingEvents);
+  const onStateSyncRef = useRef(onStateSync);
+  const restoredStateRef = useRef(restoredState);
   const onConnectedRef = useRef(onConnected);
   const onInitializedRef = useRef(onInitialized);
   const onContentLoadedRef = useRef(onContentLoaded);
@@ -1060,8 +1093,8 @@ export function SandboxIframe({
     onErrorRef.current = onError;
     onDiagnosticRef.current = onDiagnostic;
     onScreenshotRef.current = onScreenshot;
-    onIframeElementRef.current = onIframeElement;
-    onRecordingEventsRef.current = onRecordingEvents;
+    onStateSyncRef.current = onStateSync;
+    restoredStateRef.current = restoredState;
     onConnectedRef.current = onConnected;
     onInitializedRef.current = onInitialized;
     onContentLoadedRef.current = onContentLoaded;
@@ -1186,11 +1219,8 @@ export function SandboxIframe({
         onDiagnosticRef.current?.(event.data);
       } else if (type === "mcp-apps:screenshot") {
         onScreenshotRef.current?.(event.data);
-      } else if (type === "mcp-apps:recording-event") {
-        // The frame identifies the batch's origin: a chat can hold several
-        // live frames of the same app (one per rendered app message, plus the
-        // right panel), and the recorder must keep exactly one of them.
-        onRecordingEventsRef.current?.(event.data, iframe);
+      } else if (type === "mcp-apps:state-sync") {
+        onStateSyncRef.current?.(event.data);
       } else if (type === "mcp-apps:sandbox-content-loaded") {
         onContentLoadedRef.current?.();
       }
@@ -1199,7 +1229,6 @@ export function SandboxIframe({
     window.addEventListener("message", onMessage);
     window.addEventListener("message", onDiagnosticMessage);
     container.appendChild(iframe);
-    onIframeElementRef.current?.(iframe);
 
     return () => {
       cancelled = true;
@@ -1207,7 +1236,6 @@ export function SandboxIframe({
       themeObserver.disconnect();
       window.removeEventListener("message", onMessage);
       window.removeEventListener("message", onDiagnosticMessage);
-      onIframeElementRef.current?.(null);
       iframe.remove();
       iframeRef.current = null;
       // Reset connection state so the send effects below don't fire against a
@@ -1268,6 +1296,9 @@ export function SandboxIframe({
         csp,
         permissions,
         ...(ownedApp ? { ownedApp: true } : {}),
+        ...(restoredStateRef.current
+          ? { restoredState: restoredStateRef.current }
+          : {}),
       } as Parameters<typeof appBridge.sendSandboxResourceReady>[0])
       .catch((err) => {
         const error = err instanceof Error ? err : new Error(String(err));
@@ -1401,29 +1432,6 @@ export function isRenderableMcpAppHtml(html: string): boolean {
   );
 }
 
-/**
- * Host context for an app bridge on a chromeless surface with no live gateway
- * behind it (the session-replay player). Matches the runtime's context shape so
- * a replayed app themes itself exactly like the live render did.
- */
-export function buildReplayHostContext(displayMode: McpUiDisplayMode) {
-  return {
-    displayMode,
-    theme: readDocumentTheme(),
-    platform: "web",
-    availableDisplayModes: [displayMode],
-    containerDimensions: {},
-    locale: navigator.language,
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    // white-label-ok: wire identifier, not copy
-    userAgent: `Archestra/${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}`,
-    styles: {
-      variables: buildMcpUiStyleVariables(),
-      css: { fonts: collectFontFacesCss() },
-    },
-  };
-}
-
 // ── Host-theme bridging helpers ──────────────────────────────────────────────
 
 /**
@@ -1505,8 +1513,14 @@ function buildMcpUiStyleVariables(): McpUiStyles {
   const primary = getCssVar("--primary");
   const primaryFg = getCssVar("--primary-foreground");
   const radius = getCssVar("--radius");
-  const fontSans = getCssVar("--font-sans");
-  const fontMono = getCssVar("--font-mono");
+  const fontSans = withGenericFontFallback(
+    getCssVar("--font-sans"),
+    "sans-serif",
+  );
+  const fontMono = withGenericFontFallback(
+    getCssVar("--font-mono"),
+    "monospace",
+  );
   const shadowSm = getCssVar("--shadow-sm");
   const shadowMd = getCssVar("--shadow-md");
   const shadowLg = getCssVar("--shadow-lg");

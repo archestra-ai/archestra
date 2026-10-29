@@ -33,13 +33,30 @@ export function resolveRunToolTarget(params: {
     return { toolName: params.toolName, toolInput };
   }
 
-  const targetToolInput = isRecord(toolInput.tool_args)
-    ? toolInput.tool_args
-    : {};
   return {
     toolName: targetToolName,
-    toolInput: targetToolInput,
+    toolInput: readRunToolArgs(toolInput.tool_args) ?? {},
   };
+}
+
+/**
+ * The target's arguments as `run_tool` reads its `tool_args`: an object, or
+ * JSON text of one, which some models send for nested objects. A missing value
+ * is the empty object. Returns undefined for anything else, which `run_tool`
+ * refuses.
+ */
+export function readRunToolArgs(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (value === undefined) return {};
+  if (isRecord(value)) return value;
+  if (typeof value !== "string") return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 type RunToolDispatch =
@@ -106,37 +123,6 @@ export function resolveRunToolDispatch(params: {
     return { kind: "not_dispatch" };
   }
   return { kind: "target", toolName: targetToolName, loose: true };
-}
-
-/**
- * Resolves the target tool and arguments for an unverified `run_tool` wrapper.
- * `toolName` is a wire spelling without a verified attestation that matches
- * the wrapper under loose scanning.
- *
- * Clients might route this call to a platform gateway that executes the target.
- * The policy evaluates the target in addition to the wrapper itself, rather than
- * replacing the wrapper. The target is evaluated as written and never as a
- * built-in tool. Returns undefined if the call is not a valid dispatch.
- */
-export function resolveUnprovenRunToolTarget(params: {
-  toolName: string;
-  args: unknown;
-}): { toolName: string; toolInput: Record<string, unknown> } | undefined {
-  if (!runToolMatch(params.toolName, true) || !isRecord(params.args)) {
-    return undefined;
-  }
-  const targetToolName = params.args.tool_name;
-  if (
-    typeof targetToolName !== "string" ||
-    targetToolName.length === 0 ||
-    isBuiltInTarget(targetToolName)
-  ) {
-    return undefined;
-  }
-  return {
-    toolName: targetToolName,
-    toolInput: isRecord(params.args.tool_args) ? params.args.tool_args : {},
-  };
 }
 
 /**

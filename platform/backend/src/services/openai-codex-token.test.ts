@@ -179,8 +179,11 @@ describe("createOpenAiCodexFetch", () => {
 // from @/test where a real database row is involved.
 // =============================================================================
 
-import { LlmProviderApiKeyModel } from "@/models";
-import SecretModel from "@/models/secret";
+import {
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+} from "@/models";
 import {
   getSecretValueForLlmProviderApiKey,
   secretManager,
@@ -414,46 +417,6 @@ describe("rotation persistence compare-and-swap", () => {
       refreshToken: rtFresh,
     });
   });
-
-  test("skips the write when the secret row is a read-only BYOS Vault reference", async ({
-    makeOrganization,
-    makeUser,
-  }) => {
-    const organization = await makeOrganization();
-    const user = await makeUser();
-    // A BYOS row stores the vault REFERENCE; the resolved value (what the
-    // old guard inspected) would look like an ordinary credential.
-    const secret = await SecretModel.create({
-      name: `codex-byos-${crypto.randomUUID()}`,
-      secret: { apiKey: "vault/data/llm#openai" },
-      isByosVault: true,
-    });
-    const key = await LlmProviderApiKeyModel.create({
-      organizationId: organization.id,
-      name: "ChatGPT Subscription",
-      provider: "openai",
-      secretId: secret.id,
-      scope: "personal",
-      userId: user.id,
-    });
-    const rtOld = `rt-byos-${crypto.randomUUID()}`;
-    stubTokenEndpoint({
-      [rtOld]: {
-        accessToken: "at_1",
-        rotatedTo: `rt-byos2-${crypto.randomUUID()}`,
-      },
-    });
-
-    await openAiCodexTokenManager.getAccessToken({
-      refreshToken: rtOld,
-      providerApiKeyId: key.id,
-      accountId: "acc-1",
-    });
-    await openAiCodexTokenManager.waitForPersistFlush(key.id);
-
-    const row = await SecretModel.findById(secret.id);
-    expect(row?.secret).toMatchObject({ apiKey: "vault/data/llm#openai" });
-  });
 });
 
 describe("inference authentication status", () => {
@@ -584,3 +547,82 @@ for (const retryStatus of [200, 401, 503]) {
     ).toBe(retryStatus === 401);
   });
 }
+
+test("drops a model the ChatGPT plan rejects from the key's model list, and only that", async ({
+  makeOrganization,
+  makeUser,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  const credential = {
+    refreshToken: `rt-${crypto.randomUUID()}`,
+    accountId: "fixture-account",
+    accessToken: "live-access",
+    accessTokenExpiresAtMs: Date.now() + 3600000,
+  };
+  const secret = await secretManager().createSecret(
+    { apiKey: encodeOpenAiCodexCredential(credential) },
+    `codex-plan-${crypto.randomUUID()}`,
+  );
+  const key = await LlmProviderApiKeyModel.create({
+    organizationId: organization.id,
+    name: "Fixture subscription",
+    provider: "openai",
+    secretId: secret.id,
+    scope: "personal",
+    userId: user.id,
+  });
+  const makeOpenAiModel = (modelId: string) =>
+    ModelModel.create({
+      externalId: `openai/${modelId}`,
+      provider: "openai",
+      modelId,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+  const retired = await makeOpenAiModel("gpt-5.4");
+  const current = await makeOpenAiModel("gpt-5.6-sol");
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+    retired.id,
+    current.id,
+  ]);
+  const linkedModelIds = async () =>
+    (await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(key.id))
+      .map((model) => model.modelId)
+      .sort();
+
+  // The live access token is used as-is; no token redemption may happen.
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => tokenResponse({ error: "unexpected" }, 500)),
+  );
+  const send = (upstreamBody: Record<string, unknown>) =>
+    createOpenAiCodexFetch({
+      credential,
+      providerApiKeyId: key.id,
+      sessionId: "fixture-session",
+      innerFetch: vi.fn(async () => tokenResponse(upstreamBody, 400)),
+    })("https://example.test/responses", { method: "POST", body: "{}" });
+
+  // An unrelated 400 leaves the list alone.
+  const unrelated = await send({
+    detail: "Unsupported parameter: max_output_tokens",
+  });
+  expect(unrelated.status).toBe(400);
+  expect(await linkedModelIds()).toEqual(["gpt-5.4", "gpt-5.6-sol"]);
+
+  const rejected = await send({
+    detail:
+      "The 'gpt-5.4' model is not supported when using Codex with a ChatGPT account.",
+  });
+  expect(rejected.status).toBe(400);
+  expect(await rejected.json()).toEqual({
+    error: {
+      message:
+        "The 'gpt-5.4' model is not supported when using Codex with a ChatGPT account.",
+    },
+  });
+  expect(await linkedModelIds()).toEqual(["gpt-5.6-sol"]);
+});

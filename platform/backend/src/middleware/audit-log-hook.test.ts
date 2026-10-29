@@ -163,6 +163,7 @@ import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import { registerAuditLogHook } from "./audit-log-hook";
 
 // Helper: inject user + org into every request, optionally with authMethod.
@@ -340,9 +341,11 @@ describe("registerAuditLogHook", () => {
     await app.close();
   });
 
-  // Helper: wait for the async audit write to settle.
+  // Helper: wait for the audit write. The onResponse hook starts while the
+  // response finishes (before inject resolves) and registers its work as
+  // tracked background work, so draining it is deterministic.
   async function settle() {
-    await new Promise((r) => setTimeout(r, 50));
+    await drainBackgroundWork();
   }
 
   async function getRows() {
@@ -1286,6 +1289,17 @@ describe("registerAuditLogHook", () => {
         method: "POST",
         url: "/api/skills/github/preview?branch=main",
       });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+  });
+
+  describe("denylist — MCP registry list read sent as POST", () => {
+    test.each([
+      "/api/internal_mcp_catalog/registry/search",
+      "/api/internal_mcp_catalog/registry/search/ids",
+    ])("POST %s writes zero rows", async (url) => {
+      await app.inject({ method: "POST", url });
       await settle();
       expect(await getRows()).toHaveLength(0);
     });

@@ -36,7 +36,6 @@ import {
   setOAuthTeamId,
   setOAuthUserConfigValues,
 } from "@/lib/auth/oauth-session";
-import { useFeature } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import {
   clearPendingEnterpriseManagedInstall,
@@ -45,8 +44,12 @@ import {
   setPendingEnterpriseManagedInstall,
   useEnterpriseManagedInstallConnectUrl,
 } from "@/lib/mcp/enterprise-managed-install-auth";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useInstallMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { isInstallInProgress } from "@/lib/mcp/install-status";
+import {
+  fetchInternalMcpCatalogItem,
+  useMcpRegistryIssueIndex,
+} from "@/lib/mcp/mcp-registry.query";
+import { useInstallMcpServer } from "@/lib/mcp/mcp-server.query";
 import {
   clearPendingInstall,
   getPendingInstall,
@@ -55,6 +58,7 @@ import {
 } from "@/lib/mcp/pending-install";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import websocketService from "@/lib/websocket/websocket";
+import { selectInstallSuccessToastIds } from "./install-success-toasts";
 import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
@@ -117,12 +121,15 @@ export function useCatalogInstall(opts?: {
   const router = useRouter();
   const pathname = usePathname();
 
-  const { data: catalogItems } = useInternalMcpCatalog({});
-  const { data: installedServers } = useMcpServers();
+  // The registry's slim issue index carries every visible install's status
+  // and every item's name, which is all the completion tracking reads. Full
+  // items are loaded by id when a flow actually opens one.
+  const { data: issueIndex } = useMcpRegistryIssueIndex();
+  const catalogItems = issueIndex?.catalogItems;
+  const installedServers = issueIndex?.servers;
   const installMutation = useInstallMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
   const queryClient = useQueryClient();
-  const byosEnabled = useFeature("byosEnabled");
 
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
     "remote-install" | "local-install" | "oauth" | "no-auth"
@@ -146,6 +153,10 @@ export function useCatalogInstall(opts?: {
   // torn down and the intent is still pending" (reopen) — on a remount the ref
   // is fresh, so the re-open effect takes over from the stashed intent.
   const deepLinkHandledRef = useRef(false);
+  // The `?install=` catalog id whose item is being loaded right now.
+  const deepLinkLoadingRef = useRef<string | null>(null);
+  // Catalog ids with a direct (no-dialog) install request in flight.
+  const directInstallsInFlightRef = useRef(new Set<string>());
 
   // Pre-selected team ID when adding a shared connection from manage dialog
   const [preselectedTeamId, setPreselectedTeamId] = useState<string | null>(
@@ -209,17 +220,33 @@ export function useCatalogInstall(opts?: {
           return newSet;
         });
 
+        // Multi-tenant catalogs share one deployment across every install
+        // row, so a single rollout toasts once per catalog, not once per row.
+        const toastServerIds = new Set(
+          selectInstallSuccessToastIds({
+            completedIds: completedServerIds.filter(
+              (id) => !restartingServerIds.has(id),
+            ),
+            servers: installedServers,
+            multitenantCatalogIds: new Set(
+              (catalogItems ?? [])
+                .filter((item) => item.multitenant)
+                .map((item) => item.id),
+            ),
+          }),
+        );
+
         // Show toasts for completed installations and invalidate tools queries
         completedServerIds.forEach((serverId) => {
           const server = installedServers.find((s) => s.id === serverId);
           if (server) {
             if (server.localInstallationStatus === "success") {
-              if (!restartingServerIds.has(serverId)) {
+              if (toastServerIds.has(serverId)) {
                 const catalogName = catalogItems?.find(
                   (item) => item.id === server.catalogId,
                 )?.name;
                 toast.success(
-                  `Successfully installed ${catalogName ?? server.name}`,
+                  `Successfully installed ${catalogName ?? "MCP server"}`,
                 );
               }
               // Force immediate deployment status refresh via WebSocket
@@ -276,17 +303,19 @@ export function useCatalogInstall(opts?: {
     catalogItems,
   ]);
 
-  // Resume polling for pending installations after page refresh
+  // Resume polling for installs that were already pending when the page
+  // loaded. Only on the first load: later pending rows come from installs
+  // this hook started (tracked by their handlers) or from a catalog edit's
+  // reinstall cascade, which is not an install and must not toast as one.
+  const resumedPendingRef = useRef(false);
   useEffect(() => {
-    if (installedServers) {
-      const pendingServers = installedServers.filter(
-        (s) =>
-          s.localInstallationStatus === "pending" ||
-          s.localInstallationStatus === "discovering-tools",
-      );
-      if (pendingServers.length > 0) {
-        setInstallingServerIds(new Set(pendingServers.map((s) => s.id)));
-      }
+    if (!installedServers || resumedPendingRef.current) return;
+    resumedPendingRef.current = true;
+    const pendingIds = installedServers
+      .filter((s) => isInstallInProgress(s.localInstallationStatus))
+      .map((s) => s.id);
+    if (pendingIds.length > 0) {
+      setInstallingServerIds((prev) => new Set([...prev, ...pendingIds]));
     }
   }, [installedServers]);
 
@@ -424,6 +453,17 @@ export function useCatalogInstall(opts?: {
     openDialog("local-install");
   };
 
+  // The install mutation skips its own toast for an install that comes back
+  // pending, so track it here and let the completion effect toast it.
+  const trackPendingInstall = (
+    server: { id: string; localInstallationStatus?: string | null } | undefined,
+  ) => {
+    if (!server || !isInstallInProgress(server.localInstallationStatus)) {
+      return;
+    }
+    setInstallingServerIds((prev) => new Set(prev).add(server.id));
+  };
+
   // Check if a catalog item needs any config dialogs, or can be installed directly
   const canDirectInstall = (catalogItem: CatalogItem) => {
     if (catalogItem.oauthConfig) return false;
@@ -452,44 +492,54 @@ export function useCatalogInstall(opts?: {
       scope?: McpServerInstallScope;
     },
   ) => {
-    const scope: McpServerInstallScope =
-      target?.scope ?? (target?.teamId ? "team" : "personal");
-    if (
-      !(await ensureEnterpriseManagedInstallAuth(catalogItem, {
-        action: "direct",
+    // Repeated clicks land before the first request (or the enterprise auth
+    // check ahead of it) returns, so React state can't stop them; a ref can.
+    if (directInstallsInFlightRef.current.has(catalogItem.id)) return;
+    directInstallsInFlightRef.current.add(catalogItem.id);
+    try {
+      const scope: McpServerInstallScope =
+        target?.scope ?? (target?.teamId ? "team" : "personal");
+      if (
+        !(await ensureEnterpriseManagedInstallAuth(catalogItem, {
+          action: "direct",
+          catalogId: catalogItem.id,
+          scope,
+          ...(scope === "team" && target?.teamId
+            ? { teamId: target.teamId }
+            : {}),
+        }))
+      ) {
+        return;
+      }
+
+      setInstallingItemId(catalogItem.id);
+      const result = await installMutation.mutateAsync({
+        name: catalogItem.name,
         catalogId: catalogItem.id,
         scope,
         ...(scope === "team" && target?.teamId
           ? { teamId: target.teamId }
           : {}),
-      }))
-    ) {
-      return;
-    }
+        dontShowToast: true,
+      });
 
-    setInstallingItemId(catalogItem.id);
-    const result = await installMutation.mutateAsync({
-      name: catalogItem.name,
-      catalogId: catalogItem.id,
-      scope,
-      ...(scope === "team" && target?.teamId ? { teamId: target.teamId } : {}),
-      dontShowToast: true,
-    });
-
-    const installedServerId = result?.installedServer?.id;
-    if (installedServerId) {
-      setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
-      const isFirstInstallation = !installedServers?.some(
-        (s) => s.catalogId === catalogItem.id,
-      );
-      if (isFirstInstallation) {
-        setFirstInstallationServerIds((prev) =>
-          new Set(prev).add(installedServerId),
+      const installedServerId = result?.installedServer?.id;
+      if (installedServerId) {
+        setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
+        const isFirstInstallation = !installedServers?.some(
+          (s) => s.catalogId === catalogItem.id,
         );
+        if (isFirstInstallation) {
+          setFirstInstallationServerIds((prev) =>
+            new Set(prev).add(installedServerId),
+          );
+        }
       }
+      setInstallingItemId(null);
+      onInstalled?.();
+    } finally {
+      directInstallsInFlightRef.current.delete(catalogItem.id);
     }
-    setInstallingItemId(null);
-    onInstalled?.();
   };
 
   // Add personal connection: skip dialog if no config needed, otherwise open dialog with personalOnly
@@ -592,13 +642,19 @@ export function useCatalogInstall(opts?: {
   // pre-target the connection — used by the item detail page's add-connection
   // actions.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only re-run on searchParams/catalogItems; install handlers are stable within a render
-  const installFromSearchParams = useCallback(() => {
+  const installFromSearchParams = useCallback(async () => {
     const installCatalogId = searchParams.get(MCP_CATALOG_INSTALL_QUERY_PARAM);
-    if (!installCatalogId || !catalogItems) return;
-
-    const catalogItem = catalogItems.find(
-      (item) => item.id === installCatalogId,
-    );
+    if (!installCatalogId) return;
+    // The item loads asynchronously; a second call for the same link while it
+    // does must not open a second dialog.
+    if (deepLinkLoadingRef.current === installCatalogId) return;
+    deepLinkLoadingRef.current = installCatalogId;
+    const catalogItem = await fetchInternalMcpCatalogItem(
+      queryClient,
+      installCatalogId,
+    ).finally(() => {
+      deepLinkLoadingRef.current = null;
+    });
     if (!catalogItem) return;
 
     const scopeParam = searchParams.get(
@@ -634,7 +690,7 @@ export function useCatalogInstall(opts?: {
       scopeParam ?? undefined,
       teamParam ?? undefined,
     );
-  }, [searchParams, catalogItems, pathname, router]);
+  }, [searchParams, pathname, router]);
 
   // Durable re-open: if the deep-link dialog was lost before the user acted, the
   // intent survives in sessionStorage. Once catalog + installs are loaded, and
@@ -649,10 +705,7 @@ export function useCatalogInstall(opts?: {
     const pending = getPendingInstall();
     if (!pending) return;
 
-    const catalogItem = catalogItems.find(
-      (item) => item.id === pending.catalogId,
-    );
-    if (!catalogItem) {
+    if (!catalogItems.some((item) => item.id === pending.catalogId)) {
       clearPendingInstall();
       return;
     }
@@ -675,7 +728,13 @@ export function useCatalogInstall(opts?: {
 
     if (!registerPendingInstallReopen()) return;
     deepLinkHandledRef.current = true;
-    openInstallForCatalogItem(catalogItem, pending.scope, pending.teamId);
+    void fetchInternalMcpCatalogItem(queryClient, pending.catalogId).then(
+      (catalogItem) => {
+        if (catalogItem) {
+          openInstallForCatalogItem(catalogItem, pending.scope, pending.teamId);
+        }
+      },
+    );
   }, [catalogItems, installedServers, isDialogOpened]);
 
   // Resume an enterprise-managed install after linking the configured IdP.
@@ -685,13 +744,20 @@ export function useCatalogInstall(opts?: {
 
     const intent = getPendingEnterpriseManagedInstall();
     if (!intent) return;
-
-    const catalogItem = catalogItems.find(
-      (item) => item.id === intent.catalogId,
-    );
-    if (!catalogItem) return;
+    if (!catalogItems.some((item) => item.id === intent.catalogId)) return;
 
     clearPendingEnterpriseManagedInstall();
+    void resumeEnterpriseManagedInstall(intent);
+  }, [catalogItems]);
+
+  const resumeEnterpriseManagedInstall = async (
+    intent: EnterpriseManagedInstallIntent,
+  ) => {
+    const catalogItem = await fetchInternalMcpCatalogItem(
+      queryClient,
+      intent.catalogId,
+    );
+    if (!catalogItem) return;
 
     setPreselectedTeamId(
       intent.scope === "team" ? (intent.teamId ?? null) : null,
@@ -721,20 +787,21 @@ export function useCatalogInstall(opts?: {
         });
         return;
     }
-  }, [catalogItems]);
+  };
 
   const handleNoAuthConfirm = async (result: NoAuthInstallResult) => {
     if (!noAuthCatalogItem) return;
 
     const catalogItem = noAuthCatalogItem;
     setInstallingItemId(catalogItem.id);
-    await installMutation.mutateAsync({
+    const installResult = await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: result.catalogId,
       scope: result.scope,
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
     });
+    trackPendingInstall(installResult?.installedServer);
     closeDialog("no-auth");
     setNoAuthCatalogItem(null);
     setInstallingItemId(null);
@@ -756,7 +823,6 @@ export function useCatalogInstall(opts?: {
         Object.keys(installResult.environmentValues).length > 0
       ) {
         // Security: filter out secret-type env vars from sessionStorage.
-        // In BYOS mode values are vault references (safe). In non-BYOS mode
         // actual secret values are excluded — they are handled server-side
         // via secretId or re-prompted on install.
         const secretKeys = new Set(
@@ -764,13 +830,11 @@ export function useCatalogInstall(opts?: {
             .filter((e) => e.type === "secret")
             .map((e) => e.key),
         );
-        const safeValues = installResult.isByosVault
-          ? installResult.environmentValues
-          : Object.fromEntries(
-              Object.entries(installResult.environmentValues).filter(
-                ([key]) => !secretKeys.has(key),
-              ),
-            );
+        const safeValues = Object.fromEntries(
+          Object.entries(installResult.environmentValues).filter(
+            ([key]) => !secretKeys.has(key),
+          ),
+        );
         if (Object.keys(safeValues).length > 0) {
           setOAuthEnvironmentValues(safeValues);
         }
@@ -782,13 +846,11 @@ export function useCatalogInstall(opts?: {
         setOAuthUserConfigValues({
           values: installResult.userConfigValues,
           userConfig: localServerCatalogItem.userConfig,
-          isByosVault: installResult.isByosVault,
         });
       }
       closeDialog("local-install");
       // The local-install dialog already collected the install target, so the
       // OAuth confirmation has nothing further to ask — start the flow
-      // directly (unless BYOS keeps the dialog for its storage warning).
       const directTarget = resolveFixedInstallTarget(
         installResult.scope,
         installResult.scope === "team" ? installResult.teamId : undefined,
@@ -815,13 +877,12 @@ export function useCatalogInstall(opts?: {
       catalogId: installResult.catalogId,
       environmentValues: installResult.environmentValues,
       userConfigValues: installResult.userConfigValues,
-      isByosVault: installResult.isByosVault,
+
       scope: installResult.scope,
       teamId:
         installResult.scope === "team"
           ? (installResult.teamId ?? undefined)
           : undefined,
-      serviceAccount: installResult.serviceAccount,
       dontShowToast: true,
     });
 
@@ -851,7 +912,7 @@ export function useCatalogInstall(opts?: {
 
     setInstallingItemId(catalogItem.id);
 
-    await installMutation.mutateAsync({
+    const installResult = await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: result.catalogId,
       ...credentialPayload,
@@ -859,6 +920,7 @@ export function useCatalogInstall(opts?: {
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
     });
+    trackPendingInstall(installResult?.installedServer);
     setInstallingItemId(null);
     onInstalled?.();
   };
@@ -916,13 +978,11 @@ export function useCatalogInstall(opts?: {
   // team already chosen), the OAuth confirmation dialog has no choices left to
   // offer and renders an empty body — so the flow should start immediately
   // instead of showing it. Returns null when the dialog is still needed:
-  // either the scope is not fixed yet, or BYOS is enabled (the dialog then
   // carries the OAuth-credentials-stored-in-database warning).
   const resolveFixedInstallTarget = (
     scope: McpServerInstallScope | undefined,
     teamId: string | null | undefined,
   ): { scope: McpServerInstallScope; teamId?: string | null } | null => {
-    if (byosEnabled) return null;
     if (!scope) return null;
     if (scope === "team") return teamId ? { scope, teamId } : null;
     return { scope };

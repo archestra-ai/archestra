@@ -2,7 +2,8 @@
  * Optimized test setup using PGlite with file-level database initialization.
  *
  * Performance Optimizations Applied:
- * 1. Database and migrations created ONCE per test file (beforeAll), not per test
+ * 1. Database loaded from an empty, pre-migrated snapshot at most ONCE per test
+ *    file, on its first access; files that never touch it skip the load
  * 2. Tables are truncated after tests that accessed the DB; pure tests skip it
  * 3. PGlite instance is reused across all tests in a file
  * 4. Sentry is disabled to prevent data transmission during tests
@@ -46,15 +47,9 @@ process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED = "false";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION = "";
-// Native/OpenAPPA tests opt in explicitly; local policy settings must not
-// switch unrelated PGlite suites away from the existing guardrails.
-//
-// The beta master switch is pinned for the same reason as Vertex AI above: a
-// developer's .env reaches these tests through dotenv, and OpenAPPA now rides
-// this switch. Left to the .env it would turn the legacy trusted-data
-// guardrail off on a beta machine and leave it on in CI, so the same suite
-// would assert different behavior in the two places. A test that wants a beta
-// feature stubs its own gate.
+// Keep unrelated beta features off even when a developer's .env enables them.
+// OpenAPPA is always available; enforcement tests opt in through the deployment
+// Guardrails setting. A test of another beta feature stubs its own gate.
 process.env.ARCHESTRA_BETA = "false";
 process.env.ARCHESTRA_LLM_PROXY_PLUGINS = "";
 
@@ -91,6 +86,14 @@ let pristineConfig: Record<string, unknown> | null = null;
 // would pull config.ts before the env above is set.
 type EnterpriseTierRef = typeof import("../enterprise-tier.js").enterpriseTier;
 let enterpriseTier: EnterpriseTierRef | null = null;
+// archestraMcpBranding is the same kind of singleton: a test that syncs the
+// built-in catalog for a white-labeled organization leaves the tool prefix
+// branded (`acme_copilot__` instead of `archestra__`) for every later test in
+// the worker, and the next file in the worker then names its OpenAPPA tools
+// after that organization. Reset it with config, on the way in and out.
+type ArchestraMcpBrandingRef =
+  typeof import("../archestra-mcp-server/branding.js").archestraMcpBranding;
+let archestraMcpBranding: ArchestraMcpBrandingRef | null = null;
 if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
   liveConfig = (await import("../config.js")).default as unknown as Record<
     string,
@@ -98,8 +101,22 @@ if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
   >;
   pristineConfig = structuredClone(liveConfig);
   enterpriseTier = (await import("../enterprise-tier.js")).enterpriseTier;
+  archestraMcpBranding = (await import("../archestra-mcp-server/branding.js"))
+    .archestraMcpBranding;
 }
-let testDb: ReturnType<typeof drizzle> | null = null;
+type TestDatabase = ReturnType<typeof drizzle>;
+let testDb: TestDatabase | null = null;
+// Snapshot this file loads on its first database access (see beforeAll).
+let pendingSnapshotPath: string | null = null;
+// Installed as the app database for the whole file; forwarding through it
+// defers loading PGlite until code actually reaches the database.
+const lazyTestDb = new Proxy({} as TestDatabase, {
+  get(_, prop) {
+    return Reflect.get(getTestDatabase(), prop);
+  },
+}) as unknown as Parameters<
+  typeof import("../database/index.js").__setTestDb
+>[0];
 const originalConsoleWarn = console.warn;
 
 console.warn = (...args: unknown[]) => {
@@ -120,37 +137,46 @@ console.warn = (...args: unknown[]) => {
 };
 
 /**
- * Initialize the database once per test file.
+ * Install this file's database, created lazily on first access.
  *
- * Fast path: load the fully-migrated schema from the snapshot built once by
- * `global-setup.ts` (see SNAPSHOT_PATH_ENV) — a flat cost regardless of migration count.
- * Fallback: if no snapshot is available (e.g. a tooling path that skips globalSetup),
- * replay the migrations directly so the suite still works.
+ * Fast path: the fully-migrated, row-free schema snapshot built once by
+ * `global-setup.ts` (see SNAPSHOT_PATH_ENV) loads the first time the file
+ * reaches the database — a flat cost regardless of migration count, and none
+ * at all for files in these projects that never issue SQL. The snapshot is
+ * created empty, so a freshly loaded database needs no reset.
+ *
+ * Loading takes real I/O, not just microtasks. A file that fakes timers
+ * therefore loads eagerly: a test advancing fake time across a first database
+ * access would otherwise finish advancing before the query resolves, leaving
+ * the code under test parked on a fake timer nobody advances. A file whose
+ * tests fake browser globals (e.g. a `window`) must reach the database before
+ * installing them, since PGlite detects its environment during that load.
+ *
+ * Fallback: if no snapshot is available (e.g. a tooling path that skips
+ * globalSetup), replay the migrations eagerly so the suite still works.
  */
-beforeAll(async () => {
+// biome-ignore lint/correctness/noEmptyPattern: Vitest requires a destructured context before the suite argument.
+beforeAll(async ({}, suite) => {
   completedRollbackTests = 0;
+  databaseTouched = false;
   const snapshotPath = process.env[SNAPSHOT_PATH_ENV];
+  pendingSnapshotPath =
+    snapshotPath && fs.existsSync(snapshotPath) ? snapshotPath : null;
 
-  if (snapshotPath && fs.existsSync(snapshotPath)) {
-    const snapshot = new Blob([fs.readFileSync(snapshotPath)]);
-    pgliteClient = new PGlite({
-      loadDataDir: snapshot,
-      extensions: { vector },
-    });
-  } else {
-    pgliteClient = new PGlite("memory://", { extensions: { vector } });
+  if (!pendingSnapshotPath) {
+    const client = new PGlite("memory://", { extensions: { vector } });
     for (const migrationSql of getMigrationsSql()) {
-      await pgliteClient.exec(migrationSql);
+      await client.exec(migrationSql);
+    }
+    installDatabase(client);
+    // Migrations may seed rows; reset them before the first test.
+    databaseTouched = true;
+  } else {
+    const filepath = "filepath" in suite ? suite.filepath : suite.file.filepath;
+    if (fs.readFileSync(filepath, "utf-8").includes("useFakeTimers")) {
+      await getTestDatabase().$client.waitReady;
     }
   }
-
-  // Finish PGlite's async WASM init (incl. its browser-vs-node environment
-  // detection) before any test code runs: tests that fake browser globals
-  // (e.g. a `window` for the app SDK) would otherwise race the detection and
-  // send PGlite down the browser path mid-init.
-  await pgliteClient.waitReady;
-  trackDatabaseAccess(pgliteClient);
-  testDb = drizzle({ client: pgliteClient });
 
   // Set the test database via the internal setter. The module's default
   // export is a forwarding Proxy over getDb(), so consumers — including
@@ -159,14 +185,10 @@ beforeAll(async () => {
   // default export with the concrete instance: in a shared worker
   // (isolate: false) that would pin import-time consumers to whichever
   // file's PGlite happened to be live, which is closed by the time later
-  // files run ("PGlite is closed").
+  // files run ("PGlite is closed"). A file-level hook that reaches the
+  // database marks it touched, so the first test still starts empty.
   const dbModule = await import("../database/index.js");
-  dbModule.__setTestDb(
-    testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
-  );
-  // Preserve the existing first-test reset: migrations may leave seed rows in
-  // the snapshot, and a file-level hook may access the database before tests.
-  databaseTouched = true;
+  dbModule.__setTestDb(lazyTestDb);
 });
 
 /** Reset the database only after a test (or file-level hook) accessed it. */
@@ -175,9 +197,6 @@ beforeEach(async ({ task }) => {
   // rollback suites in the clean project's shared module cache without
   // relying on process-global mode or internal runner state.
   const rollbackMode = task.file.filepath.endsWith(".rollback.test.ts");
-  if (!pgliteClient) {
-    throw new Error("Database not initialized. Did beforeAll run?");
-  }
 
   // Restore the pristine config before every test. This hook is registered
   // before any test-file hooks, so a file's own beforeEach still applies its
@@ -196,7 +215,26 @@ beforeEach(async ({ task }) => {
     enterpriseTier.setUserCountForTesting(0);
   }
 
-  if (databaseTouched && (!rollbackMode || completedRollbackTests === 0)) {
+  // Same for the MCP branding singleton: back to the unbranded default, so a
+  // white-label test earlier in the worker cannot rename this test's tools.
+  archestraMcpBranding?.syncFromOrganization(null);
+
+  // Agent Runtime availability is detected from whatever cluster the default
+  // kubeconfig points at, so a developer machine with the Agent Sandbox
+  // controller would answer differently from CI. Default to "not installed";
+  // a test that needs it either overrides this spy or restores it to exercise
+  // real detection. Imported here, after the test file's mocks are applied.
+  const { agentSandboxApi } = await import(
+    "../k8s/agent-runtime/sandbox-api.js"
+  );
+  agentSandboxApi.reset();
+  vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);
+
+  if (
+    pgliteClient &&
+    databaseTouched &&
+    (!rollbackMode || completedRollbackTests === 0)
+  ) {
     // Get all user tables from the database (excluding system tables)
     const tablesResult = await pgliteClient.query<{ tablename: string }>(`
       SELECT tablename FROM pg_tables
@@ -223,7 +261,7 @@ beforeEach(async ({ task }) => {
   clearRegisteredProcessLocalCaches();
 
   if (rollbackMode) {
-    if (!testDb) throw new Error("Test database not initialized");
+    const rootDb = getTestDatabase();
     let signalReady: () => void = () => {};
     const ready = new Promise<void>((resolve) => {
       signalReady = resolve;
@@ -234,7 +272,7 @@ beforeEach(async ({ task }) => {
     });
     releaseTestTransaction = release;
     let started = false;
-    testTransactionFinished = testDb
+    testTransactionFinished = rootDb
       .transaction(async (tx) => {
         const dbModule = await import("../database/index.js");
         dbModule.__setTestDb(
@@ -305,9 +343,7 @@ async function finishTestTransaction(): Promise<void> {
     }
     try {
       const dbModule = await import("../database/index.js");
-      dbModule.__setTestDb(
-        testDb as unknown as Parameters<typeof dbModule.__setTestDb>[0],
-      );
+      dbModule.__setTestDb(lazyTestDb);
     } catch (error) {
       errors.push(error);
     } finally {
@@ -337,6 +373,7 @@ function restoreTestGlobals(): void {
   if (liveConfig && pristineConfig) {
     restoreConfig(liveConfig, structuredClone(pristineConfig));
   }
+  archestraMcpBranding?.syncFromOrganization(null);
 }
 
 /**
@@ -369,8 +406,33 @@ afterAll(async () => {
     pgliteClient = null;
   }
   testDb = null;
+  pendingSnapshotPath = null;
   databaseTouched = false;
 });
+
+/**
+ * Return this file's database, loading the migrated snapshot on first use.
+ *
+ * Construction is synchronous; PGlite queues queries until its async
+ * initialization finishes, so callers need not await readiness.
+ */
+function getTestDatabase(): TestDatabase {
+  if (testDb) return testDb;
+  if (!pendingSnapshotPath) {
+    throw new Error("Database not initialized. Did beforeAll run?");
+  }
+  const snapshot = new Blob([fs.readFileSync(pendingSnapshotPath)]);
+  return installDatabase(
+    new PGlite({ loadDataDir: snapshot, extensions: { vector } }),
+  );
+}
+
+function installDatabase(client: PGlite): TestDatabase {
+  pgliteClient = client;
+  trackDatabaseAccess(client);
+  testDb = drizzle({ client });
+  return testDb;
+}
 
 function trackDatabaseAccess(client: PGlite): void {
   // Patch the prototype rather than shadowing instance methods: tests can spy

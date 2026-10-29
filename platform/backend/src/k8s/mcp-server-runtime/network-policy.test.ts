@@ -298,52 +298,26 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
     });
   });
 
-  test("keeps DNS off public addresses when the cluster DNS IP is unknown", () => {
+  test("omits DNS bootstrap access when the cluster resolver is unknown", () => {
     const manifest = buildManagedAwsApplicationNetworkPolicy({
       name: "mcp-egress-test",
-      podSelectorLabels: {
-        app: "mcp-server",
-        "mcp-server-id": "server-id",
-      },
+      podSelectorLabels: { app: "mcp-server", "mcp-server-id": "server-id" },
       effectivePolicy: makeEffectivePolicy({
         egressMode: "restricted",
         allowedDomains: ["api.example.com"],
+        allowedCidrs: ["203.0.113.0/24"],
       }),
       clusterDnsIps: [],
     });
 
-    // Port 53 to any address would let a restricted pod query (or tunnel
-    // through) a resolver of its choosing. Without a known resolver, DNS stays
-    // limited to the private ranges every in-cluster resolver lives in.
-    expect(manifest).toMatchObject({
-      metadata: {
-        annotations: {
-          "archestra.io/network-policy-cluster-dns": "private-ranges",
-        },
-      },
-      spec: {
-        egress: [
-          {
-            to: [
-              { ipBlock: { cidr: "10.0.0.0/8" } },
-              { ipBlock: { cidr: "172.16.0.0/12" } },
-              { ipBlock: { cidr: "192.168.0.0/16" } },
-              { ipBlock: { cidr: "100.64.0.0/10" } },
-              { ipBlock: { cidr: "169.254.0.0/16" } },
-              { ipBlock: { cidr: "fc00::/7" } },
-              { ipBlock: { cidr: "fe80::/10" } },
-            ],
-            ports: [
-              { protocol: "UDP", port: 53 },
-              { protocol: "TCP", port: 53 },
-            ],
-          },
-          {
-            to: [{ domainNames: ["api.example.com"] }],
-          },
-        ],
-      },
+    expect(manifest.metadata).toMatchObject({
+      annotations: { "archestra.io/network-policy-cluster-dns": "unresolved" },
     });
+    // No port-only or private-range escape; explicit operator rules remain.
+    expect((manifest.spec as { egress: unknown[] }).egress).toEqual([
+      { to: [{ ipBlock: { cidr: "203.0.113.0/24" } }] },
+      { to: [{ domainNames: ["api.example.com"] }] },
+    ]);
   });
 
   test("never allows DNS to a public address on either policy kind", () => {
@@ -363,7 +337,7 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           name: "mcp-egress-test",
           podSelectorLabels,
           effectivePolicy,
-          clusterDnsIps: [],
+          clusterDnsIps: ["172.20.0.10"],
         }).spec as { egress: k8s.V1NetworkPolicyEgressRule[] }
       ).egress,
       (
@@ -371,7 +345,7 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           name: "mcp-egress-test",
           podSelectorLabels,
           labels: { app: "mcp-server" },
-          clusterDnsIps: [],
+          clusterDnsIps: ["172.20.0.10"],
         }).spec as { egress: k8s.V1NetworkPolicyEgressRule[] }
       ).egress,
     ];
@@ -865,7 +839,7 @@ describe("MCP egress floor and default-deny baseline builders", () => {
     });
   });
 
-  test("AWS ANP floor falls back to any-IP :53 when the resolver is unknown", () => {
+  test("AWS ANP floor keeps private destinations blocked when the resolver is unknown", () => {
     const anp = buildUnrestrictedFloorAwsApplicationNetworkPolicy({
       name: "mcp-egress-test",
       podSelectorLabels,
@@ -884,26 +858,13 @@ describe("MCP egress floor and default-deny baseline builders", () => {
         policyTypes: ["Egress"],
       },
     });
-    // A ports-only rule is not honored by the ANP agent, so without a resolved
-    // ClusterIP the DNS rule allows :53 to private address space (where the
-    // cluster resolver lives) rather than dropping lookups.
-    expect(
-      (anp.spec as { egress: Array<Record<string, unknown>> }).egress[0],
-    ).toEqual({
-      to: [
-        "10.0.0.0/8",
-        "172.16.0.0/12",
-        "192.168.0.0/16",
-        "100.64.0.0/10",
-        "169.254.0.0/16",
-        "fc00::/7",
-        "fe80::/10",
-      ].map((cidr) => ({ ipBlock: { cidr } })),
-      ports: [
-        { protocol: "UDP", port: 53 },
-        { protocol: "TCP", port: 53 },
-      ],
-    });
+    // Unknown DNS must not override the floor's private-destination denial.
+    const egress = (anp.spec as { egress: k8s.V1NetworkPolicyEgressRule[] })
+      .egress;
+    expect(egress).toHaveLength(2);
+    expect(egress.every((rule) => rule.ports === undefined)).toBe(true);
+    expect(egress[0].to?.[0]?.ipBlock?.except).toContain("172.16.0.0/12");
+    expect(egress[1].to?.[0]?.ipBlock?.except).toContain("fc00::/7");
   });
 
   test("builds a plain default-deny baseline over all app=mcp-server pods", () => {

@@ -189,7 +189,7 @@ export function buildManagedAwsApplicationNetworkPolicy(params: {
       annotations: {
         ...buildPolicyAnnotations(params.effectivePolicy, "active"),
         "archestra.io/network-policy-cluster-dns":
-          params.clusterDnsIps.join(",") || "private-ranges",
+          params.clusterDnsIps.join(",") || "unresolved",
       },
     },
     spec: {
@@ -313,7 +313,7 @@ export function buildUnrestrictedFloorAwsApplicationNetworkPolicy(params: {
       podSelector: { matchLabels: params.podSelectorLabels },
       policyTypes: ["Egress"],
       egress: [
-        buildAwsDnsBootstrapEgressRule(params.clusterDnsIps ?? []),
+        ...buildAwsDnsBootstrapEgressRules(params.clusterDnsIps ?? []),
         ...floorPublicEgressRules({
           allowedCidrs: params.allowedCidrs ?? [],
           clusterIpFamilies: params.clusterIpFamilies ?? [],
@@ -383,19 +383,6 @@ export function isAwsApplicationNetworkPolicyProvider(
 // === Internal helpers ===
 
 const BASELINE_POD_SELECTOR_LABELS = { app: "mcp-server" };
-
-// Where the AWS DNS bootstrap rule allows port 53 when the cluster resolver IP
-// is unknown: private and link-local space, which holds every in-cluster or
-// VPC resolver, and no public address.
-const UNRESOLVED_DNS_FALLBACK_CIDRS = [
-  "10.0.0.0/8",
-  "172.16.0.0/12",
-  "192.168.0.0/16",
-  "100.64.0.0/10",
-  "169.254.0.0/16",
-  "fc00::/7",
-  "fe80::/10",
-];
 
 // Reserved, private, and cloud-metadata ranges the unrestricted floor blocks
 // (spec egress-policy.md LIM-1). 168.63.129.16/32 (Azure platform metadata) is a
@@ -531,7 +518,7 @@ function buildAwsApplicationEgressRules(
   const domains = networkPolicyDomains(policy);
 
   return [
-    buildAwsDnsBootstrapEgressRule(clusterDnsIps),
+    ...buildAwsDnsBootstrapEgressRules(clusterDnsIps),
     ...policy.allowedCidrs.map((cidr) => ({
       to: [{ ipBlock: { cidr } }],
     })),
@@ -542,29 +529,25 @@ function buildAwsApplicationEgressRules(
 }
 
 /**
- * DNS bootstrap rule for EKS Auto Mode. When the cluster DNS ClusterIP could
- * not be resolved, fall back to port 53 on private address space only: EKS
- * requires the Service CIDR to be RFC1918 (IPv4) or ULA (IPv6), so the cluster
- * resolver is always reachable, while port 53 to a public host — a direct
- * channel out of a restricted pod — stays blocked.
+ * Only known resolvers receive the DNS bootstrap exception. Omitting the rule
+ * when discovery fails keeps private DNS endpoints outside the allowlist.
  */
-function buildAwsDnsBootstrapEgressRule(
+function buildAwsDnsBootstrapEgressRules(
   clusterDnsIps: string[],
-): Record<string, unknown> {
-  const to =
-    clusterDnsIps.length > 0
-      ? clusterDnsIps.map((ip) => ({
-          ipBlock: { cidr: ip.includes(":") ? `${ip}/128` : `${ip}/32` },
-        }))
-      : UNRESOLVED_DNS_FALLBACK_CIDRS.map((cidr) => ({ ipBlock: { cidr } }));
+): Array<Record<string, unknown>> {
+  if (clusterDnsIps.length === 0) return [];
 
-  return {
-    to,
-    ports: [
-      { protocol: "UDP", port: 53 },
-      { protocol: "TCP", port: 53 },
-    ],
-  };
+  return [
+    {
+      to: clusterDnsIps.map((ip) => ({
+        ipBlock: { cidr: ip.includes(":") ? `${ip}/128` : `${ip}/32` },
+      })),
+      ports: [
+        { protocol: "UDP", port: 53 },
+        { protocol: "TCP", port: 53 },
+      ],
+    },
+  ];
 }
 
 function buildCiliumDnsEgressRule(): Record<string, unknown> {

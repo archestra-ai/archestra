@@ -217,8 +217,7 @@ describe("useInitialChatModelState", () => {
     await Promise.resolve();
     expect(result.current.agentId).toBeNull();
 
-    // Resolution runs once, so a pin that arrives after the effect would be
-    // lost without the gate — the org default would have won permanently.
+    // The org default should never be selected while waiting for the pin.
     rerender({
       ...baseParams,
       organization: { defaultAgentId: "agent-1" },
@@ -367,6 +366,59 @@ describe("useInitialChatModelState", () => {
     routeConversationId?: string;
   };
 
+  it.each([
+    ["agent-1", "agent-2"],
+    [null, "agent-2"],
+    ["agent-2", null],
+  ])("follows a project default change from %s to %s", async (before, after) => {
+    const props = {
+      ...baseParams,
+      agents: resetAgents,
+      projectDefaultAgentId: before,
+    };
+    const { result, rerender } = renderHook(
+      (params) => useInitialChatModelState(params),
+      { initialProps: props },
+    );
+    await waitFor(() =>
+      expect(result.current.agentId).toBe(before ?? "agent-1"),
+    );
+
+    rerender({ ...props, projectDefaultAgentId: after });
+
+    const expected = resetAgents[after === "agent-2" ? 1 : 0];
+    await waitFor(() => expect(result.current.agentId).toBe(expected.id));
+    expect(result.current.modelId).toBe(expected.modelId);
+    expect(result.current.apiKeyId).toBe(expected.llmApiKeyId);
+  });
+
+  it.each([
+    "manual",
+    "url",
+    "conversation",
+  ])("preserves a %s agent choice when the project default changes", async (source) => {
+    const props = {
+      ...baseParams,
+      projectDefaultAgentId: "agent-1",
+      urlAgentId: source === "url" ? "agent-1" : undefined,
+      routeConversationId: source === "conversation" ? "conv-1" : undefined,
+    };
+    const { result, rerender } = renderHook(
+      (params) => useInitialChatModelState(params),
+      { initialProps: props },
+    );
+    await waitFor(() => expect(result.current.agentId).toBe("agent-1"));
+    if (source === "manual") {
+      act(() => result.current.onAgentChange("agent-1"));
+    }
+
+    rerender({ ...props, projectDefaultAgentId: "agent-2" });
+
+    expect(result.current.agentId).toBe("agent-1");
+    expect(result.current.modelId).toBe("uuid-gpt");
+    expect(result.current.apiKeyId).toBe("key-openai");
+  });
+
   it("resets the resolved selection when leaving a conversation for the initial chat route", async () => {
     const { result, rerender } = renderHook(
       (props: ResetProps) => useInitialChatModelState(props),
@@ -510,5 +562,28 @@ describe("useInitialChatModelState", () => {
 
       expect(result.current.agentId).toBeNull();
     });
+  });
+});
+
+describe("PR 8485 live project default regression", () => {
+  const choices = [
+    { id: "agent-1", modelId: "uuid-gpt", llmApiKeyId: "key-openai" },
+    { id: "agent-2", modelId: "uuid-claude", llmApiKeyId: "key-anthropic" },
+  ];
+  it("uses the changed project default after a refresh/remount", async () => {
+    const props = {
+      ...baseParams,
+      agents: choices,
+      projectDefaultAgentId: "agent-1",
+    };
+    const first = renderHook(() => useInitialChatModelState(props));
+    await waitFor(() => expect(first.result.current.agentId).toBe("agent-1"));
+    first.unmount();
+    const second = renderHook(() =>
+      useInitialChatModelState({ ...props, projectDefaultAgentId: "agent-2" }),
+    );
+    await waitFor(() => expect(second.result.current.agentId).toBe("agent-2"));
+    expect(second.result.current.modelId).toBe("uuid-claude");
+    expect(second.result.current.apiKeyId).toBe("key-anthropic");
   });
 });

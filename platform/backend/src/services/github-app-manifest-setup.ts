@@ -468,6 +468,14 @@ async function isManagedUsersOrganization(params: {
     return null;
   });
   if (!response) return null;
+  // A rate limit or server error says nothing about the account.
+  if (response.status === 429 || response.status >= 500) {
+    logger.warn(
+      { status: response.status, web },
+      "GitHub web profile check for a hidden organization failed",
+    );
+    return null;
+  }
   const location = response.headers.get("location");
   if (response.status < 300 || response.status > 399 || !location) return false;
   const target = URL.canParse(location, web) ? new URL(location, web) : null;

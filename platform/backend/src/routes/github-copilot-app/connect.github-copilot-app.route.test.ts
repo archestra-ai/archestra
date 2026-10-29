@@ -351,6 +351,8 @@ describe("GitHub Copilot organization subscription setup", () => {
         headers: { location: "https://example.com/enterprises/acme/sso" },
       }),
       "https://github.com/no-such-org": new Response(null, { status: 404 }),
+      "https://github.com/limited-org": new Response(null, { status: 429 }),
+      "https://github.com/down-org": new Response(null, { status: 503 }),
     };
     vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
       const url = String(input);
@@ -408,14 +410,16 @@ describe("GitHub Copilot organization subscription setup", () => {
       );
     }
     // Without an answer from the web profile, it's unknown, not missing.
-    const unanswered = await post(
-      "/api/github-copilot-app/organization/check",
-      { organization: "unreachable-org" },
-    );
-    expect(unanswered.statusCode).toBe(502);
-    expect(unanswered.json().error.message).toBe(
-      "GitHub didn't return the unreachable-org account.",
-    );
+    for (const organization of ["unreachable-org", "limited-org", "down-org"]) {
+      const unanswered = await post(
+        "/api/github-copilot-app/organization/check",
+        { organization },
+      );
+      expect(unanswered.statusCode, organization).toBe(502);
+      expect(unanswered.json().error.message).toBe(
+        `GitHub didn't return the ${organization} account.`,
+      );
+    }
   });
 
   test("refuses a personal GitHub account", async () => {

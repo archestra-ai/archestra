@@ -3626,10 +3626,13 @@ fn render_human_denial(presentation: &RemedyPresentation, act: &RemedyAct) -> Op
             || "this call".to_owned(),
             |tool| format!("this call to {tool}"),
         );
+    // The runtime records the denial on the call: proposed again in this
+    // session, the call gets no plan naming the reviewer.
     let mut text = format!(
         "[appa] Denied: the human reviewer refused {target}. It did not run and will not run. \
          Do not retry it or re-submit it with changed arguments or encoding to get another \
-         approval; tell the user it was denied."
+         approval; tell the user it was denied. The denial holds for the rest of this session, \
+         also when the user asks for the same call again; a new session can ask for it again."
     );
     if !presentation.offers.is_empty() {
         text.push_str("\n\nThe policy still offers options that do not need this reviewer:\n");
@@ -3655,7 +3658,7 @@ fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferO
         return format!(
             "[appa] {status}. Call the {dispatch} tool again with exactly these arguments: {{\"tool_name\":{},\"tool_args\":{}}}",
             Value::String(spelled_tool(&call.tool)),
-            call.arguments.get()
+            retry_arguments(call)
         );
     }
     let tool = owner
@@ -3667,8 +3670,71 @@ fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferO
     // not credit the model with the choice.
     format!(
         "[appa] {status}. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. Call the {tool} tool again with exactly these arguments: {}",
-        call.arguments.get()
+        retry_arguments(call)
     )
+}
+
+/// The released call's arguments as the client spelled them. Before the
+/// runtime judges a call, the backend (`normalizeToolArgumentsForPolicy`)
+/// copies a command tool's `command` argument to `cmd`, or `cmd` to
+/// `command`, and a Read, Write or Edit call's `path` to `file_path` when it
+/// has none, so a rule matches every client's spelling. The client's tool
+/// accepts only its own spelling, and a model that follows the tool schema
+/// cannot send the copy, so the retry text leaves it out. The backend copies
+/// the retry the same way, so the retry still matches the released call.
+fn retry_arguments(call: &ProposedCall) -> String {
+    let raw = call.arguments.get();
+    let tool = call.tool.as_str();
+    let tool = tool
+        .strip_prefix("builtin:")
+        .or_else(|| {
+            tool.strip_prefix("host/")
+                .and_then(|rest| rest.split_once('/'))
+                .map(|(_, name)| name)
+        })
+        .unwrap_or(tool);
+    let lowered = tool.to_ascii_lowercase();
+    // The same tools the backend copies an argument for.
+    let command_tool = matches!(
+        lowered.as_str(),
+        "bash" | "shell" | "exec_command" | "run_command" | "cmd"
+    );
+    let path_file_tool = matches!(tool, "Read" | "Write" | "Edit");
+    if !command_tool && !path_file_tool {
+        return raw.to_owned();
+    }
+    let Ok(Value::Object(arguments)) = serde_json::from_str::<Value>(raw) else {
+        return raw.to_owned();
+    };
+    let copies = |original: &str, copy: &str| {
+        arguments.get(original).is_some() && arguments.get(original) == arguments.get(copy)
+    };
+    // The path copy reads `/` where a Windows client sent `\`.
+    let path_copied = arguments
+        .get("path")
+        .and_then(Value::as_str)
+        .map(|path| path.replace('\\', "/"))
+        .is_some_and(|path| arguments.get("file_path").and_then(Value::as_str) == Some(&path));
+    let copy = if command_tool && copies("command", "cmd") {
+        // Codex's exec_command is the one command tool that spells it `cmd`.
+        if lowered == "exec_command" {
+            "command"
+        } else {
+            "cmd"
+        }
+    } else if path_file_tool && path_copied {
+        // Only a call without `file_path` gets the copy.
+        "file_path"
+    } else {
+        return raw.to_owned();
+    };
+    Value::Object(
+        arguments
+            .into_iter()
+            .filter(|(name, _)| name != copy)
+            .collect(),
+    )
+    .to_string()
 }
 
 fn remedy_operation(input: &Input) -> napi::Result<String> {
@@ -4695,6 +4761,70 @@ mod typed_tests {
     }
 
     #[test]
+    fn released_call_names_only_the_clients_own_arguments() {
+        let released = |tool: &str, arguments: serde_json::Value| {
+            let call = appa_runtime_api::ProposedCall {
+                tool: tool.to_owned(),
+                arguments: serde_json::value::to_raw_value(&arguments).unwrap(),
+                cwd: None,
+            };
+            let text = render_released_call("Authorized", &call, None);
+            let (_, json) = text.split_once("exactly these arguments: ").unwrap();
+            serde_json::from_str::<serde_json::Value>(json).unwrap()
+        };
+
+        // Kimi Code's Bash refuses unknown arguments, so a retry that had to
+        // carry the backend's `cmd` copy could never match.
+        assert_eq!(
+            released(
+                "Bash",
+                serde_json::json!({ "command": "curl -s http://127.0.0.1/", "timeout": 30, "cmd": "curl -s http://127.0.0.1/" })
+            ),
+            serde_json::json!({ "command": "curl -s http://127.0.0.1/", "timeout": 30 })
+        );
+        assert_eq!(
+            released(
+                "host/codex/exec_command",
+                serde_json::json!({ "cmd": "git status", "command": "git status" })
+            ),
+            serde_json::json!({ "cmd": "git status" })
+        );
+        // Values that differ are the client's own, and other tools keep theirs.
+        assert_eq!(
+            released("bash", serde_json::json!({ "command": "ls", "cmd": "pwd" })),
+            serde_json::json!({ "command": "ls", "cmd": "pwd" })
+        );
+        assert_eq!(
+            released(
+                "client_tool",
+                serde_json::json!({ "command": "ls", "cmd": "ls" })
+            ),
+            serde_json::json!({ "command": "ls", "cmd": "ls" })
+        );
+        // Kimi Code's Read names the file `path`; the backend adds `file_path`.
+        assert_eq!(
+            released(
+                "Read",
+                serde_json::json!({ "path": "/repo/.env", "file_path": "/repo/.env" })
+            ),
+            serde_json::json!({ "path": "/repo/.env" })
+        );
+        // A Windows path is copied with forward slashes.
+        assert_eq!(
+            released(
+                "Read",
+                serde_json::json!({ "path": "C:\\Users\\me\\.npmrc", "file_path": "C:/Users/me/.npmrc" })
+            ),
+            serde_json::json!({ "path": "C:\\Users\\me\\.npmrc" })
+        );
+        // Claude Code's Read keeps its own `file_path`.
+        assert_eq!(
+            released("Read", serde_json::json!({ "file_path": "/repo/.env" })),
+            serde_json::json!({ "file_path": "/repo/.env" })
+        );
+    }
+
+    #[test]
     fn a_blocked_result_repeats_the_ruling_and_steers_the_model() {
         let ruling = "[appa] Blocked: read_secret cannot run yet.\n\nWhy:\n  - allowed readers would narrow: public -> 1 reader";
         let response = authoritative_unexecuted_response(serde_json::json!({
@@ -4965,6 +5095,9 @@ mod remedy_tests {
         );
 
         assert!(text(&response).contains("this call to archestra__todo_write."));
+        // The runtime records the denial on the call, so asking again in this
+        // session gets no new review.
+        assert!(text(&response).contains("holds for the rest of this session"));
     }
 
     #[test]

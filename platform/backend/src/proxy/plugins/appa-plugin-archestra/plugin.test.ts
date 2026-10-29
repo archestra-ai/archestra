@@ -55,6 +55,7 @@ import {
   AppaClaudeDesktopAdapter,
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
 import {
@@ -3492,39 +3493,49 @@ describe("asking through the client's own question tool", () => {
   /**
    * A Claude Code session whose review rides the client's native card with an
    * Inspect option, on a transport that can place the complete review
-   * text before the card. `askCard` re-asks exactly as the model would: only
-   * the offer ID decides what is shown.
+   * text before the card. OpenCode, Kilo Code and Kimi Code carry the review
+   * in the question itself. `askCard` re-asks exactly as the model would:
+   * only the offer ID decides what is shown.
    */
   function inspectableClaudeReview(params: {
     sessionId: string;
     offerId: string;
-    client?: "opencode" | "kilo" | "claude-desktop";
+    client?: "opencode" | "kilo" | "kimi-code" | "claude-desktop";
   }) {
     const isOpenCodeFamily =
       params.client === "opencode" || params.client === "kilo";
     const adapter =
-      params.client === "kilo"
-        ? new AppaKiloAdapter()
-        : params.client === "opencode"
-          ? new AppaOpenCodeAdapter()
-          : params.client === "claude-desktop"
-            ? new AppaClaudeDesktopAdapter()
-            : new AppaClaudeCodeAdapter();
+      params.client === "kimi-code"
+        ? new AppaKimiCodeAdapter()
+        : params.client === "kilo"
+          ? new AppaKiloAdapter()
+          : params.client === "opencode"
+            ? new AppaOpenCodeAdapter()
+            : params.client === "claude-desktop"
+              ? new AppaClaudeDesktopAdapter()
+              : new AppaClaudeCodeAdapter();
+    const kimi = params.client === "kimi-code";
+    // Claude Code and Claude Desktop show the review before the card; the
+    // other clients carry it in the question itself.
+    const showsReview = !isOpenCodeFamily && !kimi;
     const nativeName = isOpenCodeFamily ? "question" : "AskUserQuestion";
     const plugin = new AppaPluginArchestra([adapter]);
     const context = requestContext({ sessionId: params.sessionId });
-    context.headers = isOpenCodeFamily
-      ? {
-          "user-agent": `${params.client}/1`,
-          "x-opencode-session": params.sessionId,
-          "x-archestra-question-cards": "1",
-        }
-      : params.client === "claude-desktop"
+    context.headers = kimi
+      ? { "user-agent": "kimi-code-cli/2.3.3" }
+      : isOpenCodeFamily
         ? {
-            "user-agent": "claude-cli/2.1.312 (external, cli)",
-            "x-archestra-agent-id": "anthropic_claude_desktop",
+            "user-agent": `${params.client}/1`,
+            "x-opencode-session": params.sessionId,
+            "x-archestra-question-cards": "1",
           }
-        : { "user-agent": "claude-code/1" };
+        : params.client === "claude-desktop"
+          ? {
+              "user-agent": "claude-cli/2.1.312 (external, cli)",
+              "x-archestra-agent-id": "anthropic_claude_desktop",
+            }
+          : { "user-agent": "claude-code/1" };
+    if (kimi) context.requestBody = { prompt_cache_key: params.sessionId };
     const trusted = context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
     ) as AppaTrustedContext;
@@ -3555,20 +3566,23 @@ describe("asking through the client's own question tool", () => {
             }),
           },
         ],
-        canShowToolCallReview: !isOpenCodeFamily,
+        canShowToolCallReview: showsReview,
       });
       if (prepared?.decision !== "allow")
         throw new Error("expected the review card");
       const released = await plugin.onToolCalls({
         ...context,
         toolCalls: prepared.toolCalls,
-        canShowToolCallReview: !isOpenCodeFamily,
+        canShowToolCallReview: showsReview,
       });
       if (released?.decision !== "allow")
         throw new Error("expected the released review card");
       const [call] = released.toolCalls;
+      // Kimi Code cuts tool-call IDs, so no trajectory stamp wraps the native
+      // question id: the answer comes back under that id as issued.
       const stamp = parseTrajectoryStamp(call.wireId ?? "");
-      if (!stamp) throw new Error("expected a trajectory stamp");
+      if (!kimi && !stamp) throw new Error("expected a trajectory stamp");
+      if (kimi && stamp) throw new Error("expected no trajectory stamp");
       const args = JSON.parse(call.arguments as string) as {
         questions: Array<{
           question: string;
@@ -3583,7 +3597,7 @@ describe("asking through the client's own question tool", () => {
       };
       return {
         call,
-        answerId: stamp.callId,
+        answerId: stamp ? stamp.callId : (call.wireId ?? call.id),
         card: args.questions[0],
         reviewDetails: (call as { reviewDetails?: string }).reviewDetails,
       };
@@ -3600,11 +3614,18 @@ describe("asking through the client's own question tool", () => {
             id: answerId,
             name: nativeName,
             content: JSON.stringify(
-              label === ""
-                ? isOpenCodeFamily
-                  ? "User dismissed the question."
-                  : "The user did not answer the questions."
-                : `${isOpenCodeFamily ? "User has answered your questions" : "Your questions have been answered"}: "${question}"="${label}". You can now continue with these answers in mind.`,
+              kimi
+                ? label === ""
+                  ? {
+                      answers: {},
+                      note: "User dismissed the question without answering.",
+                    }
+                  : { answers: { [question]: label } }
+                : label === ""
+                  ? isOpenCodeFamily
+                    ? "User dismissed the question."
+                    : "The user did not answer the questions."
+                  : `${isOpenCodeFamily ? "User has answered your questions" : "Your questions have been answered"}: "${question}"="${label}". You can now continue with these answers in mind.`,
             ),
             isError: false,
           },
@@ -3623,6 +3644,7 @@ describe("asking through the client's own question tool", () => {
   test.each([
     "opencode",
     "kilo",
+    "kimi-code",
   ] as const)("%s connection cards bind previews, deliver full review in native input, and consume explicit answers once", async (client) => {
     const offerId = `offer-${client}-cards`;
     const f = inspectableClaudeReview({
@@ -3674,6 +3696,7 @@ describe("asking through the client's own question tool", () => {
   test.each([
     "opencode",
     "kilo",
+    "kimi-code",
   ] as const)("%s rejects cross-session and altered-question answers without consuming the rightful card", async (client) => {
     const offerId = `offer-${client}-scope`;
     const owner = inspectableClaudeReview({
@@ -3726,6 +3749,7 @@ describe("asking through the client's own question tool", () => {
   test.each([
     "opencode",
     "kilo",
+    "kimi-code",
   ] as const)("%s dismisses without denial and refuses a stale payload", async (client) => {
     const results = vi
       .spyOn(appaService, "processProxyResults")

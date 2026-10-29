@@ -351,7 +351,10 @@ ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
 [aliases.host]
 ${CLAUDE_CODE_BATTERY} = ["archestra"]
 
-# The coding battery's tools under Codex's, OpenCode's, and Claude Desktop Cowork's spellings.
+# The coding battery's tools under Codex's, OpenCode's, Claude Desktop
+# Cowork's and Kimi Code's spellings. Kimi Code shares Claude Code's other tool
+# names; the proxy also evaluates its Read, Write and Edit \`path\` as
+# \`file_path\`.
 [aliases.tool.${CODING_BATTERY}]
 shell = [
   { name = "host/archestra/exec_command", args = { command = "cmd" } },
@@ -366,6 +369,7 @@ edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }
 fetch_url = [
   { name = "host/archestra/webfetch", args = { url = "url" } },
   { name = "host/archestra/mcp__workspace__web_fetch", args = { url = "url" } },
+  { name = "host/archestra/FetchURL", args = { url = "url" } },
 ]
 
 [policy]

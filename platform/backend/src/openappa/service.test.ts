@@ -427,6 +427,49 @@ describe("APPA feature boundary", () => {
     );
   });
 
+  // The coding battery's credential rules read Claude Code's `file_path`. A
+  // Kimi Code session read `.env` without narrowing before this copy.
+  test("evaluates Kimi Code's Read path as file_path too", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+
+    await evaluateToolCalls(
+      session,
+      [
+        { id: "read", name: "Read", arguments: { path: "/repo/.env" } },
+        {
+          id: "read-windows",
+          name: "Read",
+          arguments: { path: "C:\\Users\\me\\appa-qa\\.npmrc" },
+        },
+      ],
+      { canonicalize: (name) => name },
+    );
+
+    const events = native.dispatchHook.mock.calls.map(([raw]) =>
+      JSON.parse(raw),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        tool: "Read",
+        arguments: { path: "/repo/.env", file_path: "/repo/.env" },
+      }),
+    );
+    // On Windows the copy reads `/`, as the battery's `*/.npmrc` does.
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        tool: "Read",
+        arguments: {
+          path: "C:\\Users\\me\\appa-qa\\.npmrc",
+          file_path: "C:/Users/me/appa-qa/.npmrc",
+        },
+      }),
+    );
+  });
+
   test("forwards signed child lineage on session_start from processProxyResults and startRuntimeChild", async () => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({

@@ -28,6 +28,7 @@ import {
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
   KILO_GUARD_CLIENT,
+  KIMI_CODE_GUARD_CLIENT,
   OPENCODE_GUARD_CLIENT,
 } from "./clients";
 import {
@@ -160,9 +161,30 @@ async function expectValidBash(script: string): Promise<void> {
 // only assert each descriptor injects the right client-specific strings and
 // that the result is still valid bash.
 describe.each([
-  { name: "Codex", client: CODEX_GUARD_CLIENT },
-  { name: "Copilot CLI", client: COPILOT_GUARD_CLIENT },
-])("$name startup guard", ({ client }: { client: StartupGuardClient }) => {
+  {
+    name: "Codex",
+    client: CODEX_GUARD_CLIENT,
+    mcpRemove: "command codex mcp remove",
+  },
+  {
+    name: "Copilot CLI",
+    client: COPILOT_GUARD_CLIENT,
+    mcpRemove: "command copilot mcp remove",
+  },
+  // Kimi Code has no remove command: its connection helper removes the
+  // gateway, routing and skills together.
+  {
+    name: "Kimi Code",
+    client: KIMI_CODE_GUARD_CLIENT,
+    mcpRemove: 'node "$HOME/.archestra/kimi-code/lifecycle.cjs" disconnect',
+  },
+])("$name startup guard", ({
+  client,
+  mcpRemove,
+}: {
+  client: StartupGuardClient;
+  mcpRemove: string;
+}) => {
   test("renders valid bash for the guard script and its install section", async () => {
     await expectValidBash(renderStartupGuardScript(CTX, client));
     await expectValidBash(
@@ -184,7 +206,7 @@ describe.each([
   test("prompts name the client and disconnect mirrors its own CLI", () => {
     const script = renderStartupGuardScript(CTX, client);
     expect(script).toContain(`from ${client.promptName} now? (Y/n)`);
-    expect(script).toContain(`command ${client.binary} mcp remove`);
+    expect(script).toContain(mcpRemove);
   });
 
   test("every user-facing message names this client, never a hardcoded 'Claude'", () => {

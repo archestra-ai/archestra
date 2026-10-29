@@ -36,6 +36,57 @@ export function openCodeQuestionRuling(
 }
 
 /**
+ * Kimi Code answers its question tool with JSON keyed by the question it
+ * showed: `{"answers":{"<question>":"<label>"}}`. A dismissed question has no
+ * answers and a note. Any other shape is "unrecognized", never a guess.
+ */
+export function kimiCodeQuestionRuling(
+  result: NativeQuestionResult,
+  question: string,
+): NativeQuestionReading {
+  const reading = kimiCodeQuestionSelection(result, question, RULING_LABELS);
+  if (typeof reading === "object") {
+    return reading.label === "Approve" ? "approve" : "deny";
+  }
+  return reading;
+}
+
+/**
+ * Reads which of the given labels Kimi Code's answer selects. The answer must
+ * name the question asked: an answer to another question selects nothing.
+ */
+export function kimiCodeQuestionSelection(
+  result: NativeQuestionResult,
+  question: string,
+  labels: readonly string[],
+): { label: string } | NativeQuestionNoAnswer | "unrecognized" {
+  if (result.isError) return "unavailable";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(result.content);
+  } catch {
+    return "unrecognized";
+  }
+  const record =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  const answers = record?.answers;
+  if (!answers || typeof answers !== "object" || Array.isArray(answers))
+    return "unrecognized";
+  const entries = Object.entries(answers);
+  if (entries.length === 0)
+    return record?.note === KIMI_CODE_DISMISSED_NOTE
+      ? "declined"
+      : "unrecognized";
+  if (entries.length !== 1 || entries[0][0] !== question) return "unrecognized";
+  const answer = entries[0][1];
+  return typeof answer === "string" && labels.includes(answer)
+    ? { label: answer }
+    : "unrecognized";
+}
+
+/**
  * Reads which of the given option labels the answer selects, for a question
  * the platform wrote. Returns the selected label, a known terminal no-answer,
  * or "unrecognized" for a wording the adapter does not know. An unrecognized
@@ -132,6 +183,9 @@ function stringValues(value: unknown): string[] {
 }
 
 const RULING_LABELS = ["Approve", "Deny"];
+
+const KIMI_CODE_DISMISSED_NOTE =
+  "User dismissed the question without answering.";
 
 // The openings of a submitted answer. Claude Code writes the first, OpenCode
 // and earlier Claude Code versions the second.

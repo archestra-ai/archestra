@@ -108,6 +108,7 @@ import {
   connectionSetupBody,
   connectionSetupInputsKey,
   connectionSetupKeyDigest,
+  kimiCodeDefaultModel,
 } from "./connection-setup-payload";
 import { GatewayLink } from "./gateway-link";
 import { GatewayServersSummary } from "./gateway-servers-summary";
@@ -516,7 +517,8 @@ export function ConnectCommandPanel({
   const supportsModelChoice =
     client.id === "copilot-cli" ||
     client.id === "claude-desktop" ||
-    client.id === "pi";
+    client.id === "pi" ||
+    client.id === "kimi-code";
   const [modelChoice, setModelChoice] = useState<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: provider is the reset trigger
   useEffect(() => setModelChoice(null), [provider]);
@@ -543,12 +545,12 @@ export function ConnectCommandPanel({
       ? (modelChoice ??
         (client.id === "claude-desktop"
           ? "claude-haiku-4-5-20251001"
-          : defaultConnectionModel({
+          : (defaultConnectionModel({
               provider,
               modelIds: (modelsByProvider[provider] ?? []).map(
                 (model) => model.id,
               ),
-            })))
+            }) ?? kimiCodeDefaultModel(client.id, provider))))
       : null;
   const modelOptions = useMemo(() => {
     if (!supportsModelChoice || !provider) return [];
@@ -707,6 +709,8 @@ export function ConnectCommandPanel({
       (provider === "anthropic" || provider === "bedrock")) ||
       ((client.id === "codex" || client.id === "pi") &&
         provider === "openai") ||
+      (client.id === "kimi-code" &&
+        (provider === "kimi-code" || provider === "kimi")) ||
       openCodeFamily);
 
   // The backend's reason for refusing the latest setup request, read once the

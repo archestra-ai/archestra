@@ -188054,7 +188054,8 @@
                       "copilot-cli",
                       "opencode",
                       "kilo",
-                      "pi"
+                      "pi",
+                      "kimi-code"
                     ]
                   },
                   "platform": {
@@ -188712,7 +188713,8 @@
                         "copilot-cli",
                         "opencode",
                         "kilo",
-                        "pi"
+                        "pi",
+                        "kimi-code"
                       ]
                     },
                     "platform": {
@@ -189100,7 +189102,8 @@
                         "copilot-cli",
                         "opencode",
                         "kilo",
-                        "pi"
+                        "pi",
+                        "kimi-code"
                       ]
                     },
                     "platform": {
@@ -192377,7 +192380,8 @@
                       "codex",
                       "copilot-cli",
                       "opencode",
-                      "kilo"
+                      "kilo",
+                      "kimi-code"
                     ]
                   },
                   "platform": {
@@ -192585,7 +192589,8 @@
                         "codex",
                         "copilot-cli",
                         "opencode",
-                        "kilo"
+                        "kilo",
+                        "kimi-code"
                       ]
                     },
                     "platform": {
@@ -193752,7 +193757,8 @@
                       "copilot-cli",
                       "opencode",
                       "kilo",
-                      "pi"
+                      "pi",
+                      "kimi-code"
                     ]
                   },
                   "platform": {
@@ -193944,7 +193950,8 @@
                               "copilot-cli",
                               "opencode",
                               "kilo",
-                              "pi"
+                              "pi",
+                              "kimi-code"
                             ]
                           }
                         },
@@ -278249,7 +278256,8 @@
                 "cursor",
                 "opencode",
                 "kilo",
-                "pi"
+                "pi",
+                "kimi-code"
               ]
             },
             "in": "query",
@@ -544343,7 +544351,8 @@
                 "cursor",
                 "opencode",
                 "kilo",
-                "pi"
+                "pi",
+                "kimi-code"
               ]
             },
             "in": "query",

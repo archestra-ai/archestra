@@ -284,6 +284,72 @@ describe("OpenAPPA child-return markers", () => {
     expect(other).toEqual(unchanged);
   });
 
+  test.each([
+    ["as Kimi Code stores it", ""],
+    ["as Kimi Code sends it to the model", "Wall time: 0.140 seconds\n"],
+  ])("reads a Kimi Code Agent result %s and drops its framing", (_, wallTime) => {
+    const output = `${wallTime}agent_id: agent-0\nactual_subagent_type: explore\nstatus: completed\nstop_reason: completed\n\n[summary]\n${completeResponseCarrier(RETURN)}\n\nresume_hint: Continue with Agent(resume="agent-0", prompt="..."). Use agent_id only; do not set subagent_type.`;
+    const { body, collected } = collectNativeResult(output, "Agent");
+
+    expect(collected.completions).toEqual([
+      expect.objectContaining({
+        value: RETURN.value,
+        envelopeId: "native-result",
+      }),
+    ]);
+    expect(nativeResultContent(body)).toBe(RETURN.value);
+  });
+
+  test("reads a Kimi Code Agent result whose receipt was already stripped", () => {
+    // The proxy strips the child's trajectory receipt from history first,
+    // with the line break after the summary heading.
+    const output = `Wall time: 0.318 seconds\nagent_id: agent-0\nactual_subagent_type: explore\nstatus: completed\nstop_reason: completed\n\n[summary]${carrier(requiredMarker(RETURN))}\n\nresume_hint: Continue with Agent(resume="agent-0", prompt="...").`;
+    const { body, collected } = collectNativeResult(output, "Agent");
+
+    expect(collected.completions).toEqual([
+      expect.objectContaining({ value: RETURN.value }),
+    ]);
+    expect(nativeResultContent(body)).toBe(RETURN.value);
+  });
+
+  test("reads a Kimi Code Agent result sent as a text part", () => {
+    const text = `Wall time: 0.140 seconds\nagent_id: agent-0\nactual_subagent_type: explore\nstatus: completed\nstop_reason: completed\n\n[summary]\n${completeResponseCarrier(RETURN)}\n\nresume_hint: Continue with Agent(resume="agent-0", prompt="...").`;
+    const body = {
+      messages: [
+        {
+          role: "assistant",
+          tool_calls: [nativeToolCall("native-result", "Agent")],
+        },
+        {
+          role: "tool",
+          tool_call_id: "native-result",
+          content: [{ type: "text", text }],
+        },
+      ],
+    };
+
+    const collected = collectAndStripChildReturns(body);
+
+    expect(collected.completions).toEqual([
+      expect.objectContaining({
+        value: RETURN.value,
+        envelopeId: "native-result",
+      }),
+    ]);
+    expect(body.messages[1].content).toEqual([
+      { type: "text", text: RETURN.value },
+    ]);
+  });
+
+  test("leaves a Kimi Code Agent result without a return marker as Kimi Code sent it", () => {
+    const output =
+      'Wall time: 0.126 seconds\nagent_id: agent-0\nactual_subagent_type: explore\nstatus: completed\nstop_reason: completed\n\n[summary]\nUNSIGNED CHILD TEXT\n\nresume_hint: Continue with Agent(resume="agent-0", prompt="...").';
+    const { body, collected } = collectNativeResult(output, "Agent");
+
+    expect(collected.completions).toEqual([]);
+    expect(nativeResultContent(body)).toBe(output);
+  });
+
   test("treats a synthetic OpenCode user message as a child return", () => {
     const output = `<task id="child" state="completed">\n<summary>UNTRUSTED</summary>\n<task_result>\n${carrier(requiredMarker(RETURN))}\n</task_result>\n</task>`;
     const body = {

@@ -22,7 +22,9 @@ import {
   type InteractionSource,
   InteractionSourceSchema,
   isCodexOriginator,
+  isKimiCodeUserAgent,
   isProviderApiKeyOptional,
+  KIMI_CODE_CLIENT_HEADERS,
   MODEL_POOL_ID_HEADER,
   openCodeFamilySource,
   PROVIDER_BASE_URL_HEADER,
@@ -1618,6 +1620,22 @@ export async function handleLLMProxy<
           { model: requestAdapter.getModel() },
           `[${providerName}Proxy] stripping anthropic-beta for non-Claude custom upstream`,
         );
+      }
+    }
+
+    // Kimi Code identifies itself with its User-Agent and X-Msh-* headers, as
+    // it does when it calls the Kimi Code API directly. Relay those headers as
+    // sent, so the API sees the real client behind a Kimi Code sign-in token.
+    // Only the headers Kimi Code itself sends travel; any other x-msh-* header
+    // on the request does not.
+    if (
+      providerName === "kimi-code" &&
+      typeof headersObj["user-agent"] === "string" &&
+      isKimiCodeUserAgent(headersObj["user-agent"])
+    ) {
+      for (const name of KIMI_CODE_CLIENT_HEADERS) {
+        const value = headersObj[name];
+        if (typeof value === "string") headersToForward[name] = value;
       }
     }
 

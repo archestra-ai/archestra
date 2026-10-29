@@ -199,7 +199,7 @@ describe("run tools", () => {
       "Run not found",
     );
     expect((result.content[0] as { text: string }).text).not.toContain(
-      "not assigned",
+      "is not available through",
     );
   });
 
@@ -231,7 +231,9 @@ describe("run tools", () => {
       gatewayContext,
     );
     expect(everyone.isError).toBe(true);
-    expect(JSON.stringify(everyone.content)).toContain("not assigned");
+    expect(JSON.stringify(everyone.content)).toContain(
+      "is not available through",
+    );
 
     const mine = await executeArchestraTool(
       TOOL_LIST_AGENT_RUNS_FULL_NAME,

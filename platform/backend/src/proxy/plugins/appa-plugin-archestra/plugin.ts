@@ -6,6 +6,7 @@ import {
   buildElicitationMandateInstruction,
   isAgentTool,
   isYellToolShortName,
+  KIMI_CODE_CLIENT_ID,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   PROXY_STAMPED_TOOL_ARGUMENTS,
   SELF_FORK_TOOL_NAME,
@@ -41,7 +42,7 @@ import {
   verifyChildTrajectoryReceipt,
 } from "@/openappa/child-trajectory-receipt";
 import { recordOpenAppaClientFailure } from "@/openappa/client-failure-report";
-import { normalizeCommandExecutionArguments } from "@/openappa/command-normalization";
+import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
   delegationEnabled,
@@ -824,8 +825,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // the user's answer, and then asks again in prose.
       const nativeQuestion =
         binding.adapter?.nativeQuestion &&
-        binding.adapter.nativeQuestion.isAvailable?.(binding.requestHeaders) !==
-          false &&
+        binding.adapter.nativeQuestion.isAvailable?.(
+          binding.requestHeaders,
+          binding.requestBody,
+        ) !== false &&
         declaresNativeQuestion(binding, binding.adapter.nativeQuestion.toolName)
           ? binding.adapter.nativeQuestion.toolName
           : undefined;
@@ -993,7 +996,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           if (!entry.reviewedArguments) return true;
           try {
             return isDeepStrictEqual(
-              normalizeCommandExecutionArguments(
+              normalizeToolArgumentsForPolicy(
                 target.toolCallName,
                 JSON.parse(target.toolCallArgs),
               ),
@@ -2092,7 +2095,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (
       !native?.fromAskUser ||
       !isSpecialToolMember(binding, call, "askUser") ||
-      native.isAvailable?.(binding.requestHeaders) === false ||
+      native.isAvailable?.(binding.requestHeaders, binding.requestBody) ===
+        false ||
       !declaresNativeQuestion(binding, native.toolName) ||
       archestraMcpBranding.getToolShortName(
         this.canonicalize(binding, call),
@@ -5134,10 +5138,12 @@ async function canonicalizeHitlAskUserCall(params: {
       offerIds: params.offerIds,
     });
     if (inspectable) {
-      const family =
+      // These clients show the question text itself, so the review rides in it.
+      const reviewInQuestion =
         params.binding.adapter?.id === "opencode" ||
-        params.binding.adapter?.id === "kilo";
-      const askedQuestion = family
+        params.binding.adapter?.id === "kilo" ||
+        params.binding.adapter?.id === KIMI_CODE_CLIENT_ID;
+      const askedQuestion = reviewInQuestion
         ? openCodeReviewQuestion(inspectable.card, inspectable.reviewText)
         : params.binding.adapter?.id === "claude-desktop"
           ? claudeDesktopReviewQuestion(inspectable.card)
@@ -5763,11 +5769,14 @@ async function recordInspectableHitlAnswer(params: {
       ? { isError: params.answer.isError }
       : {}),
   };
-  let reading = labeledQuestionRuling(
-    result,
-    params.askedQuestion ?? asked.card.shortQuestion ?? asked.card.question,
-    asked.card.options.map((option) => option.label),
-  );
+  const shownQuestion =
+    params.askedQuestion ?? asked.card.shortQuestion ?? asked.card.question;
+  const cardLabels = asked.card.options.map((option) => option.label);
+  // A client whose answer names its question reads the answer itself.
+  const nativeQuestion = binding.adapter?.nativeQuestion;
+  let reading = nativeQuestion?.selectionFromResult
+    ? nativeQuestion.selectionFromResult(result, shownQuestion, cardLabels)
+    : labeledQuestionRuling(result, shownQuestion, cardLabels);
   let answer =
     typeof reading === "object"
       ? hitlReviewCardAnswer(reading.label)
@@ -5881,9 +5890,10 @@ async function sealInspectableClosure(params: {
 
 /**
  * Whether an offer-backed ask_user call becomes an inspectable native card:
- * Claude needs transport support for review text. OpenCode-family questions
- * carry it in the native input, including on transports with no text injection.
- * Their connection plugin enhances presentation; native surfaces remain usable.
+ * Claude needs transport support for review text. OpenCode-family and Kimi
+ * Code questions carry it in the native input, including on transports with
+ * no text injection. The OpenCode connection plugin enhances presentation;
+ * native surfaces remain usable.
  */
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -5895,10 +5905,12 @@ function inspectsNatively(
   const native = binding.adapter?.nativeQuestion;
   return (
     !!native?.fromAskUser &&
-    native.isAvailable?.(binding.requestHeaders) !== false &&
+    native.isAvailable?.(binding.requestHeaders, binding.requestBody) !==
+      false &&
     declaresNativeQuestion(binding, native.toolName) &&
     ((isClaudeCodeFamilyAdapter(binding.adapter?.id) &&
       canShowToolCallReview) ||
+      binding.adapter?.id === KIMI_CODE_CLIENT_ID ||
       ((binding.adapter?.id === "opencode" || binding.adapter?.id === "kilo") &&
         binding.requestHeaders["x-archestra-question-cards"] === "1"))
   );
@@ -6511,10 +6523,14 @@ function hitlDecisionGuidance(
       "The user already answered, so do not ask about the same plan again.",
     ].join(" ");
   }
+  // A denial is final for that call in this session (OpenAPPA records it on
+  // the call): a model that asked its own "approve?" question and ran the
+  // denied plan again only got the denial back.
   return [
     "The user did not approve the pending OpenAPPA review.",
     "Do not call execute_remedy_plan for it, and do not retry the blocked call.",
-    "Tell the user briefly that the action stays blocked, and stop that action.",
+    "The denial holds for the rest of this session, also when the user asks for the same call again: do not propose it again, do not change its arguments to get another review, and do not ask the user to approve it yourself.",
+    "Tell the user briefly that the action stays blocked and that a new session can ask for it again, and stop that action.",
   ].join(" ");
 }
 
@@ -6890,7 +6906,8 @@ function toolInputOf(
 /**
  * Appends trajectory stamps to tool-call IDs for supported wire families.
  * Stamped IDs identify source session lineage in future turns.
- * Skips sessions that lack caller scoping, or models that truncate tool-call IDs.
+ * Skips sessions that lack caller scoping, models that truncate tool-call IDs,
+ * and stamps longer than the client's tool-call ID limit.
  */
 function trajectoryStamper(
   binding: AppaPluginBinding,
@@ -6914,9 +6931,9 @@ function trajectoryStamper(
     shortensToolCallIds(context)
   )
     return undefined;
-  return (call) => ({
-    ...call,
-    wireId: stampToolCallId({
+  const limit = binding.adapter?.maxToolCallIdLength;
+  return (call) => {
+    const wireId = stampToolCallId({
       // Compose transport stamps instead of replacing inner wire identities,
       // such as the signed native-question ID used to claim a HITL answer.
       callId: call.wireId ?? call.id,
@@ -6924,8 +6941,12 @@ function trajectoryStamper(
       organizationId: session.organization_id,
       callerId,
       secret,
-    }),
-  });
+    });
+    // A client that cuts longer IDs would send back one the proxy cannot match.
+    return limit !== undefined && wireId.length > limit
+      ? call
+      : { ...call, wireId };
+  };
 }
 
 /**

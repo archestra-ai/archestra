@@ -32,7 +32,7 @@ import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 import { AgentCell } from "./_parts/agent-cell";
 import type { LogSession } from "./_parts/logs-table-format";
-import { ModelCell } from "./_parts/model-cell";
+import { ModelCell, makerLogoCount } from "./_parts/model-cell";
 import { OriginFilter } from "./_parts/origin-filter";
 import { SessionCell } from "./_parts/session-cell";
 import { TimeCell } from "./_parts/time-cell";
@@ -169,6 +169,12 @@ function SessionsTable() {
   const { label: providerLabel } = useModelProviderCatalog();
 
   const sessions = sessionsResponse?.data ?? [];
+  // Every row keeps room for the widest logo stack on the page, so the model
+  // names line up.
+  const modelLogoSlots = Math.max(
+    1,
+    ...sessions.map((session) => makerLogoCount(session, providerLabel)),
+  );
   const { data: agents } = useAgentOptionsByIds({
     ids: sessions.flatMap((session) =>
       session.profileId ? [session.profileId] : [],
@@ -224,7 +230,11 @@ function SessionsTable() {
         size: 184,
         minSize: 164,
         cell: ({ row }) => (
-          <ModelCell session={row.original} providerLabel={providerLabel} />
+          <ModelCell
+            session={row.original}
+            providerLabel={providerLabel}
+            logoSlots={modelLogoSlots}
+          />
         ),
       },
       {
@@ -242,7 +252,7 @@ function SessionsTable() {
         cell: ({ row }) => <TimeCell session={row.original} />,
       },
     ],
-    [agents, providerLabel],
+    [agents, providerLabel, modelLogoSlots],
   );
 
   // A failed fetch leaves no rows; show a retry state instead of the table's

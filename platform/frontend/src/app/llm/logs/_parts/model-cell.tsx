@@ -22,49 +22,42 @@ import { MakerDisc } from "./maker-disc";
 export function ModelCell({
   session,
   providerLabel,
+  logoSlots,
 }: {
   session: LogSession;
   /** The organization's name for a provider, from the provider catalog. */
   providerLabel: (provider: SupportedProvider) => string;
+  /**
+   * Logo places every row keeps: the most any row on the page shows
+   * (`makerLogoCount`), so each row's logos and model name start at the same
+   * place.
+   */
+  logoSlots: number;
 }) {
-  const models = session.models ?? [];
-  if (models.length === 0) {
+  const entries = modelEntries(session, providerLabel);
+  if (entries.length === 0) {
     return <span className="text-xs text-muted-foreground">—</span>;
   }
-  const entries = models.map((id) => {
-    const origin = describeModelOrigin({
-      model: id,
-      interactionType: session.lastInteractionType,
-    });
-    return {
-      id,
-      name: shortModelName(id),
-      provider: origin.kind === "unknown" ? null : origin.provider,
-      vendor:
-        origin.kind === "aggregator"
-          ? providerLabel(origin.provider)
-          : origin.name,
-    };
-  });
   const [first, ...rest] = entries;
-  const logos = Array.from(
-    new Map(
-      entries.map((entry) => [entry.provider ?? entry.vendor, entry]),
-    ).values(),
-  ).slice(0, 3);
+  const logos = makerLogos(entries);
   const secondLine =
     rest.length > 0
       ? `+ ${rest.length} more model${rest.length > 1 ? "s" : ""}`
       : isFreeTierModel(first.id)
         ? `${first.vendor} · free tier`
         : first.vendor;
+  const slots = Math.min(Math.max(logoSlots, logos.length), MAX_LOGOS);
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <UnstyledButton className="flex w-full min-w-0 cursor-default items-center gap-2 text-left">
           {/* The second line already names the maker. */}
-          <span aria-hidden="true" className="flex shrink-0 -space-x-1.5">
+          <span
+            aria-hidden="true"
+            className="flex shrink-0 -space-x-1.5"
+            style={{ width: DISC + (slots - 1) * (DISC - DISC_OVERLAP) }}
+          >
             {logos.map((entry) => (
               <MakerDisc
                 key={entry.provider ?? entry.vendor}
@@ -102,4 +95,50 @@ export function ModelCell({
       </TooltipContent>
     </Tooltip>
   );
+}
+
+/** How many maker logos a session's model cell shows. */
+export function makerLogoCount(
+  session: LogSession,
+  providerLabel: (provider: SupportedProvider) => string,
+): number {
+  return makerLogos(modelEntries(session, providerLabel)).length;
+}
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+const MAX_LOGOS = 3;
+// MakerDisc's default size, and the overlap of `-space-x-1.5`.
+const DISC = 20;
+const DISC_OVERLAP = 6;
+
+function modelEntries(
+  session: LogSession,
+  providerLabel: (provider: SupportedProvider) => string,
+) {
+  return (session.models ?? []).map((id) => {
+    const origin = describeModelOrigin({
+      model: id,
+      interactionType: session.lastInteractionType,
+    });
+    return {
+      id,
+      name: shortModelName(id),
+      provider: origin.kind === "unknown" ? null : origin.provider,
+      vendor:
+        origin.kind === "aggregator"
+          ? providerLabel(origin.provider)
+          : origin.name,
+    };
+  });
+}
+
+function makerLogos(entries: ReturnType<typeof modelEntries>) {
+  return Array.from(
+    new Map(
+      entries.map((entry) => [entry.provider ?? entry.vendor, entry]),
+    ).values(),
+  ).slice(0, MAX_LOGOS);
 }

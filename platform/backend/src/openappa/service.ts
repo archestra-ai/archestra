@@ -28,7 +28,7 @@ import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { normalizeCommandExecutionArguments } from "@/openappa/command-normalization";
+import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
@@ -1365,7 +1365,7 @@ export async function evaluateToolCalls(
           options.control?.name,
           options.supportsDelegation,
         ),
-        arguments: normalizeCommandExecutionArguments(
+        arguments: normalizeToolArgumentsForPolicy(
           tool,
           JSON.parse(target.toolCallArgs),
         ),

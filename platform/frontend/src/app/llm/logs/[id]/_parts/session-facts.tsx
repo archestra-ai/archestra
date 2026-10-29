@@ -698,6 +698,7 @@ const GROUPING_LABELS: Record<string, string> = {
   codex_session: "Codex session",
   opencode_session: "OpenCode session",
   kilo_session: "Kilo session",
+  kimi_code_session: "Kimi Code session",
   claude_metadata: "Claude session",
   claude_code_header: "Claude Code session",
   claude_code: "Claude session",

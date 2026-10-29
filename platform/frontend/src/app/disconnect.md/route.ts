@@ -190,6 +190,26 @@ const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
     finish:
       "Tell the user to open a new terminal so the removed environment variables are gone.",
   },
+  "kimi-code": {
+    binary: "kimi",
+    inventory: `- The connection records what it changed in ~/.archestra/kimi-code/state.json.
+- In \${KIMI_CODE_HOME:-~/.kimi-code}/config.toml: the block between
+  "# >>> archestra kimi-code connection >>>" and "# <<< archestra kimi-code connection <<<"
+  (the archestra provider and model whose base_url points at {{HOST}}, and the
+  permission rules for the gateway's tools), default_model = "archestra" and
+  default_permission_mode = "yolo".
+- In mcp.json in the same folder: the mcpServers entry whose URL starts with {{BASE}}/mcp/.
+- In AGENTS.md in the same folder: the block between the archestra kimi-code connection markers.
+- Skills: the checkout under ~/.archestra/kimi-code/skills/, listed in extra_skill_dirs.`,
+    manual: `- Run node ~/.archestra/kimi-code/lifecycle.cjs disconnect. It removes the provider,
+  model, permission rules, gateway entry, instructions block and skills checkout together,
+  and restores the default_model and default_permission_mode the user had before.
+- If that helper is missing, remove the items above by hand. Replace default_model = "archestra"
+  and default_permission_mode = "yolo" with the lines from config.toml.archestra-backup, or
+  delete them when the backup has none. Then delete ~/.archestra/kimi-code.`,
+    finish:
+      "Tell the user to open a new terminal and start a new Kimi Code session, and to remove the gateway's sign-in with /mcp-config if they no longer need it.",
+  },
   ...openCodeFamilyRecord(openCodeFamilyGuardClient),
 };
 

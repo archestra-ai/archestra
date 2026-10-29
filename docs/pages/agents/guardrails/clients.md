@@ -24,8 +24,16 @@ These clients work without extra configuration:
 - **Pi**
 - **OpenCode**
 - **Kilo Code**
+- **Kimi Code**
 
 Connect the client to the LLM Proxy and the MCP Gateway on the [connection page](/docs/get-started/connect). The client needs both: the LLM Proxy checks each tool call, and the MCP Gateway gives the agent the tools to handle a block, such as [`get_remedy_plans`](/docs/reference/archestra-mcp-server#get_remedy_plans) and [`yell`](/docs/reference/archestra-mcp-server#yell).
+
+### Use Guardrails in Kimi Code
+
+Kimi Code shows a review in its own question form: choose **Allow**, **Deny**, or **Inspect**. **Inspect** shows the complete review, and you then choose **Allow** or **Deny**. Escape closes the form without approving or denying.
+
+- Subagents run under Guardrails only as new foreground `Agent` calls. A background, resumed, or swarm subagent is refused before it starts.
+- Setup starts Kimi Code in Ask When Needed mode, so the guardrail helpers run without a prompt. Kimi Code 2.3.3 cannot approve single gateway tools, so this mode also runs your other gateway calls and routine commands without asking. It still asks before dangerous commands and shows reviews.
 
 ### Review Calls in OpenCode and Kilo Code
 

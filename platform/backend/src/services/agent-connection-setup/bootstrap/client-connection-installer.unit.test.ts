@@ -483,15 +483,21 @@ test.each([
   { serverName: "r&d_(prod)", runs: false, signInStatus: 0 },
   { serverName: "prod_gateway", runs: true, signInStatus: 0, pi: true },
   { serverName: "prod_gateway", runs: true, signInStatus: 1, pi: true },
+  { serverName: "prod_gateway", runs: true, signInStatus: 0, kimi: true },
+  { serverName: "prod_gateway", runs: true, signInStatus: 1, kimi: true },
 ])("Windows sign-in for $serverName (exit $signInStatus) reports success only after sign-in completes", async ({
   serverName,
   runs,
   signInStatus,
   pi,
+  kimi,
 }) => {
+  // Kimi Code signs in through a Node.js helper in the home directory.
   const command = pi
     ? ["arcpi", "--reconnect"]
-    : ["opencode", "mcp", "auth", serverName];
+    : kimi
+      ? ["node", "~/.archestra/kimi-code/lifecycle.cjs", "sign-in"]
+      : ["opencode", "mcp", "auth", serverName];
   const ending = {
     label: "OpenCode",
     appName: "Test",
@@ -583,13 +589,24 @@ test.each([
   if (runs) {
     expect(signIn).toEqual([
       {
-        command: pi ? process.execPath : "opencode mcp auth prod_gateway",
+        command:
+          pi || kimi ? process.execPath : "opencode mcp auth prod_gateway",
         args: pi
           ? [
               join("C:/User name 日本語", ".archestra", "pi", "launch.cjs"),
               "--reconnect",
             ]
-          : expect.objectContaining({ shell: true }),
+          : kimi
+            ? [
+                join(
+                  "C:/User name 日本語",
+                  ".archestra",
+                  "kimi-code",
+                  "lifecycle.cjs",
+                ),
+                "sign-in",
+              ]
+            : expect.objectContaining({ shell: true }),
       },
     ]);
   } else {

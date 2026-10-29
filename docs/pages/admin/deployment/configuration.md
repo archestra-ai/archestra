@@ -2,12 +2,25 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Archestra reads these environment variables at startup. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. The Docker quickstart and the Helm chart run with none set. See [Helm](/docs/admin/deployment/helm) for Kubernetes installation.
+
+## Shutdown
+
+Give long model requests and MCP tool calls time to finish when a replica stops.
+
+- **`ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS`** — Seconds after a stop signal for admitted requests, handlers and background persistence to finish. Default `60`; integer `1`–`86400`.
+- **`ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS`** — Extra time for persistence, dependency cleanup and telemetry. Default `20`; integer `5`–`86400`. The backend deadline is `max(request drain, worker task shutdown timeout) + cleanup`. The unified container gives the backend another 10 seconds before forcing it to stop.
+
+- **`ARCHESTRA_SERVER_POD_GRACE_SECONDS`** — Injected by Helm from the rendered pod grace period. At server startup, checks the resolved environment values, including Secret and ConfigMap imports, against `max(drain, worker timeout) + cleanup + 40`. Insufficient grace prevents startup. Leave unset outside Helm unless you want this validation.
+
+The Helm chart derives web and worker pod grace periods from settings it can read, reserving 40 seconds beyond the backend deadline. The `archestra.shutdown` values default to `null`, preserving existing `envFrom`, `envFromSecrets` and `envWithValueFrom` settings. Explicit chart settings override imported values; literal `archestra.env` values take precedence over the chart settings.
+
+Helm cannot read timeout values inside a Secret or ConfigMap. When importing longer durations, set `archestra.terminationGracePeriodSeconds` high enough for the resolved values. For example, an imported worker timeout of 90 seconds with default drain and cleanup requires at least 150 seconds of pod grace. Both servers validate that budget before accepting requests.
 
 ## Database
 

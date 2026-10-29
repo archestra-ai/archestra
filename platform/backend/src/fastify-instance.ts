@@ -133,7 +133,7 @@ export const createFastifyInstance = () => {
     .setErrorHandler<ApiError | Error>(handleServerError);
 
   llmProxyTiming.register(fastify);
-  registerLlmProxyDrain(fastify);
+  registerLlmProxyDrain(fastify, config.shutdown.drainSeconds * 1000);
   return fastify;
 };
 

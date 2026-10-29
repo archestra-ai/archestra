@@ -17,7 +17,6 @@ import {
   buildAllowAttribute,
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
-import { RefreshCw } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
   useCallback,
@@ -1607,10 +1606,6 @@ function SandboxIframe({
             className="h-0.5 w-full overflow-hidden bg-primary/20"
           >
             <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
-          </div>
-          <div className="mt-3 flex items-center gap-1.5 rounded-full border border-border/80 bg-background/95 px-3 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm">
-            <RefreshCw className="h-3 w-3 animate-spin text-primary [animation-duration:650ms]" />
-            <span>Reloading app…</span>
           </div>
         </output>
       )}

@@ -6,6 +6,7 @@ import {
   Search,
   TerminalSquare,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AgentRunChatSession } from "@/app/chat/runs/page.client";
 import { AgentRunState } from "@/components/agent-run-state";
@@ -28,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useAgentRuns } from "@/lib/agent-runtime.query";
+import { type AgentRunListItem, useAgentRuns } from "@/lib/agent-runtime.query";
 import { useSession } from "@/lib/auth/auth.query";
 
 export function AgentRuns({ agentId }: { agentId: string }) {
@@ -66,17 +67,14 @@ export function AgentRuns({ agentId }: { agentId: string }) {
   const index = runs.findIndex((run) => run.taskId === selected?.taskId);
   const filtered = runs.filter(
     (run) =>
-      (starter === "anyone" || run.actorUserId === starter) &&
-      `${run.title} ${run.taskId} ${run.initiatorName ?? ""}`
+      (starter === "anyone" || starterKey(run) === starter) &&
+      `${run.title} ${run.taskId} ${initiatorLabel(run)}`
         .toLowerCase()
-        .includes(search.toLowerCase()),
+        .includes(search.trim().toLowerCase()),
   );
   const starters = Array.from(
     new Map(
-      runs.map((run) => [
-        run.actorUserId ?? run.actorKind,
-        run.initiatorName ?? run.actorKind,
-      ]),
+      runs.map((run) => [starterKey(run), initiatorLabel(run)]),
     ).entries(),
   );
   const choose = (id: string) => {
@@ -99,15 +97,30 @@ export function AgentRuns({ agentId }: { agentId: string }) {
       <EmptyState
         icon={TerminalSquare}
         title="No runs yet"
-        description="Start a run to see its output here."
+        description={
+          <span>
+            Start a run from{" "}
+            <Link
+              href={`/chat/new?agent_id=${encodeURIComponent(agentId)}`}
+              className="underline underline-offset-4"
+            >
+              Chat
+            </Link>
+            .
+          </span>
+        }
       />
     );
   return (
     <div className="flex h-[calc(100dvh-16rem)] min-h-[520px] min-w-0 flex-col overflow-hidden rounded-xl border bg-card/30">
       <AgentRunChatSession
-        key={selected.taskId}
         taskId={selected.taskId}
         embedded
+        initiatorName={
+          selected.actorUserId === session?.user.id
+            ? "You"
+            : initiatorLabel(selected)
+        }
         headerLeading={
           <Button
             variant="outline"
@@ -170,7 +183,9 @@ export function AgentRuns({ agentId }: { agentId: string }) {
               onKeyDown={(event) => {
                 if (event.key === "ArrowDown") {
                   event.preventDefault();
-                  setHighlighted((v) => Math.min(filtered.length - 1, v + 1));
+                  setHighlighted((v) =>
+                    Math.max(0, Math.min(filtered.length - 1, v + 1)),
+                  );
                 }
                 if (event.key === "ArrowUp") {
                   event.preventDefault();
@@ -187,14 +202,14 @@ export function AgentRuns({ agentId }: { agentId: string }) {
                 setHighlighted(0);
               }}
             >
-              <SelectTrigger aria-label="Started by">
+              <SelectTrigger className="w-full" aria-label="Started by">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="anyone">Started by anyone</SelectItem>
                 {starters.map(([id, name]) => (
                   <SelectItem key={id} value={id}>
-                    {id === session?.user.id ? "Started by me" : name}
+                    {id === `user:${session?.user.id}` ? "Started by me" : name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -215,7 +230,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
                   <span className="mt-0.5 block text-xs text-muted-foreground">
                     {run.actorUserId === session?.user.id
                       ? "You"
-                      : (run.initiatorName ?? "Automation")}{" "}
+                      : initiatorLabel(run)}{" "}
                     ·{" "}
                     {formatDistanceToNow(new Date(run.startedAt), {
                       addSuffix: true,
@@ -238,4 +253,16 @@ export function AgentRuns({ agentId }: { agentId: string }) {
       </Dialog>
     </div>
   );
+}
+
+function starterKey(run: AgentRunListItem): string {
+  return `${run.actorKind}:${run.actorId}`;
+}
+function initiatorLabel(run: AgentRunListItem): string {
+  if (run.initiatorName) return run.initiatorName;
+  if (run.actorKind === "serviceAccount") return "a service account";
+  if (run.actorKind === "organization") return "the organization";
+  if (run.actorKind === "team") return "a team";
+  if (run.actorKind === "system") return "automation";
+  return "an unknown user";
 }

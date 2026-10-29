@@ -25,15 +25,7 @@ export function AgentRunHeader({
   actions,
 }: AgentRunHeaderProps) {
   return (
-    <header
-      style={{
-        display: "grid",
-        gridTemplateColumns: "2.25rem minmax(0, 1fr) auto",
-        alignItems: "center",
-        gap: "0.75rem",
-      }}
-      className="shrink-0 border-b px-4 py-2.5"
-    >
+    <header className="grid shrink-0 grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 border-b px-4 py-2.5">
       <Link
         href={agentHref}
         aria-label={`View Agent ${agentName}`}
@@ -41,10 +33,10 @@ export function AgentRunHeader({
       >
         {agentImage}
       </Link>
-      <div className="min-w-0 space-y-1">
+      <div className="grid min-w-0 grid-cols-[minmax(0,max-content)_auto] items-center gap-x-2 gap-y-1">
         <nav
           aria-label="Session context"
-          className="hidden min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground sm:flex"
+          className="col-span-2 hidden min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground sm:flex"
         >
           <Link
             href={agentHref}
@@ -57,28 +49,21 @@ export function AgentRunHeader({
           <span aria-hidden className="mx-1 h-3 border-l" />
           <time title={startedTitle}>{started}</time>
         </nav>
-        <div className="flex min-w-0 items-center gap-2">
-          <h1
-            className="min-w-0 truncate text-sm font-medium leading-5"
-            title={title}
-          >
-            {title}
-          </h1>
-          <span className="hidden shrink-0 items-center text-xs [&_span]:text-xs sm:inline-flex">
-            {status}
-          </span>
-        </div>
-        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground sm:hidden">
-          <Link
-            href={agentHref}
-            className="min-w-0 flex-1 truncate rounded hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            {agentName}
-          </Link>
-          <span className="inline-flex shrink-0 text-xs [&_span]:text-xs">
-            {status}
-          </span>
-        </div>
+        <h1
+          className="col-span-2 row-start-1 min-w-0 truncate text-sm font-medium leading-5 sm:col-span-1 sm:row-start-2"
+          title={title}
+        >
+          {title}
+        </h1>
+        <Link
+          href={agentHref}
+          className="col-start-1 row-start-2 min-w-0 truncate rounded text-xs text-muted-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring sm:hidden"
+        >
+          {agentName}
+        </Link>
+        <span className="col-start-2 row-start-2 inline-flex shrink-0 text-xs [&_span]:text-xs">
+          {status}
+        </span>
       </div>
       <div className="flex shrink-0 items-center justify-end">{actions}</div>
     </header>

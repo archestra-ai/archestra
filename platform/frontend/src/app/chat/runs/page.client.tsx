@@ -69,11 +69,13 @@ export function AgentRunChatSession({
   embedded = false,
   headerLeading,
   drawerFooter,
+  initiatorName,
 }: {
   taskId: string;
   embedded?: boolean;
   headerLeading?: ReactNode;
   drawerFooter?: ReactNode;
+  initiatorName?: string;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const logsRef = useRef<AgentRunLogsHandle>(null);
@@ -108,17 +110,14 @@ export function AgentRunChatSession({
   const [commandCopied, setCommandCopied] = useState(false);
   const [portCommandCopied, setPortCommandCopied] = useState(false);
   const run = query.data;
-  const project = useProject(run?.projectId ?? undefined);
-  usePageTitle(run?.title ?? "Agent Runtime");
   const now = useRuntimeClock(true);
 
   // The run's LLM requests are logged under its session id, which only the
   // owner is sent; `log:read` lets them open their own trace.
   const { data: canReadLogs } = useHasPermissions({ log: ["read"] });
 
-  // Metadata and the log stream are readable by shared viewers, but attaching
-  // to the live terminal runs a shell under the owner's own credentials — so it
-  // stays owner-only. Everyone else gets the read-only output stream.
+  // The server separately permits managers of the owning service account
+  // to attach without granting ownership actions.
   const isOwner = run?.viewerRole === "owner";
   const canAttach = run?.canAttach ?? isOwner;
 
@@ -402,60 +401,64 @@ export function AgentRunChatSession({
 
   return (
     <main className="@container flex h-full min-h-0 min-w-0 flex-col bg-background">
+      {!embedded && <RunPageTitle title={run?.title ?? "Agent Runtime"} />}
       {/* Keep this slot mounted while metadata loads so inserting the header
           cannot remount the terminal and restart its attach progress. */}
-      {run ? (
-        embedded ? (
-          <header className="grid shrink-0 grid-cols-1 items-center gap-2 border-b px-4 py-3 @3xl:grid-cols-[minmax(0,1fr)_auto] @3xl:gap-x-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="hidden @3xl:block">{headerLeading}</div>
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-                <h1 className="min-w-0 truncate text-sm font-medium">
-                  {run.title}
-                </h1>
-                <span className="inline-flex shrink-0 text-xs [&_span]:text-xs">
-                  <AgentRunState
-                    state={run.state}
-                    attentionState={run.attentionState}
-                    statusReason={run.statusReason}
-                    lastModelActivityAt={run.lastModelActivityAt}
-                    startedAt={run.startedAt}
-                    endedAt={run.endedAt}
-                    hardDeadlineAt={run.hardDeadlineAt}
-                    terminalRetained={run.terminalRetained}
-                    compact
-                  />
-                </span>
+      <div className="contents">
+        {run ? (
+          embedded ? (
+            <header className="grid shrink-0 grid-cols-1 items-center gap-2 border-b px-4 py-3 @3xl:grid-cols-[minmax(0,1fr)_auto] @3xl:gap-x-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="hidden @3xl:block">{headerLeading}</div>
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <h1 className="min-w-0 truncate text-sm font-medium">
+                    {run.title}
+                  </h1>
+                  <span className="inline-flex shrink-0 text-xs [&_span]:text-xs">
+                    <AgentRunState
+                      state={run.state}
+                      attentionState={run.attentionState}
+                      statusReason={run.statusReason}
+                      lastModelActivityAt={run.lastModelActivityAt}
+                      startedAt={run.startedAt}
+                      endedAt={run.endedAt}
+                      hardDeadlineAt={run.hardDeadlineAt}
+                      terminalRetained={run.terminalRetained}
+                      workspace={run.workspace}
+                      compact
+                    />
+                  </span>
+                </div>
               </div>
-            </div>
-            {headerActions}
-          </header>
-        ) : (
-          <AgentRunHeader
-            title={run.title}
-            status={
-              <AgentRunState
-                state={run.state}
-                attentionState={run.attentionState}
-                statusReason={run.statusReason}
-                lastModelActivityAt={run.lastModelActivityAt}
-                startedAt={run.startedAt}
-                endedAt={run.endedAt}
-                hardDeadlineAt={run.hardDeadlineAt}
-                terminalRetained={run.terminalRetained}
-                compact
-              />
-            }
-            agentName={run.agent.name}
-            agentHref={`/agents/${run.agent.id}?section=runs`}
-            agentImage={<AgentIcon icon={run.agent.icon} size={20} />}
-            started={`Started ${formatDistance(new Date(run.startedAt), now, { addSuffix: true })}`}
-            startedTitle={new Date(run.startedAt).toLocaleString()}
-            actions={headerActions}
-          />
-        )
-      ) : null}
-
+              {headerActions}
+            </header>
+          ) : (
+            <AgentRunHeader
+              title={run.title}
+              status={
+                <AgentRunState
+                  state={run.state}
+                  attentionState={run.attentionState}
+                  statusReason={run.statusReason}
+                  lastModelActivityAt={run.lastModelActivityAt}
+                  startedAt={run.startedAt}
+                  endedAt={run.endedAt}
+                  hardDeadlineAt={run.hardDeadlineAt}
+                  terminalRetained={run.terminalRetained}
+                  workspace={run.workspace}
+                  compact
+                />
+              }
+              agentName={run.agent.name}
+              agentHref={`/agents/${run.agent.id}?section=runs`}
+              agentImage={<AgentIcon icon={run.agent.icon} size={20} />}
+              started={`Started ${formatDistance(new Date(run.startedAt), now, { addSuffix: true })}`}
+              startedTitle={new Date(run.startedAt).toLocaleString()}
+              actions={headerActions}
+            />
+          )
+        ) : null}
+      </div>
       <div className="relative flex min-h-0 min-w-0 flex-1">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 px-4 pt-3 pb-4 md:px-6 md:pb-6">
           {run && live && <AgentRunLiveness run={run} />}
@@ -525,7 +528,9 @@ export function AgentRunChatSession({
               <dl className="grid grid-cols-2 gap-x-3 gap-y-4 text-sm">
                 <div>
                   <dt className="text-xs text-muted-foreground">Started by</dt>
-                  <dd className="mt-1">{isOwner ? "You" : "Run owner"}</dd>
+                  <dd className="mt-1">
+                    {initiatorName ?? (isOwner ? "You" : "Run owner")}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Started</dt>
@@ -548,12 +553,7 @@ export function AgentRunChatSession({
                   <div className="col-span-2">
                     <dt className="text-xs text-muted-foreground">Project</dt>
                     <dd className="mt-1">
-                      <Link
-                        className="underline underline-offset-4"
-                        href={`/projects/${run.projectId}`}
-                      >
-                        {project.data?.name ?? "View project"}
-                      </Link>
+                      <RunProjectLink projectId={run.projectId} />
                     </dd>
                   </div>
                 )}
@@ -573,11 +573,18 @@ export function AgentRunChatSession({
                 <p className="text-muted-foreground">
                   The run owner, Agent administrators, and shared viewers can
                   read output.
-                  {run.projectId && <span> Project viewers also need permission to read all project sessions.</span>}
+                  {run.projectId && (
+                    <span>
+                      {" "}
+                      Project viewers also need permission to read all project
+                      sessions.
+                    </span>
+                  )}
                 </p>
                 <p className="text-muted-foreground">
-                  Only authorized terminal users can connect. Sharing and
-                  project visibility grant read-only access.
+                  The owner can connect. Managers of an owning service account
+                  also need Agent use access. Sharing and project visibility
+                  grant read-only access.
                 </p>
               </section>
             </div>
@@ -713,4 +720,21 @@ function workspaceNoticeFor({
     default:
       return "The Agent is busy or changing state. Try again shortly.";
   }
+}
+
+function RunProjectLink({ projectId }: { projectId: string }) {
+  const project = useProject(projectId);
+  return (
+    <Link
+      className="underline underline-offset-4"
+      href={`/projects/${projectId}`}
+    >
+      {project.data?.name ?? "View project"}
+    </Link>
+  );
+}
+
+function RunPageTitle({ title }: { title: string }) {
+  usePageTitle(title);
+  return null;
 }

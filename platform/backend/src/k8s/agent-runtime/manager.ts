@@ -1509,7 +1509,15 @@ class AgentRuntimeManager {
       },
       "Moving an Agent Runtime workspace to another runtime tier",
     );
-    const podName = await this.findPodName(session);
+    // The turn asking for the switch runs in this Pod. The API can report the
+    // Pod a moment after its container starts, so wait for it rather than
+    // stop it without the note the replacement needs to continue the turn.
+    const podName = (await this.findPod(session))
+      ? await this.waitForRunningPod({
+          session,
+          timeoutMessage: "The workspace was not running",
+        })
+      : null;
     if (podName)
       await this.execInPod({
         session,

@@ -224,11 +224,11 @@ start_session() {
 # tmux makes the pane process a session leader, so its pid is the process
 # group of everything it started.
 stop_session() {
-  local name="$1" pid i
+  local name="$1" pid
   pid="$(session_pid "$name")"
   if [ -n "$pid" ]; then
     kill -TERM -- "-$pid" 2>/dev/null || true
-    for i in $(seq 1 30); do
+    for _ in $(seq 1 30); do
       pgrep -g "$pid" >/dev/null 2>&1 || break
       sleep 0.5
     done
@@ -277,7 +277,7 @@ start_postgres() {
     pg_ctl -D "$PGDATA" -w -t 90 -l "$LOG_DIR/db.log" -o "-p $DB_PORT -k $STATE_DIR \
       -c listen_addresses=127.0.0.1 -c shared_buffers=${ARCHESTRA_DEV_LITE_PG_SHARED_BUFFERS:-64MB} \
       -c max_connections=${ARCHESTRA_DEV_LITE_PG_MAX_CONNECTIONS:-60} -c fsync=off -c synchronous_commit=off \
-      -c full_page_writes=off -c log_min_messages=warning -c log_checkpoints=off" start >> "$LOG_DIR/db.log" 2>&1
+      -c full_page_writes=off -c log_min_messages=warning -c log_checkpoints=off" start >> "$LOG_DIR/db-ctl.log" 2>&1
   fi
   psql -h 127.0.0.1 -p "$DB_PORT" -U "$DB_USER" -d postgres -tAc \
     "select 1 from pg_database where datname='$DB_NAME'" | grep -qx 1 \
@@ -285,8 +285,7 @@ start_postgres() {
 }
 
 wait_for_db() {
-  local i
-  for i in $(seq 1 90); do
+  for _ in $(seq 1 90); do
     db_ready && return 0
     sleep 1
   done
@@ -356,6 +355,11 @@ free_ports() {
 # turbo, pnpm again, the pnpm shim) and about 1 GB of RSS in total. The turbo
 # `dev` task has no dependencies, so nothing is skipped.
 start_backend() {
+  # A running server owns the ports: freeing them first would kill it.
+  if session_alive backend; then
+    log "backend already running"
+    return 0
+  fi
   free_ports "$BACKEND_PORT" 9050
   # The backend loads platform/.env itself. With the watcher on, tsdown rebuilds
   # on every save and restarts the server (backend/tsdown.config.ts); with it
@@ -372,6 +376,7 @@ start_backend() {
     # server, so a crash or an OOM kill would otherwise end it. Five exits
     # within 60 s of starting end the loop so a server that cannot start does
     # not spin.
+    # shellcheck disable=SC2016 # expanded by the session's own shell
     run='./node_modules/.bin/tsdown || exit 1; quick_exits=0; while :; do started=$(date +%s); node --enable-source-maps dist/server.mjs; status=$?; if [ $(( $(date +%s) - started )) -ge 60 ]; then quick_exits=0; else quick_exits=$((quick_exits + 1)); fi; if [ "$quick_exits" -ge 5 ]; then echo "backend exited ($status) five times right after starting; giving up" >&2; exit "$status"; fi; echo "backend exited ($status); restarting in 1 s" >&2; sleep 1; done'
   fi
   start_session backend "$PLATFORM_DIR/backend" \
@@ -395,6 +400,10 @@ frontend_env() {
 }
 
 start_frontend() {
+  if session_alive frontend; then
+    log "frontend already running"
+    return 0
+  fi
   free_ports "$FRONTEND_PORT"
   # Next reads ARCHESTRA_* from its environment (Tilt exports .env); Node's
   # --env-file does the same here, and explicit variables take precedence.
@@ -473,6 +482,13 @@ cmd_start() {
   done
   require_platform_dir
   mkdir -p "$STATE_DIR" "$LOG_DIR"
+  # An Agent Runtime starts the stack on every turn: leave a running one alone.
+  if session_alive backend && session_alive frontend && db_ready \
+    && { [ "$e2e" = 0 ] || e2e_enabled; } && [ "$mock_data" = 0 ]; then
+    log "stack already running; logs in $LOG_DIR"
+    [ "$wait" = 1 ] && wait_ready
+    return 0
+  fi
   ensure_env "$e2e"
   install_dependencies
   ensure_native_addons
@@ -547,7 +563,7 @@ cmd_down() {
   tmx kill-server 2>/dev/null || true
   if [ -s "$PGDATA/PG_VERSION" ] && pg_ctl -D "$PGDATA" status >/dev/null 2>&1; then
     log "stopping postgres"
-    pg_ctl -D "$PGDATA" -m fast -w stop >> "$LOG_DIR/db.log" 2>&1 || true
+    pg_ctl -D "$PGDATA" -m fast -w stop >> "$LOG_DIR/db-ctl.log" 2>&1 || true
   fi
   echo "dev stack stopped; data stays in $STATE_DIR"
 }

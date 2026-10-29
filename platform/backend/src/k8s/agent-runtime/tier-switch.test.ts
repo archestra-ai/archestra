@@ -1,6 +1,6 @@
 import type { V1Pod } from "@kubernetes/client-node";
+import { describe, expect, test, vi } from "vitest";
 import type { AgentRuntimeTierSettings } from "@/services/agent-runtime/backends";
-import { describe, expect, test, vi } from "@/test";
 import type { AgentRunRecord } from "@/types";
 import manager from "./manager";
 import {
@@ -84,6 +84,23 @@ describe("switchWorkspaceTier", () => {
           settings: FULL,
         }),
       ).toBe(true);
+    } finally {
+      cluster.restore();
+    }
+  });
+
+  test("writes the note in a Pod the API does not report running yet", async () => {
+    const cluster = fakeCluster({ pendingReads: 3 });
+    try {
+      await manager.switchWorkspaceTier({
+        session: SESSION,
+        tier: "full",
+        settings: FULL,
+        resumePrompt: "continue on full",
+        shouldResume: async () => true,
+      });
+      expect(cluster.events[0]).toBe("exec:plan-turn-resume");
+      expect(cluster.resumeNotes).toEqual(["continue on full"]);
     } finally {
       cluster.restore();
     }
@@ -204,7 +221,9 @@ function agentContainer(sandbox: AgentSandbox) {
  * Pod, Running creates one from the current template. An image in
  * `failingImage` produces a Pod that fails to start.
  */
-function fakeCluster(options: { failingImage?: string } = {}) {
+function fakeCluster(
+  options: { failingImage?: string; pendingReads?: number } = {},
+) {
   const sandbox = buildAgentRuntimeSandbox({
     taskId: TASK_ID,
     agentRuntimeId: "99999999-8888-4777-8666-555555555555",
@@ -224,6 +243,7 @@ function fakeCluster(options: { failingImage?: string } = {}) {
   });
   sandbox.metadata.uid = "sandbox-uid";
   const pods: V1Pod[] = [];
+  let pendingReads = options.pendingReads ?? 0;
   const events: string[] = [];
   const resumeNotes: string[] = [];
   const startPod = () => {
@@ -299,7 +319,18 @@ function fakeCluster(options: { failingImage?: string } = {}) {
       },
     },
     coreApi: {
-      listNamespacedPod: async () => ({ items: structuredClone(pods) }),
+      listNamespacedPod: async () => {
+        // The kubelet reports a started container's Pod a moment later.
+        if (pendingReads > 0 && pods[0]?.status) {
+          pendingReads--;
+          return {
+            items: [
+              { ...structuredClone(pods[0]), status: { phase: "Pending" } },
+            ],
+          };
+        }
+        return { items: structuredClone(pods) };
+      },
       readNamespacedSecret: async () => {
         throw { code: 404 };
       },

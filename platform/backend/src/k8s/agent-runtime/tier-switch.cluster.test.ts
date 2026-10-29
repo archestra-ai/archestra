@@ -166,7 +166,12 @@ describe.skipIf(!CONTEXT)("Agent Runtime tier switch on a cluster", () => {
       expect(exec("cat /home/node/tier-log").split("\n")).toHaveLength(3);
     } catch (error) {
       const diagnostics = podName()
-        ? kubectl(["logs", podName(), "-c", "agent-runtime", "--tail=40"])
+        ? [
+            kubectl(["logs", podName(), "-c", "agent-runtime", "--tail=40"]),
+            exec(
+              `cd /var/run/archestra/turns && ls -la && cat ${taskId}.exit ${taskId}.failure 2>/dev/null; cat /home/node/tier-log`,
+            ),
+          ].join("\n")
         : "No Pod was created";
       throw new Error(`${String(error)}\nSandbox diagnostics:\n${diagnostics}`);
     } finally {

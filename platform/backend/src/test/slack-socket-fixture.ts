@@ -16,7 +16,12 @@ export async function createSlackSocketFixture() {
   let abortedRequests = 0;
   let stallHandshake = false;
   let dropHelloAndClose = false;
-  const connectionFailures: { status: number; retryAfter: number }[] = [];
+  let closeBeforeHello = false;
+  const connectionFailures: {
+    status: number;
+    retryAfter: number;
+    error?: string;
+  }[] = [];
   let connections = 0;
   const calls: string[] = [];
   const pending: (() => void)[] = [];
@@ -31,6 +36,10 @@ export async function createSlackSocketFixture() {
     const send = () => {
       if (method === "apps.connections.open" && connectionFailures.length) {
         const failure = connectionFailures.shift();
+        if (failure?.error) {
+          respond(response, { ok: false, error: failure.error });
+          return;
+        }
         response.writeHead(failure?.status ?? 503, {
           "Retry-After": String(failure?.retryAfter ?? 1),
         });
@@ -81,7 +90,11 @@ export async function createSlackSocketFixture() {
     const upgrade = () =>
       websocket.handleUpgrade(request, socket, head, (client) => {
         connections++;
-        if (dropHelloAndClose) socket.pause();
+        if (closeBeforeHello) {
+          closeBeforeHello = false;
+          stalledMethod = "apps.connections.open";
+          client.close();
+        } else if (dropHelloAndClose) socket.pause();
         else client.send(JSON.stringify({ type: "hello" }));
       });
     if (stallHandshake) pending.push(upgrade);
@@ -128,6 +141,9 @@ export async function createSlackSocketFixture() {
     dropHelloAndClose() {
       dropHelloAndClose = true;
     },
+    closeBeforeHello() {
+      closeBeforeHello = true;
+    },
     stallHandshake() {
       stallHandshake = true;
     },
@@ -139,6 +155,9 @@ export async function createSlackSocketFixture() {
     },
     failNextConnection(status = 503, retryAfter = 1) {
       connectionFailures.push({ status, retryAfter });
+    },
+    rejectNextConnection(error = "internal_error") {
+      connectionFailures.push({ status: 200, retryAfter: 0, error });
     },
     disconnect() {
       for (const socket of websocket.clients) socket.terminate();

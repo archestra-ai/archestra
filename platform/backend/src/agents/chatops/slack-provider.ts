@@ -2263,6 +2263,7 @@ class SlackProvider implements ChatOpsProvider {
 
     signal.throwIfAborted();
     let connected = false;
+    let rejectInitial: ((error: Error) => void) | undefined;
     // An upgraded socket leaves Agent's pool. Retain the initial transports so
     // cancellation also closes a peer that never sends hello or a close frame.
     const agent = new Agent();
@@ -2293,6 +2294,32 @@ class SlackProvider implements ChatOpsProvider {
             // Reject before the SDK starts its Retry-After sleep, which an
             // AbortSignal cannot cancel. Established sessions keep that retry.
             request.validateStatus = (status) => status !== 429;
+            // Socket Mode retries recoverable API errors outside WebClient's
+            // retry policy, and a later rejection can escape that retry. End
+            // setup on the first API failure through our cancellation path.
+            const transforms = request.transformResponse;
+            request.transformResponse = [
+              ...(Array.isArray(transforms)
+                ? transforms
+                : transforms
+                  ? [transforms]
+                  : []),
+              (data: unknown) => {
+                if (
+                  data !== null &&
+                  typeof data === "object" &&
+                  "ok" in data &&
+                  data.ok === false
+                ) {
+                  rejectInitial?.(
+                    new Error(
+                      "Slack rejected the initial Socket Mode connection.",
+                    ),
+                  );
+                }
+                return data;
+              },
+            ];
           }
           return request;
         },
@@ -2384,9 +2411,19 @@ class SlackProvider implements ChatOpsProvider {
     );
 
     let onAbort: (() => void) | undefined;
+    let onInitialClose: (() => void) | undefined;
     const cancelled = new Promise<never>((_resolve, reject) => {
+      rejectInitial = reject;
       onAbort = () => reject(signal.reason);
       signal.addEventListener("abort", onAbort, { once: true });
+      // Fail the initial attempt before the SDK's delayed reconnect can start.
+      // initialize() disconnects on rejection; established sessions keep the
+      // SDK's ordinary reconnect listener after this one is removed.
+      onInitialClose = () =>
+        reject(
+          new Error("Slack closed the connection before setup completed."),
+        );
+      this.socketModeClient?.once("close", onInitialClose);
     });
     try {
       await Promise.race([this.socketModeClient.start(), cancelled]);
@@ -2399,7 +2436,10 @@ class SlackProvider implements ChatOpsProvider {
     } finally {
       agent.createConnection = createConnection;
       initialSockets.clear();
+      rejectInitial = undefined;
       if (onAbort) signal.removeEventListener("abort", onAbort);
+      if (onInitialClose)
+        this.socketModeClient.removeListener("close", onInitialClose);
     }
   }
 

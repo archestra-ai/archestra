@@ -732,7 +732,19 @@ export const McpAppRuntime = function McpAppRuntime({
         const permissions = content._meta?.ui?.permissions;
 
         if (!cancelled && !fetchCancelledRef.current) {
-          setAppResource({ html, csp, permissions });
+          setAppResource((prev) => {
+            if (
+              prev &&
+              prev.html === html &&
+              JSON.stringify(prev.csp ?? null) ===
+                JSON.stringify(csp ?? null) &&
+              JSON.stringify(prev.permissions ?? null) ===
+                JSON.stringify(permissions ?? null)
+            ) {
+              return prev;
+            }
+            return { html, csp, permissions };
+          });
           onResourceStateChangeRef.current(
             isRenderableMcpAppHtml(html) ? "renderable" : "empty",
           );
@@ -1052,6 +1064,8 @@ function SandboxIframe({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const outgoingIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const hasRenderedContentRef = useRef(false);
   // Track WHICH bridge is connected, not just a boolean: a reload swaps in a new
   // bridge instance, and `ready` must read false the instant the identity changes
   // — otherwise the send effects below fire against the not-yet-connected bridge
@@ -1087,6 +1101,12 @@ function SandboxIframe({
     () => buildAllowAttribute(permissions),
     [permissions],
   );
+  const cspSerialized = JSON.stringify(csp ?? null);
+  const permissionsSerialized = JSON.stringify(permissions ?? null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stabilize by serialized value so identical refreshes do not re-send sandbox-resource-ready
+  const stableCsp = useMemo(() => csp, [cspSerialized]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stabilize by serialized value so identical refreshes do not re-send sandbox-resource-ready
+  const stablePermissions = useMemo(() => permissions, [permissionsSerialized]);
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
@@ -1108,11 +1128,38 @@ function SandboxIframe({
     const container = containerRef.current;
     if (!container) return;
 
+    const previousIframe = outgoingIframeRef.current;
     const iframe = document.createElement("iframe");
     iframe.style.width = "100%";
     iframe.style.height = `${initialHeightRef.current}px`;
     iframe.style.border = "none";
     iframe.style.backgroundColor = "transparent";
+    if (previousIframe) {
+      iframe.style.opacity = "0";
+      iframe.style.position = "absolute";
+      iframe.style.top = "0";
+      iframe.style.left = "0";
+      iframe.style.pointerEvents = "none";
+    }
+    let revealed = !previousIframe;
+    let revealFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    const revealIncomingIframe = () => {
+      if (revealed) return;
+      revealed = true;
+      if (revealFallbackTimer) {
+        clearTimeout(revealFallbackTimer);
+        revealFallbackTimer = null;
+      }
+      iframe.style.opacity = "";
+      iframe.style.position = "";
+      iframe.style.top = "";
+      iframe.style.left = "";
+      iframe.style.pointerEvents = "";
+      if (outgoingIframeRef.current === previousIframe) {
+        outgoingIframeRef.current = null;
+      }
+      previousIframe?.remove();
+    };
     // Propagate the host theme into the sandbox chain: per CSS Color
     // Adjustment, the frame element's used color-scheme sets the embedded
     // document's *preferred* color scheme, and the proxy hands it on to the
@@ -1158,6 +1205,7 @@ function SandboxIframe({
     // Wait for sandbox-proxy-ready message from the iframe
     const timeout = setTimeout(() => {
       if (!cancelled) {
+        revealIncomingIframe();
         const err = new Error("Timed out waiting for sandbox proxy iframe");
         setError(err);
         onErrorRef.current?.(err);
@@ -1189,10 +1237,14 @@ function SandboxIframe({
               setError(null);
               setConnectedBridge(appBridge);
               onConnectedRef.current?.();
+              if (!revealed) {
+                revealFallbackTimer = setTimeout(revealIncomingIframe, 900);
+              }
             }
           })
           .catch((err) => {
             if (!cancelled) {
+              revealIncomingIframe();
               const error = err instanceof Error ? err : new Error(String(err));
               setError(error);
               onErrorRef.current?.(error);
@@ -1223,20 +1275,42 @@ function SandboxIframe({
         onStateSyncRef.current?.(event.data);
       } else if (type === "mcp-apps:sandbox-content-loaded") {
         onContentLoadedRef.current?.();
+      } else if (type === "mcp-apps:guest-ready") {
+        revealIncomingIframe();
       }
     };
 
     window.addEventListener("message", onMessage);
     window.addEventListener("message", onDiagnosticMessage);
-    container.appendChild(iframe);
+    container.insertBefore(iframe, container.firstChild);
 
     return () => {
       cancelled = true;
       clearTimeout(timeout);
+      if (revealFallbackTimer) {
+        clearTimeout(revealFallbackTimer);
+        revealFallbackTimer = null;
+      }
       themeObserver.disconnect();
       window.removeEventListener("message", onMessage);
       window.removeEventListener("message", onDiagnosticMessage);
-      iframe.remove();
+      if (hasRenderedContentRef.current && container.isConnected) {
+        if (outgoingIframeRef.current && outgoingIframeRef.current !== iframe) {
+          outgoingIframeRef.current.remove();
+        }
+        iframe.style.opacity = "";
+        iframe.style.position = "";
+        iframe.style.top = "";
+        iframe.style.left = "";
+        iframe.style.pointerEvents = "none";
+        outgoingIframeRef.current = iframe;
+      } else {
+        if (outgoingIframeRef.current) {
+          outgoingIframeRef.current.remove();
+          outgoingIframeRef.current = null;
+        }
+        iframe.remove();
+      }
       iframeRef.current = null;
       // Reset connection state so the send effects below don't fire against a
       // bridge whose iframe we just removed. Without this, ready/initialized
@@ -1253,6 +1327,16 @@ function SandboxIframe({
     useDedicatedOrigin,
     allowAttribute,
   ]);
+
+  // Clean up any retained outgoing iframe if the component itself unmounts.
+  useEffect(() => {
+    return () => {
+      if (outgoingIframeRef.current) {
+        outgoingIframeRef.current.remove();
+        outgoingIframeRef.current = null;
+      }
+    };
+  }, []);
 
   // Set up size change and initialized handlers
   useEffect(() => {
@@ -1286,6 +1370,8 @@ function SandboxIframe({
   // Send HTML to sandbox once connected
   useEffect(() => {
     if (!ready || !html) return;
+    hasRenderedContentRef.current = true;
+    setInitialized(false);
     appBridge
       // `ownedApp` is a trusted host signal: Archestra-owned apps carry the
       // platform CSP in their backend envelope, so the proxy must not add a
@@ -1293,8 +1379,8 @@ function SandboxIframe({
       // notification forwards params verbatim and the proxy reads it raw.
       .sendSandboxResourceReady({
         html,
-        csp,
-        permissions,
+        csp: stableCsp,
+        permissions: stablePermissions,
         ...(ownedApp ? { ownedApp: true } : {}),
         ...(restoredStateRef.current
           ? { restoredState: restoredStateRef.current }
@@ -1305,7 +1391,7 @@ function SandboxIframe({
         setError(error);
         onErrorRef.current?.(error);
       });
-  }, [ready, html, appBridge, csp, permissions, ownedApp]);
+  }, [ready, html, appBridge, stableCsp, stablePermissions, ownedApp]);
 
   // Send tool input when available
   useEffect(() => {
@@ -1363,6 +1449,7 @@ function SandboxIframe({
     <div
       ref={containerRef}
       style={{
+        position: "relative",
         width: "100%",
         height: "100%",
         display: "flex",

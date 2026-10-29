@@ -1,13 +1,20 @@
 ---
 title: GitHub Copilot
-description: Use models from your personal GitHub Copilot subscription or your organization's enterprise plan.
+description: Connect models from a personal GitHub Copilot seat or share an organization enterprise plan.
 order: 7
 lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Use models from your personal GitHub Copilot subscription, or connect your GitHub organization's Copilot Business or Enterprise plan.
+GitHub Copilot gives you models from OpenAI, Anthropic, and Google, but GitHub does not provide standard API keys. Archestra bridges this gap so you can run Copilot models in chat, background agents, and local tools without managing raw keys.
+
+Connect in one of two ways:
+
+- **[Personal sign-in](#personal-sign-in):** sign in with your GitHub account to bring your own Copilot seat. The connection stays private to you.
+- **[Enterprise plan](#enterprise-plans):** connect your organization's Copilot Business or Enterprise plan through a GitHub App. Your whole team and CI pipelines share models billed to the organization's Copilot AI credits, without buying individual seats for everyone.
+
+Archestra handles the token exchange and refreshes credentials automatically.
 
 ![The Model Providers page showing GitHub Copilot under Personal subscriptions and Enterprise plans](/docs/automated_screenshots/platform-supported-llm-providers_model-providers.webp)
 
@@ -15,25 +22,25 @@ Use models from your personal GitHub Copilot subscription, or connect your GitHu
 
 ## Personal Sign-In
 
-Use your personal GitHub Copilot seat in Chat, agents, and local tools.
+Bring your individual Copilot subscription into Archestra for personal chats, coding agents, and local tools.
 
 On **Model Providers**, connect **GitHub Copilot** under **Personal subscriptions** and authorize Archestra on GitHub with the one-time device code.
 
-Personal sign-ins belong only to the person who connected them and are never shared. You can also connect automatically via [Connect](/docs/get-started/connect) when setting up the Copilot CLI.
+Your sign-in belongs only to you and is never shared across your organization. If you set up the Copilot CLI with [Connect](/docs/get-started/connect), Archestra connects your account automatically.
 
 <span id="enterprise-plans"></span>
 
 ## Enterprise Plans
 
-Use your organization's Copilot plan without buying per-user seats. Requests are billed to the organization's Copilot AI credits.
+Share your organization's Copilot Business or Enterprise models across teams, agents, and CI pipelines without purchasing per-user seats. Requests draw directly from your organization's Copilot AI credits.
 
-To connect a plan, your Archestra user account needs permission to create provider keys and credentials (llmProviderApiKey:create and credential:create). On GitHub, your organization must have [App access to Copilot](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-for-organization/manage-app-copilot-access) enabled.
+To connect a plan, your Archestra account needs permission to create provider keys and credentials (llmProviderApiKey:create and credential:create). On GitHub, your organization must have [App access to Copilot](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-for-organization/manage-app-copilot-access) enabled.
 
 <span id="connect-an-enterprise-plan"></span>
 
-Create a new GitHub App or connect using existing App credentials. The App requires the **Copilot Requests (Read-only)** permission on your GitHub organization.
+On **Model Providers**, connect **GitHub Copilot** under **Enterprise plans**. Create a new GitHub App or connect using existing App credentials. The App requires the **Copilot Requests (Read-only)** permission on your GitHub organization.
 
-Once connected, use the organization's Copilot models in Chat, agents, or through the proxy with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) (and on the [Model Router](/docs/llm-proxy/model-router) as `github-copilot:<model-id>`):
+Once connected, Copilot models are available in Chat, agents, and the LLM proxy with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) (and on the [Model Router](/docs/llm-proxy/model-router) as `github-copilot:<model-id>`):
 
 ```bash
 curl "https://<archestra-host>/v1/github-copilot/chat/completions" \

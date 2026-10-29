@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { SkillSandboxModel } from "@/models";
@@ -171,12 +172,22 @@ describe("capChatToolResult", () => {
     },
   );
 
-  sandboxTest(
-    "saves an oversized result to the execution sandbox in a headless run",
-    async ({ spillContext }) => {
+  sandboxTest.for(["user", "service account"] as const)(
+    "saves an oversized result to the execution sandbox in a headless run (%s caller)",
+    async (caller, { spillContext, makeServiceAccount, makeCustomRole }) => {
       const { conversationId: _, ...headless } = spillContext;
       const isolationKey = crypto.randomUUID();
-      const context = { ...headless, scopeKey: isolationKey };
+      let userId = headless.userId;
+      if (caller === "service account") {
+        const role = await makeCustomRole(headless.organizationId, {
+          permission: { agent: ["read"] },
+        });
+        const account = await makeServiceAccount(headless.organizationId, {
+          role: role.role,
+        });
+        userId = serviceAccountUserId(account.id);
+      }
+      const context = { ...headless, userId, scopeKey: isolationKey };
 
       try {
         const capped = await capChatToolResult({

@@ -1240,24 +1240,31 @@ function guestStateBootstrap(restored) {
   window.addEventListener("keydown", markUserInteracted, true);
   window.addEventListener("touchstart", markUserInteracted, true);
 
-  function retireRestoredControlForTarget(target) {
+  function retireOrScheduleForTarget(target) {
     if (!target || target.nodeType !== 1 || !hasRestoredControls) return;
     var sel = getCssSelector(target);
-    if (sel) {
-      delete pendingFormKeys[sel];
-      delete pendingToggleKeys[sel];
-      if (restored && restored.controls) {
-        delete restored.controls[sel];
-      }
-    }
     var label = getStableButtonLabel(target);
-    if (sel && isIndexBasedSelector(sel) && label) {
-      var labelKey =
-        sel.replace(/:nth-of-type\(\d+\)$/, "") + "::label=" + label;
-      delete pendingToggleKeys[labelKey];
-      if (restored && restored.controls) {
-        delete restored.controls[labelKey];
+    var labelKey =
+      sel && isIndexBasedSelector(sel) && label
+        ? sel.replace(/:nth-of-type\(\d+\)$/, "") + "::label=" + label
+        : null;
+
+    var isStillPending =
+      (sel && (pendingFormKeys[sel] || pendingToggleKeys[sel])) ||
+      (labelKey && pendingToggleKeys[labelKey]);
+
+    if (isStillPending) {
+      if (!userInteracted && restorationActive && restoreReady) {
+        scheduleRestore();
       }
+      return;
+    }
+
+    if (sel && restored && restored.controls) {
+      delete restored.controls[sel];
+    }
+    if (labelKey && restored && restored.controls) {
+      delete restored.controls[labelKey];
     }
   }
 
@@ -1267,7 +1274,7 @@ function guestStateBootstrap(restored) {
       userInteracted = true;
       restorationActive = false;
     } else if (restoreReady && e && e.target) {
-      retireRestoredControlForTarget(e.target);
+      retireOrScheduleForTarget(e.target);
     }
     scheduleCapture();
   }

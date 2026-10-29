@@ -2625,6 +2625,14 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
             value: "Blue",
             selectedText: "Blue",
           },
+          "#delayed-select": {
+            kind: "form",
+            selector: "#delayed-select",
+            tag: "select",
+            type: "select-one",
+            value: "Blue",
+            selectedText: "Blue",
+          },
           "#multi-select": {
             kind: "form",
             selector: "#multi-select",
@@ -2650,6 +2658,9 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
             <select id="single-select">
               <option value="">All</option>
               <option value="Blue">Blue</option>
+            </select>
+            <select id="delayed-select">
+              <option value="">All</option>
             </select>
             <select id="multi-select" multiple></select>
           </div>
@@ -2839,6 +2850,17 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
           '<option value="">All</option><option value="Blue">Blue</option>';
         singleSelect.value = "";
 
+        // Delayed option population that emits a synthetic bubbling change event
+        // before the saved "Blue" selection has ever been applied
+        const delayedSelect = reloadDoc.getElementById(
+          "delayed-select",
+        ) as HTMLSelectElement;
+        delayedSelect.innerHTML =
+          '<option value="">All</option><option value="Blue">Blue</option>';
+        delayedSelect.dispatchEvent(
+          new reloadWin.Event("change", { bubbles: true }),
+        );
+
         for (const val of ["b", "c", "d", "e"]) {
           const opt = reloadDoc.createElement("option");
           opt.value = val;
@@ -2850,6 +2872,7 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
         await new Promise((r) => setTimeout(r, 40));
 
         expect(singleSelect.value).toBe("Blue");
+        expect(delayedSelect.value).toBe("Blue");
         const selectedMultiValues = Array.from(multiSelect.options)
           .filter((o) => o.selected)
           .map((o) => o.value);

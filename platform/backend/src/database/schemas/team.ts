@@ -63,6 +63,11 @@ export const teamMember = pgTable(
      * Members without this flag were added manually and won't be removed by sync.
      */
     syncedFromSso: boolean("synced_from_sso").notNull().default(false),
+    /**
+     * Set when Team Sync chose this member's current role. Sync demotes an
+     * Admin only when it made them one; a role changed by hand stays put.
+     */
+    roleSyncedFromSso: boolean("role_synced_from_sso").notNull().default(false),
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [

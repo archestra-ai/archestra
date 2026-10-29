@@ -96409,7 +96409,9 @@ export type BulkDeleteKnowledgeDirectoriesResponse = BulkDeleteKnowledgeDirector
 export type LimitLabelKeysData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        key?: string;
+    };
     url: '/api/limits/labels/keys';
 };
 
@@ -96494,9 +96496,6 @@ export type LimitLabelValuesData = {
     body?: never;
     path?: never;
     query?: {
-        /**
-         * Filter values by label key
-         */
         key?: string;
     };
     url: '/api/limits/labels/values';
@@ -96677,6 +96676,10 @@ export type GetLimitsResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
@@ -96816,6 +96819,10 @@ export type CreateLimitResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
@@ -97005,6 +97012,10 @@ export type GetLimitResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
@@ -97144,6 +97155,10 @@ export type UpdateLimitResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
@@ -138514,6 +138529,7 @@ export type GetTeamsResponses = {
                 userId: string;
                 role: string;
                 syncedFromSso: boolean;
+                roleSyncedFromSso: boolean;
                 createdAt: string;
             }>;
             labels?: Array<{
@@ -138649,6 +138665,7 @@ export type CreateTeamResponses = {
             userId: string;
             role: string;
             syncedFromSso: boolean;
+            roleSyncedFromSso: boolean;
             createdAt: string;
         }>;
         labels?: Array<{
@@ -138858,6 +138875,7 @@ export type GetTeamResponses = {
             userId: string;
             role: string;
             syncedFromSso: boolean;
+            roleSyncedFromSso: boolean;
             createdAt: string;
         }>;
         labels?: Array<{
@@ -138985,6 +139003,7 @@ export type UpdateTeamResponses = {
             userId: string;
             role: string;
             syncedFromSso: boolean;
+            roleSyncedFromSso: boolean;
             createdAt: string;
         }>;
         labels?: Array<{
@@ -139190,6 +139209,7 @@ export type GetTeamMembersResponses = {
         userId: string;
         role: string;
         syncedFromSso: boolean;
+        roleSyncedFromSso: boolean;
         createdAt: string;
         name: string | null;
         email: string;
@@ -139289,6 +139309,7 @@ export type AddTeamMemberResponses = {
         userId: string;
         role: string;
         syncedFromSso: boolean;
+        roleSyncedFromSso: boolean;
         createdAt: string;
     };
 };
@@ -139311,6 +139332,10 @@ export type GetTeamMembersPageData = {
          * Return only these users (comma-separated, at most 100), to check which of them are members. With search, a user must match both.
          */
         userIds?: Array<string>;
+        /**
+         * Return only members with this team role.
+         */
+        role?: 'admin' | 'member';
     };
     url: '/api/teams/{id}/members/page';
 };
@@ -139394,6 +139419,7 @@ export type GetTeamMembersPageResponses = {
             userId: string;
             role: string;
             syncedFromSso: boolean;
+            roleSyncedFromSso: boolean;
             createdAt: string;
             name: string | null;
             email: string;
@@ -139591,6 +139617,7 @@ export type UpdateTeamMemberResponses = {
         userId: string;
         role: string;
         syncedFromSso: boolean;
+        roleSyncedFromSso: boolean;
         createdAt: string;
     };
 };
@@ -139855,6 +139882,8 @@ export type GetTeamExternalGroupsResponses = {
         id: string;
         teamId: string;
         groupIdentifier: string;
+        identityProviderId: string | null;
+        role: 'admin' | 'member';
         createdAt: string;
     }>;
 };
@@ -139864,6 +139893,14 @@ export type GetTeamExternalGroupsResponse = GetTeamExternalGroupsResponses[keyof
 export type AddTeamExternalGroupData = {
     body: {
         groupIdentifier: string;
+        /**
+         * Match the group only for sign-ins through this identity provider. Omit to match it from any provider.
+         */
+        identityProviderId?: string | null;
+        /**
+         * The team role members of this group receive.
+         */
+        role?: 'admin' | 'member';
     };
     path: {
         id: string;
@@ -139948,6 +139985,8 @@ export type AddTeamExternalGroupResponses = {
         id: string;
         teamId: string;
         groupIdentifier: string;
+        identityProviderId: string | null;
+        role: 'admin' | 'member';
         createdAt: string;
     };
 };

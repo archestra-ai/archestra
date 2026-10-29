@@ -204,8 +204,11 @@ local_resource(
 local_resource(
   'app-runtime-rs-build',
   # build:dev = the release-fast profile (no LTO, incremental) for fast in-loop
-  # rebuilds; CI/Docker still build the optimized --release binary.
-  cmd='pnpm --filter @archestra/app-runtime-rs build:dev',
+  # rebuilds; CI/Docker still build the optimized --release binary. On linux
+  # x64, scripts/napi-prebuilt.mjs first installs the addon CI built for this
+  # exact archestra-rs tree and skips cargo; a modified tree, a tree CI has not
+  # published, another platform or ARCHESTRA_NAPI_PREBUILT=false builds.
+  cmd='node ../scripts/napi-prebuilt.mjs app-runtime-rs || pnpm --filter @archestra/app-runtime-rs build:dev',
   deps=[
     '../archestra-rs/app-runtime-rs/src',
     '../archestra-rs/app-runtime-core/src',
@@ -223,7 +226,7 @@ local_resource(
 # app-runtime-rs-build.
 local_resource(
   'router-rs-build',
-  cmd='pnpm --filter @archestra/router-rs build:dev',
+  cmd='node ../scripts/napi-prebuilt.mjs router-rs || pnpm --filter @archestra/router-rs build:dev',
   deps=[
     '../archestra-rs/router-rs/src',
     '../archestra-rs/router-core/src',
@@ -256,7 +259,7 @@ else:
     # Build before starting/restarting Node: native modules stay cached in a
     # running process. resource_deps alone only orders the initial startup.
     # A failed build leaves the previous backend running and surfaces in Tilt.
-    backend_build_cmd = 'pnpm --filter @archestra/openappa-rs build:dev && pnpm --filter @archestra/openappa-rs smoke:load'
+    backend_build_cmd = '(node ../scripts/napi-prebuilt.mjs openappa-rs || pnpm --filter @archestra/openappa-rs build:dev) && pnpm --filter @archestra/openappa-rs smoke:load'
     backend_watch_deps.extend([
       '../archestra-rs/openappa-rs/src',
       '../archestra-rs/openappa-rs/build.rs',

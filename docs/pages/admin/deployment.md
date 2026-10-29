@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-29
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -48,16 +48,21 @@ helm upgrade archestra-platform \
 
 Use `archestra.env` for non-secret environment variables. Use `archestra.envWithValueFrom`, `archestra.envFromSecrets`, or `archestra.envFrom` for Kubernetes Secret references. The full environment-variable list is in [Configuration](/docs/reference/configuration).
 
-The chart generates and preserves authentication and credential-encryption secrets. To supply your own:
+The chart generates and preserves authentication and credential-encryption keys. To supply existing keys, set `archestra.authSecret.existingSecretName`; the default key names are `auth-secret`, `session-secret`, `secrets-encryption-secret`, and `offer-signing-secret`.
+
+Configure different key names explicitly. Environment-variable-safe names also let you load the same Secret through `archestra.envFrom` on clusters that reject hyphens in environment variable names:
 
 ```yaml
 archestra:
   authSecret:
     existingSecretName: archestra-auth
-    existingSecretKey: auth-secret
+    existingSecretKey: ARCHESTRA_AUTH_SECRET
+    existingSessionSecretKey: ARCHESTRA_AUTH_SESSION_SECRET
+    existingSecretsEncryptionSecretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+    existingOfferSigningSecretKey: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
 ```
 
-The referenced Secret must also contain `session-secret` and `secrets-encryption-secret`. Preserve these keys across upgrades and restores. Use the [key rotation procedure](/docs/admin/security/credentials#database-storage) when changing encryption keys.
+Preserve these keys across upgrades and restores. Use the [key rotation procedure](/docs/admin/security/credentials#database-storage) when changing encryption keys.
 
 ### Database Configuration
 

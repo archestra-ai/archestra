@@ -106,6 +106,9 @@ describe.each([
         },
       });
       expect(streaming.statusCode).toBe(400);
+      expect(streaming.json().error.message).toContain(
+        "Image streaming is not supported. Omit stream or set it to false.",
+      );
     } finally {
       await app.close();
     }

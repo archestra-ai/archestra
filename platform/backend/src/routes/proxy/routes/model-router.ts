@@ -2,6 +2,7 @@ import {
   hasArchestraTokenPrefix,
   isChatCompletionsOnlyRouterProvider,
   LLM_PROXY_OAUTH_SCOPE,
+  lacksOpenAiChatCompletions,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   providerDisplayNames,
   providerHasEndpointLocalModels,
@@ -983,15 +984,22 @@ async function getNativeResponsesAdapter({
 }
 
 /**
- * Rejects a Responses-only model on the chat-completions endpoint locally. The
- * request would otherwise reach a provider that answers with its own opaque
- * "model not supported" error, which says nothing about the endpoint being the
- * problem.
+ * Rejects a model the provider has no chat-completions endpoint for locally.
+ * The request would otherwise reach a provider that answers with its own
+ * opaque "model not supported" error, which says nothing about the endpoint
+ * being the problem. A model the provider serves there, even only without
+ * function tools, is forwarded so the router answers as the provider does.
  */
 function assertModelServesChatCompletions(
   resolution: ModelRouterResolution,
 ): void {
-  if (!modelRequiresResponses(resolution)) {
+  if (
+    !requiresResponsesApi(resolution.supportedEndpoints) &&
+    !(
+      resolution.provider === "openai" &&
+      lacksOpenAiChatCompletions(resolution.modelId)
+    )
+  ) {
     return;
   }
   throw new ApiError(

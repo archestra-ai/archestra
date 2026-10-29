@@ -240,12 +240,12 @@ export function AgentRunChatSession({
         .filter((action) => action.primary || action.prominent)
         .map((action) => (
           <span key={action.label} className="inline-flex shrink-0">
-            {action.primary && (
+            {(action.primary || action.prominent) && (
               <Button
                 type="button"
                 size="icon-sm"
-                className="sm:hidden"
-                variant="default"
+                className="lg:hidden"
+                variant={action.primary ? "default" : "outline"}
                 aria-label={action.label}
                 title={action.label}
                 disabled={action.disabled}
@@ -261,7 +261,11 @@ export function AgentRunChatSession({
             <Button
               key={action.label}
               size="sm"
-              className={action.primary ? "hidden sm:inline-flex" : undefined}
+              className={
+                action.primary || action.prominent
+                  ? "hidden lg:inline-flex"
+                  : undefined
+              }
               variant={action.primary ? "default" : "outline"}
               disabled={action.disabled}
               onClick={action.onSelect}

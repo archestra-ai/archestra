@@ -23,7 +23,7 @@ describe("resolveSubagentTierSelection", () => {
       makeLlmProviderApiKey: (
         organizationId: string,
         secretId: string | null,
-        overrides: { provider: SupportedProvider },
+        overrides: { provider: SupportedProvider; userId?: string },
       ) => Promise<{ id: string }>;
     },
     modelIds: string[],
@@ -168,6 +168,41 @@ describe("resolveSubagentTierSelection", () => {
         ...scope,
       }),
     ).toEqual(selection("claude-haiku-5-5"));
+  });
+
+  test("a per-user provider trio tier needs the user's own account, else falls back", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const { org, scope, selection } = await setup(
+      { makeOrganization, makeUser, makeMember, makeLlmProviderApiKey },
+      ["claude-sonnet-5-5", "claude-haiku-5-5"],
+    );
+    const copilot = await createModel("github-copilot", "gpt-6-luna");
+    await OrganizationModel.patch(org.id, { defaultFastModelId: copilot.id });
+    const fast = () =>
+      resolveSubagentTierSelection({
+        tier: "fast",
+        parent: selection("claude-sonnet-5-5"),
+        ...scope,
+      });
+
+    expect(await fast()).toEqual(selection("claude-haiku-5-5"));
+
+    await makeLlmProviderApiKey(org.id, (await makeSecret()).id, {
+      provider: "github-copilot",
+      userId: scope.userId,
+    });
+
+    expect(await fast()).toEqual({
+      modelId: copilot.id,
+      chatApiKeyId: null,
+      selectedModel: "gpt-6-luna",
+      selectedProvider: "github-copilot",
+    });
   });
 
   test("falls back to the parent's model when no tier model is reachable", async ({

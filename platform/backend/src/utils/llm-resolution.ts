@@ -25,6 +25,7 @@ import {
   selectionKey,
   TeamModel,
 } from "@/models";
+import { checkModelTeamAccess } from "@/routes/proxy/utils/model-team-access";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { ApiError, type Model } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
@@ -324,7 +325,18 @@ async function findTierSelection(params: {
   const trioModelId = organization?.[ORGANIZATION_TIER_FIELD[tier]] ?? null;
   const trioModel = trioModelId ? await ModelModel.findById(trioModelId) : null;
   if (trioModel && isSubagentTierCandidate(trioModel)) {
-    const key = parentKeyModels.some((m) => m.id === trioModel.id)
+    const onParentKey =
+      parent.chatApiKeyId !== null &&
+      parentKeyModels.some((m) => m.id === trioModel.id) &&
+      (
+        await checkModelTeamAccess({
+          provider: trioModel.provider,
+          modelId: trioModel.modelId,
+          organizationId: params.organizationId,
+          authenticatedUserId: params.userId,
+        })
+      ).allowed;
+    const key = onParentKey
       ? { kind: "found" as const, apiKeyId: parent.chatApiKeyId }
       : await userKeyForModel({ ...params, model: trioModel });
     if (key.kind === "found") return toSelection(trioModel, key.apiKeyId);

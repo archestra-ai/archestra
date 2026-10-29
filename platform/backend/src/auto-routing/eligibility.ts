@@ -1,4 +1,5 @@
 import { providerRequiresPerUserCredential } from "@archestra/shared";
+import { LlmProviderApiKeyModel } from "@/models";
 import {
   type ModelRouterAuth,
   type ModelRouterEndpoint,
@@ -101,7 +102,9 @@ export async function userModelRouterAuth(params: {
 /**
  * The provider key `userId` would use for `model` on a native provider route,
  * picked as the Model Router picks one for an OAuth user. A per-user
- * provider's credential is resolved at request time, so it has no key here.
+ * provider's credential is resolved at request time, so it has no key here;
+ * it is found only when the user may use the model and has connected their
+ * own account.
  */
 export async function userKeyForModel(params: {
   organizationId: string;
@@ -110,7 +113,23 @@ export async function userKeyForModel(params: {
 }): Promise<{ kind: "found"; apiKeyId: string | null } | { kind: "none" }> {
   const { organizationId, userId, model } = params;
   if (providerRequiresPerUserCredential(model.provider)) {
-    return { kind: "found", apiKeyId: null };
+    const [access, keys] = await Promise.all([
+      checkModelTeamAccess({
+        provider: model.provider,
+        modelId: model.modelId,
+        organizationId,
+        authenticatedUserId: userId,
+      }),
+      LlmProviderApiKeyModel.getAvailableKeysForUser(
+        organizationId,
+        userId,
+        [],
+        model.provider,
+      ),
+    ]);
+    return access.allowed && keys.some((key) => key.userId === userId)
+      ? { kind: "found", apiKeyId: null }
+      : { kind: "none" };
   }
   const eligibility = await checkAutoTierEligibility({
     auth: await userModelRouterAuth({ organizationId, userId }),

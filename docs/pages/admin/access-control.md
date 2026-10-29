@@ -101,7 +101,7 @@ An account gets the permissions of every role assigned to it directly, plus the 
 
 ## Team Member and Admin Roles
 
-Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its limits or view its spend just by being members. Admins manage that team's members and settings, can manage its [limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend), and can view its spend. Team admin status does not pass to descendant teams.
+Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its limits just by being members. Admins manage that team's members and settings, and its [limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend) and their usage. Team admin status does not pass to descendant teams.
 
 <span id="delegation-and-concurrent-edits"></span>
 

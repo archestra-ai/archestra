@@ -1193,6 +1193,58 @@ describe("TeamModel", () => {
       expect(await TeamModel.getMemberRole(team.id, manual.id)).toBe("member");
     });
 
+    test("demotes an Admin only when sync made them one, never one promoted by hand", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const owner = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, owner.id, { name: "Platform" });
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "engineering",
+      });
+      await TeamModel.addExternalGroup({
+        teamId: team.id,
+        groupIdentifier: "platform-leads",
+        role: "admin",
+      });
+      // Joined through sync before links had roles, then promoted by hand.
+      const promotedByHand = await makeUser({ email: "lead@test.com" });
+      await TeamModel.addMember(team.id, promotedByHand.id, "member", true);
+      await TeamModel.updateMemberRole({
+        teamId: team.id,
+        userId: promotedByHand.id,
+        role: "admin",
+      });
+      const syncedLead = await makeUser({ email: "synced-lead@test.com" });
+      await TeamModel.syncUserTeams({
+        userId: syncedLead.id,
+        organizationId: org.id,
+        ssoGroups: ["engineering", "platform-leads"],
+      });
+      expect(await TeamModel.getMemberRole(team.id, syncedLead.id)).toBe(
+        "admin",
+      );
+
+      // Both are now only in the Member group.
+      for (const userId of [promotedByHand.id, syncedLead.id]) {
+        await TeamModel.syncUserTeams({
+          userId,
+          organizationId: org.id,
+          ssoGroups: ["engineering"],
+        });
+      }
+
+      expect(await TeamModel.getMemberRole(team.id, promotedByHand.id)).toBe(
+        "admin",
+      );
+      expect(await TeamModel.getMemberRole(team.id, syncedLead.id)).toBe(
+        "member",
+      );
+    });
+
     test("matches a provider's groups only for sign-ins through that provider", async ({
       makeUser,
       makeOrganization,

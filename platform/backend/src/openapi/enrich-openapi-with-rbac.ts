@@ -306,8 +306,6 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Requires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits.",
   [RouteId.GetLimitLabelValues]:
     "Requires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits.",
-  [RouteId.GetTeamStatistics]:
-    "Requires `llmCost:read` for organization-wide team statistics. A session-authenticated team admin may request only their own team by providing `teamId`.",
   [RouteId.GetOrganizationMemberOptions]:
     "All authenticated callers may search visible member identities. member:read returns the organization roster; other callers receive only teammates in the active organization.",
   [RouteId.GetAgentCatalog]:

@@ -136671,7 +136671,6 @@ export type GetTeamStatisticsData = {
     path?: never;
     query?: {
         timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
-        teamId?: string;
     };
     url: '/api/statistics/teams';
 };
@@ -138530,6 +138529,7 @@ export type GetTeamsResponses = {
                 userId: string;
                 role: string;
                 syncedFromSso: boolean;
+                roleSyncedFromSso: boolean;
                 createdAt: string;
             }>;
             labels?: Array<{
@@ -138665,6 +138665,7 @@ export type CreateTeamResponses = {
             userId: string;
             role: string;
             syncedFromSso: boolean;
+            roleSyncedFromSso: boolean;
             createdAt: string;
         }>;
         labels?: Array<{
@@ -138874,6 +138875,7 @@ export type GetTeamResponses = {
             userId: string;
             role: string;
             syncedFromSso: boolean;
+            roleSyncedFromSso: boolean;
             createdAt: string;
         }>;
         labels?: Array<{
@@ -139001,6 +139003,7 @@ export type UpdateTeamResponses = {
             userId: string;
             role: string;
             syncedFromSso: boolean;
+            roleSyncedFromSso: boolean;
             createdAt: string;
         }>;
         labels?: Array<{
@@ -139206,6 +139209,7 @@ export type GetTeamMembersResponses = {
         userId: string;
         role: string;
         syncedFromSso: boolean;
+        roleSyncedFromSso: boolean;
         createdAt: string;
         name: string | null;
         email: string;
@@ -139305,6 +139309,7 @@ export type AddTeamMemberResponses = {
         userId: string;
         role: string;
         syncedFromSso: boolean;
+        roleSyncedFromSso: boolean;
         createdAt: string;
     };
 };
@@ -139414,6 +139419,7 @@ export type GetTeamMembersPageResponses = {
             userId: string;
             role: string;
             syncedFromSso: boolean;
+            roleSyncedFromSso: boolean;
             createdAt: string;
             name: string | null;
             email: string;
@@ -139611,6 +139617,7 @@ export type UpdateTeamMemberResponses = {
         userId: string;
         role: string;
         syncedFromSso: boolean;
+        roleSyncedFromSso: boolean;
         createdAt: string;
     };
 };

@@ -9,7 +9,6 @@ describe("enrichOpenApiWithRbac", () => {
     RouteId.CreateLimit,
     RouteId.UpdateLimit,
     RouteId.DeleteLimit,
-    RouteId.GetTeamStatistics,
   ])("documents %s as dynamically authorized for team admins", (operationId) => {
     const spec = { paths: { "/api/example": { get: { operationId } } } };
     const operation = enrichOpenApiWithRbac(spec).paths["/api/example"].get as {

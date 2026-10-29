@@ -556,9 +556,8 @@ class StatisticsModel {
   static async getTeamStatistics(params: {
     timeframe: StatisticsTimeFrame;
     organizationId: string;
-    teamId?: string;
   }): Promise<TeamStatistics[]> {
-    const { timeframe, organizationId, teamId } = params;
+    const { timeframe, organizationId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
     const teamAssignments = AgentTeamModel.readAssignments(organizationId);
@@ -609,7 +608,6 @@ class StatisticsModel {
           ...StatisticsModel.timeframeConditions(timeframe),
           eq(schema.agentsTable.organizationId, organizationId),
           eq(schema.teamsTable.organizationId, organizationId),
-          teamId ? eq(schema.teamsTable.id, teamId) : undefined,
         ),
       )
       .groupBy(
@@ -640,12 +638,7 @@ class StatisticsModel {
         schema.teamMembersTable,
         eq(schema.teamsTable.id, schema.teamMembersTable.teamId),
       )
-      .where(
-        and(
-          eq(schema.teamsTable.organizationId, organizationId),
-          teamId ? eq(schema.teamsTable.id, teamId) : undefined,
-        ),
-      )
+      .where(eq(schema.teamsTable.organizationId, organizationId))
       .groupBy(schema.teamsTable.id);
 
     // Get agent counts per team
@@ -659,12 +652,7 @@ class StatisticsModel {
         teamAssignments,
         eq(teamAssignments.teamId, schema.teamsTable.id),
       )
-      .where(
-        and(
-          eq(schema.teamsTable.organizationId, organizationId),
-          teamId ? eq(schema.teamsTable.id, teamId) : undefined,
-        ),
-      )
+      .where(eq(schema.teamsTable.organizationId, organizationId))
       .groupBy(schema.teamsTable.id);
 
     const membersByTeam = new Map(

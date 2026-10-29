@@ -531991,7 +531991,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get usage statistics for every team in the active organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmCost:read` for organization-wide team statistics. A session-authenticated team admin may request only their own team by providing `teamId`.",
+        "description": "Get usage statistics for every team in the active organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate team usage for the active organization.",
         "parameters": [
           {
             "schema": {
@@ -532021,16 +532021,6 @@
             },
             "in": "query",
             "name": "timeframe",
-            "required": false
-          },
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "in": "query",
-            "name": "teamId",
             "required": false
           }
         ],
@@ -532375,9 +532365,11 @@
           }
         },
         "x-required-permissions": {
-          "kind": "dynamic",
-          "note": "Requires `llmCost:read` for organization-wide team statistics. A session-authenticated team admin may request only their own team by providing `teamId`.",
-          "permissions": []
+          "kind": "static",
+          "note": "Returns aggregate team usage for the active organization.",
+          "permissions": [
+            "llmCost:read"
+          ]
         }
       }
     },
@@ -538436,6 +538428,9 @@
                                 "syncedFromSso": {
                                   "type": "boolean"
                                 },
+                                "roleSyncedFromSso": {
+                                  "type": "boolean"
+                                },
                                 "createdAt": {
                                   "type": "string",
                                   "format": "date-time"
@@ -538447,6 +538442,7 @@
                                 "userId",
                                 "role",
                                 "syncedFromSso",
+                                "roleSyncedFromSso",
                                 "createdAt"
                               ],
                               "additionalProperties": false
@@ -538961,6 +538957,9 @@
                           "syncedFromSso": {
                             "type": "boolean"
                           },
+                          "roleSyncedFromSso": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -538972,6 +538971,7 @@
                           "userId",
                           "role",
                           "syncedFromSso",
+                          "roleSyncedFromSso",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -539388,6 +539388,9 @@
                           "syncedFromSso": {
                             "type": "boolean"
                           },
+                          "roleSyncedFromSso": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -539399,6 +539402,7 @@
                           "userId",
                           "role",
                           "syncedFromSso",
+                          "roleSyncedFromSso",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -539866,6 +539870,9 @@
                           "syncedFromSso": {
                             "type": "boolean"
                           },
+                          "roleSyncedFromSso": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -539877,6 +539884,7 @@
                           "userId",
                           "role",
                           "syncedFromSso",
+                          "roleSyncedFromSso",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -540851,6 +540859,9 @@
                       "syncedFromSso": {
                         "type": "boolean"
                       },
+                      "roleSyncedFromSso": {
+                        "type": "boolean"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -540873,6 +540884,7 @@
                       "userId",
                       "role",
                       "syncedFromSso",
+                      "roleSyncedFromSso",
                       "createdAt",
                       "name",
                       "email",
@@ -541189,6 +541201,9 @@
                     "syncedFromSso": {
                       "type": "boolean"
                     },
+                    "roleSyncedFromSso": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -541200,6 +541215,7 @@
                     "userId",
                     "role",
                     "syncedFromSso",
+                    "roleSyncedFromSso",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -541553,6 +541569,9 @@
                           "syncedFromSso": {
                             "type": "boolean"
                           },
+                          "roleSyncedFromSso": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -541575,6 +541594,7 @@
                           "userId",
                           "role",
                           "syncedFromSso",
+                          "roleSyncedFromSso",
                           "createdAt",
                           "name",
                           "email",
@@ -541944,6 +541964,9 @@
                     "syncedFromSso": {
                       "type": "boolean"
                     },
+                    "roleSyncedFromSso": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -541955,6 +541978,7 @@
                     "userId",
                     "role",
                     "syncedFromSso",
+                    "roleSyncedFromSso",
                     "createdAt"
                   ],
                   "additionalProperties": false

@@ -4285,6 +4285,13 @@
       "when": 1793305721604,
       "tag": "0611_team_managed_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 612,
+      "version": "7",
+      "when": 1793307055982,
+      "tag": "0612_team_member_role_source",
+      "breakpoints": true
     }
   ]
 }

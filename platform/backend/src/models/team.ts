@@ -593,6 +593,7 @@ class TeamModel {
         userId,
         role,
         syncedFromSso,
+        roleSyncedFromSso: syncedFromSso,
         createdAt: now,
       })
       .returning();
@@ -608,6 +609,8 @@ class TeamModel {
     teamId: string;
     userId: string;
     role: TeamMemberRole;
+    /** Team Sync chose this role; a manual change leaves it unset. */
+    fromSync?: boolean;
   }): Promise<TeamMember | null> {
     const { teamId, userId, role } = params;
     logger.debug(
@@ -617,7 +620,7 @@ class TeamModel {
 
     const [member] = await db
       .update(schema.teamMembersTable)
-      .set({ role })
+      .set({ role, roleSyncedFromSso: params.fromSync ?? false })
       .where(
         and(
           eq(schema.teamMembersTable.teamId, teamId),
@@ -1433,7 +1436,8 @@ class TeamModel {
    * Synchronize a user's team memberships based on their SSO groups.
    * - Adds user to teams mapped to their groups, with the mapping's team role
    *   (Admin when any matching mapping grants Admin)
-   * - Keeps the role of SSO-synced memberships in step with their mappings
+   * - Promotes SSO-synced members an Admin link covers, and demotes only an
+   *   Admin that sync promoted; a role changed by hand is left alone
    * - Removes user from teams they were previously synced to but no longer have groups for
    * - Does NOT touch manually added memberships (syncedFromSso = false)
    *
@@ -1500,8 +1504,18 @@ class TeamModel {
     for (const [teamId, role] of desiredRoles) {
       const synced = syncedByTeamId.get(teamId);
       if (synced) {
-        if (synced.role !== role) {
-          await TeamModel.updateMemberRole({ teamId, userId, role });
+        // Sync always grants Admin, but demotes only an Admin it made: a
+        // role someone set by hand is theirs to change.
+        if (
+          synced.role !== role &&
+          (role === ADMIN_ROLE_NAME || synced.roleSyncedFromSso)
+        ) {
+          await TeamModel.updateMemberRole({
+            teamId,
+            userId,
+            role,
+            fromSync: true,
+          });
           roleChanged.push(teamId);
         }
       } else if (!(await TeamModel.isUserInTeam(teamId, userId))) {

@@ -1419,7 +1419,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
-  [RouteId.GetTeamStatistics]: {},
+  [RouteId.GetTeamStatistics]: {
+    llmCost: ["read"],
+  },
   [RouteId.GetProxyCostStatistics]: { llmCost: ["read"] },
   [RouteId.GetAgentStatistics]: {
     llmCost: ["read"],

@@ -41,7 +41,7 @@ When more than one rule matches a call, every matching hard rule must allow it:
 
 <span id="team-limits-and-spend"></span>
 
-### Team Limits and Spend
+### Team Limits
 
 Open **Limits** in the sidebar to view usage against limits and manage spend, token and request limits for teams you administer. Use **Add Limit** and select your team. Without organization cost or limit permissions, this page shows only your administered teams; ordinary team members have no automatic limit-management access. See [team member and admin roles](/docs/admin/access-control#team-roles).
 

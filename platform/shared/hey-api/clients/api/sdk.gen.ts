@@ -12675,7 +12675,9 @@ export const getProxyCostStatistics = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * Requires `llmCost:read` for organization-wide team statistics. A session-authenticated team admin may request only their own team by providing `teamId`.
+ * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
+ *
+ * Returns aggregate team usage for the active organization.
  */
 export const getTeamStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetTeamStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetTeamStatisticsResponses, GetTeamStatisticsErrors, ThrowOnError>({ url: '/api/statistics/teams', ...options });
 

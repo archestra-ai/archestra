@@ -83,6 +83,7 @@ import {
   type IncomingChatMessage,
   MsTeamsChatOpsConfigViewSchema,
   SlackChatOpsConfigViewSchema,
+  type SlackDbConfig,
   TelegramChatOpsConfigViewSchema,
 } from "@/types";
 import {
@@ -2217,6 +2218,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       await ChatOpsConfigModel.saveSlackConfig(merged);
       await chatOpsManager.reinitialize();
+      assertSlackStarted(merged);
 
       return reply.send({ success: true });
     },
@@ -2557,6 +2559,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       await ChatOpsConfigModel.saveSlackAgentBot(merged);
       await chatOpsManager.reinitialize();
+      assertSlackStarted(merged, agentId);
       return reply.send({ success: true });
     },
   );
@@ -3271,6 +3274,23 @@ function resolveSlackWebhookProvider(params: unknown) {
   return chatOpsManager.getSlackProvider(agentId);
 }
 
+/** The manager isolates provider failures; a Save must still report its failure. */
+function assertSlackStarted(config: SlackDbConfig, agentId?: string): void {
+  if (
+    new SlackProvider(config).isConfigured() &&
+    !chatOpsManager.getSlackProvider(agentId)?.getBotUserId()
+  ) {
+    const hosts =
+      config.connectionMode === "socket"
+        ? "slack.com and wss-primary.slack.com"
+        : "slack.com";
+    throw new ApiError(
+      502,
+      `Could not connect to Slack. Check that the platform can reach ${hosts} over HTTPS (port 443), then retry.`,
+    );
+  }
+}
+
 /**
  * Check Slack credentials before saving them: the bot token with auth.test,
  * and for Socket Mode the app-level token by opening a connection.
@@ -3319,6 +3339,13 @@ function makeSlackCheckClient(token: string): WebClient {
   return new WebClient(token, {
     timeout: SLACK_CONNECT_TIMEOUT_MS,
     retryConfig: { retries: 0 },
+    rejectRateLimitedCalls: true,
+    requestInterceptor: (request) => {
+      // Axios' timeout measures inactivity; Slack may keep a response body
+      // open by sending bytes. This deadline covers the whole request.
+      request.signal = AbortSignal.timeout(SLACK_CONNECT_TIMEOUT_MS);
+      return request;
+    },
   });
 }
 
@@ -3331,16 +3358,21 @@ function throwIfSlackUnreachable(
   error: unknown,
   connectionMode: ChatOpsConnectionMode,
 ): void {
-  if ((error as { code?: unknown } | null)?.code !== ErrorCode.RequestError) {
-    return;
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code === ErrorCode.RateLimitedError) {
+    throw new ApiError(
+      502,
+      "Slack rate-limited the connection attempt. Please retry shortly.",
+    );
   }
+  if (code !== ErrorCode.RequestError) return;
   const hosts =
     connectionMode === "socket"
       ? "slack.com and wss-primary.slack.com"
       : "slack.com";
   throw new ApiError(
     502,
-    `Could not reach slack.com within ${SLACK_CONNECT_TIMEOUT_MS / TimeInMs.Second}s. Check that the platform can reach ${hosts} over HTTPS (port 443).`,
+    `Could not reach slack.com within ${SLACK_CONNECT_TIMEOUT_MS / TimeInMs.Second}s. Check that the platform can reach ${hosts} over HTTPS (port 443), then retry.`,
   );
 }
 

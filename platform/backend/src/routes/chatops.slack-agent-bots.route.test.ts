@@ -103,6 +103,10 @@ describe("Slack agent bots", () => {
       name: "Marketing",
     });
 
+    vi.mocked(chatOpsManager.getSlackProvider).mockReturnValueOnce({
+      getBotUserId: () => "UBOT_TEST",
+    } as ReturnType<typeof chatOpsManager.getSlackProvider>);
+
     const response = await connect(agent.id, {
       botToken: "xoxb-marketing",
       appLevelToken: "xapp-marketing",

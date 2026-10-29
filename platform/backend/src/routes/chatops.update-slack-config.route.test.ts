@@ -1,12 +1,21 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { TimeInMs } from "@archestra/shared";
-import { HttpResponse, http } from "msw";
+import { eq } from "drizzle-orm";
+import { HttpResponse, http, passthrough } from "msw";
 import { vi } from "vitest";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { SLACK_CONNECT_TIMEOUT_MS } from "@/agents/chatops/constants";
+import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { ChatOpsConfigModel } from "@/models";
 import { afterEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
+import { createSlackSocketFixture } from "@/test/slack-socket-fixture";
 import chatopsRoutes from "./chatops";
+
+setupTestCacheManager();
 
 describe("PUT /api/chatops/config/slack when Slack is unreachable", () => {
   const server = useMswServer();
@@ -37,6 +46,37 @@ describe("PUT /api/chatops/config/slack when Slack is unreachable", () => {
     expect(response.json().error.message).toContain("wss-primary.slack.com");
     expect(await ChatOpsConfigModel.getSlackConfig()).toBeNull();
     await app.close();
+  });
+
+  test("a rate-limited credential check fails promptly and asks for retry", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    server.use(
+      http.post(
+        "https://slack.com/api/auth.test",
+        () =>
+          new HttpResponse(null, {
+            status: 429,
+            headers: { "Retry-After": "60" },
+          }),
+      ),
+    );
+    const app = await makeApp({ makeOrganization, makeUser });
+    try {
+      const started = performance.now();
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/chatops/config/slack",
+        payload: slackConfig,
+      });
+      expect(response.statusCode).toBe(502);
+      expect(response.json().error.message).toContain("retry");
+      expect(performance.now() - started).toBeLessThan(1000);
+      expect(await ChatOpsConfigModel.getSlackConfig()).toBeNull();
+    } finally {
+      await app.close();
+    }
   });
 
   test("gives up on a Slack API call that never answers", async ({
@@ -72,6 +112,136 @@ describe("PUT /api/chatops/config/slack when Slack is unreachable", () => {
     );
     await app.close();
   });
+  for (const method of ["auth.test", "apps.connections.open"]) {
+    test(`the ${method} credential check aborts a continuously dribbling response`, async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const fixture = await createSlackSocketFixture();
+      // MSW's intercepted socket timeout is absolute; bypass it to exercise
+      // the SDK's real Node HTTP inactivity timeout while bytes keep arriving.
+      server.close();
+      fixture.dribble(method);
+      const app = await makeApp({ makeOrganization, makeUser });
+      let finished = false;
+      const started = performance.now();
+      const pending = app
+        .inject({
+          method: "PUT",
+          url: "/api/chatops/config/slack",
+          payload: slackConfig,
+        })
+        .then((response) => {
+          finished = true;
+          return response;
+        });
+      try {
+        await delay(SLACK_CONNECT_TIMEOUT_MS + 1000);
+        const finishedBeforeRelease = finished;
+        fixture.release();
+        const response = await pending;
+        expect(finishedBeforeRelease).toBe(true);
+        expect(response.statusCode).toBe(502);
+        expect(response.json().error.message).toContain("slack.com");
+        expect(performance.now() - started).toBeLessThan(
+          SLACK_CONNECT_TIMEOUT_MS + 2000,
+        );
+        expect(fixture.dribbleWrites).toBeGreaterThan(50);
+        expect(fixture.abortedDribbles).toBe(1);
+        expect(await ChatOpsConfigModel.getSlackConfig()).toBeNull();
+      } finally {
+        fixture.release();
+        await pending;
+        await app.close();
+        await fixture.close();
+      }
+    }, 15000);
+  }
+
+  for (const target of ["main", "agent"] as const) {
+    test(`${target} Save reports failed socket startup and an explicit retry connects`, async ({
+      makeOrganization,
+      makeUser,
+      makeInternalAgent,
+    }) => {
+      const fixture = await createSlackSocketFixture();
+      server.use(...fixture.handlers);
+      if (target === "main") fixture.dropHelloAndClose();
+      else fixture.stallHandshake();
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const agent =
+        target === "agent"
+          ? await makeInternalAgent({ organizationId: org.id })
+          : undefined;
+      const app = createFastifyInstance();
+      app.addHook("onRequest", async (request) => {
+        request.organizationId = org.id;
+        request.user = user as typeof request.user;
+      });
+      registerAuditLogHook(app);
+      await app.register(chatopsRoutes);
+      const origin = await app.listen({ host: "127.0.0.1", port: 0 });
+      server.use(
+        http.all(`${origin}/api/chatops/config/slack`, () => passthrough()),
+        http.all(`${origin}/api/chatops/config/slack/agents/:agentId`, () =>
+          passthrough(),
+        ),
+      );
+      const url = `${origin}/api/chatops/config/slack${agent ? `/agents/${agent.id}` : ""}`;
+      const save = () =>
+        fetch(url, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(slackConfig),
+        });
+      try {
+        const started = performance.now();
+        const failed = await save();
+        expect(failed.status).toBe(502);
+        expect(await failed.json()).toMatchObject({
+          error: { message: expect.stringContaining("wss-primary.slack.com") },
+        });
+        expect(performance.now() - started).toBeLessThan(
+          SLACK_CONNECT_TIMEOUT_MS + 3000,
+        );
+        expect(
+          chatOpsManager.getSlackProvider(agent?.id)?.getBotUserId(),
+        ).toBeNull();
+        const stored = agent
+          ? (await ChatOpsConfigModel.getSlackAgentBots())[0]
+          : await ChatOpsConfigModel.getSlackConfig();
+        expect(stored).toMatchObject({
+          enabled: true,
+          botToken: slackConfig.botToken,
+        });
+        const [audit] = await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.resourceId, org.id));
+        expect(audit).toBeDefined();
+        expect(audit.before).not.toEqual(audit.after);
+        expect(JSON.stringify(audit)).not.toContain(slackConfig.botToken);
+        fixture.release();
+        await delay(100);
+        expect(fixture.connections).toBe(target === "main" ? 1 : 0);
+        const calls = fixture.calls.length;
+        await delay(100);
+        expect(fixture.calls.length).toBe(calls);
+        const retried = await save();
+        expect(retried.status).toBe(200);
+        expect(await retried.json()).toEqual({ success: true });
+        expect(chatOpsManager.getSlackProvider(agent?.id)?.getBotUserId()).toBe(
+          "UBOT_TEST",
+        );
+        expect(fixture.connections).toBe(target === "main" ? 2 : 1);
+      } finally {
+        await chatOpsManager.cleanup();
+        await app.close();
+        await fixture.close();
+      }
+    });
+  }
 });
 
 const slackConfig = {

@@ -1,4 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { Agent } from "node:https";
+import type { Duplex } from "node:stream";
 import {
   buildSlackSlashCommandsForCommand,
   getSlackSlashCommandAction,
@@ -7,7 +9,12 @@ import {
   TimeInMs,
 } from "@archestra/shared";
 import { SocketModeClient } from "@slack/socket-mode";
-import { type Button, type ColorScheme, WebClient } from "@slack/web-api";
+import {
+  type Button,
+  type ColorScheme,
+  WebClient,
+  type WebClientOptions,
+} from "@slack/web-api";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   type AllowedCacheKey,
@@ -227,68 +234,100 @@ class SlackProvider implements ChatOpsProvider {
       return;
     }
 
-    await slackAppFactory.ensureManifestScopes(this.config);
-    const { botToken } = this.config;
-    this.client = new WebClient(botToken);
-    this.bestEffortClient = new WebClient(botToken, {
+    const abortController = new AbortController();
+    const deadline = setTimeout(
+      () => abortController.abort(),
+      SLACK_CONNECT_TIMEOUT_MS,
+    );
+    const startupOptions: WebClientOptions = {
       retryConfig: { retries: 0 },
       rejectRateLimitedCalls: true,
-      timeout: 3 * TimeInMs.Second,
-    });
-
-    // Single raw fetch to auth.test — reads both the JSON body (user/team info)
-    // and the x-oauth-scopes response header (scope validation) in one API call.
-    // The SDK's auth.test() doesn't expose response headers.
+      requestInterceptor: (request) => {
+        request.signal = abortController.signal;
+        return request;
+      },
+    };
     try {
-      const response = await fetch("https://slack.com/api/auth.test", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${botToken}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        signal: AbortSignal.timeout(SLACK_CONNECT_TIMEOUT_MS),
+      await slackAppFactory.ensureManifestScopes(this.config, startupOptions);
+      abortController.signal.throwIfAborted();
+      const { botToken } = this.config;
+      this.client = new WebClient(botToken, startupOptions);
+      this.bestEffortClient = new WebClient(botToken, {
+        retryConfig: { retries: 0 },
+        rejectRateLimitedCalls: true,
+        timeout: 3 * TimeInMs.Second,
       });
 
-      const body = await response.json();
-      if (!body.ok) {
-        throw new Error(body.error || "auth.test returned ok=false");
+      // Single raw fetch to auth.test — reads both the JSON body (user/team info)
+      // and the x-oauth-scopes response header (scope validation) in one API call.
+      // The SDK's auth.test() doesn't expose response headers.
+      try {
+        const response = await fetch("https://slack.com/api/auth.test", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${botToken}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          signal: abortController.signal,
+        });
+
+        const body = await response.json();
+        if (!body.ok) {
+          throw new Error(body.error || "auth.test returned ok=false");
+        }
+
+        this.botUserId = (body.user_id as string) || null;
+        this.botId = (body.bot_id as string) || null;
+        this.teamId = (body.team_id as string) || null;
+        this.teamName = (body.team as string) || null;
+        // Best-effort: without it the bot simply stops answering to its own name.
+        this.botDisplayName = this.botUserId
+          ? await this.getUserName(this.botUserId)
+          : null;
+        // auth.test's `user` is the bot's username and needs no scope, so a
+        // hand-made app without users:read still reports its real handle.
+        this.botHandle =
+          (this.botUserId
+            ? await this.fetchUserHandle(this.botUserId)
+            : null) ||
+          (body.user as string) ||
+          null;
+        logger.info(
+          {
+            botUserId: this.botUserId,
+            botDisplayName: this.botDisplayName,
+            teamId: this.teamId,
+          },
+          "[SlackProvider] Authenticated successfully",
+        );
+
+        // Check granted scopes from the same response (non-fatal)
+        this.parseGrantedScopes(response.headers.get("x-oauth-scopes"));
+      } catch (error) {
+        logger.error(
+          { error: errorMessage(error) },
+          "[SlackProvider] Failed to authenticate with Slack",
+        );
+        throw error;
       }
 
-      this.botUserId = (body.user_id as string) || null;
-      this.botId = (body.bot_id as string) || null;
-      this.teamId = (body.team_id as string) || null;
-      this.teamName = (body.team as string) || null;
-      // Best-effort: without it the bot simply stops answering to its own name.
-      this.botDisplayName = this.botUserId
-        ? await this.getUserName(this.botUserId)
-        : null;
-      // auth.test's `user` is the bot's username and needs no scope, so a
-      // hand-made app without users:read still reports its real handle.
-      this.botHandle =
-        (this.botUserId ? await this.fetchUserHandle(this.botUserId) : null) ||
-        (body.user as string) ||
-        null;
-      logger.info(
-        {
-          botUserId: this.botUserId,
-          botDisplayName: this.botDisplayName,
-          teamId: this.teamId,
-        },
-        "[SlackProvider] Authenticated successfully",
-      );
-
-      // Check granted scopes from the same response (non-fatal)
-      this.parseGrantedScopes(response.headers.get("x-oauth-scopes"));
+      if (this.isSocketMode()) {
+        await this.startSocketMode(abortController.signal);
+      }
+      abortController.signal.throwIfAborted();
+      this.client = new WebClient(botToken);
     } catch (error) {
-      logger.error(
-        { error: errorMessage(error) },
-        "[SlackProvider] Failed to authenticate with Slack",
+      abortController.abort();
+      await this.cleanup();
+      const hosts = this.isSocketMode()
+        ? "slack.com and wss-primary.slack.com"
+        : "slack.com";
+      throw new Error(
+        `Could not connect to Slack. Check that the platform can reach ${hosts} over HTTPS (port 443), then retry.`,
+        { cause: error },
       );
-      throw error;
-    }
-
-    if (this.isSocketMode()) {
-      await this.startSocketMode();
+    } finally {
+      clearTimeout(deadline);
     }
   }
 
@@ -2213,7 +2252,7 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
-  private async startSocketMode(): Promise<void> {
+  private async startSocketMode(signal: AbortSignal): Promise<void> {
     const appToken = this.config.appLevelToken;
     if (!appToken) {
       logger.error(
@@ -2222,11 +2261,42 @@ class SlackProvider implements ChatOpsProvider {
       return;
     }
 
+    signal.throwIfAborted();
+    let connected = false;
+    // An upgraded socket leaves Agent's pool. Retain the initial transports so
+    // cancellation also closes a peer that never sends hello or a close frame.
+    const agent = new Agent();
+    const initialSockets = new Set<Duplex>();
+    const createConnection = agent.createConnection.bind(agent);
+    agent.createConnection = (options, callback) => {
+      const socket = createConnection(options, callback);
+      if (socket) initialSockets.add(socket);
+      return socket;
+    };
     this.socketModeClient = new SocketModeClient({
       appToken,
       autoReconnectEnabled: true,
-      // Bounds each apps.connections.open attempt; the SDK still retries.
-      clientOptions: { timeout: SLACK_CONNECT_TIMEOUT_MS },
+      clientOptions: {
+        agent,
+        timeout: SLACK_CONNECT_TIMEOUT_MS,
+        // The SDK reads these public options for each API call. Fail the first
+        // connection promptly; keep its normal retry policy for reconnects.
+        retryConfig: {
+          get retries() {
+            return connected ? 100 : 0;
+          },
+          factor: 1.3,
+        },
+        requestInterceptor: (request) => {
+          if (!connected) {
+            request.signal = signal;
+            // Reject before the SDK starts its Retry-After sleep, which an
+            // AbortSignal cannot cancel. Established sessions keep that retry.
+            request.validateStatus = (status) => status !== 429;
+          }
+          return request;
+        },
+      },
     });
 
     // The SocketModeClient dispatches events as follows (see source):
@@ -2313,42 +2383,23 @@ class SlackProvider implements ChatOpsProvider {
       },
     );
 
-    // With auto-reconnect on, start() keeps retrying until it connects, so a
-    // network that drops traffic to Slack would block the caller (saving the
-    // Slack config) forever. Stop waiting after the timeout and let the client
-    // keep retrying in the background.
-    const connection = this.socketModeClient.start();
-    let deadline: NodeJS.Timeout | undefined;
-    const timedOut = new Promise<"timed-out">((resolve) => {
-      deadline = setTimeout(
-        () => resolve("timed-out"),
-        SLACK_CONNECT_TIMEOUT_MS,
-      );
+    let onAbort: (() => void) | undefined;
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      onAbort = () => reject(signal.reason);
+      signal.addEventListener("abort", onAbort, { once: true });
     });
     try {
-      if ((await Promise.race([connection, timedOut])) === "timed-out") {
-        logger.error(
-          `[SlackProvider] Socket mode did not connect within ${SLACK_CONNECT_TIMEOUT_MS / TimeInMs.Second}s; still retrying in the background. Check that the platform can reach slack.com and wss-primary.slack.com over HTTPS (port 443).`,
-        );
-        connection.then(
-          () => logger.info("[SlackProvider] Socket mode connected"),
-          (error) =>
-            logger.error(
-              { error: errorMessage(error) },
-              "[SlackProvider] Failed to start socket mode",
-            ),
-        );
-        return;
-      }
+      await Promise.race([this.socketModeClient.start(), cancelled]);
+      connected = true;
       logger.info("[SlackProvider] Socket mode connected");
     } catch (error) {
-      logger.error(
-        { error: errorMessage(error) },
-        "[SlackProvider] Failed to start socket mode",
-      );
+      for (const socket of initialSockets) socket.destroy();
+      agent.destroy();
       throw error;
     } finally {
-      clearTimeout(deadline);
+      agent.createConnection = createConnection;
+      initialSockets.clear();
+      if (onAbort) signal.removeEventListener("abort", onAbort);
     }
   }
 

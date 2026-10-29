@@ -13,7 +13,8 @@
 //
 // Install exits 0 when every requested addon is in place and 1 when the
 // caller has to build: another platform, a modified archestra-rs tree, no
-// published entry, a network error, or ARCHESTRA_NAPI_PREBUILT=false.
+// published entry, glibc older than 2.36, a network error, or
+// ARCHESTRA_DEV_NAPI_PREBUILT=false.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -24,6 +25,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,6 +41,9 @@ const PACKAGES = [
 ];
 const BINARY = "index.linux-x64-gnu.node";
 const STAMP = ".napi-prebuilt";
+const LOCK = ".napi-prebuilt.lock";
+// CI builds on Debian bookworm; older glibc cannot load the binaries.
+const MIN_GLIBC = "2.36";
 const DEFAULT_REPOSITORY =
   "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/napi-dev-cache";
 const MANIFEST_TYPES = [
@@ -67,14 +72,18 @@ try {
   process.exitCode = 1;
 }
 
-/** Tree IDs cover every tracked input of the addons; the toolchain sits outside. */
+/**
+ * Tree IDs cover every tracked input of the addons. The toolchain file and the
+ * workflow that builds them (its builder images and commands) sit outside.
+ */
 function cacheKey() {
-  const [tree, toolchain] = git(
+  const [tree, toolchain, recipe] = git(
     "rev-parse",
     "HEAD:platform/archestra-rs",
     "HEAD:platform/rust-toolchain.toml",
+    "HEAD:.github/workflows/napi-dev-cache.yml",
   ).split("\n");
-  return `${tree}-${toolchain.slice(0, 12)}`;
+  return `${tree}-${toolchain.slice(0, 12)}-${recipe.slice(0, 12)}`;
 }
 
 function treeIsClean() {
@@ -124,76 +133,70 @@ async function install(names) {
   if (names.length === 0 || unknown.length) {
     throw new Error(`usage: <package>... from ${PACKAGES.join(", ")}`);
   }
-  // Whenever this returns false the caller builds, so a stamp from an earlier
-  // install must not vouch for whatever cargo writes next.
-  const clearStamps = () => {
-    for (const name of names)
-      rmSync(path.join(rustDir, name, STAMP), { force: true });
-  };
-  if (process.env.ARCHESTRA_NAPI_PREBUILT === "false") {
-    clearStamps();
-    return false;
-  }
-  if (
-    process.platform !== "linux" ||
-    process.arch !== "x64" ||
-    !process.report?.getReport().header.glibcVersionRuntime
-  ) {
-    clearStamps();
-    return false;
-  }
+  if (process.env.ARCHESTRA_DEV_NAPI_PREBUILT === "false") return false;
+  if (process.platform !== "linux" || process.arch !== "x64") return false;
+  const glibc = process.report?.getReport().header.glibcVersionRuntime;
+  if (!glibc || compareVersions(glibc, MIN_GLIBC) < 0) return false;
   let key;
   try {
     if (!treeIsClean()) {
       console.error("napi-prebuilt: archestra-rs has local changes; building");
-      clearStamps();
       return false;
     }
     key = cacheKey();
   } catch {
-    clearStamps();
     return false;
   }
+  if (names.every((name) => installed(name, key))) return true;
 
-  const missing = names.filter((name) => !installed(name, key));
-  if (missing.length === 0) return true;
-
-  const repository =
-    process.env.ARCHESTRA_NAPI_PREBUILT_REPOSITORY || DEFAULT_REPOSITORY;
-  let artifact;
+  // Tilt starts every addon resource at once. The first run downloads the
+  // artifact and installs all five addons; the others wait for it and then
+  // find theirs in place.
+  const release = await acquireLock();
   try {
-    artifact = await download(repository, key);
-  } catch (error) {
-    console.error(`napi-prebuilt: ${error.message}; building`);
-    clearStamps();
-    return false;
-  }
-  if (!artifact) {
-    console.error(`napi-prebuilt: no prebuilt addons for ${key}; building`);
-    clearStamps();
-    return false;
-  }
-  try {
-    for (const name of missing) {
-      const file = `${name}/${BINARY}`;
-      const binary = readFileSync(path.join(artifact.dir, file));
-      if (artifact.manifest.files[file] !== sha256(binary)) {
-        throw new Error(`${file} does not match the artifact manifest`);
-      }
-      const target = path.join(rustDir, name, BINARY);
-      // Rename over the old file: a running backend keeps the inode it mapped.
-      writeFileSync(`${target}.tmp`, binary);
-      renameSync(`${target}.tmp`, target);
-      writeFileSync(
-        path.join(rustDir, name, STAMP),
-        `${key} ${sha256(binary)}\n`,
-      );
+    if (names.every((name) => installed(name, key))) return true;
+    const repository =
+      process.env.ARCHESTRA_DEV_NAPI_PREBUILT_REPOSITORY || DEFAULT_REPOSITORY;
+    let artifact;
+    try {
+      artifact = await download(repository, key);
+    } catch (error) {
+      console.error(`napi-prebuilt: ${error.message}; building`);
+      return false;
     }
+    if (!artifact) {
+      console.error(`napi-prebuilt: no prebuilt addons for ${key}; building`);
+      return false;
+    }
+    try {
+      const written = [];
+      for (const name of PACKAGES) {
+        if (installed(name, key)) continue;
+        const file = `${name}/${BINARY}`;
+        const binary = readFileSync(path.join(artifact.dir, file));
+        if (artifact.manifest.files[file] !== sha256(binary)) {
+          throw new Error(`${file} does not match the artifact manifest`);
+        }
+        const target = path.join(rustDir, name, BINARY);
+        // Rename over the old file: a running backend keeps the inode it mapped.
+        writeFileSync(`${target}.tmp`, binary);
+        renameSync(`${target}.tmp`, target);
+        writeFileSync(
+          path.join(rustDir, name, STAMP),
+          `${key} ${sha256(binary)}\n`,
+        );
+        written.push(name);
+      }
+      console.error(
+        `napi-prebuilt: installed ${written.join(", ")} for ${key}`,
+      );
+    } finally {
+      rmSync(artifact.dir, { recursive: true, force: true });
+    }
+    return true;
   } finally {
-    rmSync(artifact.dir, { recursive: true, force: true });
+    release();
   }
-  console.error(`napi-prebuilt: installed ${missing.join(", ")} for ${key}`);
-  return true;
 }
 
 /** The addon is the one an earlier install wrote for this key, byte for byte. */
@@ -213,12 +216,13 @@ async function download(repository, key) {
   const name = url.pathname.replace(/^\/+|\/+$/g, "");
   const base = `${url.origin}/v2/${name}`;
   let token;
-  const get = async (url, accept) => {
+  // The blob gets five minutes: the layer is about 20 MB.
+  const get = async (url, accept, timeout = 30_000) => {
     const headers = { accept };
     if (token) headers.authorization = `Bearer ${token}`;
     let response = await fetch(url, {
       headers,
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(timeout),
     });
     if (response.status === 401 && !token) {
       token = await anonymousToken(
@@ -228,7 +232,7 @@ async function download(repository, key) {
       headers.authorization = `Bearer ${token}`;
       response = await fetch(url, {
         headers,
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(timeout),
       });
     }
     return response;
@@ -250,7 +254,7 @@ async function download(repository, key) {
   if (manifest.layers?.length !== 1)
     throw new Error("unexpected artifact layout");
   const layer = manifest.layers[0];
-  response = await get(`${base}/blobs/${layer.digest}`, "*/*");
+  response = await get(`${base}/blobs/${layer.digest}`, "*/*", 300_000);
   if (!response.ok) throw new Error(`registry answered ${response.status}`);
   const blob = Buffer.from(await response.arrayBuffer());
   if (`sha256:${sha256(blob)}` !== layer.digest) {
@@ -288,4 +292,52 @@ async function anonymousToken(challenge, name) {
     throw new Error(`token endpoint answered ${response.status}`);
   const body = await response.json();
   return body.token ?? body.access_token;
+}
+
+function compareVersions(a, b) {
+  const [x, y] = [a, b].map((v) => v.split(".").map(Number));
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+/**
+ * A directory as a lock across processes. A lock whose holder has exited is
+ * taken over; a live holder is waited for at most five minutes.
+ */
+async function acquireLock() {
+  const lock = path.join(rustDir, LOCK);
+  const deadline = Date.now() + 5 * 60_000;
+  for (;;) {
+    try {
+      mkdirSync(lock);
+      writeFileSync(path.join(lock, "pid"), `${process.pid}\n`);
+      return () => rmSync(lock, { recursive: true, force: true });
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+    if (!holderAlive(lock) || Date.now() > deadline) {
+      rmSync(lock, { recursive: true, force: true });
+      continue;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+
+function holderAlive(lock) {
+  let pid;
+  try {
+    pid = Number(readFileSync(path.join(lock, "pid"), "utf8"));
+  } catch {
+    // Just created and the pid not written yet, or already released.
+    return existsSync(lock) && Date.now() - statSync(lock).mtimeMs < 10_000;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
 }

@@ -207,7 +207,7 @@ local_resource(
   # rebuilds; CI/Docker still build the optimized --release binary. On linux
   # x64, scripts/napi-prebuilt.mjs first installs the addon CI built for this
   # exact archestra-rs tree and skips cargo; a modified tree, a tree CI has not
-  # published, another platform or ARCHESTRA_NAPI_PREBUILT=false builds.
+  # published, another platform or ARCHESTRA_DEV_NAPI_PREBUILT=false builds.
   cmd='node ../scripts/napi-prebuilt.mjs app-runtime-rs || pnpm --filter @archestra/app-runtime-rs build:dev',
   deps=[
     '../archestra-rs/app-runtime-rs/src',

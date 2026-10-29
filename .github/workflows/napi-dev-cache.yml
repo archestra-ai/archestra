@@ -16,6 +16,11 @@ on:
       - "platform/scripts/napi-prebuilt.mjs"
       - ".github/workflows/napi-dev-cache.yml"
   workflow_dispatch:
+    inputs:
+      republish:
+        description: "Build and publish even if an entry for this key exists"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -54,8 +59,9 @@ jobs:
         id: published
         env:
           KEY: ${{ steps.key.outputs.value }}
+          REPUBLISH: ${{ inputs.republish }}
         run: |
-          if docker manifest inspect "$REPOSITORY:$KEY" >/dev/null 2>&1; then
+          if [ "$REPUBLISH" != "true" ] && docker manifest inspect "$REPOSITORY:$KEY" >/dev/null 2>&1; then
             echo "Already published: $REPOSITORY:$KEY"
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else

@@ -72,13 +72,14 @@ start_backend() {
     # process is the server, and Tilt does not restart a serve_cmd that exits.
     # Five exits in a row within 60 s of starting end the loop (startup takes
     # about 15 s), so a server that cannot start does not spin. The loop runs
-    # its child in the background and passes TERM on to it, so stop_backend
-    # also stops a server that is still starting. INT is ignored here: a
-    # background subshell of a non-interactive shell cannot trap it.
+    # its child in the background and passes TERM and INT on to it, so
+    # stop_backend also stops a server that is still starting. dash starts a
+    # background subshell with INT ignored, so there only TERM reaches the
+    # trap; bash (macOS sh) runs it for INT as well.
     (
       cd backend || exit 1
       child=""
-      trap 'if [ -n "$child" ]; then kill -TERM "$child" 2>/dev/null; wait "$child"; fi; exit 143' TERM
+      trap 'if [ -n "$child" ]; then kill -TERM "$child" 2>/dev/null; wait "$child"; fi; exit 143' TERM INT
       ./node_modules/.bin/tsdown &
       child=$!
       wait "$child" || { echo "backend build failed; the server stays down until the next successful 'tilt trigger pnpm-dev-backend'" >&2; exit 1; }

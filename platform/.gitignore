@@ -5,8 +5,8 @@ build
 target
 *.node
 *.node.tmp
-# scripts/napi-prebuilt.mjs: which prebuilt addon a package holds
-.napi-prebuilt
+# scripts/napi-prebuilt.mjs: which prebuilt addon a package holds, and its lock
+.napi-prebuilt*
 .next
 .next-*
 next-env.d.ts

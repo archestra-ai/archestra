@@ -1,0 +1,185 @@
+# Lite Agent Runtime image
+
+A runtime image for Archestra work that runs the dev stack as plain processes:
+PostgreSQL, the backend dev server and the Next.js dev server. No Docker, kind,
+Helm or Tilt inside the pod, so the pod needs no privilege, no Docker volume,
+and a fraction of what a full Lobster run reserves (3.5 CPU / 12 GiB, limit 18 GiB).
+
+It is not a replacement for the full image. It covers the common cases: a
+preview of a branch, manual QA, code review with a running app, unit tests, and
+the Playwright lite projects. Work that needs Kubernetes stays on the full
+image: MCP server installs (the orchestrator), nested Agent Runtime, the Dagger
+code runtime, Vault, and the Keycloak-backed identity-provider specs.
+
+An Agent can use both. Its primary runtime settings name this image (the Lite
+tier) and `runtime.fullTier` names the full image with its privilege and
+resources (the Full tier). A run starts on the Lite tier and moves its own
+workspace with a `POST` of `{"tier": "full"}` or `{"tier": "light"}` to
+`$ARCHESTRA_AGENT_RUNTIME_TIER_URL`, sending `$ARCHESTRA_AGENT_RUNTIME_BINDING`
+in the `X-Archestra-Runtime-Binding` header. The platform replaces the Pod on
+the same volume and continues the running turn there as a native
+continuation: files, the checkout and the conversation stay, running
+processes stop. `$ARCHESTRA_AGENT_RUNTIME_TIER` names the Pod's current tier.
+
+## What the image adds to the public agent image
+
+The public `agent-claude-code` image already has Node 24, pnpm, Rust,
+PostgreSQL 18 with pgvector, Playwright with Chromium, tmux and the GitHub CLI.
+This image adds:
+
+- `rustfmt`, `rust-analyzer` and the musl targets that `platform/rust-toolchain.toml`
+  asks for. The toolchain home is read-only for the workspace user, so without
+  them the first `cargo metadata` fails.
+- A warm pnpm store for the `WORKSPACE_REF` commit under `/home/node/.pnpm-store`
+  (pnpm 11 keeps the store next to the HOME that holds the project, whatever
+  `store-dir` says). A task's `pnpm install` hard-links from it: 178 MB of
+  `node_modules` on disk instead of a 2.4 GB download.
+- The frontend's pinned Playwright Chromium next to the shared browser.
+- A headless JRE and the WireMock standalone jar, the LLM provider stub the
+  Playwright suite uses.
+- `archestra-dev-lite`, a wrapper that runs `platform/scripts/dev-lite.sh` in
+  the task checkout. The repository owns the stack commands; the image only
+  warms caches.
+
+Native addons (`app-runtime-rs`, `image-rs`, `openappa-rs`, `router-rs`,
+`sandbox-rs`) are not in the image. `dev-lite.sh` installs the ones CI
+publishes for main's `platform/archestra-rs` tree (`scripts/napi-prebuilt.mjs`,
+about a second) and builds them with cargo only for a changed tree (about 6
+minutes at 16 CPUs, longer on a Lite tier pod).
+
+## Use
+
+In a checkout inside the runtime:
+
+```bash
+archestra-dev-lite up            # PostgreSQL, migrations, backend :9000, frontend :3000
+archestra-dev-lite status        # processes with RSS, cgroup memory, disk, URLs
+archestra-dev-lite logs backend  # or db, migrate, frontend, wiremock, a2a
+archestra-dev-lite up --e2e      # also WireMock :9092 and the A2A fixture :9191
+archestra-dev-lite e2e           # Playwright chromium + api projects against this stack
+archestra-dev-lite restart       # down, then up
+archestra-dev-lite down          # stop; data and caches stay
+```
+
+`platform/scripts/dev-lite.sh --help` lists every option. Each component runs
+in its own tmux session (`tmux -L archestra-dev-lite ls`), so a shell tool's
+process-group cleanup cannot stop the stack. The backend and frontend run
+their dev commands directly (`tsdown`, `next dev`), not through
+`pnpm dev --filter`: the pnpm and turbo wrappers cost eight extra Node
+processes and about 1 GB of RSS.
+
+The image sets `ARCHESTRA_DEV_BACKEND_WATCH=false`: the backend builds once and runs
+without the tsdown watcher, which keeps about 1.2 GB resident. After backend
+edits run `archestra-dev-lite reload backend` (about 15 s). If the server
+exits, it restarts after a second; five exits within 60 s of starting stop the
+loop until the next reload. `ARCHESTRA_DEV_BACKEND_WATCH=true` brings the watcher
+back.
+
+## Build
+
+```bash
+cd platform/dev/lite-runtime
+docker build -t archestra-lite-runtime:dev .
+```
+
+`BASE_IMAGE` must be a public agent image tag that carries PostgreSQL 18 and
+Rust (commit tags from `971714fea` on; `:latest` did not on 2026-10-29).
+`WORKSPACE_REF` is the commit whose dependencies are warmed. The build needs
+BuildKit.
+
+## Measurements
+
+Measured on 2026-10-29 on an `n2-standard-16` GCE VM (16 vCPU, 62 GiB), the
+stack running in a container from this image with host networking and no CPU
+or memory limit. Base image `agent-claude-code:f80e33a17`, checkout at
+`6c84e3bf3`.
+
+| What | Result |
+| --- | --- |
+| Image size (`docker image inspect`) | base 1.22 GB, lite 2.42 GB |
+| Cold start, fresh container and clone to ready stack | 2 min 11 s (clone 18 s, `pnpm install` 90 s, addons installed, `initdb` 2 s, 610 migrations 5 s, servers 16 s) |
+| Same with an archestra-rs change (no published addons) | add about 6 min of `cargo` for the five addons |
+| Warm restart (`restart`) | 54 s |
+| CPU for the whole cold start | 99 CPU-seconds; idle stack 0 % of a core |
+| Memory right after start | 2.7 GB anonymous, 3.4 GB total RSS: backend 2.4 GB (tsdown watcher 1.2 GB, server 0.9 GB), frontend 0.6 GB, PostgreSQL 0.3 GB |
+| Memory after compiling six pages | 5.4 GB anonymous: frontend 3.6 GB (Next dev server and turbopack workers), backend 2.3 GB, PostgreSQL 0.3 GB; cgroup 10.2 GB with file cache |
+| Disk per workspace | `node_modules` 178 MB (hard links), `frontend/.next` 0.6 to 1.4 GB, PostgreSQL data 75 MB |
+| `up --e2e` warm restart with WireMock and the A2A fixture | 21 s; WireMock 218 MB RSS, fixture 61 MB |
+| Playwright `chromium` project, `agents`, `auth-redirect` and `chat` specs | 25 passed, 1 flaky (the Anthropic chat spec passed on retry), 3.2 min |
+
+### Compared with the full Tilt stack on the same VM
+
+The full stack (`tilt up` on the VM host, kind cluster, default namespace, the
+same checkout) was measured after the same page warm-up. Host processes are
+RSS, which double-counts shared pages, so compare orders of magnitude.
+
+| What | Full Tilt stack | Lite stack |
+| --- | --- | --- |
+| App dev servers (Next dev, tsdown watcher, backend) | 2.8 GB + 1.2 GB + 0.9 GB | 3.6 GB + 1.2 GB + 0.9 GB after six pages |
+| Fixed overhead | second Next dev server for the integration tests 0.5 GB, Tilt 0.2 GB, six pnpm/turbo wrappers 0.7 GB, drizzle studio 0.3 GB, kind node 0.8 GB working set (3.1 GB with its file cache, 1.8 GB of images inside), dockerd and containerd 0.25 GB | PostgreSQL 0.3 GB |
+| Host or container processes, total RSS | 7.5 GB plus the kind node and Docker | 3.4 GB after start, about 6 GB after six pages |
+| Idle CPU | 16 % of a core (kind, Tilt, watchers) | 0 % |
+| Privilege | privileged pod, Docker volume, nested Kubernetes | none |
+| Disk per workspace | `node_modules` 2.4 GB, kind node image about 1 GB, images inside the node 1.8 GB, build caches | `node_modules` 178 MB, `.next` up to 1.4 GB |
+
+The application's own dev servers cost about the same in both. What the lite
+image removes is the fixed overhead around them, the privilege, and the file
+cache that Kubernetes counts against the pod's limit; that is where the 24 GiB
+went.
+
+Part of that overhead is cheap to remove from the full stack as well, and the
+Tilt stack now does so (`dev/Tiltfile.dev`, `dev/Tiltfile.database`,
+`dev/run-backend-dev.sh`): the integration-test Next server and Drizzle Studio
+start on demand instead of by default, and the two dev servers launch without
+the pnpm/turbo wrapper chain. Measured with the same method, ten minutes idle
+after six pages, the full stack's host processes went from 5.2 GB to 3.7 GB of
+RSS and from 26 to 7 Node processes; idle CPU stayed at 15 % of a core, 11 %
+of it the kind node. Turning the backend watcher off as well
+(`ARCHESTRA_DEV_BACKEND_WATCH=false`, the default inside an Agent Runtime)
+brought host RSS to 2.2 GB; `tilt trigger pnpm-dev-backend` then rebuilds and
+restarts the backend in about 18 s. What remains after those changes is kind
+(0.6 GB anonymous, 3.2 GB with its file cache), dockerd and containerd (0.25
+GB), Tilt (0.16 GB), the Playwright MCP pod the backend seeds into the cluster
+(0.13 GB plus a 414 MB image), and the privilege; only running without
+Kubernetes removes those.
+
+Staging Agent Runtime pods running the full image over seven days (86 pods,
+Cloud Monitoring, 2026-10-22 to 2026-10-29) peaked at 7.4 GiB of non-evictable
+memory at the median, 16.8 GiB at p90 and 23.2 GiB at most. CPU averaged 0.39
+cores at the median, and each pod's busiest 5 minutes reached 5.3 cores at the
+median and 6.5 at p90. The Lobster agents' requests were cut on that evidence
+from 7 CPU / 24 GiB to 3.5 CPU / 12 GiB with an 18 GiB limit, which fits two
+runs on an `n2d-standard-8` node instead of one.
+
+Lite tier sizing: request 2 CPU and 4 GiB, limit 8 GiB, no CPU limit,
+`privileged: false`, no Docker volume. That fits three runs on the same node.
+The frontend dev server is the largest and most variable consumer; a
+production build (`next build` and `next start`) would cut it to a few hundred
+MB for preview-only runs at the cost of a build per start, and is a candidate
+follow-up.
+
+## Not covered
+
+- MCP server installs and anything else the Kubernetes orchestrator does. The
+  stack points `ARCHESTRA_ORCHESTRATOR_KUBECONFIG` at a file that does not
+  exist, so the backend logs "MCP Server Runtime is disabled" once at startup
+  and `/ready` reports `sandbox: disabled`. Remote (HTTP) MCP servers still
+  work. The `p4_shim_reconcile` periodic task logs one warning every 5 minutes.
+- Nested Agent Runtime, the Dagger code runtime, Vault, Keycloak-backed
+  identity-provider specs, and the `api-k8s`, `hibernation` and `vault-k8s`
+  Playwright projects.
+
+## PGlite was tried and does not fit
+
+`pglite-server` (PGlite over the PostgreSQL wire protocol, with pgvector and
+`pg_trgm`) applied all 610 migrations in 7 seconds once `CONCURRENTLY` was
+stripped, and answered multiplexed clients and advisory locks. The backend
+then failed at seed time with `prepared statement
+"archestra_read_recipients_by_scopes" already exists`: PGlite is a single
+session, and the socket server multiplexes every pooled connection through
+it, so named prepared statements, `SET` state and concurrent transactions from
+different connections collide. NOTIFY also never reaches another connection.
+The backend's pool and transaction model need one server session per
+connection, which only a real PostgreSQL gives. PostgreSQL 18 from the base
+image costs 0.3 GB of RSS and 2 seconds of `initdb`, so there is nothing to
+gain there anyway.

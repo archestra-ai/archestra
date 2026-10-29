@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Image entry for the lite dev stack. The repository owns the stack commands
+# (platform/scripts/dev-lite.sh); this only finds the checkout and hands over.
+set -euo pipefail
+repo="${ARCHESTRA_LITE_REPOSITORY_DIR:-${LOBSTER_ENV_REPOSITORY_DIR:-/home/node/workspace/archestra}}"
+if [ ! -x "$repo/platform/scripts/dev-lite.sh" ]; then
+  echo "archestra-dev-lite: no Archestra checkout with platform/scripts/dev-lite.sh at $repo" >&2
+  echo "set ARCHESTRA_LITE_REPOSITORY_DIR to the checkout" >&2
+  exit 64
+fi
+cd "$repo/platform"
+exec scripts/dev-lite.sh "$@"

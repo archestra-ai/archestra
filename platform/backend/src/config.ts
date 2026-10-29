@@ -2253,23 +2253,49 @@ export function parseShutdownSeconds(
   value: string | undefined,
   fallback: number,
   minimum = 1,
+  maximum = 86400,
 ): number {
   if (value === undefined) return fallback;
   if (
     !/^\d+$/.test(value) ||
     !Number.isSafeInteger(Number(value)) ||
     Number(value) < minimum ||
-    Number(value) > 86400
+    Number(value) > maximum
   ) {
     throw new Error(
-      `Shutdown durations must be integer seconds between ${minimum} and 86400`,
+      `Shutdown durations must be integer seconds between ${minimum} and ${maximum}`,
     );
   }
   return Number(value);
 }
 
+/** Validate resolved Secret/ConfigMap values before the server accepts work. */
+export function validateShutdownPodGrace(
+  podGraceSeconds: number | undefined,
+  drainSeconds: number,
+  cleanupSeconds: number,
+  workerSeconds: number,
+): void {
+  if (podGraceSeconds === undefined) return;
+  const required = Math.max(drainSeconds, workerSeconds) + cleanupSeconds + 40;
+  if (podGraceSeconds < required) {
+    throw new Error(
+      `Pod shutdown grace is ${podGraceSeconds}s but resolved shutdown durations require at least ${required}s. Increase archestra.terminationGracePeriodSeconds or reduce the configured shutdown durations.`,
+    );
+  }
+}
+
 const config = {
   shutdown: {
+    podGraceSeconds:
+      process.env.ARCHESTRA_SERVER_POD_GRACE_SECONDS === undefined
+        ? undefined
+        : parseShutdownSeconds(
+            process.env.ARCHESTRA_SERVER_POD_GRACE_SECONDS,
+            120,
+            1,
+            Number.MAX_SAFE_INTEGER,
+          ),
     drainSeconds: parseShutdownSeconds(
       process.env.ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS,
       60,

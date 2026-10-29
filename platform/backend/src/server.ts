@@ -59,6 +59,7 @@ import config, {
   resolveAllowedOrigins,
   shouldRunWebServer,
   shouldRunWorker,
+  validateShutdownPodGrace,
 } from "@/config";
 import { verifyEncryptedChatConfig } from "@/content-encryption/encrypted-chat-escrow";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
@@ -811,6 +812,12 @@ const startMcpServerRuntime = async (
 };
 
 const startWebServer = async () => {
+  validateShutdownPodGrace(
+    config.shutdown.podGraceSeconds,
+    config.shutdown.drainSeconds,
+    config.shutdown.cleanupSeconds,
+    config.kb.taskWorkerShutdownTimeoutSeconds,
+  );
   const fastify = createFastifyInstance();
   const startupHealth = createStartupHealthServer();
 
@@ -1473,6 +1480,12 @@ function registerWebServerShutdown(
  * Used in Helm deployments where the worker runs as a separate Deployment.
  */
 const startWorker = async () => {
+  validateShutdownPodGrace(
+    config.shutdown.podGraceSeconds,
+    config.shutdown.drainSeconds,
+    config.shutdown.cleanupSeconds,
+    config.kb.taskWorkerShutdownTimeoutSeconds,
+  );
   logger.info("Starting in worker-only mode (ARCHESTRA_PROCESS_TYPE=worker)");
 
   try {

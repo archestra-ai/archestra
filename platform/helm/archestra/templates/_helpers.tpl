@@ -484,18 +484,20 @@ genuinely missing key loudly at startup.
   valueFrom:
     {{- toYaml .valueFrom | nindent 4 }}
 {{- end }}
-{{- if not (hasKey .Values.archestra.env "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS") }}
+{{- if and (not (hasKey .Values.archestra.env "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS")) (hasKey (.Values.archestra.shutdown | default dict) "requestDrainSeconds") (ne (toString (get (.Values.archestra.shutdown | default dict) "requestDrainSeconds")) "<nil>") }}
 - name: ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS
   value: {{ include "archestra-platform.shutdownDrain" . | quote }}
 {{- end }}
-{{- if not (hasKey .Values.archestra.env "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS") }}
+{{- if and (not (hasKey .Values.archestra.env "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS")) (hasKey (.Values.archestra.shutdown | default dict) "cleanupSeconds") (ne (toString (get (.Values.archestra.shutdown | default dict) "cleanupSeconds")) "<nil>") }}
 - name: ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS
   value: {{ include "archestra-platform.shutdownCleanup" . | quote }}
 {{- end }}
-{{- if not (hasKey .Values.archestra.env "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS") }}
+{{- if and (not (hasKey .Values.archestra.env "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS")) (hasKey (.Values.archestra.shutdown | default dict) "workerTaskTimeoutSeconds") (ne (toString (get (.Values.archestra.shutdown | default dict) "workerTaskTimeoutSeconds")) "<nil>") }}
 - name: ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS
   value: {{ include "archestra-platform.shutdownWorker" . | quote }}
 {{- end }}
+- name: ARCHESTRA_SERVER_POD_GRACE_SECONDS
+  value: {{ include "archestra-platform.shutdownPodGrace" . | quote }}
 
 {{- end }}
 
@@ -1197,7 +1199,7 @@ may include a mirror path prefix; ignore trailing slashes when joining.
 {{- include "archestra-platform.imageRegistry" (dict "image" (.Values.archestra.initContainers.busyboxImage | default "busybox:1.36") "registry" .Values.archestra.initContainers.busyboxImageRegistry) -}}
 {{- end -}}
 
-{{/* Durations are rendered explicitly, so envFrom cannot desynchronize budgets. */}}
+{{/* Imported durations are preserved and checked against pod grace at startup. */}}
 {{- define "archestra-platform.shutdownDuration" -}}
 {{- $value := toString .value -}}
 {{- if or (not (regexMatch "^[0-9]+$" $value)) (lt (int $value) .minimum) (gt (int $value) 86400) -}}
@@ -1207,37 +1209,71 @@ may include a mirror path prefix; ignore trailing slashes when joining.
 {{- end -}}
 
 {{- define "archestra-platform.shutdownDrain" -}}
-{{- $value := .Values.archestra.shutdown.requestDrainSeconds -}}
+{{- $settings := .Values.archestra.shutdown | default dict -}}
+{{- $value := 60 -}}
+{{- if and (hasKey $settings "requestDrainSeconds") (ne (toString (get $settings "requestDrainSeconds")) "<nil>") -}}
+{{- $value = get $settings "requestDrainSeconds" -}}
+{{- end -}}
 {{- if hasKey .Values.archestra.env "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS" -}}
 {{- $value = get .Values.archestra.env "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS" -}}
 {{- end -}}
 {{- include "archestra-platform.shutdownDuration" (dict "name" "requestDrainSeconds" "minimum" 1 "value" $value) -}}
 {{- end -}}
 {{- define "archestra-platform.shutdownCleanup" -}}
-{{- $value := .Values.archestra.shutdown.cleanupSeconds -}}
+{{- $settings := .Values.archestra.shutdown | default dict -}}
+{{- $value := 20 -}}
+{{- if and (hasKey $settings "cleanupSeconds") (ne (toString (get $settings "cleanupSeconds")) "<nil>") -}}
+{{- $value = get $settings "cleanupSeconds" -}}
+{{- end -}}
 {{- if hasKey .Values.archestra.env "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS" -}}
 {{- $value = get .Values.archestra.env "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS" -}}
 {{- end -}}
 {{- include "archestra-platform.shutdownDuration" (dict "name" "cleanupSeconds" "minimum" 5 "value" $value) -}}
 {{- end -}}
 {{- define "archestra-platform.shutdownWorker" -}}
-{{- $value := toString .Values.archestra.shutdown.workerTaskTimeoutSeconds -}}
+{{- $settings := .Values.archestra.shutdown | default dict -}}
+{{- $value := 30 -}}
+{{- if and (hasKey $settings "workerTaskTimeoutSeconds") (ne (toString (get $settings "workerTaskTimeoutSeconds")) "<nil>") -}}
+{{- $value = get $settings "workerTaskTimeoutSeconds" -}}
+{{- end -}}
 {{- if hasKey .Values.archestra.env "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS" -}}
 {{- $value = toString (get .Values.archestra.env "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS") -}}
 {{- end -}}
 {{- include "archestra-platform.shutdownDuration" (dict "name" "worker shutdown timeout" "minimum" 1 "value" $value) -}}
 {{- end -}}
-{{- define "archestra-platform.shutdownPodGrace" -}}
-{{- range concat (.Values.archestra.envWithValueFrom | default list) (.Values.archestra.envFromSecrets | default list) -}}
-{{- if has .name (list "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS" "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS" "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS") -}}
-{{- fail "Shutdown durations must use archestra.shutdown or literal archestra.env values so pod budgets can be validated" -}}
+{{/* A template cannot read values inside unprefixed envFrom or per-key references. */}}
+{{- define "archestra-platform.shutdownUnknown" -}}
+{{- $settings := .root.Values.archestra.shutdown | default dict -}}
+{{- $chartValue := get $settings .field -}}
+{{- $unknown := false -}}
+{{- $literal := hasKey .root.Values.archestra.env .name -}}
+{{- $chartExplicit := and (hasKey $settings .field) (ne (toString $chartValue) "<nil>") -}}
+{{- if and (not $literal) (not $chartExplicit) -}}
+{{- range .root.Values.archestra.envFrom -}}
+{{- if not .prefix -}}{{- $unknown = true -}}{{- end -}}
 {{- end -}}
+{{- end -}}
+{{/* Per-key references follow literal env; only an explicit chart injection overrides them. */}}
+{{- if not (and (not $literal) $chartExplicit) -}}
+{{- range concat (.root.Values.archestra.envFromSecrets | default list) (.root.Values.archestra.envWithValueFrom | default list) -}}
+{{- if eq .name $.name -}}{{- $unknown = true -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $unknown -}}
 {{- end -}}
 
+{{- define "archestra-platform.shutdownPodGrace" -}}
 {{- $minimum := add (max (int (include "archestra-platform.shutdownDrain" .)) (int (include "archestra-platform.shutdownWorker" .))) (int (include "archestra-platform.shutdownCleanup" .)) 40 -}}
 {{- $provided := .Values.archestra.terminationGracePeriodSeconds -}}
 {{- if ne (toString $provided) "<nil>" -}}
 {{- $provided = include "archestra-platform.shutdownDuration" (dict "name" "terminationGracePeriodSeconds" "minimum" 1 "value" $provided) -}}
+{{- $knownDrain := int (include "archestra-platform.shutdownDrain" .) -}}
+{{- $knownCleanup := int (include "archestra-platform.shutdownCleanup" .) -}}
+{{- $knownWorker := int (include "archestra-platform.shutdownWorker" .) -}}
+{{- if eq (include "archestra-platform.shutdownUnknown" (dict "root" . "field" "requestDrainSeconds" "name" "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS")) "true" -}}{{- $knownDrain = 1 -}}{{- end -}}
+{{- if eq (include "archestra-platform.shutdownUnknown" (dict "root" . "field" "cleanupSeconds" "name" "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS")) "true" -}}{{- $knownCleanup = 5 -}}{{- end -}}
+{{- if eq (include "archestra-platform.shutdownUnknown" (dict "root" . "field" "workerTaskTimeoutSeconds" "name" "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS")) "true" -}}{{- $knownWorker = 1 -}}{{- end -}}
+{{- $minimum = add (max $knownDrain $knownWorker) $knownCleanup 40 -}}
 {{- if lt (int $provided) (int $minimum) -}}
 {{- fail (printf "terminationGracePeriodSeconds must be at least %d for the configured shutdown budgets" $minimum) -}}
 {{- end -}}

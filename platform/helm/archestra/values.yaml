@@ -24,10 +24,12 @@ archestra:
   # An explicit value must cover that budget. Applies to web and worker pods.
   terminationGracePeriodSeconds: null
   shutdown:
-    requestDrainSeconds: 60
-    cleanupSeconds: 20
-    # Rendered explicitly; use this or literal archestra.env instead of envFrom.
-    workerTaskTimeoutSeconds: 30
+    # null preserves envFrom, envFromSecrets and envWithValueFrom sources.
+    # Runtime defaults are 60s drain, 20s cleanup and 30s worker task timeout.
+    # Set explicit values here to override imported environment settings.
+    requestDrainSeconds: null
+    cleanupSeconds: null
+    workerTaskTimeoutSeconds: null
 
   # Optional database connection budgeting across all backend pods.
   # When configured, Helm divides the budget across peak web and worker pods,

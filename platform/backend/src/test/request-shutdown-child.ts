@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import Fastify from "fastify";
 import ts from "typescript";
-import config from "../config";
+import config, { validateShutdownPodGrace } from "../config";
 import {
   beginLlmProxyDrain,
   drainLlmProxyRequests,
@@ -16,6 +16,12 @@ import {
 } from "../utils/background-work";
 
 const opts = JSON.parse(process.argv[2]);
+validateShutdownPodGrace(
+  config.shutdown.podGraceSeconds,
+  config.shutdown.drainSeconds,
+  config.shutdown.cleanupSeconds,
+  config.kb.taskWorkerShutdownTimeoutSeconds,
+);
 const started = Date.now();
 const emit = (event: string, data = {}) =>
   process.send?.({ event, elapsedMs: Date.now() - started, ...data });

@@ -2,7 +2,7 @@
 title: Access Control
 description: Share resources and assign organization roles
 order: 2
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-29
 ---
 
 Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
@@ -95,7 +95,7 @@ See the [exact permission matrix](/docs/reference/permissions#predefined-roles).
 2. Select only the [permissions](/docs/reference/permissions#available-permissions) the job needs.
 3. Assign it to a member, team, or service account.
 
-Accounts combine their direct organization roles with organization roles assigned to their teams and ancestor teams.
+An account gets the permissions of every role assigned to it directly, plus the roles it inherits from its teams and their parent teams. Set the roles a team passes down under **Inherited Roles** when you edit the team.
 
 <span id="team-roles"></span>
 

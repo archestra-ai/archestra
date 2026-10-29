@@ -111,7 +111,10 @@ vi.mock("@/components/mcp-app/app-settings-form", () => ({
 
 // ── Import component under test after mocks ───────────────────────────────────
 
-import { AppBridge } from "@modelcontextprotocol/ext-apps/app-bridge";
+import {
+  AppBridge,
+  PostMessageTransport,
+} from "@modelcontextprotocol/ext-apps/app-bridge";
 import {
   clearMcpAppGuestState,
   McpAppRuntime,
@@ -3109,6 +3112,14 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
     // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
     const bridgeInstances: any[] = [];
     installBridgeCollector(bridgeInstances);
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const transportInstances: any[] = [];
+    (PostMessageTransport as ReturnType<typeof vi.fn>).mockImplementation(
+      function (this: Record<string, unknown>) {
+        this.close = vi.fn().mockReturnValue(Promise.resolve());
+        transportInstances.push(this);
+      },
+    );
 
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
       Promise.resolve(
@@ -3147,6 +3158,10 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
           bridgeInstances[0].sendSandboxResourceReady,
         ).toHaveBeenCalledTimes(1);
       });
+      // Simulate detached onmessage where teardownResource never receives a reply
+      bridgeInstances[0].teardownResource.mockReturnValue(
+        new Promise(() => {}),
+      );
 
       // Click Reload app (#1)
       const reloadButton = screen.getByRole("button", { name: /reload app/i });
@@ -3164,6 +3179,10 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
       expect(intermediateIframe).not.toBe(firstIframe);
       expect(intermediateIframe.style.opacity).toBe("0");
       expect(firstIframe.isConnected).toBe(true);
+      await notifySandboxProxyReady(intermediateIframe);
+      bridgeInstances[1].teardownResource.mockReturnValue(
+        new Promise(() => {}),
+      );
       // Outgoing bridge handlers reject calls immediately so the retained frame
       // cannot run tools during overlap, and teardownResource waits until removal.
       await expect(
@@ -3173,9 +3192,11 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
         ),
       ).rejects.toThrow("MCP App bridge is closed");
       expect(bridgeInstances[0].teardownResource).not.toHaveBeenCalled();
+      expect(transportInstances[0].close).not.toHaveBeenCalled();
 
       // Click Reload app (#2) before intermediateIframe reveals -> firstIframe
-      // stays visible and intermediateIframe is discarded without flashing blank.
+      // stays visible and intermediateIframe is discarded and its transport closed
+      // right away without waiting for teardownResource to settle.
       await act(async () => {
         await user.click(reloadButton);
       });
@@ -3188,10 +3209,13 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
       expect(reloadedIframe).not.toBe(firstIframe);
       expect(reloadedIframe).not.toBe(intermediateIframe);
       expect(intermediateIframe.isConnected).toBe(false);
+      expect(bridgeInstances[1].teardownResource).toHaveBeenCalledTimes(1);
+      expect(transportInstances[1].close).toHaveBeenCalledTimes(1);
       expect(firstIframe.isConnected).toBe(true);
       expect(firstIframe.style.opacity).toBe("");
       expect(reloadedIframe.style.opacity).toBe("0");
       expect(bridgeInstances[0].teardownResource).not.toHaveBeenCalled();
+      expect(transportInstances[0].close).not.toHaveBeenCalled();
 
       await notifySandboxProxyReady(reloadedIframe);
       await act(async () => {
@@ -3205,7 +3229,7 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
       );
 
       // Signal guest-ready from the reloaded iframe -> incoming iframe is revealed
-      // and outgoing iframe is torn down and removed cleanly.
+      // and outgoing iframe is torn down and its transport closed immediately.
       await act(async () => {
         window.dispatchEvent(
           new MessageEvent("message", {
@@ -3219,6 +3243,7 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
       expect(reloadedIframe.style.opacity).toBe("");
       expect(firstIframe.isConnected).toBe(false);
       expect(bridgeInstances[0].teardownResource).toHaveBeenCalledTimes(1);
+      expect(transportInstances[0].close).toHaveBeenCalledTimes(1);
       expect(document.querySelectorAll("iframe")).toHaveLength(1);
     } finally {
       fetchSpy.mockRestore();

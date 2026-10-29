@@ -1152,12 +1152,8 @@ function SandboxIframe({
     const prevBridge = outgoingBridgeRef.current;
     outgoingBridgeRef.current = null;
     if (prevBridge) {
-      prevBridge.bridge
-        .teardownResource({})
-        .catch(() => {})
-        .finally(() => {
-          prevBridge.transport?.close?.()?.catch(() => {});
-        });
+      prevBridge.bridge.teardownResource({}).catch(() => {});
+      prevBridge.transport?.close?.()?.catch(() => {});
     }
     if (outgoingIframeRef.current) {
       outgoingIframeRef.current.remove();
@@ -1361,21 +1357,13 @@ function SandboxIframe({
         outgoingIframeRef.current &&
         container.isConnected
       ) {
-        appBridge
-          .teardownResource({})
-          .catch(() => {})
-          .finally(() => {
-            activeTransport?.close?.()?.catch(() => {});
-          });
+        appBridge.teardownResource({}).catch(() => {});
+        activeTransport?.close?.()?.catch(() => {});
         iframe.remove();
       } else {
         disposeOutgoingFrame();
-        appBridge
-          .teardownResource({})
-          .catch(() => {})
-          .finally(() => {
-            activeTransport?.close?.()?.catch(() => {});
-          });
+        appBridge.teardownResource({}).catch(() => {});
+        activeTransport?.close?.()?.catch(() => {});
         iframe.remove();
       }
       iframeRef.current = null;

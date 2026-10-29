@@ -997,7 +997,9 @@ describe("Model Router auto model", () => {
         model: [org.trio[2].modelId],
       });
       const spent = await LlmThroughputModel.admit({
-        entities: [{ entityType: "organization", entityId: org.organizationId }],
+        entities: [
+          { entityType: "organization", entityId: org.organizationId },
+        ],
         model: org.trio[2].modelId,
       });
       expect("reservation" in spent && spent.reservation).toBeTruthy();

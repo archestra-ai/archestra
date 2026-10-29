@@ -485,6 +485,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.AzureImagesWithAgent]: {},
   [RouteId.OpenAiImagesWithDefaultAgent]: {},
   [RouteId.OpenAiImagesWithAgent]: {},
+  [RouteId.OpenAiImageEditsWithDefaultAgent]: {},
+  [RouteId.OpenAiImageEditsWithAgent]: {},
   [RouteId.ModelRouterImagesWithDefaultAgent]: {},
   [RouteId.ModelRouterImagesWithAgent]: {},
   [RouteId.ModelRouterImageEditsWithDefaultAgent]: {},

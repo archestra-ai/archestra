@@ -1234,15 +1234,14 @@ export async function handleLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
-    if (
-      provider.unavailableUsageAccounting &&
-      config.llmProxy.usageAccountingMode === "enforce"
-    ) {
-      throw new ApiError(
-        422,
-        "Authoritative usage and cost accounting are unavailable for this media operation",
-      );
-    }
+    // A media operation the published media tariff prices settles its cost
+    // like any other request. One it cannot price has no cost to settle, and
+    // the legacy token ledger cannot hold a media cost at all: such media is
+    // refused only where a spend budget applies to it.
+    const mediaPricedForBudget =
+      config.llmProxy.usageAccountingMode === "enforce" &&
+      provider.mediaTariffCovers?.(requestAdapter.getOriginalRequest()) ===
+        true;
     // Check usage limits
     logger.debug(
       { resolvedAgentId },
@@ -1250,9 +1249,10 @@ export async function handleLLMProxy<
     );
     const limitViolation =
       await LimitValidationService.checkLimitsBeforeRequest({
-        unpricedMediaModel: provider.unavailableUsageAccounting
-          ? requestAdapter.getModel()
-          : undefined,
+        unpricedMediaModel:
+          provider.unavailableUsageAccounting && !mediaPricedForBudget
+            ? requestAdapter.getModel()
+            : undefined,
         agentId: resolvedAgentId,
         userId,
         virtualKeyId,

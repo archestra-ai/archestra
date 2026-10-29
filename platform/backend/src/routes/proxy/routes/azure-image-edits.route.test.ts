@@ -192,7 +192,6 @@ test("real SDK edits preserve multiple inputs and a mask with governed credentia
     model: "gpt-image-1",
     inputTokens: 2,
     outputTokens: 3,
-    cost: null,
     request: {
       input_files: {
         images: [{ filename: "one.png" }, { filename: "two.webp" }],
@@ -200,6 +199,8 @@ test("real SDK edits preserve multiple inputs and a mask with governed credentia
       },
     },
   });
+  // gpt-image-1's published tariff: 2 text tokens at $5/M, 3 image tokens at $40/M.
+  expect(Number(interactions[0].cost)).toBe(0.00013);
   expect(JSON.stringify(interactions[0].request)).not.toContain(
     media.image.toString("base64"),
   );
@@ -433,7 +434,7 @@ test("client cancellation aborts the in-flight image provider request without re
   expect(media.requests).toHaveLength(1);
 });
 
-test("rejects unauthenticated calls and enforced accounting before any upstream request", async ({
+test("rejects unauthenticated calls before any upstream request", async ({
   media,
 }) => {
   const request = {
@@ -444,11 +445,23 @@ test("rejects unauthenticated calls and enforced accounting before any upstream 
   await expect(
     media.client.withOptions({ apiKey: "invalid-key" }).images.edit(request),
   ).rejects.toMatchObject({ status: 401 });
-  config.llmProxy.usageAccountingMode = "enforce";
-  await expect(media.client.images.edit(request)).rejects.toMatchObject({
-    status: 422,
-  });
   expect(media.requests).toHaveLength(0);
+});
+
+test("settles a priced edit under enforced accounting", async ({ media }) => {
+  config.llmProxy.usageAccountingMode = "enforce";
+  const priced = await media.client.images.edit({
+    model: "gpt-image-1",
+    prompt: "A circle.",
+    image: await toFile(media.image, "one.png"),
+  });
+  expect(priced.data).toHaveLength(1);
+  expect(media.requests).toHaveLength(1);
+  const [row] = await InteractionModel.getAllInteractionsForProfile(
+    media.agentId,
+  );
+  // gpt-image-1's published tariff: 2 text tokens at $5/M, 3 image tokens at $40/M.
+  expect(Number(row.cost)).toBe(0.00013);
 });
 
 test("rejects unsupported stream/partial fields, duplicate masks, invalid MIME and malformed multipart before upstream", async ({

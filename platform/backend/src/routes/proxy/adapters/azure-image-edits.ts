@@ -52,16 +52,7 @@ export function createAzureImageEditAdapter(
         openai: client.openai.withOptions({ fetch: mediaFetch }),
       };
     },
-    createResponseAdapter(response) {
-      const adapter = azureImagesAdapterFactory.createResponseAdapter(response);
-      const measured = adapter.getUsage.bind(adapter);
-      adapter.getUsage = () => ({
-        ...measured(),
-        costUnavailable: true,
-        ...(!response.usage && { usageUnavailable: true }),
-      });
-      return adapter;
-    },
+
     async execute(client, request) {
       const {
         input_files: _inputFiles,

@@ -7,6 +7,7 @@ import {
   providerDisplayNames,
   providerHasEndpointLocalModels,
   RouteId,
+  requiresResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -18,6 +19,7 @@ import {
   autoModelAvailable,
   resolveAutoModel,
 } from "@/auto-routing/router";
+import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
 import config, { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
@@ -35,7 +37,6 @@ import { collectDelegationMarkers } from "@/openappa/delegation";
 import { scrubTranslatedClientWire } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
-import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
 import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
@@ -104,9 +105,9 @@ import {
 } from "../adapters/openai-responses-translator";
 import { MODEL_ROUTER_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import {
-  handleAzureImageEdit,
+  handleImageEdit,
   ImageEditMultipartBodySchema,
-  parseAzureImageEditRequest,
+  parseImageEditRequest,
 } from "../image-edit-handler";
 import {
   resolveAgent,
@@ -124,7 +125,6 @@ import {
   type ModelRouterMappedProviderKey,
   type ModelRouterOAuthClientAuth,
   type ModelRouterUserOAuthAuth,
-  modelRequiresResponses,
   modelRouterAuthenticatedUserId,
   nativeResponsesProvider,
   selectModelRouterCredential,
@@ -320,7 +320,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? RouteId.ModelRouterImageEditsWithAgent
             : RouteId.ModelRouterImageEditsWithDefaultAgent,
           description:
-            "Edit images through a mapped Azure deployment using bounded multipart reference images and masks.",
+            "Edit images through a mapped OpenAI, Azure or Gemini image model using bounded multipart reference images and an optional mask.",
           tags: ["LLM Proxy"],
           ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
           headers: OpenAi.API.ChatCompletionsHeadersSchema,
@@ -332,7 +332,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
       async (request, reply) => {
-        const parsed = await parseAzureImageEditRequest(request);
+        const parsed = await parseImageEditRequest(request);
         const auth = mediaAuth.get(request);
         if (!auth)
           throw new ApiError(401, "Model Router authentication is required.");
@@ -342,14 +342,19 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           allowedProviders: getMappedProviders(auth),
           allowedApiKeyIds: getMappedApiKeyIds(auth),
         });
-        if (resolution.provider !== "azure")
+        const provider = resolution.provider;
+        if (
+          provider !== "azure" &&
+          provider !== "openai" &&
+          provider !== "gemini"
+        )
           throw new ApiError(
             400,
-            `Provider "${resolution.provider}" does not support the Model Router image edits endpoint.`,
+            `Provider "${provider}" does not support the Model Router image edits endpoint.`,
           );
         await applyModelRouterAuthOverride({ request, auth, resolution });
         parsed.body.model = resolution.modelId;
-        return handleAzureImageEdit(parsed, request, reply);
+        return handleImageEdit({ parsed, provider, request, reply });
       },
     );
   }

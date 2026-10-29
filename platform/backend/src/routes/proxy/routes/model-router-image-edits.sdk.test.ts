@@ -196,14 +196,28 @@ describe.each([
         expect(edit.authorization).toBe("Bearer synthetic-azure-edit-secret");
         expect(JSON.stringify(edit)).not.toContain(key.value);
       }
+      // OpenAI serves image edits natively, so the router forwards them with
+      // the mapped OpenAI key, as it does Azure's.
+      const openAiEdit = await client.images.edit({
+        model: "openai:gpt-image-1",
+        prompt: "Add a red circle.",
+        image: [file(), file()],
+        mask: file(),
+      });
+      expect(openAiEdit.data?.[0].b64_json).toBe(image.toString("base64"));
+      const openAiEdits = calls.filter(
+        (call) => call.path === "/openai/openai/v1/images/edits",
+      );
+      expect(openAiEdits).toHaveLength(1);
+      expect(openAiEdits[0]).toMatchObject({
+        authorization: "Bearer synthetic-openai-edit-secret",
+        fields: { model: "gpt-image-1", prompt: "Add a red circle." },
+      });
+      expect(openAiEdits[0].files).toHaveLength(3);
+      expect(openAiEdits[0].files.every((bytes) => bytes.equals(image))).toBe(
+        true,
+      );
       const before = calls.length;
-      await expect(
-        client.images.edit({
-          model: "openai:gpt-image-1",
-          prompt: "Add a blue circle.",
-          image: file(),
-        }),
-      ).rejects.toMatchObject({ status: 400 });
       await expect(
         client.images.edit({
           model: "azure:unlinked",
@@ -244,7 +258,8 @@ describe.each([
           (row) =>
             row.inputTokens === 2 &&
             row.outputTokens === 3 &&
-            row.cost === null,
+            // gpt-image-1: 2 text tokens at $5/M, 3 image tokens at $40/M.
+            Number(row.cost) === 0.00013,
         ),
       ).toBe(true);
       expect(
@@ -258,6 +273,22 @@ describe.each([
         image.toString("base64"),
       );
       expect(JSON.stringify(rows)).not.toContain("synthetic-azure-edit-secret");
+      const openAiRows = (
+        await InteractionModel.getAllInteractionsForProfile(agent.id)
+      ).filter(
+        (row) =>
+          row.type === "openai:images" &&
+          (row.request as { metadata?: { operation: string } }).metadata
+            ?.operation === "image-edit",
+      );
+      expect(openAiRows).toHaveLength(1);
+      expect(openAiRows[0]).toMatchObject({ inputTokens: 2, outputTokens: 3 });
+      expect(JSON.stringify(openAiRows[0].request)).not.toContain(
+        image.toString("base64"),
+      );
+      expect(JSON.stringify(openAiRows)).not.toContain(
+        "synthetic-openai-edit-secret",
+      );
     } finally {
       app.server.closeAllConnections();
       await app.close();

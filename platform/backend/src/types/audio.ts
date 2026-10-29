@@ -94,7 +94,7 @@ export const AudioAuditResponseSchema = z.object({
   content_type: z.string(),
   bytes: z.number().int().nonnegative(),
   usage_available: z.boolean(),
-  cost_available: z.literal(false),
+  cost_available: z.boolean(),
   usage: z.record(z.string(), z.unknown()).optional(),
 });
 

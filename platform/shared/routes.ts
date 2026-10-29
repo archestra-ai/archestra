@@ -283,6 +283,8 @@ export const RouteId = {
   OpenAiEmbeddingsWithAgent: "openAiEmbeddingsWithAgent",
   OpenAiImagesWithDefaultAgent: "openAiImagesWithDefaultAgent",
   OpenAiImagesWithAgent: "openAiImagesWithAgent",
+  OpenAiImageEditsWithDefaultAgent: "openAiImageEditsWithDefaultAgent",
+  OpenAiImageEditsWithAgent: "openAiImageEditsWithAgent",
   OpenAiListModelsWithDefaultAgent: "openAiListModelsWithDefaultAgent",
   OpenAiListModelsWithAgent: "openAiListModelsWithAgent",
 

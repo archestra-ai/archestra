@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { createServer } from "node:http";
 import { promisify } from "node:util";
 import OpenAI from "openai";
+import sharp from "sharp";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
@@ -365,6 +366,61 @@ describe.each([
           generationConfig: { responseModalities: ["IMAGE"] },
         },
       });
+      // Nano Banana edits: the reference image reaches generateContent as an
+      // inline part after the prompt, and the logged request keeps only the
+      // prompt. Gemini has no mask, so one is refused before any upstream call.
+      const reference = await sharp({
+        create: {
+          width: 16,
+          height: 16,
+          channels: 4,
+          background: { r: 1, g: 2, b: 3, alpha: 1 },
+        },
+      })
+        .png()
+        .toBuffer();
+      const referenceFile = () =>
+        new File([reference], "reference.png", { type: "image/png" });
+      const edited = await client.images.edit({
+        model: "gemini:gemini-2.5-flash-image",
+        prompt: "Make it red.",
+        image: referenceFile(),
+      });
+      expect(edited.data?.[0].b64_json).toBe(IMAGE);
+      expect(
+        upstream.calls
+          .filter((call) => call.path.includes(":generateContent"))
+          .at(-1),
+      ).toMatchObject({
+        apiKey: "synthetic-gemini-secret",
+        body: {
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: "Make it red." },
+                {
+                  inlineData: {
+                    mimeType: "image/png",
+                    data: reference.toString("base64"),
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: { responseModalities: ["IMAGE"] },
+        },
+      });
+      const geminiCalls = upstream.calls.length;
+      await expect(
+        client.images.edit({
+          model: "gemini:gemini-2.5-flash-image",
+          prompt: "Make it red.",
+          image: referenceFile(),
+          mask: referenceFile(),
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(upstream.calls).toHaveLength(geminiCalls);
       expect(
         upstream.calls.find((call) => call.path.includes("embeddings"))?.apiKey,
       ).toBe("synthetic-azure-secret");
@@ -499,6 +555,9 @@ describe.each([
           row.type.endsWith(":images") || row.type === "gemini:generateContent",
       );
       expect(images.length).toBeGreaterThanOrEqual(5);
+      expect(JSON.stringify(images.map((row) => row.request))).not.toContain(
+        reference.toString("base64"),
+      );
       const failedImages = images.filter(
         (row) =>
           (
@@ -531,7 +590,17 @@ describe.each([
             row.virtualKeyId === unmapped.virtualKey.id,
         ),
       ).toBe(true);
-      expect(images.every((row) => row.cost === null)).toBe(true);
+      // Each image call reporting usage is priced from its published media
+      // tariff; one without usage stays unpriced.
+      for (const row of images) {
+        expect(row.cost === null ? null : Number(row.cost)).toBe(
+          row.inputTokens === null
+            ? null
+            : row.model?.startsWith("gemini")
+              ? 0.0000906
+              : 0.00013,
+        );
+      }
       expect(
         images.some(
           (row) =>
@@ -551,13 +620,13 @@ describe.each([
       );
       const beforeEnforced = upstream.calls.length;
       config.llmProxy.usageAccountingMode = "enforce";
-      await expect(
-        client.images.generate({
-          model: imageModels[1],
-          prompt: "Draw a circle.",
-        }),
-      ).rejects.toMatchObject({ status: 422 });
-      expect(upstream.calls).toHaveLength(beforeEnforced);
+      // Priced from its published media tariff, so enforced accounting
+      // settles it like any other request.
+      await client.images.generate({
+        model: imageModels[1],
+        prompt: "Draw a circle.",
+      });
+      expect(upstream.calls).toHaveLength(beforeEnforced + 1);
       config.llmProxy.usageAccountingMode = "off";
       await LimitModel.create({
         entityType: "virtual_key",
@@ -571,7 +640,9 @@ describe.each([
           prompt: "Draw a circle.",
         }),
       ).rejects.toMatchObject({ status: 422 });
-      expect(upstream.calls).toHaveLength(beforeEnforced);
+      // The legacy token ledger cannot hold a media cost, so a budget there
+      // still refuses media before any upstream call.
+      expect(upstream.calls).toHaveLength(beforeEnforced + 1);
     } finally {
       app.server.closeAllConnections();
       await app.close();

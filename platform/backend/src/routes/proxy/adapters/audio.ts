@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import OpenAI, { toFile } from "openai";
 import config from "@/config";
+import {
+  type MediaOperation,
+  mediaTariffCovers,
+  priceOpenAiAudio,
+} from "@/services/media-pricing";
 import { ApiError, createStreamAccumulatorState } from "@/types";
 import type {
   AudioAuditRequest,
@@ -49,6 +54,10 @@ export function makeAudioAdapterFactory(params: {
   const base =
     provider === "azure" ? azureAdapterFactory : openaiAdapterFactory;
   const sse = parameters.stream_format === "sse" || parameters.stream === true;
+  const speechInput =
+    operation === "speech" && typeof parameters.input === "string"
+      ? parameters.input
+      : undefined;
   return {
     provider,
     interactionType: `${provider}:audio`,
@@ -75,7 +84,7 @@ export function makeAudioAdapterFactory(params: {
     createRequestAdapter: (request) =>
       new AudioRequestAdapter(provider, request),
     createResponseAdapter: (response) =>
-      new AudioResponseAdapter(provider, response),
+      new AudioResponseAdapter(provider, response, speechInput),
     createStreamAdapter: (request) =>
       new AudioStreamAdapter({
         provider,
@@ -83,6 +92,18 @@ export function makeAudioAdapterFactory(params: {
         model: request?.model ?? String(parameters.model),
         contentType: expectedContentType(operation, parameters),
         sse,
+        speechInput,
+      }),
+    mediaTariffCovers: (request) =>
+      mediaTariffCovers({
+        provider,
+        model: request.model,
+        operation: MEDIA_OPERATION[operation],
+        streamsUsage: sse,
+        responseFormat:
+          typeof parameters.response_format === "string"
+            ? parameters.response_format
+            : undefined,
       }),
     async execute() {
       throw new ApiError(500, "Audio transport requires byte streaming");
@@ -233,6 +254,7 @@ class AudioResponseAdapter implements LLMResponseAdapter<AudioAuditResponse> {
   constructor(
     readonly provider: "azure" | "openai",
     private readonly response: AudioAuditResponse,
+    private readonly speechInput?: string,
   ) {}
   getId() {
     return this.response.id;
@@ -250,7 +272,12 @@ class AudioResponseAdapter implements LLMResponseAdapter<AudioAuditResponse> {
     return false;
   }
   getUsage() {
-    return audioUsage(this.response.usage);
+    return audioUsage({
+      operation: this.response.operation,
+      model: this.response.model,
+      usage: this.response.usage,
+      speechInput: this.speechInput,
+    });
   }
   getOriginalResponse() {
     return this.response;
@@ -278,6 +305,7 @@ class AudioStreamAdapter
       model: string;
       contentType: string;
       sse: boolean;
+      speechInput?: string;
     },
   ) {
     this.provider = options.provider;
@@ -290,7 +318,12 @@ class AudioStreamAdapter
     this.bytes += chunk.bytes?.byteLength ?? 0;
     if (chunk.usage) this.usage = chunk.usage;
     if (chunk.done) {
-      this.state.usage = audioUsage(this.usage);
+      this.state.usage = audioUsage({
+        operation: this.options.operation,
+        model: this.options.model,
+        usage: this.usage,
+        speechInput: this.options.speechInput,
+      });
       this.state.stopReason = "stop";
     }
     return {
@@ -326,7 +359,10 @@ class AudioStreamAdapter
       content_type: this.contentType,
       bytes: this.bytes,
       usage_available: this.usage !== undefined,
-      cost_available: false,
+      cost_available:
+        !!this.state.usage &&
+        !this.state.usage.costUnavailable &&
+        !this.state.usage.usageUnavailable,
       ...(this.usage ? { usage: this.usage } : {}),
     };
   }
@@ -455,17 +491,42 @@ function safeUsage(raw: unknown): Record<string, unknown> | undefined {
   return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
-function audioUsage(usage?: Record<string, unknown>): UsageView {
+/**
+ * Usage and cost of an audio call. Speech billed per character and
+ * transcription billed per minute report no tokens, yet their cost is known:
+ * such a call records zero tokens beside its tariff cost.
+ */
+function audioUsage(params: {
+  operation: AudioOperation;
+  model: string;
+  usage?: Record<string, unknown>;
+  speechInput?: string;
+}): UsageView {
+  const { usage } = params;
   const known =
     typeof usage?.input_tokens === "number" &&
     typeof usage?.output_tokens === "number";
+  const cost = priceOpenAiAudio({
+    model: params.model,
+    operation: MEDIA_OPERATION[params.operation],
+    input: params.speechInput,
+    usage,
+  });
   return {
     inputTokens: known ? Number(usage.input_tokens) : 0,
     outputTokens: known ? Number(usage.output_tokens) : 0,
-    usageUnavailable: !known,
-    costUnavailable: true,
+    usageUnavailable: !known && cost === undefined,
+    ...(cost === undefined
+      ? { costUnavailable: true }
+      : { providerReportedCost: cost, mediaTariff: true }),
   };
 }
+
+const MEDIA_OPERATION: Record<AudioOperation, MediaOperation> = {
+  speech: "audio-speech",
+  transcriptions: "audio-transcription",
+  translations: "audio-translation",
+};
 
 /**
  * The content type the provider answers with, used until its first chunk

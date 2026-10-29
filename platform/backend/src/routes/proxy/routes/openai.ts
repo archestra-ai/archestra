@@ -37,6 +37,11 @@ import {
   RESPONSES_SUFFIX,
 } from "../common";
 import {
+  handleImageEdit,
+  ImageEditMultipartBodySchema,
+  parseImageEditRequest,
+} from "../image-edit-handler";
+import {
   createPassthroughAuthenticator,
   isJwtLike,
   resolveAgent,
@@ -114,6 +119,37 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           reply,
           openaiImagesAdapterFactory,
         ),
+    );
+  }
+
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${API_PREFIX}${withAgent ? "/:agentId" : ""}/images/edits`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.OpenAiImageEditsWithAgent
+            : RouteId.OpenAiImageEditsWithDefaultAgent,
+          description:
+            "Edit images with OpenAI using bounded multipart image inputs and an optional PNG mask. Returns a complete image response; streaming is unsupported.",
+          consumes: ["multipart/form-data"],
+          body: ImageEditMultipartBodySchema,
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          headers: OpenAi.API.ChatCompletionsHeadersSchema,
+          response: constructResponseSchema(
+            Azure.API.ImageGenerationResponseSchema,
+          ),
+        },
+      },
+      async (request, reply) =>
+        handleImageEdit({
+          parsed: await parseImageEditRequest(request),
+          provider: "openai",
+          request,
+          reply,
+        }),
     );
   }
 

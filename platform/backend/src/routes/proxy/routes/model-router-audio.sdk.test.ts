@@ -318,23 +318,6 @@ describe.each([
       await vi.waitFor(() =>
         expect([...cancelled].sort()).toEqual(["azure", "openai"]),
       );
-      const accountingMode = config.llmProxy.usageAccountingMode;
-      before = calls.length;
-      try {
-        config.llmProxy.usageAccountingMode = "enforce";
-        for (const model of modelIds) {
-          await expect(
-            client.audio.speech.create({
-              model,
-              input: "Synthetic input.",
-              voice: "alloy",
-            }),
-          ).rejects.toMatchObject({ status: 422 });
-        }
-        expect(calls).toHaveLength(before);
-      } finally {
-        config.llmProxy.usageAccountingMode = accountingMode;
-      }
       const interactions = (
         await InteractionModel.getAllInteractionsForProfile(agent.id)
       ).filter(

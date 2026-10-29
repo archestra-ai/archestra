@@ -51,7 +51,7 @@ The router speaks the OpenAI API. It supports these endpoints:
 | `/models` | Lists only the models your credential can reach |
 | `/embeddings` | All router providers except Anthropic, Bedrock, Cohere, and GitHub Copilot |
 | `/images/generations` | OpenAI, Azure, and Gemini image models |
-| `/images/edits` | Azure image models, using multipart reference images and masks |
+| `/images/edits` | OpenAI, Azure, and Gemini image models, using multipart reference images and masks |
 | `/audio/speech` | OpenAI and Azure speech models |
 | `/audio/transcriptions` and `/audio/translations` | OpenAI and Azure models that support the requested operation |
 
@@ -72,9 +72,10 @@ with open("speech.wav", "rb") as audio:
 
 The image result contains the provider's image data; the transcription result has a `text` field. Audio speech responses retain their native bytes, and supported transcription streaming retains its SSE events. Add `/<proxy-id>` after `/v1/model-router` to select a specific LLM proxy.
 
-- **Provider parameters:** OpenAI and Azure retain native image parameters. Image generation streaming is rejected. Gemini accepts one base64 image with automatic sizing; unsupported quality, size, output-format, and other conversions are rejected.
+- **Provider parameters:** OpenAI and Azure retain native image parameters. Image generation streaming is rejected. Gemini accepts one base64 image with automatic sizing; unsupported quality, size, output-format, and other conversions are rejected. Gemini edits take reference images but no mask.
 - **Uploads and logs:** audio uploads are bounded to 25 MiB per file. Logs retain file metadata and usage rather than audio bytes or transcription text.
-- **Unavailable pricing:** media cost remains unknown when authoritative pricing is unavailable. Enforced accounting and applicable cost budgets reject these requests before contacting the provider.
+- **Pricing:** image, speech, and transcription calls are priced at the provider's published media rates: per image token, per character of speech, per minute of audio. A call those rates cannot price, such as a translation or a text-format transcript, records no cost.
+- **Budgets:** with [`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE=enforce`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE), a priced media call counts toward cost budgets like a chat call. Otherwise, and for a call that cannot be priced, a cost budget rejects the request before it reaches the provider.
 
 File lifecycle operations use the provider-specific Azure proxy URL. A common router model name cannot select a file account, and uploaded file handles cannot replace multipart image inputs.
 

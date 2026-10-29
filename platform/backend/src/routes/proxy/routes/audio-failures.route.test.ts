@@ -188,13 +188,8 @@ describe.each([
     ).toBe(403);
     expect(calls).toBe(0);
   });
-  test("fails closed for enforced accounting and an applicable budget", async () => {
+  test("fails closed when a spend budget applies to unpriced media", async () => {
     const payload = { model: "tts-alias", input: "Synthetic.", voice: "alloy" };
-    config.llmProxy.usageAccountingMode = "enforce";
-    await expect(client.audio.speech.create(payload)).rejects.toMatchObject({
-      status: 422,
-    });
-    config.llmProxy.usageAccountingMode = "off";
     await LimitModel.create({
       entityType: "agent",
       entityId: agentId,
@@ -275,6 +270,52 @@ describe.each([
       request: { file: { size: exact.length } },
       response: { usage_available: true, usage: { seconds: 1 } },
     });
+  });
+  test("prices speech per character and transcription per minute from the published tariff", async () => {
+    handler = (response) => {
+      response.writeHead(200, { "content-type": "audio/mpeg" });
+      response.end(Buffer.from([1, 2, 3]));
+    };
+    await client.audio.speech.create({
+      model: "tts-1",
+      input: "Hello",
+      voice: "alloy",
+    });
+    handler = (response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          text: "Synthetic transcript.",
+          usage: { type: "duration", seconds: 2 },
+        }),
+      );
+    };
+    await client.audio.transcriptions.create({
+      model: "whisper-1",
+      file: new File([audio], "synthetic.wav", { type: "audio/wav" }),
+    });
+    // A translation reports neither tokens nor duration: it stays unpriced.
+    handler = (response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ text: "Synthetic translation." }));
+    };
+    await client.audio.translations.create({
+      model: "whisper-1",
+      file: new File([audio], "synthetic.wav", { type: "audio/wav" }),
+    });
+    const rows = await InteractionModel.getAllInteractionsForProfile(agentId);
+    const cost = (operation: string) => {
+      const row = rows.find(
+        (item) =>
+          (item.request as { operation?: string }).operation === operation,
+      );
+      return row?.cost == null ? null : Number(row.cost);
+    };
+    // tts-1: 5 characters at $15 per million.
+    expect(cost("speech")).toBe(0.000075);
+    // whisper-1: 2 seconds at $0.006 per minute.
+    expect(cost("transcriptions")).toBe(0.0002);
+    expect(cost("translations")).toBeNull();
   });
   test("preserves native text/subtitle responses and converts multipart numeric/array fields", async () => {
     for (const format of ["text", "srt", "vtt"] as const) {

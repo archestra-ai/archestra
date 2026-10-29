@@ -1,4 +1,5 @@
 import { HttpResponse, http } from "msw";
+import sharp from "sharp";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import { InteractionModel, ModelModel } from "@/models";
@@ -108,6 +109,98 @@ describe.each([
       expect(streaming.statusCode).toBe(400);
       expect(streaming.json().error.message).toContain(
         "Image streaming is not supported. Omit stream or set it to false.",
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("governs OpenAI image edits with the caller's key, forwarding the exact upload bytes", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    config.llm.openai.baseUrl = "https://openai.example/v1";
+    config.llmProxy.plugins = [];
+    const agent = await makeAgent({ isDefault: true, agentType: "llm_proxy" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    const token = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: user.id,
+    });
+    const image = await sharp({
+      create: {
+        width: 16,
+        height: 16,
+        channels: 4,
+        background: { r: 1, g: 2, b: 3, alpha: 1 },
+      },
+    })
+      .png()
+      .toBuffer();
+    let forwarded: FormData | undefined;
+    server.use(
+      http.post(
+        "https://openai.example/v1/images/edits",
+        async ({ request }) => {
+          expect(request.headers.get("authorization")).toBe(
+            "Bearer openai-key",
+          );
+          forwarded = await request.formData();
+          return HttpResponse.json({
+            created: 1,
+            data: [{ b64_json: "aW1hZ2U=" }],
+            usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
+          });
+        },
+      ),
+    );
+    const form = new FormData();
+    form.append("model", "gpt-image-1");
+    form.append("prompt", "Make it red.");
+    form.append(
+      "image",
+      new File([image], "reference.png", { type: "image/png" }),
+    );
+    const encoded = new Request("http://form.test", {
+      method: "POST",
+      body: form,
+    });
+    const app = createFastifyInstance();
+    await app.register(openAiRoutes);
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai${withAgent ? `/${agent.id}` : ""}/images/edits`,
+        headers: {
+          authorization: "Bearer openai-key",
+          "x-archestra-virtual-key": token,
+          "content-type": String(encoded.headers.get("content-type")),
+        },
+        payload: Buffer.from(await encoded.arrayBuffer()),
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().data[0].b64_json).toBe("aW1hZ2U=");
+      expect(forwarded?.get("model")).toBe("gpt-image-1");
+      expect(forwarded?.get("prompt")).toBe("Make it red.");
+      const sent = forwarded?.get("image") as File;
+      expect(Buffer.from(await sent.arrayBuffer()).equals(image)).toBe(true);
+      const interactions = await InteractionModel.getAllInteractionsForProfile(
+        agent.id,
+      );
+      expect(interactions.at(-1)).toMatchObject({
+        type: "openai:images",
+        model: "gpt-image-1",
+        inputTokens: 2,
+        outputTokens: 3,
+        request: {
+          prompt: "Make it red.",
+          metadata: { operation: "image-edit" },
+        },
+      });
+      expect(JSON.stringify(interactions.at(-1)?.request)).not.toContain(
+        image.toString("base64"),
       );
     } finally {
       await app.close();

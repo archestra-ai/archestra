@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { z } from "zod";
+import { mediaTariffCovers, priceOpenAiImage } from "@/services/media-pricing";
 import type {
   LLMRequestAdapter,
   LLMResponseAdapter,
@@ -21,6 +22,12 @@ export function createImageGenerationAdapters(provider: ImageProvider) {
     createResponseAdapter: (response: ImageResponse) =>
       new ImageResponseAdapter(response, provider),
     createStreamAdapter: () => new ImageStreamAdapter(provider),
+    mediaTariffCovers: (request: ImageRequest & { metadata?: unknown }) =>
+      mediaTariffCovers({
+        provider,
+        model: request.model,
+        operation: "image-generation",
+      }),
   };
 }
 
@@ -95,9 +102,15 @@ class ImageResponseAdapter implements LLMResponseAdapter<ImageResponse> {
     return false;
   }
   getUsage() {
+    const cost = priceOpenAiImage({
+      model: this.getModel(),
+      usage: this.response.usage,
+    });
     return {
       usageUnavailable: !this.response.usage,
-      costUnavailable: true,
+      ...(cost === undefined
+        ? { costUnavailable: true }
+        : { providerReportedCost: cost, mediaTariff: true }),
       inputTokens: this.response.usage?.input_tokens ?? 0,
       outputTokens: this.response.usage?.output_tokens ?? 0,
     };

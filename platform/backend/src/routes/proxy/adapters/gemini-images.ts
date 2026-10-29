@@ -1,5 +1,6 @@
 import type { GenerateContentParameters, GoogleGenAI } from "@google/genai";
 import type { z } from "zod";
+import { mediaTariffCovers, priceGeminiImage } from "@/services/media-pricing";
 import {
   ApiError,
   type Azure,
@@ -8,7 +9,9 @@ import {
   type LLMResponseAdapter,
 } from "@/types";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
+import type { ValidatedImageEditUploads } from "../utils/image-edit-input";
 import { mediaProviderError } from "../utils/media-provider-error";
+import type { AzureImageEditRequest } from "./azure-image-edits";
 import { type GeminiRequestWithModel, geminiAdapterFactory } from "./gemini";
 
 /** Translate only Images parameters with an exact native Gemini meaning. */
@@ -31,6 +34,55 @@ export function toGeminiImageRequest(
     _isStreaming: false,
     contents: [{ role: "user", parts: [{ text: request.prompt }] }],
     generationConfig: { responseModalities: ["IMAGE"] },
+  };
+}
+
+/**
+ * An Images edit request in Gemini's native shape. The reference images are
+ * attached by `createGeminiImageEditAdapter` when the request executes, so the
+ * logged request carries the prompt and not the image bytes.
+ */
+export function toGeminiImageEditRequest(
+  request: AzureImageEditRequest,
+  uploads: ValidatedImageEditUploads,
+): GeminiRequestWithModel {
+  if (uploads.mask) {
+    throw new ApiError(
+      400,
+      "Gemini image edits do not support a mask. Describe the area to change in the prompt.",
+    );
+  }
+  const { input_files: _inputFiles, metadata: _metadata, ...fields } = request;
+  return toGeminiImageRequest(fields);
+}
+
+/** Gemini image edits: generateContent with the reference images as inline parts. */
+export function createGeminiImageEditAdapter(
+  uploads: ValidatedImageEditUploads,
+): typeof geminiImagesAdapterFactory {
+  return {
+    ...geminiImagesAdapterFactory,
+    execute(client: unknown, request: GeminiRequestWithModel) {
+      const [first, ...rest] = request.contents ?? [];
+      return geminiImagesAdapterFactory.execute(client, {
+        ...request,
+        contents: [
+          {
+            ...first,
+            parts: [
+              ...(first?.parts ?? []),
+              ...uploads.images.map((file, index) => ({
+                inlineData: {
+                  mimeType: uploads.metadata.images[index].mime_type,
+                  data: file.data.toString("base64"),
+                },
+              })),
+            ],
+          },
+          ...rest,
+        ],
+      });
+    },
   };
 }
 
@@ -63,6 +115,12 @@ export const geminiImagesAdapterFactory = {
       "Gemini image streaming is not supported by the Images compatibility endpoint.",
     );
   },
+  mediaTariffCovers: (request: GeminiRequestWithModel) =>
+    mediaTariffCovers({
+      provider: "gemini",
+      model: request._model ?? "",
+      operation: "image-generation",
+    }),
   async execute(client: unknown, request: GeminiRequestWithModel) {
     let result: Gemini.Types.GenerateContentResponse;
     try {
@@ -116,11 +174,14 @@ class GeminiImagesResponseAdapter
   }
   getUsage() {
     const usage = this.response.usageMetadata;
+    const cost = priceGeminiImage({ model: this.getModel(), usage });
     return {
       ...this.inner.getUsage(),
       usageUnavailable:
         usage?.promptTokenCount == null || usage?.candidatesTokenCount == null,
-      costUnavailable: true,
+      ...(cost === undefined
+        ? { costUnavailable: true }
+        : { providerReportedCost: cost, mediaTariff: true }),
     };
   }
   getLoggedResponse() {
@@ -139,7 +200,7 @@ class GeminiImagesResponseAdapter
       created: this.created,
       data,
       usage_available: !this.getUsage().usageUnavailable,
-      cost_available: false,
+      cost_available: !this.getUsage().costUnavailable,
       // Captions and native usage are preserved as explicit extensions; neither
       // is mislabeled as a revised prompt or an OpenAI billing breakdown.
       gemini_text: this.getText(),

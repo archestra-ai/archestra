@@ -156,8 +156,13 @@ export function InternalMCPCatalog({
   const pathname = usePathname();
   const ownershipFilters = useScopeFilterParams();
 
-  // Get search query from URL
+  // Filter locally on the keystroke; the router commits URL changes in a
+  // transition, which must not delay filtering an already loaded catalog.
   const searchQueryFromUrl = searchParams.get("search") || "";
+  const [searchQuery, setSearchQuery] = useState(searchQueryFromUrl);
+  useEffect(() => {
+    setSearchQuery(searchQueryFromUrl);
+  }, [searchQueryFromUrl]);
 
   const {
     data: catalogItems,
@@ -293,9 +298,10 @@ export function InternalMCPCatalog({
       entityFromUrl: manageCatalogItemFromUrl,
     });
 
-  // Update URL when search query changes (debounced via DebouncedInput)
+  // Preserve shareable URLs and external navigation while filtering promptly.
   const handleSearchChange = useCallback(
     (value: string) => {
+      setSearchQuery(value);
       const params = new URLSearchParams(searchParams.toString());
       if (value.trim()) {
         params.set("search", value);
@@ -1019,7 +1025,7 @@ export function InternalMCPCatalog({
 
   const allFilteredItems = sortItems(
     filterByLabels(
-      filterCatalogItems(catalogItems || [], searchQueryFromUrl),
+      filterCatalogItems(catalogItems || [], searchQuery),
       parsedLabels,
     )
       .filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID)
@@ -1113,7 +1119,7 @@ export function InternalMCPCatalog({
   const hasLabelFilters = parsedLabels && Object.keys(parsedLabels).length > 0;
   const hasActiveFilters = Boolean(
     ownershipFilters.hasActiveScopeFilters ||
-      searchQueryFromUrl.trim() ||
+      searchQuery.trim() ||
       hasLabelFilters,
   );
   // A selected attention facet is the list's current view, not an applied
@@ -1180,7 +1186,7 @@ export function InternalMCPCatalog({
               <SearchInput
                 objectNamePlural="MCP servers"
                 searchFields={["name"]}
-                value={searchQueryFromUrl}
+                value={searchQuery}
                 onSearchChange={handleSearchChange}
                 syncQueryParams={false}
                 debounceMs={0}

@@ -7,4 +7,5 @@ export const useTeamLimitAccess = vi.fn(() => ({
   globalRead: false,
   isPending: false,
   allows: () => false,
+  isLocked: () => false,
 }));

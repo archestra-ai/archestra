@@ -22,6 +22,7 @@ import { WithPagePermissions } from "./with-page-permissions";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/limits-access");
 vi.mock("@/lib/runtime-credentials.query", () => ({
   useRuntimeCredentials: () => ({ data: [], isPending: false }),
 }));

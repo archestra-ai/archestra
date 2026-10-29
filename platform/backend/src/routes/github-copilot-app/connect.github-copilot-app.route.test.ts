@@ -356,6 +356,8 @@ describe("GitHub Copilot organization subscription setup", () => {
       const url = String(input);
       if (/\/users\/[^/]+$/.test(url))
         return Response.json({ message: "Not Found" }, { status: 404 });
+      if (url === "https://github.com/unreachable-org")
+        throw new TypeError("fetch failed");
       return webProfiles[url]?.clone() ?? github(input, init);
     });
 
@@ -405,6 +407,15 @@ describe("GitHub Copilot organization subscription setup", () => {
         `GitHub has no account named ${organization}.`,
       );
     }
+    // Without an answer from the web profile, it's unknown, not missing.
+    const unanswered = await post(
+      "/api/github-copilot-app/organization/check",
+      { organization: "unreachable-org" },
+    );
+    expect(unanswered.statusCode).toBe(502);
+    expect(unanswered.json().error.message).toBe(
+      "GitHub didn't return the unreachable-org account.",
+    );
   });
 
   test("refuses a personal GitHub account", async () => {

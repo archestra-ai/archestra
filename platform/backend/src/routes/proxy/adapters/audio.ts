@@ -16,7 +16,10 @@ import type {
   UsageView,
 } from "@/types/llm-provider";
 import { PROXY_BODY_LIMIT } from "../common";
-import type { MediaMultipartFile } from "../utils/media-multipart";
+import {
+  type MediaMultipartFile,
+  mediaUploadType,
+} from "../utils/media-multipart";
 import { azureAdapterFactory, getAzureClientForRequest } from "./azure";
 import { openaiAdapterFactory } from "./openai";
 
@@ -107,7 +110,7 @@ export function makeAudioAdapterFactory(params: {
         } else {
           if (!file) throw new ApiError(400, "Audio file is required");
           const upload = await toFile(file.data, file.filename, {
-            type: file.mimetype,
+            type: mediaUploadType(file),
           });
           if (operation === "transcriptions") {
             response =

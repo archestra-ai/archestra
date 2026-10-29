@@ -16,6 +16,7 @@ import { handleLLMProxy } from "../llm-proxy-handler";
 import { getAzureProxyIngress } from "../utils/azure-ingress";
 import {
   type MediaMultipartFile,
+  mediaUploadType,
   parseMediaMultipart,
   registerMediaMultipartParser,
 } from "../utils/media-multipart";
@@ -68,10 +69,11 @@ export async function parseAudioUploadRequest(
     ].includes(extension)
   )
     throw new ApiError(400, "Unsupported audio filename extension");
+  const uploadType = mediaUploadType(file);
   if (
-    !file.mimetype.startsWith("audio/") &&
+    !uploadType.startsWith("audio/") &&
     !["application/octet-stream", "video/mp4", "video/webm"].includes(
-      file.mimetype,
+      uploadType,
     )
   )
     throw new ApiError(415, "Unsupported audio content type");
@@ -154,7 +156,7 @@ export function handleAudioProxy(params: {
       ? {
           file: {
             filename: file.filename,
-            mimetype: file.mimetype,
+            mimetype: mediaUploadType(file),
             size: file.data.length,
           },
         }

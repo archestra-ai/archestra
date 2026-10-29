@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { ApiError } from "@/types/api";
+import { mediaUploadType } from "./media-multipart";
 
 export const IMAGE_EDIT_MAX_FILE_BYTES = 50 * 1024 * 1024 - 1;
 export const IMAGE_EDIT_MAX_MASK_BYTES = 4 * 1024 * 1024 - 1;
@@ -105,7 +106,7 @@ async function validateImage(
     );
   }
   const mime = png ? "image/png" : jpeg ? "image/jpeg" : "image/webp";
-  const declared = file.mimetype.split(";")[0].trim().toLowerCase();
+  const declared = mediaUploadType(file);
   // SDK uploads created from a byte buffer commonly use application/octet-stream.
   if (
     declared &&

@@ -50,6 +50,14 @@ describe("image edit uploads", () => {
     expect(result.metadata.images[0].mime_type).toBe("image/jpeg");
   });
 
+  test("accepts an image part sent without its own content type", async () => {
+    // The multipart parser reports such a part as text/plain; Python
+    // `requests` uploads files that way by default, and OpenAI accepts them.
+    const file = { ...(await image("image")), mimetype: "text/plain" };
+    const result = await validateImageEditUploads([file]);
+    expect(result.metadata.images[0].mime_type).toBe("image/png");
+  });
+
   test("rejects invalid file counts, duplicate masks, unsupported file fields and empty files", async () => {
     const file = await image();
     await expect(validateImageEditUploads([])).rejects.toThrow(

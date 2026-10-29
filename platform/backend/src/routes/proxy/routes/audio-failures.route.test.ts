@@ -315,6 +315,46 @@ describe.each([
       );
     }
   });
+  test("accepts an audio part sent without its own content type, as the provider does", async () => {
+    let forwardedType: string | undefined;
+    handler = (response, body, type) => {
+      void new Request("http://upstream.test", {
+        method: "POST",
+        headers: { "content-type": type },
+        body: new Uint8Array(body),
+      })
+        .formData()
+        .then((form) => {
+          forwardedType = (form.get("file") as File).type;
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(JSON.stringify({ text: "Synthetic transcript." }));
+        });
+    };
+    // Python `requests` sends `files={"file": open(path, "rb")}` this way: the
+    // file part names a filename and carries no Content-Type header.
+    const boundary = "synthetic-boundary";
+    const body = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nalias\r\n` +
+          `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="synthetic.wav"\r\n\r\n`,
+      ),
+      audio,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+    const response = await fetch(`${client.baseURL}/audio/transcriptions`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer synthetic-provider-key",
+        "x-archestra-virtual-key": token,
+        "content-type": `multipart/form-data; boundary=${boundary}`,
+      },
+      body,
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await response.json()).toEqual({ text: "Synthetic transcript." });
+    expect(forwardedType).toBe("application/octet-stream");
+  });
+
   test("preserves speech SSE and transcription SSE without injected framing", async () => {
     const speech =
       'data: {"type":"speech.audio.delta","audio":"AAE="}\n\ndata: {"type":"speech.audio.done","usage":{"input_tokens":2,"output_tokens":3}}\n\n';

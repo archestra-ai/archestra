@@ -21,6 +21,18 @@ export interface MediaMultipartLimits {
   maxParts?: number;
 }
 
+/**
+ * The MIME type a media upload declares, lower-cased and without parameters.
+ * A file part sent without its own Content-Type (Python `requests` uploads
+ * that way by default) reaches the parser as `text/plain`, the multipart
+ * default, which no audio or image upload means. Such a part counts as
+ * untyped bytes, as OpenAI reads the format from the filename and content.
+ */
+export function mediaUploadType(file: { mimetype: string }): string {
+  const type = file.mimetype.split(";")[0].trim().toLowerCase();
+  return !type || type === "text/plain" ? "application/octet-stream" : type;
+}
+
 /** Fastify enforces route bodyLimit, including chunked wire bytes and headers. */
 export async function registerMediaMultipartParser(
   fastify: FastifyInstance,

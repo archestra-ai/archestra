@@ -188,6 +188,33 @@ describe("buildUserContent", () => {
     expect(note).toContain("report.docx");
   });
 
+  test("attributes an unreadable file to the missing sandbox when the credential cannot have one", async () => {
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: "application/zip",
+        contentBase64: "AAAA",
+        name: "bundle.zip",
+      },
+    ];
+
+    const withoutSandbox = await buildUserContent("Read this", attachments, {
+      ...geminiOpts(PDF_AND_IMAGES),
+      credentialHasNoSandbox: true,
+    });
+    const regular = await buildUserContent(
+      "Read this",
+      attachments,
+      geminiOpts(PDF_AND_IMAGES),
+    );
+
+    expect(withoutSandbox.rejected).toEqual([
+      { name: "bundle.zip", reason: "credential_has_no_sandbox" },
+    ]);
+    expect(regular.rejected).toEqual([
+      { name: "bundle.zip", reason: "unsupported_type" },
+    ]);
+  });
+
   test("keeps images regardless of the readable mime set, including image/jpg", async () => {
     const attachments: A2AAttachment[] = [
       {

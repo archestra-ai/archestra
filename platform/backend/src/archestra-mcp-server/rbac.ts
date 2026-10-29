@@ -350,6 +350,26 @@ const ORG_CONTEXT_READ_TOOLS: ReadonlySet<ArchestraToolShortName> = new Set([
   "query_knowledge_sources",
 ]);
 
+/** Team and organization tokens on A2A run as this literal: no user is behind it. */
+const SYSTEM_CALLER_USER_ID = "system";
+
+/**
+ * The context an org-context read tool's handler sees: a "system" caller is
+ * handed over as the userless credential it is, so the handler restricts
+ * results to organization scope instead of evaluating "system" as a user.
+ */
+export function orgContextReadToolContext(
+  toolName: string,
+  context: ArchestraContext,
+): ArchestraContext {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  return context.userId === SYSTEM_CALLER_USER_ID &&
+    shortName !== null &&
+    ORG_CONTEXT_READ_TOOLS.has(shortName)
+    ? { ...context, userId: undefined }
+    : context;
+}
+
 /**
  * Check if a user has permission to execute a specific Archestra tool.
  * Returns an error result if denied, or null if allowed.
@@ -374,14 +394,14 @@ export async function checkToolPermission(
 
   // Application credentials may have no user; they may still use read-only tools
   // that operate at organization scope — the handlers restrict the results.
-  if (!context.userId) {
+  if (!context.userId || context.userId === SYSTEM_CALLER_USER_ID) {
     if (ORG_CONTEXT_READ_TOOLS.has(typedShortName)) return null;
     // Name the cause: this is reached whenever the caller authenticated with a
     // credential that acts for an application rather than a person, and the
     // previous wording ("User context not available") read as an internal
     // fault rather than a fixable choice of credential.
     return errorResult(
-      `${toolName} requires an acting user, but the credential used to authenticate does not identify one. Team tokens, organization tokens, and OAuth client-credentials tokens act for an application, not a person. Re-authenticate with a personal token, a user OAuth token, or an Identity Provider JWT.`,
+      `${toolName} requires an acting user, but the credential used to authenticate does not identify one. Team tokens, organization tokens, and OAuth client-credentials tokens act for an application, not a person. Re-authenticate with a personal token, a service account API key, a user OAuth token, or an Identity Provider JWT.`,
     );
   }
 

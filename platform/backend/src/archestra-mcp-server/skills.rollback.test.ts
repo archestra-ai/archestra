@@ -1208,6 +1208,43 @@ describe("skill tool execution", () => {
     expect(textOf(result)).not.toContain("private-skill");
   });
 
+  test("a team or organization token caller reads only organization skills", async ({
+    makeUser,
+  }) => {
+    const author = await makeUser();
+    await seedSkill({
+      access: "personal",
+      skill: { name: "private-skill", authorId: author.id },
+    });
+    await seedSkill({ skill: { name: "shared-skill" } });
+    const systemContext = { ...context, userId: "system" };
+
+    const shared = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "shared-skill" },
+      systemContext,
+    );
+    const hidden = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "private-skill" },
+      systemContext,
+    );
+    const write = await executeArchestraTool(
+      TOOL_CREATE_SKILL_FULL_NAME,
+      { content: manifest("system-skill") },
+      systemContext,
+    );
+
+    expect(shared.isError).toBe(false);
+    expect(hidden.structuredContent?.archestraError).toMatchObject({
+      code: "unknown_skill",
+    });
+    expect(write.isError).toBe(true);
+    expect(
+      await SkillModel.findAllByName(organizationId, "system-skill"),
+    ).toEqual([]);
+  });
+
   test("load_skill hides a skill outside the user's scope", async ({
     makeUser,
     makeMember,

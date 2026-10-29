@@ -110,7 +110,7 @@ import {
   toolEntries as projectToolEntries,
   tools as projectTools,
 } from "./projects";
-import { checkToolPermission } from "./rbac";
+import { checkToolPermission, orgContextReadToolContext } from "./rbac";
 import {
   repairEnvelopedToolArgs,
   toolEntries as runToolEntries,
@@ -442,7 +442,7 @@ export async function executeArchestraTool(
   try {
     const result = await toolEntry.invoke({
       args: admitted.args,
-      context,
+      context: orgContextReadToolContext(toolName, context),
       toolName,
     });
 

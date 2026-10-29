@@ -519,6 +519,7 @@ export async function executeA2AMessage(
                 agentId,
               })
           : undefined,
+        credentialHasNoSandbox: userId === "system",
       },
     );
     const currentTurnText = message + note;
@@ -981,6 +982,11 @@ type StageAttachmentsFn = (
   attachments: A2AAttachment[],
 ) => Promise<StageResult[]>;
 
+/** Team and organization tokens run as "system", which never gets a sandbox. */
+type A2AAttachmentRejectionReason =
+  | ChatUploadRejectionReason
+  | "credential_has_no_sandbox";
+
 /**
  * Surface a child run's tool calls while it runs: each call when its input is
  * ready, again when it settles. The final-message pass in
@@ -1113,8 +1119,14 @@ export async function buildUserContent(
     ingestibleMimeTypes: Set<string>;
     sandboxByteLimit?: number;
     stageAttachments?: StageAttachmentsFn;
+    /** The caller's credential cannot have a sandbox, so `stageAttachments` is absent. */
+    credentialHasNoSandbox?: boolean;
   },
-): Promise<{ content: UserContent | null; note: string }> {
+): Promise<{
+  content: UserContent | null;
+  note: string;
+  rejected: Array<{ name: string; reason: A2AAttachmentRejectionReason }>;
+}> {
   // `A2AAttachment.contentType` is typed non-optional, but every value
   // originates from an external source (A2A protocol parts, chat-platform or
   // email uploads) and stays populated only because each ingestion path defaults
@@ -1156,7 +1168,7 @@ export async function buildUserContent(
   const toStage: A2AAttachment[] = [];
   const rejected: Array<{
     att: A2AAttachment;
-    reason: ChatUploadRejectionReason;
+    reason: A2AAttachmentRejectionReason;
   }> = [];
   for (const att of nonImageAttachments) {
     const reason = chatUploadRejectionReason({
@@ -1167,7 +1179,12 @@ export async function buildUserContent(
       sandboxByteLimit,
     });
     if (reason) {
-      rejected.push({ att, reason });
+      rejected.push({
+        att,
+        reason: opts.credentialHasNoSandbox
+          ? "credential_has_no_sandbox"
+          : reason,
+      });
     } else if (canInlineAttachment(att, opts.ingestibleMimeTypes)) {
       inlineNonImage.push(att);
     } else {
@@ -1240,9 +1257,13 @@ export async function buildUserContent(
       .join(", ")}. Use the run_command tool to read or process them.]`;
   }
 
+  const rejectedSummary = rejected.map((r) => ({
+    name: r.att.name ?? "unnamed",
+    reason: r.reason,
+  }));
   const keptAttachments = [...validImageAttachments, ...inlineNonImage];
   if (keptAttachments.length === 0) {
-    return { content: null, note };
+    return { content: null, note, rejected: rejectedSummary };
   }
 
   // Hand the inline attachments to the chat provider-normalization pipeline as a
@@ -1273,7 +1294,7 @@ export async function buildUserContent(
   ] as unknown as Omit<UIMessage, "id">[]);
 
   const content = (modelMessages[0]?.content ?? null) as UserContent | null;
-  return { content, note };
+  return { content, note, rejected: rejectedSummary };
 }
 
 // ============================================================================
@@ -1334,7 +1355,7 @@ function canInlineAttachment(
   return ingestibleMimeTypes.has(att.contentType);
 }
 
-function rejectionText(reason: ChatUploadRejectionReason): string {
+function rejectionText(reason: A2AAttachmentRejectionReason): string {
   switch (reason) {
     case "text_too_large":
       return "text too large to inline";
@@ -1346,6 +1367,8 @@ function rejectionText(reason: ChatUploadRejectionReason): string {
       return "too large to store";
     case "unsupported_type":
       return "type not supported by this model";
+    case "credential_has_no_sandbox":
+      return "not readable inline, and this credential has no code sandbox to stage it in; use a service account API key";
   }
 }
 

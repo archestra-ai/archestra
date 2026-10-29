@@ -224,9 +224,13 @@ Pin an exact chart version or image tag from [GitHub Releases](https://github.co
 
 On the first v1.4 startup, Archestra converts legacy sharing and role permissions before serving API traffic. One replica performs the conversion; other replicas wait, and later restarts skip it. During startup, `/health` responds successfully while `/ready` returns HTTP 503 until the API is ready, so large conversions do not exhaust the Kubernetes startup probe budget.
 
-During shutdown, Archestra stops accepting new model requests and gives active requests up to 60 seconds to finish. Requests that outlast this window can still lose their connection. The Helm chart sets `archestra.terminationGracePeriodSeconds` to 120; keep it at least this high so the container can finish shutdown.
+Set `archestra.shutdown.requestDrainSeconds` above the longest request you want to preserve after shutdown starts. For example, `200` gives a request with 180 seconds remaining room to finish. Keep `archestra.terminationGracePeriodSeconds: null` to derive matching web and worker pod limits. See [shutdown settings](/docs/reference/configuration#shutdown) for cleanup budgets and environment overrides.
 
-For Docker, use `docker stop --time 120` or set Compose's `stop_grace_period: 120s`. A shorter host deadline can kill the container before requests finish.
+During shutdown, readiness returns 503 and new work is rejected. Admitted LLM and MCP calls can finish within the drain budget, including their persistence work; MCP replies and cancellations for active calls remain available. Notification streams close after active calls settle. At the deadline, remaining HTTP connections close and unfinished work may be interrupted.
+
+Reconnect notification streams to a live replica. An interrupted tool call can already have performed its side effect: retry only when the tool supports idempotency or after reconciling its result. The drain setting does not extend provider, MCP upstream or client timeouts; raise those separately when needed.
+
+For Docker, set the same [shutdown environment variables](/docs/reference/configuration#shutdown) and allow at least `max(drain, worker timeout) + cleanup + 40` seconds in `docker stop --time` or Compose's `stop_grace_period`.
 
 The proxy retries a provider connection failure at most twice before receiving the first response chunk. It does not retry provider error responses, timeouts, or failures after output starts. Recovery after partial output depends on your client's retry policy.
 

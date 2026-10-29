@@ -76,9 +76,11 @@ import config, {
   parseRetentionDays,
   parseSampleRate,
   parseSandboxMemoryMaxBytes,
+  parseShutdownSeconds,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
   resolveAllowedOrigins,
+  validateShutdownPodGrace,
 } from "./config";
 
 // Mock the logger
@@ -3717,5 +3719,64 @@ describe("OpenAPPA feature configuration", () => {
         `ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER "${provider}" does not support chat completions`,
       );
     });
+  });
+});
+
+describe("shutdown durations", () => {
+  test("accepts whole seconds and uses defaults only when absent", () => {
+    expect(parseShutdownSeconds(undefined, 60)).toBe(60);
+    expect(parseShutdownSeconds("180", 60)).toBe(180);
+    expect(parseShutdownSeconds("0008", 60)).toBe(8);
+    expect(parseShutdownSeconds("86400", 60)).toBe(86400);
+  });
+  test.each([
+    "",
+    "0",
+    "-1",
+    "1.5",
+    "1s",
+    " 60",
+    "Infinity",
+    "86401",
+    "9007199254740992",
+  ])("rejects invalid duration %s", (value) => {
+    expect(() => parseShutdownSeconds(value, 60)).toThrow();
+  });
+  test("reserves at least five seconds for cleanup", () => {
+    expect(() => parseShutdownSeconds("4", 20, 5)).toThrow();
+    expect(parseShutdownSeconds("5", 20, 5)).toBe(5);
+  });
+});
+
+describe("resolved pod shutdown budgets", () => {
+  test("preserves imported worker and drain durations when the pod covers them", () => {
+    expect(() => validateShutdownPodGrace(150, 60, 20, 90)).not.toThrow();
+    expect(() => validateShutdownPodGrace(60, 15, 5, 15)).not.toThrow();
+    expect(() => validateShutdownPodGrace(240, 180, 20, 30)).not.toThrow();
+    expect(() => validateShutdownPodGrace(260, 200, 20, 30)).not.toThrow();
+  });
+  test("rejects hidden imported values exceeding the rendered pod budget", () => {
+    expect(() => validateShutdownPodGrace(120, 60, 20, 90)).toThrow(
+      "at least 150s",
+    );
+    expect(() => validateShutdownPodGrace(120, 180, 20, 30)).toThrow(
+      "at least 240s",
+    );
+    expect(() => validateShutdownPodGrace(120, 60, 60, 30)).toThrow(
+      "at least 160s",
+    );
+  });
+  test("does not impose a Kubernetes budget on Docker or standalone servers", () => {
+    expect(() =>
+      validateShutdownPodGrace(undefined, 200, 20, 90),
+    ).not.toThrow();
+  });
+  test("accepts a derived pod budget beyond the maximum individual duration", () => {
+    expect(
+      parseShutdownSeconds("172840", 120, 1, Number.MAX_SAFE_INTEGER),
+    ).toBe(172840);
+    expect(() =>
+      validateShutdownPodGrace(172840, 86400, 86400, 86400),
+    ).not.toThrow();
   });
 });

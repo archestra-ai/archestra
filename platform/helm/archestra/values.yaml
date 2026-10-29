@@ -20,9 +20,16 @@ archestra:
   # as the HPA will manage the replica count dynamically
   replicaCount: 1
 
-  # Covers frontend stop, backend's 60s proxy drain / 80s shutdown deadline,
-  # and supervisord's 90s backend stop budget. Keep at least 120 seconds.
-  terminationGracePeriodSeconds: 120
+  # null derives max(request drain, worker timeout) + cleanup + 40 seconds.
+  # An explicit value must cover that budget. Applies to web and worker pods.
+  terminationGracePeriodSeconds: null
+  shutdown:
+    # null preserves envFrom, envFromSecrets and envWithValueFrom sources.
+    # Runtime defaults are 60s drain, 20s cleanup and 30s worker task timeout.
+    # Set explicit values here to override imported environment settings.
+    requestDrainSeconds: null
+    cleanupSeconds: null
+    workerTaskTimeoutSeconds: null
 
   # Optional database connection budgeting across all backend pods.
   # When configured, Helm divides the budget across peak web and worker pods,

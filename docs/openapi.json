@@ -76643,6 +76643,10 @@
                           ],
                           "additionalProperties": false
                         },
+                        "autoRouted": {
+                          "default": false,
+                          "type": "boolean"
+                        },
                         "llmApiKey": {
                           "nullable": true,
                           "type": "object",
@@ -76892,6 +76896,7 @@
                         "incomingEmailAllowedDomain",
                         "builtInAgentConfig",
                         "model",
+                        "autoRouted",
                         "llmApiKey",
                         "identityProviderId",
                         "environmentId",

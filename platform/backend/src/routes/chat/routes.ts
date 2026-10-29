@@ -3020,6 +3020,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // A chat with no model choice of its own follows its agent's "Auto",
+      // starting on the agent's anchor.
+      const inheritsAutoRouted =
+        autoRouted === undefined &&
+        !modelId &&
+        !chatApiKeyId &&
+        !modelPoolId &&
+        agent.autoRouted;
+
       // Validate chatApiKeyId if provided
       // Skip validation if it matches the agent's configured key (permission flows through agent access)
       if (
@@ -3103,7 +3112,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
           modelPoolId: autoRouted ? null : (modelPoolId ?? null),
-          autoRouted: autoRouted ?? false,
+          autoRouted: autoRouted ?? inheritsAutoRouted,
           projectId: projectId ?? null,
           thinkingEffort,
         }),

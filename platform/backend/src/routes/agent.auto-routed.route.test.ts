@@ -103,6 +103,34 @@ describe("agents set to Auto", () => {
     });
   });
 
+  test("restoring a version set to Auto restores Auto with its anchor", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const { normal, key } = await setUpAutoRouting(
+      makeLlmProviderApiKey,
+      makeSecret,
+    );
+    const agent = await makeAgent({ organizationId, agentType: "agent" });
+    await update(agent.id, { autoRouted: true });
+    const autoVersion = (await AgentModel.findById(agent.id))?.latestVersion;
+    await update(agent.id, { llmApiKeyId: key.id, modelId: normal.id });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/versions/${autoVersion}/restore`,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(await AgentModel.findById(agent.id)).toMatchObject({
+      autoRouted: true,
+      modelId: normal.id,
+      llmApiKeyId: key.id,
+      modelPoolId: null,
+    });
+  });
+
   test("Auto is refused while auto routing is off for the organization", async ({
     makeAgent,
     makeLlmProviderApiKey,

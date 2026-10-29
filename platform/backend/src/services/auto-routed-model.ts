@@ -57,7 +57,7 @@ export async function applyAutoRoutedChoice<
   const { body, keyField } = params;
   if (body.autoRouted) {
     const anchor = await resolveAutoRoutedAnchor(params);
-    body.modelPoolId = null;
+    Object.assign(body, autoRoutedSelection(true));
     body.modelId = anchor.modelId;
     body[keyField] = anchor.chatApiKeyId as (typeof body)[K];
     return;
@@ -68,8 +68,20 @@ export async function applyAutoRoutedChoice<
       body.modelId !== undefined ||
       body.modelPoolId)
   ) {
-    body.autoRouted = false;
+    Object.assign(body, autoRoutedSelection(false));
   }
+}
+
+/**
+ * The selection fields an "Auto" flag implies: "Auto" and a pool exclude each
+ * other, so turning it on leaves the pool.
+ */
+export function autoRoutedSelection(
+  autoRouted: boolean,
+): { autoRouted: true; modelPoolId: null } | { autoRouted: false } {
+  return autoRouted
+    ? { autoRouted: true, modelPoolId: null }
+    : { autoRouted: false };
 }
 
 // === Internal ===

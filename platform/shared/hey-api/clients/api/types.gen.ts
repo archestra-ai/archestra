@@ -20399,6 +20399,7 @@ export type GetAgentVersionResponses = {
                 id: string;
                 externalId: string;
             } | null;
+            autoRouted: boolean;
             llmApiKey: {
                 id: string;
                 name: string;

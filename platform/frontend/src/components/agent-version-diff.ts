@@ -627,6 +627,10 @@ const CONFIGURATION_FIELDS: {
     identity: (s) => s.model?.id ?? null,
   },
   {
+    label: "Auto routing",
+    render: (s) => (s.autoRouted ? "On" : "Off"),
+  },
+  {
     label: "LLM API key",
     render: (s) =>
       s.llmApiKey ? `${s.llmApiKey.name} (${s.llmApiKey.provider})` : null,

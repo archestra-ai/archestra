@@ -3826,7 +3826,11 @@ class AgentModel {
     id: string,
     userId?: string,
     isAgentAdmin?: boolean,
-  ): Promise<{ llmApiKeyId: string | null; modelId: string | null } | null> {
+  ): Promise<{
+    llmApiKeyId: string | null;
+    modelId: string | null;
+    autoRouted: boolean;
+  } | null> {
     if (!(await AgentModel.callerCanAccess(id, userId, isAgentAdmin))) {
       return null;
     }
@@ -3835,6 +3839,7 @@ class AgentModel {
       .select({
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
+        autoRouted: schema.agentsTable.autoRouted,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))

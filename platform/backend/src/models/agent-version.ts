@@ -238,6 +238,7 @@ class AgentVersionModel {
       incomingEmailAllowedDomain: agent.incomingEmailAllowedDomain ?? null,
       builtInAgentConfig: agent.builtInAgentConfig ?? null,
       model,
+      autoRouted: agent.autoRouted,
       llmApiKey: keyRows[0] ?? null,
       identityProviderId: agent.identityProviderId ?? null,
       environmentId: agent.environmentId ?? null,

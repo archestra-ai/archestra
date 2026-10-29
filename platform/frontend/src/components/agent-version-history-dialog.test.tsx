@@ -60,6 +60,7 @@ const snapshot = (
 ): AgentConfigSnapshot => ({
   agentType: "agent",
   name: "Support bot",
+  autoRouted: false,
   description: null,
   icon: null,
   systemPrompt: "be helpful",

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import type * as k8s from "@kubernetes/client-node";
+import config from "@/config";
 import logger from "@/logging";
 
 // === Public API ===
@@ -22,9 +23,15 @@ class ClusterDnsResolver {
 
   /**
    * Returns the cluster DNS ClusterIP(s), or an empty array when they cannot
-   * be determined. Results are cached per API client for a few minutes.
+   * be determined. Operator-configured IPs win over discovery; discovered
+   * results are cached per API client for a few minutes.
    */
   async getClusterDnsIps(coreApi: k8s.CoreV1Api): Promise<string[]> {
+    const configured = config.orchestrator.kubernetes.clusterDnsIps;
+    if (configured.length > 0) {
+      return configured;
+    }
+
     const cached = this.cache.get(coreApi);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.value;
@@ -64,7 +71,7 @@ class ClusterDnsResolver {
     }
 
     logger.warn(
-      "Could not determine the cluster DNS service IP (kube-dns service lookup and resolv.conf both failed)",
+      "Could not determine the cluster DNS service IP (kube-dns service lookup and resolv.conf both failed); set ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS or grant the platform service account get on the kube-system/kube-dns Service",
     );
     return [];
   }

@@ -137,6 +137,37 @@ describe("Slack startup cancellation", () => {
     });
   }
 
+  test("a socket closing before hello fails promptly without starting a background retry", async () => {
+    const fixture = await createSlackSocketFixture();
+    fixture.closeBeforeHello();
+    const provider = new SlackProvider(slackConfig);
+    try {
+      const started = performance.now();
+      await expect(provider.initialize()).rejects.toThrow("then retry");
+      expect(performance.now() - started).toBeLessThan(1000);
+      expect(provider.getBotUserId()).toBeNull();
+      // The SDK already scheduled a shutdown-check timer before our listener
+      // ran. Let it expire and prove it never starts another connection.
+      await delay(5500);
+      expect(
+        fixture.calls.filter((method) => method === "apps.connections.open"),
+      ).toHaveLength(1);
+      expect(fixture.connections).toBe(1);
+      fixture.release();
+      const retry = new SlackProvider(slackConfig);
+      try {
+        await retry.initialize();
+        expect(retry.getBotUserId()).toBe("UBOT_TEST");
+        expect(fixture.connections).toBe(2);
+      } finally {
+        await retry.cleanup();
+      }
+    } finally {
+      await provider.cleanup();
+      await fixture.close();
+    }
+  }, 15000);
+
   test("initial rate limiting fails promptly without retaining a Retry-After timer", async () => {
     const fixture = await createSlackSocketFixture();
     fixture.failNextConnection(429, 60);

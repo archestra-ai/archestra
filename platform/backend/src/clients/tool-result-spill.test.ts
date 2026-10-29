@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { SkillSandboxModel } from "@/models";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import { afterAll, beforeEach, describe, expect, test } from "@/test";
 import {
@@ -167,6 +168,41 @@ describe("capChatToolResult", () => {
         toolCallId: "call-spill",
       });
       expect(await sandboxUploads(sandbox.id)).toHaveLength(1);
+    },
+  );
+
+  sandboxTest(
+    "saves an oversized result to the execution sandbox in a headless run",
+    async ({ spillContext }) => {
+      const { conversationId: _, ...headless } = spillContext;
+      const isolationKey = crypto.randomUUID();
+      const context = { ...headless, scopeKey: isolationKey };
+
+      try {
+        const capped = await capChatToolResult({
+          result: { content: oversized },
+          hookFeedback: null,
+          context,
+          toolCallId: "call-headless-spill",
+        });
+
+        const marker = readCappedToolResult(capped);
+        const sandbox = await executionSandboxRegistry.findDefault({
+          organizationId: context.organizationId,
+          userId: context.userId,
+          isolationKey,
+        });
+        if (!sandbox) throw new Error("expected an execution sandbox");
+        expect(sandbox.conversationId).toBeNull();
+        const files = await sandboxUploads(sandbox.id);
+        expect(files).toHaveLength(1);
+        expect(files[0].path).toBe(marker?.path);
+        expect(Buffer.from(files[0].data ?? "").toString("utf8")).toBe(
+          oversized,
+        );
+      } finally {
+        executionSandboxRegistry.release(isolationKey);
+      }
     },
   );
 

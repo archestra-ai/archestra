@@ -295,17 +295,24 @@ describe.each([
               "content-type":
                 format === "vtt" ? "text/vtt" : "text/plain; charset=utf-8",
             });
-            response.end("Synthetic transcript.\n");
+            response.end("Synthetic transcript, café.\n");
           });
       };
-      const result = await client.audio.transcriptions.create({
-        model: "alias",
-        file: new File([audio], "synthetic.wav"),
-        response_format: format,
-        temperature: 0,
-        timestamp_granularities: ["word", "segment"],
-      });
-      expect(result).toBe("Synthetic transcript.\n");
+      const { data: result, response } = await client.audio.transcriptions
+        .create({
+          model: "alias",
+          file: new File([audio], "synthetic.wav"),
+          response_format: format,
+          temperature: 0,
+          timestamp_granularities: ["word", "segment"],
+        })
+        .withResponse();
+      expect(result).toBe("Synthetic transcript, café.\n");
+      // Relayed as the provider labelled it, charset included: a client that
+      // decodes `text/*` without one (Python `requests`) reads Latin-1.
+      expect(response.headers.get("content-type")).toBe(
+        format === "vtt" ? "text/vtt" : "text/plain; charset=utf-8",
+      );
     }
   });
   test("preserves speech SSE and transcription SSE without injected framing", async () => {

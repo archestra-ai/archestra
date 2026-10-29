@@ -1406,19 +1406,20 @@ export async function handleLLMProxy<
     // return a proper HTTP error status code (e.g. 429) instead of being
     // stuck with a 200. The AI SDK detects errors via HTTP status codes, so
     // this is critical for error propagation to clients like the chat UI.
-    let sseHeaders: Record<string, string> | undefined;
-    if (requestAdapter.isStreaming()) {
+    const commitsStreamHeaders = requestAdapter.isStreaming();
+    if (commitsStreamHeaders) {
       logger.debug(
         `[${providerName}Proxy] Preparing streaming response headers (lazy commit)`,
       );
-      sseHeaders = streamAdapter.getSSEHeaders();
     }
 
     // Helper to commit SSE headers before the first write.
-    // Safe to call multiple times — only writes headers once.
+    // Safe to call multiple times — only writes headers once. The headers are
+    // read at commit time: a byte stream (audio) learns the provider's own
+    // content type from its first chunk and relays it as the provider sent it.
     const ensureStreamHeaders = () => {
-      if (sseHeaders && !reply.raw.headersSent) {
-        reply.raw.writeHead(200, sseHeaders);
+      if (commitsStreamHeaders && !reply.raw.headersSent) {
+        reply.raw.writeHead(200, streamAdapter.getSSEHeaders());
         streamTiming.firstByteAt = Date.now();
       }
     };

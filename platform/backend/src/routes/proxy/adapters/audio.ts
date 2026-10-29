@@ -464,17 +464,22 @@ function audioUsage(usage?: Record<string, unknown>): UsageView {
   };
 }
 
+/**
+ * The content type the provider answers with, used until its first chunk
+ * names the real one. Text carries its charset as OpenAI's does: without one,
+ * HTTP clients such as Python `requests` decode `text/*` as Latin-1.
+ */
 function expectedContentType(
   operation: AudioOperation,
   parameters: Record<string, unknown>,
 ) {
   if (parameters.stream_format === "sse" || parameters.stream === true)
-    return "text/event-stream";
+    return "text/event-stream; charset=utf-8";
   if (operation === "speech")
     return `audio/${parameters.response_format ?? "mpeg"}`;
   return String(parameters.response_format ?? "json").includes("json")
     ? "application/json"
-    : "text/plain";
+    : "text/plain; charset=utf-8";
 }
 
 function safeAudioError(error: unknown): ApiError {

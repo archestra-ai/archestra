@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type ClientFilter,
-  INTERACTION_SOURCE_DISPLAY,
-  type InteractionSource,
-} from "@archestra/shared";
+import type { ClientFilter, InteractionSource } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { MessagesSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -14,19 +10,14 @@ import { AgentSelector } from "@/components/agent-selector";
 import {
   CollectionFilters,
   FilterBar,
-  FilterSelect,
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { SourceFilterOption } from "@/components/log-filter-option";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  ClientFilterSelect,
-  UserFilterSelect,
-} from "@/components/user-client-filter-selects";
+import { UserFilterSelect } from "@/components/user-client-filter-selects";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
@@ -42,6 +33,7 @@ import { ErrorBoundary } from "../../_parts/error-boundary";
 import { AgentCell } from "./_parts/agent-cell";
 import type { LogSession } from "./_parts/logs-table-format";
 import { ModelCell } from "./_parts/model-cell";
+import { OriginFilter } from "./_parts/origin-filter";
 import { SessionCell } from "./_parts/session-cell";
 import { TimeCell } from "./_parts/time-cell";
 import { UsageCell } from "./_parts/usage-cell";
@@ -324,30 +316,11 @@ function SessionsTable() {
             />
           ) : null}
 
-          <FilterSelect
-            value={sourceFilter}
-            onValueChange={handleSourceFilterChange}
-            placeholder="Filter by Source"
-            items={[
-              { value: "all", label: "All Sources" },
-              ...Object.entries(INTERACTION_SOURCE_DISPLAY).map(
-                ([value, { label }]) => ({
-                  value,
-                  label,
-                  content: (
-                    <SourceFilterOption source={value as InteractionSource} />
-                  ),
-                  selectedContent: (
-                    <SourceFilterOption source={value as InteractionSource} />
-                  ),
-                }),
-              ),
-            ]}
-          />
-
-          <ClientFilterSelect
-            value={clientFilter}
-            onValueChange={handleClientFilterChange}
+          <OriginFilter
+            client={clientFilter}
+            source={sourceFilter}
+            onClientChange={handleClientFilterChange}
+            onSourceChange={handleSourceFilterChange}
           />
         </FilterBar>
       </CollectionFilters>

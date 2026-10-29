@@ -25,24 +25,18 @@ export class LlmLogsPage {
     await this.page.goto(`/llm/logs/${encodeURIComponent(sessionId)}`);
   }
 
-  // The filter bar renders four SearchableSelect comboboxes in order:
-  // Profile, User, Source, Client. The combobox's accessible name changes to
-  // the selected option, so the Client filter is addressed by position.
   get clientFilter(): Locator {
-    return this.page.getByRole("combobox").nth(3);
+    return this.page.getByRole("combobox", {
+      name: "Filter by apps and sources",
+    });
   }
 
   rowForText(text: string | RegExp): Locator {
     return this.table.locator("tbody tr").filter({ hasText: text });
   }
 
-  /**
-   * Open the Client filter and pick an option by its visible label.
-   * Claude options also carry the Anthropic logo's alt text ("Anthropic …"),
-   * so match on the label as a substring.
-   */
   async selectClient(label: string) {
     await this.clientFilter.click();
-    await this.page.getByRole("option", { name: label }).click();
+    await this.page.getByRole("option", { name: label, exact: true }).click();
   }
 }

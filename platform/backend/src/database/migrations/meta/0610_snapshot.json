@@ -1,5 +1,5 @@
 {
-  "id": "f5163354-c776-4cd4-b31a-5cc863a76de0",
+  "id": "c36475c9-e1ce-400f-9b12-19f2cd44e30f",
   "prevId": "93c0d2ed-6424-4b5e-bae1-11a5566042b6",
   "version": "7",
   "dialect": "postgresql",
@@ -16460,6 +16460,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "team_managed": {
+          "name": "team_managed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "cleanup_interval": {
           "name": "cleanup_interval",
           "type": "varchar",
@@ -29610,6 +29617,13 @@
         },
         "synced_from_sso": {
           "name": "synced_from_sso",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "role_synced_from_sso": {
+          "name": "role_synced_from_sso",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

@@ -4275,22 +4275,8 @@
     {
       "idx": 610,
       "version": "7",
-      "when": 1793304462115,
-      "tag": "0610_plain_daredevil",
-      "breakpoints": true
-    },
-    {
-      "idx": 611,
-      "version": "7",
-      "when": 1793305721604,
-      "tag": "0611_team_managed_limits",
-      "breakpoints": true
-    },
-    {
-      "idx": 612,
-      "version": "7",
-      "when": 1793307055982,
-      "tag": "0612_team_member_role_source",
+      "when": 1793307994824,
+      "tag": "0610_team_sync_roles_and_team_limits",
       "breakpoints": true
     }
   ]

@@ -1,1 +1,0 @@
-ALTER TABLE "team_member" ADD COLUMN "role_synced_from_sso" boolean DEFAULT false NOT NULL;

@@ -376,7 +376,7 @@ An explicit archestra.env value overrides the injection.
 {{- end }}
 {{/* This binary is copied into arbitrary MCP images and must be static: the
      generic init-container busybox can use a libc the target image lacks. */}}
-{{- $prepullBootstrapImage := .bootstrapImage | default "docker.io/library/busybox:1.36-musl" }}
+{{- $prepullBootstrapImage := include "archestra-platform.imageRegistry" (dict "image" (.bootstrapImage | default "docker.io/library/busybox:1.36-musl") "registry" .bootstrapImageRegistry) }}
 {{- if $prepullBootstrapImage }}
 - name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
   value: {{ $prepullBootstrapImage | quote }}
@@ -943,7 +943,7 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
       psql -h {{ include "archestra-platform.fullname" . }}-postgresql -U postgres -d {{ .Values.postgresql.auth.database }} -c "CREATE EXTENSION IF NOT EXISTS vector;"
 {{- end }}
 - name: wait-for-postgres
-  image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
+  image: {{ include "archestra-platform.busyboxImage" . }}
   {{- with .Values.archestra.initContainers.resources }}
   resources:
     {{- toYaml . | nindent 4 }}
@@ -1017,7 +1017,7 @@ are covered by the pre-upgrade migration Job.
 {{- define "archestra-platform.waitForMigrationsInitContainer" -}}
 {{- if .Values.archestra.initContainers.waitForMigrations.enabled }}
 - name: wait-for-migrations
-  image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
+  image: {{ include "archestra-platform.busyboxImage" . }}
   {{- with .Values.archestra.initContainers.resources }}
   resources:
     {{- toYaml . | nindent 4 }}
@@ -1173,4 +1173,30 @@ it treats empty collections as unset and would restore global constraints.
   {{- toYaml . | nindent 2 }}
   {{- end -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+Replace only an image's registry, retaining the repository and tag/digest.
+A first path component containing a dot/port, or localhost, is a registry.
+Unqualified image names keep their complete repository path. Registry overrides
+may include a mirror path prefix; ignore trailing slashes when joining.
+*/}}
+{{- define "archestra-platform.imageRegistry" -}}
+{{- $image := .image -}}
+{{- $registry := .registry | default "" | trimSuffix "/" -}}
+{{- if $registry -}}
+{{- $parts := splitList "/" $image -}}
+{{- $first := first $parts -}}
+{{- if and (gt (len $parts) 1) (or (contains "." $first) (contains ":" $first) (eq "localhost" $first)) -}}
+{{- $image = join "/" (rest $parts) -}}
+{{- end -}}
+{{- printf "%s/%s" $registry $image -}}
+{{- else -}}
+{{- $image -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Shared by startup checks in web, migration, and worker pods. */}}
+{{- define "archestra-platform.busyboxImage" -}}
+{{- include "archestra-platform.imageRegistry" (dict "image" (.Values.archestra.initContainers.busyboxImage | default "busybox:1.36") "registry" .Values.archestra.initContainers.busyboxImageRegistry) -}}
 {{- end -}}

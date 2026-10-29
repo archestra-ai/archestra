@@ -455,10 +455,10 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
  * Identifies Claude Desktop requests. Claude Desktop's Code and Cowork tabs
  * share Claude Code's runtime, tool names (`Bash`, `Agent`, `SendMessage`,
  * `AskUserQuestion`, `WaitForMcpServers`), and session/subagent wire format.
- * Only its identity and gateway setup instructions differ: the
- * `anthropic_claude_desktop` agent id header set by Desktop's setup, a
+ * Its differences are identity (`anthropic_claude_desktop` agent id header,
  * `claude-desktop` User-Agent, or a `cowork`/`claude-desktop` Anthropic billing
- * entrypoint in the system prompt.
+ * entrypoint in the system prompt), gateway setup instructions, and native
+ * question rendering/answer matching.
  */
 export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
   override readonly id = "claude-desktop" as const;

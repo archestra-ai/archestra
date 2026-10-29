@@ -1,4 +1,5 @@
 import { MEMBER_ROLE_NAME } from "@archestra/shared";
+import { sql } from "drizzle-orm";
 import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
@@ -38,6 +39,11 @@ const member = pgTable(
       table.userId,
       table.organizationId,
     ),
+    // Unused, but deleting a model still clears it through the foreign key;
+    // without this each deleted model reads the whole table.
+    defaultModelIdx: index("member_default_model_id_idx")
+      .on(table.defaultModelId)
+      .where(sql`${table.defaultModelId} IS NOT NULL`),
   }),
 );
 

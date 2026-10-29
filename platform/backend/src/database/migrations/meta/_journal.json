@@ -4264,6 +4264,13 @@
       "when": 1793220651428,
       "tag": "0608_vengeful_leech",
       "breakpoints": true
+    },
+    {
+      "idx": 609,
+      "version": "7",
+      "when": 1793228884954,
+      "tag": "0609_absent_scourge",
+      "breakpoints": true
     }
   ]
 }

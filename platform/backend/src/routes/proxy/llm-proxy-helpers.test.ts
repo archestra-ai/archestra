@@ -1037,12 +1037,15 @@ describe("handleError", () => {
   const extractMessage = (error: unknown) =>
     error instanceof Error ? error.message : "Internal server error";
 
-  /** The events of a Responses error frame: the `error` event, then the terminal. */
+  /**
+   * The events of a Responses error frame: the `error` event, then the
+   * terminal, each named on its `event:` line as OpenAI names them.
+   */
   const responsesEvents = (frame: string) =>
     frame
       .split("\n\n")
       .filter(Boolean)
-      .map((event) => JSON.parse(event.replace(/^data: /, "")));
+      .map((event) => JSON.parse(event.replace(/^event: .*\ndata: /, "")));
 
   test("preserves the internal code carried by a thrown ApiError", () => {
     const { reply } = makeReply(false);

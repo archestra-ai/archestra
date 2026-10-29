@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import vm from "node:vm";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { authPermissionState } = vi.hoisted(() => ({
@@ -109,7 +112,10 @@ vi.mock("@/components/mcp-app/app-settings-form", () => ({
 // ── Import component under test after mocks ───────────────────────────────────
 
 import { AppBridge } from "@modelcontextprotocol/ext-apps/app-bridge";
-import { McpAppRuntime } from "@/components/mcp-app/mcp-app-view";
+import {
+  clearMcpAppGuestState,
+  McpAppRuntime,
+} from "@/components/mcp-app/mcp-app-view";
 import { useApp } from "@/lib/app.query";
 import { useAppAccess } from "@/lib/apps/use-app-access";
 import {
@@ -128,6 +134,7 @@ const mockUseAppAccess = vi.mocked(useAppAccess);
 // (a name, a fullscreen-by-default flag) must not leak into the next.
 beforeEach(() => {
   authPermissionState.granted = false;
+  clearMcpAppGuestState();
   mockUseApp.mockReturnValue({ data: undefined } as ReturnType<typeof useApp>);
   mockUseAppAccess.mockReturnValue({
     canEdit: true,
@@ -1995,5 +2002,887 @@ describe("McpAppSection error handling", () => {
     });
 
     fetchSpy.mockRestore();
+  });
+});
+
+describe("McpAppSection filter and parameter state preservation on reload", () => {
+  const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
+  const SANDBOX_ORIGIN = "http://127.0.0.1:9000";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearMcpAppGuestState();
+  });
+
+  // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+  function installBridgeCollector(bridgeInstances: any[]) {
+    (AppBridge as ReturnType<typeof vi.fn>).mockImplementation(function (
+      this: Record<string, unknown>,
+    ) {
+      this.onrequestdisplaymode = null;
+      this.onopenlink = null;
+      this.oncalltool = null;
+      this.onreadresource = null;
+      this.onlistresources = null;
+      this.onlistresourcetemplates = null;
+      this.onlistprompts = null;
+      this.onloggingmessage = null;
+      this.onmessage = null;
+      this.onsizechange = null;
+      this.oninitialized = null;
+      this.onsandboxready = null;
+      this.connect = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendSandboxResourceReady = vi
+        .fn()
+        .mockReturnValue(Promise.resolve());
+      this.sendToolInput = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolInputPartial = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolResult = vi.fn().mockReturnValue(Promise.resolve());
+      this.setHostContext = vi.fn();
+      this.teardownResource = vi.fn().mockReturnValue(Promise.resolve());
+      bridgeInstances.push(this);
+    });
+  }
+
+  async function notifySandboxProxyReady(iframe: HTMLIFrameElement) {
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: iframe.contentWindow,
+          origin: SANDBOX_ORIGIN,
+          data: { method: SANDBOX_PROXY_READY },
+        }),
+      );
+    });
+  }
+
+  it("forwards captured guest filter/parameter state to the new sandbox on top-left Reload app click", async () => {
+    const user = userEvent.setup();
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    installBridgeCollector(bridgeInstances);
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="panel"
+          preloadedResource={preloadedResource}
+        />,
+      );
+    });
+
+    const firstIframe = document.querySelector("iframe");
+    if (!firstIframe) throw new Error("initial iframe did not mount");
+    await notifySandboxProxyReady(firstIframe);
+
+    expect(bridgeInstances).toHaveLength(1);
+    expect(bridgeInstances[0].sendSandboxResourceReady).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        restoredState: expect.anything(),
+      }),
+    );
+
+    const capturedState = {
+      controls: {
+        "#filter-user": {
+          kind: "form",
+          tag: "select",
+          type: "select-one",
+          value: "alice",
+          selectedIndex: 2,
+          selectedText: "@Alice",
+        },
+        "#filter-client": {
+          kind: "form",
+          tag: "select",
+          type: "select-one",
+          value: "acme",
+          selectedIndex: 1,
+          selectedText: "acme (4)",
+        },
+        "#btn-hide-done": {
+          kind: "toggle",
+          active: true,
+        },
+      },
+      groups: {
+        "button.tab|.toolbar": "2|todo|Todo 71",
+      },
+      localStorage: {
+        "archestra-pm-board:hide-done": "1",
+      },
+      sessionStorage: {},
+      urlHash: "#sprint",
+      urlSearch: "",
+      historyState: null,
+    };
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: firstIframe.contentWindow,
+          origin: SANDBOX_ORIGIN,
+          data: {
+            type: "mcp-apps:state-sync",
+            state: capturedState,
+          },
+        }),
+      );
+    });
+
+    // Click the top-left reload icon button in the panel header
+    const reloadButton = screen.getByRole("button", { name: /reload app/i });
+    await act(async () => {
+      await user.click(reloadButton);
+    });
+
+    const reloadedIframe = document.querySelector("iframe");
+    if (!reloadedIframe) throw new Error("reloaded iframe did not mount");
+    await notifySandboxProxyReady(reloadedIframe);
+
+    expect(bridgeInstances).toHaveLength(2);
+    expect(bridgeInstances[1].sendSandboxResourceReady).toHaveBeenCalledWith(
+      expect.objectContaining({
+        html: preloadedResource.html,
+        restoredState: capturedState,
+      }),
+    );
+  });
+
+  it("preserves guest filter state across remounts of the same app instance without leaking to other tool-call instances or resources", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    installBridgeCollector(bridgeInstances);
+
+    const { unmount } = render(
+      <AppsProvider
+        apps={[
+          {
+            toolCallId: "tc-1",
+            label: "First Instance",
+            uiResourceUri: defaultProps.uiResourceUri,
+            createdAt: 0,
+          },
+        ]}
+      >
+        <McpAppSection
+          {...defaultProps}
+          toolCallId="tc-1"
+          surface="inline"
+          preloadedResource={preloadedResource}
+        />
+      </AppsProvider>,
+    );
+
+    const inlineIframe = document.querySelector("iframe");
+    if (!inlineIframe) throw new Error("inline iframe did not mount");
+    await notifySandboxProxyReady(inlineIframe);
+
+    const syncedState = {
+      controls: {
+        "#filter-user": {
+          kind: "form",
+          tag: "select",
+          type: "select-one",
+          value: "user-1",
+        },
+      },
+    };
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: inlineIframe.contentWindow,
+          origin: SANDBOX_ORIGIN,
+          data: {
+            type: "mcp-apps:state-sync",
+            state: syncedState,
+          },
+        }),
+      );
+    });
+
+    unmount();
+
+    // Mounting the same toolCallId on the panel surface restores the state
+    const { unmount: unmountPanel } = render(
+      <McpAppSection
+        {...defaultProps}
+        toolCallId="tc-1"
+        surface="panel"
+        preloadedResource={preloadedResource}
+      />,
+    );
+    const panelIframe = document.querySelector("iframe");
+    if (!panelIframe) throw new Error("panel iframe did not mount");
+    await notifySandboxProxyReady(panelIframe);
+
+    expect(bridgeInstances[1].sendSandboxResourceReady).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restoredState: syncedState,
+      }),
+    );
+
+    unmountPanel();
+
+    // A separate tool-call render (tc-2) of the SAME resource URI does not inherit tc-1's state
+    const { unmount: unmountSecondInstance } = render(
+      <McpAppSection
+        {...defaultProps}
+        toolCallId="tc-2"
+        surface="panel"
+        preloadedResource={preloadedResource}
+      />,
+    );
+    const secondInstanceIframe = document.querySelector("iframe");
+    if (!secondInstanceIframe)
+      throw new Error("second instance iframe did not mount");
+    await notifySandboxProxyReady(secondInstanceIframe);
+
+    expect(bridgeInstances[2].sendSandboxResourceReady).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        restoredState: expect.anything(),
+      }),
+    );
+
+    unmountSecondInstance();
+
+    // Mounting a different app resource URI does not inherit the first app's state
+    render(
+      <McpAppSection
+        {...defaultProps}
+        toolCallId="tc-1"
+        uiResourceUri="resource://test-server/other-ui"
+        surface="panel"
+        preloadedResource={preloadedResource}
+      />,
+    );
+    const otherIframe = document.querySelector("iframe");
+    if (!otherIframe) throw new Error("other iframe did not mount");
+    await notifySandboxProxyReady(otherIframe);
+
+    expect(bridgeInstances[3].sendSandboxResourceReady).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        restoredState: expect.anything(),
+      }),
+    );
+  });
+
+  it("guestStateBootstrap captures and restores asynchronously populated select filters, tabs, toggles, and storage while ignoring modal inputs", async () => {
+    const proxyHtml = readFileSync(
+      join(__dirname, "../../../../backend/src/static/mcp-sandbox-proxy.html"),
+      "utf-8",
+    );
+    const bootstrapStart = proxyHtml.indexOf(
+      "function guestStateBootstrap(restored)",
+    );
+    const bootstrapEnd = proxyHtml.indexOf(
+      "function buildStatePreservationScript(restoredState)",
+    );
+    const bootstrapFnSource = `(${proxyHtml.slice(bootstrapStart, bootstrapEnd).trim()})`;
+    const runBootstrap = vm.runInThisContext(bootstrapFnSource) as (
+      restored: Record<string, unknown> | null,
+    ) => void;
+
+    // 1. Mount an embedded iframe to isolate window/document listeners
+    const hostFrame = document.createElement("iframe");
+    document.body.appendChild(hostFrame);
+    const guestWin = hostFrame.contentWindow as Window & typeof globalThis;
+    const guestDoc = hostFrame.contentDocument as Document;
+
+    const syncedPayloads: Record<string, unknown>[] = [];
+    const onParentMessage = (event: MessageEvent) => {
+      const data = event.data as {
+        type?: unknown;
+        state?: Record<string, unknown>;
+      } | null;
+      if (data?.type === "mcp-apps:state-sync" && data.state) {
+        syncedPayloads.push(data.state);
+      }
+    };
+    window.addEventListener("message", onParentMessage);
+
+    try {
+      const renderBoardMarkup = (doc: Document) => {
+        doc.body.innerHTML = `
+          <div class="toolbar">
+            <button class="tab" data-list="archive">Archive</button>
+            <button class="tab active" data-list="sprint">Sprint</button>
+            <button class="tab" data-list="todo">Todo</button>
+          </div>
+          <div class="subbar">
+            <select id="filter-user" class="filter-select"><option value="">All</option></select>
+            <select id="filter-client" class="filter-select"><option value="">All clients</option></select>
+            <button id="btn-hide-done" class="filter-toggle" aria-pressed="false">Hide done</button>
+          </div>
+          <div class="modal-backdrop" id="modal-task">
+            <input id="task-title" value="draft title that must not persist" />
+          </div>
+        `;
+      };
+
+      const wireBoardEvents = (doc: Document) => {
+        const tabs = Array.from(doc.querySelectorAll(".tab[data-list]"));
+        for (const tab of tabs) {
+          tab.addEventListener("click", () => {
+            for (const other of tabs) other.classList.remove("active");
+            tab.classList.add("active");
+          });
+        }
+        const hideDoneBtn = doc.getElementById("btn-hide-done");
+        hideDoneBtn?.addEventListener("click", () => {
+          const next = hideDoneBtn.getAttribute("aria-pressed") !== "true";
+          hideDoneBtn.setAttribute("aria-pressed", String(next));
+          hideDoneBtn.classList.toggle("active", next);
+        });
+      };
+
+      const populateAsyncSelects = (doc: Document) => {
+        const userSelect = doc.getElementById(
+          "filter-user",
+        ) as HTMLSelectElement;
+        userSelect.innerHTML =
+          '<option value="">All</option><option value="__unassigned__">Unassigned</option><option value="alice">@Alice</option><option value="bob">@Bob</option>';
+        const clientSelect = doc.getElementById(
+          "filter-client",
+        ) as HTMLSelectElement;
+        clientSelect.innerHTML =
+          '<option value="">All clients</option><option value="acme">acme (4)</option>';
+      };
+
+      // Run initial mount in guest context
+      renderBoardMarkup(guestDoc);
+      wireBoardEvents(guestDoc);
+      vm.runInNewContext(`(${bootstrapFnSource})(null)`, {
+        window: guestWin,
+        document: guestDoc,
+        Element: guestWin.Element,
+        MutationObserver: guestWin.MutationObserver,
+        Event: guestWin.Event,
+        setTimeout: guestWin.setTimeout.bind(guestWin),
+        clearTimeout: guestWin.clearTimeout.bind(guestWin),
+        Object,
+        Array,
+        String,
+        Number,
+        JSON,
+        CSS: guestWin.CSS,
+      });
+
+      populateAsyncSelects(guestDoc);
+
+      // User selects @Alice in #filter-user, acme in #filter-client, clicks Todo tab & Hide done
+      const userSelect = guestDoc.getElementById(
+        "filter-user",
+      ) as HTMLSelectElement;
+      userSelect.value = "alice";
+      userSelect.dispatchEvent(new guestWin.Event("change", { bubbles: true }));
+
+      const clientSelect = guestDoc.getElementById(
+        "filter-client",
+      ) as HTMLSelectElement;
+      clientSelect.value = "acme";
+      clientSelect.dispatchEvent(
+        new guestWin.Event("change", { bubbles: true }),
+      );
+
+      const todoTab = guestDoc.querySelector(
+        '.tab[data-list="todo"]',
+      ) as HTMLButtonElement;
+      todoTab.click();
+
+      const hideDoneBtn = guestDoc.getElementById(
+        "btn-hide-done",
+      ) as HTMLButtonElement;
+      hideDoneBtn.click();
+
+      guestWin.localStorage.setItem("archestra-pm-board:hide-done", "1");
+
+      // Wait for debounced state-sync postMessage
+      await new Promise((r) => setTimeout(r, 80));
+      expect(syncedPayloads.length).toBeGreaterThan(0);
+      const latestSnapshot = syncedPayloads[syncedPayloads.length - 1];
+      const controls = latestSnapshot.controls as Record<
+        string,
+        Record<string, unknown>
+      >;
+      expect(controls["#filter-user"]).toMatchObject({
+        kind: "form",
+        tag: "select",
+        value: "alice",
+      });
+      expect(controls["#filter-client"]).toMatchObject({
+        kind: "form",
+        tag: "select",
+        value: "acme",
+      });
+      expect(controls["#task-title"]).toBeUndefined();
+
+      // 2. Simulate reload in a fresh iframe with only initial <option value="">All</option>
+      const reloadFrame = document.createElement("iframe");
+      document.body.appendChild(reloadFrame);
+      const reloadWin = reloadFrame.contentWindow as Window & typeof globalThis;
+      const reloadDoc = reloadFrame.contentDocument as Document;
+
+      try {
+        renderBoardMarkup(reloadDoc);
+        wireBoardEvents(reloadDoc);
+
+        let filterUserChangedValue = "";
+        reloadDoc
+          .getElementById("filter-user")
+          ?.addEventListener("change", (e) => {
+            filterUserChangedValue = (e.target as HTMLSelectElement).value;
+          });
+
+        vm.runInNewContext(
+          `(${bootstrapFnSource})(${JSON.stringify(latestSnapshot)})`,
+          {
+            window: reloadWin,
+            document: reloadDoc,
+            Element: reloadWin.Element,
+            MutationObserver: reloadWin.MutationObserver,
+            Event: reloadWin.Event,
+            setTimeout: reloadWin.setTimeout.bind(reloadWin),
+            clearTimeout: reloadWin.clearTimeout.bind(reloadWin),
+            Object,
+            Array,
+            String,
+            Number,
+            JSON,
+            CSS: reloadWin.CSS,
+          },
+        );
+
+        // Storage is restored synchronously before any guest script runs
+        expect(
+          reloadWin.localStorage.getItem("archestra-pm-board:hide-done"),
+        ).toBe("1");
+
+        // Simulate MCP App handshake / initial tool-result arriving, then async option population
+        reloadWin.dispatchEvent(
+          new reloadWin.MessageEvent("message", {
+            data: {
+              jsonrpc: "2.0",
+              method: "ui/notifications/tool-result",
+              params: {},
+            },
+          }),
+        );
+
+        // Populate #filter-user and #filter-client asynchronously (as pm-board.ts does after connect)
+        populateAsyncSelects(reloadDoc);
+        await new Promise((r) => setTimeout(r, 80));
+
+        expect(
+          (reloadDoc.getElementById("filter-user") as HTMLSelectElement).value,
+        ).toBe("alice");
+        expect(filterUserChangedValue).toBe("alice");
+        expect(
+          (reloadDoc.getElementById("filter-client") as HTMLSelectElement)
+            .value,
+        ).toBe("acme");
+        expect(
+          reloadDoc
+            .querySelector('.tab[data-list="todo"]')
+            ?.classList.contains("active"),
+        ).toBe(true);
+        expect(
+          reloadDoc
+            .getElementById("btn-hide-done")
+            ?.getAttribute("aria-pressed"),
+        ).toBe("true");
+      } finally {
+        reloadFrame.remove();
+      }
+      void runBootstrap;
+    } finally {
+      window.removeEventListener("message", onParentMessage);
+      hostFrame.remove();
+    }
+  });
+
+  it("guestStateBootstrap handles controlled React inputs, async toggle mutations, multi-pass select resets, sibling independent toggles, and batched multi-select options", async () => {
+    const proxyHtml = readFileSync(
+      join(__dirname, "../../../../backend/src/static/mcp-sandbox-proxy.html"),
+      "utf-8",
+    );
+    const bootstrapStart = proxyHtml.indexOf(
+      "function guestStateBootstrap(restored)",
+    );
+    const bootstrapEnd = proxyHtml.indexOf(
+      "function buildStatePreservationScript(restoredState)",
+    );
+    const bootstrapFnSource = `(${proxyHtml.slice(bootstrapStart, bootstrapEnd).trim()})`;
+
+    const syncedPayloads: Record<string, unknown>[] = [];
+    const onParentMessage = (event: MessageEvent) => {
+      const data = event.data as {
+        type?: unknown;
+        state?: Record<string, unknown>;
+      } | null;
+      if (data?.type === "mcp-apps:state-sync" && data.state) {
+        syncedPayloads.push(data.state);
+      }
+    };
+    window.addEventListener("message", onParentMessage);
+
+    // 1. Verify async toggle capture (aria-pressed updated 50ms after click) +
+    // sibling independent [aria-pressed] toggles where one defaults to "true"
+    const captureFrame = document.createElement("iframe");
+    document.body.appendChild(captureFrame);
+    const captureWin = captureFrame.contentWindow as Window & typeof globalThis;
+    const captureDoc = captureFrame.contentDocument as Document;
+
+    try {
+      captureDoc.body.innerHTML = `
+        <div class="subbar">
+          <button id="toggle-default-on" aria-pressed="true">Hide archive</button>
+          <button id="toggle-async" aria-pressed="false">Async filter</button>
+        </div>
+      `;
+      const defaultOnBtn = captureDoc.getElementById(
+        "toggle-default-on",
+      ) as HTMLButtonElement;
+      defaultOnBtn.addEventListener("click", () => {
+        const next = defaultOnBtn.getAttribute("aria-pressed") !== "true";
+        defaultOnBtn.setAttribute("aria-pressed", String(next));
+      });
+      const asyncBtn = captureDoc.getElementById(
+        "toggle-async",
+      ) as HTMLButtonElement;
+      asyncBtn.addEventListener("click", () => {
+        captureWin.setTimeout(() => {
+          asyncBtn.setAttribute("aria-pressed", "true");
+        }, 50);
+      });
+
+      vm.runInNewContext(`(${bootstrapFnSource})(null)`, {
+        window: captureWin,
+        document: captureDoc,
+        Element: captureWin.Element,
+        MutationObserver: captureWin.MutationObserver,
+        Event: captureWin.Event,
+        setTimeout: captureWin.setTimeout.bind(captureWin),
+        clearTimeout: captureWin.clearTimeout.bind(captureWin),
+        Object,
+        Array,
+        String,
+        Number,
+        JSON,
+        CSS: captureWin.CSS,
+      });
+
+      // Turn off #toggle-default-on (now false) and click #toggle-async (turns true after 50ms)
+      defaultOnBtn.click();
+      asyncBtn.click();
+
+      await new Promise((r) => setTimeout(r, 100));
+      expect(syncedPayloads.length).toBeGreaterThan(0);
+      const captured = syncedPayloads[syncedPayloads.length - 1];
+      const capturedControls = captured.controls as Record<
+        string,
+        Record<string, unknown>
+      >;
+      expect(capturedControls["#toggle-default-on"]).toMatchObject({
+        kind: "toggle",
+        active: false,
+      });
+      expect(capturedControls["#toggle-async"]).toMatchObject({
+        kind: "toggle",
+        active: true,
+      });
+
+      // 2. Restore in a fresh iframe with:
+      // - #toggle-default-on defaulting to aria-pressed="true" (must restore to "false")
+      // - controlled React-like input #search-input with _valueTracker + custom value setter
+      // - #single-select that gets rebuilt and reset to "" 50ms after initial restoration
+      // - #multi-select whose options ["a", "b"] arrive in two async batches
+      const restoreState = {
+        controls: {
+          "#toggle-default-on": capturedControls["#toggle-default-on"],
+          "#toggle-async": {
+            kind: "toggle",
+            selector: "#toggle-async",
+            mode: "aria-pressed",
+            active: false,
+            isGroup: false,
+            label: "Async filter",
+          },
+          "#search-input": {
+            kind: "form",
+            selector: "#search-input",
+            tag: "input",
+            type: "text",
+            value: "blue",
+          },
+          "#single-select": {
+            kind: "form",
+            selector: "#single-select",
+            tag: "select",
+            type: "select-one",
+            value: "Blue",
+            selectedText: "Blue",
+          },
+          "#delayed-select": {
+            kind: "form",
+            selector: "#delayed-select",
+            tag: "select",
+            type: "select-one",
+            value: "Blue",
+            selectedText: "Blue",
+          },
+          "#multi-select": {
+            kind: "form",
+            selector: "#multi-select",
+            tag: "select",
+            type: "select-multiple",
+            value: "a",
+            selectedValues: ["a", "b", "c", "d", "e"],
+          },
+        },
+      };
+
+      const reloadFrame = document.createElement("iframe");
+      document.body.appendChild(reloadFrame);
+      const reloadWin = reloadFrame.contentWindow as Window & typeof globalThis;
+      const reloadDoc = reloadFrame.contentDocument as Document;
+
+      try {
+        reloadDoc.body.innerHTML = `
+          <div class="subbar">
+            <button id="toggle-default-on" aria-pressed="true">Hide archive</button>
+            <button id="toggle-async" aria-pressed="false">Async filter</button>
+            <input id="search-input" type="text" value="" />
+            <select id="single-select">
+              <option value="">All</option>
+              <option value="Blue">Blue</option>
+            </select>
+            <select id="delayed-select">
+              <option value="">All</option>
+            </select>
+            <select id="multi-select" multiple></select>
+          </div>
+        `;
+
+        const reloadDefaultOn = reloadDoc.getElementById(
+          "toggle-default-on",
+        ) as HTMLButtonElement;
+        reloadDefaultOn.addEventListener("click", () => {
+          const next = reloadDefaultOn.getAttribute("aria-pressed") !== "true";
+          reloadDefaultOn.setAttribute("aria-pressed", String(next));
+        });
+
+        // Mount real React controlled text input + checkbox inside reloadDoc
+        const reactMount = reloadDoc.createElement("div");
+        reloadDoc.body.appendChild(reactMount);
+        let latestReactChecked = false;
+        let latestReactText = "";
+        function ControlledGuestForm() {
+          const [checked, setChecked] = useState(false);
+          const [text, setText] = useState("");
+          const [rerenders, setRerenders] = useState(0);
+          latestReactChecked = checked;
+          latestReactText = text;
+          return (
+            <div data-rerenders={rerenders}>
+              <input
+                id="react-checkbox"
+                type="checkbox"
+                checked={checked}
+                onChange={(e) => setChecked(e.target.checked)}
+              />
+              <input
+                id="react-text"
+                type="text"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
+              <button
+                id="react-rerender-btn"
+                type="button"
+                onClick={() => setRerenders((c) => c + 1)}
+              >
+                Rerender
+              </button>
+            </div>
+          );
+        }
+        render(<ControlledGuestForm />, { container: reactMount });
+        (restoreState.controls as Record<string, Record<string, unknown>>)[
+          "#react-checkbox"
+        ] = {
+          kind: "form",
+          selector: "#react-checkbox",
+          tag: "input",
+          type: "checkbox",
+          value: "on",
+          checked: true,
+        };
+        (restoreState.controls as Record<string, Record<string, unknown>>)[
+          "#react-text"
+        ] = {
+          kind: "form",
+          selector: "#react-text",
+          tag: "input",
+          type: "text",
+          value: "blue",
+        };
+
+        // Emulate React's controlled input _valueTracker and custom instance setter
+        const searchInput = reloadDoc.getElementById(
+          "search-input",
+        ) as HTMLInputElement & {
+          _valueTracker?: {
+            getValue: () => string;
+            setValue: (v: string) => void;
+          };
+        };
+        const nativeInputDesc = Object.getOwnPropertyDescriptor(
+          Object.getPrototypeOf(searchInput),
+          "value",
+        );
+        let trackedValue = "";
+        let reactStateValue = "";
+        searchInput._valueTracker = {
+          getValue: () => trackedValue,
+          setValue: (v: string) => {
+            trackedValue = String(v);
+          },
+        };
+        Object.defineProperty(searchInput, "value", {
+          configurable: true,
+          enumerable: true,
+          get() {
+            return nativeInputDesc?.get ? nativeInputDesc.get.call(this) : "";
+          },
+          set(v: string) {
+            trackedValue = String(v);
+            nativeInputDesc?.set?.call(this, v);
+          },
+        });
+        searchInput.addEventListener("input", () => {
+          const currentDomValue = nativeInputDesc?.get
+            ? String(nativeInputDesc.get.call(searchInput))
+            : "";
+          if (searchInput._valueTracker?.getValue() !== currentDomValue) {
+            searchInput._valueTracker?.setValue(currentDomValue);
+            reactStateValue = currentDomValue;
+          }
+        });
+
+        vm.runInNewContext(
+          `(${bootstrapFnSource})(${JSON.stringify(restoreState)})`,
+          {
+            window: reloadWin,
+            document: reloadDoc,
+            Element: reloadWin.Element,
+            MutationObserver: reloadWin.MutationObserver,
+            Event: reloadWin.Event,
+            setTimeout: reloadWin.setTimeout.bind(reloadWin),
+            clearTimeout: reloadWin.clearTimeout.bind(reloadWin),
+            Object,
+            Array,
+            String,
+            Number,
+            JSON,
+            CSS: reloadWin.CSS,
+          },
+        );
+
+        // Trigger initial restore on tool-result
+        reloadWin.dispatchEvent(
+          new reloadWin.MessageEvent("message", {
+            data: {
+              jsonrpc: "2.0",
+              method: "ui/notifications/tool-result",
+              params: {},
+            },
+          }),
+        );
+
+        // Batch 1 for multi-select: only option "a" arrives initially
+        const multiSelect = reloadDoc.getElementById(
+          "multi-select",
+        ) as HTMLSelectElement;
+        multiSelect.innerHTML = '<option value="a">A</option>';
+
+        await new Promise((r) => setTimeout(r, 30));
+
+        // Controlled React state updated on initial restore, and survives a React re-render
+        expect(reactStateValue).toBe("blue");
+        searchInput.value = reactStateValue;
+        expect(searchInput.value).toBe("blue");
+
+        const reactCheckboxEl = reloadDoc.getElementById(
+          "react-checkbox",
+        ) as HTMLInputElement;
+        const reactTextEl = reloadDoc.getElementById(
+          "react-text",
+        ) as HTMLInputElement;
+        const reactRerenderBtn = reloadDoc.getElementById(
+          "react-rerender-btn",
+        ) as HTMLButtonElement;
+        expect(latestReactChecked).toBe(true);
+        expect(reactCheckboxEl.checked).toBe(true);
+        expect(latestReactText).toBe("blue");
+        expect(reactTextEl.value).toBe("blue");
+
+        // Trigger an unrelated React re-render and verify both controlled checkbox and text persist
+        await act(async () => {
+          reactRerenderBtn.click();
+        });
+        expect(latestReactChecked).toBe(true);
+        expect(reactCheckboxEl.checked).toBe(true);
+        expect(latestReactText).toBe("blue");
+        expect(reactTextEl.value).toBe("blue");
+
+        // Independent sibling toggle that defaulted to "true" was turned off
+        expect(reloadDefaultOn.getAttribute("aria-pressed")).toBe("false");
+
+        // Multi-pass initialization: app rebuilds #single-select (resetting to "")
+        // and delivers options "b", "c", "d", "e" across 4 more separate async batches (5 total)
+        const singleSelect = reloadDoc.getElementById(
+          "single-select",
+        ) as HTMLSelectElement;
+        singleSelect.innerHTML =
+          '<option value="">All</option><option value="Blue">Blue</option>';
+        singleSelect.value = "";
+
+        // Delayed option population that emits a synthetic bubbling change event
+        // before the saved "Blue" selection has ever been applied
+        const delayedSelect = reloadDoc.getElementById(
+          "delayed-select",
+        ) as HTMLSelectElement;
+        delayedSelect.innerHTML =
+          '<option value="">All</option><option value="Blue">Blue</option>';
+        delayedSelect.dispatchEvent(
+          new reloadWin.Event("change", { bubbles: true }),
+        );
+
+        for (const val of ["b", "c", "d", "e"]) {
+          const opt = reloadDoc.createElement("option");
+          opt.value = val;
+          opt.textContent = val.toUpperCase();
+          multiSelect.appendChild(opt);
+          await new Promise((r) => setTimeout(r, 15));
+        }
+
+        await new Promise((r) => setTimeout(r, 40));
+
+        expect(singleSelect.value).toBe("Blue");
+        expect(delayedSelect.value).toBe("Blue");
+        const selectedMultiValues = Array.from(multiSelect.options)
+          .filter((o) => o.selected)
+          .map((o) => o.value);
+        expect(selectedMultiValues).toEqual(["a", "b", "c", "d", "e"]);
+      } finally {
+        reloadFrame.remove();
+      }
+    } finally {
+      window.removeEventListener("message", onParentMessage);
+      captureFrame.remove();
+    }
   });
 });

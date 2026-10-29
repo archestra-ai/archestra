@@ -200,23 +200,1212 @@ document.addEventListener("DOMContentLoaded", function() {\
 <\/script>';
 }
 
+function safeJsonForInlineScript(value) {
+  return JSON.stringify(value === undefined ? null : value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 /**
- * Inject CSP meta tag and violation listener into HTML (Inspector pattern).
+ * Guest bootstrap that captures UI filter/parameter state (form controls,
+ * tabs/toggles/chips, localStorage/sessionStorage including opaque-origin
+ * fallback, and URL/history state) and restores it when the host reloads the
+ * app iframe.
+ */
+function guestStateBootstrap(restored) {
+  var STATE_SYNC_TYPE = "mcp-apps:state-sync";
+  var RESTORE_WINDOW_MS = 8000;
+  var MAX_RESTORE_ATTEMPTS_PER_CONTROL = 4;
+
+  var DATA_KEY_ATTRS = [
+    "data-list",
+    "data-tab",
+    "data-view",
+    "data-filter",
+    "data-range",
+    "data-scope",
+    "data-mode",
+    "data-period",
+    "data-status",
+    "data-category",
+    "data-value",
+    "data-id",
+    "data-key",
+  ];
+
+  var TOGGLE_SELECTOR = [
+    "[aria-pressed]",
+    "[aria-selected]",
+    '[role="tab"]',
+    '[role="switch"]',
+    '[role="radio"]',
+    "[data-tab]",
+    "[data-view]",
+    "[data-list]",
+    "[data-filter]",
+    "[data-range]",
+    "[data-scope]",
+    "[data-mode]",
+    "[data-period]",
+    "[data-status]",
+    "[data-category]",
+    "button.tab",
+    "button.view-btn",
+    "button.nav-item",
+    "button.seg-btn",
+    "button.filter-btn",
+    "button.chip",
+    "button.client-chip",
+  ].join(", ");
+
+  var hasRestoredControls = !!(
+    restored &&
+    restored.controls &&
+    typeof restored.controls === "object" &&
+    Object.keys(restored.controls).length > 0
+  );
+
+  var currentControls = {};
+  var pendingFormKeys = {};
+  var pendingToggleKeys = {};
+  var restoreAttempts = {};
+  var appliedMultiValues = {};
+
+  if (hasRestoredControls) {
+    var initKeys = Object.keys(restored.controls);
+    for (var i = 0; i < initKeys.length; i++) {
+      var rk = initKeys[i];
+      var entry = restored.controls[rk];
+      currentControls[rk] = entry;
+      if (entry && entry.kind === "form") {
+        pendingFormKeys[rk] = true;
+      } else if (entry && entry.kind === "toggle") {
+        pendingToggleKeys[rk] = true;
+      }
+    }
+  }
+
+  var userInteracted = false;
+  var restorationActive = hasRestoredControls;
+  var isRestoringNow = false;
+  var restoreReady = false;
+  var lastSentJson = "";
+  var syncTimer = null;
+  var restoreTimer = null;
+
+  var localStore = {};
+  if (
+    restored &&
+    restored.localStorage &&
+    typeof restored.localStorage === "object"
+  ) {
+    var lk = Object.keys(restored.localStorage);
+    for (var li = 0; li < lk.length; li++) {
+      if (typeof restored.localStorage[lk[li]] === "string") {
+        localStore[lk[li]] = restored.localStorage[lk[li]];
+      }
+    }
+  }
+
+  var sessionStore = {};
+  if (
+    restored &&
+    restored.sessionStorage &&
+    typeof restored.sessionStorage === "object"
+  ) {
+    var sk = Object.keys(restored.sessionStorage);
+    for (var si = 0; si < sk.length; si++) {
+      if (typeof restored.sessionStorage[sk[si]] === "string") {
+        sessionStore[sk[si]] = restored.sessionStorage[sk[si]];
+      }
+    }
+  }
+
+  function createMemoryStorage(backing, onMutate) {
+    var api = {
+      getItem: function (key) {
+        var k = String(key);
+        return Object.prototype.hasOwnProperty.call(backing, k)
+          ? backing[k]
+          : null;
+      },
+      setItem: function (key, value) {
+        backing[String(key)] = String(value);
+        onMutate();
+      },
+      removeItem: function (key) {
+        delete backing[String(key)];
+        onMutate();
+      },
+      clear: function () {
+        var keys = Object.keys(backing);
+        for (var idx = 0; idx < keys.length; idx++) delete backing[keys[idx]];
+        onMutate();
+      },
+      key: function (index) {
+        var keys = Object.keys(backing);
+        return index >= 0 && index < keys.length ? keys[index] : null;
+      },
+    };
+    Object.defineProperty(api, "length", {
+      enumerable: true,
+      configurable: true,
+      get: function () {
+        return Object.keys(backing).length;
+      },
+    });
+    return api;
+  }
+
+  function setupStorage(propName, backing, onMutate) {
+    var nativeStorage = null;
+    try {
+      nativeStorage = window[propName];
+      var probeKey = "__mcp_app_probe__";
+      nativeStorage.setItem(probeKey, "1");
+      nativeStorage.removeItem(probeKey);
+    } catch (e) {
+      nativeStorage = null;
+    }
+
+    if (nativeStorage) {
+      try {
+        var restoredKeys = Object.keys(backing);
+        for (var idx = 0; idx < restoredKeys.length; idx++) {
+          var k = restoredKeys[idx];
+          nativeStorage.setItem(k, backing[k]);
+        }
+        for (var j = 0; j < nativeStorage.length; j++) {
+          var nk = nativeStorage.key(j);
+          if (nk !== null && nk !== "__mcp_app_probe__") {
+            var nv = nativeStorage.getItem(nk);
+            if (typeof nv === "string") backing[nk] = nv;
+          }
+        }
+      } catch (e) {}
+
+      try {
+        var origSet = nativeStorage.setItem.bind(nativeStorage);
+        var origRemove = nativeStorage.removeItem.bind(nativeStorage);
+        var origClear = nativeStorage.clear.bind(nativeStorage);
+        nativeStorage.setItem = function (key, value) {
+          backing[String(key)] = String(value);
+          try {
+            origSet(key, value);
+          } catch (e) {}
+          onMutate();
+        };
+        nativeStorage.removeItem = function (key) {
+          delete backing[String(key)];
+          try {
+            origRemove(key);
+          } catch (e) {}
+          onMutate();
+        };
+        nativeStorage.clear = function () {
+          var keys = Object.keys(backing);
+          for (var cIdx = 0; cIdx < keys.length; cIdx++) {
+            delete backing[keys[cIdx]];
+          }
+          try {
+            origClear();
+          } catch (e) {}
+          onMutate();
+        };
+      } catch (e) {}
+    } else {
+      var shim = createMemoryStorage(backing, onMutate);
+      try {
+        Object.defineProperty(window, propName, {
+          configurable: true,
+          enumerable: true,
+          get: function () {
+            return shim;
+          },
+        });
+      } catch (e) {}
+    }
+  }
+
+  function readStorageSnapshot(propName, backing) {
+    try {
+      var s = window[propName];
+      if (s && typeof s.length === "number") {
+        var out = {};
+        for (var idx = 0; idx < s.length; idx++) {
+          var k = s.key(idx);
+          if (k !== null && k !== "__mcp_app_probe__") {
+            var v = s.getItem(k);
+            if (typeof v === "string") out[k] = v;
+          }
+        }
+        return out;
+      }
+    } catch (e) {}
+    return Object.assign({}, backing);
+  }
+
+  setupStorage("localStorage", localStore, function () {
+    postSync();
+  });
+  setupStorage("sessionStorage", sessionStore, function () {
+    postSync();
+  });
+
+  var currentUrlHash =
+    restored && typeof restored.urlHash === "string" ? restored.urlHash : "";
+  var currentUrlSearch =
+    restored && typeof restored.urlSearch === "string"
+      ? restored.urlSearch
+      : "";
+  var currentHistoryState =
+    restored && restored.historyState !== undefined
+      ? restored.historyState
+      : null;
+
+  if (restored) {
+    try {
+      if (currentUrlSearch || currentUrlHash || currentHistoryState !== null) {
+        var targetUrl = (currentUrlSearch || "") + (currentUrlHash || "");
+        if (targetUrl || currentHistoryState !== null) {
+          window.history.replaceState(
+            currentHistoryState,
+            "",
+            targetUrl || undefined,
+          );
+        }
+      }
+    } catch (e) {
+      if (currentUrlHash) {
+        try {
+          window.location.hash = currentUrlHash;
+        } catch (err) {}
+      }
+    }
+  }
+
+  function captureUrlState() {
+    try {
+      currentUrlHash = window.location.hash || "";
+      currentUrlSearch = window.location.search || "";
+      if (window.history && window.history.state !== undefined) {
+        currentHistoryState = window.history.state;
+      }
+    } catch (e) {}
+  }
+
+  try {
+    var origPushState = window.history.pushState.bind(window.history);
+    var origReplaceState = window.history.replaceState.bind(window.history);
+    window.history.pushState = function (state, unused, url) {
+      currentHistoryState = state;
+      var res = origPushState(state, unused, url);
+      captureUrlState();
+      postSync();
+      return res;
+    };
+    window.history.replaceState = function (state, unused, url) {
+      currentHistoryState = state;
+      var res = origReplaceState(state, unused, url);
+      captureUrlState();
+      postSync();
+      return res;
+    };
+  } catch (e) {}
+
+  window.addEventListener("hashchange", function () {
+    captureUrlState();
+    postSync();
+  });
+  window.addEventListener("popstate", function () {
+    captureUrlState();
+    postSync();
+  });
+
+  function escapeCss(val) {
+    var str = String(val);
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+      return CSS.escape(str);
+    }
+    return str.replace(/([!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~ ])/g, "\\$1");
+  }
+
+  function isExcludedElement(el) {
+    if (!el || el.nodeType !== 1 || typeof el.closest !== "function") {
+      return true;
+    }
+    if (
+      el.closest(
+        'dialog, [role="dialog"], [aria-modal="true"], .modal, .modal-backdrop, .modal-overlay, .picker, .menu-pop, [id*="modal" i], [class*="modal-" i], [class*="-modal" i]',
+      )
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  function hasAnyDataAttr(el) {
+    if (!el || !el.attributes) return false;
+    for (var idx = 0; idx < el.attributes.length; idx++) {
+      if (el.attributes[idx].name.indexOf("data-") === 0) return true;
+    }
+    return false;
+  }
+
+  function getStableButtonLabel(el) {
+    if (!el) return "";
+    var walker = document.createTreeWalker(el, 4 /* NodeFilter.SHOW_TEXT */, null);
+    var node = walker.nextNode();
+    while (node) {
+      var txt = (node.nodeValue || "").trim();
+      if (txt) return txt;
+      node = walker.nextNode();
+    }
+    return (
+      el.getAttribute("aria-label") ||
+      el.getAttribute("title") ||
+      ""
+    ).trim();
+  }
+
+  function getCssSelector(el) {
+    if (!el || el.nodeType !== 1) return null;
+    var tag = el.tagName.toLowerCase();
+    if (el.id) {
+      return "#" + escapeCss(el.id);
+    }
+    for (var idx = 0; idx < DATA_KEY_ATTRS.length; idx++) {
+      var attr = DATA_KEY_ATTRS[idx];
+      if (el.hasAttribute(attr)) {
+        var val = el.getAttribute(attr) || "";
+        var ancestorWithId = el.parentElement
+          ? el.parentElement.closest("[id]")
+          : null;
+        var prefix =
+          ancestorWithId && ancestorWithId.id
+            ? "#" + escapeCss(ancestorWithId.id) + " "
+            : "";
+        return prefix + tag + "[" + attr + '="' + escapeCss(val) + '"]';
+      }
+    }
+    if (
+      el.name &&
+      (tag === "input" || tag === "select" || tag === "textarea")
+    ) {
+      var nameSel = tag + '[name="' + escapeCss(el.name) + '"]';
+      if (el.type === "radio" || el.type === "checkbox") {
+        nameSel += '[value="' + escapeCss(el.value || "") + '"]';
+      }
+      return nameSel;
+    }
+    var parts = [];
+    var cur = el;
+    while (
+      cur &&
+      cur.nodeType === 1 &&
+      cur !== document.body &&
+      cur !== document.documentElement
+    ) {
+      if (cur.id) {
+        parts.unshift("#" + escapeCss(cur.id));
+        break;
+      }
+      var curTag = cur.tagName.toLowerCase();
+      var parent = cur.parentElement;
+      if (parent) {
+        var sameTagSiblings = [];
+        for (var c = 0; c < parent.children.length; c++) {
+          if (parent.children[c].tagName === cur.tagName) {
+            sameTagSiblings.push(parent.children[c]);
+          }
+        }
+        if (sameTagSiblings.length > 1) {
+          var sIdx = sameTagSiblings.indexOf(cur) + 1;
+          curTag += ":nth-of-type(" + sIdx + ")";
+        }
+      }
+      parts.unshift(curTag);
+      cur = parent;
+    }
+    return parts.length > 0 ? parts.join(" > ") : null;
+  }
+
+  function isIndexBasedSelector(sel) {
+    return typeof sel === "string" && /:nth-of-type\(\d+\)$/.test(sel);
+  }
+
+  function readToggleState(el) {
+    if (!el || el.nodeType !== 1) return null;
+    var parent = el.parentElement;
+    var role = el.getAttribute("role");
+    if (el.hasAttribute("aria-pressed")) {
+      return {
+        mode: "aria-pressed",
+        active: el.getAttribute("aria-pressed") === "true",
+        isGroup: role === "tab" || role === "radio",
+      };
+    }
+    if (el.hasAttribute("aria-selected") || role === "tab") {
+      var selectedActive =
+        el.getAttribute("aria-selected") === "true" ||
+        el.classList.contains("active") ||
+        el.classList.contains("selected") ||
+        el.classList.contains("is-active");
+      return {
+        mode: "aria-selected",
+        active: selectedActive,
+        isGroup: true,
+      };
+    }
+    if (
+      el.hasAttribute("aria-checked") ||
+      role === "switch" ||
+      role === "radio"
+    ) {
+      return {
+        mode: "aria-checked",
+        active: el.getAttribute("aria-checked") === "true",
+        isGroup: role === "radio",
+      };
+    }
+    if (el.hasAttribute("data-state")) {
+      var ds = el.getAttribute("data-state");
+      if (
+        ds === "active" ||
+        ds === "inactive" ||
+        ds === "on" ||
+        ds === "off" ||
+        ds === "checked" ||
+        ds === "unchecked"
+      ) {
+        return {
+          mode: "data-state",
+          active: ds === "active" || ds === "on" || ds === "checked",
+          isGroup: role === "tab" || role === "radio",
+        };
+      }
+    }
+    var hasActiveClass =
+      el.classList.contains("active") ||
+      el.classList.contains("selected") ||
+      el.classList.contains("is-active") ||
+      el.classList.contains("on");
+    var siblingHasActiveClass = parent
+      ? Array.from(parent.children).some(function (child) {
+          return (
+            child.classList &&
+            (child.classList.contains("active") ||
+              child.classList.contains("selected") ||
+              child.classList.contains("is-active") ||
+              child.classList.contains("on"))
+          );
+        })
+      : false;
+    if (hasActiveClass || siblingHasActiveClass) {
+      return {
+        mode: "class",
+        active: hasActiveClass,
+        isGroup: true,
+      };
+    }
+    return null;
+  }
+
+  function findControlElement(key, saved) {
+    var sel = (saved && saved.selector) || key;
+    var el = null;
+    try {
+      el = document.querySelector(sel);
+    } catch (e) {
+      el = null;
+    }
+    if (saved && saved.kind === "toggle" && saved.label) {
+      if (el && getStableButtonLabel(el) === saved.label) {
+        return el;
+      }
+      var containerSel =
+        sel.indexOf(" > ") !== -1 ? sel.slice(0, sel.lastIndexOf(" > ")) : null;
+      var container = null;
+      if (containerSel) {
+        try {
+          container = document.querySelector(containerSel);
+        } catch (e) {
+          container = null;
+        }
+      }
+      if (!container && el && el.parentElement) {
+        container = el.parentElement;
+      }
+      if (container) {
+        var candidates = container.querySelectorAll(
+          "button, [role='tab'], [aria-pressed], [aria-selected]",
+        );
+        for (var idx = 0; idx < candidates.length; idx++) {
+          if (getStableButtonLabel(candidates[idx]) === saved.label) {
+            return candidates[idx];
+          }
+        }
+      }
+      if (
+        el &&
+        ((sel.charAt(0) === "#" && sel.indexOf(" > ") === -1) ||
+          sel.indexOf("[data-") !== -1)
+      ) {
+        return el;
+      }
+      return null;
+    }
+    return el;
+  }
+
+  function snapshotControls() {
+    if (!document.body) return;
+    var nextControls = {};
+    if (!userInteracted && hasRestoredControls && restorationActive) {
+      var prevKeys = Object.keys(currentControls);
+      for (var pk = 0; pk < prevKeys.length; pk++) {
+        var pKey = prevKeys[pk];
+        if (restored && restored.controls && restored.controls[pKey]) {
+          nextControls[pKey] = currentControls[pKey];
+        }
+      }
+    }
+
+    var formEls = document.querySelectorAll("select, input, textarea");
+    for (var idx = 0; idx < formEls.length; idx++) {
+      var el = formEls[idx];
+      if (isExcludedElement(el)) continue;
+      var tag = el.tagName.toLowerCase();
+      var type = (el.type || tag).toLowerCase();
+      if (
+        tag === "input" &&
+        (type === "hidden" ||
+          type === "submit" ||
+          type === "button" ||
+          type === "reset" ||
+          type === "file" ||
+          type === "image" ||
+          type === "password")
+      ) {
+        continue;
+      }
+      if (tag === "textarea" && !el.id && !el.name && !hasAnyDataAttr(el)) {
+        continue;
+      }
+      var sel = getCssSelector(el);
+      if (!sel) continue;
+
+      if (tag === "select") {
+        if (!el.options || el.options.length === 0) continue;
+        if (!userInteracted && restorationActive && pendingFormKeys[sel]) {
+          continue;
+        }
+        if (el.multiple) {
+          var selectedValues = [];
+          for (var oi = 0; oi < el.options.length; oi++) {
+            if (el.options[oi].selected) {
+              selectedValues.push(el.options[oi].value);
+            }
+          }
+          nextControls[sel] = {
+            kind: "form",
+            selector: sel,
+            tag: "select",
+            type: type,
+            value: el.value || "",
+            selectedValues: selectedValues,
+          };
+        } else {
+          var selOpt =
+            el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null;
+          nextControls[sel] = {
+            kind: "form",
+            selector: sel,
+            tag: "select",
+            type: type,
+            value: el.value || "",
+            selectedText: selOpt ? (selOpt.textContent || "").trim() : "",
+          };
+        }
+      } else if (tag === "input" && (type === "checkbox" || type === "radio")) {
+        if (!userInteracted && restorationActive && pendingFormKeys[sel]) {
+          continue;
+        }
+        nextControls[sel] = {
+          kind: "form",
+          selector: sel,
+          tag: "input",
+          type: type,
+          value: el.value || "",
+          checked: !!el.checked,
+        };
+      } else {
+        if (!userInteracted && restorationActive && pendingFormKeys[sel]) {
+          continue;
+        }
+        nextControls[sel] = {
+          kind: "form",
+          selector: sel,
+          tag: tag,
+          type: type,
+          value: el.value || "",
+        };
+      }
+    }
+
+    var toggleEls = document.querySelectorAll(TOGGLE_SELECTOR);
+    for (var ti = 0; ti < toggleEls.length; ti++) {
+      var tel = toggleEls[ti];
+      if (isExcludedElement(tel)) continue;
+      var tState = readToggleState(tel);
+      if (!tState) continue;
+      var tSel = getCssSelector(tel);
+      if (!tSel) continue;
+      var label = getStableButtonLabel(tel);
+      var key =
+        isIndexBasedSelector(tSel) && label
+          ? tSel.replace(/:nth-of-type\(\d+\)$/, "") + "::label=" + label
+          : tSel;
+      if (!userInteracted && restorationActive && pendingToggleKeys[key]) {
+        continue;
+      }
+      nextControls[key] = {
+        kind: "toggle",
+        selector: tSel,
+        mode: tState.mode,
+        active: tState.active,
+        isGroup: tState.isGroup,
+        label: label,
+      };
+    }
+
+    currentControls = nextControls;
+  }
+
+  function postSync() {
+    var payload = {
+      controls: currentControls,
+      localStorage: readStorageSnapshot("localStorage", localStore),
+      sessionStorage: readStorageSnapshot("sessionStorage", sessionStore),
+      urlHash: currentUrlHash,
+      urlSearch: currentUrlSearch,
+      historyState: currentHistoryState,
+    };
+    var serialized = "";
+    try {
+      serialized = JSON.stringify(payload);
+    } catch (e) {
+      return;
+    }
+    if (serialized === lastSentJson) return;
+    lastSentJson = serialized;
+    try {
+      window.parent.postMessage(
+        {
+          type: STATE_SYNC_TYPE,
+          state: payload,
+        },
+        "*",
+      );
+    } catch (e) {}
+  }
+
+  function captureAndSync() {
+    if (isRestoringNow) return;
+    captureUrlState();
+    snapshotControls();
+    postSync();
+  }
+
+  function scheduleMutationCapture() {
+    if (isRestoringNow) return;
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(function () {
+      syncTimer = null;
+      captureAndSync();
+    }, 0);
+  }
+
+  function scheduleCapture() {
+    if (isRestoringNow) return;
+    captureAndSync();
+    if (typeof queueMicrotask === "function") {
+      queueMicrotask(captureAndSync);
+    }
+    scheduleMutationCapture();
+  }
+
+  function restoreTogglesPass(keys) {
+    var clickedAny = false;
+    // Phase 1A: Click toggles saved as active=true first. In mutually exclusive
+    // toolbars, activating the selected toggle automatically deactivates its
+    // siblings so Phase 1B sees them already inactive.
+    for (var idx = 0; idx < keys.length; idx++) {
+      var key = keys[idx];
+      var saved = restored.controls[key];
+      if (!saved || saved.kind !== "toggle") {
+        delete pendingToggleKeys[key];
+        continue;
+      }
+      if (!saved.active) continue;
+      if ((restoreAttempts[key] || 0) >= MAX_RESTORE_ATTEMPTS_PER_CONTROL) {
+        delete pendingToggleKeys[key];
+        continue;
+      }
+      var el = findControlElement(key, saved);
+      if (!el) continue;
+      var current = readToggleState(el);
+      if (!current) continue;
+
+      if (!current.active) {
+        restoreAttempts[key] = (restoreAttempts[key] || 0) + 1;
+        clickedAny = true;
+        try {
+          el.click();
+        } catch (e) {}
+      }
+      var updatedEl = findControlElement(key, saved) || el;
+      var afterClick = readToggleState(updatedEl);
+      if (afterClick && afterClick.active) {
+        delete pendingToggleKeys[key];
+      }
+    }
+
+    // Phase 1B: Handle toggles saved as active=false. Exclusive tab/radio
+    // groups are deactivated by Phase 1A; independent toggles that defaulted
+    // to active=true on load are clicked here to turn them off.
+    for (var idxB = 0; idxB < keys.length; idxB++) {
+      var keyB = keys[idxB];
+      var savedB = restored.controls[keyB];
+      if (!savedB || savedB.kind !== "toggle" || savedB.active) continue;
+      if (savedB.isGroup) {
+        delete pendingToggleKeys[keyB];
+        continue;
+      }
+      if ((restoreAttempts[keyB] || 0) >= MAX_RESTORE_ATTEMPTS_PER_CONTROL) {
+        delete pendingToggleKeys[keyB];
+        continue;
+      }
+      var elB = findControlElement(keyB, savedB);
+      if (!elB) continue;
+      var currentB = readToggleState(elB);
+      if (!currentB) continue;
+
+      if (currentB.active !== false) {
+        restoreAttempts[keyB] = (restoreAttempts[keyB] || 0) + 1;
+        clickedAny = true;
+        try {
+          elB.click();
+        } catch (e) {}
+      }
+      var updatedStandalone = findControlElement(keyB, savedB) || elB;
+      var afterStandalone = readToggleState(updatedStandalone);
+      if (afterStandalone && afterStandalone.active === false) {
+        delete pendingToggleKeys[keyB];
+      }
+    }
+    return clickedAny;
+  }
+
+  function setNativeFormValue(el, newValue) {
+    var prevValue = el.value;
+    var proto = null;
+    try {
+      proto = Object.getPrototypeOf(el);
+    } catch (e) {
+      proto = null;
+    }
+    var descriptor = proto
+      ? Object.getOwnPropertyDescriptor(proto, "value")
+      : null;
+    if (descriptor && typeof descriptor.set === "function") {
+      descriptor.set.call(el, newValue);
+    } else {
+      el.value = newValue;
+    }
+    var tracker = el._valueTracker;
+    if (tracker && typeof tracker.setValue === "function") {
+      try {
+        tracker.setValue(String(prevValue));
+      } catch (e) {}
+    }
+  }
+
+  function setNativeChecked(el, newChecked) {
+    var prevChecked = !!el.checked;
+    var proto = null;
+    try {
+      proto = Object.getPrototypeOf(el);
+    } catch (e) {
+      proto = null;
+    }
+    var descriptor = proto
+      ? Object.getOwnPropertyDescriptor(proto, "checked")
+      : null;
+    if (descriptor && typeof descriptor.set === "function") {
+      descriptor.set.call(el, newChecked);
+    } else {
+      el.checked = newChecked;
+    }
+    var tracker = el._valueTracker;
+    if (tracker && typeof tracker.setValue === "function") {
+      try {
+        tracker.setValue(String(prevChecked));
+      } catch (e) {}
+    }
+  }
+
+  function runRestorePass() {
+    if (
+      !hasRestoredControls ||
+      userInteracted ||
+      !restorationActive ||
+      !restoreReady
+    ) {
+      return;
+    }
+    if (!document.body) return;
+
+    isRestoringNow = true;
+    try {
+      var keys = Object.keys(restored.controls);
+
+      // Pass 1: Restore active tabs/toggles/chips. If switching a tab renders
+      // nested filter chips, run one follow-up toggle pass immediately.
+      if (restoreTogglesPass(keys)) {
+        restoreTogglesPass(keys);
+      }
+
+      // Pass 2: Restore form controls (<select>, <input>, <textarea>).
+      // Dispatch input/change immediately per control so apps whose change
+      // handler re-renders all controls don't overwrite subsequent controls.
+      function dispatchFormEvents(el) {
+        try {
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        } catch (e) {}
+      }
+
+      for (var j = 0; j < keys.length; j++) {
+        var fKey = keys[j];
+        var fSaved = restored.controls[fKey];
+        if (!fSaved || fSaved.kind !== "form") {
+          delete pendingFormKeys[fKey];
+          continue;
+        }
+        if ((restoreAttempts[fKey] || 0) >= MAX_RESTORE_ATTEMPTS_PER_CONTROL) {
+          delete pendingFormKeys[fKey];
+          continue;
+        }
+        var fEl = findControlElement(fKey, fSaved);
+        if (!fEl) continue;
+        var tag = fEl.tagName.toLowerCase();
+
+        if (tag === "select") {
+          if (!fEl.options || fEl.options.length === 0) continue;
+          if (fEl.multiple && Array.isArray(fSaved.selectedValues)) {
+            var targetSet = {};
+            for (var sv = 0; sv < fSaved.selectedValues.length; sv++) {
+              targetSet[fSaved.selectedValues[sv]] = true;
+            }
+            var appliedMap = appliedMultiValues[fKey];
+            if (!appliedMap) {
+              appliedMap = {};
+              appliedMultiValues[fKey] = appliedMap;
+            }
+            var matchedValueMap = {};
+            var matchedCount = 0;
+            var needsMultiChange = false;
+            var hadPreviouslyAppliedReset = false;
+            for (var moi = 0; moi < fEl.options.length; moi++) {
+              var opt = fEl.options[moi];
+              var shouldSelect = !!targetSet[opt.value];
+              if (shouldSelect && !matchedValueMap[opt.value]) {
+                matchedValueMap[opt.value] = true;
+                matchedCount++;
+              }
+              if (opt.selected !== shouldSelect) {
+                needsMultiChange = true;
+                if (shouldSelect && appliedMap[opt.value]) {
+                  hadPreviouslyAppliedReset = true;
+                }
+              }
+            }
+            var anyMatched =
+              fSaved.selectedValues.length === 0 || matchedCount > 0;
+            var allMatched = matchedCount >= fSaved.selectedValues.length;
+            if (!anyMatched) continue;
+            if (allMatched) {
+              delete pendingFormKeys[fKey];
+            }
+            if (needsMultiChange) {
+              for (var moi2 = 0; moi2 < fEl.options.length; moi2++) {
+                var shouldSel = !!targetSet[fEl.options[moi2].value];
+                fEl.options[moi2].selected = shouldSel;
+                if (shouldSel) {
+                  appliedMap[fEl.options[moi2].value] = true;
+                }
+              }
+              if (allMatched || hadPreviouslyAppliedReset) {
+                restoreAttempts[fKey] = (restoreAttempts[fKey] || 0) + 1;
+              }
+              dispatchFormEvents(fEl);
+            }
+          } else {
+            var matchedOption = null;
+            for (var oi = 0; oi < fEl.options.length; oi++) {
+              if (fEl.options[oi].value === fSaved.value) {
+                matchedOption = fEl.options[oi];
+                break;
+              }
+            }
+            if (!matchedOption && fSaved.selectedText) {
+              for (var oi2 = 0; oi2 < fEl.options.length; oi2++) {
+                if (
+                  (fEl.options[oi2].textContent || "").trim() ===
+                  fSaved.selectedText
+                ) {
+                  matchedOption = fEl.options[oi2];
+                  break;
+                }
+              }
+            }
+            if (!matchedOption) {
+              continue;
+            }
+            delete pendingFormKeys[fKey];
+            if (fEl.value !== matchedOption.value) {
+              setNativeFormValue(fEl, matchedOption.value);
+              restoreAttempts[fKey] = (restoreAttempts[fKey] || 0) + 1;
+              dispatchFormEvents(fEl);
+            }
+          }
+        } else if (
+          tag === "input" &&
+          (fEl.type === "checkbox" || fEl.type === "radio")
+        ) {
+          delete pendingFormKeys[fKey];
+          if (
+            typeof fSaved.checked === "boolean" &&
+            fEl.checked !== fSaved.checked
+          ) {
+            restoreAttempts[fKey] = (restoreAttempts[fKey] || 0) + 1;
+            if (fEl.type === "checkbox" || fSaved.checked === true) {
+              try {
+                fEl.click();
+              } catch (e) {}
+            }
+            var updatedCheckEl = findControlElement(fKey, fSaved) || fEl;
+            if (updatedCheckEl.checked !== fSaved.checked) {
+              setNativeChecked(updatedCheckEl, fSaved.checked);
+              dispatchFormEvents(updatedCheckEl);
+            }
+          }
+        } else if (tag === "input" || tag === "textarea") {
+          delete pendingFormKeys[fKey];
+          if (typeof fSaved.value === "string" && fEl.value !== fSaved.value) {
+            setNativeFormValue(fEl, fSaved.value);
+            restoreAttempts[fKey] = (restoreAttempts[fKey] || 0) + 1;
+            dispatchFormEvents(fEl);
+          }
+        }
+      }
+    } finally {
+      isRestoringNow = false;
+    }
+  }
+
+  function scheduleRestore() {
+    if (!hasRestoredControls || userInteracted || !restorationActive) return;
+    if (restoreTimer) return;
+    restoreTimer = setTimeout(function () {
+      restoreTimer = null;
+      runRestorePass();
+    }, 0);
+  }
+
+  function markUserInteracted(e) {
+    if (isRestoringNow) return;
+    if (e && e.isTrusted) {
+      userInteracted = true;
+      restorationActive = false;
+    }
+  }
+
+  window.addEventListener("pointerdown", markUserInteracted, true);
+  window.addEventListener("mousedown", markUserInteracted, true);
+  window.addEventListener("keydown", markUserInteracted, true);
+  window.addEventListener("touchstart", markUserInteracted, true);
+
+  function retireOrScheduleForTarget(target) {
+    if (!target || target.nodeType !== 1 || !hasRestoredControls) return;
+    var sel = getCssSelector(target);
+    var label = getStableButtonLabel(target);
+    var labelKey =
+      sel && isIndexBasedSelector(sel) && label
+        ? sel.replace(/:nth-of-type\(\d+\)$/, "") + "::label=" + label
+        : null;
+
+    var isStillPending =
+      (sel && (pendingFormKeys[sel] || pendingToggleKeys[sel])) ||
+      (labelKey && pendingToggleKeys[labelKey]);
+
+    if (isStillPending) {
+      if (!userInteracted && restorationActive && restoreReady) {
+        scheduleRestore();
+      }
+      return;
+    }
+
+    if (sel && restored && restored.controls) {
+      delete restored.controls[sel];
+    }
+    if (labelKey && restored && restored.controls) {
+      delete restored.controls[labelKey];
+    }
+  }
+
+  function onControlEvent(e) {
+    if (isRestoringNow) return;
+    if (e && e.isTrusted) {
+      userInteracted = true;
+      restorationActive = false;
+    } else if (restoreReady && e && e.target) {
+      retireOrScheduleForTarget(e.target);
+    }
+    scheduleCapture();
+  }
+
+  window.addEventListener("change", onControlEvent, true);
+  window.addEventListener("input", onControlEvent, true);
+  window.addEventListener("click", onControlEvent, true);
+
+  if (hasRestoredControls) {
+    window.addEventListener("message", function (event) {
+      if (userInteracted || !restorationActive) return;
+      var data = event.data;
+      if (!data || typeof data !== "object") return;
+      if (data.jsonrpc === "2.0") {
+        if (data.method === "ui/notifications/tool-result") {
+          setTimeout(function () {
+            restoreReady = true;
+            runRestorePass();
+          }, 0);
+        } else if (
+          data.result &&
+          typeof data.result === "object" &&
+          data.result.protocolVersion &&
+          data.result.hostInfo
+        ) {
+          // Initialize handshake response: allow microtasks (await app.connect())
+          // and any immediate tool-result notification to run, then restore.
+          setTimeout(function () {
+            restoreReady = true;
+            runRestorePass();
+          }, 20);
+        } else if (restoreReady) {
+          scheduleRestore();
+        }
+      }
+    });
+  }
+
+  var observer = null;
+  function startObserver() {
+    if (!document.documentElement || observer) return;
+    observer = new MutationObserver(function () {
+      if (isRestoringNow) return;
+      if (
+        hasRestoredControls &&
+        !userInteracted &&
+        restorationActive &&
+        restoreReady
+      ) {
+        scheduleRestore();
+      }
+      if (userInteracted || !hasRestoredControls || !restorationActive) {
+        scheduleMutationCapture();
+      }
+    });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: [
+        "aria-pressed",
+        "aria-selected",
+        "aria-checked",
+        "data-state",
+        "class",
+        "hidden",
+        "value",
+        "selected",
+        "checked",
+      ],
+    });
+  }
+
+  function onDomReady() {
+    startObserver();
+    if (!hasRestoredControls) return;
+    var isSdkApp = !!(
+      window.__ARCHESTRA_APP_CONTEXT__ ||
+      window.__ARCHESTRA_APP_SDK_URL__ ||
+      window.MCP_EXTAPPS ||
+      window.archestra
+    );
+    setTimeout(
+      function () {
+        restoreReady = true;
+        runRestorePass();
+      },
+      isSdkApp ? 250 : 0,
+    );
+    setTimeout(function () {
+      restorationActive = false;
+      scheduleMutationCapture();
+    }, RESTORE_WINDOW_MS);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", onDomReady);
+  } else {
+    onDomReady();
+  }
+}
+
+function buildStatePreservationScript(restoredState) {
+  var serializedState = safeJsonForInlineScript(restoredState || null);
+  return (
+    "<script>(" +
+    guestStateBootstrap.toString() +
+    ")(" +
+    serializedState +
+    ");<\/script>"
+  );
+}
+
+/**
+ * Inject CSP meta tag, violation listener, and state preservation bootstrap into HTML (Inspector pattern).
  * Used for srcdoc loading where HTTP headers aren't available.
  */
-function injectCSP(html, cspValue, ownedApp) {
+function injectCSP(html, cspValue, ownedApp, restoredState) {
   var violationListener = buildViolationListenerScript();
+  var statePreservation = buildStatePreservationScript(restoredState);
   var injection;
   // Owned apps carry their CSP and the SDK bundle URL in the backend-injected
   // envelope (app-sdk-injection.ts), so they work identically here and in a
   // foreign host. The proxy must NOT add a second CSP for them — a differing
   // policy would intersect and break the render — so it only adds the violation
-  // listener. This MUST key off the trusted host-set `ownedApp` flag, never the
-  // HTML: the HTML for external MCP-UI apps is attacker-controlled, so a content
-  // marker could be spoofed to suppress the platform CSP. External apps get the
-  // full proxy CSP + SDK-URL injection.
+  // listener and state preservation bootstrap. This MUST key off the trusted
+  // host-set `ownedApp` flag, never the HTML: the HTML for external MCP-UI apps
+  // is attacker-controlled, so a content marker could be spoofed to suppress the
+  // platform CSP. External apps get the full proxy CSP + SDK-URL injection.
   if (ownedApp === true) {
-    injection = violationListener;
+    injection = violationListener + statePreservation;
   } else {
     var cspMeta = '<meta http-equiv="Content-Security-Policy" content="' + cspValue + '">';
     // Expose the served SDK URL so the injected Apps SDK can import it (apps
@@ -224,7 +1413,7 @@ function injectCSP(html, cspValue, ownedApp) {
     // location.origin-derived (no user input), but JSON-encode defensively so it
     // can never break out of the inline script.
     var sdkGlobal = '<script>window.__ARCHESTRA_APP_SDK_URL__=' + JSON.stringify(APP_SDK_URL) + ';<\/script>';
-    injection = cspMeta + sdkGlobal + violationListener;
+    injection = cspMeta + sdkGlobal + violationListener + statePreservation;
   }
 
   // Anchors tolerate attributes (<head lang="en">) and mirror the backend's
@@ -234,15 +1423,21 @@ function injectCSP(html, cspValue, ownedApp) {
   // (\s[^>]*)? — attributes allowed, never a longer tag name (<header>).
   var head = /(<head(\s[^>]*)?>)/i.exec(html);
   if (head) {
-    return html.replace(head[1], head[1] + injection);
+    return html.replace(head[1], function () {
+      return head[1] + injection;
+    });
   }
   var htmlTag = /(<html(\s[^>]*)?>)/i.exec(html);
   if (htmlTag) {
-    return html.replace(htmlTag[1], htmlTag[1] + "<head>" + injection + "</head>");
+    return html.replace(htmlTag[1], function () {
+      return htmlTag[1] + "<head>" + injection + "</head>";
+    });
   }
   var doctype = /(<!DOCTYPE[^>]*>)/i.exec(html);
   if (doctype) {
-    return html.replace(doctype[1], doctype[1] + "<head>" + injection + "</head>");
+    return html.replace(doctype[1], function () {
+      return doctype[1] + "<head>" + injection + "</head>";
+    });
   }
   return injection + html;
 }
@@ -346,7 +1541,7 @@ window.addEventListener("message", async (event) => {
     if (event.data && event.data.method === RESOURCE_READY_NOTIFICATION) {
       // `ownedApp` is set by the trusted host (origin-validated above) only for
       // Archestra-owned apps, whose envelope already carries the platform CSP.
-      const { html, sandbox, csp, permissions, ownedApp } = event.data.params;
+      const { html, sandbox, csp, permissions, ownedApp, restoredState } = event.data.params;
       if (typeof sandbox === "string") {
         // Only allow known-safe sandbox tokens to prevent a compromised MCP
         // server from injecting e.g. allow-top-navigation to escape the sandbox.
@@ -365,7 +1560,7 @@ window.addEventListener("message", async (event) => {
       if (typeof html === "string") {
         // Inject CSP as meta tag + violation listener into the HTML (Inspector pattern).
         // One code path for all modes — CSP is always in the HTML, not HTTP headers.
-        const processedHtml = injectCSP(html, buildCSP(csp), ownedApp === true);
+        const processedHtml = injectCSP(html, buildCSP(csp), ownedApp === true, restoredState);
 
         if (IS_OPAQUE_ORIGIN) {
           // Opaque origin (production fallback): use srcdoc
@@ -395,9 +1590,9 @@ window.addEventListener("message", async (event) => {
     }
   } else if (event.source === inner.contentWindow) {
     // Message filtering (Inspector pattern): only forward JSON-RPC 2.0 messages,
-    // CSP violations, and runtime-error diagnostics. Prevents noise from browser
-    // extensions or widget internals from reaching PostMessageTransport and
-    // causing parse errors.
+    // CSP violations, runtime-error diagnostics, and state-sync snapshots.
+    // Prevents noise from browser extensions or widget internals from reaching
+    // PostMessageTransport and causing parse errors.
     var data = event.data;
     if (data && typeof data === "object") {
       if (
@@ -405,7 +1600,8 @@ window.addEventListener("message", async (event) => {
         data.type === "mcp-apps:csp-violation" ||
         data.type === "mcp-apps:runtime-error" ||
         data.type === "mcp-apps:screenshot" ||
-        data.type === "mcp-apps:sandbox-content-loaded"
+        data.type === "mcp-apps:sandbox-content-loaded" ||
+        data.type === "mcp-apps:state-sync"
       ) {
         window.parent.postMessage(data, EXPECTED_HOST_ORIGIN || "*");
       }

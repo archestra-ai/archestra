@@ -18,10 +18,11 @@ permissions: {}
 
 # A Release Please update fires `synchronize` and `edited` for the same head
 # within a second. Pull-request runs only classify (release candidates are
-# scanned in the merge group) and finish in under a minute, so let them all
-# complete: cancelling the older run leaves its always-run gate contexts
-# failed on that commit, which reads as a red release PR even though the
-# surviving run passed.
+# scanned in the merge group) and finish in under a minute, so do not cancel
+# a pull-request run that is already executing: cancelling it leaves its
+# always-run gate contexts failed on that commit, which reads as a red
+# release PR even though the surviving run passed. GitHub still replaces a
+# sibling that is only pending in the group; that one never reports contexts.
 concurrency:
   group: docker-image-scanning-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'pull_request' }}

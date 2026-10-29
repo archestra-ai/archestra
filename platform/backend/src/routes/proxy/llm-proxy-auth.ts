@@ -25,7 +25,7 @@ import {
   LRUCacheManager,
 } from "@/cache-manager";
 import { internalCallProvenance } from "@/clients/internal-call";
-import config from "@/config";
+import config, { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -1420,6 +1420,7 @@ async function authenticatePassthroughProxyRequest(params: {
 
   const presentedCredential = passthroughToken ?? bearerToken ?? undefined;
   let authenticatedBearer = false;
+  let providerApiKey: string | null = null;
   await virtualKeyRateLimiter.check({
     ip: request.ip,
     credential: presentedCredential,
@@ -1453,12 +1454,17 @@ async function authenticatePassthroughProxyRequest(params: {
         authenticatedBearer = true;
         return;
       }
-      // Token validity and expiry are the whole bar here. The provider-mapping
-      // check that validateVirtualApiKey adds decides WHICH upstream credential
-      // to use, and a pass-through forwards none — so requiring it would reject
-      // otherwise-valid platform credentials for no security gain.
+      // Token validity and expiry are the whole bar here. A key that maps a
+      // key of this provider also has it forwarded upstream, as the handled
+      // endpoints do; a key that maps none still passes and forwards nothing.
       await validateVirtualApiKeyToken(bearerToken);
       authenticatedBearer = true;
+      providerApiKey = await passthroughProviderApiKey({
+        tokenValue: bearerToken,
+        provider,
+        organizationId: (await resolveAgent(agentId)).organizationId,
+        requestedModel: requestedModelFromBody(request),
+      });
       return;
     }
 
@@ -1485,6 +1491,13 @@ async function authenticatePassthroughProxyRequest(params: {
     await authenticate();
     if (authenticatedBearer && bearerToken) {
       stripAuthenticatedBearer(request, bearerToken);
+      if (providerApiKey) {
+        forwardPassthroughProviderApiKey({
+          request,
+          provider,
+          apiKey: providerApiKey,
+        });
+      }
     }
     await virtualKeyRateLimiter.recordSuccess({
       credential: presentedCredential,
@@ -1498,6 +1511,67 @@ async function authenticatePassthroughProxyRequest(params: {
     }
     throw error;
   }
+}
+
+/**
+ * The provider key a virtual key maps for a pass-through request's provider,
+ * or null when it maps none that may be forwarded. Not forwarded: a key bound
+ * to another endpoint (its own base URL), and subscription or per-user
+ * credentials, which are no API key for the provider's public API.
+ */
+async function passthroughProviderApiKey(params: {
+  tokenValue: string;
+  provider: SupportedProvider;
+  organizationId: string;
+  requestedModel: string | null | undefined;
+}): Promise<string | null> {
+  let mapped: VirtualKeyValidationResult;
+  try {
+    mapped = await validateVirtualApiKey({
+      tokenValue: params.tokenValue,
+      expectedProvider: params.provider,
+      expectedOrganizationId: params.organizationId,
+      requestedModel: params.requestedModel,
+    });
+  } catch (error) {
+    // No usable mapping: the request still passes, forwarding no credential.
+    if (error instanceof ApiError && error.statusCode < 500) return null;
+    throw error;
+  }
+  const { apiKey, baseUrl } = mapped;
+  if (!apiKey) return null;
+  const upstream = getProviderConfiguredBaseUrl(params.provider);
+  if (baseUrl && trimTrailingSlash(baseUrl) !== trimTrailingSlash(upstream))
+    return null;
+  if (
+    credentialRequiresPerUserScope({ provider: params.provider, apiKey }) ||
+    apiKey.startsWith("sk-ant-oat")
+  )
+    return null;
+  return apiKey;
+}
+
+/**
+ * Puts the mapped provider key on the request in the header the provider
+ * reads, unless the caller already sent its own provider credential there.
+ */
+function forwardPassthroughProviderApiKey(params: {
+  request: FastifyRequest;
+  provider: SupportedProvider;
+  apiKey: string;
+}) {
+  const { request, provider, apiKey } = params;
+  const [name, value] =
+    provider === "anthropic"
+      ? ["x-api-key", apiKey]
+      : ["authorization", `Bearer ${apiKey}`];
+  if (request.raw.headers[name] !== undefined) return;
+  request.headers[name] = value;
+  request.raw.headers[name] = value;
+}
+
+function trimTrailingSlash(url: string | undefined): string | undefined {
+  return url?.replace(/\/+$/, "");
 }
 
 /**

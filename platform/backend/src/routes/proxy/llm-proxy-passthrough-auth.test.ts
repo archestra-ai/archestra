@@ -1,6 +1,10 @@
 import type { FastifyRequest } from "fastify";
-import { OrganizationModel, UserTokenModel } from "@/models";
-import { describe, expect, test } from "@/test";
+import {
+  OrganizationModel,
+  UserTokenModel,
+  VirtualApiKeyModel,
+} from "@/models";
+import { accessGrants, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { createPassthroughAuthenticator } from "./llm-proxy-auth";
@@ -129,5 +133,97 @@ describe("createPassthroughAuthenticator", () => {
         agentId: agent.id,
       }),
     ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  describe("a standard virtual key", () => {
+    async function virtualKeyFor(params: {
+      organizationId: string;
+      provider: "openai" | "anthropic";
+      baseUrl?: string;
+      makeSecret: (overrides: {
+        secret: Record<string, unknown>;
+      }) => Promise<{ id: string }>;
+      makeLlmProviderApiKey: (
+        organizationId: string,
+        secretId: string,
+        overrides: { provider: "openai" | "anthropic"; baseUrl?: string },
+      ) => Promise<{ id: string }>;
+    }) {
+      const secret = await params.makeSecret({
+        secret: { apiKey: `sk-${params.provider}-mapped` },
+      });
+      const providerKey = await params.makeLlmProviderApiKey(
+        params.organizationId,
+        secret.id,
+        {
+          provider: params.provider,
+          ...(params.baseUrl ? { baseUrl: params.baseUrl } : {}),
+        },
+      );
+      const key = await VirtualApiKeyModel.create({
+        organizationId: params.organizationId,
+        name: "pass-through",
+        ...accessGrants("org"),
+        providerApiKeys: [
+          { provider: params.provider, providerApiKeyId: providerKey.id },
+        ],
+      });
+      return key.value;
+    }
+
+    test("forwards the provider key it maps, in place of itself", async ({
+      makeAgent,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const agent = await makeAgent();
+      const token = await virtualKeyFor({
+        organizationId: agent.organizationId,
+        provider: "openai",
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const request = requestWith({ authorization: `Bearer ${token}` });
+      await authenticate({ request, agentId: agent.id });
+      expect(request.headers.authorization).toBe("Bearer sk-openai-mapped");
+      expect(request.raw.headers.authorization).toBe("Bearer sk-openai-mapped");
+    });
+
+    test("forwards nothing when the mapped key belongs to another endpoint", async ({
+      makeAgent,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const agent = await makeAgent();
+      const token = await virtualKeyFor({
+        organizationId: agent.organizationId,
+        provider: "openai",
+        baseUrl: "https://openai-compatible.example/v1",
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const request = requestWith({ authorization: `Bearer ${token}` });
+      await authenticate({ request, agentId: agent.id });
+      expect(request.headers.authorization).toBeUndefined();
+    });
+
+    test("still passes, forwarding nothing, when it maps no key of the provider", async ({
+      makeAgent,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const agent = await makeAgent();
+      const token = await virtualKeyFor({
+        organizationId: agent.organizationId,
+        provider: "anthropic",
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const request = requestWith({ authorization: `Bearer ${token}` });
+      await expect(
+        authenticate({ request, agentId: agent.id }),
+      ).resolves.toBeUndefined();
+      expect(request.headers.authorization).toBeUndefined();
+    });
   });
 });

@@ -44,6 +44,7 @@ The request shows under **Logs → LLM Proxy**, with the key's name.
 <span id="provider-matching"></span>
 
 - With **Selected providers**, the key needs a mapping for the route's provider. An OpenAI route needs an OpenAI key. On the [Model Router](/docs/llm-proxy/model-router), the model's prefix picks the mapping.
+- The key also works on provider endpoints Archestra forwards unchanged, such as `/v1/openai/moderations`: Archestra sends the provider key it maps, so the app never holds one. A provider key with its own **Base URL** is not sent there.
 - Self-hosted providers can map several endpoints. Archestra sends each request to the endpoint that serves the model. You can edit a virtual key to add providers or endpoints without changing its token.
 - Choose **Current and future providers** to automatically use each provider's shared **Primary** API key, including providers added later. Personal and subscription keys are excluded. You can optionally select a different key for an existing provider. Connect settings apply this option to newly issued keys.
 - After you confirm, deleting a provider key or disconnecting a subscription also deletes the virtual keys and OAuth clients that map only that key. A key or client that also maps other providers keeps those. Knowledge base settings that used the key are cleared.

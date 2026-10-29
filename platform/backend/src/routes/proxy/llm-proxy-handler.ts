@@ -2360,18 +2360,18 @@ async function handleStreaming<
   const carriesStreamTerminal = provider.carriesStreamTerminal;
   let terminalSent = false;
 
-  // Every byte to the client goes through here so the keep-alive knows when
-  // the stream last spoke. The keep-alive itself only ever writes to a stream
-  // that is already committed and idle (see StreamKeepAlive) — it is armed
-  // now, before the upstream call, so it also covers a stream committed
-  // during preflight and a slow post-stream plugin ruling, but it cannot
-  // itself turn a pending upstream error into a 200.
+  // Every model byte reports activity to the keep-alive. Prefill comments
+  // explicitly opt into committing 200 before the upstream answers; errors
+  // after that point use the provider's existing stream-error framing.
   const keepAlive = new StreamKeepAlive(
     reply.raw,
     config.llmProxy.streamKeepAliveIntervalMs,
     streamAdapter
       .getSSEHeaders()
       ["Content-Type"]?.startsWith("text/event-stream") ?? false,
+    config.llmProxy.streamKeepAliveDuringPrefill
+      ? ensureStreamHeaders
+      : undefined,
   );
   keepAlive.start();
   const writeToClient = (data: string | Uint8Array) => {

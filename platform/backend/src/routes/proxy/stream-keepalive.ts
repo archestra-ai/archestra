@@ -21,12 +21,10 @@ export const STREAM_KEEPALIVE_SSE_COMMENT = ": archestra keep-alive\n\n";
  * minutes), and the upstream `ping` events that would otherwise cover it never
  * reach us: the Anthropic SDK drops them inside its SSE parser.
  *
- * This never commits headers. Writing anything before the upstream call has
- * produced a byte would force a 200 and foreclose the provider's real status
- * (a 429, an overload 529, a 400) that clients key their retry logic on. It
- * only fires on a stream that is already open and has been quiet for the
- * configured interval; every real write is reported through {@link touch} so
- * an active stream is never interrupted.
+ * By default this never commits headers, preserving upstream HTTP error
+ * statuses. An optional callback enables comments during prefill too: its
+ * first invocation commits 200, so later failures use the stream's error
+ * framing. Every real write is reported through {@link touch}.
  */
 export class StreamKeepAlive {
   private timer: NodeJS.Timeout | undefined;
@@ -34,13 +32,22 @@ export class StreamKeepAlive {
   constructor(
     private readonly raw: Pick<
       ServerResponse,
-      "headersSent" | "writableEnded" | "destroyed" | "write"
+      | "headersSent"
+      | "writableEnded"
+      | "destroyed"
+      | "writableNeedDrain"
+      | "write"
+      | "once"
+      | "off"
     >,
     /** Silence tolerated before a keep-alive is written. `0` disables. */
     private readonly intervalMs: number,
     /** Whether the response is `text/event-stream`; nothing else can carry a comment. */
     private readonly isEventStream: boolean,
+    private readonly commitHeaders?: () => void,
   ) {}
+
+  private readonly onClose = () => this.stop();
 
   /** Arm the idle timer. A disabled or non-SSE keep-alive stays inert. */
   start(): void {
@@ -49,6 +56,8 @@ export class StreamKeepAlive {
     }
     this.timer = setTimeout(() => this.onIdle(), this.intervalMs);
     this.timer.unref();
+    this.raw.once("close", this.onClose);
+    this.raw.once("finish", this.onClose);
   }
 
   /** Report that a real byte just went out, so the idle clock restarts. */
@@ -61,19 +70,24 @@ export class StreamKeepAlive {
       clearTimeout(this.timer);
       this.timer = undefined;
     }
+    this.raw.off("close", this.onClose);
+    this.raw.off("finish", this.onClose);
   }
 
   private onIdle(): void {
     if (!this.timer) {
       return;
     }
-    if (
-      this.raw.headersSent &&
-      !this.raw.writableEnded &&
-      !this.raw.destroyed
-    ) {
-      this.raw.write(STREAM_KEEPALIVE_SSE_COMMENT);
+    if (this.raw.writableEnded || this.raw.destroyed) {
+      this.stop();
+      return;
     }
-    this.timer.refresh();
+    // A queued byte already keeps the connection busy. Do not accumulate
+    // comments behind it while the client cannot drain the socket.
+    if (!this.raw.writableNeedDrain) {
+      if (!this.raw.headersSent) this.commitHeaders?.();
+      if (this.raw.headersSent) this.raw.write(STREAM_KEEPALIVE_SSE_COMMENT);
+    }
+    this.timer?.refresh();
   }
 }

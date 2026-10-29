@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -592,6 +592,13 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Values: `0` turns it off
   - Keep it below the shortest stall timeout of your clients. Claude Code reports a stall after 20 seconds.
   - Bedrock and Ollama native streams get no keep-alive.
+  - By default, comments start only after the first response event reaches the client.
+
+- **`ARCHESTRA_LLM_PROXY_STREAM_KEEPALIVE_DURING_PREFILL`** - Send SSE keep-alive comments while waiting for the upstream's first event, using the configured keep-alive interval.
+  - Default: `false`
+  - Values: `true`, `false`
+  - Set to `true` for clients or ingress proxies that disconnect during long prefills. The first comment commits HTTP `200`; subsequent failures arrive as SSE error events, without the upstream HTTP status or retry headers. Clients must support stream errors.
+  - Applies only to SSE responses. It does not extend upstream timeouts or load balancer request deadlines, and response buffering must be disabled in intervening proxies for comments to reach the client.
 
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Records traffic sent with a subscription credential, such as a Claude Pro or Max login, as subscription usage with $0 billed spend.
   - Default: `true`

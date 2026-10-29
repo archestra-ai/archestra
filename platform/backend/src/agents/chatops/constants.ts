@@ -136,6 +136,13 @@ export const SLACK_DEFAULT_CONNECTION_MODE: ChatOpsConnectionMode =
   "socket" as const;
 
 /**
+ * How long connecting to Slack (a credential check, or opening the Socket
+ * Mode connection) may take. Without a bound, a network that drops traffic to
+ * Slack hangs saving the Slack config until the caller gives up.
+ */
+export const SLACK_CONNECT_TIMEOUT_MS = 10 * TimeInMs.Second;
+
+/**
  * How long a Telegram account-linking code stays valid. Codes are one-shot
  * and minted in both directions: by the web UI (carried to the bot via a
  * t.me ?start= deep link) and by the bot (carried to the web via a sign-in

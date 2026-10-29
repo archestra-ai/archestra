@@ -4,9 +4,10 @@
   "private": true,
   "description": "Seeds demo data into an Archestra instance and captures every docs screenshot in light and dark mode",
   "scripts": {
-    "capture": "playwright test --project=capture",
+    "capture": "playwright test --project=capture && playwright test --project=manifest",
+    "validate": "playwright test --project=manifest",
     "seed": "playwright test --project=seed",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc6 --noEmit"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

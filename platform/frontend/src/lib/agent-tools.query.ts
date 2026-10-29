@@ -2,7 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { agentDelegationsQueryKeys } from "@/lib/agent-tools-query-keys";
-import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
+import { invalidateToolAssignmentQueries } from "./use-invalidate-tool-assignment-queries";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -631,7 +631,10 @@ type UpdateAgentServerToolsParams = {
   agentId: string;
   add: string[];
   remove: string[];
-  /** Built-in tools take no credential. */
+  /**
+   * The catalog's `serverType` is `"builtin"`: its tools take no credential.
+   * Not `isBuiltInCatalogId`, which also covers the local Playwright server.
+   */
   builtIn: boolean;
   credential?: { mode: "dynamic" } | { mode: "static"; mcpServerId: string };
   undoToast?: { agentName: string; serverName: string };

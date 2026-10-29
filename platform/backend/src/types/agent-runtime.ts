@@ -78,6 +78,8 @@ export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
      * (not the main Slack app) posts the result.
      */
     pinnedAgentId: z.string().uuid().optional(),
+    /** Jira service fallback shares an actor, but never a requester workspace. */
+    jiraRequesterAccountId: z.string().min(1).max(256).optional(),
     conversationReference: z.record(z.string(), z.unknown()).optional(),
     /** Placeholder and mute state belong to this turn, not later UI continuations. */
     originatingTaskId: z.string().uuid().optional(),
@@ -326,6 +328,7 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
 /** Run metadata shown to Agent managers alongside the runtime state. */
 export const SelectAgentRunListItemSchema = SelectAgentRunSchema.extend({
   initiatorName: z.string().nullable(),
+  canAttach: z.boolean().optional(),
   /** Who the run is shared with, derived from its permission policy. */
   shareVisibility: z.union([
     z.enum(["organization", "team", "user"]),
@@ -356,8 +359,8 @@ export const SelectAgentRunSessionSchema = SelectAgentRunSchema.extend({
 
 /**
  * How the requesting user relates to a run they're allowed to open.
- * `owner` started it and may attach interactively; `shared` was granted a
- * read-only view through a share and may only stream its logs.
+ * `owner` started it; `shared` is not its owner. Terminal access is conveyed
+ * separately by `canAttach`, including managers of an owning service account.
  */
 export const AgentRunViewerRoleSchema = z.enum(["owner", "shared"]);
 
@@ -392,6 +395,7 @@ export const GetAgentRunResponseSchema = AgentRunSessionResponseSchema.extend({
     .nullable()
     .optional(),
   viewerRole: AgentRunViewerRoleSchema,
+  canAttach: z.boolean().optional(),
   /** Present on the detail endpoint while an owned run is starting. */
   startupProgress: AgentRunStartupProgressSchema.nullable().optional(),
 });

@@ -50,6 +50,7 @@ export function openaiToGemini(req: OpenAiRequest): {
   const loose = req as OpenAiRequest & {
     stop?: string | string[] | null;
     top_p?: number | null;
+    cachedContent?: string;
   };
   const systemParts: Array<{ text: string }> = [];
   const contents: GeminiRequest["contents"] = [];
@@ -151,6 +152,9 @@ export function openaiToGemini(req: OpenAiRequest): {
     _model: req.model,
     _isStreaming: req.stream === true,
   };
+
+  if (loose.cachedContent !== undefined)
+    geminiBody.cachedContent = loose.cachedContent;
 
   if (systemParts.length > 0) {
     geminiBody.systemInstruction = { parts: systemParts };
@@ -304,6 +308,9 @@ export function geminiUsageViewToOpenai(
   const completionTokens = usage.outputTokens + reasoningTokens;
   return {
     prompt_tokens: promptTokens,
+    ...((usage.cacheReadTokens ?? 0) > 0
+      ? { prompt_tokens_details: { cached_tokens: usage.cacheReadTokens ?? 0 } }
+      : {}),
     completion_tokens: completionTokens,
     total_tokens: promptTokens + completionTokens,
     ...(reasoningTokens > 0
@@ -332,6 +339,13 @@ export function geminiUsageToOpenai(
     (response.usageMetadata?.candidatesTokenCount ?? 0) + reasoningTokens;
   return {
     prompt_tokens: promptTokens,
+    ...((response.usageMetadata?.cachedContentTokenCount ?? 0) > 0
+      ? {
+          prompt_tokens_details: {
+            cached_tokens: response.usageMetadata?.cachedContentTokenCount ?? 0,
+          },
+        }
+      : {}),
     completion_tokens: completionTokens,
     total_tokens:
       response.usageMetadata?.totalTokenCount ??

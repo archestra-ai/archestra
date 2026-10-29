@@ -1,3 +1,15 @@
+import {
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
+  TOOL_ASK_USER_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+} from "@archestra/shared/archestra-mcp-server";
+
+const APPA_TOOLS = [
+  TOOL_RUN_TOOL_SHORT_NAME,
+  ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
+  TOOL_ASK_USER_SHORT_NAME,
+];
+
 /** Executed by Claude Desktop's bundled extension runtime, never on the server. */
 export const DESKTOP_CONNECTION_INSTALLER = String.raw`
 const fs = require('node:fs');
@@ -8,6 +20,7 @@ const http = require('node:http');
 const {execFile,spawn} = require('node:child_process');
 const {promisify} = require('node:util');
 const run = promisify(execFile);
+const APPA_TOOLS = ${JSON.stringify(APPA_TOOLS)};
 
 class DesktopInstaller {
   constructor(ticket) {
@@ -50,7 +63,8 @@ class DesktopInstaller {
     for (const entry of this.metadata.entries) {
       if (!/^[0-9a-f-]{36}$/i.test(entry.id || '')) continue;
       const profile = read(path.join(this.library,entry.id + '.json'),{});
-      const urls = [profile.inferenceGatewayBaseUrl,...(profile.managedMcpServers || []).map(s => s.url),...(profile.allowedPluginMarketplaces || []).map(s => s.url)];
+      if (!isPlainObject(profile)) continue;
+      const urls = [profile.inferenceGatewayBaseUrl,...(Array.isArray(profile.managedMcpServers) ? profile.managedMcpServers : []).map(s => s?.url),...(Array.isArray(profile.allowedPluginMarketplaces) ? profile.allowedPluginMarketplaces : []).map(s => s?.url)];
       if (entry.id === this.profileId || urls.some(url => typeof url === 'string' && entry.id === uuid('archestra-desktop:' + url))) this.managed.set(entry.id,profile);
     }
     const previous = this.managed.get(this.metadata.appliedId) || this.managed.get(this.profileId) || {};
@@ -62,7 +76,7 @@ class DesktopInstaller {
       if (proxy.authMode === 'provider-key') {
         this.headers['anthropic-beta'] = 'oauth-2025-04-20';
         const token = previous.inferenceGatewayApiKey;
-        if (typeof token === 'string' && token.startsWith('sk-ant-oat') && await this.probe(token)) this.credential = token;
+        if (typeof token === 'string' && token.startsWith('sk-ant-oat') && await this.probe(token,true)) this.credential = token;
         else { this.state = {phase:'signin',message:'Sign in with your Claude subscription to connect Desktop.'}; return; }
       } else {
         if (!proxy.virtualKey || !await this.probe(proxy.virtualKey)) throw new Error('The gateway rejected this API key. Return to Connect to choose another key.');
@@ -77,6 +91,7 @@ class DesktopInstaller {
       inferenceProvider:'gateway',inferenceCredentialKind:'static',
       inferenceGatewayBaseUrl:proxy.url,inferenceGatewayApiKey:this.credential,
       inferenceGatewayAuthScheme:'bearer',inferenceCustomHeaders:this.headers,modelDiscoveryEnabled:true,
+      coworkEgressAllowedHosts:['*'],
       claudeAiImport:{enabled:true,bannerBehavior:'show'}
     });
     if (mcp) this.profile.managedMcpServers = [{name:mcp.serverName,transport:'http',url:mcp.url,oauth:{mode:'dcr'}}];
@@ -93,19 +108,23 @@ class DesktopInstaller {
       if (!head) throw new Error('The shared skills marketplace did not provide a valid Git revision. Desktop settings have not changed.');
       this.profile.allowedPluginMarketplaces = [{source:'git',url:skills.cloneUrl,expectedName:skills.marketplaceName,ref:head[1],installationPreference:'auto_install'}];
     }
+    this.appaPlan = prepareAppaPermissions(mcp,[...this.managed.values(),read(this.profilePath,{})]);
     this.state = {phase:'ready',message:'Your connection is ready. Finish any active Desktop tasks, then restart to apply it.',subscription:proxy?.authMode === 'provider-key'};
   }
-  async probe(token) {
+  async probe(token,cached = false) {
     this.state = {phase:'checking',message:'Checking your connection…'};
     const response = await fetch(this.setup.proxy.url.replace(/\/$/,'') + '/v1/messages',{
-      method:'POST',headers:{...this.headers,Authorization:'Bearer ' + token,'anthropic-version':'2023-06-01','Content-Type':'application/json'},
+      method:'POST',headers:{...this.headers,Authorization:'Bearer ' + token,'X-Claude-Code-Session-Id':crypto.randomUUID(),'anthropic-version':'2023-06-01','Content-Type':'application/json'},
       body:JSON.stringify({model:this.setup.proxy.model || 'claude-haiku-4-5-20251001',max_tokens:8,messages:[{role:'user',content:'Reply with exactly OK.'}]}),
       redirect:'error',signal:AbortSignal.timeout(60000)
     });
-    if (response.status === 401) return false;
+    if (response.status === 401 || (cached && !response.ok)) return false;
     if (!response.ok) throw new Error('The gateway connection check failed (HTTP ' + response.status + '). Check model access and quota. Desktop settings have not changed.');
     const data = await response.json();
-    if (data.type !== 'message' || !data.content?.length) throw new Error('The gateway did not return a completion. Desktop settings have not changed.');
+    if (data.type !== 'message' || !data.content?.length) {
+      if (cached) return false;
+      throw new Error('The gateway did not return a completion. Desktop settings have not changed.');
+    }
     return true;
   }
   async signIn() {
@@ -141,10 +160,19 @@ class DesktopInstaller {
     try {
       // Read preferences immediately before applying, preserving unrelated settings.
       const app = read(this.appPath,{});
+      const appaPlan = prepareAppaPermissions(this.setup.mcp,[...this.managed.values(),read(this.profilePath,{})]);
       const oldPaths = [...this.managed.keys()].filter(id => id !== this.profileId).map(id => path.join(this.library,id + '.json'));
       for (const file of [this.profilePath,this.metaPath,this.appPath,...oldPaths]) {
         if (fs.existsSync(file) && !fs.existsSync(file + '.before-archestra')) await write(file + '.before-archestra',read(file,{}));
       }
+      if (appaPlan) {
+        if (fs.existsSync(appaPlan.settingsPath) && !fs.existsSync(appaPlan.settingsPath + '.archestra-backup')) {
+          fs.copyFileSync(appaPlan.settingsPath,appaPlan.settingsPath + '.archestra-backup');
+        }
+        await write(appaPlan.statePath,appaPlan.state,false);
+        await write(appaPlan.settingsPath,appaPlan.settings,false);
+      }
+      await applyCoworkAppaPermissions(this.directory,this.setup.mcp,this.setup.appName);
       const metadata = read(this.metaPath,{entries:[]});
       metadata.entries = metadata.entries.filter(entry => entry.id !== this.profileId && !this.managed.has(entry.id));
       metadata.entries.push({id:this.profileId,name:this.setup.appName + ' Desktop'});
@@ -219,14 +247,193 @@ class DesktopInstaller {
   close() {clearTimeout(this.timeout);this.server.closeAllConnections();this.server.close();}
 }
 
+function isPlainObject(value) {return typeof value === 'object' && value !== null && !Array.isArray(value);}
+function prepareAppaPermissions(mcp,oldProfiles) {
+  const home = os.homedir();
+  const configDir = process.env.CLAUDE_CONFIG_DIR || path.join(home,'.claude');
+  const settingsPath = path.join(configDir,'settings.json');
+  const stateRoot = process.env.CLAUDE_CONFIG_DIR || home;
+  const statePath = path.join(stateRoot,'.archestra','claude-appa-permissions.json');
+  const oldServers = oldProfiles.flatMap(p => Array.isArray(p?.managedMcpServers) ? p.managedMcpServers : []).map(s => s?.name).filter(n => typeof n === 'string');
+  let server = null;
+  let desired = [];
+  let names = oldServers;
+  if (!mcp) {
+    if (!oldServers.length || !fs.existsSync(statePath)) return null;
+  } else {
+    server = mcp.serverName || '';
+    const prefix = mcp.toolPrefix || 'archestra__';
+    if (!/^[a-zA-Z0-9_.-]+$/.test(server) || !/^[a-zA-Z0-9_]+__$/.test(prefix)) return null;
+    desired = APPA_TOOLS.map(tool => 'mcp__' + server + '__' + prefix + tool);
+    const legacy = Array.isArray(mcp.legacyServerNames) ? mcp.legacyServerNames.filter(n => typeof n === 'string') : [];
+    names = [server,...legacy,...oldServers];
+  }
+  const settingsRaw = fs.existsSync(settingsPath) ? fs.readFileSync(settingsPath,'utf8').replace(/^\uFEFF/,'') : '';
+  let settings,state;
+  try {
+    settings = settingsRaw.trim() ? JSON.parse(settingsRaw) : {};
+    state = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath,'utf8').replace(/^\uFEFF/,'')) : {};
+  } catch {
+    throw new Error('Claude settings or APPA permission state is not valid JSON. No settings were changed.');
+  }
+  if (!isPlainObject(settings) || !isPlainObject(state)) throw new Error('Claude settings and APPA permission state must be JSON objects. No settings were changed.');
+  if (settings.permissions === undefined) settings.permissions = {};
+  if (!isPlainObject(settings.permissions)) throw new Error('Claude permissions must be a JSON object. No settings were changed.');
+  const allowed = settings.permissions.allow === undefined ? [] : settings.permissions.allow;
+  if (!Array.isArray(allowed) || !allowed.every(rule => typeof rule === 'string')) throw new Error('Claude permissions.allow must be an array of strings. No settings were changed.');
+  for (const owned of Object.values(state)) {
+    if (!Array.isArray(owned) || !owned.every(rule => typeof rule === 'string')) throw new Error('Invalid APPA permission ownership state. No settings were changed.');
+  }
+  if (!mcp && !names.some(name => Object.hasOwn(state,name))) return null;
+  const previouslyOwned = new Set();
+  for (const name of names) {
+    for (const rule of state[name] || []) previouslyOwned.add(rule);
+    delete state[name];
+  }
+  const nextAllowed = allowed.filter(rule => !previouslyOwned.has(rule) || desired.includes(rule));
+  const owned = desired.filter(rule => previouslyOwned.has(rule) || !nextAllowed.includes(rule));
+  for (const rule of desired) {
+    if (!nextAllowed.includes(rule)) nextAllowed.push(rule);
+  }
+  settings.permissions.allow = nextAllowed;
+  if (server && owned.length) state[server] = owned;
+  return {settingsPath,settings,statePath,state};
+}
+function escapeRegExp(value) {return value.replace(/[.*+?^$()|[\]\\{}]/g,'\\$&');}
+function coworkScopeDirs(directory,createPrimary) {
+  const sessionsRoot = path.join(directory,'local-agent-mode-sessions');
+  const antDidPath = path.join(directory,'ant-did');
+  const scopes = [];
+  if (createPrimary || fs.existsSync(antDidPath)) {
+    if (fs.existsSync(antDidPath) && fs.lstatSync(antDidPath).isSymbolicLink()) throw new Error('Desktop settings contain a symbolic link. No settings were replaced.');
+    let accountId = '';
+    if (fs.existsSync(antDidPath)) {
+      try {
+        const decoded = Buffer.from(fs.readFileSync(antDidPath,'utf8').trim(),'base64').toString('utf8').trim();
+        if (/^[0-9a-fA-F-]{8,}$/.test(decoded)) accountId = decoded;
+      } catch {}
+    }
+    if (!accountId && createPrimary) {
+      accountId = crypto.randomUUID();
+      fs.mkdirSync(directory,{recursive:true,mode:0o700});
+      fs.writeFileSync(antDidPath,Buffer.from(accountId,'utf8').toString('base64'),{mode:0o600});
+    }
+    if (accountId) {
+      const fullScope = path.join(sessionsRoot,accountId,'00000000-0000-4000-8000-000000000001');
+      const shortScope = path.join(sessionsRoot,accountId.slice(0,8),'00000000');
+      const primary = fs.existsSync(fullScope) && !fs.existsSync(shortScope) ? fullScope : shortScope;
+      if (createPrimary || fs.existsSync(primary)) scopes.push(primary);
+    }
+  }
+  if (fs.existsSync(sessionsRoot) && !fs.lstatSync(sessionsRoot).isSymbolicLink()) {
+    for (const acct of fs.readdirSync(sessionsRoot,{withFileTypes:true})) {
+      if (!acct.isDirectory() || acct.isSymbolicLink() || acct.name.startsWith('.') || acct.name === 'skills-plugin') continue;
+      const acctDir = path.join(sessionsRoot,acct.name);
+      for (const org of fs.readdirSync(acctDir,{withFileTypes:true})) {
+        if (!org.isDirectory() || org.isSymbolicLink() || org.name.startsWith('.')) continue;
+        const orgDir = path.join(acctDir,org.name);
+        if ((fs.existsSync(path.join(orgDir,'cowork_settings.json')) || fs.existsSync(path.join(orgDir,'cowork_plugins'))) && !scopes.includes(orgDir)) {
+          scopes.push(orgDir);
+        }
+      }
+    }
+  }
+  return scopes;
+}
+async function applyCoworkAppaPermissions(directory,mcp,appName) {
+  const mktName = 'local-desktop-app-uploads';
+  const pluginName = 'archestra-appa-permissions';
+  const pluginId = pluginName + '@' + mktName;
+  if (mcp) {
+    const server = mcp.serverName || '';
+    const prefix = mcp.toolPrefix || 'archestra__';
+    if (!/^[a-zA-Z0-9_.-]+$/.test(server) || !/^[a-zA-Z0-9_]+__$/.test(prefix)) return;
+    const nowIso = new Date().toISOString();
+    const matcher = '^mcp__' + escapeRegExp(server) + '__' + escapeRegExp(prefix) + '(' + APPA_TOOLS.map(escapeRegExp).join('|') + ')$';
+    const allowOutput = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}';
+    for (const scopeDir of coworkScopeDirs(directory,true)) {
+      const pluginsDir = path.join(scopeDir,'cowork_plugins');
+      const mktDir = path.join(pluginsDir,'marketplaces',mktName);
+      const pluginDir = path.join(mktDir,pluginName);
+      if (fs.existsSync(pluginDir) && fs.lstatSync(pluginDir).isSymbolicLink()) throw new Error('Desktop settings contain a symbolic link. No settings were replaced.');
+      await write(path.join(pluginDir,'.claude-plugin','plugin.json'),{
+        name:pluginName,version:'1.0.0',description:'Auto-allow internal OpenAPPA guardrails tools',
+        author:{name:appName},license:'MIT'
+      },false);
+      await write(path.join(pluginDir,'hooks','hooks.json'),{
+        hooks:{PreToolUse:[{matcher,hooks:[{type:'command',command:"echo '" + allowOutput + "'"}]}]}
+      },false);
+      const mktManifestPath = path.join(mktDir,'.claude-plugin','marketplace.json');
+      const mktManifest = isPlainObject(read(mktManifestPath,null)) ? read(mktManifestPath,{}) : {
+        name:mktName,version:'1.0.0',description:'Locally uploaded plugins via Claude Desktop app',
+        owner:{name:'Local User'},plugins:[]
+      };
+      const mktPlugins = Array.isArray(mktManifest.plugins) ? mktManifest.plugins.filter(p => !(isPlainObject(p) && p.name === pluginName)) : [];
+      mktPlugins.push({name:pluginName,version:'1.0.0',source:'./' + pluginName});
+      mktManifest.plugins = mktPlugins;
+      await write(mktManifestPath,mktManifest,false);
+      const knownPath = path.join(pluginsDir,'known_marketplaces.json');
+      const known = isPlainObject(read(knownPath,null)) ? read(knownPath,{}) : {};
+      const mktPosix = path.resolve(mktDir).replace(/\\/g,'/');
+      known[mktName] = {source:{source:'directory',path:mktPosix},installLocation:mktPosix,lastUpdated:nowIso};
+      await write(knownPath,known,false);
+      const installedPath = path.join(pluginsDir,'installed_plugins.json');
+      const installed = isPlainObject(read(installedPath,null)) ? read(installedPath,{}) : {version:2,plugins:{}};
+      installed.version = 2;
+      if (!isPlainObject(installed.plugins)) installed.plugins = {};
+      const existing = Array.isArray(installed.plugins[pluginId]) ? installed.plugins[pluginId].find(e => isPlainObject(e) && typeof e.installedAt === 'string') : null;
+      installed.plugins[pluginId] = [{
+        scope:'user',installPath:path.resolve(pluginDir).replace(/\\/g,'/'),
+        version:'1.0.0',installedAt:existing ? existing.installedAt : nowIso,lastUpdated:nowIso
+      }];
+      await write(installedPath,installed,false);
+      const coworkSettingsPath = path.join(scopeDir,'cowork_settings.json');
+      const coworkSettings = isPlainObject(read(coworkSettingsPath,null)) ? read(coworkSettingsPath,{}) : {};
+      if (!isPlainObject(coworkSettings.enabledPlugins)) coworkSettings.enabledPlugins = {};
+      coworkSettings.enabledPlugins[pluginId] = true;
+      await write(coworkSettingsPath,coworkSettings,false);
+    }
+    return;
+  }
+  for (const scopeDir of coworkScopeDirs(directory,false)) {
+    const pluginsDir = path.join(scopeDir,'cowork_plugins');
+    const mktDir = path.join(pluginsDir,'marketplaces',mktName);
+    const pluginDir = path.join(mktDir,pluginName);
+    if (fs.existsSync(pluginDir) && !fs.lstatSync(pluginDir).isSymbolicLink()) fs.rmSync(pluginDir,{recursive:true,force:true});
+    const mktManifestPath = path.join(mktDir,'.claude-plugin','marketplace.json');
+    if (fs.existsSync(mktManifestPath)) {
+      const mktManifest = read(mktManifestPath,{});
+      if (isPlainObject(mktManifest) && Array.isArray(mktManifest.plugins)) {
+        mktManifest.plugins = mktManifest.plugins.filter(p => !(isPlainObject(p) && p.name === pluginName));
+        await write(mktManifestPath,mktManifest,false);
+      }
+    }
+    const installedPath = path.join(pluginsDir,'installed_plugins.json');
+    if (fs.existsSync(installedPath)) {
+      const installed = read(installedPath,{});
+      if (isPlainObject(installed) && isPlainObject(installed.plugins) && Object.hasOwn(installed.plugins,pluginId)) {
+        delete installed.plugins[pluginId];
+        await write(installedPath,installed,false);
+      }
+    }
+    const coworkSettingsPath = path.join(scopeDir,'cowork_settings.json');
+    if (fs.existsSync(coworkSettingsPath)) {
+      const coworkSettings = read(coworkSettingsPath,{});
+      if (isPlainObject(coworkSettings) && isPlainObject(coworkSettings.enabledPlugins) && Object.hasOwn(coworkSettings.enabledPlugins,pluginId)) {
+        delete coworkSettings.enabledPlugins[pluginId];
+        await write(coworkSettingsPath,coworkSettings,false);
+      }
+    }
+  }
+}
 function read(file,fallback) {return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'')) : fallback;}
-async function write(file,value) {
+async function write(file,value,protectAcl = true) {
   fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});
   if (fs.existsSync(file) && fs.lstatSync(file).isSymbolicLink()) throw new Error('Desktop settings contain a symbolic link. No settings were replaced.');
   const temporary = path.join(path.dirname(file),'.setup-' + crypto.randomBytes(16).toString('hex'));
   const fd = fs.openSync(temporary,'wx',0o600);
   try {
-    if (process.platform === 'win32') {
+    if (protectAcl && process.platform === 'win32') {
       const {stdout} = await run('powershell.exe',['-NoProfile','-NonInteractive','-Command','[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value'],{windowsHide:true});
       await run('icacls.exe',[temporary,'/inheritance:r','/grant:r','*' + stdout.trim() + ':F'],{windowsHide:true});
     }

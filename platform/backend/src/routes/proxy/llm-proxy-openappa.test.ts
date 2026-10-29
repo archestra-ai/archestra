@@ -64,7 +64,7 @@ import {
   peekHitlDecision,
   stageHitlReview,
 } from "@/openappa/hitl-review";
-import { buildNoticeArguments } from "@/openappa/notice";
+import { buildNoticeArguments, readNotice } from "@/openappa/notice";
 import * as appaService from "@/openappa/service";
 import { appendSessionReceipt } from "@/openappa/session-token";
 import {
@@ -89,10 +89,15 @@ import {
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { type Agent, ApiError } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
-import { anthropicAdapterFactory, openaiAdapterFactory } from "./adapters";
+import {
+  anthropicAdapterFactory,
+  kimiCodeAdapterFactory,
+  openaiAdapterFactory,
+} from "./adapters";
 import { createOpenAiCodexClient } from "./adapters/openai-codex-client";
 import { openAiResponsesAdapterFactory } from "./adapters/openai-responses";
 import anthropicProxyRoutes from "./routes/anthropic";
+import kimiCodeProxyRoutes from "./routes/kimi-code";
 import openAiProxyRoutes from "./routes/openai";
 
 const native = vi.hoisted(() => ({
@@ -2893,6 +2898,182 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
+  test("block mode governs Claude Desktop sessions, isolates headerless Chat conversations, and rejects headerless requests without a conversation identity", async () => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+    const probe = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "user-agent": "ClaudeDesktop/1.0.0",
+      },
+      payload: {
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1,
+        metadata: {
+          user_id:
+            "user_0123456789abcdef_account__session_11111111-2222-3333-4444-555555555555",
+        },
+        messages: [{ role: "user", content: "hi" }],
+      },
+    });
+    expect(probe.statusCode, probe.body).toBe(200);
+    expect(events).toEqual([]);
+
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: { name: "get_weather", input: { location: "SF" } },
+    };
+    const governed = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "x-archestra-agent-id": "anthropic_claude_desktop",
+        "x-claude-code-session-id": "desktop-session",
+      },
+      payload: payload(false) as Record<string, unknown>,
+    });
+    expect(governed.statusCode, governed.body).toBe(200);
+    const callerId = `user:${userId}`;
+    expect(events.filter((event) => event.event === "session_start")).toEqual([
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: `${callerId}|desktop-session`,
+      }),
+    ]);
+
+    // Two headerless Desktop Chat conversations with the exact same system prompt
+    // and opening user message bind isolated client-supplied conversation roots,
+    // never merging on prompt content.
+    block = true;
+    const sharedOpeningMessages = [
+      { role: "user", content: "Check the weather in SF" },
+    ];
+    const chatOneDenied = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "user-agent": "ClaudeDesktop/1.0.0",
+      },
+      payload: {
+        ...(payload(false, sharedOpeningMessages) as Record<string, unknown>),
+        system: "You are Claude.",
+        metadata: { conversation_id: "desktop-chat-1" },
+      },
+    });
+    expect(chatOneDenied.statusCode, chatOneDenied.body).toBe(200);
+    expect(
+      (
+        chatOneDenied.json().content as Array<{ type: string; name?: string }>
+      ).some(
+        (block) => block.type === "tool_use" && block.name === "get_weather",
+      ),
+    ).toBe(false);
+
+    const startsAfterChatOne = events.filter(
+      (event) => event.event === "session_start",
+    );
+    expect(startsAfterChatOne).toHaveLength(2);
+    const chatOneSessionId = String(startsAfterChatOne[1]?.session_id);
+    expect(chatOneSessionId).toBe(`user:${userId}|desktop-chat-1`);
+
+    // Superyelling the first Chat conversation exempts its own follow-up turn
+    // without disabling enforcement for a second headerless Chat conversation
+    // that shares the exact same system prompt and opening message.
+    await OpenAppaUnenforcedModel.recordSession({
+      organizationId: agent.organizationId,
+      sessionId: chatOneSessionId,
+      parentId: undefined,
+      reason: "superyell",
+    });
+
+    const chatOneFollowUp = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "user-agent": "ClaudeDesktop/1.0.0",
+      },
+      payload: {
+        ...(payload(false, [
+          ...sharedOpeningMessages,
+          { role: "assistant", content: "I could not run that tool." },
+          { role: "user", content: "Try again after disabling guardrails" },
+        ]) as Record<string, unknown>),
+        system: "You are Claude.",
+        metadata: { conversation_id: "desktop-chat-1" },
+      },
+    });
+    expect(chatOneFollowUp.statusCode, chatOneFollowUp.body).toBe(200);
+    expect(
+      (
+        chatOneFollowUp.json().content as Array<{ type: string; name?: string }>
+      ).some(
+        (block) => block.type === "tool_use" && block.name === "get_weather",
+      ),
+    ).toBe(true);
+
+    const chatTwoDenied = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "x-archestra-agent-id": "anthropic_claude_desktop",
+      },
+      payload: {
+        ...(payload(false, sharedOpeningMessages) as Record<string, unknown>),
+        system: "You are Claude.",
+        metadata: { conversation_id: "desktop-chat-2" },
+      },
+    });
+    expect(chatTwoDenied.statusCode, chatTwoDenied.body).toBe(200);
+    expect(
+      (
+        chatTwoDenied.json().content as Array<{ type: string; name?: string }>
+      ).some(
+        (block) => block.type === "tool_use" && block.name === "get_weather",
+      ),
+    ).toBe(false);
+
+    const startsAfterChatTwo = events.filter(
+      (event) => event.event === "session_start",
+    );
+    expect(startsAfterChatTwo).toHaveLength(3);
+    const chatTwoSessionId = String(startsAfterChatTwo[2]?.session_id);
+    expect(chatTwoSessionId).toBe(`user:${userId}|desktop-chat-2`);
+    expect(chatTwoSessionId).not.toBe(chatOneSessionId);
+
+    // A headerless Desktop request without a client-supplied conversation identifier
+    // is rejected as unsupported in block mode even when prompt content is present.
+    const unidentifiable = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "x-archestra-agent-id": "anthropic_claude_desktop",
+      },
+      payload: {
+        ...(payload(false, sharedOpeningMessages) as Record<string, unknown>),
+        system: "You are Claude.",
+      },
+    });
+    expect(unidentifiable.statusCode).toBe(400);
+    expect(unidentifiable.json().error.message).toContain(
+      "OpenAPPA does not recognize this client",
+    );
+  });
+
   test("an encrypted chat that started while the switch was off stays unenforced; a new one requires a key and escrow", async ({
     makeConversation,
   }) => {
@@ -3692,6 +3873,107 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         "approved OpenAPPA offer IDs",
       );
       expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    });
+
+    test.each([
+      true,
+      false,
+    ])("carries a denial on an undeclared notice call when the gateway tools are not loaded, and restores it next request (stream=%s)", async (stream) => {
+      // Claude Code 2.1.310 answers a call to a tool it never declared with an
+      // error result and goes on; the next request carries both back.
+      const withoutGatewayTools = (body: Record<string, unknown>) => ({
+        ...body,
+        tools: (body.tools as { name: string }[]).filter(
+          (tool) => !tool.name.startsWith("archestra__"),
+        ),
+      });
+      const send = (history: unknown[]) =>
+        app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: { ...internalCallHeader(), ...claudeCode() },
+          payload: withoutGatewayTools(deferring(payload(stream, history))),
+        });
+      const call = {
+        id: "toolu_denied_carried",
+        name: "get_weather",
+        input: { location: "SF" },
+      };
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: call,
+        streamingToolUse: call,
+      };
+      block = true;
+      const opening = [{ role: "user", content: "Check the weather" }];
+
+      const denied = await send(opening);
+
+      expect(denied.statusCode, denied.body).toBe(200);
+      const carrier = noticeFrom(denied.body, stream);
+      expect(carrier).toMatchObject({
+        id: call.id,
+        name: "archestra__get_remedy_plans",
+      });
+      const notice = readNotice({ callId: call.id, arguments: carrier.input });
+      expect(notice).toMatchObject({
+        tool: "get_weather",
+        original: { arguments: call.input },
+      });
+
+      block = false;
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      providerRequests.length = 0;
+      const answered = await send([
+        ...opening,
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: carrier.id,
+              name: carrier.name,
+              input: carrier.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: carrier.id,
+              is_error: true,
+              content:
+                "<tool_use_error>Error: No such tool available: archestra__get_remedy_plans</tool_use_error>",
+            },
+          ],
+        },
+      ]);
+
+      expect(answered.statusCode, answered.body).toBe(200);
+      const sent = providerRequests.at(-1) as {
+        messages: { role: string; content: Record<string, unknown>[] }[];
+      };
+      expect(sent.messages[1].content).toEqual([
+        {
+          type: "tool_use",
+          id: call.id,
+          name: "get_weather",
+          input: call.input,
+        },
+      ]);
+      expect(sent.messages).toHaveLength(3);
+      expect(sent.messages[2].content).toEqual([
+        expect.objectContaining({
+          type: "tool_result",
+          tool_use_id: call.id,
+          is_error: true,
+          content: notice?.result,
+        }),
+      ]);
     });
   });
 
@@ -9673,6 +9955,234 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(forwarded()).not.toContain("Push the release token now");
         expect(forwarded()).toContain("[appa] Message withheld");
       });
+    });
+  });
+
+  describe("Kimi Code", () => {
+    const secret = "route-test-kimi-delegation-secret-0123456789";
+    const rootSession = "session_6b1c0f0e-2d8a-4b44-9d41-0c0d7a6f3e21";
+    const spawnPrompt = "Find out why the build fails.";
+    const gitContext =
+      "<git-context>\nWorking directory: /work/app\nBranch: main\nRecent commits:\n  abc1234 Fix the build\n</git-context>\n\n";
+    let providerCalls: Array<{ id: string; name: string; args: object }>;
+    let upstreamHeaders: Array<Record<string, string> | undefined>;
+
+    beforeEach(async () => {
+      config.openappa.offerSigningSecret = secret;
+      await ModelModel.upsert({
+        externalId: "kimi-code/k3.1-pro",
+        provider: "kimi-code",
+        modelId: "k3.1-pro",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      await app.register(kimiCodeProxyRoutes);
+      providerCalls = [];
+      upstreamHeaders = [];
+      vi.spyOn(kimiCodeAdapterFactory, "createClient").mockImplementation(
+        (_apiKey, options) => {
+          upstreamHeaders.push(options.defaultHeaders);
+          return {
+            chat: {
+              completions: {
+                create: async (params: unknown) => {
+                  providerRequests.push(structuredClone(params));
+                  const calls = providerCalls.map((call) => ({
+                    id: call.id,
+                    type: "function",
+                    function: {
+                      name: call.name,
+                      arguments: JSON.stringify(call.args),
+                    },
+                  }));
+                  return {
+                    id: "chatcmpl_kimi",
+                    object: "chat.completion",
+                    created: 1,
+                    model: "k3.1-pro",
+                    choices: [
+                      {
+                        index: 0,
+                        message: calls.length
+                          ? {
+                              role: "assistant",
+                              content: null,
+                              tool_calls: calls,
+                            }
+                          : { role: "assistant", content: "Done." },
+                        finish_reason: calls.length ? "tool_calls" : "stop",
+                        logprobs: null,
+                      },
+                    ],
+                    usage: {
+                      prompt_tokens: 10,
+                      completion_tokens: 5,
+                      total_tokens: 15,
+                    },
+                  };
+                },
+              },
+            },
+          } as never;
+        },
+      );
+    });
+
+    // Kimi Code 2.3.3 sends its session id as the prompt cache key on every
+    // request, its subagents' included, and only its User-Agent names it.
+    const send = (
+      messages: unknown[],
+      extraHeaders: Record<string, string> = {},
+    ) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/kimi-code/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer sk-kimi-test",
+          "x-archestra-virtual-key": platformKey,
+          "user-agent": "kimi-code-cli/2.3.3",
+          "x-msh-platform": "kimi_code_cli",
+          ...extraHeaders,
+        },
+        payload: {
+          model: "k3.1-pro",
+          stream: false,
+          prompt_cache_key: rootSession,
+          messages,
+          tools: [
+            ...["Agent", "AgentSwarm", "Bash", "AskUserQuestion"].map(
+              (name) => ({
+                type: "function",
+                function: {
+                  name,
+                  parameters: { type: "object", properties: {} },
+                },
+              }),
+            ),
+            // Kimi Code cuts each run of underscores to one; the attestation
+            // in the description still names the gateway tool.
+            ...["get_remedy_plans", "execute_remedy_plan"].map((tool) => ({
+              type: "function",
+              function: {
+                name: `mcp__archestra__archestra_${tool}`,
+                description: attestToolDescription({
+                  organizationId: agent.organizationId,
+                  gatewayId: agent.id,
+                  advertisedName: `archestra__${tool}`,
+                  kind: "b",
+                  description: tool,
+                }),
+                parameters: { type: "object", properties: {} },
+              },
+            })),
+          ],
+        },
+      });
+    const released = (body: string) =>
+      (JSON.parse(body).choices[0].message.tool_calls ?? []) as Array<{
+        id: string;
+        function: { name: string; arguments: string };
+      }>;
+
+    test("relays only the client headers Kimi Code sends to the Kimi Code API", async () => {
+      const response = await send([{ role: "user", content: "Hello" }], {
+        "x-msh-version": "2.3.3",
+        "x-msh-device-id": "device-1",
+        // Not among the headers Kimi Code sends with a model request.
+        "x-msh-session": "other",
+        "x-msh-tool-call-id": "call-1",
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamHeaders.at(-1)).toEqual({
+        "user-agent": "kimi-code-cli/2.3.3",
+        "x-msh-platform": "kimi_code_cli",
+        "x-msh-version": "2.3.3",
+        "x-msh-device-id": "device-1",
+      });
+    });
+
+    test("binds a subagent through its marker after Kimi's git context, and keeps tool-call IDs unstamped", async () => {
+      providerCalls = [
+        {
+          id: "Agent:0",
+          name: "Agent",
+          args: { description: "Check the build", prompt: spawnPrompt },
+        },
+      ];
+      const root = await send([{ role: "user", content: "Split the work" }]);
+      expect(root.statusCode, root.body).toBe(200);
+      const [spawn] = released(root.body);
+      // A stamp is longer than the 64 characters Kimi Code keeps.
+      expect(spawn.id).toBe("Agent:0");
+      const prompt = JSON.parse(spawn.function.arguments).prompt as string;
+      expect(prompt).toMatch(
+        new RegExp(
+          `^${spawnPrompt.replace(".", "\\.")}\n\n\\[appa\\] delegated trajectory \\S+ — child of ${rootSession}\\.$`,
+        ),
+      );
+      expect(
+        events.some(
+          (event) =>
+            event.event === "tool_call" &&
+            event.tool === "Agent" &&
+            String(event.session_id).endsWith(`|${rootSession}`),
+        ),
+      ).toBe(true);
+
+      events.length = 0;
+      providerRequests.length = 0;
+      providerCalls = [
+        { id: "Bash:0", name: "Bash", args: { command: "npm run build" } },
+      ];
+      const child = await send([
+        { role: "system", content: "You are now running as a subagent." },
+        { role: "user", content: `${gitContext}${prompt}` },
+      ]);
+      expect(child.statusCode, child.body).toBe(200);
+      expect(
+        events.some(
+          (event) =>
+            event.event === "tool_call" &&
+            event.tool === "Bash" &&
+            String(event.session_id).endsWith(`|${rootSession}:Agent:0`),
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(providerRequests)).not.toContain(
+        "delegated trajectory",
+      );
+    });
+
+    test.each([
+      [
+        "Agent",
+        { description: "d", prompt: spawnPrompt, run_in_background: true },
+        "run_in_background",
+      ],
+      [
+        "Agent",
+        { description: "d", prompt: spawnPrompt, resume: "agent-0" },
+        "resume",
+      ],
+      [
+        "AgentSwarm",
+        { description: "d", prompt_template: "Check {{item}}", items: ["a"] },
+        "items",
+      ],
+    ] as const)("refuses a %s spawn a marker cannot bind (%j)", async (name, args, field) => {
+      providerCalls = [{ id: `${name}:0`, name, args }];
+      const response = await send([
+        { role: "user", content: "Split the work" },
+      ]);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(released(response.body)).toEqual([]);
+      expect(response.body).toContain(`does not accept`);
+      expect(response.body).toContain(field);
+      expect(
+        events.some(
+          (event) => event.event === "tool_call" && event.tool === name,
+        ),
+      ).toBe(false);
     });
   });
 

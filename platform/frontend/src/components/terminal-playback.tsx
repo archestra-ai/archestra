@@ -1,13 +1,21 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils/tailwind";
 import { TerminalRecordingBlock } from "./terminal-recording-block";
-import {
-  parseTerminalSize,
-  prepareTerminalRecording,
-} from "./terminal-recording-geometry";
+import { prepareTerminalRecording } from "./terminal-recording-geometry";
 import { inferTerminalRecordingLinks } from "./terminal-recording-links";
+import {
+  createTerminalReplayer,
+  type TerminalReplayer,
+} from "./terminal-recording-replay";
 import { snapshotTerminalRecording } from "./terminal-recording-snapshot";
 
 /**
@@ -31,6 +39,7 @@ export function TerminalPlayback({
   );
   const recordingRef = useRef(recording);
   recordingRef.current = recording;
+  const replayerRef = useRef<TerminalReplayer | null>(null);
   const lines = useMemo(() => {
     if (!snapshot) return [];
     const physical = snapshot.lines.map((line) => ({
@@ -95,27 +104,16 @@ export function TerminalPlayback({
       });
       initializedTerminal = terminal;
 
-      // Alternate buffers have no scrollback and are discarded on exit. Keep
-      // replay in the normal buffer so snapshots retain earlier output.
-      terminal.parser.registerCsiHandler(
-        { prefix: "?", final: "h" },
-        containsAlternateScreenMode,
-      );
-      terminal.parser.registerCsiHandler(
-        { prefix: "?", final: "l" },
-        containsAlternateScreenMode,
-      );
-
-      terminal.parser.registerOscHandler(777, (data) => {
-        const size = parseTerminalSize(data);
-        if (!size) return false;
-        terminal.resize(size.cols, size.rows);
-        return true;
-      });
+      // Alternate buffers have no scrollback and are discarded on exit. The
+      // replayer keeps replay in the normal buffer, so snapshots retain
+      // earlier output, and resizes xterm as tmux resized the recorded pane.
+      const replayer = createTerminalReplayer(terminal);
+      replayerRef.current = replayer;
 
       let rendered: TerminalRecording | null = null;
       let writing = false;
       let queued: TerminalRecording | null = null;
+      let failures = 0;
       const renderRecording = (next: TerminalRecording) => {
         if (disposed) return;
         if (writing) {
@@ -133,14 +131,16 @@ export function TerminalPlayback({
             : next.content;
         if (!append) {
           if (rendered) terminal.reset();
+          replayer.reset();
           terminal.resize(next.dimensions.cols, next.dimensions.rows);
         }
         rendered = next;
         writing = true;
-        // reset() does not discard xterm's pending write buffer. Drain it
-        // before seeking, otherwise old bytes can resurrect a later screen.
-        terminal.write(bytes, () => {
-          const finish = async () => {
+        // reset() does not discard xterm's pending write buffer. Every write
+        // completes before the next render starts, so a seek never meets old
+        // bytes that could resurrect a later screen.
+        void replayer.write(bytes).then(
+          async () => {
             if (disposed) return;
             let view: ReturnType<typeof snapshotTerminalRecording> | null =
               null;
@@ -170,6 +170,7 @@ export function TerminalPlayback({
             }
             if (disposed) return;
             writing = false;
+            failures = 0;
             if (queued) {
               const latest = queued;
               queued = null;
@@ -178,9 +179,23 @@ export function TerminalPlayback({
               inferTerminalRecordingLinks(view.lines);
               setSnapshot(view);
             }
-          };
-          void finish();
-        });
+          },
+          (error: unknown) => {
+            // A failed write leaves the buffer unknown: it is reset, and
+            // the next render replays from the start instead of appending.
+            // A recording that fails every replay is given up after a few.
+            console.error("Terminal recording replay failed", error);
+            if (disposed) return;
+            terminal.reset();
+            replayer.reset();
+            writing = false;
+            rendered = null;
+            const latest = queued ?? next;
+            queued = null;
+            if (failures++ >= MAX_REPLAY_RETRIES) return;
+            renderRecording(latest);
+          },
+        );
       };
       renderRecordingRef.current = renderRecording;
       renderRecording(recordingRef.current);
@@ -189,6 +204,7 @@ export function TerminalPlayback({
     void initialize();
     return () => {
       disposed = true;
+      replayerRef.current?.stop();
       initializedTerminal?.dispose();
       renderRecordingRef.current = null;
     };
@@ -203,6 +219,8 @@ export function TerminalPlayback({
   // while the reader is at the end. A reader who has scrolled up keeps their
   // place through later output and seeks.
   const viewportRef = useRef<HTMLDivElement>(null);
+  const glyphProbeRef = useRef<HTMLSpanElement>(null);
+  const cell = useCellSize(glyphProbeRef);
   const openedAtEnd = useRef(false);
   const atEnd = useRef(true);
   useEffect(() => {
@@ -240,17 +258,26 @@ export function TerminalPlayback({
         data-testid="terminal-playback"
         data-recorded-cols={snapshot?.cols}
         data-recorded-rows={snapshot?.rows}
-        style={
-          wrapLines
-            ? undefined
-            : { minWidth: snapshot ? `max(100%, ${snapshot.cols}ch)` : "100%" }
-        }
+        style={{
+          ...(cell ? { lineHeight: cell.rowHeight } : {}),
+          ...(wrapLines
+            ? {}
+            : {
+                minWidth: snapshot
+                  ? `max(100%, ${cell ? `${snapshot.cols * cell.width}px` : `${snapshot.cols}ch`})`
+                  : "100%",
+              }),
+        }}
       >
+        <span aria-hidden className="pointer-events-none invisible absolute">
+          <span ref={glyphProbeRef}>M</span>
+        </span>
         {blocks.map((block) => (
           <TerminalRecordingBlock
             key={block[0].row}
             lines={block}
             wrapLines={wrapLines}
+            cell={cell}
             virtualize={virtualize}
           />
         ))}
@@ -261,15 +288,55 @@ export function TerminalPlayback({
 
 // ===================== internals =====================
 
-const ALTERNATE_SCREEN_MODES = new Set([47, 1047, 1049]);
 const RETAINED_SCROLLBACK_LINES = 1_000_000;
+/** Replays retried after a failed write before the player gives up. */
+const MAX_REPLAY_RETRIES = 2;
 /** How close to the end still counts as "at the end" for following output. */
 const FOLLOW_END_SLACK_PX = 10;
 
 type TerminalRecording = ReturnType<typeof prepareTerminalRecording>;
 
-function containsAlternateScreenMode(params: (number | number[])[]): boolean {
-  return params.some(
-    (param) => typeof param === "number" && ALTERNATE_SCREEN_MODES.has(param),
-  );
+/**
+ * The cell of xterm's own renderer: the font's glyph box and advance, in px,
+ * and the box as a line height relative to the font. The document's 1.2 line
+ * height is taller than that box, and an inline background or a
+ * line-drawing character covers only the box, so a highlighted block showed
+ * dark seams between its rows and borders and dividers broke into dashes. The
+ * advance is the browser's own, already a whole number of its layout units,
+ * so a run sized in whole cells ends on the same grid however its row is
+ * split. The probe is observed, so a player shown after it mounts is
+ * measured; browser zoom changes the layout units and fires a resize. Null
+ * until measured.
+ */
+function useCellSize(
+  glyphProbeRef: RefObject<HTMLSpanElement | null>,
+): { width: number; height: number; rowHeight: string } | null {
+  const [cell, setCell] = useState<{
+    width: number;
+    height: number;
+    rowHeight: string;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const probe = glyphProbeRef.current;
+    if (!probe) return;
+    const measure = () => {
+      const { height, width } = probe.getBoundingClientRect();
+      const fontSize = Number.parseFloat(getComputedStyle(probe).fontSize);
+      if (height <= 0 || width <= 0 || !(fontSize > 0)) return;
+      setCell((previous) =>
+        previous?.width === width && previous.height === height
+          ? previous
+          : { width, height, rowHeight: `${height / fontSize}em` },
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(probe);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [glyphProbeRef]);
+  return cell;
 }

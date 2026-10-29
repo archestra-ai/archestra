@@ -1191,6 +1191,33 @@ describe("GeminiStreamAdapter", () => {
       expect(response.usageMetadata?.candidatesTokenCount).toBe(5);
     });
 
+    test("retains served traffic type when reconstructing a stream", () => {
+      const adapter = geminiAdapterFactory.createStreamAdapter();
+      adapter.processChunk({
+        usageMetadata: {
+          trafficType: "ON_DEMAND_PRIORITY",
+          promptTokenCount: 10,
+        },
+      } as GeminiStreamChunk);
+      adapter.processChunk({
+        candidates: [
+          {
+            content: { role: "model", parts: [{ text: "Hello" }] },
+            finishReason: FinishReason.STOP,
+            index: 0,
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 10,
+          candidatesTokenCount: 2,
+          totalTokenCount: 12,
+        },
+      } as GeminiStreamChunk);
+      expect(adapter.toProviderResponse().usageMetadata?.trafficType).toBe(
+        "ON_DEMAND_PRIORITY",
+      );
+    });
+
     test("reports gross promptTokenCount and republishes cachedContentTokenCount", () => {
       const adapter = geminiAdapterFactory.createStreamAdapter();
 

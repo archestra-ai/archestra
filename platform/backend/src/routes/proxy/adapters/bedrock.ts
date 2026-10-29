@@ -70,7 +70,8 @@ type BedrockCommandContext = {
       | {
           tools:
             | Array<{
-                toolSpec:
+                cachePoint?: { type: "default"; ttl?: string };
+                toolSpec?:
                   | {
                       name?: string;
                       description?: string;
@@ -683,18 +684,28 @@ class BedrockRequestAdapter
   getTools(): CommonMcpToolDefinition[] {
     if (!this.request.toolConfig?.tools) return [];
 
-    return this.request.toolConfig.tools.map((tool) => ({
-      name: tool.toolSpec?.name ?? "",
-      description: tool.toolSpec?.description,
-      inputSchema: (tool.toolSpec?.inputSchema?.json ?? {}) as Record<
-        string,
-        unknown
-      >,
-    }));
+    return this.request.toolConfig.tools.flatMap((tool) =>
+      tool.toolSpec
+        ? [
+            {
+              name: tool.toolSpec?.name ?? "",
+              description: tool.toolSpec?.description,
+              inputSchema: (tool.toolSpec?.inputSchema?.json ?? {}) as Record<
+                string,
+                unknown
+              >,
+            },
+          ]
+        : [],
+    );
   }
 
   hasTools(): boolean {
-    return (this.request.toolConfig?.tools?.length ?? 0) > 0;
+    return (
+      this.request.toolConfig?.tools?.some(
+        (tool) => tool.toolSpec !== undefined,
+      ) ?? false
+    );
   }
 
   getProviderMessages(): BedrockMessages {
@@ -1286,6 +1297,11 @@ class BedrockStreamAdapter
         this.currentToolCallIndex === this.state.toolCalls.length - 1;
 
       if (isToolBlock) {
+        // A tool called with no input streams only an empty `input` delta;
+        // its input is `{}`, not the empty string policy evaluation would
+        // reject.
+        const call = this.state.toolCalls[this.currentToolCallIndex];
+        if (call.arguments === "") call.arguments = "{}";
         this.state.rawToolCallEvents.push(chunk);
         isToolCallChunk = true;
       } else {
@@ -1758,23 +1774,31 @@ function buildBedrockCommandContext(
       additionalModelRequestFields: request.additionalModelRequestFields,
       toolConfig: request.toolConfig
         ? {
-            tools: request.toolConfig.tools?.map((t) => ({
-              toolSpec: t.toolSpec
-                ? {
-                    name: t.toolSpec.name
-                      ? getProviderToolName(t.toolSpec.name, toolNameMapping, {
-                          isNova: shouldEncodeHyphens,
-                        })
-                      : t.toolSpec.name,
-                    description: t.toolSpec.description,
-                    inputSchema: t.toolSpec.inputSchema
+            tools: request.toolConfig.tools?.map((t) =>
+              t.cachePoint
+                ? { cachePoint: t.cachePoint }
+                : {
+                    toolSpec: t.toolSpec
                       ? {
-                          json: t.toolSpec.inputSchema.json,
+                          name: t.toolSpec.name
+                            ? getProviderToolName(
+                                t.toolSpec.name,
+                                toolNameMapping,
+                                {
+                                  isNova: shouldEncodeHyphens,
+                                },
+                              )
+                            : t.toolSpec.name,
+                          description: t.toolSpec.description,
+                          inputSchema: t.toolSpec.inputSchema
+                            ? {
+                                json: t.toolSpec.inputSchema.json,
+                              }
+                            : undefined,
                         }
                       : undefined,
-                  }
-                : undefined,
-            })),
+                  },
+            ),
             toolChoice: encodeProviderToolChoiceName({
               toolChoice: request.toolConfig.toolChoice,
               mapping: toolNameMapping,

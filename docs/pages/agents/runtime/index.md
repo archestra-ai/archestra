@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-23
+lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,12 +14,12 @@ Agent Runtime becomes available when your Kubernetes cluster serves the Agent Sa
 
 A run uses the agent's instructions, tools, skills, and permissions. Its model calls go through the [LLM Proxy](/docs/llm-proxy) and its tools through the [MCP Gateway](/docs/mcp/gateway), so logs, guardrails, and cost limits apply.
 
-![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, OpenClaw, and Grok Build under Agent Runtimes](/docs/automated_screenshots/agents-runtime_create-agent.webp)
+![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok Build, and Kimi Code under Agent Runtimes](/docs/automated_screenshots/agents-runtime_create-agent.webp)
 
 ## Create an Agent With a Dedicated Runtime
 
 1. Go to **Agents** and click **Add Agent**.
-2. Under **Agent Runtimes**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, **OpenClaw**, or **Grok Build**. The agent opens prefilled.
+2. Under **Agent Runtimes**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, **OpenClaw**, **Grok Build**, or **Kimi Code**. The agent opens prefilled.
 3. Review **Runtime** on the **Configuration** step. An attention icon marks a setting you must fix. Hover over it to see what to change.
 4. Click **Create and run**, or **Continue setup** to add tools, skills, and knowledge first.
 
@@ -52,11 +52,12 @@ Each run gets a temporary virtual key. Provider keys stay in Archestra.
 - **Claude Code:** your Claude Pro or Max subscription, or an API key for Anthropic, Amazon Bedrock, or Anthropic on Vertex AI.
 - **Codex:** your ChatGPT subscription, connected under **Model Providers**. An OpenAI API key does not replace it.
 - **Grok Build:** your SuperGrok subscription, connected under **Model Providers**, or an xAI API key. Pick an xAI model, such as `grok-4.7`.
+- **Kimi Code:** a Kimi Code membership key, added as a Kimi Code key under **Model Providers**, for yourself or shared with a team. Pick a Kimi Code model, such as `k3.1-pro`.
 - **Other agents:** any [model provider](/docs/llm-proxy/providers) configured in Archestra.
 
 What to know:
 
-- Each person connects their own subscription before their first run. Subscription usage shows in the logs, but it does not count toward cost limits.
+- Each person connects their own Claude, ChatGPT or SuperGrok subscription before their first run. Subscription usage, Kimi Code included, shows in the logs, but it does not count toward cost limits.
 - Claude subscription runs use Opus unless you select another **Model**. **Claude account default** follows Claude Code's choice for your account.
 - Tools run with the permissions of the person who started the run.
 
@@ -183,4 +184,4 @@ What to know:
   - `500` with `x-should-retry: false`: an administrator must fix the policy or the deployment setting the message names, or report the reference it carries.
   - `503`: a short outage. The client retries on its own.
 - **A model call fails with HTTP 400 and names `X-Archestra-Runtime-Binding`:** the agent's image does not send the [run headers](/docs/agents/runtime/custom-images#send-the-run-headers). Rebuild it on a current maintained image, then start a new run.
-- **Find a run's traffic:** LLM Proxy Logs and MCP Gateway Logs show the run ID. For health metrics, see [Agent Runtime Health](/docs/admin/observability/metrics#agent-runtime-health).
+- **Find a run's traffic:** LLM Proxy Logs and MCP Gateway Logs show the run ID. For health metrics, see [Agent Runtime Health](/docs/admin/observability/metrics/agent-runtime).

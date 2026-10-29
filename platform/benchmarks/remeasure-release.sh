@@ -33,7 +33,7 @@ status=0
   env -i PATH="$PATH" HOME="$HOME" CI=true NPM_CONFIG_USERCONFIG=/dev/null \
     pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
   env -i PATH="$PATH" HOME="$HOME" CARGO_TARGET_DIR="$platform_root/archestra-rs/target" \
-    bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2
+    bash benchmarks/ci.sh --requests=300 --stream-requests=300 --repeats=2
 ) > benchmarks/results/release/run.log 2>&1 || status=$?
 cp "$release_platform"/benchmarks/results/*.log benchmarks/results/release/ 2>/dev/null || true
 if [[ -f "$release_platform/benchmarks/results/ci/report.json" ]]; then

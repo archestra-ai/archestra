@@ -8,10 +8,18 @@ import { formatCompact, formatCost, formatInt } from "./cost-explorer.query";
 const sum = (values: number[]) =>
   values.reduce((total, value) => total + value, 0);
 export function fmtMetric(
-  metric: "billed" | "subscription" | "requests" | "tokens",
+  metric:
+    | "billed"
+    | "subscription"
+    | "requests"
+    | "tokens"
+    | "cacheRead"
+    | "cacheWrite"
+    | "cacheSavings",
   n: number,
   precise = false,
 ) {
+  if (metric === "cacheSavings") return formatCost(n);
   if (metric === "billed" || metric === "subscription") {
     return precise && n < 1000 ? `$${n.toFixed(2)}` : formatCost(n);
   }

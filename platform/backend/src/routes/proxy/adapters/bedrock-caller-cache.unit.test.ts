@@ -65,7 +65,7 @@ describe("explicit Bedrock caller caching", () => {
           { preserveContentParts: true },
         ).chatBody,
       ),
-    ).toThrow(/Bedrock/);
+    ).toThrow(/cache_control/);
   });
 
   test.each([
@@ -360,4 +360,27 @@ describe("Bedrock gross usage on each translated transport", () => {
       JSON.parse(new TextDecoder().decode(event ?? undefined).slice(6)).usage,
     ).toEqual(response.usage);
   });
+});
+
+test("rejects conflicting Bedrock tool markers and preserves matching boundaries", () => {
+  const tool = {
+    type: "function",
+    cache_control: { type: "ephemeral", ttl: "5m" },
+    function: {
+      name: "lookup",
+      parameters: {},
+      cache_control: { type: "ephemeral", ttl: "1h" },
+    },
+  };
+  expect(() =>
+    translate([{ role: "user", content: "question" }], { tools: [tool] }),
+  ).toThrow(/Conflicting.*cache_control/);
+  tool.function.cache_control.ttl = "5m";
+  expect(
+    translate([{ role: "user", content: "question" }], { tools: [tool] })
+      .toolConfig?.tools,
+  ).toEqual([
+    { toolSpec: { name: "lookup", inputSchema: { json: {} } } },
+    { cachePoint: { type: "default", ttl: "5m" } },
+  ]);
 });

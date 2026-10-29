@@ -78,6 +78,7 @@ original = {'appliedId': 'previous', 'entries': [{'id': 'previous', 'name': 'Exi
 (library / '_meta.json').write_text(json.dumps(original))
 token = '${auth === "virtual-key" ? "archestra-test-key" : "sk-ant-oat01-test-subscription"}'
 calls = []
+reject_cached_once = [False]
 def native(args, **kwargs):
     calls.append(args)
     # Desktop may reject the Apple event while the user quits through its menu.
@@ -86,8 +87,12 @@ def native(args, **kwargs):
         stdout=('Token: ' + token) if 'setup-token' in args else '')
 def upstream(request, **kwargs):
     assert request.get_header('Authorization') == 'Bearer ' + token
+    assert uuid.UUID(request.get_header('X-claude-code-session-id'))
     assert request.get_header('X-archestra-virtual-key') == ${auth === "provider-key" ? "'archestra-test-user'" : "None"}
     assert request.get_header('Anthropic-beta') == ${auth === "provider-key" ? "'oauth-2025-04-20'" : "None"}
+    if reject_cached_once[0]:
+        reject_cached_once[0] = False
+        raise urllib.error.HTTPError(request.full_url, 429, 'quota', {}, None)
     if ${quotaFailure ? "True" : "False"}:
         raise urllib.error.HTTPError(request.full_url, 429, 'quota', {}, None)
     return io.StringIO(json.dumps({'type':'message','content':[{'type':'text','text':'OK'}]}))
@@ -118,17 +123,35 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
             assert profile['inferenceGatewayApiKey'] == token
             assert profile['modelDiscoveryEnabled'] is True
             assert 'inferenceModels' not in profile
+            assert profile['coworkEgressAllowedHosts'] == ['*']
             assert profile['claudeAiImport'] == {'enabled': True, 'bannerBehavior': 'show'}
             assert profile['inferenceCustomHeaders'].get('X-Archestra-Virtual-Key') == ${auth === "provider-key" ? "'archestra-test-user'" : "None"}
+            assert 'X-Claude-Code-Session-Id' not in profile['inferenceCustomHeaders']
         else:
             assert 'inferenceProvider' not in profile
+            assert 'coworkEgressAllowedHosts' not in profile
             assert 'claudeAiImport' not in profile
         assert 'source' not in profile['managedMcpServers'][0]
         assert profile['managedMcpServers'][0]['oauth'] == {'mode': 'dcr'}
         assert profile['managedMcpServers'][0]['url'] == 'https://proxy.example/v1/mcp/test'
+        expected_appa_rules = [
+            'mcp__test-gateway__archestra__run_tool',
+            'mcp__test-gateway__archestra__get_remedy_plans',
+            'mcp__test-gateway__archestra__execute_remedy_plan',
+            'mcp__test-gateway__archestra__list_peer_messages',
+            'mcp__test-gateway__archestra__read_peer_message',
+            'mcp__test-gateway__archestra__yell',
+            'mcp__test-gateway__archestra__ask_user',
+        ]
+        assert json.loads((home / '.claude/settings.json').read_text())['permissions']['allow'] == expected_appa_rules
+        assert json.loads((home / '.archestra/claude-appa-permissions.json').read_text()) == {'test-gateway': expected_appa_rules}
         assert profile_path.stat().st_mode & 0o777 == 0o600
         assert json.loads((library / '_meta.json.before-archestra').read_text()) == original
         assert sum('setup-token' in args for args in calls) == ${auth === "provider-key" ? 1 : 0}
+        if ${auth === "provider-key" ? "True" : "False"}:
+            reject_cached_once[0] = True
+            runpy.run_path(str(root / 'installer.py'))
+            assert sum('setup-token' in args for args in calls) == 2
         assert json.loads((library.parent / 'claude_desktop_config.json').read_text()).get('deploymentMode') == ${auth === "none" ? "'1p'" : "'3p'"}
         # Migrate a profile made by the older per-deployment installer.
         legacy_id = str(uuid.uuid5(uuid.NAMESPACE_URL, 'archestra-desktop:https://proxy.example/v1/mcp/test'))
@@ -154,7 +177,7 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
         assert replaced_profile['managedMcpServers'][0]['oauth'] == {'mode': 'dcr'}
         assert replaced_profile['managedMcpServers'][0]['url'] == 'https://replacement.example/v1/mcp/test'
         assert 'proxy.example' not in json.dumps(replaced_profile)
-        assert sum('setup-token' in args for args in calls) == ${auth === "provider-key" ? 1 : 0}
+        assert sum('setup-token' in args for args in calls) == ${auth === "provider-key" ? 2 : 0}
         module['main'].__globals__['SETUP']['runtimeHandoffInstructions'] = 'x' * 3000
         module['main']()
         saved_profile = profile_path.read_bytes()
@@ -174,6 +197,8 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
         module['main'].__globals__['SETUP']['skills'] = None
         module['main']()
         assert 'managedMcpServers' not in json.loads(profile_path.read_text())
+        assert json.loads((home / '.claude/settings.json').read_text())['permissions']['allow'] == []
+        assert json.loads((home / '.archestra/claude-appa-permissions.json').read_text()) == {}
         module['main'].__globals__['SETUP']['proxy'] = None
         module['main']()
         assert json.loads(profile_path.read_text()) == {}
@@ -299,6 +324,115 @@ with patch('sys.platform', 'darwin'), patch('subprocess.Popen') as desktop_proce
       expect(result.stderr).toContain("Could not reach the shared marketplace");
       expect(result.stderr).not.toContain("Traceback");
     }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Desktop setup preserves user permissions, migrates legacy APPA rules, and rejects invalid Claude settings before stopping Desktop", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "desktop-appa-perms-"));
+  const context: SetupScriptContext = {
+    clientId: "claude-desktop",
+    platform: "macos",
+    appName: "Test Platform",
+    proxy: null,
+    mcp: {
+      serverName: "archestra",
+      toolPrefix: "archestra__",
+      legacyServerNames: ["legacy_gw"],
+      url: "https://proxy.example/v1/mcp/test",
+    },
+    skills: null,
+  };
+  const script = renderSetupScript(context)
+    .split("python3 <<'ARCHESTRA_DESKTOP_PY'\n")[1]
+    .split("\nARCHESTRA_DESKTOP_PY")[0];
+  try {
+    await writeFile(path.join(directory, "installer.py"), script);
+    await writeFile(
+      path.join(directory, "test.py"),
+      `
+import base64, json, os, pathlib, runpy, subprocess, urllib.request
+from unittest.mock import patch
+root = pathlib.Path(__file__).parent
+home = root / 'home'
+(home / 'Applications/Claude.app').mkdir(parents=True)
+library = home / 'Library/Application Support/Claude-3p/configLibrary'
+library.mkdir(parents=True)
+original_meta = {'appliedId': 'previous', 'entries': [{'id': 'previous', 'name': 'Existing profile'}]}
+(library / '_meta.json').write_text(json.dumps(original_meta))
+settings_path = home / '.claude/settings.json'
+state_path = home / '.archestra/claude-appa-permissions.json'
+settings_path.parent.mkdir(parents=True)
+state_path.parent.mkdir(parents=True)
+initial_settings = {
+    'theme': 'dark',
+    'permissions': {
+        'allow': [
+            'Bash(git status)',
+            'mcp__legacy_gw__archestra__run_tool',
+            'mcp__archestra__archestra__ask_user',
+        ],
+        'deny': ['Bash(rm -rf *)'],
+    },
+}
+settings_path.write_text('\ufeff' + json.dumps(initial_settings), encoding='utf-8')
+state_path.write_text('\ufeff' + json.dumps({
+    'legacy_gw': ['mcp__legacy_gw__archestra__run_tool'],
+    'other_gw': ['mcp__other_gw__archestra__run_tool'],
+}), encoding='utf-8')
+calls = []
+def native(args, **kwargs):
+    calls.append(args)
+    return subprocess.CompletedProcess(args, 1 if args[0] == 'pgrep' else 0, stdout='')
+with patch('sys.platform', 'darwin'), patch('subprocess.Popen') as desktop_process, patch('time.sleep'), patch('pathlib.Path.home', return_value=home), patch('subprocess.run', side_effect=native):
+    desktop_process.return_value.wait.return_value = 0
+    runpy.run_path(str(root / 'installer.py'))
+    assert json.loads(settings_path.with_name('settings.json.archestra-backup').read_text(encoding='utf-8-sig')) == initial_settings
+    updated_settings = json.loads(settings_path.read_text())
+    assert updated_settings['theme'] == 'dark'
+    assert updated_settings['permissions']['deny'] == ['Bash(rm -rf *)']
+    assert 'Bash(git status)' in updated_settings['permissions']['allow']
+    assert 'mcp__legacy_gw__archestra__run_tool' not in updated_settings['permissions']['allow']
+    expected_rules = [
+        'mcp__archestra__archestra__run_tool',
+        'mcp__archestra__archestra__get_remedy_plans',
+        'mcp__archestra__archestra__execute_remedy_plan',
+        'mcp__archestra__archestra__list_peer_messages',
+        'mcp__archestra__archestra__read_peer_message',
+        'mcp__archestra__archestra__yell',
+        'mcp__archestra__archestra__ask_user',
+    ]
+    for rule in expected_rules:
+        assert rule in updated_settings['permissions']['allow']
+    updated_state = json.loads(state_path.read_text())
+    assert 'legacy_gw' not in updated_state
+    assert updated_state['other_gw'] == ['mcp__other_gw__archestra__run_tool']
+    # User-owned mcp__archestra__archestra__ask_user stays user-owned (not in installer ledger)
+    assert 'mcp__archestra__archestra__ask_user' not in updated_state['archestra']
+    assert len(updated_state['archestra']) == 6
+    ant_did = base64.b64decode((library.parent / 'ant-did').read_text().strip()).decode('utf-8')
+    cowork_scope = library.parent / 'local-agent-mode-sessions' / ant_did[:8] / '00000000'
+    cowork_settings = json.loads((cowork_scope / 'cowork_settings.json').read_text())
+    assert cowork_settings['enabledPlugins']['archestra-appa-permissions@local-desktop-app-uploads'] is True
+    installed_plugins = json.loads((cowork_scope / 'cowork_plugins/installed_plugins.json').read_text())
+    assert installed_plugins['plugins']['archestra-appa-permissions@local-desktop-app-uploads'][0]['version'] == '1.0.0'
+    hooks_cfg = json.loads((cowork_scope / 'cowork_plugins/marketplaces/local-desktop-app-uploads/archestra-appa-permissions/hooks/hooks.json').read_text())
+    assert hooks_cfg['hooks']['PreToolUse'][0]['matcher'].startswith('^mcp__archestra__archestra__(')
+    # Malformed settings.json aborts before stopping Desktop or modifying profile files
+    calls.clear()
+    settings_path.write_text('{invalid json')
+    meta_before = (library / '_meta.json').read_text()
+    try:
+        runpy.run_path(str(root / 'installer.py'))
+        raise AssertionError('Expected malformed settings.json to fail setup')
+    except SystemExit as error:
+        assert error.code == 1
+    assert not any(args[0] == 'osascript' for args in calls)
+    assert (library / '_meta.json').read_text() == meta_before
+`,
+    );
+    await exec("python3", [path.join(directory, "test.py")]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

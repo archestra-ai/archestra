@@ -1,7 +1,7 @@
 "use strict";
 
 // Shared scaffolding for the hand-maintained `index.cjs` loaders of the NAPI
-// cdylib crates (app-runtime-rs, sandbox-rs, image-rs). Each crate's loader is
+// cdylib crates (app-runtime-rs, sandbox-rs, image-rs, router-rs). Each crate's loader is
 // identical apart from its crate/package name and which functions it exports
 // (sync vs async), so that boilerplate lives here — one place to fix the
 // platform-triple resolution and the panic→Error normalization.

@@ -11,6 +11,7 @@ import {
   Files,
   FolderKanban,
   KeyRound,
+  Layers,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
@@ -19,6 +20,7 @@ import {
   Puzzle,
   Route,
   Settings,
+  Shuffle,
   Sparkles,
   Waypoints,
 } from "lucide-react";
@@ -37,6 +39,9 @@ import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
  * Messaging Channels, six pages missing outright, and no permission gating at
  * all, so it offered pages the reader could not open.
  */
+
+/** Shown only while the deployment enables the auto routing alpha. */
+export const AUTO_ROUTING_URL = "/llm/auto-routing";
 
 export interface NavSubItem {
   title: string;
@@ -244,6 +249,16 @@ export const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/llm/models"),
       },
       {
+        title: "Model Pools",
+        url: "/llm/model-pools",
+        icon: Layers,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/llm/model-pools"),
+        // Shown only while ARCHESTRA_LLM_MODEL_POOLS_ENABLED is on (sidebar).
+        beta: true,
+        badgeLabel: "Beta",
+      },
+      {
         // The one row in this list that still covers two pages. Costs and
         // Limits share a tab bar and the row would otherwise push the group
         // to eight; `getCostsNavigationUrl` picks which of the two it opens
@@ -254,6 +269,15 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith("/llm/costs") || pathname === "/llm/limits",
         permissionUrls: ["/llm/costs", "/llm/limits"],
+      },
+      {
+        title: "Auto Routing",
+        url: AUTO_ROUTING_URL,
+        icon: Shuffle,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith(AUTO_ROUTING_URL),
+        beta: true,
+        badgeLabel: "Alpha",
       },
     ],
   },

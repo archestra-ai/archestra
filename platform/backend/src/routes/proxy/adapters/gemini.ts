@@ -9,6 +9,7 @@ import {
   type HarmCategory,
   type HarmProbability,
   type Part,
+  type TrafficType,
 } from "@google/genai";
 import { get } from "lodash-es";
 import { createGoogleGenAIClient } from "@/clients/gemini-client";
@@ -648,6 +649,7 @@ class GeminiStreamAdapter
   readonly state: StreamAccumulatorState;
   private readonly toolNameCodec: GeminiToolNameCodec;
   private model: string = "";
+  private trafficType: TrafficType | undefined;
   private inlineDataParts: Gemini.Types.MessagePart[] = [];
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal, so toProviderResponse persists the refusal (finishReason STOP, no
@@ -701,6 +703,7 @@ class GeminiStreamAdapter
 
     // Handle usage metadata
     if (chunk.usageMetadata) {
+      this.trafficType = chunk.usageMetadata.trafficType ?? this.trafficType;
       const cacheReadTokens = chunk.usageMetadata.cachedContentTokenCount ?? 0;
       this.state.usage = {
         inputTokens: Math.max(
@@ -980,6 +983,7 @@ class GeminiStreamAdapter
       // only the uncached remainder as its entire prompt.
       usageMetadata: this.state.usage
         ? {
+            ...(this.trafficType ? { trafficType: this.trafficType } : {}),
             promptTokenCount:
               this.state.usage.inputTokens +
               (this.state.usage.cacheReadTokens ?? 0),
@@ -1333,6 +1337,10 @@ export function restToSdkGenerateContentParams(
     params.config.systemInstruction = { ...body.systemInstruction };
   }
 
+  if (body.cachedContent !== undefined) {
+    params.config.cachedContent = body.cachedContent;
+  }
+
   return params as GenerateContentParameters;
 }
 
@@ -1389,6 +1397,7 @@ export const geminiAdapterFactory: LLMProvider<
       options.baseUrl,
       options.model,
       options.googleUserProject,
+      options.defaultHeaders,
     );
 
     // Wrap with observability for request duration metrics

@@ -12,7 +12,6 @@ import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useSession } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
@@ -58,7 +57,7 @@ export function ProviderAuthRequiredCard({
   // ChatGPT mode, since the provider itself is not per-user. Anything else
   // falls back to the Model Providers link.
   const subscriptionKind = subscriptionKindForProvider(provider);
-  const byosEnabled = useFeature("byosEnabled") === true;
+
   // The user's existing personal key for this subscription, if any. A sign-in
   // then RECONNECTS that key in place instead of minting a duplicate row: the
   // card most often appears because an existing key's sign-in expired, and a
@@ -76,6 +75,7 @@ export function ProviderAuthRequiredCard({
             currentUserId !== undefined &&
             key.userId === currentUserId &&
             key.provider === provider &&
+            !key.isGithubAppKey &&
             (SUBSCRIPTION_CREDENTIALS[subscriptionKind].marker === null ||
               subscriptionKindFromKeyMetadata(key) === subscriptionKind),
         )
@@ -104,17 +104,7 @@ export function ProviderAuthRequiredCard({
           </InlineNoticeText>
         </div>
 
-        {subscriptionKind && byosEnabled ? (
-          // Not a nested <InlineNotice>: the card around it is already the
-          // alert, so a second one would draw a box inside a box and have a
-          // screen reader announce the same notice twice.
-          <InlineNoticeText className="block">
-            Subscription sign-in is unavailable because this deployment uses a
-            read-only external Vault. Ask an administrator to use managed secret
-            storage, or choose an agent/model that does not require this exact
-            personal subscription.
-          </InlineNoticeText>
-        ) : subscriptionKind ? (
+        {subscriptionKind ? (
           <SubscriptionSignIn
             kind={subscriptionKind}
             disabled={createKey.isPending || reconnectKey.isPending}

@@ -63,6 +63,16 @@ describe("config routes", () => {
     expect(on.json().features.devFeedbackEnabled).toBe(true);
   });
 
+  test("advertises auto routing only when its flag is set", async () => {
+    config.autoRouting.enabled = true;
+    const on = await app.inject({ method: "GET", url: "/api/config" });
+    config.autoRouting.enabled = false;
+    const off = await app.inject({ method: "GET", url: "/api/config" });
+
+    expect(off.json().features.autoRoutingEnabled).toBe(false);
+    expect(on.json().features.autoRoutingEnabled).toBe(true);
+  });
+
   test.for([
     1, 2,
   ])("returns public config without authentication for isolated database %s", async () => {
@@ -151,7 +161,7 @@ describe("config routes", () => {
 
     expect(payload.features).toMatchObject({
       orchestratorK8sRuntime: expect.any(Boolean),
-      byosEnabled: expect.any(Boolean),
+
       azureOpenAiEntraIdEnabled: expect.any(Boolean),
       bedrockIamAuthEnabled: expect.any(Boolean),
       geminiVertexAiEnabled: expect.any(Boolean),
@@ -171,7 +181,6 @@ describe("config routes", () => {
       mcpIdleHibernationBetaEnabled: expect.any(Boolean),
       // SPDX-SnippetEnd
     });
-    expect([null, "1", "2"]).toContain(payload.features.byosVaultKvVersion);
     expect(typeof payload.features.incomingEmail.enabled).toBe("boolean");
     expect(["string", "undefined"]).toContain(
       typeof payload.features.incomingEmail.provider,
@@ -200,6 +209,7 @@ describe("config routes", () => {
       "groq",
       "jev",
       "kimi",
+      "kimi-code",
       "microsoft-365-copilot",
       "minimax",
       "mistral",

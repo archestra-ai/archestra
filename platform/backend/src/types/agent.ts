@@ -3,6 +3,7 @@ import {
   BUILT_IN_AGENT_IDS,
   CreatedByNullableSchema,
   DOMAIN_VALIDATION_REGEX,
+  GitHubActionsAccessSchema,
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
   IncomingEmailSecurityModeSchema,
@@ -10,6 +11,7 @@ import {
   MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPTS,
   ResourcePermissionGrantSchema,
+  StoredGitHubActionsAccessSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import {
@@ -189,6 +191,12 @@ const selectExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
+  /**
+   * MCP gateways' GitHub Actions token exchange setting. Optional, like
+   * `lastUsedAt`, so agent objects built in code without it still fit. Read
+   * without the entry rules, so a row saved under other rules still loads.
+   */
+  githubActionsAccess: StoredGitHubActionsAccessSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable(),
   activationSkillMode: AgentActivationSkillModeSchema,
   /**
@@ -208,6 +216,7 @@ const insertExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
+  githubActionsAccess: GitHubActionsAccessSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable().optional(),
   activationSkillMode: AgentActivationSkillModeSchema.optional(),
 };
@@ -262,10 +271,22 @@ function validateIncomingEmailDomain(
   }
 }
 
+/** Internal state written only by AutoRoutingSettingsModel, under the routing-plan lock; never read or written through agent payloads. */
+const AUTO_ROUTING_COLUMNS = {
+  autoRoutingEnabled: true,
+  autoRoutingBudgetUsdPerDay: true,
+  autoRoutingFastModelId: true,
+  autoRoutingNormalModelId: true,
+  autoRoutingSmartModelId: true,
+  autoRoutingScorerVersionId: true,
+  autoRoutingGeneration: true,
+  autoRoutingPlannedGeneration: true,
+} as const;
+
 const AgentRowSchema = createSelectSchema(
   schema.agentsTable,
   selectExtendedFields,
-);
+).omit(AUTO_ROUTING_COLUMNS);
 
 /**
  * Hot-path agent shape for the MCP gateway: the raw agents row plus labels,
@@ -379,6 +400,7 @@ export const ChatAgentRosterSchema = SelectAgentSchema.pick({
   runtime: true,
   modelId: true,
   llmApiKeyId: true,
+  modelPoolId: true,
 });
 export type ChatAgentRoster = z.infer<typeof ChatAgentRosterSchema>;
 
@@ -510,6 +532,10 @@ export const InsertAgentSchemaBase = createInsertSchema(
     latestVersion: true,
     // Stamped by AgentUsageModel when the agent is used; never client-settable.
     lastUsedAt: true,
+    ...AUTO_ROUTING_COLUMNS,
+    // Set on an existing gateway by the update route, which checks the
+    // editor may use the GitHub App it names. A new agent starts without it.
+    githubActionsAccess: true,
   });
 
 // Full schema with validation refinement
@@ -576,6 +602,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     latestVersion: true,
     // Stamped by AgentUsageModel when the agent is used; never client-settable.
     lastUsedAt: true,
+    ...AUTO_ROUTING_COLUMNS,
   });
 
 // Full schema with validation refinement

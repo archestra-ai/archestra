@@ -25,6 +25,7 @@ import {
   EyeIcon,
   FileTextIcon,
   KeyRoundIcon,
+  LayersIcon,
   LogInIcon,
   type LucideIcon,
   RotateCcwIcon,
@@ -47,6 +48,7 @@ import {
 import { AgentIcon } from "@/components/agent-icon";
 import { agentListHref } from "@/components/agent-pages/agent-page-config";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
+import { ProviderIcon } from "@/components/provider-icon";
 import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,6 +58,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { OverlappedIcons } from "@/components/ui/overlapped-icons";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import {
@@ -67,7 +70,14 @@ import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import type { LlmModel } from "@/lib/llm-models.query";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
+import type { AvailableModelPool } from "@/lib/model-pools.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
+import {
+  isOrganizationSubscription,
+  ORGANIZATION_SUBSCRIPTIONS_HEADING,
+  organizationSubscriptionName,
+  organizationSubscriptionSubtitle,
+} from "@/lib/organization-subscription";
 import { logoNameForProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -102,6 +112,10 @@ export interface ChatSetupMenuProps {
   subscriptionSignInTitle: string;
   thinkingEffort: ThinkingEffortSetting;
   onThinkingEffortChange?: (effort: ThinkingEffortSetting) => void;
+  /** The model pool the chat is set to, in place of a key and model. */
+  modelPoolId?: string | null;
+  /** Null leaves the pool for the chat's key and model. */
+  onModelPoolChange?: (modelPoolId: string | null) => void;
   toolsUnavailable: boolean;
   notRecommendedForAgents: boolean;
 }
@@ -111,7 +125,9 @@ export interface ChatSetupMenuProps {
  * shows its current value (model, agent, key). The list below holds the
  * active tab's choices, so every change is one surface and one click.
  * Picking a model or agent closes the menu; picking a key keeps it open on
- * the model tab, since the key decides which models exist.
+ * the model tab, since the key decides which models exist. A model pool sits
+ * with the keys and closes the menu too: the pool picks the key and model, so
+ * there is no Model tab while one is in use.
  */
 export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
   const [query, setQuery] = useState("");
@@ -132,6 +148,8 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
         const connected = data.keys.filter(
           (key) =>
             key.provider === spec.provider &&
+            // An organization GitHub App key is a provider key, not a sign-in.
+            !key.isGithubAppKey &&
             (spec.marker === null ||
               subscriptionKindFromKeyMetadata(key) === kind),
         );
@@ -148,10 +166,17 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
       data.keySections
         .map((section) => ({
           ...section,
-          keys: section.keys.filter((key) => !isPersonalSubscription(key)),
+          keys: section.keys.filter(
+            (key) =>
+              !isPersonalSubscription(key) && !isOrganizationSubscription(key),
+          ),
         }))
         .filter((section) => section.keys.length > 0),
     [data.keySections],
+  );
+  const organizationSubscriptions = useMemo(
+    () => data.keys.filter(isOrganizationSubscription),
+    [data.keys],
   );
   const [active, setActive] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -161,7 +186,10 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
 
   // ---- gates
   const showProvider = ctx.canShowProviderSettings;
-  const showModels = showProvider && !ctx.subscriptionConnectRequired;
+  const currentPool = data.activePool;
+  const pools = showProvider ? data.pools : [];
+  const showModels =
+    showProvider && !ctx.subscriptionConnectRequired && !currentPool;
   const showSignIn =
     showProvider &&
     ctx.subscriptionConnectRequired &&
@@ -192,7 +220,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     if (
       showProvider &&
       ctx.canChangeCredential &&
-      (data.keys.length > 0 || subscriptions.length > 0)
+      (data.keys.length > 0 || subscriptions.length > 0 || pools.length > 0)
     )
       list.push("key");
     if (showModels || showSignIn) list.push("model");
@@ -206,10 +234,14 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     ctx.canChangeCredential,
     data.keys.length,
     subscriptions.length,
+    pools.length,
   ]);
+  // The menu opens on Model, which a pool doesn't have: open on the pool.
   const scope: Scope | undefined = scopes.includes(scopeState)
     ? scopeState
-    : scopes[0];
+    : currentPool && scopes.includes("key")
+      ? "key"
+      : scopes[0];
 
   // ---- what each tab shows: the live value, not the kind
   const tabs: Record<Scope, { icon: ReactNode; text: string; aria: string }> = {
@@ -236,13 +268,23 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
       text: data.agentName,
       aria: `Agent: ${data.agentName}`,
     },
-    key: {
-      icon: <KeyRoundIcon className="size-4" />,
-      text: currentKey?.name ?? "Default key",
-      aria: currentKey
-        ? `Key: ${currentKey.name} (${data.keyScopeLabel(currentKey)})`
-        : "Key: Default key",
-    },
+    key: currentPool
+      ? {
+          icon: <LayersIcon className="size-4" />,
+          text: currentPool.name,
+          aria: `Model pool: ${currentPool.name}`,
+        }
+      : {
+          icon: <KeyRoundIcon className="size-4" />,
+          text: currentKey
+            ? isOrganizationSubscription(currentKey)
+              ? organizationSubscriptionName(currentKey)
+              : currentKey.name
+            : "Default key",
+          aria: currentKey
+            ? `Key: ${currentKey.name} (${data.keyScopeLabel(currentKey)})`
+            : "Key: Default key",
+        },
   };
 
   // ---- match counts per scope (drives the "N matches in Agents" row)
@@ -261,6 +303,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
       ),
       agent: count(allAgents.map(agentKeywords)),
       key: count([
+        ...pools.map(poolKeywords),
         ...apiKeySections
           .flatMap((section) => section.keys)
           .map((key) =>
@@ -281,6 +324,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     allAgents,
     apiKeySections,
     subscriptions,
+    pools,
     data.providerLabel,
     data.keyScopeLabel,
   ]);
@@ -302,9 +346,11 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
         ? currentAgent
           ? agentValue(currentAgent.id)
           : ""
-        : currentKey
-          ? keyValue(currentKey.id)
-          : "";
+        : currentPool
+          ? poolValue(currentPool.id)
+          : currentKey
+            ? keyValue(currentKey.id)
+            : "";
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-run when the rendered rows change, not on every keystroke
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -373,6 +419,10 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     data.selectAgent(id);
     ctx.close();
   };
+  const pickPool = (id: string) => {
+    data.selectPool(id);
+    ctx.close();
+  };
   const pickKey = (k: LlmProviderApiKey) => {
     data.selectKey(k);
     setQuery("");
@@ -384,7 +434,12 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     : ctx.notRecommendedForAgents
       ? "Small model — tool use may be unreliable"
       : null;
-  const placeholder = scope ? PLACEHOLDER[scope] : "Search…";
+  const placeholder =
+    scope === "key" && pools.length > 0
+      ? "Search pools & keys…"
+      : scope
+        ? PLACEHOLDER[scope]
+        : "Search…";
 
   if (!scope) {
     return (
@@ -610,6 +665,19 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
             </CommandGroup>
           ))}
         {/* ---------------- Key scope ---------------- */}
+        {scope === "key" && pools.length > 0 && (
+          <CommandGroup heading="Model pools" className={GROUP}>
+            {pools.map((pool) => (
+              <PoolRow
+                key={pool.id}
+                pool={pool}
+                providerLabel={data.providerLabel}
+                selected={pool.id === currentPool?.id}
+                onSelect={() => pickPool(pool.id)}
+              />
+            ))}
+          </CommandGroup>
+        )}
         {scope === "key" && subscriptions.length > 0 && (
           <CommandGroup heading="Personal subscriptions" className={GROUP}>
             {subscriptions.map(({ kind, key }) => (
@@ -617,11 +685,11 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
                 key={key?.id ?? kind}
                 kind={kind}
                 apiKey={key}
-                selected={!!key && key.id === currentKey?.id}
+                selected={!currentPool && !!key && key.id === currentKey?.id}
                 onSelect={() => {
                   if (
                     key &&
-                    key.id !== currentKey?.id &&
+                    (currentPool || key.id !== currentKey?.id) &&
                     !key.requiresReauthentication
                   ) {
                     pickKey(key);
@@ -632,6 +700,27 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
                     ctx.close();
                   }
                 }}
+              />
+            ))}
+          </CommandGroup>
+        )}
+        {scope === "key" && organizationSubscriptions.length > 0 && (
+          <CommandGroup
+            heading={ORGANIZATION_SUBSCRIPTIONS_HEADING}
+            className={GROUP}
+          >
+            {organizationSubscriptions.map((k) => (
+              <KeyRow
+                key={k.id}
+                apiKey={{ ...k, name: organizationSubscriptionName(k) }}
+                keywords={keyKeywords(
+                  k,
+                  data.providerLabel,
+                  data.keyScopeLabel,
+                )}
+                scopeLabel={organizationSubscriptionSubtitle(k)}
+                selected={k.id === currentKey?.id}
+                onSelect={() => pickKey(k)}
               />
             ))}
           </CommandGroup>
@@ -654,7 +743,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
                     data.keyScopeLabel,
                   )}
                   scopeLabel={data.keyScopeLabel(k)}
-                  selected={k.id === currentKey?.id}
+                  selected={!currentPool && k.id === currentKey?.id}
                   onSelect={() => pickKey(k)}
                 />
               ))}
@@ -872,6 +961,48 @@ function AgentRow({
           </div>
         )}
       </div>
+      <Selected on={selected} />
+    </CommandItem>
+  );
+}
+
+function PoolRow({
+  pool,
+  providerLabel,
+  selected,
+  onSelect,
+}: {
+  pool: AvailableModelPool;
+  providerLabel: (provider: SupportedProvider) => string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <CommandItem
+      value={poolValue(pool.id)}
+      keywords={poolKeywords(pool)}
+      onSelect={onSelect}
+      className={cn(ITEM, "min-h-11")}
+    >
+      <PickerIcon selected={selected}>
+        <LayersIcon className="size-3.5" />
+      </PickerIcon>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-medium">{pool.name}</span>
+        <span className="truncate text-xs leading-4 text-muted-foreground">
+          {pool.providers.map(providerLabel).join(", ")}
+        </span>
+      </div>
+      <OverlappedIcons
+        size="sm"
+        maxVisible={3}
+        className="shrink-0"
+        icons={pool.providers.map((provider) => ({
+          key: provider,
+          icon: <ProviderIcon provider={provider} size={10} />,
+          tooltip: providerLabel(provider),
+        }))}
+      />
       <Selected on={selected} />
     </CommandItem>
   );
@@ -1191,6 +1322,9 @@ function keyKeywords(
 ) {
   return [k.name, providerLabel(k.provider), scopeLabel(k)];
 }
+function poolKeywords(pool: AvailableModelPool) {
+  return [pool.name, "pool", "model pool"];
+}
 function signInKeywords(title: string) {
   return [title, "sign in", "connect"];
 }
@@ -1203,6 +1337,9 @@ function agentValue(id: string) {
 }
 function keyValue(id: string) {
   return `key:${id}`;
+}
+function poolValue(id: string) {
+  return `pool:${id}`;
 }
 
 const MODALITY_CAPABILITIES = [

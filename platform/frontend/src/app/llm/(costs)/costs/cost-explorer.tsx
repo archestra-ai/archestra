@@ -11,6 +11,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useProxyLabelKeys } from "@/lib/proxy-label-costs.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -55,18 +56,35 @@ export default function CostExplorer() {
   const appName = useAppName();
   const { data: canReadApps } = useHasPermissions({ app: ["read"] });
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
+  const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
   const { data: canReadLimits } = useHasPermissions({ llmLimit: ["read"] });
   const canGroup = (group: DimId) =>
-    (group !== "app" || canReadApps) && (group !== "skill" || canReadSkills);
-  const [q, setQ] = useState<PivotQuery>(SAVED_VIEWS[0].q);
+    (group !== "app" || canReadApps) &&
+    (group !== "skill" || canReadSkills) &&
+    (group !== "pool" || poolsEnabled);
+  const [query, setQ] = useState<PivotQuery>(SAVED_VIEWS[0].q);
   const [focus, setFocus] = useState<Set<string>>(new Set());
   const [view, setView] = useState<"summary" | "pivot">("summary");
   const [pivotCols, setPivotCols] = useState<"days" | "split">("days");
 
   const labelKeys = useProxyLabelKeys({
     timeframe,
-    enabled: enabled && q.group === "label",
+    enabled: enabled && query.group === "label",
   });
+  const labelKey = labelKeys.data?.includes(query.labelKey ?? "")
+    ? query.labelKey
+    : labelKeys.data?.[0];
+  const q = { ...query, labelKey };
+  useEffect(() => {
+    if (
+      query.group !== "label" ||
+      !labelKeys.isSuccess ||
+      query.labelKey === labelKey
+    )
+      return;
+    setQ((previous) => ({ ...previous, labelKey }));
+    setFocus(new Set());
+  }, [query.group, query.labelKey, labelKey, labelKeys.isSuccess]);
   const kpis = useKpis({ timeframe, enabled });
   const cube = usePivotCube(q, timeframe, enabled);
   const statistics = useCostStatistics({
@@ -76,7 +94,9 @@ export default function CostExplorer() {
 
   const contentRef = useRef<HTMLDivElement>(null);
   const [settledHeight, setSettledHeight] = useState<number>();
-  const isLoading = cube.isLoading || kpis.isCostPending;
+  const isLoadingLabels = q.group === "label" && labelKeys.isPending;
+  const labelKeysError = q.group === "label" && labelKeys.isError;
+  const isLoading = cube.isLoading || kpis.isCostPending || isLoadingLabels;
   // A range change replaces a potentially long table with a few skeletons.
   // Reserve its settled height until the response arrives so the browser does
   // not clamp the page's scroll offset to the shorter loading layout.
@@ -104,7 +124,7 @@ export default function CostExplorer() {
   const metric = METRICS[q.metric];
   const dim =
     q.group === "label"
-      ? { label: q.labelKey ?? "cost_center", plural: "label values" }
+      ? { label: q.labelKey ?? "Label", plural: "label values" }
       : DIMS[q.group];
   const splits = splitOptions(q.metric, q.group);
   const hasSplit = q.split !== "none";
@@ -125,7 +145,9 @@ export default function CostExplorer() {
         ? "Inference attributed to app sessions. This does not mean every app itself runs a model."
         : q.group === "key"
           ? "Key names and recorded IDs are shown in full. Calls without an individual key ID cannot be distinguished further."
-          : null;
+          : q.group === "providerKey" || q.group === "pool"
+            ? "A request a model pool failed over counts once per attempt. A failed attempt is free unless a timeout cut it off, which bills an estimate of the input it read. Pick Requests to see how many there were."
+            : null;
 
   const headline = useMemo(() => {
     const top = cube.rows[0];
@@ -273,31 +295,19 @@ export default function CostExplorer() {
             }))}
             onChange={(group) => update({ group })}
           />
-          {q.group === "label" && (
+          {q.group === "label" && !!labelKeys.data?.length && (
             <SearchableSelect
               size="sm"
               ariaLabel="Label key"
-              value={q.labelKey ?? "cost_center"}
+              value={q.labelKey ?? ""}
               onValueChange={(labelKey) => update({ labelKey })}
               items={(labelKeys.data ?? []).map((key) => ({
                 value: key,
                 label: key,
               }))}
-              placeholder={
-                labelKeys.isPending ? "Loading label keys…" : "Label key"
-              }
-              disabled={labelKeys.isPending}
+              placeholder="Label key"
               searchPlaceholder="Search label keys…"
-              hint={
-                labelKeys.isError
-                  ? "Could not load label keys. Reopen this view to retry."
-                  : "Labels captured on requests in this time range."
-              }
-              emptyMessage={
-                labelKeys.isError
-                  ? "Label keys unavailable"
-                  : "No label keys in this time range"
-              }
+              emptyMessage="No matching label keys"
               className="w-44 border-transparent bg-muted/60 shadow-none"
             />
           )}
@@ -364,17 +374,23 @@ export default function CostExplorer() {
             </div>
             {!cube.isLoading && headline.top && (
               <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
-                <Stat label={`Top ${dim.label.toLowerCase()}`}>
-                  <span className="max-w-48 truncate">
-                    {headline.top.label}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {(headline.topShare * 100).toFixed(0)}%
-                  </span>
-                </Stat>
-                <Stat label={dim.plural.replace(/^./, (c) => c.toUpperCase())}>
-                  {cube.rows.length}
-                </Stat>
+                {q.group !== "time" && (
+                  <>
+                    <Stat label={`Top ${dim.label.toLowerCase()}`}>
+                      <span className="max-w-48 truncate">
+                        {headline.top.label}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {(headline.topShare * 100).toFixed(0)}%
+                      </span>
+                    </Stat>
+                    <Stat
+                      label={dim.plural.replace(/^./, (c) => c.toUpperCase())}
+                    >
+                      {cube.rows.length}
+                    </Stat>
+                  </>
+                )}
                 {headline.trend !== null && (
                   <Stat label="2nd half vs 1st">
                     <span
@@ -431,19 +447,28 @@ export default function CostExplorer() {
             }
           />
 
-          {Boolean(cube.error) && (
+          {Boolean(cube.error || labelKeysError) && (
             <QueryLoadError
               title="Could not load usage statistics"
               description="Check your access and connection, then retry."
-              onRetry={cube.retry}
+              onRetry={
+                labelKeysError ? () => void labelKeys.refetch() : cube.retry
+              }
             />
           )}
           {!cube.error &&
+            !labelKeysError &&
             q.chart !== "table" &&
-            (cube.isLoading ? (
+            (cube.isLoading || isLoadingLabels ? (
               <Skeleton className="h-[260px] w-full" />
             ) : cube.rows.length === 0 ? (
-              <Empty text={`No ${metric.label.toLowerCase()} in this range.`} />
+              <Empty
+                text={
+                  q.group === "label" && !q.labelKey
+                    ? "No labels captured on requests in this time range."
+                    : `No ${metric.label.toLowerCase()} in this range.`
+                }
+              />
             ) : (
               <PivotChart
                 cube={cube}
@@ -534,7 +559,7 @@ export default function CostExplorer() {
               <SummaryTable
                 cube={cube}
                 metric={q.metric}
-                dimLabel={dim.label}
+                dimLabel={q.group === "time" ? "Scope" : dim.label}
                 splitLabel={hasSplit ? DIMS[q.split as DimId].label : null}
                 focus={focus}
                 onToggle={toggleFocus}
@@ -543,7 +568,7 @@ export default function CostExplorer() {
               <PivotTable
                 cube={cube}
                 metric={q.metric}
-                dimLabel={dim.label}
+                dimLabel={q.group === "time" ? "Scope" : dim.label}
                 bySplit={pivotBySplit}
                 focus={focus}
                 onToggle={toggleFocus}

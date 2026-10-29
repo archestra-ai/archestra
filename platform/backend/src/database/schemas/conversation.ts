@@ -15,6 +15,7 @@ import type {
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
+import modelPoolsTable from "./model-pool";
 import projectsTable from "./project";
 import { softDeletablePgTable } from "./soft-deletable-table";
 
@@ -44,6 +45,16 @@ const conversationsTable = softDeletablePgTable(
     selectedProvider: text("selected_provider").$type<SupportedProvider>(),
     /** FK to models(id) — the resolved model for this conversation. */
     modelId: uuid("model_id").references(() => modelsTable.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * The model pool the user picked for this chat. Its turns go to the pool's
+     * members instead of `modelId` on `chatApiKeyId`, which then hold one
+     * member the user can use, for everything that needs a single model
+     * (context size, attachments, titles). Null: no pool, even when the key is
+     * a pool member.
+     */
+    modelPoolId: uuid("model_pool_id").references(() => modelPoolsTable.id, {
       onDelete: "set null",
     }),
     /**
@@ -151,6 +162,11 @@ const conversationsTable = softDeletablePgTable(
     // is the hard floor beneath the trash — which the partial owner-scoped
     // index above cannot serve.
     index("conversations_last_message_at_idx").on(table.lastMessageAt),
+    // Deleting a model clears modelId through its foreign key; without this
+    // each deleted model reads the whole table.
+    index("conversations_model_id_idx")
+      .on(table.modelId)
+      .where(sql`${table.modelId} IS NOT NULL`),
   ],
 );
 

@@ -190,6 +190,26 @@ const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
     finish:
       "Tell the user to open a new terminal so the removed environment variables are gone.",
   },
+  "kimi-code": {
+    binary: "kimi",
+    inventory: `- The connection records what it changed in ~/.archestra/kimi-code/state.json.
+- In \${KIMI_CODE_HOME:-~/.kimi-code}/config.toml: the block between
+  "# >>> archestra kimi-code connection >>>" and "# <<< archestra kimi-code connection <<<"
+  (the archestra provider and model whose base_url points at {{HOST}}, and the
+  permission rules for the gateway's tools), default_model = "archestra" and
+  default_permission_mode = "yolo".
+- In mcp.json in the same folder: the mcpServers entry whose URL starts with {{BASE}}/mcp/.
+- In AGENTS.md in the same folder: the block between the archestra kimi-code connection markers.
+- Skills: the checkout under ~/.archestra/kimi-code/skills/, listed in extra_skill_dirs.`,
+    manual: `- Run node ~/.archestra/kimi-code/lifecycle.cjs disconnect. It removes the provider,
+  model, permission rules, gateway entry, instructions block and skills checkout together,
+  and restores the default_model and default_permission_mode the user had before.
+- If that helper is missing, remove the items above by hand. Replace default_model = "archestra"
+  and default_permission_mode = "yolo" with the lines from config.toml.archestra-backup, or
+  delete them when the backup has none. Then delete ~/.archestra/kimi-code.`,
+    finish:
+      "Tell the user to open a new terminal and start a new Kimi Code session, and to remove the gateway's sign-in with /mcp-config if they no longer need it.",
+  },
   ...openCodeFamilyRecord(openCodeFamilyGuardClient),
 };
 
@@ -293,13 +313,28 @@ Desktop folder: ~/Library/Application Support/Claude-3p on macOS,
   carries the gateway, the shared marketplace and the proxy settings for ${target.host}.
 - configLibrary/_meta.json: its entry, and appliedId when that profile is active.
 - claude_desktop_config.json: deploymentMode, which the setup set. Files ending in
-  .before-archestra hold the state from before the first setup.`,
+  .before-archestra hold the state from before the first setup.
+- ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR/settings.json) and
+  ~/.archestra/claude-appa-permissions.json (or
+  $CLAUDE_CONFIG_DIR/.archestra/claude-appa-permissions.json): permissions.allow rules
+  recorded under the gateway's SERVER_NAME from managedMcpServers.
+- local-agent-mode-sessions/*/*/cowork_plugins/marketplaces/local-desktop-app-uploads/archestra-appa-permissions:
+  local Cowork plugin auto-allowing internal guardrails tools, registered in
+  cowork_plugins/installed_plugins.json and cowork_settings.json.`,
     remove: `- Ask the user to finish active tasks and quit Claude Desktop. Do not force it to close.
 - Delete configLibrary/${CLAUDE_DESKTOP_PROFILE_ID}.json.
 - In configLibrary/_meta.json, remove the entry with that id, and remove appliedId if it is that id.
 - In claude_desktop_config.json, set deploymentMode to its value in
   claude_desktop_config.json.before-archestra, or remove the key if the backup has none
   or does not exist.
+- Read the SERVER_NAME entry from ~/.archestra/claude-appa-permissions.json (or
+  $CLAUDE_CONFIG_DIR/.archestra/claude-appa-permissions.json), remove only those recorded
+  rules from permissions.allow in ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR/settings.json),
+  and then remove SERVER_NAME from claude-appa-permissions.json.
+- Under local-agent-mode-sessions/*/*, delete
+  cowork_plugins/marketplaces/local-desktop-app-uploads/archestra-appa-permissions and
+  remove archestra-appa-permissions@local-desktop-app-uploads from
+  cowork_plugins/installed_plugins.json and cowork_settings.json.
 - Then the user reopens Claude Desktop.`,
     finish:
       "Ask the user to check Settings > Connectors and Settings > Plugins, and to remove the gateway or the shared marketplace there if either is still listed.",

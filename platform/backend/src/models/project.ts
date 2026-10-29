@@ -471,6 +471,15 @@ class ProjectModel {
    */
   static async hardDeleteLocked(tx: Transaction, id: string): Promise<void> {
     await hardDelete(tx, schema.projectsTable, eq(schema.projectsTable.id, id));
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await ResourcePermissionPolicyModel.deleteForTarget({
+      tx,
+      resources: ["project"],
+      scope: id,
+    });
+    // SPDX-SnippetEnd
   }
 
   /**

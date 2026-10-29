@@ -262,14 +262,19 @@ function finishSetup(ending, platform) {
     if (ending.signIn) {
       console.log('\n' + paint('1', 'Authorize ' + ending.label + ' for the "' + ending.signIn.gatewayName + '" MCP gateway'));
       const piReconnect = ending.signIn.command?.length === 2 && ending.signIn.command[0] === 'arcpi' && ending.signIn.command[1] === '--reconnect';
-      const windowsLine = !piReconnect && ending.signIn.command && platform === 'windows' ? windowsCommandLine(ending.signIn.command) : null;
-      const runnable = ending.signIn.command && (piReconnect || platform !== 'windows' || windowsLine !== null);
+      // A Node.js helper the setup installed in the home directory runs with
+      // this Node.js on every platform, without a shell to expand its path.
+      const nodeHelper = !piReconnect && ending.signIn.command?.[0] === 'node' && /^~\/[\w./-]+$/.test(ending.signIn.command[1] ?? '');
+      const windowsLine = !piReconnect && !nodeHelper && ending.signIn.command && platform === 'windows' ? windowsCommandLine(ending.signIn.command) : null;
+      const runnable = ending.signIn.command && (piReconnect || nodeHelper || platform !== 'windows' || windowsLine !== null);
       const signInQuestion = piReconnect
         ? '  Authorize now? Keep your existing Pi login or choose to sign in again. [Y/n] '
         : '  Authorize now? This opens ' + ending.appName + ' in your browser. [Y/n] ';
       if (runnable && terminal !== null && ask(terminal, signInQuestion)) {
         const child = piReconnect
           ? spawnSync(process.execPath, [join(homedir(), '.archestra', 'pi', 'launch.cjs'), '--reconnect'], { stdio: [terminal, 'inherit', 'inherit'], shell: false })
+          : nodeHelper
+          ? spawnSync(process.execPath, [join(homedir(), ...ending.signIn.command[1].slice(2).split('/')), ...ending.signIn.command.slice(2)], { stdio: [terminal, 'inherit', 'inherit'], shell: false })
           : windowsLine !== null
           ? spawnSync(windowsLine, { stdio: [terminal, 'inherit', 'inherit'], shell: true })
           : spawnSync(ending.signIn.command[0], ending.signIn.command.slice(1), { stdio: [terminal, 'inherit', 'inherit'] });

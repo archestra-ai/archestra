@@ -148,6 +148,19 @@ describe("AgentRuntimePicker", () => {
     expect(savedRuntime().inferenceProtocol).toBe("openai_chat");
   });
 
+  it("keeps Kimi Code on Chat Completions without offering a protocol choice", async () => {
+    const user = userEvent.setup();
+    await renderPicker("codex");
+    await user.click(screen.getByRole("radio", { name: "Kimi Code" }));
+    expect(
+      screen.queryByRole("button", { name: /^Inference API/ }),
+    ).not.toBeInTheDocument();
+    expect(savedRuntime()).toMatchObject({
+      command: ["archestra-kimi"],
+      inferenceProtocol: "openai_chat",
+    });
+  });
+
   it("keeps Grok Build on Chat Completions without offering a protocol choice", async () => {
     const user = userEvent.setup();
     await renderPicker("codex");
@@ -158,6 +171,20 @@ describe("AgentRuntimePicker", () => {
     expect(savedRuntime()).toMatchObject({
       command: ["archestra-grok"],
       inferenceProtocol: "openai_chat",
+    });
+  });
+
+  it("selects Copilot CLI with native terminal input and its supported model protocol", async () => {
+    const user = userEvent.setup();
+    await renderPicker("codex");
+    await user.click(screen.getByRole("radio", { name: "GitHub Copilot CLI" }));
+    expect(
+      screen.queryByRole("button", { name: /^Inference API/ }),
+    ).not.toBeInTheDocument();
+    expect(savedRuntime()).toMatchObject({
+      command: ["archestra-copilot"],
+      inferenceProtocol: "openai_chat",
+      steerMode: "tmux_keys",
     });
   });
 

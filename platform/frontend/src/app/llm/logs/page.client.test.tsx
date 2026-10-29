@@ -115,6 +115,7 @@ function makeSessionSummary(
     sources: ["api"],
     interactionId: null,
     requestCount: 1,
+    failedOverCount: 0,
     totalInputTokens: 100,
     totalOutputTokens: 50,
     totalCacheReadTokens: 0,
@@ -263,6 +264,34 @@ describe("LlmProxyLogsPage proxy filter", () => {
     expect(screen.getByText("+ 1 more model")).toBeVisible();
     expect(screen.queryByRole("columnheader", { name: "Source" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Details" })).toBeNull();
+  });
+
+  // Each row used to size its logos to its own count, so a two-maker row's
+  // model name started further right than a one-maker row's.
+  it("starts every row's model logos and name at the same place", () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          makeSessionSummary({
+            sessionId: "two-makers",
+            models: ["gpt-5.4", "claude-sonnet-4-5"],
+          }),
+          makeSessionSummary({ sessionId: "one-maker", models: ["gpt-5.4"] }),
+        ],
+        pagination: makePagination(),
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    const rows = screen.getAllByRole("row").slice(1);
+    const slots = rows.map(
+      (row) =>
+        within(row).getAllByAltText("OpenAI")[0].parentElement?.parentElement,
+    );
+    // Two 20px discs that overlap by 6px, in both rows.
+    for (const slot of slots) expect(slot).toHaveStyle({ width: "34px" });
   });
 
   // Naming the key is the point: a shared-key session used to render only

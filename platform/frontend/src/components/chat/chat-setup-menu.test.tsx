@@ -9,6 +9,7 @@ const {
   models,
   keys,
   readiness,
+  pools,
   mutateConversation,
   hiddenProviders,
   navigate,
@@ -86,6 +87,7 @@ const {
     },
   ] as unknown as LlmProviderApiKey[],
   readiness: [] as unknown[],
+  pools: [] as { id: string; name: string; providers: string[] }[],
   mutateConversation: vi.fn(),
   navigate: vi.fn(),
 }));
@@ -125,6 +127,10 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => ({ data: keys }),
 }));
 
+vi.mock("@/lib/model-pools.query", () => ({
+  useAvailableModelPools: () => ({ data: pools }),
+}));
+
 vi.mock("@/lib/chat/chat.query", () => ({
   useUpdateConversation: () => ({ mutate: mutateConversation }),
 }));
@@ -152,6 +158,7 @@ beforeEach(() => {
   hiddenProviders.clear();
   navigate.mockClear();
   readiness.splice(0);
+  pools.splice(0);
   mutateConversation.mockReset();
 });
 
@@ -206,6 +213,31 @@ describe("ChatSetupMenu", () => {
     expect(
       screen.getByRole("tab", { name: "Model: Qwen3 32B" }),
     ).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("picks a model pool at once and hides the model choice while in it", async () => {
+    pools.push({ id: "pool-1", name: "qwen3-32b", providers: ["vllm"] });
+    const user = userEvent.setup();
+    const props = renderMenu({ onModelPoolChange: vi.fn() });
+
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+    const group = screen.getByRole("group", { name: "Model pools" });
+    await user.click(within(group).getByRole("option", { name: /qwen3-32b/ }));
+
+    expect(props.onModelPoolChange).toHaveBeenCalledWith("pool-1");
+    expect(props.close).toHaveBeenCalledOnce();
+  });
+
+  it("shows a picked pool in place of the key, with no model tab", () => {
+    pools.push({ id: "pool-1", name: "qwen3-32b", providers: ["vllm"] });
+    renderMenu({ modelPoolId: "pool-1", onModelPoolChange: vi.fn() });
+
+    expect(
+      screen.getByRole("tab", { name: "Model pool: qwen3-32b" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.queryByRole("tab", { name: /^Model:/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("offers subscription connections even without an API key and supports keyboard selection", async () => {

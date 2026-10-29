@@ -121,7 +121,8 @@ export type AppaClientAdapter = {
    */
   nativeQuestion?: {
     toolName: string;
-    isAvailable?(headers: IncomingHttpHeaders): boolean;
+    /** False when the client would refuse the tool, from its headers or request. */
+    isAvailable?(headers: IncomingHttpHeaders, requestBody?: unknown): boolean;
     supportsMultiple?: boolean;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
     /**
@@ -134,6 +135,16 @@ export type AppaClientAdapter = {
       asked: AskUserArguments,
     ): NativeQuestionReading;
     /**
+     * Which of a card's labels the tool's result selects, for a client whose
+     * answer names the question it answers. Without it, the shared reader
+     * reads the result. `question` is the question text as the client showed it.
+     */
+    selectionFromResult?(
+      result: NativeQuestionResult,
+      question: string,
+      labels: readonly string[],
+    ): { label: string } | NativeQuestionNoAnswer | "unrecognized";
+    /**
      * The client also shows the gateway's MCP form (elicitation), which
      * returns the choice as data. An answer in a wording the proxy does not
      * know is then asked once more there. A known no-answer is not asked again.
@@ -141,12 +152,24 @@ export type AppaClientAdapter = {
     formFallback?: boolean;
   };
   /**
+   * The longest tool-call ID the client sends back unchanged. A client that
+   * cuts longer IDs gets no trajectory stamps, which are longer than this.
+   */
+  readonly maxToolCallIdLength?: number;
+  /**
    * The client's own tool that waits for MCP servers which are still
    * connecting. The client declares it when it sends requests before its tool
    * list is complete. The call takes no arguments and changes nothing, so it
    * can carry a denial while the gateway notice tool is not declared yet.
    */
   readonly pendingServersTool?: string;
+  /**
+   * On the Anthropic Messages wire, the client answers a call to a tool it
+   * never declared with an error result and goes on with its turn. A denial
+   * then reaches the model through an undeclared notice call, which the next
+   * request restores, while no notice tool is declared.
+   */
+  readonly answersUndeclaredCalls?: true;
   /**
    * What the person does when this client sends a request without the
    * gateway's tools: where to see the gateway's state in the client, how to
@@ -222,12 +245,12 @@ export type AppaClientAdapter = {
   /** The teammates the history's launch receipts name, by name. */
   teammateLaunches?(requestBody: unknown): Map<string, AppaTeammateLaunch>;
   /**
-   * The teammate a durable launch receipt names. Used when compaction has
+   * The child a durable launch receipt names. Used when compaction has
    * dropped the receipt from the request but the runtime still retained it.
    */
   launchIdentity?(
     text: string,
-  ): { name: string; childNativeId: string } | undefined;
+  ): { name?: string; childNativeId: string } | undefined;
   /** The name a spawn call gives the teammate it starts, if it names one. */
   teammateName?(call: { name: string; arguments: unknown }): string | undefined;
   /**

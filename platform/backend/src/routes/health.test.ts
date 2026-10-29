@@ -53,6 +53,7 @@ describe("GET /ready", () => {
     // status stays "disabled" and surfaces as a terminal-fail-fast signal.
     expect(body.sandbox).toBe("disabled");
     expect(body.sandboxReason).toBe("disabled");
+    expect(body.openappa).toBe("not_checked");
 
     await app.close();
   });

@@ -35,6 +35,7 @@ jobs:
     uses: $/.github/workflows/deploy-dev-platform-images.yml
     permissions:
       contents: read # Required to invoke the reusable image publishing workflow.
+      packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation.
     with:
       version: ${{ github.sha }}

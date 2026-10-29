@@ -60,6 +60,7 @@ import {
   getComposerAnswer,
   takesComposerAnswer,
 } from "@/components/chat/mcp-elicitation-fields";
+import { ProviderAuthRequiredCard } from "@/components/chat/provider-auth-required-card";
 import type { RightPanelTab } from "@/components/chat/right-side-panel";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
@@ -161,7 +162,7 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
-import { useStreamStall } from "@/lib/chat/stream-stall.hook";
+import { getQueueInterruptBlockedReason } from "@/lib/chat/queue-interrupt";
 import {
   foldConfirmedThinkingEffort,
   writePendingThinkingEffort,
@@ -174,7 +175,8 @@ import {
   getAgentSubscriptionConnection,
   resolveConversationKeyForModel,
 } from "@/lib/chat/use-chat-preferences";
-import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
+import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state";
+import { useStreamStall } from "@/lib/chat/use-stream-stall";
 import { useConfig, useFeature } from "@/lib/config/config.query";
 import {
   type ConnectivityState,
@@ -184,6 +186,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useStableCallback } from "@/lib/hooks/use-stable-callback";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   type SupportedProvider,
@@ -451,6 +454,7 @@ export function ChatPageContent({
     useConversation(conversationId);
   const { data: defaultAgentId } = useDefaultAgentId();
   const runtimeEnabled = useFeature("agentRuntime") === true;
+  const providerCatalog = useModelProviderCatalog();
   const startAgentRunMutation = useStartAgentRun();
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
@@ -478,7 +482,10 @@ export function ChatPageContent({
     enabled: canLoadApiKeys,
     toastOnError: false,
   });
-  const { data: organization, isPending: isOrgLoading } = useOrganization();
+  const { data: organization, isPending: isOrgLoading } = useOrganization(
+    true,
+    { refetchInterval: 5000, refetchOnWindowFocus: "always" },
+  );
 
   // A new chat started from a project (`/chat?project=<id>`) takes the
   // project's pinned agent. `isPending` stays true while the query is disabled,
@@ -539,6 +546,22 @@ export function ChatPageContent({
   const initialRuntimeCandidate =
     internalAgents.find((agent) => agent.id === initialAgentId) ??
     initialAgentReference;
+  // The new chat's model pool, which the create request carries. Until the
+  // user picks a pool, a key or a model, it is the agent's own pool while the
+  // agent's model is in use.
+  const [initialModelPoolChoice, setInitialModelPoolChoice] = useState<
+    string | null | undefined
+  >(undefined);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new agent or chat starts from the agent's pool again
+  useEffect(() => {
+    setInitialModelPoolChoice(undefined);
+  }, [initialAgentId, routeConversationId]);
+  const initialModelPoolId =
+    initialModelPoolChoice !== undefined
+      ? initialModelPoolChoice
+      : initialModelSource === "agent"
+        ? (initialRuntimeCandidate?.modelPoolId ?? null)
+        : null;
   const initialRuntimeAgent =
     runtimeEnabled && initialRuntimeCandidate?.runtime
       ? initialRuntimeCandidate
@@ -1394,6 +1417,19 @@ export function ChatPageContent({
     [conversation, modelsByProvider],
   );
 
+  // A pool stands in for the key and model; the server picks one of its
+  // members as the conversation's key and model. Null leaves the pool.
+  const handleConversationModelPoolChange = useCallback(
+    (modelPoolId: string | null) => {
+      if (!conversation) return;
+      updateConversationMutateRef.current({
+        id: conversation.id,
+        modelPoolId,
+      });
+    },
+    [conversation],
+  );
+
   // Handle agent change in existing conversation
   const handleConversationAgentChange = useCallback(
     (agentId: string) => {
@@ -1932,6 +1968,7 @@ export function ChatPageContent({
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
   // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
   const showBrowserButton =
+    organization?.playwrightMcpEnabled === true &&
     !isReadOnlyConversation &&
     (canUpdateAgent ||
       hasPlaywrightMcpTools ||
@@ -1943,6 +1980,7 @@ export function ChatPageContent({
   // an opened chat shows its context usage right away.
   const tokensUsed =
     contextTokensUsed ??
+    tokenUsage?.inputTokens ??
     tokenUsage?.totalTokens ??
     conversation?.contextTokensUsed ??
     undefined;
@@ -2233,6 +2271,15 @@ export function ChatPageContent({
     }
   });
 
+  const handleInterruptQueue = useStableCallback(() => {
+    if (!conversationId) return;
+    stop?.({
+      preserveQueuedMessages: true,
+      interruptQueued: true,
+      stopServer: () => stopChatStreamMutation.mutateAsync(conversationId),
+    });
+  });
+
   const handleSubmit = useStableCallback<
     Parameters<ArchestraPromptInputProps["onSubmit"]>,
     ReturnType<ArchestraPromptInputProps["onSubmit"]>
@@ -2448,7 +2495,15 @@ export function ChatPageContent({
     }
   });
 
-  const isBrowserPanelVisible = isBrowserPanelOpen;
+  const isBrowserPanelVisible =
+    isBrowserPanelOpen && organization?.playwrightMcpEnabled === true;
+  useEffect(() => {
+    if (organization?.playwrightMcpEnabled === false) {
+      setIsBrowserPanelOpen(false);
+      setActiveRightTab((tab) => (tab === "browser" ? "files" : tab));
+      setPendingBrowserUrl(undefined);
+    }
+  }, [organization?.playwrightMcpEnabled]);
   const isRightPanelOpen =
     isArtifactOpen || isBrowserPanelVisible || isAppsTabOpen || isRunsTabOpen;
 
@@ -2594,6 +2649,7 @@ export function ChatPageContent({
         agentId: initialAgentId,
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
+        modelPoolId: initialModelPoolId,
         title,
         projectId: searchParams.get("project"),
         thinkingEffort: initialThinkingEffort,
@@ -2634,6 +2690,7 @@ export function ChatPageContent({
       initialAgentId,
       initialModel,
       initialApiKeyId,
+      initialModelPoolId,
       isEncryptedChatDraft,
       initialThinkingEffort,
       isAgentSubscriptionMetadataPending,
@@ -3533,6 +3590,19 @@ export function ChatPageContent({
                                 conversationNotRecommended
                               }
                               onStop={handleStopStreaming}
+                              onInterruptQueue={handleInterruptQueue}
+                              isInterruptingQueue={
+                                stopChatStreamMutation.isPending
+                              }
+                              interruptQueueDisabledReason={getQueueInterruptBlockedReason(
+                                {
+                                  messages,
+                                  hasPendingQuestion:
+                                    !!chatSession?.pendingMcpElicitations
+                                      ?.length,
+                                  isCompacting: isContextCompacting,
+                                },
+                              )}
                               status={status}
                               selectedModel={conversationModelId ?? ""}
                               onModelChange={handleModelChange}
@@ -3616,6 +3686,10 @@ export function ChatPageContent({
                               thinkingEffort={displayedThinkingEffort}
                               onThinkingEffortChange={
                                 handleThinkingEffortChange
+                              }
+                              modelPoolId={conversation?.modelPoolId ?? null}
+                              onModelPoolChange={
+                                handleConversationModelPoolChange
                               }
                               agentRequiresPerUserConnect={
                                 isApplyingAgentSelection ||
@@ -3759,6 +3833,21 @@ export function ChatPageContent({
                                 reader looks before typing. */}
                             <div className="mb-3 empty:hidden">
                               {isInitialRuntimeMode &&
+                                initialPerUserConnect.needsConnect &&
+                                initialPerUserConnect.provider && (
+                                  <ProviderAuthRequiredCard
+                                    provider={initialPerUserConnect.provider}
+                                    providerLabel={providerCatalog.label(
+                                      initialPerUserConnect.provider,
+                                    )}
+                                    agentName={initialPerUserConnect.agentName}
+                                    variant="preflight"
+                                    onConnected={() => {
+                                      void runtimePreflight.refetch();
+                                    }}
+                                  />
+                                )}
+                              {isInitialRuntimeMode &&
                                 runtimePreflight.data?.ready === false && (
                                   <AgentRuntimeCredentialPrompt
                                     agentId={initialAgentId ?? ""}
@@ -3801,13 +3890,19 @@ export function ChatPageContent({
                                   : "ready"
                               }
                               selectedModel={initialModel}
-                              onModelChange={handleInitialModelChange}
+                              onModelChange={(modelId) => {
+                                setInitialModelPoolChoice(null);
+                                handleInitialModelChange(modelId);
+                              }}
                               agentId={newChatAgentId}
                               currentProvider={initialProvider}
                               textareaRef={textareaRef}
                               initialApiKeyId={initialApiKeyId}
                               onApiKeyChange={setInitialApiKeyId}
-                              onProviderChange={handleInitialProviderChange}
+                              onProviderChange={(provider) => {
+                                setInitialModelPoolChoice(null);
+                                handleInitialProviderChange(provider);
+                              }}
                               allowFileUploads={
                                 organization?.allowChatFileUploads ?? false
                               }
@@ -3875,9 +3970,14 @@ export function ChatPageContent({
                                   : setIsEncryptedChatDraft
                               }
                               modelSource={initialModelSource}
-                              onResetModelOverride={handleResetModelOverride}
+                              onResetModelOverride={() => {
+                                setInitialModelPoolChoice(undefined);
+                                handleResetModelOverride();
+                              }}
                               thinkingEffort={initialThinkingEffort}
                               onThinkingEffortChange={setInitialThinkingEffort}
+                              modelPoolId={initialModelPoolId}
+                              onModelPoolChange={setInitialModelPoolChoice}
                               agentRequiresPerUserConnect={
                                 isAgentSubscriptionMetadataPending ||
                                 initialModelSource === "agent" ||

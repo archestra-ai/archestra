@@ -15,8 +15,10 @@ export {
 /** Clients whose proxy requests carry a native conversation identity. */
 export const NATIVE_SESSION_CLIENT_LABELS = {
   "claude-code": "Claude Code",
+  "claude-desktop": "Claude Desktop",
   codex: "Codex",
   pi: "Pi",
+  "kimi-code": "Kimi Code",
   opencode: OPENCODE_FAMILY.opencode.label,
   kilo: OPENCODE_FAMILY.kilo.label,
 } as const;
@@ -93,6 +95,7 @@ export const INSTALLER_CLIENT_IDS = [
   "opencode",
   "kilo",
   "pi",
+  "kimi-code",
 ] as const;
 
 export type InstallerClientId = (typeof INSTALLER_CLIENT_IDS)[number];
@@ -103,6 +106,7 @@ export const INSTALLER_CLIENT_LABELS: Record<InstallerClientId, string> = {
   cursor: "Cursor",
   codex: "Codex",
   pi: "Pi",
+  "kimi-code": "Kimi Code",
   "copilot-cli": "Copilot CLI",
   ...openCodeFamilyRecord((client) => client.label),
 };
@@ -122,6 +126,7 @@ export const INSTALLER_CLIENT_KEY_PROVIDERS: Record<
   cursor: MODEL_ROUTER_SUPPORTED_PROVIDERS,
   codex: ["openai"],
   pi: MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  "kimi-code": ["kimi-code", "kimi"],
   "copilot-cli": [
     "openai",
     "azure",
@@ -189,6 +194,13 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
     "~/.pi/agent/extensions/archestra-pi.js (native guardrails and model routing)",
     "~/.pi/agent/mcp.json (gateway)",
     "~/.archestra/pi/connection.json (model settings and access key)",
+  ],
+  "kimi-code": [
+    "~/.kimi-code/config.toml (model routing, permission mode and gateway tool rules)",
+    "~/.kimi-code/mcp.json (gateway)",
+    "~/.kimi-code/AGENTS.md (instructions block)",
+    "Skills in ~/.archestra/kimi-code/skills/",
+    "Startup check in your shell profile",
   ],
   "claude-desktop": ["A dedicated Claude Desktop profile"],
   "copilot-cli": [
@@ -282,6 +294,12 @@ export const OAUTH_AGENTS = {
     identities: [
       { clientId: "https://github.com/copilot/cli/client-metadata.json" },
     ],
+  },
+  // DCR as "kimi-code (<server name>)", with a new loopback port for each
+  // sign-in (captured from Kimi Code 2.3.3).
+  "kimi-code": {
+    label: "Kimi Code",
+    identities: [{ clientNamePattern: "^kimi-code \\(.*\\)$" }],
   },
   // OpenCode and Kilo Code: a CIMD document, or DCR under the product name
   // on a configured redirect port (see the family descriptor).

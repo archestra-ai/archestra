@@ -74,6 +74,7 @@ test.each([
   const module = { exports: null };
   let verifier: string | undefined;
   let challenge: string | null = null;
+  let cachedQuotaFailure = false;
   const network = async (url: string, options: RequestInit) => {
     if (url.includes("/api/connection-setups/script/")) {
       expect(options.headers).toEqual({
@@ -91,7 +92,9 @@ test.each([
           : undefined,
         mcp: withMcp
           ? {
-              serverName: "Test gateway",
+              serverName: "test_gateway",
+              toolPrefix: "archestra__",
+              legacyServerNames: ["old_gateway"],
               url: insecureMcp
                 ? "http://localhost:9000/v1/mcp/test"
                 : "https://proxy.example/v1/mcp/test",
@@ -125,11 +128,12 @@ test.each([
     expect(url).toBe("https://proxy.example/v1/anthropic/v1/messages");
     expect(options.headers).toMatchObject({
       Authorization: `Bearer ${token}`,
+      "X-Claude-Code-Session-Id": expect.stringMatching(/^[0-9a-f-]{36}$/i),
       "X-Archestra-Virtual-Key": "test-user-key",
       "anthropic-beta": "oauth-2025-04-20",
     });
     expect(body.messages).toHaveLength(1);
-    return quotaFailure
+    return quotaFailure || cachedQuotaFailure
       ? new Response("quota", { status: 429 })
       : Response.json({
           type: "message",
@@ -274,14 +278,81 @@ test.each([
       expect(profile.inferenceGatewayBaseUrl).toBe(
         withProxy ? "https://proxy.example/v1/anthropic" : undefined,
       );
+      expect(
+        profile.inferenceCustomHeaders?.["X-Claude-Code-Session-Id"],
+      ).toBeUndefined();
       // Third-party mode keeps its own history, so proxy setups enable the
       // Claude.ai import. Tools-only setups stay in standard mode.
+      expect(profile.coworkEgressAllowedHosts).toEqual(
+        withProxy ? ["*"] : undefined,
+      );
       expect(profile.claudeAiImport).toEqual(
         withProxy ? { enabled: true, bannerBehavior: "show" } : undefined,
       );
       expect(profile.managedMcpServers?.[0]?.oauth).toEqual(
         withMcp ? { mode: "dcr" } : undefined,
       );
+      if (withMcp) {
+        const expectedAppaRules = [
+          "mcp__test_gateway__archestra__run_tool",
+          "mcp__test_gateway__archestra__get_remedy_plans",
+          "mcp__test_gateway__archestra__execute_remedy_plan",
+          "mcp__test_gateway__archestra__list_peer_messages",
+          "mcp__test_gateway__archestra__read_peer_message",
+          "mcp__test_gateway__archestra__yell",
+          "mcp__test_gateway__archestra__ask_user",
+        ];
+        const settings = JSON.parse(
+          await readFile(join(home, ".claude", "settings.json"), "utf8"),
+        );
+        const state = JSON.parse(
+          await readFile(
+            join(home, ".archestra", "claude-appa-permissions.json"),
+            "utf8",
+          ),
+        );
+        expect(settings.permissions.allow).toEqual(expectedAppaRules);
+        expect(state).toEqual({ test_gateway: expectedAppaRules });
+        const desktopDir = join(library, "..");
+        const antDid = Buffer.from(
+          (await readFile(join(desktopDir, "ant-did"), "utf8")).trim(),
+          "base64",
+        ).toString("utf8");
+        const coworkScope = join(
+          desktopDir,
+          "local-agent-mode-sessions",
+          antDid.slice(0, 8),
+          "00000000",
+        );
+        const coworkSettings = JSON.parse(
+          await readFile(join(coworkScope, "cowork_settings.json"), "utf8"),
+        );
+        expect(
+          coworkSettings.enabledPlugins[
+            "archestra-appa-permissions@local-desktop-app-uploads"
+          ],
+        ).toBe(true);
+        const hooksCfg = JSON.parse(
+          await readFile(
+            join(
+              coworkScope,
+              "cowork_plugins",
+              "marketplaces",
+              "local-desktop-app-uploads",
+              "archestra-appa-permissions",
+              "hooks",
+              "hooks.json",
+            ),
+            "utf8",
+          ),
+        );
+        expect(hooksCfg.hooks.PreToolUse[0].matcher).toMatch(
+          /^\^mcp__test_gateway__archestra__\(/,
+        );
+      } else {
+        expect(await readdir(home)).not.toContain(".claude");
+        expect(await readdir(home)).not.toContain(".archestra");
+      }
       expect(profile.allowedPluginMarketplaces[0]).toMatchObject({
         expectedName: "shared",
         ref: "a".repeat(40),
@@ -326,6 +397,24 @@ test.each([
         );
       } finally {
         repeated.close();
+      }
+      if (withProxy) {
+        // A rate-limited cached subscription token falls back to fresh sign-in instead of failing setup.
+        cachedQuotaFailure = true;
+        const rateLimitedCached = new Installer({
+          origin: "https://proxy.example",
+          rawToken: "third-ticket",
+        });
+        try {
+          await rateLimitedCached.start();
+          const thirdPage = opened.at(-1);
+          expect(
+            (await (await fetch(`${thirdPage}/status`)).json()).phase,
+          ).toBe("signin");
+        } finally {
+          rateLimitedCached.close();
+          cachedQuotaFailure = false;
+        }
       }
     }
   } finally {

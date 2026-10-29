@@ -31,7 +31,7 @@ import {
   recordHitlRuling,
   stageHitlReview,
 } from "@/openappa/hitl-review";
-import { buildNoticeArguments } from "@/openappa/notice";
+import { buildNoticeArguments, readNotice } from "@/openappa/notice";
 import { prepareAppaRequest } from "@/openappa/request";
 import { verifyRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as appaService from "@/openappa/service";
@@ -50,8 +50,12 @@ import { setupTestCacheManager } from "@/test/cache-manager";
 import { makeReturnLabelReview } from "@/test/openappa-return-label-review";
 import { ApiError } from "@/types";
 import { AppaChatAdapter } from "./adapters/chat";
-import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
+import {
+  AppaClaudeCodeAdapter,
+  AppaClaudeDesktopAdapter,
+} from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
 import {
@@ -1880,6 +1884,62 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("asks about a review_required result in a session with a long id", async () => {
+    // Agent-run sessions carry their caller's scope. Encoded with the result
+    // id, the question-asked key outgrew keyv_cache.key, and every request
+    // after review_required failed until the client gave up. The test
+    // organization id is shorter than a real one, so the session id makes up
+    // the difference.
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const sessionId = `service-account:${randomUUID()}|agent-run-${randomUUID()}-${randomUUID()}-${randomUUID()}`;
+    const context = requestContext({ sessionId });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request = {
+      tools: {
+        control: { name: "mcp__archestra__execute_remedy_plan" },
+        notice: { name: "mcp__archestra__get_remedy_plans" },
+        askUser: { name: "mcp__archestra__ask_user" },
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [],
+      session: {},
+    };
+    await stageHitlReview({
+      session: trusted.session,
+      review: { offerId: "offer-long", text: "Canonical HITL review." },
+    });
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    try {
+      await plugin.onSessionInit(context);
+      await expect(
+        plugin.onToolResults({
+          ...context,
+          toolResults: [
+            {
+              id: "toolu_bdrk_01Lumt8L3Mtc6Rz7zaD6LbUq",
+              name: "mcp__archestra__execute_remedy_plan",
+              content: JSON.stringify({
+                ok: false,
+                outcome: "review_required",
+                offer_id: "offer-long",
+              }),
+              isError: false,
+            },
+          ],
+        }),
+      ).resolves.toBeDefined();
+    } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("hands OpenCode the model's ask_user as its question tool", async () => {
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({
@@ -3489,30 +3549,49 @@ describe("asking through the client's own question tool", () => {
   /**
    * A Claude Code session whose review rides the client's native card with an
    * Inspect option, on a transport that can place the complete review
-   * text before the card. `askCard` re-asks exactly as the model would: only
-   * the offer ID decides what is shown.
+   * text before the card. OpenCode, Kilo Code and Kimi Code carry the review
+   * in the question itself. `askCard` re-asks exactly as the model would:
+   * only the offer ID decides what is shown.
    */
   function inspectableClaudeReview(params: {
     sessionId: string;
     offerId: string;
-    client?: "opencode" | "kilo";
+    client?: "opencode" | "kilo" | "kimi-code" | "claude-desktop";
   }) {
+    const isOpenCodeFamily =
+      params.client === "opencode" || params.client === "kilo";
     const adapter =
-      params.client === "kilo"
-        ? new AppaKiloAdapter()
-        : params.client === "opencode"
-          ? new AppaOpenCodeAdapter()
-          : new AppaClaudeCodeAdapter();
-    const nativeName = params.client ? "question" : "AskUserQuestion";
+      params.client === "kimi-code"
+        ? new AppaKimiCodeAdapter()
+        : params.client === "kilo"
+          ? new AppaKiloAdapter()
+          : params.client === "opencode"
+            ? new AppaOpenCodeAdapter()
+            : params.client === "claude-desktop"
+              ? new AppaClaudeDesktopAdapter()
+              : new AppaClaudeCodeAdapter();
+    const kimi = params.client === "kimi-code";
+    // Claude Code and Claude Desktop show the review before the card; the
+    // other clients carry it in the question itself.
+    const showsReview = !isOpenCodeFamily && !kimi;
+    const nativeName = isOpenCodeFamily ? "question" : "AskUserQuestion";
     const plugin = new AppaPluginArchestra([adapter]);
     const context = requestContext({ sessionId: params.sessionId });
-    context.headers = params.client
-      ? {
-          "user-agent": `${params.client}/1`,
-          "x-opencode-session": params.sessionId,
-          "x-archestra-question-cards": "1",
-        }
-      : { "user-agent": "claude-code/1" };
+    context.headers = kimi
+      ? { "user-agent": "kimi-code-cli/2.3.3" }
+      : isOpenCodeFamily
+        ? {
+            "user-agent": `${params.client}/1`,
+            "x-opencode-session": params.sessionId,
+            "x-archestra-question-cards": "1",
+          }
+        : params.client === "claude-desktop"
+          ? {
+              "user-agent": "claude-cli/2.1.312 (external, cli)",
+              "x-archestra-agent-id": "anthropic_claude_desktop",
+            }
+          : { "user-agent": "claude-code/1" };
+    if (kimi) context.requestBody = { prompt_cache_key: params.sessionId };
     const trusted = context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
     ) as AppaTrustedContext;
@@ -3543,20 +3622,23 @@ describe("asking through the client's own question tool", () => {
             }),
           },
         ],
-        canShowToolCallReview: !params.client,
+        canShowToolCallReview: showsReview,
       });
       if (prepared?.decision !== "allow")
         throw new Error("expected the review card");
       const released = await plugin.onToolCalls({
         ...context,
         toolCalls: prepared.toolCalls,
-        canShowToolCallReview: !params.client,
+        canShowToolCallReview: showsReview,
       });
       if (released?.decision !== "allow")
         throw new Error("expected the released review card");
       const [call] = released.toolCalls;
+      // Kimi Code cuts tool-call IDs, so no trajectory stamp wraps the native
+      // question id: the answer comes back under that id as issued.
       const stamp = parseTrajectoryStamp(call.wireId ?? "");
-      if (!stamp) throw new Error("expected a trajectory stamp");
+      if (!kimi && !stamp) throw new Error("expected a trajectory stamp");
+      if (kimi && stamp) throw new Error("expected no trajectory stamp");
       const args = JSON.parse(call.arguments as string) as {
         questions: Array<{
           question: string;
@@ -3571,7 +3653,7 @@ describe("asking through the client's own question tool", () => {
       };
       return {
         call,
-        answerId: stamp.callId,
+        answerId: stamp ? stamp.callId : (call.wireId ?? call.id),
         card: args.questions[0],
         reviewDetails: (call as { reviewDetails?: string }).reviewDetails,
       };
@@ -3588,11 +3670,18 @@ describe("asking through the client's own question tool", () => {
             id: answerId,
             name: nativeName,
             content: JSON.stringify(
-              label === ""
-                ? params.client
-                  ? "User dismissed the question."
-                  : "The user did not answer the questions."
-                : `${params.client ? "User has answered your questions" : "Your questions have been answered"}: "${question}"="${label}". You can now continue with these answers in mind.`,
+              kimi
+                ? label === ""
+                  ? {
+                      answers: {},
+                      note: "User dismissed the question without answering.",
+                    }
+                  : { answers: { [question]: label } }
+                : label === ""
+                  ? isOpenCodeFamily
+                    ? "User dismissed the question."
+                    : "The user did not answer the questions."
+                  : `${isOpenCodeFamily ? "User has answered your questions" : "Your questions have been answered"}: "${question}"="${label}". You can now continue with these answers in mind.`,
             ),
             isError: false,
           },
@@ -3611,6 +3700,7 @@ describe("asking through the client's own question tool", () => {
   test.each([
     "opencode",
     "kilo",
+    "kimi-code",
   ] as const)("%s connection cards bind previews, deliver full review in native input, and consume explicit answers once", async (client) => {
     const offerId = `offer-${client}-cards`;
     const f = inspectableClaudeReview({
@@ -3662,6 +3752,7 @@ describe("asking through the client's own question tool", () => {
   test.each([
     "opencode",
     "kilo",
+    "kimi-code",
   ] as const)("%s rejects cross-session and altered-question answers without consuming the rightful card", async (client) => {
     const offerId = `offer-${client}-scope`;
     const owner = inspectableClaudeReview({
@@ -3714,6 +3805,7 @@ describe("asking through the client's own question tool", () => {
   test.each([
     "opencode",
     "kilo",
+    "kimi-code",
   ] as const)("%s dismisses without denial and refuses a stale payload", async (client) => {
     const results = vi
       .spyOn(appaService, "processProxyResults")
@@ -4452,6 +4544,122 @@ describe("asking through the client's own question tool", () => {
         getHitlReview({ session: trusted.session, offerId }),
       ).resolves.toBeUndefined();
     } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("Claude Desktop inspectable cards carry the call and policy scope in question without option previews, place Inspect reviewDetails before the card, and seal Skip/Dismiss sentinel answers", async () => {
+    const offerId = "offer-claude-desktop-inspectable";
+    const command =
+      "python3 -c \"print('<script>alert(1)</script><a href=https://example.com>link</a>')\"";
+    const { plugin, context, trusted, askCard, answer } =
+      inspectableClaudeReview({
+        client: "claude-desktop",
+        sessionId: "user:user|claude-desktop-inspectable",
+        offerId,
+      });
+    await stageInspectableReview(trusted.session, offerId, command);
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+
+    try {
+      await plugin.onSessionInit(context);
+      const first = await askCard();
+      expect(first.call.name).toBe("AskUserQuestion");
+      expect(first.card.question).toContain("Run Bash?\n\n");
+      expect(first.card.question.replace(/\n\s+/g, "")).toContain(
+        "<script>alert(1)</script>",
+      );
+      expect(first.card.question.replace(/\s+/g, " ")).toContain(
+        "the readers must be the public audience",
+      );
+      expect(first.card.options.map((option) => option.label)).toEqual([
+        "Allow",
+        "Deny",
+        "Inspect",
+      ]);
+      expect(first.card.options.some((option) => "preview" in option)).toBe(
+        false,
+      );
+      expect(first.reviewDetails).toBeUndefined();
+
+      await answer(first.answerId, first.card.question, "Inspect");
+      const inspected = await askCard();
+      expect(inspected.reviewDetails).toContain("## Approval review");
+      expect(inspected.reviewDetails).toContain(command);
+      expect(inspected.card.question).toBe(first.card.question);
+      expect(inspected.card.options.some((option) => "preview" in option)).toBe(
+        false,
+      );
+
+      const approved = await answer(
+        inspected.answerId,
+        inspected.card.question,
+        "Allow",
+      );
+      expect(approved.guidance).toContain("approved OpenAPPA offer IDs");
+      await expect(
+        consumeHitlRuling({ session: trusted.session, offerId }),
+      ).resolves.toBe("approve");
+
+      for (const [suffix, sentinel, closure] of [
+        ["skip", "[No preference]", "unanswered"],
+        [
+          "dismiss",
+          "[User dismissed \u2014 do not proceed, wait for next instruction]",
+          "declined",
+        ],
+      ] as const) {
+        const sentinelOfferId = `offer-claude-desktop-${suffix}`;
+        const sentinelFixture = inspectableClaudeReview({
+          client: "claude-desktop",
+          sessionId: `user:user|claude-desktop-${suffix}`,
+          offerId: sentinelOfferId,
+        });
+        await stageInspectableReview(
+          sentinelFixture.trusted.session,
+          sentinelOfferId,
+          "pwd",
+        );
+        await sentinelFixture.plugin.onSessionInit(sentinelFixture.context);
+        try {
+          const card = await sentinelFixture.askCard();
+          await sentinelFixture.plugin.onToolResults({
+            ...sentinelFixture.context,
+            toolResults: [
+              {
+                id: card.answerId,
+                name: "AskUserQuestion",
+                content: JSON.stringify(
+                  `The user answered: "${card.card.question}"="${sentinel}". Read the answers carefully \u2014 they may request clarification, changes, or that you not proceed \u2014 and follow what they actually say.`,
+                ),
+                isError: false,
+              },
+            ],
+          });
+          await expect(
+            hitlReview.peekHitlDecision({
+              session: sentinelFixture.trusted.session,
+              offerId: sentinelOfferId,
+            }),
+          ).resolves.toEqual({ ruling: "none", closure });
+          await expect(
+            consumeHitlRuling({
+              session: sentinelFixture.trusted.session,
+              offerId: sentinelOfferId,
+            }),
+          ).resolves.toBe("none");
+        } finally {
+          await sentinelFixture.plugin.onCleanup(sentinelFixture.context);
+        }
+      }
+    } finally {
+      evaluateToolCalls.mockRestore();
       processResults.mockRestore();
       await plugin.onCleanup(context);
     }
@@ -5276,14 +5484,38 @@ describe("withoutRemedySections", () => {
 });
 
 describe("rendering runtime text for this client", () => {
-  test("shows a ruling the session cannot act on without its plans, and where Claude Code shows the gateway", async () => {
-    // The gateway needs a sign-in, so Claude Code lists no gateway tool and
+  test.each([
+    {
+      client: "Claude Code",
+      adapter: () => new AppaClaudeCodeAdapter(),
+      headers: { "user-agent": "claude-cli/2.1.300 (external, cli)" },
+      hint: (server: string) =>
+        `Run /mcp in Claude Code. If "${server}" is still connecting, wait for it. If it needs authentication, select it and sign in.`,
+    },
+    {
+      client: "Claude Desktop",
+      adapter: () => new AppaClaudeDesktopAdapter(),
+      headers: {
+        "user-agent": "claude-cli/2.1.289 (external, cli)",
+        "x-archestra-agent-id": "anthropic_claude_desktop",
+      },
+      hint: (server: string) =>
+        `In Claude Desktop, open Settings → Connectors, select "${server}", and complete sign-in if needed. In your conversation, open + → Connectors and enable "${server}" if it is off. If it is not listed, connect Claude Desktop again and start a new session.`,
+    },
+  ])("carries a ruling the session cannot act on without its plans, and where $client shows the gateway", async ({
+    adapter,
+    headers,
+    hint,
+  }) => {
+    // The gateway needs a sign-in, so the client lists no gateway tool and
     // no wait tool: nothing is pending. The ruling still names a plan and a
     // subagent route, which the model would pass on as options; neither can
-    // be taken here. The person is sent to /mcp, where the client says why.
-    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    // be taken here. The person is sent to the client's MCP surface, where
+    // the client says why. The ruling rides an undeclared notice call, which
+    // the client answers with an error and the next request restores.
+    const plugin = new AppaPluginArchestra([adapter()]);
     const context = requestContext({ sessionId: "gateway-needs-sign-in" });
-    context.headers = { "user-agent": "claude-cli/2.1.300 (external, cli)" };
+    context.headers = headers;
     const trusted = context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
     ) as Record<string, unknown>;
@@ -5307,12 +5539,17 @@ describe("rendering runtime text for this client", () => {
       .mockResolvedValue(undefined);
     try {
       await plugin.onSessionInit(context);
-      const outcome = (await plugin.onToolCalls({
+      const outcome = await plugin.onToolCalls({
         ...context,
         toolCalls: [{ id: "bash", name: "Bash", arguments: { command: "ls" } }],
-      })) as { decision: string; refusal: { contentMessage: string } };
-      expect(outcome.decision).toBe("refuse");
-      const message = outcome.refusal.contentMessage;
+      });
+      expect(outcome).toMatchObject({ decision: "allow" });
+      const notice = carriedNotice(outcome, "bash");
+      expect(notice).toMatchObject({
+        tool: "Bash",
+        original: { kind: "function", arguments: { command: "ls" } },
+      });
+      const message = notice.result;
       expect(
         message.startsWith("[appa] Blocked: Bash cannot run yet.\n\nWhy:\n"),
       ).toBe(true);
@@ -5328,9 +5565,7 @@ describe("rendering runtime text for this client", () => {
       expect(message).toContain(
         `[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway tools, so no remedy plan can be used in this session, and a subagent started from it has the same limit. The call is refused.`,
       );
-      expect(message).toContain(
-        `Run /mcp in Claude Code. If "${archestraMcpBranding.serverName}" is still connecting, wait for it. If it needs authentication, select it and sign in.`,
-      );
+      expect(message).toContain(hint(archestraMcpBranding.serverName));
       expect(message).toMatch(/Then send your message again\.$/);
     } finally {
       cancelCalls.mockRestore();
@@ -5414,7 +5649,7 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("cuts the subagent advice from a ruling with no plan when the session has no gateway tools", async () => {
+  test("cuts the subagent advice from a carried ruling with no plan when the session has no gateway tools", async () => {
     // The runtime advises a subagent route whether or not it offers a plan.
     // A subagent of this client has no gateway tools either, so the advice
     // would contradict the stop instruction the proxy adds.
@@ -5452,12 +5687,12 @@ describe("rendering runtime text for this client", () => {
       .mockResolvedValue(undefined);
     try {
       await plugin.onSessionInit(context);
-      const outcome = (await plugin.onToolCalls({
+      const outcome = await plugin.onToolCalls({
         ...context,
         toolCalls: [{ id: "bash", name: "Bash", arguments: { command: "ls" } }],
-      })) as { decision: string; refusal: { contentMessage: string } };
-      expect(outcome.decision).toBe("refuse");
-      const message = outcome.refusal.contentMessage;
+      });
+      expect(outcome).toMatchObject({ decision: "allow" });
+      const message = carriedNotice(outcome, "bash").result;
       expect(message).toContain("trust is suspicious");
       expect(message).not.toContain("Alternative:");
       expect(message).not.toContain("subagent tool is available");
@@ -5679,13 +5914,14 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("has Claude Code wait for its MCP servers once in place of a denial it cannot deliver yet", async ({
+  test("has Claude Code wait for its MCP servers once in place of a denial, then carries the next one as a notice", async ({
     makeOrganization,
   }) => {
     // Claude Code declares WaitForMcpServers in the requests it sends before
     // the gateway is connected. The denied call becomes that wait, so the turn
     // goes on and the next request can declare the remedy tools. A session
-    // waits once: after that, a request without the tools is refused as before.
+    // waits once: after that, a denial in a request without the tools rides
+    // an undeclared notice call, and the admitted sibling still runs.
     config.openappa.enabled = true;
     config.openappa.yellEnabled = true;
     const organizationId = (await makeOrganization()).id;
@@ -5741,16 +5977,17 @@ describe("rendering runtime text for this client", () => {
       });
       expect(cancelCalls).not.toHaveBeenCalled();
 
-      const second = (await send()) as {
-        decision: string;
-        refusal: { contentMessage: string };
-      };
-      expect(second.decision).toBe("refuse");
+      const second = await send();
+      expect(second).toMatchObject({
+        decision: "allow",
+        toolCalls: [admitted, { id: "denied" }],
+        blocked: [{ id: "denied", name: "Read" }],
+      });
       // Claude Code's own view of its servers is where the person sees why.
-      expect(second.refusal.contentMessage).toContain(
+      expect(carriedNotice(second, "denied").result).toContain(
         "Run /mcp in Claude Code.",
       );
-      expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+      expect(cancelCalls).not.toHaveBeenCalled();
       expect((await yells()).data).toHaveLength(0);
     } finally {
       cancelCalls.mockRestore();
@@ -5758,7 +5995,7 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("does not answer a denied wait call with another wait call", async () => {
+  test("carries a denied wait call as a notice, not as another wait call", async () => {
     // The wait tool carries a denial only for other tools. A policy that
     // denies the wait tool itself must not see it released anyway.
     const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
@@ -5786,26 +6023,27 @@ describe("rendering runtime text for this client", () => {
       .mockResolvedValue(undefined);
     try {
       await plugin.onSessionInit(context);
-      expect(
-        await plugin.onToolCalls({
-          ...context,
-          toolCalls: [{ id: "wait", name: "WaitForMcpServers", arguments: {} }],
-        }),
-      ).toMatchObject({
-        decision: "refuse",
-        refusal: { reason: "openappa_no_notice_tool", blockedToolId: "wait" },
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "wait", name: "WaitForMcpServers", arguments: {} }],
       });
+      expect(outcome).toMatchObject({
+        decision: "allow",
+        toolCalls: [{ id: "wait" }],
+        blocked: [{ id: "wait", name: "WaitForMcpServers" }],
+      });
+      expect(carriedNotice(outcome, "wait").tool).toBe("WaitForMcpServers");
     } finally {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();
     }
   });
 
-  test("refuses a denial the runtime did not record instead of sending the wait call", async () => {
+  test("carries a denial the runtime did not record instead of sending the wait call", async () => {
     // The runtime answers a wait call's result with the ruling it recorded for
     // that id. A denial made before dispatch, such as malformed arguments, has
-    // no such record, so only the refusal text can deliver its ruling. The
-    // session keeps its one wait for a later denial.
+    // no such record, so only a notice that carries the ruling can deliver it.
+    // The session keeps its one wait for a later denial.
     const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
     const context = requestContext({ sessionId: "unrecorded-denial" });
     context.headers = { "user-agent": "claude-cli/2.1.289 (external, cli)" };
@@ -5835,12 +6073,9 @@ describe("rendering runtime text for this client", () => {
       });
     try {
       await plugin.onSessionInit(context);
-      const first = (await send()) as {
-        decision: string;
-        refusal: { contentMessage: string };
-      };
-      expect(first.decision).toBe("refuse");
-      expect(first.refusal.contentMessage).toContain(
+      const first = await send();
+      expect(first).toMatchObject({ decision: "allow" });
+      expect(carriedNotice(first, "denied").result).toContain(
         "The tool call arguments are not valid JSON.",
       );
       expect(await send()).toMatchObject({
@@ -5853,9 +6088,314 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("withdraws evaluated calls by id when a child handback shares a refused batch", async ({
-    makeOrganization,
-  }) => {
+  describe("a denial with no declared notice tool", () => {
+    const claudeCodeAgent = "claude-cli/2.1.310 (external, cli)";
+    const ruling = "[appa] Refused: no plan.";
+    const admitted = { id: "admitted", name: "Read", arguments: '{"a":1}' };
+    const denied = {
+      id: "denied",
+      name: "Bash",
+      arguments: '{"command":"ls"}',
+    };
+    const rule = async (params: {
+      sessionId: string;
+      adapter: AppaClaudeCodeAdapter | AppaOpenCodeAdapter;
+      userAgent: string;
+      interactionType: string;
+      declaredTools: { name: string }[];
+    }) => {
+      const plugin = new AppaPluginArchestra([params.adapter]);
+      const context = requestContext({ sessionId: params.sessionId });
+      context.headers = { "user-agent": params.userAgent };
+      context.interactionType = params.interactionType;
+      const trusted = context.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as Record<string, unknown>;
+      trusted.request = {
+        tools: undefined,
+        customTools: new Set(),
+        declaredTools: params.declaredTools,
+      };
+      await plugin.onSessionInit(context);
+      return plugin.onToolCalls({ ...context, toolCalls: [admitted, denied] });
+    };
+    let cancelCalls: MockInstance<typeof appaService.cancelCalls>;
+    let evaluateToolCalls: MockInstance<typeof appaService.evaluateToolCalls>;
+    beforeEach(() => {
+      cancelCalls = vi
+        .spyOn(appaService, "cancelCalls")
+        .mockResolvedValue(undefined);
+      evaluateToolCalls = vi
+        .spyOn(appaService, "evaluateToolCalls")
+        .mockImplementation(async () => [
+          { kind: "allow" as const },
+          {
+            kind: "deny" as const,
+            feedback: ruling,
+            recorded: true as const,
+            offers: [],
+          },
+        ]);
+    });
+    afterEach(() => {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    });
+
+    test("rides an undeclared notice call on Claude Code's Messages wire, carrying the ruling a refusal would", async () => {
+      const declaredTools = [{ name: "Read" }, { name: "Bash" }];
+      const refused = (await rule({
+        sessionId: "refused-twin",
+        adapter: new AppaClaudeCodeAdapter(),
+        userAgent: claudeCodeAgent,
+        interactionType: "openai:chatCompletions",
+        declaredTools,
+      })) as { decision: string; refusal: { contentMessage: string } };
+      expect(refused.decision).toBe("refuse");
+      cancelCalls.mockClear();
+
+      const outcome = await rule({
+        sessionId: "carried",
+        adapter: new AppaClaudeCodeAdapter(),
+        userAgent: claudeCodeAgent,
+        interactionType: "anthropic:messages",
+        declaredTools,
+      });
+      expect(outcome).toMatchObject({
+        decision: "allow",
+        toolCalls: [admitted, { id: "denied" }],
+        blocked: [{ id: "denied", name: "Bash", reason: ruling }],
+      });
+      expect(carriedNotice(outcome, "denied")).toEqual({
+        id: "denied",
+        tool: "Bash",
+        original: {
+          kind: "function",
+          arguments: { command: "ls" },
+          rawArguments: '{"command":"ls"}',
+        },
+        result: refused.refusal.contentMessage,
+      });
+      expect(cancelCalls).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      {
+        case: "on another wire",
+        adapter: () => new AppaClaudeCodeAdapter(),
+        userAgent: claudeCodeAgent,
+        interactionType: "openai:chatCompletions",
+        declaredTools: [{ name: "Read" }, { name: "Bash" }],
+      },
+      {
+        case: "for a client that may not answer an undeclared call",
+        adapter: () => new AppaOpenCodeAdapter(),
+        userAgent: "opencode/1.17.0",
+        interactionType: "anthropic:messages",
+        declaredTools: [{ name: "Read" }, { name: "Bash" }],
+      },
+      {
+        // The client would run its own tool of that name with the ruling.
+        case: "when the client declares a tool under the notice name",
+        adapter: () => new AppaClaudeCodeAdapter(),
+        userAgent: claudeCodeAgent,
+        interactionType: "anthropic:messages",
+        declaredTools: [
+          { name: "Read" },
+          { name: "Bash" },
+          { name: "archestra__get_remedy_plans" },
+        ],
+      },
+    ])("refuses and withdraws the admitted call $case", async ({
+      case: _case,
+      adapter,
+      ...params
+    }) => {
+      const outcome = await rule({
+        sessionId: "refused",
+        adapter: adapter(),
+        ...params,
+      });
+      expect(outcome).toMatchObject({
+        decision: "refuse",
+        refusal: { reason: "openappa_no_notice_tool", blockedToolId: "denied" },
+      });
+      expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+    });
+
+    test("refuses and withdraws the admitted call when the carried ruling cannot be kept", async () => {
+      const set = cacheManager.set.bind(cacheManager);
+      const cacheSet = vi
+        .spyOn(cacheManager, "set")
+        .mockImplementation((key, ...rest) =>
+          key.startsWith(CacheKey.OpenAppaCarriedRuling)
+            ? Promise.reject(new Error("cache unavailable"))
+            : set(key, ...rest),
+        );
+      try {
+        const outcome = await rule({
+          sessionId: "carrier-cache-down",
+          adapter: new AppaClaudeCodeAdapter(),
+          userAgent: claudeCodeAgent,
+          interactionType: "anthropic:messages",
+          declaredTools: [{ name: "Read" }, { name: "Bash" }],
+        });
+        expect(outcome).toMatchObject({
+          decision: "refuse",
+          refusal: {
+            reason: "openappa_no_notice_tool",
+            blockedToolId: "denied",
+          },
+        });
+        expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+      } finally {
+        cacheSet.mockRestore();
+      }
+    });
+
+    test("withdraws the admitted call when the refusal fails before it is sent", async () => {
+      const set = cacheManager.set.bind(cacheManager);
+      const cacheSet = vi
+        .spyOn(cacheManager, "set")
+        .mockImplementation((key, ...rest) =>
+          key.startsWith(CacheKey.OpenAppaRemedyToolsMissing)
+            ? Promise.reject(new Error("cache unavailable"))
+            : set(key, ...rest),
+        );
+      try {
+        await expect(
+          rule({
+            sessionId: "refusal-cache-down",
+            adapter: new AppaOpenCodeAdapter(),
+            userAgent: "opencode/1.17.0",
+            interactionType: "anthropic:messages",
+            declaredTools: [{ name: "Read" }, { name: "Bash" }],
+          }),
+        ).rejects.toThrow("cache unavailable");
+        expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+      } finally {
+        cacheSet.mockRestore();
+      }
+    });
+
+    test("answers the carried call with the carried ruling and asks for no remedy plan, though the journal offers one", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const sessionId = "carried-offered";
+      const call = () => {
+        const context = requestContext({ sessionId, organizationId: org.id });
+        context.headers = { "user-agent": claudeCodeAgent };
+        trustedOf(context).request = {
+          tools: undefined,
+          customTools: new Set(),
+          declaredTools: [{ name: "Read" }, { name: "Bash" }],
+          session: {},
+        };
+        return context;
+      };
+      const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+      const first = call();
+      await plugin.onSessionInit(first);
+      const carried = carriedNotice(
+        await plugin.onToolCalls({ ...first, toolCalls: [admitted, denied] }),
+        denied.id,
+      ).result;
+      await plugin.onCleanup(first);
+
+      await db.insert(schema.openappaSessionsTable).values({
+        organizationId: org.id,
+        callerId: "user:user",
+        sessionId,
+        actor: openappaActor(sessionId),
+        root: openappaActor(sessionId),
+        startDecision: { decision: "ack" },
+      });
+      await db.insert(schema.openappaOperationsTable).values({
+        organizationId: org.id,
+        callerId: "user:user",
+        sessionId,
+        root: openappaActor(sessionId),
+        operationId: `call:${denied.id}`,
+        status: "complete",
+        input: { semantic: { event: "tool_call" } },
+        decision: {
+          decision: "deny_call",
+          feedback: `${ruling} Call execute_remedy_plan(offer_id: "offer-1").`,
+          offers: [{ offer_id: "offer-1" }],
+        },
+      });
+      const processResults = vi
+        .spyOn(appaService, "processProxyResults")
+        .mockResolvedValue({
+          toolResultUpdates: {
+            [denied.id]: {
+              content: `${ruling} Call execute_remedy_plan(offer_id: "offer-1").`,
+              outputSource: "runtime",
+              denied: true,
+            },
+          },
+        });
+      const next = call();
+      const request = { system: "Base", messages: [] };
+      try {
+        await plugin.onSessionInit(next);
+        const results = await plugin.onToolResults({
+          ...next,
+          toolResults: [
+            {
+              id: denied.id,
+              name: "Bash",
+              content:
+                "<tool_use_error>Error: No such tool available: archestra__get_remedy_plans</tool_use_error>",
+              isError: true,
+            },
+          ],
+        });
+        await plugin.onBeforeModel({ ...next, request });
+
+        expect(results?.toolResultUpdates?.[denied.id]).toBe(carried);
+        expect(request).toEqual({ system: "Base", messages: [] });
+      } finally {
+        processResults.mockRestore();
+        await plugin.onCleanup(next);
+      }
+    });
+
+    test("still swaps in the wait tool first while Claude Code's servers are pending", async () => {
+      const outcome = await rule({
+        sessionId: "pending",
+        adapter: new AppaClaudeCodeAdapter(),
+        userAgent: claudeCodeAgent,
+        interactionType: "anthropic:messages",
+        declaredTools: [
+          { name: "Read" },
+          { name: "Bash" },
+          { name: "WaitForMcpServers" },
+        ],
+      });
+      expect(outcome).toEqual({
+        decision: "allow",
+        toolCalls: [
+          admitted,
+          { id: "denied", name: "WaitForMcpServers", arguments: "{}" },
+        ],
+        blocked: [{ id: "denied", name: "Bash", reason: ruling }],
+      });
+      expect(cancelCalls).not.toHaveBeenCalled();
+    });
+  });
+
+  test.for([
+    { wire: "openai:chatCompletions", carried: false },
+    { wire: "anthropic:messages", carried: true },
+  ] as const)("handles a denied call by id when a child handback shares its batch (wire $wire, carried $carried)", async ({
+    wire,
+    carried,
+  }, { makeOrganization }) => {
+    // A wire the client cannot be handed an undeclared notice on refuses the
+    // batch and withdraws the admitted call by id, not by batch position. On
+    // the Messages wire the denial rides the notice and its siblings run.
     const priorSecret = config.openappa.offerSigningSecret;
     config.openappa.offerSigningSecret = DELEGATION_SECRET;
     const organization = await makeOrganization();
@@ -5864,6 +6404,7 @@ describe("rendering runtime text for this client", () => {
       sessionId: "user:user|s1",
       organizationId: organization.id,
     });
+    context.interactionType = wire;
     context.headers = {
       "user-agent": "claude-code/1",
       "x-claude-code-session-id": "s1",
@@ -5924,15 +6465,28 @@ describe("rendering runtime text for this client", () => {
         ],
       });
 
-      expect(outcome).toMatchObject({
-        decision: "refuse",
-        refusal: { blockedToolId: "denied" },
-      });
-      expect(cancelCalls).toHaveBeenCalledWith(
-        expect.anything(),
-        ["admitted"],
-        expect.any(Function),
-      );
+      if (carried) {
+        expect(outcome).toMatchObject({
+          decision: "allow",
+          blocked: [{ id: "denied", name: "Bash" }],
+        });
+        if (outcome?.decision !== "allow") throw new Error("expected allow");
+        expect(outcome.toolCalls.map((call) => call.id)).toEqual(
+          expect.arrayContaining(["admitted", "denied"]),
+        );
+        expect(carriedNotice(outcome, "denied").tool).toBe("Bash");
+        expect(cancelCalls).not.toHaveBeenCalled();
+      } else {
+        expect(outcome).toMatchObject({
+          decision: "refuse",
+          refusal: { blockedToolId: "denied" },
+        });
+        expect(cancelCalls).toHaveBeenCalledWith(
+          expect.anything(),
+          ["admitted"],
+          expect.any(Function),
+        );
+      }
     } finally {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();
@@ -6188,6 +6742,173 @@ describe("rendering runtime text for this client", () => {
       evaluateToolCalls.mockRestore();
       endChild.mockRestore();
       config.openappa.offerSigningSecret = priorSecret;
+    }
+  });
+
+  test("converts a withheld SubagentHandback (crossed=false) into a denied tool notice instead of throwing 409", async ({
+    makeOrganization,
+  }) => {
+    const priorSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = DELEGATION_SECRET;
+    const organization = await makeOrganization();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    trusted.request.turnEndOperationId = "turn_end:withheld-handback";
+    const marker = mintDelegationMarker({
+      organizationId: organization.id,
+      callerId: "user:user",
+      parentId: "s1",
+      spawnerNativeId: "s1",
+      prompt: "task",
+      spawnCallId: "spawn-call",
+    });
+    if (!marker) throw new Error("expected delegation marker");
+    trusted.request.delegation = {
+      markers: collectDelegationMarkers({
+        family: "anthropic:messages",
+        body: {
+          messages: [{ role: "user", content: `task\n\n${marker}` }],
+        },
+      }),
+    };
+    const feedback =
+      "[appa] Return value does not satisfy the declared JSON schema.";
+    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+      decision: "replace",
+      content: feedback,
+      crossed: false,
+    });
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "handback-invalid",
+            name: "SubagentHandback",
+            arguments: { message: "not valid json" },
+          },
+        ],
+      });
+      expect(outcome).toMatchObject({
+        decision: "allow",
+        blocked: [{ id: "handback-invalid", name: "SubagentHandback" }],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected allow");
+      const [notice] = outcome.toolCalls;
+      expect(notice?.name).toBe("archestra__get_remedy_plans");
+      expect(carriedNotice(outcome, "handback-invalid")).toMatchObject({
+        tool: "SubagentHandback",
+        result: feedback,
+      });
+    } finally {
+      endChild.mockRestore();
+      config.openappa.offerSigningSecret = priorSecret;
+    }
+  });
+
+  test("holds conflicting sibling execute_remedy_plan calls in a single batch as unstamped notices before any offer is spent", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    await db.insert(schema.openappaSessionsTable).values({
+      actor: openappaActor("user:user|s1"),
+      root: openappaActor("user:user|s1"),
+      organizationId: organization.id,
+      callerId: "user:user",
+      sessionId: "user:user|s1",
+      parentId: null,
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: organization.id,
+      callerId: "user:user",
+      sessionId: "user:user|s1",
+      operationId: "call:denied-agent-spawn",
+      root: openappaActor("user:user|s1"),
+      status: "complete",
+      input: { semantic: { event: "tool_call", tool: "Agent", spawn: true } },
+      decision: {
+        decision: "deny_call",
+        offers: [{ offer_id: "offer-bare" }, { offer_id: "offer-schema" }],
+      },
+    });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "control" }, { kind: "control" }]);
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "remedy-1",
+            name: "archestra__execute_remedy_plan",
+            arguments: {
+              offer_id: "offer-bare",
+              label: { trust: "trusted", audience: ["public"] },
+              plan: "Declare the return label",
+            },
+          },
+          {
+            id: "remedy-2",
+            name: "archestra__execute_remedy_plan",
+            arguments: {
+              offer_id: "offer-schema",
+              label: { audience: ["public"] },
+              return_schema: {
+                type: "object",
+                properties: { online: { type: "boolean" } },
+                required: ["online"],
+              },
+              plan: "Declare the return label and JSON schema",
+            },
+          },
+        ],
+      });
+      expect(outcome).toMatchObject({
+        decision: "allow",
+        blocked: [
+          { id: "remedy-1", name: "archestra__execute_remedy_plan" },
+          { id: "remedy-2", name: "archestra__execute_remedy_plan" },
+        ],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected allow");
+      for (const id of ["remedy-1", "remedy-2"]) {
+        const notice = carriedNotice(outcome, id);
+        expect(notice.tool).toBe("archestra__execute_remedy_plan");
+        expect(notice.result).toContain("mutually exclusive offers");
+        expect(notice.original).toMatchObject({ kind: "function" });
+        if (notice.original.kind !== "function")
+          throw new Error("expected function");
+        expect(notice.original.arguments).not.toHaveProperty("execution");
+        expect(notice.original.arguments).not.toHaveProperty("trajectory");
+      }
+    } finally {
+      evaluateToolCalls.mockRestore();
     }
   });
 
@@ -7935,6 +8656,13 @@ describe("child return contract delivery", () => {
       request: () => ({ input: [] }),
     },
     {
+      client: "Codex via a Responses alias",
+      adapter: () => new AppaCodexAdapter(),
+      headers: { originator: "codex_cli_rs" },
+      interactionType: "perplexity:responses",
+      request: () => ({ input: [] }),
+    },
+    {
       client: "OpenCode",
       adapter: () => new AppaOpenCodeAdapter(),
       headers: { "user-agent": "opencode/1.18.23" },
@@ -7974,6 +8702,90 @@ describe("child return contract delivery", () => {
       await plugin.onBeforeModel({ ...context, request: retry });
       expect(occurrences(first, contract)).toBe(1);
       expect(occurrences(retry, contract)).toBe(1);
+    } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each([
+    {
+      name: "after an existing vLLM system prompt",
+      interactionType: "vllm:chatCompletions",
+      messages: [
+        { role: "system", content: "Base" },
+        { role: "user", content: "go" },
+      ],
+      expected: [
+        { role: "system", content: `Base\n\n${contract}` },
+        { role: "user", content: "go" },
+      ],
+    },
+    {
+      name: "as a leading system message on vLLM",
+      interactionType: "vllm:chatCompletions",
+      messages: [{ role: "user", content: "go" }],
+      expected: [
+        { role: "system", content: contract },
+        { role: "user", content: "go" },
+      ],
+    },
+    {
+      name: "as a leading system message on native Chat Completions",
+      interactionType: "openai:chatCompletions",
+      messages: [{ role: "user", content: "go" }],
+      expected: [
+        { role: "system", content: contract },
+        { role: "user", content: "go" },
+      ],
+    },
+    {
+      name: "as a text part of a leading developer message",
+      interactionType: "openrouter:chatCompletions",
+      messages: [
+        { role: "developer", content: [{ type: "text", text: "Base" }] },
+        { role: "user", content: "go" },
+      ],
+      expected: [
+        {
+          role: "developer",
+          content: [
+            { type: "text", text: "Base" },
+            { type: "text", text: contract },
+          ],
+        },
+        { role: "user", content: "go" },
+      ],
+    },
+  ])("merges the contract into one leading system message $name", async ({
+    interactionType,
+    messages,
+    expected,
+  }) => {
+    const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|child",
+      parentId: "user:user|parent",
+    });
+    context.headers = { "user-agent": "opencode/1.18.23" };
+    context.interactionType = interactionType;
+    const trusted = trustedOf(context);
+    trusted.request.tools = undefined;
+    trusted.request.declaredTools = [];
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {},
+        returnContract: contract,
+      });
+    const request = { messages: structuredClone(messages) };
+
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolResults({ ...context, toolResults: [] });
+      await plugin.onBeforeModel({ ...context, request });
+      await plugin.onBeforeModel({ ...context, request });
+      expect(request.messages).toEqual(expected);
     } finally {
       processResults.mockRestore();
       await plugin.onCleanup(context);
@@ -8217,6 +9029,22 @@ const APPROVAL_RULING = [
   "  If a child-session or subagent tool is available, handle the work there if isolation is useful.",
   "  A child inherits the same session label, so delegation does not clear these requirements.",
 ].join("\n");
+
+/**
+ * The notice a denial rides when the client declares no notice tool: the
+ * released call with the denied call's id, under the gateway notice name.
+ */
+function carriedNotice(outcome: unknown, callId: string) {
+  const call = (
+    outcome as {
+      toolCalls?: { id: string; name: string; arguments: unknown }[];
+    }
+  ).toolCalls?.find((each) => each.id === callId);
+  expect(call?.name).toBe("archestra__get_remedy_plans");
+  const notice = readNotice({ callId, arguments: call?.arguments });
+  if (!notice) throw new Error(`no notice carried for ${callId}`);
+  return notice;
+}
 
 function requestContext(params: {
   sessionId: string;

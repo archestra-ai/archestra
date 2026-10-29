@@ -1,5 +1,8 @@
 import { VIRTUAL_KEY_HEADER } from "@archestra/shared/consts";
-import type { SupportedProvider } from "@archestra/shared/model-constants";
+import {
+  providerDisplayNames,
+  type SupportedProvider,
+} from "@archestra/shared/model-constants";
 import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   type OpenCodeProviderRoute,
@@ -9,18 +12,15 @@ import type { OpenCodeFamilyClient } from "../opencode-family";
 import type { SetupScriptProxySection } from "../types";
 
 /**
- * What the connection serves in an OpenCode-family client, keyed by the
- * client's own provider ids (models.dev). The routing plugin filters the
- * client's stock catalog to these providers and models and sends their
- * requests to the proxy. The client shows no Archestra-specific provider and
- * no renamed one; the mapping between its ids and the proxy's stays inside the
- * plugin.
+ * What the connection serves in an OpenCode-family client. Native routes use
+ * the client's stock ids; managed Model Router providers use separate ids to
+ * avoid the native SDK and sign-in transport.
  */
 export interface ManagedRuntimeCatalog {
-  /** Stock provider id → proxy base URL for that provider's native wire. */
+  /** Client provider id → proxy base URL for its configured wire. */
   routes: Record<string, string>;
   /**
-   * Stock provider id → the model ids the organization's credential serves
+   * Client provider id → the model ids the organization's credential serves
    * there, in catalog order. Absent for a provider only the user's own
    * sign-in can serve.
    */
@@ -36,6 +36,8 @@ export interface ManagedRuntimeCatalog {
    * keeps working.
    */
   legacy: Record<string, string>;
+  /** Managed providers whose native SDK/auth cannot carry the connection key. */
+  modelRouter?: Record<string, PrimaryProviders[number]>;
 }
 
 type PrimaryProviders = NonNullable<
@@ -43,14 +45,14 @@ type PrimaryProviders = NonNullable<
 >;
 
 /**
- * The catalog over the client's stock providers. A primary provider without a
- * row in the route table has no stock provider in the client, so it cannot be
- * shown; `unsupported` names those keys for the installer's notice.
+ * The native provider catalog plus managed Azure and Copilot providers.
+ * Other primary providers without a verified client wire remain unsupported.
  */
 function openCodeCatalog(params: {
   primaryProviders?: PrimaryProviders;
   passthroughProviders?: SupportedProvider[];
   routeUrl: (route: OpenCodeProviderRoute) => string;
+  modelRouterUrl: string;
 }): { catalog: ManagedRuntimeCatalog; unsupported: string[] } {
   const catalog: ManagedRuntimeCatalog = {
     routes: {},
@@ -71,9 +73,24 @@ function openCodeCatalog(params: {
     if (entry) {
       shown.add(entry.provider);
       catalog.managed[id] = entry.models.map((model) => model.id);
-      catalog.legacy[`archestra-${route.provider}`] = id;
+      // A provider with two catalogs keeps an earlier pin on its first one.
+      catalog.legacy[`archestra-${route.provider}`] ??= id;
     }
     if (passthrough) catalog.passthrough.push(id);
+  }
+  for (const entry of params.primaryProviders ?? []) {
+    if (entry.provider !== "azure" && entry.provider !== "github-copilot")
+      continue;
+    const id = `archestra-${entry.provider}`;
+    catalog.routes[id] = params.modelRouterUrl;
+    catalog.managed[id] = entry.models.map((model) => model.id);
+    catalog.modelRouter ??= {};
+    catalog.modelRouter[id] = {
+      provider: entry.provider,
+      name: providerDisplayNames[entry.provider],
+      models: entry.models,
+    };
+    shown.add(entry.provider);
   }
   const unsupported = (params.primaryProviders ?? [])
     .filter((entry) => !shown.has(entry.provider))
@@ -94,6 +111,7 @@ export function openCodePrimaryConfig(
     primaryProviders: proxy.primaryProviders,
     passthroughProviders: proxy.passthroughProviders,
     routeUrl: (route) => openCodePassthroughBaseUrl(proxy.baseUrl, route),
+    modelRouterUrl: `${proxy.baseUrl.replace(/\/$/, "")}/model-router`,
   });
   // The passthrough key attributes the user's own sign-ins to the user. It
   // never goes on a request the connection's own key authenticates.
@@ -132,6 +150,7 @@ export function publicManagedCatalog(params: {
         ...route,
         pathSuffix: `/${params.routingAgentId}${route.pathSuffix}`,
       }),
+    modelRouterUrl: `${base}/model-router/${params.routingAgentId}`,
   }).catalog;
 }
 
@@ -152,7 +171,7 @@ const keyPath = path.join(home, ".archestra", ${JSON.stringify(`${client.stateNa
 const input = JSON.parse(process.env.ARCHESTRA_OC_PRIMARY === "stdin" ? fs.readFileSync(0, "utf8") : process.env.ARCHESTRA_OC_PRIMARY || "null");
 if (!input && !fs.existsSync(statePath)) process.exit(0);
 const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : null;
-const config = original ? JSON.parse(original) : {};
+const config = original ? JSON.parse(original.replace(/^\uFEFF/, "")) : {};
 if (fs.existsSync(statePath)) {
   const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
   for (const [section, entries] of Object.entries(state.sections ?? {})) {

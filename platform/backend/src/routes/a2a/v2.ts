@@ -3,7 +3,7 @@ import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { type A2AActor, A2AError } from "@/agents/a2a/a2a-base";
+import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import {
   type A2AProtocolCancelTaskRequest,
@@ -1105,9 +1105,15 @@ class A2AV2Router {
     request: A2AProtocolSendMessageRequest;
     detached: boolean;
   }): Promise<void> {
-    if (!params.detached || params.request.message.taskId) return;
     const runtime = resolveAgentRuntime(params.agent);
     if (!runtime) return;
+    if (params.actor.oauthExecution) {
+      throw new A2AError(
+        A2AErrorKind.UnsupportedOperation,
+        "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
+      );
+    }
+    if (!params.detached || params.request.message.taskId) return;
 
     try {
       await preflightAgentRuntimeModelCompatibility({

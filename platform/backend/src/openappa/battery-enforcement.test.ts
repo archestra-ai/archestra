@@ -419,7 +419,21 @@ requires = { audience = { contains = ["self"] } }
       "codex-git-push": `host/archestra/exec_command {\n  cmd: "git push origin main"\n}\nexpect allow\n`,
       // OpenCode's read spells the path `filePath`.
       "opencode-read-env": `host/archestra/read {\n  filePath: "/repo/.env"\n}\nexpect allow\n${probe}`,
+      // Kimi Code's Read names the file \`path\`; the proxy adds \`file_path\`.
+      "kimi-read-env": `host/archestra/Read {\n  path: "/repo/.env"\n  file_path: "/repo/.env"\n}\nexpect allow\n${probe}`,
+      // A Windows path, as the proxy copies it (forward slashes).
+      "kimi-read-env-windows": `host/archestra/Read {\n  path: "C:/Users/me/appa-qa/.env"\n  file_path: "C:/Users/me/appa-qa/.env"\n}\nexpect allow\n${probe}`,
+      // The policy alone does not read \`path\`: the copy is what narrows.
+      "kimi-read-path-only": `host/archestra/Read {\n  path: "/repo/.env"\n}\nexpect allow\n${probe}`,
+      // Kimi Code's fetch tool is FetchURL, Claude Code's WebFetch. Unmapped,
+      // it would go to the default model like an unruled client tool.
+      "kimi-fetch": `host/archestra/FetchURL {\n  url: "https://example.com/"\n}\nexpect allow\n${probe}`,
+      "claude-fetch": `host/archestra/WebFetch {\n  url: "https://example.com/"\n}\nexpect allow\n${probe}`,
       "git-push": `host/archestra/Bash {\n  command: "git push origin main"\n}\nexpect allow\n`,
+      // Claude Desktop Cowork's workspace shell and web_fetch tools.
+      "cowork-credentials": `host/archestra/mcp__workspace__bash {\n  command: "cat ~/.aws/credentials"\n}\nexpect allow\n${probe}`,
+      "cowork-git-push": `host/archestra/mcp__workspace__bash {\n  command: "git push origin main"\n}\nexpect allow\n`,
+      "cowork-fetch-docs": `host/archestra/mcp__workspace__web_fetch {\n  url: "https://archestra.ai/docs"\n}\nexpect allow\n${probe}`,
       "unruled-client-tool": "host/archestra/FutureBuiltIn {}\nexpect allow\n",
       // A subagent's return is checked when it hands back, so starting one
       // needs no model, even from a narrowed session. A workflow's fan-out is
@@ -450,7 +464,15 @@ requires = { audience = { contains = ["self"] } }
       "codex-credentials": ["allow", "authority human-approval"],
       "codex-git-push": ["claude-code.bash-repository-requirements"],
       "opencode-read-env": ["allow", "authority human-approval"],
+      "kimi-read-env": ["allow", "authority human-approval"],
+      "kimi-read-env-windows": ["allow", "authority human-approval"],
+      "kimi-read-path-only": ["allow", "allow"],
+      "kimi-fetch": ["allow", "allow"],
+      "claude-fetch": ["allow", "allow"],
       "git-push": ["claude-code.bash-repository-requirements"],
+      "cowork-credentials": ["allow", "authority human-approval"],
+      "cowork-git-push": ["claude-code.bash-repository-requirements"],
+      "cowork-fetch-docs": ["allow", "allow"],
       "unruled-client-tool": [UNDECLARED_TOOL_ANNOTATOR],
       "spawn-after-read-env": ["allow", "allow", "allow"],
       workflow: [UNDECLARED_TOOL_ANNOTATOR],

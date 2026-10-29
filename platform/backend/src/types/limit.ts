@@ -36,6 +36,9 @@ export const LimitTypeSchema = z.enum([
 ]);
 export type LimitType = z.infer<typeof LimitTypeSchema>;
 
+export const LimitBehaviorSchema = z.enum(["hard", "soft"]);
+export type LimitBehavior = z.infer<typeof LimitBehaviorSchema>;
+
 export const LimitCleanupIntervalSchema = z.enum([
   "minute",
   "1h",
@@ -54,22 +57,31 @@ export const BudgetCleanupIntervalSchema = LimitCleanupIntervalSchema.exclude([
 ]);
 export type BudgetCleanupInterval = z.infer<typeof BudgetCleanupIntervalSchema>;
 
+/** Why an admin set a limit (shown with custom per-user limits). */
+const LimitReasonSchema = z.string().trim().max(500).nullable().optional();
+
 /**
  * Base database schema derived from Drizzle
  */
 export const SelectLimitSchema = createSelectSchema(schema.limitsTable, {
+  behavior: LimitBehaviorSchema,
+  reason: z.string().nullable().optional(),
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
   cleanupInterval: LimitCleanupIntervalSchema.optional(),
 });
 export const InsertLimitSchema = createInsertSchema(schema.limitsTable, {
+  behavior: LimitBehaviorSchema.optional(),
+  reason: LimitReasonSchema,
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
   cleanupInterval: LimitCleanupIntervalSchema.optional(),
 });
 export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
+  behavior: LimitBehaviorSchema.optional(),
+  reason: LimitReasonSchema,
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
@@ -93,6 +105,12 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
   .extend({ labels: z.array(LabelWithDetailsSchema).optional() })
   .refine(
     (data) => {
+      if (
+        data.behavior === "soft" &&
+        (data.limitType === "mcp_server_calls" ||
+          data.limitType === "tool_calls")
+      )
+        return false;
       // Normalization is intentional: callers persist this parsed object with
       // empty model lists cleared and legacy rate intervals set to minute.
       // Validation: mcp_server_calls requires mcpServerName and should not have model

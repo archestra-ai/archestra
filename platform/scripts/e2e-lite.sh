@@ -43,6 +43,7 @@ PLATFORM_DIR="$(dirname "${SCRIPT_DIR}")"
 REPO_ROOT="$(dirname "${PLATFORM_DIR}")"
 
 REGISTRY="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public"
+CI_REGISTRY="ghcr.io/archestra-ai/ci"
 MCP_SERVER_BASE_IMAGE="${MCP_SERVER_BASE_IMAGE:-${REGISTRY}/mcp-server-base:latest}"
 
 NETWORK="archestra-lite-net"
@@ -95,7 +96,7 @@ resolve_platform_image() {
       .github/scripts/e2e-image-input-hash.sh)" ]]; then
     local input_hash image
     input_hash=$(cd "${REPO_ROOT}" && bash .github/scripts/e2e-image-input-hash.sh platform)
-    image="${REGISTRY}/platform:input-${input_hash}-slim"
+    image="${CI_REGISTRY}/platform:input-${input_hash}-slim"
     if pull_public "${image}" 2> /dev/null; then
       echo "${image}"
       return
@@ -187,7 +188,8 @@ cmd_up() {
   wait_for "A2A fixture" "http://127.0.0.1:9191/health" 15
   # Cold startup includes embedded Kind, database initialization, migrations,
   # and seeding. On CI runners this can exceed four minutes.
-  wait_for backend "http://127.0.0.1:9000/health" 300
+  # Liveness succeeds during startup, before seeding and API routes are ready.
+  wait_for backend "http://127.0.0.1:9000/ready" 300
   wait_for frontend "http://127.0.0.1:3000/" 30
   # Keycloak last: its ~40-60s realm import overlaps the platform boot.
   wait_for Keycloak "http://127.0.0.1:30081/realms/archestra/.well-known/openid-configuration" 60

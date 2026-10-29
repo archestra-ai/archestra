@@ -18,6 +18,7 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AUTO_ROUTING_URL,
   chatsNavItems,
   contentNavGroups,
   isNavItemPermitted,
@@ -55,8 +56,8 @@ import {
 import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useMyAgentRuns } from "@/lib/agent-runtime.query";
 import { useApps } from "@/lib/app.query";
-import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useIsAuthenticated } from "@/lib/auth/use-is-authenticated";
 import {
   useConversations,
   useDeleteConversation,
@@ -149,6 +150,7 @@ function useNavigationDestinations(
   permissionMap: Record<string, boolean> | null,
 ) {
   const openappaEnabled = useFeature("openappaEnabled");
+  const autoRoutingEnabled = useFeature("autoRoutingEnabled");
   // Connect is useful with either half, exactly as the sidebar gates its row.
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
   const { data: canReadMcpGateway } = useHasPermissions({
@@ -171,6 +173,9 @@ function useNavigationDestinations(
           return canReadLlmProxy === true || canReadMcpGateway === true;
         }
         if (item.url === "/openappa" && openappaEnabled !== true) return false;
+        if (item.url === AUTO_ROUTING_URL && autoRoutingEnabled !== true) {
+          return false;
+        }
         return isNavItemPermitted(item, permissionMap);
       })
       .map((item) => ({
@@ -180,7 +185,13 @@ function useNavigationDestinations(
         keywords: NAVIGATION_KEYWORDS[item.url] ?? "",
         href: item.url,
       }));
-  }, [permissionMap, openappaEnabled, canReadLlmProxy, canReadMcpGateway]);
+  }, [
+    permissionMap,
+    openappaEnabled,
+    autoRoutingEnabled,
+    canReadLlmProxy,
+    canReadMcpGateway,
+  ]);
 }
 
 interface ConversationSearchPaletteProps {

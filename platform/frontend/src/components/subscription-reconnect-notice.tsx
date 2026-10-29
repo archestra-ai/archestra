@@ -26,7 +26,7 @@ const CreateLlmProviderApiKeyDialog = lazyComponent<
 );
 
 type ReconnectCredential = Pick<LlmProviderApiKey, "id" | "name" | "provider"> &
-  Partial<Pick<LlmProviderApiKey, "subscriptionKind">>;
+  Partial<Pick<LlmProviderApiKey, "subscriptionKind" | "isGithubAppKey">>;
 
 export function SubscriptionReconnectNotice({
   credential,
@@ -38,9 +38,10 @@ export function SubscriptionReconnectNotice({
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const kind =
-    subscriptionKindFromKeyMetadata(credential) ??
-    subscriptionKindForProvider(credential.provider);
+  const kind = credential.isGithubAppKey
+    ? null
+    : (subscriptionKindFromKeyMetadata(credential) ??
+      subscriptionKindForProvider(credential.provider));
   if (!kind) return null;
   const subscription = SUBSCRIPTION_CREDENTIALS[kind];
   return (
@@ -99,7 +100,6 @@ export function SubscriptionReconnectNotice({
           }}
           allowedProviders={[credential.provider]}
           credentialMode="subscription"
-          requiresExactSubscriptionCredential
         />
       )}
     </>

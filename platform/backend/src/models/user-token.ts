@@ -6,11 +6,6 @@ import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type { SelectUserToken } from "@/types";
 
-/**
- * User tokens always use DB storage (forceDB: true) because:
- * 1. They are auto-created on user joining an organization
- * 2. They might not work with BYOS Vault (which is read-only from customer's Vault)
- */
 const FORCE_DB = true;
 
 /**

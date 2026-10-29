@@ -463,11 +463,6 @@ export function LlmProviderApiKeySelector({
           defaultValues={subscriptionToConnect.defaultValues}
           allowedProviders={[subscriptionToConnect.provider]}
           credentialMode="subscription"
-          requiresExactSubscriptionCredential={Boolean(
-            pinnedSubscriptionOption &&
-              pinnedSubscriptionOption.subscriptionKind ===
-                subscriptionToConnect.subscriptionKind,
-          )}
           reconnectKeyId={reconnectKeyId ?? undefined}
           onSuccess={() =>
             setConnectedKindToSelect(subscriptionToConnect.subscriptionKind)
@@ -504,6 +499,8 @@ function subscriptionMatchesKind(
 ) {
   const { provider, marker } = SUBSCRIPTION_CREDENTIALS[kind];
   if (key.provider !== provider) return false;
+  // An organization GitHub App key is an ordinary shared key, not a sign-in.
+  if (key.isGithubAppKey) return false;
   if (marker === null) return true;
   // The metadata helper consumes only the authoritative server-derived kind.
   return subscriptionKindFromKeyMetadata(key) === kind;

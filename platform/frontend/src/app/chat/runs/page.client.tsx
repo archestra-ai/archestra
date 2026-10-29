@@ -120,6 +120,7 @@ export function AgentRunChatSession({
   // to the live terminal runs a shell under the owner's own credentials — so it
   // stays owner-only. Everyone else gets the read-only output stream.
   const isOwner = run?.viewerRole === "owner";
+  const canAttach = run?.canAttach ?? isOwner;
 
   if (!query.isPending && !run) {
     // Sit in the same centered terminal-box placement the attach loader
@@ -145,7 +146,7 @@ export function AgentRunChatSession({
   const canReattach = Boolean(isOwner && run?.terminalRetained);
   const showLiveTerminal =
     (!run && query.isPending) ||
-    (isOwner && !showHistory && (live || (reattached && canReattach)));
+    (canAttach && !showHistory && (live || (reattached && canReattach)));
   const canContinue =
     isOwner &&
     !live &&
@@ -168,7 +169,7 @@ export function AgentRunChatSession({
     primary?: boolean;
     prominent?: boolean;
   }[] = [];
-  if (isOwner && (live || (reattached && canReattach))) {
+  if (canAttach && (live || (reattached && canReattach))) {
     actions.push({
       label: showHistory ? "Live terminal" : "Run history",
       icon: History,
@@ -274,7 +275,7 @@ export function AgentRunChatSession({
             </Button>{" "}
           </span>
         ))}
-      {(isOwner || canManageAccess) && (
+      {(canAttach || canManageAccess || !showLiveTerminal) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -494,7 +495,7 @@ export function AgentRunChatSession({
             />
           ) : run ? (
             <>
-              {live && !isOwner && (
+              {live && !canAttach && (
                 <div className="shrink-0 overflow-hidden rounded-md border bg-slate-950">
                   <ExecTerminalStatus
                     title="Read-only terminal"

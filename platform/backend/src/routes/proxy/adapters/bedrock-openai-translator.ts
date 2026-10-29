@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { ApiError } from "@archestra/shared/types";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import type { Bedrock, OpenAi, StreamAccumulatorState } from "@/types";
+import { assertModelRouterCacheControls } from "../model-router-cache-controls";
 import type { OpenAiStreamUsage } from "./openai-sse-chunk";
 import { parseJsonObject } from "./openai-translator-utils";
 
@@ -39,6 +40,7 @@ type Loose = any;
  * entire LLM-proxy pipeline sees Converse shapes.
  */
 export function openaiToConverse(req: OpenAiRequest): OpenaiToConverseResult {
+  assertModelRouterCacheControls("bedrock", req);
   const loose = req as Loose;
   const system: NonNullable<BedrockRequest["system"]> = [];
   const messages: BedrockMessage[] = [];
@@ -291,6 +293,9 @@ export function createConverseToOpenaiSseEncoder(
   // only counts tool-use blocks; Bedrock's contentBlockIndex is dense across
   // all blocks (text + tool_use). We need to translate.
   const toolIndexByBlock = new Map<number, number>();
+  // Tool blocks that streamed any argument text. Bedrock streams a call with
+  // no input as one empty `input` delta, where OpenAI streams `{}`.
+  const toolBlocksWithInput = new Set<number>();
   let nextToolIndex = 0;
   let pendingFinishReason: OpenAi.Types.FinishReason | null = null;
   let rolePrepended = false;
@@ -362,6 +367,8 @@ export function createConverseToOpenaiSseEncoder(
         const blockIdx = e.contentBlockDelta.contentBlockIndex;
         const toolIdx =
           toolIndexByBlock.get(blockIdx) ?? Math.max(0, nextToolIndex - 1);
+        if (delta.toolUse.input === "") return null;
+        toolBlocksWithInput.add(blockIdx);
         return sse(
           envelope({
             tool_calls: [
@@ -377,7 +384,16 @@ export function createConverseToOpenaiSseEncoder(
     }
 
     if (e.contentBlockStop) {
-      return null;
+      const blockIdx = e.contentBlockStop.contentBlockIndex;
+      const toolIdx = toolIndexByBlock.get(blockIdx);
+      if (toolIdx === undefined || toolBlocksWithInput.has(blockIdx)) {
+        return null;
+      }
+      return sse(
+        envelope({
+          tool_calls: [{ index: toolIdx, function: { arguments: "{}" } }],
+        }),
+      );
     }
 
     if (e.messageStop) {
@@ -539,6 +555,13 @@ function textContentToBedrock(content: unknown): BedrockContentBlock[] {
 }
 
 function appendCacheMarker(blocks: BedrockContentBlock[], marker: Loose): void {
+  const point = cachePoint(marker);
+  if (point) blocks.push(point);
+}
+
+function cachePoint(
+  marker: Loose,
+): { cachePoint: { type: "default"; ttl?: string } } | undefined {
   if (marker === undefined) return;
   if (
     !marker ||
@@ -550,12 +573,12 @@ function appendCacheMarker(blocks: BedrockContentBlock[], marker: Loose): void {
       "Bedrock cache_control requires type ephemeral and an optional string ttl",
     );
   // Model support, TTLs, checkpoint limits and ordering are validated by AWS.
-  blocks.push({
+  return {
     cachePoint: {
       type: "default",
       ...(marker.ttl !== undefined ? { ttl: marker.ttl } : {}),
     },
-  });
+  };
 }
 
 // MIMEs whose text content Bedrock's document block can represent as txt.
@@ -743,22 +766,35 @@ function buildToolConfig(
   const tools = Array.isArray(loose.tools) ? loose.tools : [];
   if (tools.length === 0 && toolChoice == null) return undefined;
 
-  const mapped = tools
-    .filter((t: Loose) => t?.type === "function" && t.function?.name)
-    .map((t: Loose) => ({
-      toolSpec: {
-        name: String(t.function.name),
-        ...(t.function.description
-          ? { description: String(t.function.description) }
-          : {}),
-        inputSchema: {
-          json: (t.function.parameters ?? {
-            type: "object",
-            properties: {},
-          }) as Record<string, unknown>,
+  const mapped = tools.flatMap((t: Loose) => {
+    const outer = cachePoint(t?.cache_control);
+    const inner = cachePoint(t?.function?.cache_control);
+    if (outer && inner && outer.cachePoint.ttl !== inner.cachePoint.ttl)
+      throw new ApiError(400, "Conflicting Bedrock tool cache_control markers");
+    const point = outer ?? inner;
+    if (t?.type !== "function" || !t.function?.name) {
+      if (point)
+        throw new ApiError(400, "Unsupported Bedrock tool with cache_control");
+      return [];
+    }
+    return [
+      {
+        toolSpec: {
+          name: String(t.function.name),
+          ...(t.function.description
+            ? { description: String(t.function.description) }
+            : {}),
+          inputSchema: {
+            json: (t.function.parameters ?? {
+              type: "object",
+              properties: {},
+            }) as Record<string, unknown>,
+          },
         },
       },
-    }));
+      ...(point ? [point] : []),
+    ];
+  });
 
   const cfg: NonNullable<BedrockRequest["toolConfig"]> = { tools: mapped };
 

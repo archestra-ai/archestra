@@ -38,8 +38,10 @@ import {
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
+import { normalizeVersion } from "@archestra/shared/version";
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
+import { getAppVersion } from "@/app-version";
 import logger from "@/logging";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
@@ -47,7 +49,7 @@ import {
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
 import { parseUsageAccountingMode } from "@/utils/billable-usage";
-import packageJson from "../../package.json";
+import { isValidCidr } from "@/utils/network";
 
 type ProcessType = "web" | "worker" | "all";
 type FileStorageProviderType = "db" | "filesystem" | "s3";
@@ -79,7 +81,7 @@ const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
 
-const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
+const appVersion = getAppVersion();
 
 /**
  * Developer-only convenience: when set (and NOT in production), the login screen
@@ -1598,7 +1600,7 @@ export const getAnalyticsConfig = () => {
 
 const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-  `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`;
+  `ghcr.io/archestra-ai/mcp-server-base:${appVersion}`;
 
 /**
  * Default resource requests/limits applied to generated MCP server
@@ -1832,6 +1834,26 @@ export const parseEngineDeniedCidrs = (
     );
   }
   return valid;
+};
+
+/**
+ * The Kubernetes API server CIDRs the SRE agent's MCP server may reach. Invalid
+ * entries are dropped loudly: one bad entry would otherwise make the API
+ * server reject the environment's whole egress policy.
+ *
+ * @public — exported for testability
+ */
+export const parseSreApiServerCidrs = (
+  envValue: string | undefined,
+): string[] => {
+  const entries = parseCommaSeparatedList(envValue ?? "");
+  const invalid = entries.filter((entry) => !isValidCidr(entry));
+  if (invalid.length > 0) {
+    logger.error(
+      `ARCHESTRA_SRE_APISERVER_CIDRS ignoring invalid CIDRs: ${invalid.join(", ")}`,
+    );
+  }
+  return [...new Set(entries.filter(isValidCidr))];
 };
 
 /**
@@ -2233,7 +2255,7 @@ const config = {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
     name: DEFAULT_APP_NAME,
-    version: appVersion,
+    version: normalizeVersion(appVersion),
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
     /**
@@ -2842,6 +2864,14 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_KIMI_BASE_URL || "https://api.moonshot.ai/v1",
     },
+    // Kimi Code membership keys answer only on the Kimi Code endpoint. The
+    // default is the overseas host; China accounts use
+    // https://api.kimi.com/coding/v1.
+    "kimi-code": {
+      baseUrl:
+        process.env.ARCHESTRA_KIMI_CODE_BASE_URL ||
+        "https://api.kimi.ai/coding/v1",
+    },
     "github-copilot": {
       baseUrl:
         process.env.ARCHESTRA_GITHUB_COPILOT_BASE_URL ||
@@ -2986,6 +3016,9 @@ const config = {
     },
     kimi: {
       apiKey: process.env.ARCHESTRA_CHAT_KIMI_API_KEY || "",
+    },
+    "kimi-code": {
+      apiKey: process.env.ARCHESTRA_CHAT_KIMI_CODE_API_KEY || "",
     },
     "github-copilot": {
       apiKey: process.env.ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY || "",
@@ -3159,6 +3192,19 @@ const config = {
         process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
       ),
     },
+  },
+  /**
+   * The pre-installed read-only Kubernetes MCP server and the SRE agent that
+   * uses it (see services/sre-agent). Off by default; turning it off removes
+   * what it seeded.
+   */
+  sreAgent: {
+    enabled: process.env.ARCHESTRA_SRE_AGENT_ENABLED === "true",
+    k8sServiceAccount:
+      process.env.ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT?.trim() || undefined,
+    apiServerCidrs: parseSreApiServerCidrs(
+      process.env.ARCHESTRA_SRE_APISERVER_CIDRS,
+    ),
   },
   /**
    * code execution sandbox runtime — the per-conversation Dagger container that
@@ -3430,6 +3476,13 @@ const config = {
   production: isProduction,
   environment,
   llmProxy: {
+    // BETA gate for model pools: hides the page and its API, and keeps the
+    // proxy and the Model Router from resolving a model name to a pool. Off
+    // by default; a blank value falls back to the ARCHESTRA_BETA master switch
+    // (see betaFeatureEnabled).
+    modelPoolsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_LLM_MODEL_POOLS_ENABLED,
+    ),
     usageAccountingMode: parseUsageAccountingMode(
       process.env.ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE,
     ),
@@ -3450,6 +3503,20 @@ const config = {
     streamKeepAliveIntervalMs: parseNonNegativeInt(
       process.env.ARCHESTRA_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
       DEFAULT_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
+    ),
+  },
+  autoRouting: {
+    /** ALPHA gate for the Model Router's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
+    enabled: betaFeatureEnabled(process.env.ARCHESTRA_AUTO_ROUTING_ENABLED),
+    /** Budget (ms) for one session-scoring call before the router falls back. */
+    scorerTimeoutMs: parsePositiveInt(
+      process.env.ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS,
+      2000,
+    ),
+    /** Idle sessions (live, plus scored past ones) a fit needs before it publishes a plan; fewer keep the organization in cold start. */
+    minSessions: parsePositiveInt(
+      process.env.ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS,
+      1000,
     ),
   },
   kb: {
@@ -3481,7 +3548,7 @@ const config = {
     perforceShim: {
       image:
         process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE ||
-        `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:${appVersion}`,
+        `ghcr.io/archestra-ai/p4-shim:${appVersion}`,
       p4Binary: {
         x64: {
           url:
@@ -3922,9 +3989,10 @@ const config = {
   // maintenanceMode it does not affect request handling.
   siteNotificationMessage:
     process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
-  // Enterprise-licensed like the `retention` block below — the boot-time
-  // assertion in data-retention/license-gate.ee.ts covers this window too.
   auditLog: {
+    otelEnabled: process.env.ARCHESTRA_AUDIT_LOG_OTEL_ENABLED === "true",
+    // Retention is enterprise-licensed; the boot-time assertion in
+    // data-retention/license-gate.ee.ts covers this window too.
     retentionDays: parseRetentionDays(
       "ARCHESTRA_AUDIT_LOG_RETENTION_DAYS",
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,

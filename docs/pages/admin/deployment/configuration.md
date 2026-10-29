@@ -1,13 +1,13 @@
 ---
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
-order: 5
-lastUpdated: 2026-10-24
+order: 6
+lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra reads these environment variables at startup. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. The Docker quickstart and the Helm chart run with none set. See [Deployment](/docs/admin/deployment) for the install.
+Archestra reads these environment variables at startup. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. The Docker quickstart and the Helm chart run with none set. See [Helm](/docs/admin/deployment/helm) for Kubernetes installation.
 
 ## Database
 
@@ -23,7 +23,7 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
 - **`ARCHESTRA_DATABASE_POOL_MAX`** - Maximum PostgreSQL connections per backend process.
   - Default: `50`
   - Values: `1`–`500`
-  - In Helm, `archestra.database.connectionBudget` sizes the pool across all pods. This variable and `archestra.database.poolMax` override it. See [Database Configuration](/docs/admin/deployment#database-configuration).
+  - In Helm, `archestra.database.connectionBudget` sizes the pool across all pods. This variable and `archestra.database.poolMax` override it. See [Connection Capacity](/docs/admin/deployment/database#connection-capacity).
 
 - **`ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`** - PostgreSQL `statement_timeout` for every pooled connection, in milliseconds.
   - Default: `30000`
@@ -60,7 +60,7 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
 - **`ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS`** - How long the API and web servers keep an idle keep-alive connection open, in milliseconds.
   - Default: `620000`
   - Values: a positive whole number of milliseconds, digits only, such as `620000`
-  - Keep it above the keep-alive timeout of every proxy and load balancer in front of Archestra. See [Keep-Alive Timeouts](/docs/admin/deployment#keep-alive-timeouts).
+  - Keep it above the keep-alive timeout of every proxy and load balancer in front of Archestra. See [Streaming Timeouts](/docs/admin/deployment/networking#streaming-timeouts).
 
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum HTTP request body size for LLM Proxy and chat requests.
   - Default: `70MB`
@@ -80,11 +80,12 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
   - Default: `false`
   - Values: `true`, `false`
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
+  - Also turns on [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) when it is left blank. Set to `false`, it stays off.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
   - Default: `false`
   - Values: `true`, `false`
-  - Requires the Docker socket mounted into the container. For evaluation only. See [Quickstart Deployment](/docs/admin/deployment#quickstart-deployment).
+  - Requires the Docker socket mounted into the container. For evaluation only. See [Run Archestra](/docs/get-started#run-archestra).
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates the enterprise license.
   - Default: `false`
@@ -233,11 +234,11 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Where Archestra stores secrets such as API keys and tokens.
   - Default: `DB`
-  - Values: `DB`, `VAULT`, `READONLY_VAULT`. Both Vault values require an enterprise license.
+  - Values: `DB`, `VAULT`. Vault requires an enterprise license.
   - With an invalid Vault configuration or no license, Archestra logs a warning and uses `DB`. See [Credentials and Secrets](/docs/admin/credentials#secrets-storage).
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - Address of the HashiCorp Vault server.
-  - Required when: [`ARCHESTRA_SECRETS_MANAGER=VAULT`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_MANAGER) or `READONLY_VAULT`
+  - Required when: [`ARCHESTRA_SECRETS_MANAGER=VAULT`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_MANAGER)
   - Values: a URL, for example `https://vault.example.com:8200`
 
 - **`ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`** - How Archestra authenticates to Vault.
@@ -282,11 +283,6 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
 - **`ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH`** - Path prefix for KV v2 list and delete operations.
   - Default: [`ARCHESTRA_HASHICORP_VAULT_SECRET_PATH`](/docs/admin/deployment/configuration#ARCHESTRA_HASHICORP_VAULT_SECRET_PATH) with `/data/` replaced by `/metadata/`
   - Set it only when your paths do not follow that pattern.
-
-- **`ARCHESTRA_DATABASE_URL_VAULT_REF`** - Reads the database connection string from Vault instead of [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL).
-  - Default: unset
-  - Values: `path:key`, for example `secret/data/archestra/database:connection_string`
-  - Used only when [`ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_MANAGER).
 
 ## LLM Providers
 
@@ -518,6 +514,16 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_JEV_BASE_URL`** - Full Jev decisions endpoint. See [Jev](/docs/llm-proxy/providers#jev).
   - Default: `https://api.typesafe.ai/v1/systemone`
 
+- **`ARCHESTRA_AUTO_ROUTING_ENABLED`** - Turns on the alpha [Auto Routing](/docs/llm-proxy/auto-routing) model for the Model Router.
+  - Default: unset (off)
+  - Values: `true`, `false`. Blank follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA).
+
+- **`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`** - How long the session scorer may take before the router falls back to the normal model.
+  - Default: `2000`
+
+- **`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`** - Finished sessions needed before auto routing publishes a plan instead of using the normal model. Scored past sessions count toward it.
+  - Default: `1000`
+
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL of your OpenAI-compatible server (vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI).
   - Default: unset (provider off)
   - Values: a URL, for example `http://localhost:8000/v1`
@@ -542,6 +548,9 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_KIMI_BASE_URL`** - Base URL for Kimi (Moonshot AI) API requests.
   - Default: `https://api.moonshot.ai/v1`
 
+- **`ARCHESTRA_KIMI_CODE_BASE_URL`** - Base URL for Kimi Code API requests. Set it to `https://api.kimi.com/coding/v1` to use the endpoint for China.
+  - Default: `https://api.kimi.ai/coding/v1`
+
 - **`ARCHESTRA_MINIMAX_BASE_URL`** - Base URL for MiniMax API requests.
   - Default: `https://api.minimax.io/v1`
 
@@ -562,7 +571,7 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE`** - Controls settlement of provider billing components, including advisor and compaction inference.
   - Default: `off`
   - Values: `off` (legacy accounting), `shadow` (record candidate charges while applying legacy usage), `enforce` (apply settled charges to budgets and reports)
-  - Set it on both web and worker pods. Requests retain their starting mode. See [Component Cost Accounting](/docs/admin/deployment/upgrades#component-cost-accounting).
+  - Set it on both web and worker pods. Requests retain their starting mode.
 
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual keys per provider API key.
   - Default: `10`
@@ -588,6 +597,10 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Default: `true`
   - Values: `true`, `false` (all traffic is metered)
   - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
+
+- **`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`** - Turns on beta model pools: a model name served by several provider keys, with failover between them.
+  - Default: unset (follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA))
+  - Values: `true`, `false`. While it is off, the Model Pools page and its API are hidden, and requests for a pool's name are not routed to the pool. Saved pools are kept.
 
 ## Chat
 
@@ -627,6 +640,9 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
   - Default: unset
 
 - **`ARCHESTRA_CHAT_KIMI_API_KEY`** - Kimi (Moonshot AI) API key.
+  - Default: unset
+
+- **`ARCHESTRA_CHAT_KIMI_CODE_API_KEY`** - Kimi Code membership API key.
   - Default: unset
 
 - **`ARCHESTRA_CHAT_MINIMAX_API_KEY`** - MiniMax API key.
@@ -773,7 +789,7 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: `localhost`
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base image for MCP servers that do not set their own image.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:<platform version>`
+  - Default: `ghcr.io/archestra-ai/mcp-server-base:<platform version>`
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST`** - CPU request for each MCP server container.
   - Default: `50m`
@@ -845,6 +861,22 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
 - **`ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME`** - Release name used to name cluster objects Archestra creates outside the chart, such as the image pre-pull DaemonSet.
   - Default: set by the Helm chart. Set it yourself only when you deploy without the chart.
   - When unset, those objects are not created.
+
+## SRE Agent
+
+The [SRE agent](/docs/admin/deployment/diagnostics#sre-agent) investigates the installation's pods, logs, and events through a read-only Kubernetes MCP server. The Helm chart sets these from `archestra.sre`.
+
+- **`ARCHESTRA_SRE_AGENT_ENABLED`** - Installs the read-only Kubernetes MCP server, its **SRE** environment, and the **SRE** agent.
+  - Default: `false`
+  - Setting it back to `false` removes all three.
+
+- **`ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT`** - ServiceAccount the MCP server pod runs as.
+  - Default: unset. The Helm chart creates a read-only `-sre` account for it and sets it when `archestra.orchestrator.kubernetes.mcpServerRbac.create` is `true`.
+  - Required: without it, nothing is installed.
+
+- **`ARCHESTRA_SRE_APISERVER_CIDRS`** - Kubernetes API server endpoint CIDRs the MCP server may reach, added to the organization's default egress policy.
+  - Default: unset (the environment uses the organization's default egress policy)
+  - Values: comma-separated IPv4 or IPv6 CIDRs, for example `172.16.0.2/32`. Invalid entries are ignored and logged.
 
 ## MCP Apps Sandbox
 
@@ -947,8 +979,8 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 
 Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox controller installed. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
 
-- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, OpenClaw, and Grok Build images are pulled from.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public`
+- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok Build, and Kimi Code images are pulled from.
+  - Default: `ghcr.io/archestra-ai`
   - Set it when you mirror these images to a private registry.
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`** - Tag of the maintained images.
@@ -1058,7 +1090,7 @@ Embedding, reranking, and OCR models for the [Knowledge Base](/docs/knowledge) a
 - **`ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED`** - In the built-in chat, asks the model to back claims with verbatim quotes and logs each quote that does not match the cited chunk.
   - Default: `true`
   - Values: `true`, `false`
-  - Log-only: it never blocks or changes an answer. Misses are counted in the [`rag_quote_verification_total`](/docs/admin/observability/metrics#rag_quote_verification_total) metric.
+  - Log-only: it never blocks or changes an answer. Misses are counted in the [`rag_quote_verification_total`](/docs/admin/observability/metrics/knowledge-base#rag_quote_verification_total) metric.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`** - Token budget for one chunk, including its title and metadata.
   - Default: `512`
@@ -1148,7 +1180,7 @@ These configure the OAuth client for the Google Drive connector's [individual au
 [Perforce permission sync](/docs/knowledge/connectors/perforce) runs the `p4` CLI in a per-connector pod and needs the Kubernetes orchestrator. Archestra downloads the `p4` binary from Perforce and checks its SHA-256. Air-gapped installs point the URLs at an internal mirror and set matching checksums.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`** - Image of the pod that runs `p4` for permission sync.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:<platform version>`
+  - Default: `ghcr.io/archestra-ai/p4-shim:<platform version>`
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_AMD64`** - Download URL of the `p4` binary for x86-64 nodes.
   - Default: `https://cdist2.perforce.com/perforce/r25.2/bin.linux26x86_64/p4`
@@ -1374,7 +1406,7 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
   - Default: unset (no authentication)
   - Clients send `Authorization: Bearer <token>`.
 
-- **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often the [`llm_active_users`](/docs/admin/observability/metrics#llm_active_users) gauge is recomputed.
+- **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often the [`llm_active_users`](/docs/admin/observability/metrics/llm#llm_active_users) gauge is recomputed.
   - Default: `300000` (5 minutes)
   - Values: `0` (off), or `30000` and above
 
@@ -1440,6 +1472,8 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 
 - **`ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS`** - Days without a new message before a conversation is deleted with its messages, attachments, files, and code sandboxes.
   - Default: `0` (keep forever)
+
+- **`ARCHESTRA_AUDIT_LOG_OTEL_ENABLED`** - Set to `true` to export persisted administrative audit event metadata as OTLP logs through the configured OpenTelemetry endpoint. Default: `false`. Delivery is best-effort; see [Audit log export](/docs/admin/observability/audit-logs).
 
 - **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Days to keep audit log records.
   - Default: `0` (keep forever)

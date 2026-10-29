@@ -4,6 +4,9 @@ node_modules
 build
 target
 *.node
+*.node.tmp
+# scripts/napi-prebuilt.mjs: which prebuilt addon a package holds, and its lock
+.napi-prebuilt*
 .next
 .next-*
 next-env.d.ts
@@ -85,6 +88,7 @@ archestra-rs/sandbox-rs/index.js
 archestra-rs/app-runtime-rs/index.js
 archestra-rs/image-rs/index.js
 archestra-rs/openappa-rs/index.js
+archestra-rs/router-rs/index.js
 
 # Playwright
 /playwright/

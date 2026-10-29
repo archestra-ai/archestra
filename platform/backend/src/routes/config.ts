@@ -29,7 +29,6 @@ import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
-import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
 import { devFeedbackService } from "@/services/dev-feedback";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -137,8 +136,7 @@ export const ConfigResponseSchema = z.strictObject({
     // in one request, so the composer needs this to stop a send that
     // the body parser would reject with an opaque 413.
     apiBodyLimitBytes: z.number(),
-    byosEnabled: z.boolean(),
-    byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
+
     azureOpenAiEntraIdEnabled: z.boolean(),
     anthropicWifEnabled: z.boolean(),
     anthropicKeylessAuthEnabled: z.boolean(),
@@ -166,6 +164,8 @@ export const ConfigResponseSchema = z.strictObject({
     chatopsTelegramEnabled: z.boolean(),
     /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
     kbMfilesConnectorEnabled: z.boolean(),
+    /** BETA: the Model Pools page and pool routing. */
+    llmModelPoolsEnabled: z.boolean(),
     kbMfilesOauthEnabled: z.boolean(),
     /**
      * The BM25 tuning constants an organization inherits until it
@@ -197,6 +197,8 @@ export const ConfigResponseSchema = z.strictObject({
     mcpGatewaySkillsEnabled: z.boolean(),
     /** Internal UI feedback overlay; on only where its Slack channel is set. */
     devFeedbackEnabled: z.boolean(),
+    /** ALPHA: the Model Router's "auto" model and its settings. */
+    autoRoutingEnabled: z.boolean(),
   }),
   providerBaseUrls: z.record(SupportedProvidersSchema, z.string().nullable()),
 });
@@ -246,8 +248,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
       chatAttachmentStorageBytesLimit: config.chat.attachmentStorageBytesLimit,
       apiBodyLimitBytes: config.api.bodyLimit,
-      byosEnabled: isByosEnabled(),
-      byosVaultKvVersion: getByosVaultKvVersion(),
+
       azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
       anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
       anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
@@ -271,6 +272,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       agentHooksEnabled: config.hooks.enabled,
       chatopsTelegramEnabled: config.chatops.telegramEnabled,
       kbMfilesConnectorEnabled: config.kb.mfilesConnectorEnabled,
+      llmModelPoolsEnabled: config.llmProxy.modelPoolsEnabled,
       kbMfilesOauthEnabled: config.kb.mfilesOauthEnabled,
       kbBm25DefaultK1: config.kb.bm25K1,
       kbBm25DefaultB: config.kb.bm25B,
@@ -283,6 +285,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       },
       mcpGatewaySkillsEnabled: config.mcpGateway.skillsEnabled,
       devFeedbackEnabled: devFeedbackService.isAvailable,
+      autoRoutingEnabled: config.autoRouting.enabled,
     },
     providerBaseUrls: {
       openai: config.llm.openai.baseUrl || null,
@@ -306,6 +309,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       deepseek: config.llm.deepseek.baseUrl || null,
       archestra: config.llm.archestra.baseUrl || null,
       kimi: config.llm.kimi.baseUrl || null,
+      "kimi-code": config.llm["kimi-code"].baseUrl || null,
       "github-copilot": config.llm["github-copilot"].baseUrl || null,
       "microsoft-365-copilot":
         config.llm["microsoft-365-copilot"].baseUrl || null,

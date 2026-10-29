@@ -1,0 +1,14 @@
+[package]
+name = "router_core"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+# float_roundtrip: a plan's breakpoints must parse back bit-identical so tie checks stay exact.
+serde_json = { version = "1", features = ["float_roundtrip"] }

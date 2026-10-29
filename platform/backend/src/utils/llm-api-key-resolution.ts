@@ -126,6 +126,17 @@ export async function resolveProviderApiKey(params: {
       provider,
       agentLlmApiKeyId,
     });
+  } else if (
+    provider === "github-copilot" &&
+    (await LlmProviderApiKeyModel.isGithubAppKey(agentLlmApiKeyId))
+  ) {
+    // No acting user (scheduled, email): only a GitHub App key the agent or
+    // organization default names explicitly. Never an unnamed fallback.
+    resolvedApiKey = await LlmProviderApiKeyModel.getOrganizationApiKey({
+      organizationId,
+      provider,
+      agentLlmApiKeyId,
+    });
   }
 
   resolvedApiKey = params.selection
@@ -158,7 +169,6 @@ export async function resolveProviderApiKey(params: {
         );
         // A marker belonging to another provider's subscription means the
         // stored value was corrupted or swapped (e.g. rotated out of band —
-        // nothing re-validates a BYOS vault value). No adapter can use it:
         // this provider's adapter would send the encoded refresh token
         // upstream as a raw bearer. Refuse resolution outright — even for the
         // owner's own key.

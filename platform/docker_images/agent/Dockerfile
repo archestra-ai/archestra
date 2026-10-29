@@ -21,10 +21,14 @@ RUN apt-get update -qq \
 FROM node:24-bookworm-slim AS agent-base
 ARG TARGETARCH
 
+# CVE-2026-84782: require the fixed OpenSSL packages and refresh cached apt layers.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less libssl-dev libssl3 \
-      openssh-client pkg-config procps python3 python3-venv ripgrep tmux \
+      openssh-client openssl pkg-config procps python3 python3-venv ripgrep tmux \
+ && for package in openssl libssl3 libssl-dev; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.0.22-1~deb12u2' || exit 1; \
+    done \
  && rm -rf /var/lib/apt/lists/*
 
 # A local PostgreSQL with pgvector for projects that need a database. Debian's
@@ -135,17 +139,18 @@ RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/workspace-files.py \
  && python3 /tmp/agent-image-tests/interactive-resume.py \
+ && python3 /tmp/agent-image-tests/tui-exec.py \
  && python3 /tmp/agent-image-tests/development-tools.py \
  && node /tmp/agent-image-tests/npm-http.cjs
 
 FROM agent-base AS agent-claude-code
 USER root
-RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.285 \
+RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.308 \
  && CLAUDE_PACKAGE_DIR=$(pnpm list --global --json @anthropic-ai/claude-code | jq -r '.[0].dependencies["@anthropic-ai/claude-code"].path') \
  && node "$CLAUDE_PACKAGE_DIR/install.cjs" \
  && claude --version \
  && mkdir -p /home/node/.claude \
- && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.285","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
+ && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.308","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
  && printf '%s\n' '{"skipDangerousModePermissionPrompt":true}' > /home/node/.claude/settings.json \
  && chmod 0600 /home/node/.claude.json /home/node/.claude/settings.json \
  && chown -R 1000:1000 /home/node
@@ -167,7 +172,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.153.0 \
+RUN pnpm add --global @openai/codex@0.163.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -181,7 +186,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-opencode
 USER root
-RUN pnpm add --global opencode-ai@1.18.23 \
+RUN pnpm add --global opencode-ai@1.19.3 \
  && OPENCODE_PACKAGE_DIR="$(pnpm list --global --json opencode-ai | jq -r '.[0].dependencies["opencode-ai"].path')" \
  && node "${OPENCODE_PACKAGE_DIR}/postinstall.mjs" \
  && opencode --version \
@@ -200,10 +205,13 @@ USER root
 # Hermes ships only from source (PyPI stopped at 0.19.0): build the release
 # commit the way upstream's own image does. Python, uv, and every Python
 # package come from the hash-locked versions in the checkout. Pillow, PyJWT,
-# and certifi are raised past the lock's vulnerable versions; the startup
+# certifi, and urllib3 are raised past the lock's vulnerable versions; the startup
 # tests below exercise the resulting runtime, including gateway discovery.
+# Keep 0.22.2 until the persistent gateway used by 0.22.4 supports the
+# required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
-RUN hermes_version=0.22.2 \
+RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
+    hermes_version=0.22.2 \
  && hermes_commit=d923a5eb487a17c0a68801bba9ef0f56c81040a8 \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
@@ -216,10 +224,12 @@ RUN hermes_version=0.22.2 \
  && rm /tmp/hermes-python.tgz \
  && /opt/hermes-python/bin/python3 -c 'import sqlite3, sys; assert sys.version_info[:2] == (3, 14); assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version' \
  && cd /opt/hermes \
+ # Upstream's source package uses 0.0.0; stamp the verified release into its metadata.
+ && python3 /tmp/agent-image-patches/hermes-release-version.py /opt/hermes "${hermes_version}" \
  && UV_NO_CONFIG=1 UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy uv-hermes sync --quiet --frozen --no-default-groups --extra mcp \
       --python /opt/hermes-python/bin/python3 --compile-bytecode \
  && UV_NO_CONFIG=1 uv-hermes pip install --quiet --python /opt/hermes/.venv/bin/python \
-      Pillow==13.0.0 PyJWT==2.14.0 certifi==2026.10.19 \
+      Pillow==13.0.0 PyJWT==2.14.0 certifi==2026.10.19 urllib3==2.8.0 \
  && LEFTHOOK=0 npm_config_install_links=false node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui \
  && node scripts/build/tui.mjs --source /opt/hermes --out /opt/hermes-tui \
  && rm -rf node_modules ui-tui/node_modules /root/.npm /root/.cache \
@@ -228,7 +238,12 @@ RUN hermes_version=0.22.2 \
       --commit "${hermes_commit}" --base-version "${hermes_version}" --distance 0 \
       --source docker --distribution docker --update-mechanism external \
  && printf '%s\n' docker > .install_method \
- && rm -rf .git \
+ # Discard superseded wheels and build-only installers, including pip's vendored packages.
+ && rm -rf .git /home/node/.cache/uv /usr/local/bin/uv-hermes \
+      /opt/hermes-python/lib/python3.14/site-packages/pip \
+      /opt/hermes-python/lib/python3.14/site-packages/pip-*.dist-info \
+      /opt/hermes-python/lib/python3.14/ensurepip \
+      /opt/hermes-python/bin/pip* \
  && ln -s /opt/hermes/.venv/bin/hermes /usr/local/bin/hermes \
  && hermes --version \
  && chown -R 1000:1000 /home/node
@@ -237,6 +252,7 @@ ENV HERMES_NODE=/usr/local/bin/node
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
     /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-tui-mcp-discovery.py \
+ && /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-mcp-sdk-import.py \
  && /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-no-first-contact-note.py
 USER 1000:1000
 RUN --network=none \
@@ -258,6 +274,15 @@ RUN pnpm --dir /opt/agent-openclaw install --frozen-lockfile \
  && chown -R 1000:1000 /home/node
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
+    # npm 12.2.1 fixes its bundled brace-expansion, but still bundles undici 6.29.0.
+    # Reuse the checksummed 6.29.1 copy already installed for the global npm CLI.
+    npm_dir=/opt/agent-openclaw/node_modules/.pnpm/npm@12.2.1/node_modules/npm && \
+    test "$(node -p "require('${npm_dir}/package.json').version")" = 12.2.1 && \
+    test "$(node -p "require('/usr/local/lib/node_modules/npm/node_modules/undici/package.json').version")" = 6.29.1 && \
+    rm -rf "${npm_dir}/node_modules/undici" && \
+    cp -a /usr/local/lib/node_modules/npm/node_modules/undici "${npm_dir}/node_modules/undici" && \
+    node /tmp/agent-image-tests/npm-http.cjs "${npm_dir}/node_modules/undici" && \
     python3 /tmp/agent-image-patches/openclaw-mcp-required.py
 USER 1000:1000
 RUN --network=none \
@@ -295,3 +320,58 @@ USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py grok
+
+# The npm package's postinstall only renames a previous Python kimi shim on
+# global installs. Install the checksummed tarball without lifecycle scripts.
+# Kimi finds ripgrep and fd on PATH instead of downloading its own copies.
+FROM agent-base AS agent-kimi
+USER root
+# Set before the version check below so no Kimi process looks for updates.
+ENV KIMI_CODE_NO_AUTO_UPDATE=1 KIMI_CLI_NO_AUTO_UPDATE=1 KIMI_DISABLE_TELEMETRY=1
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends fd-find \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /tmp/kimi \
+ && cd /tmp/kimi \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.3.3)" kimi-code.tgz \
+ && echo "dd5f1bc9cb9c7fd2a03d11f6ed2f037b6bb48a9f38fd1cb7169367ea08b9cfd266a041edf6fc626071d9aa231dc837f99cf9b86eff98286c0a1102f8a18a514f  kimi-code.tgz" | sha512sum -c - \
+ && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
+ && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
+ && cd / && rm -rf /tmp/kimi /root/.npm \
+ && HOME=/tmp/kimi-version KIMI_CODE_HOME=/tmp/kimi-version kimi --version \
+ && rm -rf /tmp/kimi-version \
+ && chown -R 1000:1000 /home/node
+RUN --network=none \
+    --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
+    python3 /tmp/agent-image-patches/kimi-user-mcp-only.py \
+ && python3 /tmp/agent-image-patches/kimi-long-tool-call-ids.py
+USER 1000:1000
+
+RUN --network=none \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/mcp-startup.py kimi
+
+# Redistribute the unmodified native binary and its license/notices together.
+# No package lifecycle scripts or automatic updates run in this image.
+FROM agent-base AS agent-copilot
+USER root
+ENV COPILOT_AUTO_UPDATE=false
+RUN case "$TARGETARCH" in \
+      amd64) copilot_arch=x64; copilot_checksum=7861cf6ec3f4a764207d56428ed6c604564f04e250d0337bc486c1440a3ba06f1bd737cb8ab40875f23887c232ebc0efd9c289189660dbf10eed6ecaa483093b ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=e6b3b4076fc076e09e92b13e694ce2a7248a671658d9bfed55167c4aecbcca63c5342d10ec742243c0d98718fedd184747cad4d99f0a3895406ed32544e5faf8 ;; \
+      *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+ && mkdir -p /opt/copilot \
+ && cd /tmp \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.102)" copilot.tgz \
+ && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
+ && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
+ && test -s /opt/copilot/LICENSE.md \
+ && ln -s /opt/copilot/copilot /usr/local/bin/copilot \
+ && COPILOT_HOME=/tmp/copilot-version COPILOT_OFFLINE=true copilot --no-auto-update --version \
+ && rm -rf /tmp/copilot.tgz /tmp/copilot-version /root/.npm \
+ && chown -R 1000:1000 /home/node
+USER 1000:1000
+RUN --network=none \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/copilot.py

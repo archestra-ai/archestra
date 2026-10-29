@@ -10,6 +10,10 @@
 
 1. **Use pnpm** for package management
 2. **Use Tilt for development** - `tilt up` to start the full environment
+   - Inside an Agent Runtime the backend dev server runs without its file
+     watcher (`ARCHESTRA_DEV_BACKEND_WATCH` defaults to false there). After
+     changing backend code run `tilt trigger pnpm-dev-backend` to rebuild and
+     restart it (about 20 s). The frontend dev server reloads on its own.
 4. **Documentation** - The `archestra-docs-writer` skill decides whether a change needs docs and how to write them. Read it before touching `../docs/pages`.
 5. **Add Tests for Behavior** - When a change alters observable behavior, add or update tests that pin that behavior (unit, integration, or e2e under `platform/e2e-tests/tests`). Favor behavior-focused tests over implementation-detail ones — skip tests that only assert wiring, prop plumbing, or incidental markup. Tests exercise real code; mock only true process boundaries (network, clock, subprocesses, externally-owned storage). Skipping tests is a judgment call to state explicitly, not a silent default. Load the `archestra-dev-testing` skill to choose the level and to avoid the "fluff test" anti-pattern
 6. **Enterprise Licensing** — The repo is dual-licensed: AGPL-3.0 by default (`../LICENSE_AGPL`), Enterprise License (`../LICENSE_ENTERPRISE`) for marked code. See the license router at `../LICENSE.md` for the resolution rules. Pricing and scope: the Licensing section of docs/pages/get-started/index.md. When you add or modify code of enterprise features, tag it as Enterprise using mechanism described in LICENSE.md.
@@ -58,7 +62,7 @@ Load these project skills when the task matches their domain:
 - **Cost Limits**: <http://localhost:3000/llm/cost/limits> (Token usage limits management with per-profile configuration)
 - **Token Price**: <http://localhost:3000/llm/cost/token-price> (Model pricing configuration)
 - **Tilt UI**: <http://localhost:10350/>
-- **Drizzle Studio**: <https://local.drizzle.studio/>
+- **Drizzle Studio**: <https://local.drizzle.studio/> (on demand: `tilt trigger database-gui`)
 - **MCP Gateway**: <http://localhost:9000/v1/mcp/:profileId> (POST for JSON-RPC stateless mode; GET with Accept: text/event-stream opens the legacy HTTP+SSE stream, other GETs return 405; requires Bearer archestra_token auth)
 - **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
 - **MCP Reinstall**: <http://localhost:9000/api/mcp_server/:id/reinstall> (POST to recreate the server's pod)

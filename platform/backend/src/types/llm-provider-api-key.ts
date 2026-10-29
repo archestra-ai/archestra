@@ -21,6 +21,9 @@ import { ResourceVisibilityScopeSchema } from "./visibility";
  */
 export const LlmProviderCredentialKindSchema = z.enum([
   "api_key",
+  // A GitHub App credential on `github-copilot`: organization-owned, so
+  // shareable even though personal Copilot sign-ins are not.
+  "github_app",
   ...SubscriptionCredentialKindSchema.options,
 ]);
 export type LlmProviderCredentialKind = z.infer<
@@ -113,8 +116,7 @@ export const LlmProviderApiKeyWithScopeInfoSchema =
     createdBy: CreatedByNullableSchema,
     teamName: z.string().nullable().optional(),
     userName: z.string().nullable().optional(),
-    vaultSecretPath: z.string().nullable().optional(),
-    vaultSecretKey: z.string().nullable().optional(),
+
     secretStorageType: SecretStorageTypeSchema.optional(),
     bestModelId: z.string().nullable().optional(),
     isAgentKey: z.boolean().optional(),
@@ -126,6 +128,14 @@ export const LlmProviderApiKeyWithScopeInfoSchema =
      * subscription with its row.
      */
     subscriptionKind: SubscriptionCredentialKindSchema.nullable().optional(),
+    /**
+     * True for a GitHub Copilot key that stores an organization's GitHub App
+     * credential: shareable, unlike a personal Copilot sign-in. Derived from
+     * the recorded credential kind; no secret is read or returned.
+     */
+    isGithubAppKey: z.boolean().optional(),
+    /** The GitHub organization a GitHub App key is installed on, and billed to. */
+    githubOrganization: z.string().nullable().optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),
   });
 

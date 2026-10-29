@@ -57,8 +57,7 @@ export function makeConfig(
       sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       chatAttachmentStorageBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       apiBodyLimitBytes: 70 * 1024 * 1024,
-      byosEnabled: false,
-      byosVaultKvVersion: "1",
+
       azureOpenAiEntraIdEnabled: false,
       anthropicWifEnabled: false,
       anthropicKeylessAuthEnabled: false,
@@ -82,6 +81,7 @@ export function makeConfig(
       // including its Application Account (OAuth) fields.
       kbMfilesConnectorEnabled: true,
       kbMfilesOauthEnabled: true,
+      llmModelPoolsEnabled: false,
       kbBm25DefaultK1: 1.2,
       kbBm25DefaultB: 0.75,
       kbContextualRetrievalDefaultMode: "disabled",
@@ -92,6 +92,7 @@ export function makeConfig(
       },
       mcpGatewaySkillsEnabled: false,
       devFeedbackEnabled: false,
+      autoRoutingEnabled: false,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },

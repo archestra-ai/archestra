@@ -7,6 +7,7 @@ import {
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_LIST_LLM_MODELS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
 import {
@@ -236,6 +237,11 @@ const EditAgentToolArgsSchema = z
 
 const ListAgentsOutputSchema = z.object({
   total: z.number().describe("The total number of matching agents."),
+  hint: z
+    .string()
+    .describe(
+      "Says that each agent's `tools` are that agent's own, not tools you can call.",
+    ),
   agents: z.array(
     z.object({
       id: z.string().describe("The agent ID."),
@@ -348,7 +354,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_LIST_AGENTS_SHORT_NAME,
     title: "List Agents",
     description:
-      "List agents with optional filtering by name, provider key, or how the caller reaches them (access). Returns configured provider-key and model names, assigned tools, and knowledge sources.",
+      "List agents with optional filtering by name, provider key, or how the caller reaches them (access). Returns configured provider-key and model names, the tools each agent uses in its own runs, and knowledge sources.",
     schema: ListAgentsToolArgsSchema,
     outputSchema: ListAgentsOutputSchema,
     async handler({ args, context }) {
@@ -534,10 +540,11 @@ const registry = defineArchestraTools([
           };
         });
 
-        return structuredSuccessResult(
-          { total: results.pagination.total, agents },
-          JSON.stringify({ total: results.pagination.total, agents }, null, 2),
-        );
+        // A model reads an agent's tool list as tools it can call, and then
+        // calls names its own gateway or agent does not have.
+        const hint = `Each agent's tools are the ones that agent uses in its own runs, not tools you can call. Call only tools in your own tool list or returned by ${archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME)}.`;
+        const output = { total: results.pagination.total, hint, agents };
+        return structuredSuccessResult(output, JSON.stringify(output, null, 2));
       } catch (error) {
         return catchError(error, "listing agents");
       }

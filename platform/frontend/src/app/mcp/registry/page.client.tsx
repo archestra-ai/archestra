@@ -5,7 +5,7 @@ import {
   MCP_REGISTRY_SEED_MARKER,
   startMcpRegistryEarlyRequests,
 } from "@/lib/mcp/mcp-registry.query";
-import { InternalMCPCatalog } from "./_parts/InternalMCPCatalog";
+import { InternalMCPCatalog } from "./_parts/internal-mcp-catalog";
 import { registryPageRequestFromUrl } from "./_parts/registry-list-query";
 
 // A full page load whose server render could not seed the list evaluates this

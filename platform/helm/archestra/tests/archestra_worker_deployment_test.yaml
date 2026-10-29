@@ -446,3 +446,18 @@ tests:
       - equal:
           path: spec.template.metadata.labels["app.kubernetes.io/component"]
           value: worker
+
+  - it: worker reads the encryption secret from the configured existing secret key
+    set:
+      archestra.authSecret.existingSecretName: external-auth-secret
+      archestra.authSecret.existingSecretsEncryptionSecretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+                optional: true

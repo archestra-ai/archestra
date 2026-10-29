@@ -802,6 +802,15 @@ class KnowledgeBaseConnectorModel {
         schema.knowledgeBaseConnectorsTable,
         eq(schema.knowledgeBaseConnectorsTable.id, params.id),
       );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["knowledgeConnector"],
+        scope: params.id,
+      });
+      // SPDX-SnippetEnd
       return count > 0;
     });
   }
@@ -1122,6 +1131,43 @@ class KnowledgeBaseConnectorModel {
       knowledgeBases,
       memberOverrides,
       configKeys,
+      ...(row.config?.type === "github"
+        ? {
+            githubRepositorySettings: {
+              defaults: {
+                includeIssues: row.config.includeIssues ?? true,
+                includePullRequests: row.config.includePullRequests ?? true,
+                includeRepositoryFiles:
+                  row.config.includeRepositoryFiles ?? false,
+                labelsToSkip: row.config.labelsToSkip ?? [],
+                fileTypes: row.config.fileTypes ?? [],
+                includePaths: row.config.includePaths ?? [],
+                excludePaths: row.config.excludePaths ?? [],
+              },
+              repositories: (row.config.repositoryOverrides ?? []).map(
+                ({
+                  repository,
+                  includeIssues,
+                  includePullRequests,
+                  includeRepositoryFiles,
+                  labelsToSkip,
+                  fileTypes,
+                  includePaths,
+                  excludePaths,
+                }) => ({
+                  repository,
+                  includeIssues: includeIssues ?? null,
+                  includePullRequests: includePullRequests ?? null,
+                  includeRepositoryFiles: includeRepositoryFiles ?? null,
+                  labelsToSkip: labelsToSkip ?? null,
+                  fileTypes: fileTypes ?? null,
+                  includePaths: includePaths ?? null,
+                  excludePaths: excludePaths ?? null,
+                }),
+              ),
+            },
+          }
+        : {}),
       permissionSyncIntervalSeconds: row.permissionSyncIntervalSeconds ?? null,
       environmentId: row.environmentId ?? null,
       createdAt: row.createdAt.toISOString(),

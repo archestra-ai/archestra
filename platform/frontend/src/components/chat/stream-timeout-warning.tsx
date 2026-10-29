@@ -3,7 +3,7 @@
 import { AlertTriangle } from "lucide-react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { TRANSPORT_STALL_THRESHOLD_SECONDS } from "@/lib/chat/stream-stall.hook";
+import { TRANSPORT_STALL_THRESHOLD_SECONDS } from "@/lib/chat/use-stream-stall";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
 /**

@@ -11,7 +11,7 @@ Save a credential once and reuse it in agents, MCP servers, skills, and Knowledg
 
 1. Open **Settings → Credentials**, or **Personal Settings → Credentials** if Settings is unavailable.
 2. Click **Add credential**, name it, and choose its type and ownership.
-3. Save its definition, then **Connect** the value. GitHub user credentials open GitHub authorization; other types ask for the secret or private key. With Vault storage, select the external secret instead.
+3. Save its definition, then **Connect** the value. GitHub user credentials open GitHub authorization; other types ask for the secret or private key.
 4. Confirm the credential shows **Connected** before binding it to a resource.
 
 For an existing credential, use **Connect** on its row. Connecting from a conversation setup link does not retry the message; send it again after setup finishes.

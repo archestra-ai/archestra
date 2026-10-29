@@ -104,6 +104,30 @@ describe("extractSessionInfo", () => {
     });
   });
 
+  test("groups out-of-process children launched with --parent-session-id under metadata.user_id parent_session_id", () => {
+    const result = extractSessionInfo({
+      headers: {
+        "x-claude-code-session-id": "child-session-id",
+      },
+      body: {
+        metadata: {
+          user_id: JSON.stringify({
+            device_id: "abc",
+            account_uuid: "",
+            session_id: "child-session-id",
+            parent_session_id: "parent-session-id",
+          }),
+        },
+      },
+      externalAgentId: undefined,
+    });
+
+    expect(result).toEqual({
+      sessionId: "parent-session-id",
+      sessionSource: CLAUDE_CODE_HEADER_SESSION_SOURCE,
+    });
+  });
+
   test("extracts session ID from Claude Code metadata.user_id", () => {
     const result = extractSessionInfo({
       headers: {},

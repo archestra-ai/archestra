@@ -227,8 +227,12 @@ describe("AppSettingsForm save", () => {
     const user = userEvent.setup();
     const { onOpenChange } = renderForm();
 
+    expect(screen.getByLabelText("Label key")).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: /^Advanced$/ }));
     await user.type(screen.getByLabelText("Label key"), "region");
     await user.type(screen.getByLabelText("Label value"), "eu");
+    await user.click(screen.getByRole("button", { name: /^Advanced$/ }));
+    expect(screen.getByLabelText("Label key")).not.toBeVisible();
     submitForm();
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
@@ -247,6 +251,8 @@ describe("AppSettingsForm save", () => {
     const user = userEvent.setup();
     const { onOpenChange } = renderForm();
 
+    expect(screen.getByLabelText("Label key")).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: /^Advanced$/ }));
     await user.type(screen.getByLabelText("Label key"), "region");
     await user.type(screen.getByLabelText("Label value"), "eu");
     goToSection("Status");

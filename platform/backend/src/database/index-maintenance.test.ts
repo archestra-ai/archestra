@@ -6,6 +6,7 @@ import {
   createInteractionsIndexes,
   createMcpServerIndexes,
   dropLegacyPayloadTrgmIndexes,
+  isModelHistoryIndexReady,
 } from "./index-maintenance";
 
 async function indexExists(name: string): Promise<boolean> {
@@ -48,6 +49,7 @@ describe("dropLegacyPayloadTrgmIndexes", () => {
 });
 
 describe("createAgentToolsIndexes", () => {
+  const allAssignments = "agent_tools_tool_id_all_agent_id_idx";
   const pinned = "agent_tools_mcp_server_id_agent_id_idx";
   const unpinned = "agent_tools_tool_id_agent_id_idx";
   // concurrently: false — PGlite rejects the concurrent forms. The test
@@ -61,16 +63,21 @@ describe("createAgentToolsIndexes", () => {
   };
 
   beforeEach(async () => {
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${allAssignments}"`));
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${pinned}"`));
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${unpinned}"`));
   });
 
-  test("creates both partial indexes when missing", async () => {
+  test("creates the full tool lookup and both partial indexes when missing", async () => {
     expect(await createAgentToolsIndexes(options)).toEqual({
+      [allAssignments]: "created",
       [pinned]: "created",
       [unpinned]: "created",
     });
 
+    expect(await indexDefinition(allAssignments)).toBe(
+      `CREATE INDEX ${allAssignments} ON public.agent_tools USING btree (tool_id, agent_id)`,
+    );
     expect(await indexDefinition(pinned)).toBe(
       `CREATE INDEX ${pinned} ON public.agent_tools USING btree (mcp_server_id, agent_id) WHERE (mcp_server_id IS NOT NULL)`,
     );
@@ -80,38 +87,78 @@ describe("createAgentToolsIndexes", () => {
     expect(await advisoryLockCount()).toBe(0);
   });
 
+  test("supports a tool lookup without a pinned or unpinned predicate", async () => {
+    await createAgentToolsIndexes(options);
+
+    // The review counts every assignment. Its query cannot use the existing
+    // partial tool index because it does not constrain mcp_server_id.
+    const plan = await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL enable_seqscan = off`);
+      return tx.execute(sql`
+        EXPLAIN (FORMAT JSON)
+        SELECT count(*) FROM agent_tools
+        WHERE tool_id = '00000000-0000-4000-8000-000000000001'::uuid
+      `);
+    });
+    expect(JSON.stringify(plan.rows)).toContain(allAssignments);
+  });
+
   test("leaves valid indexes alone", async () => {
     await createAgentToolsIndexes(options);
+    const allOid = await indexOid(allAssignments);
     const pinnedOid = await indexOid(pinned);
     const unpinnedOid = await indexOid(unpinned);
 
     expect(await createAgentToolsIndexes(options)).toEqual({
+      [allAssignments]: "already_valid",
       [pinned]: "already_valid",
       [unpinned]: "already_valid",
     });
+    expect(await indexOid(allAssignments)).toBe(allOid);
     expect(await indexOid(pinned)).toBe(pinnedOid);
     expect(await indexOid(unpinned)).toBe(unpinnedOid);
   });
 
-  test("rebuilds a matching index left invalid by an interrupted build", async () => {
+  test.each([
+    unpinned,
+    allAssignments,
+  ])("rebuilds %s after an interrupted build", async (indexName) => {
     await createAgentToolsIndexes(options);
     const pinnedOid = await indexOid(pinned);
-    const unpinnedOid = await indexOid(unpinned);
+    const invalidOid = await indexOid(indexName);
     // What a cancelled CREATE INDEX CONCURRENTLY leaves behind.
     await db.execute(
-      sql`update pg_index set indisvalid = false where indexrelid = ${unpinnedOid}::oid`,
+      sql`update pg_index set indisvalid = false where indexrelid = ${invalidOid}::oid`,
     );
 
     expect(await createAgentToolsIndexes(options)).toEqual({
+      [allAssignments]: "already_valid",
       [pinned]: "already_valid",
-      [unpinned]: "rebuilt_invalid",
+      [unpinned]: "already_valid",
+      [indexName]: "rebuilt_invalid",
     });
     expect(await indexOid(pinned)).toBe(pinnedOid);
-    expect(await indexOid(unpinned)).not.toBe(unpinnedOid);
+    expect(await indexOid(indexName)).not.toBe(invalidOid);
     const rebuilt = await db.execute(
-      sql`select indisvalid from pg_index where indexrelid = to_regclass(${unpinned})`,
+      sql`select indisvalid from pg_index where indexrelid = to_regclass(${indexName})`,
     );
     expect(rebuilt.rows[0]?.indisvalid).toBe(true);
+  });
+
+  test("leaves a partial index using the full lookup name alone", async () => {
+    await db.execute(
+      sql.raw(
+        `CREATE INDEX "${allAssignments}" ON agent_tools (tool_id, agent_id) WHERE mcp_server_id IS NULL`,
+      ),
+    );
+    const before = await indexDefinition(allAssignments);
+    expect(await createAgentToolsIndexes(options)).toEqual({
+      [allAssignments]: "unexpected_definition",
+      [pinned]: "created",
+      [unpinned]: "created",
+    });
+    expect(await indexDefinition(allAssignments)).toBe(before);
+    expect(await advisoryLockCount()).toBe(0);
   });
 
   test.each([
@@ -134,6 +181,7 @@ describe("createAgentToolsIndexes", () => {
     const before = await indexDefinition(takenName);
 
     expect(await createAgentToolsIndexes(options)).toEqual({
+      [allAssignments]: "created",
       [takenName]: "unexpected_definition",
       [otherName]: "created",
     });
@@ -205,6 +253,8 @@ describe("createMcpServerIndexes", () => {
 describe("createInteractionsIndexes", () => {
   const name = "interactions_session_preview_missing_idx";
   const passthroughName = "interactions_passthrough_virtual_key_id_idx";
+  const modelHistoryName = "interactions_model_created_at_idx";
+  const mediaCostName = "interactions_media_cost_unavailable_idx";
   const options = {
     concurrently: false,
     client: {
@@ -216,12 +266,16 @@ describe("createInteractionsIndexes", () => {
   beforeEach(async () => {
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${name}"`));
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${passthroughName}"`));
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${modelHistoryName}"`));
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${mediaCostName}"`));
   });
 
   test("creates the missing-preview index, then recognizes it on the next boot", async () => {
     expect(await createInteractionsIndexes(options)).toEqual({
       [name]: "created",
       [passthroughName]: "created",
+      [mediaCostName]: "created",
+      [modelHistoryName]: "created",
     });
     expect(await indexDefinition(name)).toBe(
       `CREATE INDEX ${name} ON public.interactions USING btree (created_at, id) WHERE ((session_preview IS NULL) AND (encrypted_chat_conversation_id IS NULL))`,
@@ -233,6 +287,8 @@ describe("createInteractionsIndexes", () => {
     expect(await createInteractionsIndexes(options)).toEqual({
       [name]: "already_valid",
       [passthroughName]: "already_valid",
+      [mediaCostName]: "already_valid",
+      [modelHistoryName]: "already_valid",
     });
     expect(await indexOid(name)).toBe(oid);
     expect(await advisoryLockCount()).toBe(0);
@@ -254,6 +310,63 @@ describe("createInteractionsIndexes", () => {
     );
     expect(await indexOid(passthroughName)).toBe(oid);
     expect(await advisoryLockCount()).toBe(0);
+  });
+
+  test("creates the media cost index, then leaves it alone", async () => {
+    expect((await createInteractionsIndexes(options))[mediaCostName]).toBe(
+      "created",
+    );
+    expect(await indexDefinition(mediaCostName)).toBe(
+      `CREATE INDEX ${mediaCostName} ON public.interactions USING btree (created_at, id) WHERE (((response -> '__mediaUsage'::text) ->> 'costAvailable'::text) = 'false'::text)`,
+    );
+    const oid = await indexOid(mediaCostName);
+
+    expect((await createInteractionsIndexes(options))[mediaCostName]).toBe(
+      "already_valid",
+    );
+    expect(await indexOid(mediaCostName)).toBe(oid);
+  });
+});
+
+describe("model history index", () => {
+  const name = "interactions_model_created_at_idx";
+  const options = {
+    concurrently: false,
+    client: {
+      query: (text: string, values?: unknown[]) =>
+        db.$client.query(text, values),
+    },
+  };
+
+  beforeEach(async () => {
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${name}"`));
+  });
+
+  // Cost backfills refuse to run until this reports ready, so the INCLUDE list
+  // must read back exactly as built or the feature would stay off forever.
+  test("is built with its INCLUDE columns and then reported ready", async () => {
+    expect(await isModelHistoryIndexReady()).toBe(false);
+
+    expect((await createInteractionsIndexes(options))[name]).toBe("created");
+    expect(await indexDefinition(name)).toBe(
+      `CREATE INDEX ${name} ON public.interactions USING btree (model, created_at, id) INCLUDE (type, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cache_write_1h_tokens, cost, billing_mode, user_id)`,
+    );
+    expect(await isModelHistoryIndexReady()).toBe(true);
+
+    expect((await createInteractionsIndexes(options))[name]).toBe(
+      "already_valid",
+    );
+  });
+
+  test("an index under its name with other columns is not ready and is left alone", async () => {
+    await db.execute(
+      sql.raw(`CREATE INDEX "${name}" ON interactions (model, created_at)`),
+    );
+
+    expect(await isModelHistoryIndexReady()).toBe(false);
+    expect((await createInteractionsIndexes(options))[name]).toBe(
+      "unexpected_definition",
+    );
   });
 });
 

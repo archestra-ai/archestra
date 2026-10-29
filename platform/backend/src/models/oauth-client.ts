@@ -183,6 +183,34 @@ class OAuthClientModel {
   }
 
   /**
+   * Insert, once, a client that owns tokens the platform issues itself. It is
+   * disabled, has no secret to authenticate with, no redirect URI and no
+   * grant type, so no OAuth flow can run as it. Concurrent callers are safe.
+   */
+  static async ensurePlatformIssuedClient(params: {
+    id: string;
+    clientId: string;
+    name: string;
+  }): Promise<void> {
+    await db
+      .insert(schema.oauthClientsTable)
+      .values({
+        id: params.id,
+        clientId: params.clientId,
+        name: params.name,
+        clientSecret: null,
+        redirectUris: [],
+        grantTypes: [],
+        responseTypes: [],
+        scopes: ["mcp"],
+        tokenEndpointAuthMethod: "client_secret_post",
+        public: false,
+        disabled: true,
+      })
+      .onConflictDoNothing({ target: schema.oauthClientsTable.clientId });
+  }
+
+  /**
    * Atomically insert or update an OAuth client from a CIMD document.
    * Uses onConflictDoUpdate on the unique clientId column to avoid
    * race conditions between concurrent requests.

@@ -829,6 +829,7 @@ function CreateProjectDialog({
         </div>
       )}
       <AdvancedLabelsSection
+        collapsible
         ref={labelsRef}
         labels={labels}
         onLabelsChange={setLabels}

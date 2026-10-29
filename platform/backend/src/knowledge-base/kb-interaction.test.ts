@@ -386,7 +386,7 @@ describe("withKbObservability", () => {
 
   it("stores null cost when pricing lookup fails", async () => {
     // Simulate the pricing lookup throwing (calculateKbCost swallows → cost null).
-    vi.spyOn(ModelModel, "findByProviderAndModelId").mockRejectedValueOnce(
+    vi.spyOn(ModelModel, "findByProviderAndModelIds").mockRejectedValueOnce(
       new Error("DB down"),
     );
 

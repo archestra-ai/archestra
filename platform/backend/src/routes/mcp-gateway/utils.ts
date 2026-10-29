@@ -72,6 +72,7 @@ import {
 } from "@/archestra-mcp-server/helpers";
 import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
+import { callerOf, canUseAgent } from "@/auth/permission-gated";
 import type { RequestLookups } from "@/auth/request-lookups";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
@@ -342,6 +343,12 @@ export async function buildAgentMcpToolList(params: {
 }> {
   const { agent, tokenAuth } = params;
   const agentId = agent.id;
+  // The principal tools/call executes as: a service account (bare or behind an
+  // OAuth client) acts under its synthetic user id. Every caller-scoped part of
+  // this list must use it too, or the list hides what the call would allow.
+  const callerUserId = tokenAuth?.serviceAccountId
+    ? serviceAccountUserId(tokenAuth.serviceAccountId)
+    : tokenAuth?.userId;
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
   const archestraTools = getArchestraMcpTools();
@@ -371,9 +378,7 @@ export async function buildAgentMcpToolList(params: {
   const fetchedMcpTools = await filterToolsByCallerCatalogAccess(
     agentMcpTools,
     {
-      userId: tokenAuth?.serviceAccountId
-        ? serviceAccountUserId(tokenAuth.serviceAccountId)
-        : tokenAuth?.userId,
+      userId: callerUserId,
       organizationId: agent.organizationId,
       lookups: params.lookups,
     },
@@ -509,9 +514,7 @@ export async function buildAgentMcpToolList(params: {
   // Filter Archestra tools based on user RBAC permissions
   const permittedNames = await filterToolNamesByPermission(
     candidateTools.map((t) => t.name),
-    tokenAuth?.serviceAccountId
-      ? serviceAccountUserId(tokenAuth.serviceAccountId)
-      : tokenAuth?.userId,
+    callerUserId,
     tokenAuth?.organizationId,
     params.lookups,
   );
@@ -598,7 +601,7 @@ export async function buildAgentMcpToolList(params: {
         agentId,
         tokenAuth?.organizationId
           ? {
-              userId: tokenAuth.userId,
+              userId: callerUserId,
               organizationId: tokenAuth.organizationId,
             }
           : undefined,
@@ -612,7 +615,7 @@ export async function buildAgentMcpToolList(params: {
               .filter((tool) => tool.builtIn && permittedNames.has(tool.name))
               .map((tool) => tool.name),
             agentId,
-            userId: tokenAuth?.userId,
+            userId: callerUserId,
             organizationId: tokenAuth?.organizationId,
             prefetchedCatalogs: catalogsById,
             lookups: params.lookups,
@@ -1730,6 +1733,43 @@ async function validateResolvedUserToken(params: {
   };
 }
 
+export type A2AOAuthExecution = {
+  tokenId: string;
+  clientId: string;
+  serviceAccountId?: string;
+};
+
+export async function authorizeA2AOAuthExecution(params: {
+  agentId: string;
+  organizationId: string;
+  execution: A2AOAuthExecution;
+}): Promise<TokenAuthResult> {
+  const { execution } = params;
+  const hash = execution.tokenId.startsWith(OAUTH_TOKEN_ID_PREFIX)
+    ? await OAuthAccessTokenModel.getTokenHashById(
+        execution.tokenId.slice(OAUTH_TOKEN_ID_PREFIX.length),
+      )
+    : undefined;
+  const result = hash
+    ? await validateOAuthTokenByHash({
+        profileId: params.agentId,
+        oauthTokenHash: hash,
+        requiredOAuthScope: "a2a",
+      })
+    : null;
+  if (
+    !result ||
+    result.isUserToken ||
+    result.oauthClientId !== execution.clientId ||
+    result.serviceAccountId !== execution.serviceAccountId ||
+    result.organizationId !== params.organizationId ||
+    !(await canUseAgent(params.agentId, callerOf(result)))
+  ) {
+    throw new Error("OAuth application is no longer authorized for this agent");
+  }
+  return result;
+}
+
 /**
  * Validate an OAuth access token for a specific profile.
  * Looks up the token by its SHA-256 hash in the oauth_access_token table
@@ -2149,6 +2189,26 @@ export async function authenticateMCPGatewayRequest(
   tokenValue: string,
   lookups?: RequestLookups,
   requiredOAuthScope: "mcp" | "a2a" = MCP_GATEWAY_OAUTH_SCOPE,
+): Promise<GatewayAuthOutcome> {
+  const outcome = await authenticateUngated(
+    profileId,
+    tokenValue,
+    lookups,
+    requiredOAuthScope,
+  );
+  // A permission-gated agent is reached only by a token whose user or service
+  // account holds the permission: no grant or OAuth client stands in for it.
+  return outcome.result &&
+    !(await canUseAgent(profileId, callerOf(outcome.result)))
+    ? { result: null, reason: "invalid_token" }
+    : outcome;
+}
+
+async function authenticateUngated(
+  profileId: string,
+  tokenValue: string,
+  lookups: RequestLookups | undefined,
+  requiredOAuthScope: "mcp" | "a2a",
 ): Promise<GatewayAuthOutcome> {
   const tokenHashes = buildTokenHashes(profileId, tokenValue);
   const authCacheKey = `${tokenHashes.cacheKey}:${requiredOAuthScope}`;
@@ -3099,9 +3159,14 @@ export function normalizeToolInputSchema(
 
   // MCP clients (Kilo, Claude Code, …) copy tools/list schemas into the
   // provider tool list. Gemini 400s the whole request if any advertised
-  // schema still has a non-string `const`/`enum`. Execution still validates
-  // against the original Zod/JSON Schema.
-  return sanitizeGeminiToolSchema(objectSchema) as McpListTool["inputSchema"];
+  // schema still has a non-string `const`/`enum`. The client's model may be
+  // any model, so a field that takes any value stays free: typed as an
+  // object, strict models turn `limit: 10` in run_tool's tool_args into
+  // `limit: {}`. Execution still validates against the original Zod/JSON
+  // Schema.
+  return sanitizeGeminiToolSchema(objectSchema, {
+    anyValue: "any",
+  }) as McpListTool["inputSchema"];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

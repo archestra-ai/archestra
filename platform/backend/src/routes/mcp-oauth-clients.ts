@@ -195,6 +195,7 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.allowedGatewayIds && body.allowedGatewayIds.length > 0) {
         await validateMcpOauthClientConfig({
           organizationId,
+          userId: user.id,
           allowedGatewayIds: body.allowedGatewayIds,
         });
       }
@@ -249,6 +250,7 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.allowedGatewayIds && body.allowedGatewayIds.length > 0) {
         await validateMcpOauthClientConfig({
           organizationId,
+          userId: user.id,
           allowedGatewayIds: body.allowedGatewayIds,
         });
       }
@@ -355,10 +357,11 @@ export default mcpOauthClientsRoutes;
 
 async function validateMcpOauthClientConfig(params: {
   organizationId: string;
+  userId: string;
   allowedGatewayIds: string[];
 }) {
   for (const gatewayId of params.allowedGatewayIds) {
-    const agent = await AgentModel.findById(gatewayId);
+    const agent = await AgentModel.findById(gatewayId, params.userId, true);
     // An OAuth client may be scoped to MCP gateways and/or A2A agents (both are
     // reached by id through validateMCPGatewayToken). llm_proxy agents have
     // their own LLM OAuth clients and are not eligible here.

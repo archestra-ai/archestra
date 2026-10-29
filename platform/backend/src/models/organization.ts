@@ -299,16 +299,34 @@ class OrganizationModel {
       return OrganizationModel.getById(id);
     }
 
-    const [updatedOrganization] = await db
-      .update(schema.organizationsTable)
-      .set(data)
-      .where(eq(schema.organizationsTable.id, id))
-      .returning();
+    const updatedOrganization = await OrganizationModel.patchInTransaction({
+      id,
+      data,
+    });
 
     logger.debug(
       { id, updated: !!updatedOrganization },
       "OrganizationModel.patch: completed",
     );
+    await OrganizationModel.invalidateSettingsCaches(id);
+    return updatedOrganization || null;
+  }
+
+  /** Used by the browser policy's cluster fence; cache invalidation follows commit. */
+  static async patchInTransaction(params: {
+    id: string;
+    data: Partial<Organization>;
+    tx?: Transaction;
+  }): Promise<Organization | null> {
+    const [row] = await (params.tx ?? db)
+      .update(schema.organizationsTable)
+      .set(params.data)
+      .where(eq(schema.organizationsTable.id, params.id))
+      .returning();
+    return row ?? null;
+  }
+
+  static async invalidateSettingsCaches(id: string): Promise<void> {
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
     await cacheManager.delete(getOrganizationOnlineSkillCatalogCacheKey(id));
@@ -326,7 +344,6 @@ class OrganizationModel {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     OrganizationModel.mcpIdleHibernationCache.clear();
     // SPDX-SnippetEnd
-    return updatedOrganization || null;
   }
 
   /**
@@ -886,6 +903,7 @@ class OrganizationModel {
       mcpIdleHibernationEnabled: org.mcpIdleHibernationEnabled,
       // SPDX-SnippetEnd
       onlineSkillCatalogEnabled: org.onlineSkillCatalogEnabled,
+      playwrightMcpEnabled: org.playwrightMcpEnabled,
       allowChatFileUploads: org.allowChatFileUploads,
       allowUnauthenticatedLlmProxyRequests:
         org.allowUnauthenticatedLlmProxyRequests,

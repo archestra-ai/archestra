@@ -1024,6 +1024,50 @@ describe("POST /api/connection-setups", () => {
     expect(attributionKey?.authorId).toBe(user.id);
   });
 
+  test("kimi-code passthrough provisions an attribution key and the provider's default model", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    const create = (payload: Record<string, unknown>) =>
+      app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: {
+          clientId: "kimi-code",
+          baseUrl: "http://localhost:9000/v1",
+          llmProxyId: proxy.id,
+          ...payload,
+        },
+      });
+
+    const response = await create({ provider: "kimi-code" });
+    expect(response.statusCode, response.body).toBe(200);
+    const setup = await ConnectionSetupModel.findByToken(
+      response.json().command.match(/script\/([^']+)'/)?.[1] as string,
+    );
+    // Kimi Code keeps the person's own Kimi Code key; the passthrough key
+    // only attributes requests, as for Claude Code.
+    expect(setup?.proxyAuth).toBe("provider-key");
+    expect(setup?.model).toBe("k3.1-pro");
+    const attributionKey = await VirtualApiKeyModel.findById(
+      setup?.virtualApiKeyId as string,
+    );
+    expect(attributionKey?.keyType).toBe("passthrough");
+
+    const chosen = await create({ provider: "kimi", model: "kimi-k3" });
+    expect(chosen.statusCode, chosen.body).toBe(200);
+    expect(
+      (
+        await ConnectionSetupModel.findByToken(
+          chosen.json().command.match(/script\/([^']+)'/)?.[1] as string,
+        )
+      )?.model,
+    ).toBe("kimi-k3");
+
+    const unsupported = await create({ provider: "anthropic" });
+    expect(unsupported.statusCode).toBe(400);
+  });
+
   test("copilot-cli github-copilot passthrough provisions an attribution key by default (mirrors Claude Code)", async ({
     makeAgent,
   }) => {
@@ -1096,6 +1140,7 @@ describe("POST /api/connection-setups", () => {
     "bedrock",
     "vllm",
     "azure",
+    "github-copilot",
   ] as const)("OpenCode virtual key installs %s models without leaking other mappings", async (provider, {
     makeSecret,
     makeLlmProviderApiKey,
@@ -1118,6 +1163,7 @@ describe("POST /api/connection-setups", () => {
     expect(previous.statusCode).toBe(200);
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider,
+      userId: user.id,
       isPrimary: false,
       baseUrl: "https://models.example/v1",
     });
@@ -1163,12 +1209,19 @@ describe("POST /api/connection-setups", () => {
       url: `/api/connection-setups/script/${rawToken}`,
     });
     expect(script.statusCode).toBe(200);
-    // None of these providers has an OpenCode provider of its own, so the
-    // installer carries no route for it and never adds an Archestra one.
-    expect(script.body).not.toContain(`"archestra-${provider}"`);
-    expect(script.body).not.toContain("example/coder");
-    expect(script.body).toContain('"routes":{}');
-    expect(script.body).toMatch(/"unsupported":\["Test API Key [0-9a-f]{8}"\]/);
+    if (provider === "azure" || provider === "github-copilot") {
+      expect(script.body).toContain(`"archestra-${provider}"`);
+      expect(script.body).toContain("example/coder");
+      expect(script.body).toContain('"modelRouter":{');
+      expect(script.body).toContain('"unsupported":[]');
+    } else {
+      expect(script.body).not.toContain(`"archestra-${provider}"`);
+      expect(script.body).not.toContain("example/coder");
+      expect(script.body).toContain('"routes":{}');
+      expect(script.body).toMatch(
+        /"unsupported":\["Test API Key [0-9a-f]{8}"\]/,
+      );
+    }
     expect(script.body).not.toContain('"archestra-openai"');
     expect(script.body).toContain("opencode-primary-state.json");
   });

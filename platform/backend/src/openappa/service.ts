@@ -15,6 +15,7 @@ import {
   type CallToolResult,
   CallToolResultSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { stringify as stringifyToml } from "smol-toml";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
@@ -27,7 +28,7 @@ import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { normalizeCommandExecutionArguments } from "@/openappa/command-normalization";
+import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
@@ -42,12 +43,13 @@ import {
 import {
   OpenappaRootOnlyError,
   openappaFailure,
+  type RuntimeFailureCode,
   runtimeFailureCode,
   unansweredAnnotationNotice,
   undeclaredToolNotice,
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
-import { toolEntries } from "@/openappa/policy-text";
+import { asRecord, parsePolicyToml, toolEntries } from "@/openappa/policy-text";
 import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
@@ -328,6 +330,50 @@ export async function recompileAllOnStart(): Promise<void> {
     logger.error({ err: error }, "OpenAPPA could not recompose the policies");
   }
 }
+
+/**
+ * Open the native runtime at boot, so a database URL, TLS or packaging failure
+ * is logged with its cause before the first governed request. Never rejects.
+ */
+export async function startOpenappaRuntime(): Promise<void> {
+  if (!openappaEnabled()) return;
+  await binding().catch(openappaFailure);
+}
+
+type OpenappaReadiness =
+  | { state: "disabled" | "ready" | "starting" }
+  | { state: "unavailable"; code: RuntimeFailureCode | "unknown" };
+
+/**
+ * Whether the runtime can decide governed requests. Opens it when it is not
+ * open yet, because a pod that is not ready receives no request that would.
+ * Waits at most `waitMs`; a slower opening reports `starting`.
+ */
+export async function openappaReadiness(
+  waitMs = READINESS_WAIT_MS,
+): Promise<OpenappaReadiness> {
+  if (!openappaEnabled()) return { state: "disabled" };
+  let timer: NodeJS.Timeout | undefined;
+  const elapsed = new Promise<"starting">((resolve) => {
+    timer = setTimeout(() => resolve("starting"), waitMs);
+  });
+  try {
+    const state = await Promise.race([
+      binding().then(() => "ready" as const),
+      elapsed,
+    ]);
+    return { state };
+  } catch (error) {
+    return {
+      state: "unavailable",
+      code: runtimeFailureCode(error) ?? "unknown",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const READINESS_WAIT_MS = 3000;
 
 export async function executeYell(params: {
   session: OpenAppaSession;
@@ -693,13 +739,16 @@ async function effectivePolicy(
   try {
     const policy =
       await openappaBatteriesService.getEffectivePolicy(organizationId);
-    return {
+    const resolved = {
       ...(await openappaDeclarations.dispatchPolicy({
         organizationId,
         content: policy.content,
       })),
       compositionHash: policy.contentHash,
     };
+    return isPeerReadModeActive(organizationId)
+      ? peerReadPolicy(resolved)
+      : resolved;
   } catch (error) {
     throw openappaFailure(error);
   }
@@ -793,15 +842,25 @@ async function startSession(params: {
   policy?: DispatchPolicy;
   deliverReturnContract?: (text: string) => void;
   principal?: { principal?: string };
+  lineage?: { spawnCallId?: string; childNativeId?: string };
 }): Promise<string | undefined> {
+  const event = {
+    event: "session_start",
+    ...(params.lineage?.spawnCallId
+      ? { spawn_call_id: params.lineage.spawnCallId }
+      : {}),
+    ...(params.lineage?.childNativeId
+      ? { child_native_id: params.lineage.childNativeId }
+      : {}),
+  };
   const decision = params.principal
     ? await dispatchWithPrincipal({
         session: params.session,
-        event: { event: "session_start" },
+        event,
         policy: params.policy,
         principal: params.principal,
       })
-    : await dispatch(params.session, { event: "session_start" }, params.policy);
+    : await dispatch(params.session, event, params.policy);
   if (decision.decision === "context") {
     const text = decision.text;
     if (
@@ -825,6 +884,7 @@ async function startSession(params: {
 export async function startRuntimeChild(params: {
   session: OpenAppaSession;
   spawnCallId?: string;
+  childNativeId?: string;
 }): Promise<{ contract?: string }> {
   if (!params.session.parent_id) {
     throw new ApiError(
@@ -835,6 +895,7 @@ export async function startRuntimeChild(params: {
   const decision = await dispatch(params.session, {
     event: "session_start",
     ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
+    ...(params.childNativeId ? { child_native_id: params.childNativeId } : {}),
   });
   if (decision.decision === "ack") return {};
   if (decision.decision === "context" && decision.text?.trim()) {
@@ -1057,6 +1118,8 @@ export async function processProxyResults(params: {
   classifySpawnResult?: (
     result: CommonToolResult,
   ) => "pending" | "failed" | undefined;
+  /** Signed lineage retained with a child session for fork binding at session start. */
+  lineage?: { spawnCallId?: string; childNativeId?: string };
 }) {
   // One policy and membership snapshot serve this ordered result batch.
   // Nothing persists across batches: the next one sees membership revocation.
@@ -1069,6 +1132,7 @@ export async function processProxyResults(params: {
     policy,
     deliverReturnContract: params.deliverReturnContract,
     principal,
+    lineage: params.lineage,
   });
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
@@ -1206,6 +1270,18 @@ export async function evaluateToolCalls(
     canonicalize: options.canonicalize,
     looseRunToolDispatch: options.looseRunToolDispatch === true,
   });
+  const hasSpawnCall = calls.some(
+    (call) =>
+      options.spawnCallIds?.has(call.id) === true ||
+      options.isSpawn?.(call.name, call.namespace) === true,
+  );
+  if (hasSpawnCall) {
+    exitPeerReadMode(session.organization_id);
+  } else if (
+    normalized.some((target) => target.toolCallName === "SendMessage")
+  ) {
+    enterPeerReadMode(session.organization_id);
+  }
   const admitted: string[] = [];
   const dispatchCall = sessionDispatch(session, policy);
   const results = await Promise.allSettled(
@@ -1289,7 +1365,7 @@ export async function evaluateToolCalls(
           options.control?.name,
           options.supportsDelegation,
         ),
-        arguments: normalizeCommandExecutionArguments(
+        arguments: normalizeToolArgumentsForPolicy(
           tool,
           JSON.parse(target.toolCallArgs),
         ),
@@ -1698,6 +1774,7 @@ async function declareSpawnReturn(params: {
   controlToolName?: string;
   policy: SharedPolicy;
 }): Promise<AppaCallDecision | undefined> {
+  exitPeerReadMode(params.session.organization_id);
   const probeId = `${params.callId}:declare`;
   const probe = await dispatch(
     params.session,
@@ -1743,7 +1820,9 @@ async function declareSpawnReturn(params: {
   const args = {
     offer_id: offer.offer_id,
     label: {},
-    ...(wanted.kind === "attested" ? { return_schema: wanted.schema } : {}),
+    ...(wanted.kind === "attested"
+      ? { return_schema: normalizeReturnSchemaNode(wanted.schema) }
+      : {}),
   };
   const declared = await executeRemedyByOffer({
     organizationId: params.session.organization_id,
@@ -1761,6 +1840,128 @@ async function declareSpawnReturn(params: {
     feedback: declared.result.content
       .flatMap((block) => (block.type === "text" ? [block.text] : []))
       .join("\n"),
+  };
+}
+
+function normalizeReturnSchemaNode(node: unknown): unknown {
+  if (!node || typeof node !== "object" || Array.isArray(node)) return node;
+  const record = node as Record<string, unknown>;
+  let changed = false;
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (
+      key === "additionalProperties" &&
+      record.type === "object" &&
+      value === false
+    ) {
+      changed = true;
+      continue;
+    }
+    if (
+      key === "properties" &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      let propsChanged = false;
+      const nextProps: Record<string, unknown> = {};
+      for (const [propKey, propSchema] of Object.entries(
+        value as Record<string, unknown>,
+      )) {
+        const normalizedProp = normalizeReturnSchemaNode(propSchema);
+        if (normalizedProp !== propSchema) propsChanged = true;
+        nextProps[propKey] = normalizedProp;
+      }
+      if (propsChanged) {
+        changed = true;
+        next[key] = nextProps;
+        continue;
+      }
+    } else if (key === "items") {
+      const normalizedItems = normalizeReturnSchemaNode(value);
+      if (normalizedItems !== value) {
+        changed = true;
+        next[key] = normalizedItems;
+        continue;
+      }
+    }
+    next[key] = value;
+  }
+  return changed ? next : node;
+}
+
+const PEER_READ_CANONICAL_TOOL = "mcp/archestra/read_peer_message";
+const MAX_PEER_READ_OFFERS = 1024;
+const PEER_READ_MODE_TTL_MS = 5 * 60 * 1000;
+const peerReadOfferIds = new Set<string>();
+const peerReadModeUntilByOrg = new Map<string, number>();
+
+function rememberPeerReadOffer(offerId: string): void {
+  if (peerReadOfferIds.size >= MAX_PEER_READ_OFFERS) {
+    const oldest = peerReadOfferIds.values().next().value;
+    if (oldest !== undefined) peerReadOfferIds.delete(oldest);
+  }
+  peerReadOfferIds.add(offerId);
+}
+
+function enterPeerReadMode(organizationId: string): void {
+  peerReadModeUntilByOrg.set(
+    organizationId,
+    Date.now() + PEER_READ_MODE_TTL_MS,
+  );
+}
+
+function exitPeerReadMode(organizationId: string): void {
+  peerReadModeUntilByOrg.delete(organizationId);
+}
+
+function isPeerReadModeActive(organizationId: string): boolean {
+  const until = peerReadModeUntilByOrg.get(organizationId);
+  if (until === undefined) return false;
+  if (Date.now() > until) {
+    peerReadModeUntilByOrg.delete(organizationId);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * `appa_runtime::read_tool_preserves_source_label` requires `read_peer_message`
+ * to be declared with an empty `delta` and out of any output sanitizer's scope.
+ * Because child-return sanitizers (`attest-schema`, `redact-secrets`) are
+ * required by `appa_engine` to be unscoped (`scope.tags.is_empty()`), strip
+ * sanitizer declarations and ensure `mcp/archestra/read_peer_message` has an
+ * empty rule when dispatching `readPeerMessage` and its remedy offers.
+ */
+function peerReadPolicy(policy: DispatchPolicy): DispatchPolicy {
+  const document = parsePolicyToml(policy.content);
+  const policyTable = asRecord(document?.policy);
+  if (!document || !policyTable) return policy;
+  const tools = Array.isArray(policyTable.tool) ? policyTable.tool : [];
+  const brandedName = archestraMcpBranding.getToolName(
+    TOOL_READ_PEER_MESSAGE_SHORT_NAME,
+  );
+  const hasPeerReadRule = tools.some((entry) => {
+    const record = asRecord(entry);
+    return (
+      record?.name === PEER_READ_CANONICAL_TOOL || record?.name === brandedName
+    );
+  });
+  const hasSanitizers =
+    Array.isArray(policyTable.sanitizer) && policyTable.sanitizer.length > 0;
+  if (hasPeerReadRule && !hasSanitizers) return policy;
+  delete policyTable.sanitizer;
+  const externals = asRecord(document.externals);
+  if (externals) delete externals.sanitizers;
+  if (!hasPeerReadRule) {
+    policyTable.tool = [
+      { name: PEER_READ_CANONICAL_TOOL, delta: {} },
+      ...tools,
+    ];
+  }
+  return {
+    ...policy,
+    content: stringifyToml(document),
   };
 }
 
@@ -1810,6 +2011,12 @@ export async function executeRemedyByOffer(params: {
   /** Existing session route, not proof that the offer remains spendable. */
   known: boolean;
 }> {
+  const offerId = asRecord(params.args)?.offer_id;
+  const isPeerReadOffer =
+    typeof offerId === "string" && peerReadOfferIds.has(offerId);
+  if (isPeerReadOffer) {
+    enterPeerReadMode(params.organizationId);
+  }
   const decision = await withRuntime(params.organizationId, (module, policy) =>
     withOpenappaContentEncryption(
       params.organizationId,
@@ -1834,7 +2041,7 @@ export async function executeRemedyByOffer(params: {
               : {}),
             withhold_consult_content: withholdConsultContent(),
           }),
-          policy,
+          isPeerReadOffer ? peerReadPolicy(policy) : policy,
           encryption,
         ),
     ),
@@ -1950,6 +2157,7 @@ export async function sendPeerMessage(params: {
 }): Promise<
   { kind: "released"; messageId: string } | { kind: "denied"; feedback: string }
 > {
+  enterPeerReadMode(params.session.organization_id);
   const parsed = await peerResponse(
     params.session,
     (module, policy) =>
@@ -2002,6 +2210,7 @@ export async function admitPeerMessage(params: {
   | { kind: "held"; notices: PeerNotice[] }
   | { kind: "unverified" }
 > {
+  enterPeerReadMode(params.session.organization_id);
   const parsed = await peerResponse(
     params.session,
     (module, policy) =>
@@ -2060,6 +2269,7 @@ export async function listPeerMessages(params: {
   session: OpenAppaSession;
   toolCallId?: string;
 }): Promise<PeerNotice[]> {
+  enterPeerReadMode(params.session.organization_id);
   const parsed = await peerResponse(
     params.session,
     (module, policy) =>
@@ -2087,6 +2297,7 @@ export async function readPeerMessage(params: {
   toolCallId: string;
   args: { message_id: string };
 }): Promise<CallToolResult> {
+  enterPeerReadMode(params.session.organization_id);
   const decision = await withRuntime(
     params.session.organization_id,
     (module, policy) =>
@@ -2099,7 +2310,7 @@ export async function readPeerMessage(params: {
             TOOL_READ_PEER_MESSAGE_SHORT_NAME,
           ),
         }),
-        policy,
+        peerReadPolicy(policy),
       ),
   );
   if (decision.decision === "mcp_result" && decision.result) {
@@ -2111,6 +2322,9 @@ export async function readPeerMessage(params: {
     );
   }
   if (decision.decision === "deny_call") {
+    for (const offer of decision.offers ?? []) {
+      if (offer.offer_id) rememberPeerReadOffer(offer.offer_id);
+    }
     return {
       isError: true,
       content: [{ type: "text", text: decision.feedback }],
@@ -2204,6 +2418,9 @@ async function crossChildValue(params: {
       content:
         "The child value exceeds the supported size. No original bytes were returned.",
     };
+  }
+  if (params.output.length > 0) {
+    exitPeerReadMode(params.session.organization_id);
   }
   const policy = sharedPolicy(params.session.organization_id);
   const correlation = {

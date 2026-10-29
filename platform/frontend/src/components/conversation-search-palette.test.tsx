@@ -65,7 +65,7 @@ vi.mock("@/lib/hooks/use-platform", () => ({
   usePlatform: () => ({ modKey: "⌘", altKey: "⌥", isMac: true }),
 }));
 
-vi.mock("@/lib/auth/auth.hook", () => ({
+vi.mock("@/lib/auth/use-is-authenticated", () => ({
   useIsAuthenticated: () => true,
 }));
 
@@ -904,6 +904,30 @@ describe("ConversationSearchPalette", () => {
       expect(mockRouterPush).toHaveBeenCalledWith("/openappa");
     } else {
       expect(screen.queryByText("Guardrails")).not.toBeInTheDocument();
+    }
+  });
+
+  it.each([
+    true,
+    false,
+  ])("offers Auto Routing only while the alpha is enabled: %s", (enabled) => {
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "autoRoutingEnabled" && enabled,
+    );
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<ConversationSearchPalette {...defaultProps} />);
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "auto routing" },
+    });
+    if (enabled) {
+      fireEvent.click(screen.getByText("Auto Routing"));
+      expect(mockRouterPush).toHaveBeenCalledWith("/llm/auto-routing");
+    } else {
+      expect(screen.queryByText("Auto Routing")).not.toBeInTheDocument();
     }
   });
 

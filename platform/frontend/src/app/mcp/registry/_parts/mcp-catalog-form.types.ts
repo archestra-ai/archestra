@@ -18,6 +18,7 @@ const headerNameSchema = z
 
 const additionalHeaderSchema = z.object({
   fieldName: z.string().optional(),
+  sourceAuthFieldName: z.string().optional(),
   headerName: headerNameSchema,
   credentialId: z.string().min(1).max(128).optional(),
   credentialScope: z.enum(["personal", "organization"]).optional(),
@@ -203,6 +204,10 @@ const activeAuthFormSchema = z
     serverType: z.enum(["remote", "local"]),
     multitenant: z.boolean().optional(),
     serverUrl: HttpUrlSchema.optional().or(z.literal("")),
+    // Carried from an existing entry so a save keeps it; choosing "None"
+    // clears it.
+    requiresAuth: z.boolean().optional(),
+    managesAuthFields: z.boolean().optional(),
     authMethod: z.enum([
       "none",
       "bearer",
@@ -224,14 +229,7 @@ const activeAuthFormSchema = z
     deploymentSpecYaml: z.string().optional(),
     // Original YAML from API (used to detect if user modified the YAML)
     originalDeploymentSpecYaml: z.string().optional(),
-    // BYOS: External Vault path for OAuth client secret
-    oauthClientSecretVaultPath: z.string().optional(),
-    // BYOS: External Vault key for OAuth client secret
-    oauthClientSecretVaultKey: z.string().optional(),
-    // BYOS: External Vault path for local config secret env vars
-    localConfigVaultPath: z.string().optional(),
-    // BYOS: External Vault key for local config secret env vars
-    localConfigVaultKey: z.string().optional(),
+
     // Labels for categorizing catalog items
     labels: z
       .array(z.object({ key: z.string(), value: z.string() }))

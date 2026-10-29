@@ -109,7 +109,11 @@ interface ChatContext {
    * not every key they can see. A key shared as read-only is listed in
    * settings but refused when a chat sends it.
    */
-  chatApiKeys: Array<{ id: string; provider: string }>;
+  chatApiKeys: Array<{
+    id: string;
+    provider: string;
+    isGithubAppKey?: boolean;
+  }>;
   organization: OrganizationInfo | null;
 }
 
@@ -159,11 +163,17 @@ export function resolveInitialModel(
   // no key for it. So a per-user model is selectable by model alone: pairing it
   // with `findKeyForProvider` (null) would otherwise drop it from the catalog
   // and leave an org/agent default pointing at one half-pinned and skipped.
-  const isPerUserModel = (modelId: string | null | undefined): boolean => {
+  const isPerUserModel = (
+    modelId: string | null | undefined,
+    apiKeyId?: string | null,
+  ): boolean => {
     const provider = providerForModel(modelId);
     return (
       provider != null &&
-      providerRequiresPerUserCredential(provider as SupportedProvider)
+      providerRequiresPerUserCredential(provider as SupportedProvider) &&
+      // Paired with a GitHub App key, a Copilot model is an ordinary keyed
+      // model; only the personal sign-in path is per-user.
+      !chatApiKeys.some((key) => key.id === apiKeyId && key.isGithubAppKey)
     );
   };
 
@@ -194,7 +204,9 @@ export function resolveInitialModel(
     apiKeyId: string | null | undefined,
   ): ModelSelection => ({
     modelId,
-    apiKeyId: isPerUserModel(modelId) ? PER_USER_PLACEHOLDER_KEY : apiKeyId,
+    apiKeyId: isPerUserModel(modelId, apiKeyId)
+      ? PER_USER_PLACEHOLDER_KEY
+      : apiKeyId,
   });
 
   // The organization default stores a key chosen by someone, at some point,
@@ -211,7 +223,7 @@ export function resolveInitialModel(
     if (
       !modelId ||
       !apiKeyId ||
-      isPerUserModel(modelId) ||
+      isPerUserModel(modelId, apiKeyId) ||
       apiKeyId === agent?.llmApiKeyId ||
       chatApiKeys.some((k) => k.id === apiKeyId)
     ) {
@@ -246,7 +258,7 @@ export function resolveInitialModel(
   // resolution (which surfaces the inline connect prompt).
   return {
     modelId: resolved.modelId,
-    apiKeyId: isPerUserModel(resolved.modelId)
+    apiKeyId: isPerUserModel(resolved.modelId, resolved.apiKeyId)
       ? null
       : (resolved.apiKeyId ?? null),
   };

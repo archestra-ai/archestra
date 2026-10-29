@@ -3,8 +3,9 @@ import {
   DEFAULT_APP_NAME,
   isIntegrationHidden,
   legacyMcpClientServerNames,
-  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   OPENCODE_PRIMARY_PROVIDERS,
+  openCodePassthroughProviders,
+  PROVIDER_MODEL_TIERS,
   providerDisplayNames,
   RouteId,
   resolveMcpClientServerName,
@@ -37,6 +38,7 @@ import {
   OrganizationModel,
   PluginModel,
   SkillMarketplaceCredentialModel,
+  SkillMarketplaceRepoModel,
   SkillModel,
   SkillShareLinkModel,
   TeamModel,
@@ -123,6 +125,7 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   "claude-desktop": ["anthropic"],
   codex: ["openai"],
   pi: INSTALLER_CLIENT_KEY_PROVIDERS.pi,
+  "kimi-code": INSTALLER_CLIENT_KEY_PROVIDERS["kimi-code"],
   // Cursor routes every model through the Model Router with one key that maps
   // many providers ("primary-providers"), never a single provider.
   cursor: [],
@@ -141,9 +144,7 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   ],
   // OpenCode and Kilo Code route only the providers their plugin redirects
   // natively.
-  ...openCodeFamilyRecord(() =>
-    OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(({ provider }) => provider),
-  ),
+  ...openCodeFamilyRecord(() => openCodePassthroughProviders()),
 };
 
 /** Clients whose proxy setup mints one virtual key mapped to many providers. */
@@ -559,13 +560,18 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         model &&
         clientId !== "copilot-cli" &&
         clientId !== "claude-desktop" &&
-        clientId !== "pi"
+        clientId !== "pi" &&
+        clientId !== "kimi-code"
       ) {
         throw new ApiError(
           400,
-          "model is only supported for copilot-cli, claude-desktop and pi setups",
+          "model is only supported for copilot-cli, claude-desktop, pi and kimi-code setups",
         );
       }
+      // Kimi Code names one model in its provider entry. Without a choice,
+      // use the provider's default.
+      if (clientId === "kimi-code" && provider)
+        model ??= PROVIDER_MODEL_TIERS[provider].normal;
 
       const organization = await OrganizationModel.getById(organizationId);
       if (
@@ -685,6 +691,8 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (provider === "anthropic" || provider === "bedrock")) ||
             ((clientId === "codex" || clientId === "pi") &&
               provider === "openai") ||
+            (clientId === "kimi-code" &&
+              (provider === "kimi-code" || provider === "kimi")) ||
             (clientId === "copilot-cli" && provider === "github-copilot") ||
             isOpenCodeFamilyClient(clientId))
         ) {
@@ -820,6 +828,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } else if (
         !isOpenCodeFamilyClient(clientId) &&
         clientId !== "pi" &&
+        clientId !== "kimi-code" &&
         organization.connectionPluginsEnabled
       ) {
         const canDeliverPlugins = await userCanDeliverPlugins({
@@ -1120,29 +1129,41 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Desktop configuration requires a Claude Desktop setup.",
           );
         const { context, marketplaceRender } = await buildScriptContext(setup);
+        // Skills-only setups register the deployment's shared marketplace
+        // URL, authenticated with a credential minted for this user. That is
+        // what lets a member install with the same one command an admin
+        // gets, and it stays current instead of freezing a snapshot.
+        //
+        // A setup that also delivers plugins still mints a share link: the
+        // shared URL serves skills only, and splitting the two would make the
+        // script register two marketplaces.
+        // Desktop rejects URL userinfo and requires a pinned revision for
+        // automatic installation, so it uses the snapshot branch below.
+        // Pi uses the scoped link too: the static credential exposes every
+        // readable skill and would ignore its approved skill selection.
+        //
+        // Clients register the shared marketplace under the name the user's
+        // repo row serves, frozen when the row is created. Create it now, so
+        // the name the script removes and guards is the one the clone serves,
+        // even after an app or org rename.
+        const sharedMarketplaceRepo =
+          marketplaceRender &&
+          marketplaceRender.pluginIds.length === 0 &&
+          setup.clientId !== "claude-desktop" &&
+          setup.clientId !== "pi" &&
+          setup.clientId !== "kimi-code"
+            ? await SkillMarketplaceRepoModel.ensureForViewer({
+                organizationId: setup.organizationId,
+                userId: setup.userId,
+                marketplaceName: marketplaceRender.marketplaceName,
+              })
+            : null;
 
         // Skill-link creation + attach + render commit together: a rendered
         // clone URL exists iff its link row committed.
         script = await withDbTransaction(async (tx) => {
           let skills: SetupScriptContext["skills"] = null;
-          // Skills-only setups register the deployment's shared marketplace
-          // URL, authenticated with a credential minted for this user. That is
-          // what lets a member install with the same one command an admin
-          // gets, and it stays current instead of freezing a snapshot.
-          //
-          // A setup that also delivers plugins still mints a share link: the
-          // shared URL serves skills only, and splitting the two would make the
-          // script register two marketplaces.
-          // Desktop rejects URL userinfo and requires a pinned revision for
-          // automatic installation, so it uses the snapshot branch below.
-          // Pi uses the scoped link too: the static credential exposes every
-          // readable skill and would ignore its approved skill selection.
-          if (
-            marketplaceRender &&
-            marketplaceRender.pluginIds.length === 0 &&
-            setup.clientId !== "claude-desktop" &&
-            setup.clientId !== "pi"
-          ) {
+          if (sharedMarketplaceRepo) {
             const { rawToken: marketplaceToken } =
               await SkillMarketplaceCredentialModel.create({
                 organizationId: setup.organizationId,
@@ -1164,7 +1185,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             staticUrl.password = encodeURIComponent(marketplaceToken);
             skills = {
               cloneUrl: staticUrl.toString(),
-              marketplaceName: marketplaceRender.marketplaceName,
+              marketplaceName: sharedMarketplaceRepo.marketplaceName,
               hasSkills: true,
               pluginNames: [],
             };
@@ -1251,7 +1272,7 @@ interface MarketplaceRenderContext {
   pluginNames: string[];
   pluginClientType: Exclude<
     ConnectionSetupClientId,
-    OpenCodeFamilyClientId | "pi"
+    OpenCodeFamilyClientId | "pi" | "kimi-code"
   > | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
@@ -1522,7 +1543,8 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       pluginClientType:
         pluginIds.length > 0 &&
         !isOpenCodeFamilyClient(setup.clientId) &&
-        setup.clientId !== "pi"
+        setup.clientId !== "pi" &&
+        setup.clientId !== "kimi-code"
           ? setup.clientId
           : null,
       pluginPlatform:
@@ -1942,9 +1964,7 @@ async function openCodeFamilyPassthroughProviders(
 ): Promise<SupportedProvider[]> {
   const { modelProviderOverrides } =
     await OrganizationModel.getIntegrationOverrides(organizationId);
-  return OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
-    (route) => route.provider,
-  ).filter(
+  return openCodePassthroughProviders().filter(
     (provider) => !isIntegrationHidden(modelProviderOverrides, provider),
   );
 }

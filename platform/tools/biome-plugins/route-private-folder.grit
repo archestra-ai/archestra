@@ -1,0 +1,34 @@
+// Project-specific Biome (GritQL) lint plugin — route-private folder naming.
+//
+// Next.js App Router folders that start with `_` are opted out of routing, and
+// this app keeps the components, hooks, utils and types that belong to one
+// route in such a folder. The name is `_parts/` — not `_components/`, which the
+// bundled Next.js docs use as their example. `_components` was a misnomer here
+// because the folders also hold hooks, utils and types, and `_parts/` was the
+// name the app was scaffolded with; both grew side by side because nothing
+// enforced one of them. This plugin does.
+//
+// Scoped in biome.json to `frontend/src/app/**/_*/**` minus `_parts/` and
+// `__mocks__/`, so it only ever sees files inside a wrongly named folder. It
+// reports once per file, anchored on the first import (or on the whole file
+// when there is none), rather than once per statement. Plugin diagnostics are
+// not suppressible via biome-ignore: rename the folder.
+//
+// Conventions: platform/frontend/AGENTS.md, "Conventions".
+language js
+
+file(body=$body) where {
+  or {
+    and {
+      $body <: contains `import $_ from $_` as $anchor,
+      register_diagnostic(
+        span = $anchor,
+        message = "Route-private folders are named `_parts/` (not `_components/` as the Next.js docs show). Rename this folder. See `platform/frontend/AGENTS.md`, Conventions."
+      )
+    },
+    register_diagnostic(
+      span = $body,
+      message = "Route-private folders are named `_parts/` (not `_components/` as the Next.js docs show). Rename this folder. See `platform/frontend/AGENTS.md`, Conventions."
+    )
+  }
+}

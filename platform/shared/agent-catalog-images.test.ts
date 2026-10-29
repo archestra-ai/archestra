@@ -62,6 +62,8 @@ describe("popular Agent images", () => {
       hermes: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-hermes:latest`,
       openclaw: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-openclaw:latest`,
       grok: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-grok:latest`,
+      kimi: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-kimi:latest`,
+      copilot: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-copilot:latest`,
     });
   });
 
@@ -78,6 +80,21 @@ describe("popular Agent images", () => {
 });
 
 describe("followAgentCatalogImage", () => {
+  test("moves maintained legacy registry tags to this release while preserving digest pins", () => {
+    const legacy =
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-codex";
+    const catalogImages = getAgentCatalogImages({
+      registry: AGENT_CATALOG_IMAGE_REGISTRY,
+      tag: "1.5.0-rc.12",
+    });
+    expect(
+      followAgentCatalogImage({ image: `${legacy}:1.4.0`, catalogImages }),
+    ).toBe("ghcr.io/archestra-ai/agent-codex:1.5.0-rc.12");
+    const pinned = `${legacy}@sha256:${"a".repeat(64)}`;
+    expect(followAgentCatalogImage({ image: pinned, catalogImages })).toBe(
+      pinned,
+    );
+  });
   const catalogImages = getAgentCatalogImages({
     registry: AGENT_CATALOG_IMAGE_REGISTRY,
     tag: "1.4.0-rc.37",

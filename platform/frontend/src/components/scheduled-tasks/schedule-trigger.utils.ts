@@ -1,6 +1,7 @@
 import type { UseMutationResult } from "@tanstack/react-query";
 import { Cron } from "croner";
 import type { ScheduleTriggerRunStatus } from "@/lib/schedule-trigger.query";
+import { browserTimeZone } from "@/lib/utils/time-zone";
 import { isScheduleTriggerRunActive } from "./schedule-run-state";
 
 export {
@@ -26,7 +27,7 @@ export const DEFAULT_FORM_STATE = (): ScheduleTriggerFormState => ({
   name: "",
   agentId: "",
   cronExpression: "0 9 * * 1-5",
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  timezone: browserTimeZone(),
   messageTemplate: "",
 });
 

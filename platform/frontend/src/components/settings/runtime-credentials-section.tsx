@@ -4,8 +4,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { AccountPageAction } from "@/app/account/_components/account-page-action";
-import { ClaudeCodeSubscription } from "@/app/account/_components/claude-code-subscription";
+import { AccountPageAction } from "@/app/account/_parts/account-page-action";
+import { ClaudeCodeSubscription } from "@/app/account/_parts/claude-code-subscription";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -37,7 +37,6 @@ import { DataTable } from "@/components/ui/data-table";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useGitCredentials } from "@/lib/git-credentials.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -95,7 +94,7 @@ export function RuntimeCredentialsSection({
       ),
     [gitCredentials.data],
   );
-  const byosEnabled = useFeature("byosEnabled");
+
   const [definitionDialog, setDefinitionDialog] = useState<
     RuntimeCredentialDefinition | "new" | null
   >(null);
@@ -402,7 +401,6 @@ export function RuntimeCredentialsSection({
         <RuntimeCredentialConnectionDialog
           definition={connecting}
           scope={connecting.allowOrganization ? "organization" : "personal"}
-          useExternalSecretsManager={byosEnabled}
           onClose={() => setConnecting(null)}
         />
       )}
@@ -493,9 +491,11 @@ function DeleteCredentialDialog({
                           ? "/mcp/registry"
                           : agent.kind === "knowledge"
                             ? "/knowledge/knowledge-bases"
-                            : agent.kind === "skill"
-                              ? "/skills"
-                              : "/plugins"
+                            : agent.kind === "copilot"
+                              ? "/llm/model-providers"
+                              : agent.kind === "skill"
+                                ? "/skills"
+                                : "/plugins"
                         : `/agents/${agent.id}`
                     }
                     className="block truncate rounded px-2 py-1 text-sm text-foreground hover:bg-muted"

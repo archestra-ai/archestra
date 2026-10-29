@@ -1,5 +1,6 @@
-import { type Logger, SeverityNumber } from "@opentelemetry/api-logs";
+import type { Logger } from "@opentelemetry/api-logs";
 import type { DestinationStream } from "pino";
+import { toOtelLogRecord } from "./otel-log-record";
 
 /** Parse the already-redacted Pino record once for both structured consumers. */
 export function createLogObserverStream({
@@ -22,50 +23,10 @@ export function createLogObserverStream({
         } catch {
           // Retention and export are independent observers of the same record.
         }
-        const {
-          time,
-          msg,
-          level,
-          hostname: _hostname,
-          pid: _pid,
-          trace_id: _traceId,
-          span_id: _spanId,
-          trace_flags: _traceFlags,
-          ...attributes
-        } = record;
-        const millis = typeof time === "number" ? time : Date.now();
-        const timestamp: [number, number] = [
-          Math.trunc(millis / 1000),
-          (millis % 1000) * 1_000_000,
-        ];
-        logger.emit({
-          timestamp,
-          observedTimestamp: timestamp,
-          severityNumber: severities[level] ?? SeverityNumber.INFO,
-          severityText: levels[level] ?? "INFO",
-          body: msg,
-          attributes,
-        });
+        logger.emit(toOtelLogRecord(record));
       } catch {
         // Invalid records or a failing observer must never disrupt logging.
       }
     },
   };
 }
-
-const severities: Record<number, SeverityNumber> = {
-  10: SeverityNumber.TRACE,
-  20: SeverityNumber.DEBUG,
-  30: SeverityNumber.INFO,
-  40: SeverityNumber.WARN,
-  50: SeverityNumber.ERROR,
-  60: SeverityNumber.FATAL,
-};
-const levels: Record<number, string> = {
-  10: "trace",
-  20: "debug",
-  30: "info",
-  40: "warn",
-  50: "error",
-  60: "fatal",
-};

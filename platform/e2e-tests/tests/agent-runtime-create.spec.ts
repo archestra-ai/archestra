@@ -154,6 +154,8 @@ test("configures popular agent templates and preserves the creation wizard", asy
     "Hermes",
     "OpenClaw",
     "Grok Build",
+    "Kimi Code",
+    "GitHub Copilot CLI",
   ];
   const save = async () => {
     const response = page.waitForResponse(
@@ -179,8 +181,15 @@ test("configures popular agent templates and preserves the creation wizard", asy
     await goToPage(page, "/settings/agents");
     await expect(
       settings.getByRole("button", { name: /^Remove / }),
-    ).toHaveCount(6);
-    for (const name of ["OpenCode", "Hermes", "OpenClaw", "Grok Build"]) {
+    ).toHaveCount(8);
+    for (const name of [
+      "OpenCode",
+      "Hermes",
+      "OpenClaw",
+      "Grok Build",
+      "Kimi Code",
+      "GitHub Copilot CLI",
+    ]) {
       await settings
         .getByRole("button", { name: `Remove ${name}`, exact: true })
         .click();
@@ -192,7 +201,14 @@ test("configures popular agent templates and preserves the creation wizard", asy
     ).toHaveCount(2);
 
     await goToPage(page, "/agents/new");
-    for (const name of ["OpenCode", "Hermes", "OpenClaw", "Grok Build"]) {
+    for (const name of [
+      "OpenCode",
+      "Hermes",
+      "OpenClaw",
+      "Grok Build",
+      "Kimi Code",
+      "GitHub Copilot CLI",
+    ]) {
       await expect(
         page.getByRole("button", { name: new RegExp(name) }),
       ).toHaveCount(0);

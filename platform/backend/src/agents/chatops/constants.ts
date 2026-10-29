@@ -88,6 +88,10 @@ export const THREAD_MUTE_HINT =
 /** Slack's native Stop control cancels a turn without muting the thread. */
 export const SLACK_THREAD_MUTE_HINT = `Press Stop to cancel only the current answer. ${THREAD_MUTE_HINT}`;
 
+/** Jira has no mute-reaction ingress; its project label is a persistent stop. */
+export const JIRA_THREAD_MUTE_HINT =
+  'Reply "mute" to stop auto-replies; @mention me to resume. The archestra-mute label blocks replies until removed.';
+
 /**
  * In group conversations the agent hears every message but should not answer
  * every one. When it decides no reply is needed it answers with exactly this
@@ -135,6 +139,13 @@ export const CHATOPS_COMMANDS = {
  */
 export const SLACK_DEFAULT_CONNECTION_MODE: ChatOpsConnectionMode =
   "socket" as const;
+
+/**
+ * How long connecting to Slack (a credential check, or opening the Socket
+ * Mode connection) may take. Without a bound, a network that drops traffic to
+ * Slack hangs saving the Slack config until the caller gives up.
+ */
+export const SLACK_CONNECT_TIMEOUT_MS = 10 * TimeInMs.Second;
 
 /**
  * How long a Telegram account-linking code stays valid. Codes are one-shot

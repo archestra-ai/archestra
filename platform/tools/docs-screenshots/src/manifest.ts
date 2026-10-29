@@ -501,22 +501,15 @@ export const SHOTS: Shot[] = [
     prepare: prepareThroughputLimit,
   },
   {
-    asset: "automated_screenshots/llm-proxy_throughput-mobile",
-    route: () => "/llm/limits",
-    viewport: { width: 390, height: 844 },
-    prepare: prepareThroughputLimit,
-  },
-  {
     asset: "automated_screenshots/platform-agent-plugins_catalog",
     route: () => "/plugins",
   },
   {
-    asset: "automated_screenshots/agents-plugins_plugin-details",
-    route: (seed) => `/plugins/${seed.plugins["Branch Guard"]}`,
-  },
-  {
     asset: "automated_screenshots/agents-runtime_create-agent",
     route: () => "/agents/new",
+    // Tall enough for the third row of runtime cards, which the default 900px
+    // frame cuts off.
+    viewport: { width: 1440, height: 1040 },
   },
   {
     asset: "automated_screenshots/agents-runtime_runtime-picker",
@@ -530,21 +523,6 @@ export const SHOTS: Shot[] = [
         .getByRole("heading", { name: "Runtime", exact: true })
         .scrollIntoViewIfNeeded();
     },
-  },
-  {
-    asset: "automated_screenshots/agents-subagents_agent-subagents",
-    route: (seed) => `/agents/${seed.agents["Support Triage"]}?section=tools`,
-    prepare: async (page) => {
-      await page.getByRole("combobox", { name: "Add subagent" }).click();
-      await page.getByRole("option", { name: /Research Assistant/ }).click();
-      await page
-        .getByRole("heading", { name: "Subagents", exact: true })
-        .click();
-    },
-    target: (page) =>
-      page.locator("section").filter({
-        has: page.getByRole("heading", { name: "Subagents", exact: true }),
-      }),
   },
   {
     asset: "automated_screenshots/agents-hooks_hooks-editor",
@@ -591,14 +569,6 @@ export const SHOTS: Shot[] = [
       }),
   },
   {
-    asset: "automated_screenshots/agents-subagents-built-in_built-in-agents",
-    route: () => "/agents?scope=built_in",
-  },
-  {
-    asset: "automated_screenshots/agents-subagents-external_connect",
-    route: () => "/agents/a2a/new",
-  },
-  {
     asset:
       "automated_screenshots/agents-triggers-and-channels-webhook-a2a_a2a-tab",
     route: (seed) => `/agents/${seed.agents["Support Triage"]}?section=connect`,
@@ -617,11 +587,6 @@ export const SHOTS: Shot[] = [
       page.locator("section").filter({
         has: page.getByRole("heading", { name: "Channels", exact: true }),
       }),
-  },
-  {
-    asset: "automated_screenshots/agents-triggers-and-channels-slack_setup",
-    route: () => "/settings/messaging-channels/slack",
-    viewport: { width: 1440, height: 700 },
   },
   {
     asset: "automated_screenshots/agents-triggers-and-channels-ms-teams_setup",
@@ -691,18 +656,6 @@ export const SHOTS: Shot[] = [
     },
   },
 ];
-
-/*
- * Not migrated yet — each renders an empty state until the seeder creates the data
- * it shows, so the hand-captured image stays until then:
- *
- * - platform-credentials_overview: saved credentials of each kind
- * - platform-costs-and-limits_costs, _my-usage, _proxy-attribution,
- *   platform-llm-proxy-authentication_logs-virtual-key: LLM proxy traffic over
- *   several days (drive it through WireMock so costs, logs, and usage fill in)
- * - platform-projects_*: project files, instructions, schedules, and chats
- * - chat and orchestrator shots: conversations and a hibernated MCP server
- */
 
 async function prepareThroughputLimit(page: Page) {
   await page.getByRole("button", { name: "Add Limit", exact: true }).click();

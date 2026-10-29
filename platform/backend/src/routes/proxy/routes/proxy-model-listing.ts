@@ -54,6 +54,8 @@ export interface ResolvedProxyModelsKey {
   apiKey: string;
   baseUrl: string | undefined;
   extraHeaders: Record<string, string> | null;
+  /** The stored provider key a virtual key maps to; none for a raw key. */
+  providerApiKeyId?: string;
 }
 
 /**
@@ -117,6 +119,7 @@ export async function resolveProxyModelsApiKey(params: {
       apiKey: resolved.apiKey ?? "",
       baseUrl: providerKey?.baseUrl ?? undefined,
       extraHeaders: providerKey?.extraHeaders ?? null,
+      providerApiKeyId: providerKey?.id,
     };
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 401) {

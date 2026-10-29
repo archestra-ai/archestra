@@ -153,6 +153,14 @@ describe("initialPolicy", () => {
       name: archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME),
       delta: {},
     });
+    expect(rule("host/archestra/mcp__ccd_turn__wrap_up")).toEqual({
+      name: "host/archestra/mcp__ccd_turn__wrap_up",
+      delta: {},
+    });
+    expect(rule("host/archestra/mcp__ccd_turn__update_plan")).toEqual({
+      name: "host/archestra/mcp__ccd_turn__update_plan",
+      delta: {},
+    });
     expect(
       governing(archestraMcpBranding.getToolName(TOOL_TODO_WRITE_SHORT_NAME)),
     ).toEqual(

@@ -26,6 +26,7 @@ import {
   Groq,
   Jev,
   Kimi,
+  KimiCode,
   Microsoft365Copilot,
   Minimax,
   Mistral,
@@ -199,6 +200,7 @@ export const InteractionRequestSchema = z.union([
   DeepSeek.API.ChatCompletionRequestSchema,
   GithubCopilot.API.ChatCompletionRequestSchema,
   Kimi.API.ChatCompletionRequestSchema,
+  KimiCode.API.ChatCompletionRequestSchema,
   Microsoft365Copilot.API.ChatCompletionRequestSchema,
   Minimax.API.ChatCompletionRequestSchema,
   OpenAi.API.ResponsesRequestSchema,
@@ -252,6 +254,7 @@ export const InteractionResponseSchema = z.union([
   DeepSeek.API.ChatCompletionResponseSchema,
   GithubCopilot.API.ChatCompletionResponseSchema,
   Kimi.API.ChatCompletionResponseSchema,
+  KimiCode.API.ChatCompletionResponseSchema,
   Microsoft365Copilot.API.ChatCompletionResponseSchema,
   Minimax.API.ChatCompletionResponseSchema,
   OpenAi.API.ResponsesResponseSchema,
@@ -331,6 +334,22 @@ const INTERNAL_ENCRYPTION_COLUMNS = {
   encryptedChatConversationId: true,
 } as const;
 
+/**
+ * Which GitHub Copilot credential served a request: an organization's
+ * subscription (a GitHub App key, billed to that organization) or a member's
+ * own sign-in.
+ */
+export const CopilotCredentialSourceSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("organization"),
+    organization: z.string().nullable(),
+  }),
+  z.object({ kind: z.literal("personal") }),
+]);
+export type CopilotCredentialSource = z.infer<
+  typeof CopilotCredentialSourceSchema
+>;
+
 const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit({
   ...DELTA_ENCODING_COLUMNS,
   ...INTERNAL_ENCRYPTION_COLUMNS,
@@ -342,6 +361,12 @@ const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit({
    * that do not resolve it.
    */
   connectorName: z.string().nullable().optional(),
+  /**
+   * For a GitHub Copilot request: the organization subscription or personal
+   * sign-in that served it. Null when unknown; absent on endpoints that do
+   * not resolve it.
+   */
+  copilotCredentialSource: CopilotCredentialSourceSchema.nullable().optional(),
   /**
    * `virtualKeyId` resolved to its key and owner, within the caller's
    * organization. Null when the request used no standard virtual key (or the
@@ -377,6 +402,7 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   baselineModel: true,
   billingMode: true,
   inputTokens: true,
+  inputTokensEstimated: true,
   outputTokens: true,
   cacheReadTokens: true,
   cacheWriteTokens: true,
@@ -384,6 +410,11 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   baselineCost: true,
   durationMs: true,
   createdAt: true,
+  providerApiKeyId: true,
+  modelPoolId: true,
+  attempt: true,
+  attemptOutcome: true,
+  failureReason: true,
 }).extend({
   attributionLabels: AttributionLabelsSchema.nullish(),
   type: SupportedProvidersDiscriminatorSchema,
@@ -694,6 +725,17 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["kimi-code:chatCompletions"]),
+    request: withReadFallback(KimiCode.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(KimiCode.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(KimiCode.API.ChatCompletionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["github-copilot:chatCompletions"]),
     request: withReadFallback(GithubCopilot.API.ChatCompletionRequestSchema),
     processedRequest: withReadFallback(
@@ -891,6 +933,8 @@ export const InsertInteractionSchema = createInsertSchema(
   billingUsage: z
     .custom<import("@/utils/billable-usage").PricedBillingUsage>()
     .optional(),
+  /** The auto-routing decision this request was routed by; its usage is recorded with the row. */
+  autoRoutingDecisionId: z.string().uuid().optional(),
 });
 
 export type UserInfo = z.infer<typeof UserInfoSchema>;
@@ -935,6 +979,11 @@ export const SessionSummarySchema = z.object({
   sources: z.array(InteractionSourceSchema),
   interactionId: z.string().nullable(), // Only set for single interactions (null session)
   requestCount: z.number(),
+  failedOverCount: z
+    .number()
+    .describe(
+      "Requests a model pool retried on another member. Each is also counted in requestCount. Only one cut off by a timeout carries tokens or cost: an estimate of the input it read.",
+    ),
   totalInputTokens: z.number(),
   totalOutputTokens: z.number(),
   totalCacheReadTokens: z.number(),
@@ -985,6 +1034,8 @@ export const SessionSummarySchema = z.object({
    * Empty when no request in the session used a virtual key.
    */
   virtualKeys: z.array(InteractionVirtualKeySchema),
+  /** For GitHub Copilot requests: the credentials that served them. */
+  copilotCredentialSources: z.array(CopilotCredentialSourceSchema).optional(),
   /**
    * Short preview of the session's last user message, computed server-side
    * from the reconstructed request. The raw request body is intentionally

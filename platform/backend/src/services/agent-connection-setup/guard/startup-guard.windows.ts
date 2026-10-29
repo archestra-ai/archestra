@@ -19,6 +19,7 @@ import {
   type StartupGuardClient,
   type StartupGuardContext,
   startupGuardRefreshInstall,
+  startupGuardUnreachableWarning,
 } from "./startup-guard";
 
 /**
@@ -37,9 +38,10 @@ import {
  *   flicker), all on the alternate screen so the terminal is clean after
  *   the client exits; an unreachable platform gets the 15s capped-backoff retry
  *   ladder with jitter, status line at 3s, "hang tight" at 10s, and the
- *   disconnect (Y/n) offer on its own line below the row, `y`/`n` live
- *   throughout; after the whole turn, ONE "Disconnect … from <promptName> now?
- *   (Y/n)" prompt covers every down remote;
+ *   session-only skip offer on its own line below the row; Enter/`n` skip
+ *   checks while preserving connections. After the whole turn, explicit
+ *   resource-down responses get one "Disconnect … (Y/n)" prompt; transport
+ *   failures keep the session-only skip. [C] always allows intentional removal;
  * - keeps a skip entry live the whole run: Space — polled between animation
  *   frames and during the retry wait ([Console]::KeyAvailable is naturally
  *   non-blocking here) — ends the pre-loader immediately and lets the client
@@ -275,6 +277,11 @@ function Write-Arch([string]$Text, [string]$Color, [switch]$NoNewline) {
 # the body lands in $Script:HealthBody for per-resource markers.
 $Script:HealthBody = ''
 $Script:HealthState = ''  # 'ok' | 'down' | '' (no health URL)
+function Write-ArchUnreachableWarning {
+  if ($Script:HealthState -eq 'down' -and -not $Script:GuardUninstalled) {
+    [Console]::Error.WriteLine((ConvertTo-ArchConsole ${psq(startupGuardUnreachableWarning(ctx, client))}))
+  }
+}
 function Invoke-ArchHealthFetch {
   ${client.healthProbe ? client.healthProbe.powershell : ""}
   try {
@@ -365,6 +372,7 @@ if (-not $Interactive -and -not $ArchDisconnectAll) {
   }
   Start-ArchRefreshedGuard
   if ($Script:GuardHandedOff) { return }
+  Write-ArchUnreachableWarning
   foreach ($r in $ActiveRemotes) {
     if (Test-ArchResourceDown $r) {
       [Console]::Error.WriteLine((ConvertTo-ArchConsole ('archestra: failed to connect to ' + $r.FailName + ' — ${client.binary} is configured to use it and may fail. Disconnect it from the ' + $AppName + ' /connection page, or run ${client.binary} interactively to be offered a disconnect.')))
@@ -763,7 +771,10 @@ function Show-ArchVersionUpdate {
 # silently removes itself too — the Disconnected rows say everything.
 function Show-ArchDownSummaryPrompt($downRemotes) {
   $baseTop = 0; try { $baseTop = [Console]::CursorTop } catch { }
-  if ($downRemotes.Count -eq 1) {
+  $transportOutage = $Script:HealthState -eq 'down' -or -not $HealthUrl
+  if ($transportOutage) {
+    $q = 'Instance unreachable. Press [Enter] to skip checks for this session; connections stay configured. '
+  } elseif ($downRemotes.Count -eq 1) {
     $q = 'Disconnect ' + $downRemotes[0].FailName + ' from ${client.promptName} now? (Y/n) '
   } else {
     $q = 'Disconnect all ' + $downRemotes.Count + ' unreachable resources from ${client.promptName} now? (Y/n) '
@@ -801,7 +812,7 @@ function Show-ArchDownSummaryPrompt($downRemotes) {
     try { [Console]::SetCursorPosition(0, $baseTop) } catch { }
   }
   if ($choice -eq 'c') { Invoke-ArchReconfigureMenu; return }
-  if ($choice -eq 'y') {
+  if ($choice -eq 'y' -and -not $transportOutage) {
     $Script:Dwell = $true
     Disconnect-ArchRemotes $downRemotes
     if ($downRemotes.Count -ge $ActiveRemotes.Count -and -not $Script:ArchDisconnectFailed) { Remove-ArchGuard }
@@ -813,15 +824,10 @@ function Show-ArchDownSummaryPrompt($downRemotes) {
   else { Write-Arch ' Skipped — still configured; ${client.promptName} may fail to reach them this session' DarkGray }
 }
 
-# The disconnect offer during the retry ladder is the same classic (Y/n)
-# prompt, on its own line below the row after a blank line — drawn once via
-# cursor save/restore so the dots keep appending to the row above it, and
-# wiped again the moment the wait resolves. The platform being unreachable
-# affects every active remote, so answering yes disconnects them all.
+# Transport failures offer a session-only skip; explicit removal stays in [C].
 $Script:WaitPromptShown = $false
 function Get-ArchWaitPromptText {
-  if ($ActiveRemotes.Count -eq 1) { return 'Disconnect ' + $ActiveRemotes[0].FailName + ' from ${client.promptName} now? (Y/n) ' }
-  return 'Disconnect all ' + $ActiveRemotes.Count + ' unreachable resources from ${client.promptName} now? (Y/n) '
+  return 'Instance unreachable. Press [Enter] to skip checks for this session; connections stay configured. '
 }
 function Show-ArchWaitPrompt {
   if ($Script:WaitPromptShown) { return }
@@ -857,14 +863,8 @@ function Clear-ArchWaitPrompt {
   }
 }
 
-# One health request for the whole launch, retried with backoff while the
-# spinner plays on the first resource row. y = disconnect every remote now
-# (they are all unreachable) — and with nothing left to check, remove the
-# startup check itself; n = skip the checks for this launch. Both answer
-# keys are live the whole wait; bare Enter accepts the disconnect default
-# only once the prompt is actually on screen.
+# Skipping health checks changes this launch only and preserves routing.
 $Script:SkipAll = $false
-$Script:DiscAll = $false
 $Script:SkipNow = $false
 $Script:OpenMenu = $false
 # A key the probe frames had to consume that belongs to a LATER prompt (a
@@ -883,11 +883,10 @@ function Wait-ArchHealth {
   while ($true) {
     Start-Sleep -Milliseconds 250
     $key = Read-ArchKey
-    if ($key -eq 'y' -or $key -eq 'Y') { $Script:DiscAll = $true; break }
     if ($key -eq 'n' -or $key -eq 'N') { $Script:SkipAll = $true; break }
     if ($key -eq ' ') { $Script:SkipNow = $true; break }
     if ($key -eq 'c' -or $key -eq 'C') { $Script:OpenMenu = $true; break }
-    if ($key -eq "\`r" -and $Script:WaitPromptShown) { $Script:DiscAll = $true; break }
+    if ($key -eq "\`r" -and $Script:WaitPromptShown) { $Script:SkipAll = $true; break }
     $now = [DateTime]::UtcNow
     if ($now -ge $nextAttempt) {
       if (Invoke-ArchHealthFetch) { $Script:HealthState = 'ok'; Clear-ArchWaitPrompt; return }
@@ -921,14 +920,14 @@ function Wait-ArchHealth {
 }
 
 # The whole pre-loader draws on the terminal's alternate screen — the same
-# way claude itself does — so nothing lingers in the scrollback after claude
-# exits. When the launch needed attention, the outcome is held briefly
-# before the alternate screen closes over it.
+# way claude itself does. Keep unreachable-instance diagnostics after restoring
+# the normal screen, alongside any later client connection error.
 $Script:AltScreen = $UseVt
 $Script:Dwell = $false
 function Exit-ArchGuard {
   if ($Script:Dwell) { Start-Sleep -Milliseconds 1200 }
   if ($Script:AltScreen) { Write-Host -NoNewline ("$Esc[?1049l") }
+  Write-ArchUnreachableWarning
 }
 function Show-ArchGuardScreen {
 if ($Script:AltScreen) { Write-Host -NoNewline ("$Esc[?1049h$Esc[H$Esc[2J") }
@@ -957,15 +956,6 @@ if ($Script:OpenMenu) {
   if ($UseVt) { Write-Host -NoNewline ("$Esc[" + $ActiveRemotes.Count + 'B' + "\`r") }
   Clear-ArchReconfigureHint
   Invoke-ArchReconfigureMenu
-  Show-ArchVersionUpdate
-  Exit-ArchGuard
-  return
-}
-if ($Script:DiscAll) {
-  Clear-ArchLine
-  $Script:Dwell = $true
-  Disconnect-ArchRemotes $ActiveRemotes
-  if (-not $Script:ArchDisconnectFailed) { Remove-ArchGuard }
   Show-ArchVersionUpdate
   Exit-ArchGuard
   return

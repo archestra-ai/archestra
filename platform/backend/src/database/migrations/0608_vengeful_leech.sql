@@ -1,0 +1,1 @@
+ALTER TABLE "limits" ADD COLUMN "behavior" varchar DEFAULT 'hard' NOT NULL;

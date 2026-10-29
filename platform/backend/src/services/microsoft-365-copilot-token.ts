@@ -31,7 +31,6 @@
  * credential's access token can never be served for the new one.
  */
 import { createHmac, randomBytes } from "node:crypto";
-import { isVaultReference } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -267,21 +266,12 @@ class Microsoft365CopilotTokenManager {
     );
     if (storedValue === undefined) {
       // Unreadable stored value (e.g. the secret vanished between the key
-      // lookup and here): the vault-reference check below can't run, so skip
+      // lookup and here): skip
       // rather than overwrite an unknown target. Costs only longevity — the
       // in-memory latestRefreshToken keeps serving this process.
       logger.warn(
         { providerApiKeyId },
         "[Microsoft365Copilot] skipping rotated refresh token persistence: stored secret value is unreadable",
-      );
-      return;
-    }
-    if (isVaultReference(storedValue)) {
-      // BYOS vault reference: the actual token lives in an external read-only
-      // vault we must not (and cannot) overwrite.
-      logger.warn(
-        { providerApiKeyId },
-        "[Microsoft365Copilot] skipping rotated refresh token persistence for vault-referenced key",
       );
       return;
     }

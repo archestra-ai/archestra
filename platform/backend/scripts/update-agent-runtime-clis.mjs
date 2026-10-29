@@ -42,7 +42,7 @@ const publishedBefore = now.getTime() - cooldownDays * 24 * 60 * 60 * 1000;
 
 const STABLE_SEMVER = /^\d+\.\d+\.\d+$/;
 const HERMES_REPOSITORY = "NousResearch/hermes-agent";
-const GROK_ARCHES = [
+const NPM_BINARY_ARCHES = [
   ["amd64", "x64"],
   ["arm64", "arm64"],
 ];
@@ -186,7 +186,7 @@ const AGENT_RUNTIME_CLIS = [
         ],
         version,
       );
-      for (const [dockerArch, grokArch] of GROK_ARCHES) {
+      for (const [dockerArch, grokArch] of NPM_BINARY_ARCHES) {
         const checksum = await grokBinaryChecksum(grokArch, version);
         dockerfile = replaceExactlyOnce(
           dockerfile,
@@ -197,6 +197,53 @@ const AGENT_RUNTIME_CLIS = [
           `$1${checksum}`,
         );
       }
+      files.dockerfile = dockerfile;
+    },
+  },
+  {
+    target: "agent-copilot",
+    label: "GitHub Copilot CLI",
+    resolve: () => resolveNpm({ name: "@github/copilot", channel: "latest" }),
+    read: (files) => readSingleVersion(files.dockerfile, [
+      /@github\/copilot-linux-\$\{copilot_arch\}@(\d+\.\d+\.\d+)\b/g,
+    ]),
+    write: async (files, version) => {
+      let dockerfile = replaceVersion(files.dockerfile, [
+        /(@github\/copilot-linux-\$\{copilot_arch\}@)\d+\.\d+\.\d+\b/g,
+      ], version);
+      for (const [dockerArch, copilotArch] of NPM_BINARY_ARCHES) {
+        const checksum = await npmTarballSha512(`@github/copilot-linux-${copilotArch}`, version);
+        dockerfile = replaceExactlyOnce(dockerfile,
+          new RegExp(`(${dockerArch}\\) copilot_arch=${copilotArch}; copilot_checksum=)[0-9a-f]{128}`, "g"),
+          `$1${checksum}`);
+      }
+      files.dockerfile = dockerfile;
+    },
+  },
+  {
+    target: "agent-kimi",
+    label: "Kimi Code",
+    resolve: () =>
+      resolveNpm({ name: "@moonshot-ai/kimi-code", channel: "latest" }),
+    read: (files) =>
+      readSingleVersion(files.dockerfile, [
+        /@moonshot-ai\/kimi-code@(\d+\.\d+\.\d+)\b/g,
+      ]),
+    write: async (files, version) => {
+      const checksum = await npmTarballSha512(
+        "@moonshot-ai/kimi-code",
+        version,
+      );
+      let dockerfile = replaceVersion(
+        files.dockerfile,
+        [/(@moonshot-ai\/kimi-code@)\d+\.\d+\.\d+\b/g],
+        version,
+      );
+      dockerfile = replaceExactlyOnce(
+        dockerfile,
+        /(echo ")[0-9a-f]{128}(  kimi-code\.tgz")/g,
+        `$1${checksum}$2`,
+      );
       files.dockerfile = dockerfile;
     },
   },
@@ -336,7 +383,7 @@ async function resolveGrok() {
     );
   }
   const perArch = await Promise.all(
-    GROK_ARCHES.map(async ([, grokArch]) =>
+    NPM_BINARY_ARCHES.map(async ([, grokArch]) =>
       npmReleases(
         await fetchJson(
           `${npmRegistry}/${encodeNpmName(`@xai-official/grok-linux-${grokArch}`)}`,
@@ -381,6 +428,23 @@ async function grokBinaryChecksum(grokArch, version) {
   }
   const binary = readTarEntry(gunzipSync(archive), "package/bin/grok.br");
   return createHash("sha256").update(binary).digest("hex");
+}
+
+// The Dockerfile verifies the packed tarball against the registry's own
+// integrity, which is its SHA-512.
+async function npmTarballSha512(name, version) {
+  const manifest = await fetchJson(
+    `${npmRegistry}/${encodeNpmName(name)}/${version}`,
+  );
+  const match = /^sha512-(.+)$/.exec(manifest.dist?.integrity ?? "");
+  if (!match) {
+    throw new Error(`${name}@${version} has no sha512 integrity`);
+  }
+  const digest = Buffer.from(match[1], "base64");
+  if (digest.length !== 64) {
+    throw new Error(`${name}@${version} has a malformed sha512 integrity`);
+  }
+  return digest.toString("hex");
 }
 
 function readTarEntry(tar, wanted) {

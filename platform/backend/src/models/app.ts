@@ -859,14 +859,31 @@ class AppModel {
     return ok ? await AppModel.findById(params.id) : null;
   }
 
-  /** Soft-delete an app (frees its name for re-use via the partial unique indexes). */
+  /**
+   * Soft-delete an app (frees its name for re-use via the partial unique
+   * indexes). Apps have no restore, so the row stays only for history and its
+   * permission policy goes with the delete.
+   */
   static async delete(id: string, tx?: Transaction): Promise<boolean> {
-    const count = await softDelete(
-      tx ?? db,
-      schema.appsTable,
-      eq(schema.appsTable.id, id),
-    );
-    return count > 0;
+    const run = async (transaction: Transaction) => {
+      const count = await softDelete(
+        transaction,
+        schema.appsTable,
+        eq(schema.appsTable.id, id),
+      );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (count > 0)
+        await ResourcePermissionPolicyModel.deleteForTarget({
+          tx: transaction,
+          resources: ["app"],
+          scope: id,
+        });
+      // SPDX-SnippetEnd
+      return count > 0;
+    };
+    return tx ? run(tx) : withDbTransaction(run);
   }
 
   /**

@@ -135,6 +135,30 @@ describe("DELETE /api/llm-provider-api-keys/bulk", () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
+  // The keys are deleted and audited before the model sweep runs, so a sweep
+  // failure (a statement timeout on a large deployment) must not turn the
+  // completed batch into an error response.
+  test("reports the deleted keys when the model cleanup after them fails", async ({
+    makeSecret,
+  }) => {
+    const key = await createKey("bulk-cleanup-fails", makeSecret);
+    const cleanup = vi
+      .spyOn(ModelModel, "deleteOrphanedModels")
+      .mockRejectedValue(
+        new Error("canceling statement due to statement timeout"),
+      );
+
+    const response = await bulkDelete([key.id]);
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toEqual({
+      succeeded: [{ id: key.id, name: "bulk-cleanup-fails" }],
+      failed: [],
+    });
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(await LlmProviderApiKeyModel.findById(key.id)).toBeNull();
+  });
+
   test("rejects a batch over the cap", async () => {
     const ids = Array.from({ length: 501 }, () => crypto.randomUUID());
     expect((await bulkDelete(ids)).statusCode).toBe(400);

@@ -15,7 +15,6 @@ import {
 describe("formatSecretStorageType", () => {
   test("formats known storage types", () => {
     expect(formatSecretStorageType("vault")).toBe("Vault");
-    expect(formatSecretStorageType("external_vault")).toBe("External Vault");
     expect(formatSecretStorageType("database")).toBe("Database");
   });
 

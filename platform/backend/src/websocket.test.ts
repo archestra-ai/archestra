@@ -799,15 +799,16 @@ describe("websocket Agent run authorization and cleanup", () => {
     // Two stored chunks (256 KiB each); the size is set in the first.
     const marker = "\u001b]777;archestra-terminal-size=100x30\u0007";
     const recording = `${marker}${"earlier output\n".repeat(30_000)}done ✓\n`;
+    const readableTranscript = JSON.stringify({
+      version: 1,
+      provider: "claude-code",
+      entries: [{ type: "message", role: "user", text: "Build it" }],
+    });
     await agentRunTranscriptStore.persist({
       runId: run.id,
       transcript: recording,
       observedBytes: Buffer.byteLength(recording),
-      readableTranscript: JSON.stringify({
-        version: 1,
-        provider: "claude-code",
-        entries: [{ type: "message", role: "user", text: "Build it" }],
-      }),
+      readableTranscript,
     });
     const ws = {
       readyState: WS.OPEN,
@@ -832,7 +833,11 @@ describe("websocket Agent run authorization and cleanup", () => {
       .mocked(ws.send)
       .mock.calls.map(([message]) => JSON.parse(String(message)));
     const logs = sent
-      .filter((message) => message.type === "agent_run_logs")
+      .filter(
+        (message) =>
+          message.type === "agent_run_logs" &&
+          message.payload.channel !== "readable",
+      )
       .map((message) => message.payload.logs)
       .join("");
     const total = Buffer.byteLength(recording);
@@ -850,12 +855,19 @@ describe("websocket Agent run authorization and cleanup", () => {
         truncated: false,
         totalBytes: total,
         omittedBytes: total - Buffer.byteLength(tail),
+        readable: {
+          provider: "claude-code",
+          version: 1,
+          totalBytes: Buffer.byteLength(readableTranscript),
+        },
       },
     });
-    // The readable transcript has no reader on the page; a tail leaves it out.
-    expect(sent.some((message) => message.payload.channel === "readable")).toBe(
-      false,
-    );
+    expect(
+      sent
+        .filter((message) => message.payload.channel === "readable")
+        .map((message) => message.payload.logs)
+        .join(""),
+    ).toBe(readableTranscript);
   });
 
   test("a tail read that fails after output was sent ends in an error, not the full recording", async ({

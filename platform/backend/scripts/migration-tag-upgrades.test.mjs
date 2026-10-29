@@ -39,11 +39,13 @@ const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 // statements; some early migrations rely on that. PGlite's query path uses the
 // extended protocol and rejects them, poisoning the surrounding transaction,
 // so multi-command statements must be routed to exec (simple protocol) before
-// PGlite parses them. The executed SQL text is unchanged, and Drizzle's ledger
-// hash is computed from the migration file, not per-statement chunks, so
-// replay fidelity is preserved.
+// PGlite parses them. The executed SQL text is unchanged except for
+// CONCURRENTLY (see withoutConcurrently), and Drizzle's ledger hash is computed
+// from the migration file, not per-statement chunks, so replay fidelity is
+// preserved.
 class MigrationPGlite extends PGlite {
   async query(query, params, options) {
+    query = withoutConcurrently(query);
     if ((!params || params.length === 0) && hasMultipleStatements(query)) {
       await super.exec(query);
       return { rows: [], fields: [], affectedRows: 0 };
@@ -55,6 +57,7 @@ class MigrationPGlite extends PGlite {
     return super.transaction(async (tx) => {
       const original = tx.query.bind(tx);
       tx.query = async (query, params, options) => {
+        query = withoutConcurrently(query);
         if ((!params || params.length === 0) && hasMultipleStatements(query)) {
           await tx.exec(query);
           return { rows: [], fields: [], affectedRows: 0 };
@@ -64,6 +67,15 @@ class MigrationPGlite extends PGlite {
       return callback(tx);
     });
   }
+}
+
+// PGlite cannot build or drop an index concurrently ("tuple concurrently
+// updated"). The plain statement creates the same index, so both installs
+// still converge on the same catalog.
+function withoutConcurrently(text) {
+  return typeof text === "string"
+    ? text.replace(/\b(CREATE|DROP)\s+INDEX\s+CONCURRENTLY\b/gi, "$1 INDEX")
+    : text;
 }
 
 // Counts top-level semicolons, skipping string literals, quoted identifiers,

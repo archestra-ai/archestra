@@ -96,4 +96,56 @@ describe("MsTeamsSetupDialog group-chat files", () => {
     await waitFor(() => expect(toggle).toBeChecked());
     expect(screen.getByText(REDIRECT_URI)).toBeInTheDocument();
   });
+
+  it("saves the switch as soon as it flips, without finishing the wizard", async () => {
+    let saved = false;
+    const putBodies: unknown[] = [];
+    server.use(
+      http.get(`${API_ORIGIN}/api/chatops/status`, () =>
+        HttpResponse.json({ providers: [] }),
+      ),
+      http.get(`${API_ORIGIN}/api/chatops/config/ms-teams`, () =>
+        HttpResponse.json({
+          configured: true,
+          updatedAt: "2026-10-21T00:00:00.000Z",
+          enabled: true,
+          appId: "app-id",
+          tenantId: "tenant-id",
+          groupChatFileSignIn: saved,
+          signInRedirectUri: REDIRECT_URI,
+        }),
+      ),
+      http.put(
+        `${API_ORIGIN}/api/chatops/config/ms-teams`,
+        async ({ request }) => {
+          const body = (await request.json()) as {
+            groupChatFileSignIn?: boolean;
+          };
+          putBodies.push(body);
+          saved = body.groupChatFileSignIn ?? saved;
+          return HttpResponse.json({ success: true });
+        },
+      ),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MsTeamsSetupDialog open onOpenChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("tab", { name: /group chats/i }),
+    );
+    const toggle = await screen.findByRole("switch", {
+      name: /sign in for group-chat files/i,
+    });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    await userEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(putBodies).toEqual([{ groupChatFileSignIn: true }]),
+    );
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).toBeChecked();
+  });
 });

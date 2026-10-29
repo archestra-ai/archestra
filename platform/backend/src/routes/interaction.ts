@@ -13,6 +13,7 @@ import { userHasPermission } from "@/auth";
 import {
   InteractionModel,
   KnowledgeBaseConnectorModel,
+  LlmProviderApiKeyModel,
   OpenAppaSessionModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -532,8 +533,19 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
+      const copilotCredentialSource =
+        interaction.providerApiKeyId &&
+        interaction.type.startsWith("github-copilot:")
+          ? ((
+              await LlmProviderApiKeyModel.findCopilotCredentialSources([
+                interaction.providerApiKeyId,
+              ])
+            ).get(interaction.providerApiKeyId) ?? null)
+          : null;
+
       return reply.send({
         ...interaction,
+        copilotCredentialSource,
         connectorName: connector?.name ?? null,
         virtualKey: interaction.virtualKeyId
           ? (virtualKeys.get(interaction.virtualKeyId) ?? null)

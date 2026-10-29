@@ -5,6 +5,7 @@ import {
   RouteId,
   RUN_ID_HEADER,
   SOURCE_HEADER,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -1430,8 +1431,9 @@ export default mcpGatewayRoutes;
 
 /**
  * A listing, or a call to a tool of a connected MCP server, never writes the
- * caller's roles or teams. Archestra's own tools and delegations to agents or
- * skills can, so their requests read every answer fresh.
+ * caller's roles or teams. The built-in tool search only reads metadata and
+ * can share those lookups too. Other built-in tools and delegations to agents
+ * or skills can write them, so their requests read every answer fresh.
  */
 function sharesCallerLookups(body: unknown): boolean {
   const { method, params } = (body ?? {}) as {
@@ -1440,6 +1442,13 @@ function sharesCallerLookups(body: unknown): boolean {
   };
   if (method === "tools/list") return true;
   const name = params?.name;
+  if (
+    method === "tools/call" &&
+    typeof name === "string" &&
+    archestraMcpBranding.getToolShortName(name) === TOOL_SEARCH_TOOLS_SHORT_NAME
+  ) {
+    return true;
+  }
   return (
     method === "tools/call" &&
     typeof name === "string" &&

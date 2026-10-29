@@ -2,7 +2,7 @@
 title: Google Gemini
 description: Connect Gemini using Google AI Studio or Vertex AI.
 order: 4
-lastUpdated: 2026-10-23
+lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -34,6 +34,19 @@ To use Vertex AI instead of Google AI Studio, configure these environment variab
 | [`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE) | No       | Path to service account JSON key file  |
 
 Vertex AI mode also gives Knowledge access to Vertex's multimodal embedding model (`multimodalembedding@001`) — see [Image Embedding](/docs/knowledge/settings#image-embedding).
+
+### Priority PayGo
+
+When Archestra uses Vertex AI, request Priority PayGo by sending these headers to its Gemini `generateContent` or `streamGenerateContent` endpoint:
+
+```http
+X-Vertex-AI-LLM-Shared-Request-Type: priority
+X-Vertex-AI-LLM-Request-Type: shared
+```
+
+Archestra forwards both values to Vertex. Omit `X-Vertex-AI-LLM-Request-Type: shared` to use available Provisioned Throughput before spilling over to Priority PayGo.
+
+Check `usageMetadata.trafficType` in the response or streamed usage chunk: `ON_DEMAND_PRIORITY` confirms priority service; `ON_DEMAND` means standard service. Eligibility, pricing, and possible downgrades follow [Vertex AI's Priority PayGo rules](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/priority-paygo).
 
 ### Missing Models and Nano Banana
 
@@ -99,3 +112,13 @@ For non-GKE environments, Vertex AI supports several authentication methods thro
 - **AWS/Azure**: Use workload identity federation to authenticate without service account keys
 
 See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs/authentication) for detailed setup instructions for each environment.
+
+## Prompt Caching
+
+For models that support explicit context caching, pass the provider-created cache name in `cachedContent` when calling the native `generateContent` or `streamGenerateContent` endpoint. Archestra forwards the reference and records provider-reported cached input tokens, including implicit cache hits.
+
+It does not create cache objects or manage their storage lifetime. Model eligibility and cache storage charges follow [Gemini’s caching rules](https://ai.google.dev/gemini-api/docs/caching).
+
+The [Model Router](/docs/llm-proxy/model-router) also accepts `cachedContent` alongside Chat Completions or Responses input when targeting Gemini. Reference a cache created for that Gemini model, and follow Google's restrictions on supplying system instructions or tools alongside cached content.
+
+Anthropic-style `cache_control` markers and OpenAI-specific cache options cannot be translated to Gemini; the router rejects them with a 400 error instead of silently ignoring them.

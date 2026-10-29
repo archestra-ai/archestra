@@ -95,9 +95,44 @@ class OAuthAccessTokenModel {
     return result;
   }
 
+  static async getTokenHashById(id: string): Promise<string | undefined> {
+    const [row] = await db
+      .select({ token: schema.oauthAccessTokensTable.token })
+      .from(schema.oauthAccessTokensTable)
+      .where(eq(schema.oauthAccessTokensTable.id, id))
+      .limit(1);
+    return row?.token;
+  }
+
+  /** Delete one access token by its hashed value; true when it existed. */
+  static async deleteByTokenHash(tokenHash: string): Promise<boolean> {
+    const rows = await db
+      .delete(schema.oauthAccessTokensTable)
+      .where(eq(schema.oauthAccessTokensTable.token, tokenHash))
+      .returning({ id: schema.oauthAccessTokensTable.id });
+    return rows.length > 0;
+  }
+
   /**
-   * Update the persisted expiry for a hashed access token.
+   * Revoke only a client-owned application token, never a user's token family.
    */
+  static async deleteClientCredentialsToken(params: {
+    tokenHash: string;
+    clientId: string;
+  }): Promise<void> {
+    await db
+      .delete(schema.oauthAccessTokensTable)
+      .where(
+        and(
+          eq(schema.oauthAccessTokensTable.token, params.tokenHash),
+          eq(schema.oauthAccessTokensTable.clientId, params.clientId),
+          isNull(schema.oauthAccessTokensTable.userId),
+          isNull(schema.oauthAccessTokensTable.refreshId),
+        ),
+      );
+  }
+
+  /** Update the persisted expiry for a hashed value. */
   static async updateExpiresAtByTokenHash(params: {
     tokenHash: string;
     expiresAt: Date;

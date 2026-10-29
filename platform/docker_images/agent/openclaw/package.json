@@ -1,6 +1,6 @@
 {
   "private": true,
   "dependencies": {
-    "openclaw": "2026.7.1-2"
+    "openclaw": "2026.10.5"
   }
 }

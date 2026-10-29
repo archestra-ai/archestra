@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { ApiError } from "@archestra/shared/types";
 import type { Anthropic, OpenAi, UsageView } from "@/types";
+import { assertModelRouterCacheControls } from "../model-router-cache-controls";
 import type { OpenAiStreamUsage } from "./openai-sse-chunk";
 import {
   type NormalizedContentPart,
@@ -46,33 +48,58 @@ export function openaiToAnthropic(req: OpenAiRequest): {
   anthropicBody: AnthropicRequest;
   openaiContext: AnthropicOpenaiContext;
 } {
+  assertModelRouterCacheControls("anthropic", req);
   const loose = req as OpenAiRequest & {
     stop?: string | string[] | null;
     top_p?: number | null;
   };
   const system: string[] = [];
+  const systemBlocks: Array<Record<string, unknown>> = [];
   const messages: AnthropicRequest["messages"] = [];
 
   for (const message of req.messages as LooseMessage[]) {
     if (message.role === "system" || message.role === "developer") {
       system.push(stringifyTextContent(message.content));
+      const blocks = cacheableContentBlocks(message.content);
+      if (blocks.some((block) => block.type !== "text")) {
+        if (blocks.some((block) => block.cache_control !== undefined))
+          throw new ApiError(
+            400,
+            "Anthropic system cache_control requires text content",
+          );
+      }
+      const textBlocks = blocks.filter((block) => block.type === "text");
+      applyMessageCacheControl(textBlocks, message);
+      if (systemBlocks.length > 0 && textBlocks.length > 0)
+        textBlocks[0].text = `\n\n${textBlocks[0].text}`;
+      systemBlocks.push(...textBlocks);
       continue;
     }
 
     if (message.role === "user") {
+      const blocks = cacheableContentBlocks(message.content);
+      applyMessageCacheControl(blocks, message);
       messages.push({
         role: "user",
-        content: userContentToAnthropicContent(message.content),
+        content:
+          typeof message.content === "string" &&
+          readCacheControl(message) === undefined
+            ? message.content
+            : (blocks as AnthropicUserContent),
       });
       continue;
     }
 
     if (message.role === "assistant") {
-      const content: Array<Record<string, unknown>> = [];
       const text = stringifyTextContent(message.content);
-      if (text) {
-        content.push({ type: "text", text });
-      }
+      const blocks = cacheableContentBlocks(message.content);
+      const content: Array<Record<string, unknown>> = blocks.some(
+        (block) => block.cache_control !== undefined,
+      )
+        ? blocks
+        : text
+          ? [{ type: "text", text }]
+          : [];
       for (const toolCall of message.tool_calls ?? []) {
         if (toolCall.type !== "function") continue;
         content.push({
@@ -82,6 +109,7 @@ export function openaiToAnthropic(req: OpenAiRequest): {
           input: parseJsonObject(toolCall.function.arguments),
         });
       }
+      applyMessageCacheControl(content, message);
       messages.push({
         role: "assistant",
         content:
@@ -98,19 +126,30 @@ export function openaiToAnthropic(req: OpenAiRequest): {
       // results stay a plain string to match prior behavior.
       const normalized = normalizeOpenAiContentParts(message.content);
       const hasMedia = normalized.some((part) => part.kind !== "text");
+      const blocks = cacheableContentBlocks(message.content);
+      const cache_control = readCacheControl(message);
       messages.push({
         role: "user",
         content: [
           {
             type: "tool_result",
             tool_use_id: message.tool_call_id ?? "",
-            content: hasMedia
-              ? userContentToAnthropicBlocks(message.content)
-              : stringifyTextContent(message.content),
+            content:
+              hasMedia ||
+              blocks.some((block) => block.cache_control !== undefined)
+                ? (blocks as AnthropicToolResultContent)
+                : stringifyTextContent(message.content),
+            ...(cache_control !== undefined ? { cache_control } : {}),
           },
         ],
       });
+      continue;
     }
+    if (readCacheControl(message) !== undefined)
+      throw new ApiError(
+        400,
+        "Unsupported Anthropic message with cache_control",
+      );
   }
 
   const anthropicBody: AnthropicRequest = {
@@ -124,8 +163,15 @@ export function openaiToAnthropic(req: OpenAiRequest): {
   };
 
   if (system.length > 0) {
-    anthropicBody.system = system.join("\n\n");
+    anthropicBody.system = systemBlocks.some(
+      (block) => block.cache_control !== undefined,
+    )
+      ? (systemBlocks as AnthropicRequest["system"])
+      : system.join("\n\n");
   }
+
+  const cache_control = readCacheControl(req);
+  if (cache_control !== undefined) anthropicBody.cache_control = cache_control;
 
   if (req.temperature !== undefined && req.temperature !== null) {
     anthropicBody.temperature = req.temperature;
@@ -143,12 +189,34 @@ export function openaiToAnthropic(req: OpenAiRequest): {
 
   if (req.tools) {
     anthropicBody.tools = req.tools
-      .filter((tool) => tool.type === "function")
-      .map((tool) => ({
-        name: tool.function.name,
-        description: tool.function.description,
-        input_schema: tool.function.parameters ?? { type: "object" },
-      }));
+      .filter((tool) => {
+        if (tool.type !== "function" && readCacheControl(tool) !== undefined)
+          throw new ApiError(
+            400,
+            "Anthropic cache_control requires a function tool",
+          );
+        return tool.type === "function";
+      })
+      .map((tool) => {
+        const outer = readCacheControl(tool);
+        const inner = readCacheControl(tool.function);
+        if (
+          outer !== undefined &&
+          inner !== undefined &&
+          outer.ttl !== inner.ttl
+        )
+          throw new ApiError(
+            400,
+            "Conflicting Anthropic cache_control on tool and function",
+          );
+        const cache_control = outer ?? inner;
+        return {
+          name: tool.function.name,
+          description: tool.function.description,
+          input_schema: tool.function.parameters ?? { type: "object" },
+          ...(cache_control !== undefined ? { cache_control } : {}),
+        };
+      });
   }
 
   if (req.tool_choice) {
@@ -229,9 +297,8 @@ export function anthropicResponseToOpenai(
  * tokens back from the cache and misses on 4 reports `prompt_tokens: 4`, and
  * the cache read is unrecoverable from the wire.
  *
- * Cache *writes* have no OpenAI counterpart, so they land in the uncached
- * remainder (`prompt_tokens - cached_tokens`) — which is where they belong:
- * a cache write is billed at more than the input rate, never less.
+ * Cache writes remain a separate subset so clients and pooled transports can
+ * recover uncached input and apply the provider's write tariff.
  */
 function anthropicUsageToOpenai(
   usage: AnthropicResponse["usage"],
@@ -241,6 +308,8 @@ function anthropicUsageToOpenai(
     outputTokens: usage.output_tokens,
     cacheReadTokens: usage.cache_read_input_tokens ?? 0,
     cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
+    cacheWrite1hTokens:
+      usage.cache_creation?.ephemeral_1h_input_tokens ?? undefined,
   });
 }
 
@@ -261,6 +330,7 @@ export function anthropicUsageViewToOpenai(
     outputTokens: usage.outputTokens,
     cacheReadTokens: usage.cacheReadTokens ?? 0,
     cacheWriteTokens: usage.cacheWriteTokens ?? 0,
+    cacheWrite1hTokens: usage.cacheWrite1hTokens,
   });
 }
 
@@ -269,6 +339,7 @@ function buildOpenAiUsage(params: {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  cacheWrite1hTokens?: number;
 }): OpenAiUsage {
   const promptTokens =
     params.uncachedInputTokens +
@@ -279,9 +350,19 @@ function buildOpenAiUsage(params: {
     completion_tokens: params.outputTokens,
     total_tokens: promptTokens + params.outputTokens,
     // Omitted rather than zeroed when nothing was cached, so the field's
-    // presence still means "this provider reported cache hits".
-    ...(params.cacheReadTokens > 0
-      ? { prompt_tokens_details: { cached_tokens: params.cacheReadTokens } }
+    // presence still means "this provider reported cache usage".
+    ...(params.cacheReadTokens > 0 || params.cacheWriteTokens > 0
+      ? {
+          prompt_tokens_details: {
+            cached_tokens: params.cacheReadTokens,
+            ...(params.cacheWriteTokens > 0
+              ? { cache_write_tokens: params.cacheWriteTokens }
+              : {}),
+            ...((params.cacheWrite1hTokens ?? 0) > 0
+              ? { cache_write_1h_tokens: params.cacheWrite1hTokens }
+              : {}),
+          },
+        }
       : {}),
   };
 }
@@ -303,31 +384,86 @@ type AnthropicToolResultContent = NonNullable<
   >["content"]
 >;
 
-// Converts an OpenAI user-message `content` into Anthropic content, preserving
-// images (base64 data URLs → image blocks) and PDF files (→ document blocks)
-// instead of dropping every non-text part. A plain string passes through
-// unchanged; nothing convertible falls back to an empty string since Anthropic
-// requires non-empty content.
-function userContentToAnthropicContent(content: unknown): AnthropicUserContent {
-  if (typeof content === "string") return content;
-  const blocks = userContentToAnthropicBlocks(content);
-  if (blocks.length === 0) return "";
-  return blocks as unknown as AnthropicUserContent;
+function readCacheControl(
+  value: unknown,
+): { type: "ephemeral"; ttl?: "5m" | "1h" } | undefined {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("cache_control" in value) ||
+    value.cache_control === undefined ||
+    value.cache_control === null
+  )
+    return undefined;
+  const control = value.cache_control;
+  if (
+    !control ||
+    typeof control !== "object" ||
+    !("type" in control) ||
+    control.type !== "ephemeral" ||
+    ("ttl" in control &&
+      control.ttl !== undefined &&
+      control.ttl !== "5m" &&
+      control.ttl !== "1h")
+  ) {
+    throw new ApiError(
+      400,
+      "Anthropic cache_control requires type ephemeral and an optional 5m or 1h ttl",
+    );
+  }
+  return control as { type: "ephemeral"; ttl?: "5m" | "1h" };
 }
 
-// Maps OpenAI content parts to Anthropic content blocks (text, image, base64
-// PDF document). Shared by user messages and tool_result blocks. Images use a
-// base64 source for data URLs and a url source for http(s) URLs (Anthropic
-// fetches them). Audio is dropped since Anthropic models no audio source here.
-function userContentToAnthropicBlocks(
+function applyMessageCacheControl(
+  blocks: Array<Record<string, unknown>>,
+  message: unknown,
+): void {
+  const control = readCacheControl(message);
+  if (control === undefined) return;
+  const last = blocks.at(-1);
+  if (!last)
+    throw new ApiError(
+      400,
+      "Anthropic cache_control requires cacheable message content",
+    );
+  const existing = readCacheControl(last);
+  if (
+    existing !== undefined &&
+    (existing.type !== control.type || existing.ttl !== control.ttl)
+  )
+    throw new ApiError(
+      400,
+      "Conflicting Anthropic cache_control on message and final content block",
+    );
+  last.cache_control = control;
+}
+
+function cacheableContentBlocks(
   content: unknown,
-): AnthropicToolResultContent {
+): Array<Record<string, unknown>> {
+  if (typeof content === "string")
+    return content ? [{ type: "text", text: content }] : [];
   const blocks: Array<Record<string, unknown>> = [];
-  for (const part of normalizeOpenAiContentParts(content)) {
-    const block = normalizedPartToAnthropicBlock(part);
-    if (block) blocks.push(block);
+  for (const raw of Array.isArray(content) ? content : []) {
+    const cache_control = readCacheControl(raw);
+    const converted = normalizeOpenAiContentParts([raw]).flatMap((part) => {
+      const block = normalizedPartToAnthropicBlock(part);
+      return block && !(block.type === "text" && block.text === "")
+        ? [block]
+        : [];
+    });
+    if (cache_control !== undefined && converted.length === 0)
+      throw new ApiError(
+        400,
+        "Unsupported Anthropic content part with cache_control",
+      );
+    for (const block of converted)
+      blocks.push({
+        ...block,
+        ...(cache_control !== undefined ? { cache_control } : {}),
+      });
   }
-  return blocks as unknown as AnthropicToolResultContent;
+  return blocks;
 }
 
 function normalizedPartToAnthropicBlock(

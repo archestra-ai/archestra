@@ -22,6 +22,16 @@ describe("isPersonalSubscription", () => {
     ).toBe(true);
   });
 
+  test("treats an organization GitHub App key on Copilot as a shared key", () => {
+    expect(
+      isPersonalSubscription({
+        provider: "github-copilot",
+        name: "Org Copilot",
+        isGithubAppKey: true,
+      }),
+    ).toBe(false);
+  });
+
   test("does not treat a registry-label display name as credential metadata", () => {
     expect(
       isPersonalSubscription({

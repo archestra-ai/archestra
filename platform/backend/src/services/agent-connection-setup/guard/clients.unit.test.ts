@@ -28,6 +28,7 @@ import {
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
   KILO_GUARD_CLIENT,
+  KIMI_CODE_GUARD_CLIENT,
   OPENCODE_GUARD_CLIENT,
 } from "./clients";
 import {
@@ -69,7 +70,7 @@ test.each([
   { guard: KILO_GUARD_CLIENT, client: KILO_CLIENT, orphan: true },
   { guard: OPENCODE_GUARD_CLIENT, client: OPENCODE_CLIENT, orphan: false },
   { guard: OPENCODE_GUARD_CLIENT, client: OPENCODE_CLIENT, orphan: true },
-])("$client.label disconnect disables matching JSONC aliases and verifies both files (orphan: $orphan)", async ({
+])("$client.label disconnect accepts BOM and disables matching JSONC aliases and verifies both files (orphan: $orphan)", async ({
   guard,
   client,
   orphan,
@@ -88,9 +89,9 @@ test.each([
     functions: ["disconnect_actions", "disconnect_verify"],
     invoke: "disconnect_actions mcp\ndisconnect_verify mcp",
     files: {
-      [ownedPath]: JSON.stringify(
-        orphan ? {} : { mcp: { prod_gateway: registration } },
-      ),
+      [ownedPath]:
+        "\uFEFF" +
+        JSON.stringify(orphan ? {} : { mcp: { prod_gateway: registration } }),
       [siblingPath]: JSON.stringify({
         mcp: {
           ...(orphan ? {} : { prod_gateway: registration }),
@@ -160,9 +161,30 @@ async function expectValidBash(script: string): Promise<void> {
 // only assert each descriptor injects the right client-specific strings and
 // that the result is still valid bash.
 describe.each([
-  { name: "Codex", client: CODEX_GUARD_CLIENT },
-  { name: "Copilot CLI", client: COPILOT_GUARD_CLIENT },
-])("$name startup guard", ({ client }: { client: StartupGuardClient }) => {
+  {
+    name: "Codex",
+    client: CODEX_GUARD_CLIENT,
+    mcpRemove: "command codex mcp remove",
+  },
+  {
+    name: "Copilot CLI",
+    client: COPILOT_GUARD_CLIENT,
+    mcpRemove: "command copilot mcp remove",
+  },
+  // Kimi Code has no remove command: its connection helper removes the
+  // gateway, routing and skills together.
+  {
+    name: "Kimi Code",
+    client: KIMI_CODE_GUARD_CLIENT,
+    mcpRemove: 'node "$HOME/.archestra/kimi-code/lifecycle.cjs" disconnect',
+  },
+])("$name startup guard", ({
+  client,
+  mcpRemove,
+}: {
+  client: StartupGuardClient;
+  mcpRemove: string;
+}) => {
   test("renders valid bash for the guard script and its install section", async () => {
     await expectValidBash(renderStartupGuardScript(CTX, client));
     await expectValidBash(
@@ -184,7 +206,7 @@ describe.each([
   test("prompts name the client and disconnect mirrors its own CLI", () => {
     const script = renderStartupGuardScript(CTX, client);
     expect(script).toContain(`from ${client.promptName} now? (Y/n)`);
-    expect(script).toContain(`command ${client.binary} mcp remove`);
+    expect(script).toContain(mcpRemove);
   });
 
   test("every user-facing message names this client, never a hardcoded 'Claude'", () => {
@@ -869,9 +891,9 @@ describe("an unverified disconnect is not recorded as done", () => {
     expect(script).toContain(
       "if ($downRemotes.Count -ge $ActiveRemotes.Count -and -not $Script:ArchDisconnectFailed) { Remove-ArchGuard }",
     );
-    expect(script).toContain(
-      "if (-not $Script:ArchDisconnectFailed) { Remove-ArchGuard }",
-    );
+    // Explicit /disconnect cleanup still waits for every verified reversal.
+    // The removed outage-retry branch must no longer offer an uninstall.
+    expect(script).toContain("if (-not $archFailed) { Remove-ArchGuard }");
     // A missing binary cannot have removed anything.
     expect(script).toContain("the codex executable could not be found on PATH");
     // …and Windows reverses the credential too.

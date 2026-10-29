@@ -8,15 +8,16 @@ packages:
   - "archestra-rs/openappa-rs"
   - "archestra-rs/app-runtime-rs"
   - "archestra-rs/image-rs"
+  - "archestra-rs/router-rs"
   - "e2e-tests"
   - "tools/docs-screenshots"
 
 catalog:
   ai: ^6.0.193
-  # GHSA-qq9h-g4jm-xgf3 (HIGH, improper authentication) affects >=1.1.3 and is
-  # fixed in 1.6.22. The @better-auth/* packages release in lockstep with it.
-  better-auth: 1.6.22
-  "@better-auth/core": 1.6.22
+  # GHSA-965c-763c-88jm and GHSA-r4xp-prcw-77qf require Better Auth 1.7.7.
+  # Keep core/OAuth contexts aligned; SSO retains its OAuth-only patch below.
+  better-auth: 1.7.7
+  "@better-auth/core": 1.7.7
   "@better-auth/oauth-provider": 1.6.22
   "@better-auth/sso": 1.6.22
   # TypeScript 7 ships a `tsc` binary but no programmatic API until 7.1. knip,
@@ -27,6 +28,11 @@ catalog:
   typescript-7: "npm:typescript@7.0.1-rc"
   zod: ^4.6.6
 overrides:
+  # Keep the OAuth-only SSO compatibility patch on Better Auth 1.7's
+  # endpoint context. The older plugin's exact peer otherwise installs a
+  # second, incompatible better-call/core context.
+  '@better-auth/sso@1.6.22>better-call': 1.4.0
+  '@better-auth/oauth-provider@1.6.22>better-call': 1.4.0
   # CVE-2023-54404: these stable SDK releases still require vulnerable Zod 3.
   # Run their validators on patched Zod 4; the package patches below adapt
   # their record/function/error APIs while preserving current SDK interfaces.
@@ -241,6 +247,15 @@ overrides:
   # GHSA-wq5f-xc86-pv6w (HIGH, dependency on vulnerable third-party component)
   # fixed in 0.35.5.
   sharp: 0.35.5
+  # CVE-2026-116576 (GHSA-3f7j-7jwc-fxfj, HIGH, OS command injection in
+  # services() through Unicode quotation marks on Windows) affects <5.33.16.
+  # Transitive-only (@opentelemetry/instrumentation-host-metrics), so an
+  # override is the only way to lift the resolution; the release image scan
+  # (Docker Scout, fixable critical/high) fails the platform image on it.
+  # 5.33.16 was published 2026-10-19 and clears the 7-day window. Bounded to
+  # <6 so the floor cannot carry the host-metrics instrumentation onto a major
+  # it has not been tested with.
+  systeminformation: '>=5.33.16 <6'
 packageExtensions:
   '@hookform/resolvers@*':
     dependencies:
@@ -278,6 +293,7 @@ patchedDependencies:
   # Keep all credential rules; remove after an upstream upgrade passes logging
   # redaction coverage without parsing paths on every record.
   '@pinojs/redact@0.4.0': patches/@pinojs__redact@0.4.0.patch
+  better-auth@1.7.7: patches/better-auth@1.7.7.patch
   # Preserve v2 client URL, middleware and declaration contracts under Zod 4.
   confluence.js@2.1.0: patches/confluence.js@2.1.0.patch
   # Native Ollama /api/chat sends `"content": ""` on every thinking-phase chunk,

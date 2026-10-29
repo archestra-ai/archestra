@@ -2,7 +2,7 @@
 title: Anthropic
 description: Connect Claude with an Anthropic API key, Microsoft Foundry, Vertex AI, or workload identity federation.
 order: 3
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -53,3 +53,27 @@ Archestra can authenticate to the Anthropic API without a static API key using [
 Configure a federation issuer, service account, and federation rule in the Claude Console (**Settings → Workload identity**), then set the `ARCHESTRA_ANTHROPIC_*` WIF environment variables — see [Environment Variables](/docs/admin/deployment/configuration) in the deployment docs. When configured, Archestra creates an "Anthropic Workload Identity Federation" system key automatically and syncs the available Claude models; users can also create Anthropic provider keys without entering an API key.
 
 Note: the SDK-standard `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` environment variables take precedence over federation if present in the backend environment, matching Anthropic's documented credential precedence.
+
+## Prompt Caching
+
+The native Anthropic proxy forwards caller-supplied `cache_control` on requests, system and message blocks, and tools. It records provider-reported cache reads and writes for streaming and non-streaming calls.
+
+Archestra does not add cache markers to native proxy requests; use [Anthropic’s caching controls](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) for a supported model. Cache eligibility and hits are decided by Anthropic.
+
+### Through the Model Router
+
+The [Model Router](/docs/llm-proxy/model-router) translates caller-supplied `cache_control` on content blocks, messages, and function tool definitions when targeting Anthropic. Message-level controls apply to the final content block; controls on earlier blocks keep their original boundary. Top-level `cache_control` is forwarded for Anthropic's automatic caching mode.
+
+For example, this Chat Completions body marks the stable system prefix while leaving the question outside that breakpoint:
+
+```json
+{
+  "model": "anthropic:claude-sonnet-4-6",
+  "messages": [
+    { "role": "system", "content": [{ "type": "text", "text": "Reusable instructions", "cache_control": { "type": "ephemeral" } }] },
+    { "role": "user", "content": "A question that changes each turn" }
+  ]
+}
+```
+
+The same controls work on translated Responses input blocks and function tools. A marker on content the translator cannot represent returns an error rather than silently moving or dropping the breakpoint. Cache reads and writes remain separate in returned usage; a model or provider switch can reduce cache reuse.

@@ -1,14 +1,10 @@
-import {
-  isVaultReference,
-  type ResourcePermissionGrant,
-} from "@archestra/shared";
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
 import type { ResourceAccessFilter } from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { isByosEnabled } from "@/secrets-manager";
 import { CredentialAccess } from "@/services/credential-access";
 import { githubUserConnectionManager } from "@/services/github-user-connection";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -134,7 +130,10 @@ export async function getRuntimeCredentialUsage(params: {
   });
   return {
     agents: await RuntimeCredentialDefinitionModel.listAgentsUsing(params),
-    resources: await RuntimeCredentialDefinitionModel.listOtherUsage(params),
+    resources: [
+      ...(await RuntimeCredentialDefinitionModel.listOtherUsage(params)),
+      ...(await copilotUsage(params)),
+    ],
   };
 }
 
@@ -170,7 +169,9 @@ export async function deleteRuntimeCredentialDefinition(params: {
   if (
     (await RuntimeCredentialDefinitionModel.hasGitHubUserDefinitions(params)) ||
     (await RuntimeCredentialDefinitionModel.isUsedByAgent(params)) ||
-    (await RuntimeCredentialDefinitionModel.listOtherUsage(params)).length > 0
+    (await RuntimeCredentialDefinitionModel.listOtherUsage(params)).length >
+      0 ||
+    (await copilotUsage(params)).length > 0
   ) {
     throw new ApiError(
       409,
@@ -197,7 +198,6 @@ export async function setRuntimeCredentialConnection(params: {
   scope: RuntimeCredentialConnectionScope;
   value: string;
 }) {
-  assertConnectionValue(params.value);
   const definition = await requireRuntimeCredentialDefinition(params);
   assertScopeAllowed({ definition, scope: params.scope });
   if (definition.kind === "github_app_user")
@@ -325,16 +325,6 @@ function assertScopeAllowed(params: {
   }
 }
 
-function assertConnectionValue(value: string): void {
-  if (!isByosEnabled()) return;
-  if (!isVaultReference(value)) {
-    throw new ApiError(
-      400,
-      "Readonly Vault credentials must select a secret and key",
-    );
-  }
-}
-
 function assertProviderConfiguration(definition: {
   kind?: string;
   allowPersonal?: boolean;
@@ -398,4 +388,23 @@ async function assertGitHubAppReference(
       400,
       "Select an organization GitHub App with an OAuth client ID",
     );
+}
+
+/**
+ * GitHub Copilot enterprise plans that reference this GitHub App credential.
+ * They stop working without it, so they block deleting it like other uses.
+ */
+async function copilotUsage(params: { organizationId: string; key: string }) {
+  const definition = await RuntimeCredentialDefinitionModel.find(params);
+  if (definition?.kind !== "github_app") return [];
+  // Loaded lazily: the Copilot setup itself saves credentials through here.
+  const { copilotKeysUsingCredential } = await import(
+    "@/services/github-copilot-app-setup"
+  );
+  return (
+    await copilotKeysUsingCredential({
+      organizationId: params.organizationId,
+      credentialId: definition.id,
+    })
+  ).map((key) => ({ ...key, kind: "copilot" as const }));
 }

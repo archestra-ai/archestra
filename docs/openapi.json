@@ -61638,9 +61638,6 @@
                                     "format": "uuid",
                                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                   },
-                                  "autoRouted": {
-                                    "type": "boolean"
-                                  },
                                   "identityProviderId": {
                                     "nullable": true,
                                     "type": "string"
@@ -62325,7 +62322,6 @@
                                   "llmModel",
                                   "modelId",
                                   "modelPoolId",
-                                  "autoRouted",
                                   "identityProviderId",
                                   "environmentId",
                                   "runtime",
@@ -63375,9 +63371,6 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "autoRouted": {
-                            "type": "boolean"
-                          },
                           "identityProviderId": {
                             "nullable": true,
                             "type": "string"
@@ -64062,7 +64055,6 @@
                           "llmModel",
                           "modelId",
                           "modelPoolId",
-                          "autoRouted",
                           "identityProviderId",
                           "environmentId",
                           "runtime",
@@ -64466,9 +64458,6 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "autoRouted": {
-                    "type": "boolean"
                   },
                   "identityProviderId": {
                     "nullable": true,
@@ -65269,9 +65258,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "autoRouted": {
-                      "type": "boolean"
-                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -65939,7 +65925,6 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -67134,9 +67119,6 @@
                         "type": "string",
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "autoRouted": {
-                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -67153,8 +67135,7 @@
                       "runtime",
                       "modelId",
                       "llmApiKeyId",
-                      "modelPoolId",
-                      "autoRouted"
+                      "modelPoolId"
                     ],
                     "additionalProperties": false
                   }
@@ -67785,9 +67766,6 @@
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "autoRouted": {
-                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -67804,8 +67782,7 @@
                           "runtime",
                           "modelId",
                           "llmApiKeyId",
-                          "modelPoolId",
-                          "autoRouted"
+                          "modelPoolId"
                         ],
                         "additionalProperties": false
                       }
@@ -70542,9 +70519,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "autoRouted": {
-                      "type": "boolean"
-                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -71224,7 +71198,6 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -71968,9 +71941,6 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
-                        "autoRouted": {
-                          "type": "boolean"
-                        },
                         "identityProviderId": {
                           "nullable": true,
                           "type": "string"
@@ -72638,7 +72608,6 @@
                         "llmModel",
                         "modelId",
                         "modelPoolId",
-                        "autoRouted",
                         "identityProviderId",
                         "environmentId",
                         "runtime",
@@ -73066,9 +73035,6 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "autoRouted": {
-                      "type": "boolean"
                     },
                     "identityProviderId": {
                       "nullable": true,
@@ -73737,7 +73703,6 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -74090,9 +74055,6 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "autoRouted": {
-                    "type": "boolean"
                   },
                   "identityProviderId": {
                     "nullable": true,
@@ -74628,9 +74590,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "autoRouted": {
-                      "type": "boolean"
-                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -75298,7 +75257,6 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -76643,10 +76601,6 @@
                           ],
                           "additionalProperties": false
                         },
-                        "autoRouted": {
-                          "default": false,
-                          "type": "boolean"
-                        },
                         "llmApiKey": {
                           "nullable": true,
                           "type": "object",
@@ -76896,7 +76850,6 @@
                         "incomingEmailAllowedDomain",
                         "builtInAgentConfig",
                         "model",
-                        "autoRouted",
                         "llmApiKey",
                         "identityProviderId",
                         "environmentId",
@@ -77324,9 +77277,6 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "autoRouted": {
-                      "type": "boolean"
                     },
                     "identityProviderId": {
                       "nullable": true,
@@ -77995,7 +77945,6 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -78541,9 +78490,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "autoRouted": {
-                      "type": "boolean"
-                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -79211,7 +79157,6 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -86568,9 +86513,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "autoRouted": {
-                      "type": "boolean"
-                    },
                     "identityProviderId": {
                       "nullable": true,
                       "type": "string"
@@ -87238,7 +87180,6 @@
                     "llmModel",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "identityProviderId",
                     "environmentId",
                     "runtime",
@@ -118873,6 +118814,11 @@
                       ],
                       "additionalProperties": false
                     },
+                    "routedAgentCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "generation": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -118958,6 +118904,7 @@
                     "enabled",
                     "budgetUsdPerDay",
                     "tiers",
+                    "routedAgentCount",
                     "generation",
                     "plannedGeneration",
                     "status"
@@ -119410,6 +119357,11 @@
                       ],
                       "additionalProperties": false
                     },
+                    "routedAgentCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "generation": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -119590,6 +119542,7 @@
                     "enabled",
                     "budgetUsdPerDay",
                     "tiers",
+                    "routedAgentCount",
                     "generation",
                     "plannedGeneration",
                     "status",
@@ -120809,6 +120762,11 @@
                       ],
                       "additionalProperties": false
                     },
+                    "routedAgentCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "generation": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -120989,6 +120947,7 @@
                     "enabled",
                     "budgetUsdPerDay",
                     "tiers",
+                    "routedAgentCount",
                     "generation",
                     "plannedGeneration",
                     "status",
@@ -153797,9 +153756,6 @@
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "autoRouted": {
-                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -153816,8 +153772,7 @@
                           "runtime",
                           "modelId",
                           "llmApiKeyId",
-                          "modelPoolId",
-                          "autoRouted"
+                          "modelPoolId"
                         ],
                         "additionalProperties": false
                       }
@@ -154585,9 +154540,6 @@
                               "format": "uuid",
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                             },
-                            "autoRouted": {
-                              "type": "boolean"
-                            },
                             "identityProviderId": {
                               "nullable": true,
                               "type": "string"
@@ -155255,7 +155207,6 @@
                             "llmModel",
                             "modelId",
                             "modelPoolId",
-                            "autoRouted",
                             "identityProviderId",
                             "environmentId",
                             "runtime",
@@ -156086,9 +156037,6 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
-                        "autoRouted": {
-                          "type": "boolean"
-                        },
                         "thinkingEffort": {
                           "nullable": true,
                           "type": "string",
@@ -156528,7 +156476,6 @@
                         "selectedProvider",
                         "modelId",
                         "modelPoolId",
-                        "autoRouted",
                         "thinkingEffort",
                         "hasCustomToolSelection",
                         "hooksDebugEnabled",
@@ -156879,9 +156826,6 @@
                                 "type": "string",
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "autoRouted": {
-                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -156898,8 +156842,7 @@
                               "runtime",
                               "modelId",
                               "llmApiKeyId",
-                              "modelPoolId",
-                              "autoRouted"
+                              "modelPoolId"
                             ],
                             "additionalProperties": false
                           }
@@ -157667,9 +157610,6 @@
                                   "format": "uuid",
                                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                 },
-                                "autoRouted": {
-                                  "type": "boolean"
-                                },
                                 "identityProviderId": {
                                   "nullable": true,
                                   "type": "string"
@@ -158337,7 +158277,6 @@
                                 "llmModel",
                                 "modelId",
                                 "modelPoolId",
-                                "autoRouted",
                                 "identityProviderId",
                                 "environmentId",
                                 "runtime",
@@ -161847,9 +161786,6 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
-                      "autoRouted": {
-                        "type": "boolean"
-                      },
                       "thinkingEffort": {
                         "nullable": true,
                         "type": "string",
@@ -162327,7 +162263,6 @@
                       "selectedProvider",
                       "modelId",
                       "modelPoolId",
-                      "autoRouted",
                       "thinkingEffort",
                       "hasCustomToolSelection",
                       "hooksDebugEnabled",
@@ -162634,9 +162569,6 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "autoRouted": {
-                    "type": "boolean"
-                  },
                   "projectId": {
                     "nullable": true,
                     "type": "string",
@@ -162743,9 +162675,6 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "autoRouted": {
-                      "type": "boolean"
                     },
                     "thinkingEffort": {
                       "nullable": true,
@@ -163186,7 +163115,6 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -163542,9 +163470,6 @@
                         "type": "string",
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "autoRouted": {
-                        "type": "boolean"
                       },
                       "thinkingEffort": {
                         "nullable": true,
@@ -163985,7 +163910,6 @@
                       "selectedProvider",
                       "modelId",
                       "modelPoolId",
-                      "autoRouted",
                       "thinkingEffort",
                       "hasCustomToolSelection",
                       "hooksDebugEnabled",
@@ -164364,9 +164288,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "autoRouted": {
-                      "type": "boolean"
-                    },
                     "thinkingEffort": {
                       "nullable": true,
                       "type": "string",
@@ -164806,7 +164727,6 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -165107,9 +165027,6 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "autoRouted": {
-                    "type": "boolean"
-                  },
                   "agentId": {
                     "type": "string",
                     "format": "uuid",
@@ -165237,9 +165154,6 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "autoRouted": {
-                      "type": "boolean"
                     },
                     "thinkingEffort": {
                       "nullable": true,
@@ -165680,7 +165594,6 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -168139,9 +168052,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "autoRouted": {
-                      "type": "boolean"
-                    },
                     "thinkingEffort": {
                       "nullable": true,
                       "type": "string",
@@ -168581,7 +168491,6 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -169246,9 +169155,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "autoRouted": {
-                      "type": "boolean"
-                    },
                     "thinkingEffort": {
                       "nullable": true,
                       "type": "string",
@@ -169688,7 +169594,6 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -170422,9 +170327,6 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
-                        "autoRouted": {
-                          "type": "boolean"
-                        },
                         "thinkingEffort": {
                           "nullable": true,
                           "type": "string",
@@ -170864,7 +170766,6 @@
                         "selectedProvider",
                         "modelId",
                         "modelPoolId",
-                        "autoRouted",
                         "thinkingEffort",
                         "hasCustomToolSelection",
                         "hooksDebugEnabled",
@@ -171254,9 +171155,6 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "autoRouted": {
-                      "type": "boolean"
                     },
                     "thinkingEffort": {
                       "nullable": true,
@@ -171697,7 +171595,6 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -172094,9 +171991,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "autoRouted": {
-                      "type": "boolean"
-                    },
                     "thinkingEffort": {
                       "nullable": true,
                       "type": "string",
@@ -172536,7 +172430,6 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",
@@ -465139,6 +465032,514 @@
         }
       }
     },
+    "/api/organization/default-model": {
+      "get": {
+        "operationId": "getOrganizationDefaultModel",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Get the model agents and chats on the organization default run on, and the tiers auto routing routes them across\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "model": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "openai",
+                            "gemini",
+                            "anthropic",
+                            "bedrock",
+                            "cohere",
+                            "cerebras",
+                            "mistral",
+                            "perplexity",
+                            "groq",
+                            "xai",
+                            "openrouter",
+                            "vllm",
+                            "ollama",
+                            "ollama-native",
+                            "zhipuai",
+                            "deepseek",
+                            "minimax",
+                            "kimi",
+                            "kimi-code",
+                            "azure",
+                            "github-copilot",
+                            "microsoft-365-copilot",
+                            "archestra",
+                            "voyage",
+                            "jev"
+                          ]
+                        },
+                        "displayName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "provider",
+                        "displayName"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "autoRouting": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "active": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            }
+                          },
+                          "required": [
+                            "active"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "active": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            },
+                            "tiers": {
+                              "type": "object",
+                              "properties": {
+                                "fast": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "provider": {
+                                      "type": "string",
+                                      "enum": [
+                                        "openai",
+                                        "gemini",
+                                        "anthropic",
+                                        "bedrock",
+                                        "cohere",
+                                        "cerebras",
+                                        "mistral",
+                                        "perplexity",
+                                        "groq",
+                                        "xai",
+                                        "openrouter",
+                                        "vllm",
+                                        "ollama",
+                                        "ollama-native",
+                                        "zhipuai",
+                                        "deepseek",
+                                        "minimax",
+                                        "kimi",
+                                        "kimi-code",
+                                        "azure",
+                                        "github-copilot",
+                                        "microsoft-365-copilot",
+                                        "archestra",
+                                        "voyage",
+                                        "jev"
+                                      ]
+                                    },
+                                    "displayName": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "provider",
+                                    "displayName"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "normal": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "provider": {
+                                      "type": "string",
+                                      "enum": [
+                                        "openai",
+                                        "gemini",
+                                        "anthropic",
+                                        "bedrock",
+                                        "cohere",
+                                        "cerebras",
+                                        "mistral",
+                                        "perplexity",
+                                        "groq",
+                                        "xai",
+                                        "openrouter",
+                                        "vllm",
+                                        "ollama",
+                                        "ollama-native",
+                                        "zhipuai",
+                                        "deepseek",
+                                        "minimax",
+                                        "kimi",
+                                        "kimi-code",
+                                        "azure",
+                                        "github-copilot",
+                                        "microsoft-365-copilot",
+                                        "archestra",
+                                        "voyage",
+                                        "jev"
+                                      ]
+                                    },
+                                    "displayName": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "provider",
+                                    "displayName"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "smart": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "provider": {
+                                      "type": "string",
+                                      "enum": [
+                                        "openai",
+                                        "gemini",
+                                        "anthropic",
+                                        "bedrock",
+                                        "cohere",
+                                        "cerebras",
+                                        "mistral",
+                                        "perplexity",
+                                        "groq",
+                                        "xai",
+                                        "openrouter",
+                                        "vllm",
+                                        "ollama",
+                                        "ollama-native",
+                                        "zhipuai",
+                                        "deepseek",
+                                        "minimax",
+                                        "kimi",
+                                        "kimi-code",
+                                        "azure",
+                                        "github-copilot",
+                                        "microsoft-365-copilot",
+                                        "archestra",
+                                        "voyage",
+                                        "jev"
+                                      ]
+                                    },
+                                    "displayName": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "provider",
+                                    "displayName"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "fast",
+                                "normal",
+                                "smart"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "active",
+                            "tiers"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "autoRouting"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
     "/api/organization/appearance-settings": {
       "patch": {
         "operationId": "updateAppearanceSettings",
@@ -509596,9 +509997,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "autoRouted": {
-                      "type": "boolean"
-                    },
                     "thinkingEffort": {
                       "nullable": true,
                       "type": "string",
@@ -510038,7 +510436,6 @@
                     "selectedProvider",
                     "modelId",
                     "modelPoolId",
-                    "autoRouted",
                     "thinkingEffort",
                     "hasCustomToolSelection",
                     "hooksDebugEnabled",

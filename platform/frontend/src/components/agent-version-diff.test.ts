@@ -17,7 +17,6 @@ function makeSnapshot(
   return {
     agentType: "agent",
     name: "prod-gateway",
-    autoRouted: false,
     description: null,
     icon: null,
     systemPrompt: "Be careful.",
@@ -641,7 +640,6 @@ const SNAPSHOT_KEY_HOMES: Record<
   icon: { field: "Icon" },
   agentType: { field: "Type" },
   model: { field: "Model" },
-  autoRouted: { field: "Auto routing" },
   llmApiKey: { field: "LLM API key" },
   toolExposureMode: { field: "Tool exposure" },
   missingCredentialBehavior: { field: "Missing tool connection" },

@@ -12,7 +12,6 @@ import {
   Key,
   LayersIcon,
   Plus,
-  Sparkles,
   TriangleAlert,
 } from "lucide-react";
 import Image from "next/image";
@@ -97,13 +96,13 @@ interface LlmProviderApiKeyDropdownProps {
   onSelectAllOption?: () => void;
   allowOrganizationDefault?: boolean;
   organizationDefaultSelected?: boolean;
+  /** What "Organization default" currently runs on. */
+  organizationDefaultDescription?: string;
   onSelectOrganizationDefault?: () => void;
   /** Model pools offered before the keys; a picked pool replaces the key. */
   pools?: AvailableModelPool[];
   selectedPoolId?: string | null;
   onSelectPool?: (poolId: string) => void;
-  /** "Auto", offered before the pools while auto routing is on; it replaces the key. */
-  autoRouting?: { selected: boolean; onSelect: () => void };
 }
 
 export function LlmProviderApiKeyDropdown({
@@ -130,11 +129,11 @@ export function LlmProviderApiKeyDropdown({
   onSelectAllOption,
   allowOrganizationDefault = false,
   organizationDefaultSelected = false,
+  organizationDefaultDescription,
   onSelectOrganizationDefault,
   pools = [],
   selectedPoolId = null,
   onSelectPool,
-  autoRouting,
 }: LlmProviderApiKeyDropdownProps) {
   const selectableKeys = useMemo(
     () =>
@@ -171,15 +170,11 @@ export function LlmProviderApiKeyDropdown({
       }),
     [keysByProvider, currentProvider],
   );
-  const autoSelected = autoRouting?.selected ?? false;
-  const selectedPool = autoSelected
+  const selectedPool = pools.find((pool) => pool.id === selectedPoolId);
+  const selectedKey = selectedPool
     ? undefined
-    : pools.find((pool) => pool.id === selectedPoolId);
-  const selectedKey =
-    selectedPool || autoSelected
-      ? undefined
-      : availableKeys.find((key) => key.id === selectedApiKeyId);
-  const checkedKeyId = selectedPool || autoSelected ? null : selectedApiKeyId;
+    : availableKeys.find((key) => key.id === selectedApiKeyId);
+  const checkedKeyId = selectedPool ? null : selectedApiKeyId;
   const selectedKeyIsSubscription =
     selectedKey !== undefined && isPersonalSubscription(selectedKey);
   const fallbackTriggerLabel =
@@ -207,12 +202,7 @@ export function LlmProviderApiKeyDropdown({
             data-testid={triggerTestId}
           >
             <span className="flex min-w-0 items-center gap-1.5">
-              {autoSelected ? (
-                <>
-                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate font-medium">Auto</span>
-                </>
-              ) : selectedPool ? (
+              {selectedPool ? (
                 <>
                   <LayersIcon className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate font-medium">
@@ -317,33 +307,13 @@ export function LlmProviderApiKeyDropdown({
                       Organization default
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      No model or key set - falls back to the organization
-                      default
+                      {organizationDefaultDescription ??
+                        "No model or key set - falls back to the organization default"}
                     </span>
                   </div>
                   {organizationDefaultSelected && (
                     <CheckIcon className="ml-auto h-4 w-4 shrink-0" />
                   )}
-                </CommandItem>
-              </CommandGroup>
-            )}
-            {autoRouting && (
-              <CommandGroup>
-                <CommandItem
-                  value="auto-routing"
-                  keywords={["auto", "auto routing"]}
-                  onSelect={autoRouting.onSelect}
-                  className="cursor-pointer"
-                >
-                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span>Auto</span>
-                    <span className="text-xs text-muted-foreground">
-                      Routes each session to the organization&apos;s fast,
-                      normal or smart model
-                    </span>
-                  </div>
-                  {autoSelected && <CheckIcon className="h-4 w-4 shrink-0" />}
                 </CommandItem>
               </CommandGroup>
             )}
@@ -370,7 +340,7 @@ export function LlmProviderApiKeyDropdown({
                       <LayersIcon className="h-3.5 w-3.5 shrink-0" />
                       <span className="truncate">{pool.name}</span>
                     </div>
-                    {selectedPool?.id === pool.id && (
+                    {selectedPoolId === pool.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
                   </CommandItem>
@@ -468,7 +438,7 @@ export function LlmProviderApiKeyDropdown({
                         </span>
                       </div>
                     </div>
-                    {checkedKeyId === key.id && (
+                    {selectedApiKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
                   </CommandItem>

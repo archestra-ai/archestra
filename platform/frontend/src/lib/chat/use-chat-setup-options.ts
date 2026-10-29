@@ -21,7 +21,6 @@ import {
   useProfile,
 } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth/auth.query";
-import { useAutoRoutingAvailable } from "@/lib/auto-routing.query";
 import {
   type AgentConnectionGate,
   indexReadinessByAgent,
@@ -38,6 +37,7 @@ import {
   useAvailableLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
 import { useAvailableModelPools } from "@/lib/model-pools.query";
+import { useOrganizationDefaultModelSummary } from "@/lib/organization.query";
 import {
   isOrganizationSubscription,
   organizationSubscriptionSubtitle,
@@ -96,9 +96,6 @@ export function useChatSetupOptions(params: {
   /** The model pool the chat is set to; it stands in for the key and model. */
   modelPoolId?: string | null;
   onModelPoolChange?: (modelPoolId: string | null) => void;
-  /** Whether the chat is set to "Auto"; like a pool, it stands in for the key and model. */
-  autoRouted?: boolean;
-  onAutoRoutedChange?: (autoRouted: boolean) => void;
 }) {
   const catalog = useModelProviderCatalog();
   const { data: session } = useSession();
@@ -215,18 +212,11 @@ export function useChatSetupOptions(params: {
 
   // Same guard as the model picker: when the key changes and the selected
   // model is no longer offered, fall back to the best available one.
-  // A pool's member model need not be in its key's list; the pool keeps it,
-  // and "Auto" keeps the organization's default model.
-  const {
-    selectedModel,
-    onModelChange,
-    suppressAutoSelect,
-    modelPoolId,
-    autoRouted = false,
-  } = params;
+  // A pool's member model need not be in its key's list; the pool keeps it.
+  const { selectedModel, onModelChange, suppressAutoSelect, modelPoolId } =
+    params;
   useEffect(() => {
-    if (isPlaceholderData || suppressAutoSelect || modelPoolId || autoRouted)
-      return;
+    if (isPlaceholderData || suppressAutoSelect || modelPoolId) return;
     const next = resolveAutoSelectedModel({
       selectedModel,
       availableModels: models.map((m) => ({
@@ -242,7 +232,6 @@ export function useChatSetupOptions(params: {
     isPlaceholderData,
     suppressAutoSelect,
     modelPoolId,
-    autoRouted,
     selectedModel,
     models,
     modelsLoading,
@@ -282,21 +271,31 @@ export function useChatSetupOptions(params: {
   const { data: pools = [] } = useAvailableModelPools({
     enabled: !!params.onModelPoolChange,
   });
-  const activePool =
-    params.modelPoolId && !autoRouted
-      ? pools.find((pool) => pool.id === params.modelPoolId)
-      : undefined;
+  const activePool = params.modelPoolId
+    ? pools.find((pool) => pool.id === params.modelPoolId)
+    : undefined;
 
-  // ---- "Auto": the organization trio, routed per session. A chat already on
-  // it keeps the entry even while routing is unavailable, so it can leave.
-  const autoRoutingAvailable = useAutoRoutingAvailable();
-  const autoOffered =
-    !!params.onAutoRoutedChange && (autoRoutingAvailable || autoRouted);
+  // ---- the organization default: an agent with no model of its own is
+  // auto routed on it while the organization routes.
+  const { data: organizationDefault } = useOrganizationDefaultModelSummary();
+  const agentFollowsDefault =
+    !!activeAgent &&
+    activeAgent.runtime === null &&
+    !activeAgent.modelId &&
+    !activeAgent.llmApiKeyId &&
+    !activeAgent.modelPoolId;
+  const organizationDefaultNote = (dbId: string): string | null => {
+    if (!organizationDefault?.model || organizationDefault.model.id !== dbId)
+      return null;
+    if (!agentFollowsDefault || !organizationDefault.autoRouting.active)
+      return "Organization default";
+    const { fast, normal, smart } = organizationDefault.autoRouting.tiers;
+    return `Organization default · Auto routed: ${fast.displayName}, ${normal.displayName}, ${smart.displayName}`;
+  };
 
   // ---- reasoning
   const supportsReasoning =
     !activePool &&
-    !autoRouted &&
     !!activeModel &&
     !!params.onThinkingEffortChange &&
     modelSupportsThinkingEffort({
@@ -310,9 +309,8 @@ export function useChatSetupOptions(params: {
   const updateConversation = useUpdateConversation();
   const selectKey = (key: LlmProviderApiKey) => {
     if (key.id === params.apiKeyId) {
-      // The pool's or "Auto"'s own key: back to it, alone.
+      // The pool's own key: back to it, alone.
       if (params.modelPoolId) params.onModelPoolChange?.(null);
-      if (autoRouted) params.onAutoRoutedChange?.(false);
       return;
     }
     if (params.conversationId) {
@@ -346,13 +344,13 @@ export function useChatSetupOptions(params: {
     // models
     modelsLoading,
     activeModel,
-    modelName: autoRouted
-      ? "Auto"
-      : (activePool?.name ??
-        activeModel?.displayName ??
-        params.fallbackModelName ??
-        "Choose a model"),
+    modelName:
+      activePool?.name ??
+      activeModel?.displayName ??
+      params.fallbackModelName ??
+      "Choose a model",
     modelSections,
+    organizationDefaultNote,
     selectModel: (dbId: string) => {
       if (dbId !== params.selectedModel) params.onModelChange(dbId);
     },
@@ -360,14 +358,7 @@ export function useChatSetupOptions(params: {
     pools,
     activePool,
     selectPool: (id: string) => {
-      if (id !== params.modelPoolId || autoRouted)
-        params.onModelPoolChange?.(id);
-    },
-    // auto routing
-    autoOffered,
-    autoSelected: autoRouted,
-    selectAuto: () => {
-      if (!autoRouted) params.onAutoRoutedChange?.(true);
+      if (id !== params.modelPoolId) params.onModelPoolChange?.(id);
     },
     // credentials
     keys,

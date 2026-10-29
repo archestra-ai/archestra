@@ -525,6 +525,8 @@ export const requiredEndpointPermissionsMap: Partial<
    * authenticated but no specific permission.
    */
   [RouteId.GetOrganization]: {},
+  /** Names the default model for every member, so "Organization default" reads the same for all. */
+  [RouteId.GetOrganizationDefaultModel]: {},
 
   // Agent Runtime belongs to Agents. Read access is enough to view
   // runs and manage one's own declared credentials; shared credential writes

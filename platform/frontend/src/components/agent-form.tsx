@@ -195,7 +195,6 @@ import {
 } from "@/lib/agent-tools.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
-import { useAutoRoutingAvailable } from "@/lib/auto-routing.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -1300,9 +1299,6 @@ export function AgentForm({
   // A model pool in place of the key and model; the server stores one of its
   // members as the key and model.
   const [modelPoolId, setModelPoolId] = useState<string | null>(null);
-  // "Auto" in place of the key and model, like a pool; the server stores the
-  // organization's default model as the key and model.
-  const [autoRouted, setAutoRouted] = useState(false);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
   // The tools editor's live selection (pending edits included), so the
@@ -1698,7 +1694,6 @@ export function AgentForm({
             llmApiKeyId: agentData.llmApiKeyId,
             llmModel: agentData.modelId,
             modelPoolId: agentData.modelPoolId ?? null,
-            autoRouted: agentData.autoRouted,
             identityProviderId: agentData.identityProviderId ?? undefined,
             environmentId: agentData.environmentId ?? undefined,
             knowledgeBaseIds: agentData.knowledgeBaseIds,
@@ -1731,7 +1726,6 @@ export function AgentForm({
             llmApiKeyId: null,
             llmModel: null,
             modelPoolId: null,
-            autoRouted: false,
             identityProviderId: undefined,
             environmentId: undefined,
             knowledgeBaseIds: [],
@@ -1758,7 +1752,6 @@ export function AgentForm({
       setLlmApiKeyId(nextValues.llmApiKeyId);
       setLlmModel(nextValues.llmModel);
       setModelPoolId(nextValues.modelPoolId);
-      setAutoRouted(nextValues.autoRouted);
       setAssignedTeamIds(nextValues.assignedTeamIds);
       setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
@@ -1910,8 +1903,6 @@ export function AgentForm({
     enabled: isInternalAgent && !runtime,
   });
   const agentModelPoolId = runtime ? null : modelPoolId;
-  const autoRoutingAvailable = useAutoRoutingAvailable();
-  const agentAutoRouted = !runtime && autoRouted;
   const agentModelPool = agentModelPoolId
     ? modelPools.find((pool) => pool.id === agentModelPoolId)
     : undefined;
@@ -2175,8 +2166,7 @@ export function AgentForm({
     !!persistedAgent &&
     ((llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
       (llmModel ?? null) !== (persistedAgent.modelId ?? null) ||
-      agentModelPoolId !== (persistedAgent.modelPoolId ?? null) ||
-      agentAutoRouted !== persistedAgent.autoRouted);
+      agentModelPoolId !== (persistedAgent.modelPoolId ?? null));
   const hasCompleteLlmSelection = Boolean(llmApiKeyId) === Boolean(llmModel);
   const needsClaudeProviderKey =
     !agent &&
@@ -2293,7 +2283,6 @@ export function AgentForm({
               llmApiKeyId: llmApiKeyId || null,
               modelId: llmModel || null,
               modelPoolId: agentModelPoolId,
-              autoRouted: agentAutoRouted,
             }),
           },
         });
@@ -2330,7 +2319,6 @@ export function AgentForm({
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
                   modelPoolId: agentModelPoolId,
-                  autoRouted: agentAutoRouted,
                 }),
               }),
             }),
@@ -2399,7 +2387,6 @@ export function AgentForm({
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
             modelPoolId: agentModelPoolId,
-            autoRouted: agentAutoRouted,
             suggestedPrompts: validSuggestedPrompts,
             ...(activationSkillPolicy && { activationSkillPolicy }),
           }),
@@ -2640,7 +2627,6 @@ export function AgentForm({
     llmApiKeyId,
     llmModel,
     agentModelPoolId,
-    agentAutoRouted,
     llmSelectionChanged,
     identityProviderId,
     environmentId,
@@ -2795,7 +2781,6 @@ export function AgentForm({
     llmApiKeyId,
     llmModel,
     modelPoolId,
-    autoRouted,
     identityProviderId,
     environmentId,
     knowledgeBaseIds,
@@ -2905,7 +2890,6 @@ export function AgentForm({
         onSelectKey={(keyId) => {
           cancelPendingCreatedKeySelection();
           setModelPoolId(null);
-          setAutoRouted(false);
           handleLlmApiKeyChange(keyId);
           setApiKeySelectorOpen(false);
         }}
@@ -2915,29 +2899,11 @@ export function AgentForm({
           cancelPendingCreatedKeySelection();
           pendingModelAutoSelectionRef.current = null;
           setModelPoolId(poolId);
-          setAutoRouted(false);
           setLlmApiKeyId(null);
           setLlmModel(null);
           lastAutoSelectedProviderRef.current = null;
           setApiKeySelectorOpen(false);
         }}
-        autoRouting={
-          !runtime && (autoRoutingAvailable || agentAutoRouted)
-            ? {
-                selected: agentAutoRouted,
-                onSelect: () => {
-                  cancelPendingCreatedKeySelection();
-                  pendingModelAutoSelectionRef.current = null;
-                  setAutoRouted(true);
-                  setModelPoolId(null);
-                  setLlmApiKeyId(null);
-                  setLlmModel(null);
-                  lastAutoSelectedProviderRef.current = null;
-                  setApiKeySelectorOpen(false);
-                },
-              }
-            : undefined
-        }
         onAddApiKey={onAddApiKey}
         currentProvider={currentLlmProvider ?? undefined}
         providerFilter={apiKeyProviderFilter}
@@ -2948,13 +2914,13 @@ export function AgentForm({
         allowOrganizationDefault={
           !!agent || !isClaudeCodeRuntime || usesClaudeSubscription
         }
-        organizationDefaultSelected={
-          !llmApiKeyId && !agentModelPoolId && !agentAutoRouted
+        organizationDefaultSelected={!llmApiKeyId && !agentModelPoolId}
+        organizationDefaultDescription={
+          organizationDefaultModel.label ?? undefined
         }
         onSelectOrganizationDefault={() => {
           cancelPendingCreatedKeySelection();
           setModelPoolId(null);
-          setAutoRouted(false);
           setLlmApiKeyId(null);
           setLlmModel(null);
           lastAutoSelectedProviderRef.current = null;
@@ -3076,11 +3042,9 @@ export function AgentForm({
       ? `${requiredSubscription.label}. ${requiredSubscriptionSatisfied ? "Connected" : "Not connected yet"}`
       : needsClaudeProviderKey
         ? "Select a provider and Claude model"
-        : agentAutoRouted
-          ? "Auto"
-          : agentModelPoolId
-            ? `Model pool ${agentModelPool?.name ?? ""}`.trim()
-            : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
+        : agentModelPoolId
+          ? `Model pool ${agentModelPool?.name ?? ""}`.trim()
+          : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
   const modelBlock = (
     <div className="space-y-2">
       {(agent || !isInternalAgent || !agentRuntimeEnabled) && (
@@ -3121,7 +3085,6 @@ export function AgentForm({
           )}
           {!isClaudeCodeRuntime &&
             !agentModelPoolId &&
-            !agentAutoRouted &&
             (selectedApiKeyIsSubscription ? (
               <Alert>
                 <InfoIcon className="h-4 w-4" />
@@ -3182,7 +3145,7 @@ export function AgentForm({
           ) : (
             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <div className="min-w-0">{providerKeyControl}</div>
-              {!agentModelPoolId && !agentAutoRouted && (
+              {!agentModelPoolId && (
                 <div className="min-w-0">{modelControl}</div>
               )}
             </div>
@@ -4398,7 +4361,6 @@ type AgentFormFields = {
   llmApiKeyId: string | null;
   llmModel: string | null;
   modelPoolId: string | null;
-  autoRouted: boolean;
   identityProviderId: string | null | undefined;
   environmentId: string | null | undefined;
   knowledgeBaseIds: string[];

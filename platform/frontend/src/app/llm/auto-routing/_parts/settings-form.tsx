@@ -84,6 +84,9 @@ export function AutoRoutingSettingsForm({
               <FormLabel className="!mt-0">
                 {field.value ? "Enabled" : "Disabled"}
               </FormLabel>
+              <span className="text-sm text-muted-foreground">
+                {`Applies to ${settings.routedAgentCount} ${settings.routedAgentCount === 1 ? "agent" : "agents"} and the chats using the organization default`}
+              </span>
             </FormItem>
           )}
         />

@@ -68,6 +68,7 @@ function makeSettings(
       normal: tier("claude-sonnet", 2),
       smart: tier("claude-opus", 3),
     },
+    routedAgentCount: 2,
     generation: 3,
     plannedGeneration: 3,
     status: {
@@ -302,6 +303,13 @@ describe("AutoRoutingOverviewPage", () => {
 
     expect(await screen.findByText("Set a daily budget")).toBeInTheDocument();
     expect(updates).toEqual([]);
+  });
+
+  it("counts the agents on the organization default that routing applies to", async () => {
+    settings = makeSettings({ routedAgentCount: 7 });
+    renderPage();
+
+    expect(await screen.findByText(/\b7 agents\b/)).toBeInTheDocument();
   });
 
   it("shows the organization trio read-only, with a link to edit it", async () => {

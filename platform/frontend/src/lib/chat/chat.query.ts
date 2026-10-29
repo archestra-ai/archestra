@@ -123,25 +123,19 @@ export function mergeUpdatedConversationIntoCache(
   if (variables.chatApiKeyId !== undefined || variables.agentId !== undefined) {
     merged.chatApiKeyId = updatedConversation.chatApiKeyId;
   }
-  // A pool comes with one of its members' key and model, and "Auto" with the
-  // organization's default model; a key, model or agent change leaves both
-  // (or takes the new agent's).
-  if (
-    variables.modelPoolId !== undefined ||
-    variables.autoRouted !== undefined
-  ) {
+  // A pool comes with one of its members' key and model, and a key, model or
+  // agent change leaves the pool (or takes the new agent's).
+  if (variables.modelPoolId !== undefined) {
     merged.modelId = updatedConversation.modelId;
     merged.chatApiKeyId = updatedConversation.chatApiKeyId;
   }
   if (
     variables.modelPoolId !== undefined ||
-    variables.autoRouted !== undefined ||
     variables.modelId !== undefined ||
     variables.chatApiKeyId !== undefined ||
     variables.agentId !== undefined
   ) {
     merged.modelPoolId = updatedConversation.modelPoolId;
-    merged.autoRouted = updatedConversation.autoRouted;
   }
   if (variables.agentId !== undefined) {
     merged.agentId = updatedConversation.agentId;
@@ -550,7 +544,6 @@ export function useCreateConversation() {
       modelId,
       chatApiKeyId,
       modelPoolId,
-      autoRouted,
       title,
       projectId,
       encryptedChat,
@@ -574,7 +567,6 @@ export function useCreateConversation() {
               modelId,
               chatApiKeyId: chatApiKeyId ?? undefined,
               modelPoolId: modelPoolId ?? undefined,
-              autoRouted,
               title,
               projectId: projectId ?? undefined,
               encryptedChat: encryptedChat || undefined,
@@ -616,7 +608,6 @@ export function useUpdateConversation() {
       modelId,
       chatApiKeyId,
       modelPoolId,
-      autoRouted,
       agentId,
       projectId,
       pinnedAt,
@@ -633,7 +624,6 @@ export function useUpdateConversation() {
               modelId,
               chatApiKeyId,
               modelPoolId,
-              autoRouted,
               agentId,
               projectId,
               pinnedAt,

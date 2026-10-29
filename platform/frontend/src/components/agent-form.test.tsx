@@ -128,9 +128,7 @@ const {
   useAgentA2aDelegationsMock,
   useSyncAgentA2aDelegationsMock,
   saveChannelChangesMock,
-  useAutoRoutingAvailableMock,
 } = vi.hoisted(() => ({
-  useAutoRoutingAvailableMock: vi.fn(() => false),
   /** Stands in for what the agent write hooks reject with once they toasted. */
   ReportedApiError: class ReportedApiError extends Error {
     name = "ReportedApiError";
@@ -389,10 +387,6 @@ vi.mock("@/lib/agent.query", () => ({
   useProfile: useProfileMock,
   useUpdateDefaultAgentId: useUpdateDefaultAgentIdMock,
   useUpdateProfile: useUpdateProfileMock,
-}));
-
-vi.mock("@/lib/auto-routing.query", () => ({
-  useAutoRoutingAvailable: useAutoRoutingAvailableMock,
 }));
 
 vi.mock("@/lib/agent-tools.query", () => ({
@@ -722,26 +716,15 @@ vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
     onAddApiKey,
     onSelectKey,
     providerFilter,
-    autoRouting,
   }: {
     onAddApiKey?: () => void;
     onSelectKey: (keyId: string) => void;
     providerFilter?: (provider: SupportedProvider) => boolean;
-    autoRouting?: { selected: boolean; onSelect: () => void };
   }) => (
     <>
       <button type="button" onClick={() => onSelectKey("key-1")}>
         Pick API key
       </button>
-      {autoRouting && (
-        <button
-          type="button"
-          aria-pressed={autoRouting.selected}
-          onClick={autoRouting.onSelect}
-        >
-          Pick Auto
-        </button>
-      )}
       {onAddApiKey && (
         <button type="button" onClick={onAddApiKey}>
           Add provider key
@@ -1174,7 +1157,6 @@ const baseAgent = {
   llmModel: null,
   modelId: null,
   modelPoolId: null,
-  autoRouted: false,
   identityProviderId: null,
   environmentId: null,
   builtInAgentConfig: null,
@@ -2800,7 +2782,6 @@ describe("AgentForm save payload and failure handling", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useAutoRoutingAvailableMock.mockReturnValue(false);
     useAgentActivationSkillPolicyMock.mockReturnValue({
       data: {
         mode: "all",
@@ -4300,78 +4281,6 @@ describe("AgentForm save payload and failure handling", () => {
     await waitFor(() => expect(updateAgent).toHaveBeenCalled());
     expect(savedBody().llmApiKeyId).toBe("key-1");
     expect(savedBody().modelId).toBe("model-1");
-  });
-
-  it("offers Auto only while auto routing is available", () => {
-    useAutoRoutingAvailableMock.mockReturnValue(false);
-    const { unmount } = renderConfiguration();
-    expect(
-      screen.queryByRole("button", { name: "Pick Auto" }),
-    ).not.toBeInTheDocument();
-    unmount();
-
-    useAutoRoutingAvailableMock.mockReturnValue(true);
-    renderConfiguration();
-    expect(screen.getByRole("button", { name: "Pick Auto" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-  });
-
-  it("saves Auto in place of the agent's pool", async () => {
-    const user = userEvent.setup();
-    useAutoRoutingAvailableMock.mockReturnValue(true);
-    render(
-      <AgentForm
-        agentType="agent"
-        agent={{
-          ...baseAgent,
-          llmApiKeyId: "key-0",
-          modelId: "model-0",
-          modelPoolId: "pool-1",
-        }}
-        sections={["configuration"]}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Pick Auto" }));
-    await user.click(screen.getByRole("button", { name: /update/i }));
-
-    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
-    expect(savedBody()).toMatchObject({
-      autoRouted: true,
-      modelPoolId: null,
-    });
-  });
-
-  it("leaves Auto when a key is picked", async () => {
-    const user = userEvent.setup();
-    useAutoRoutingAvailableMock.mockReturnValue(true);
-    render(
-      <AgentForm
-        agentType="agent"
-        agent={{
-          ...baseAgent,
-          llmApiKeyId: "key-0",
-          modelId: "model-0",
-          autoRouted: true,
-        }}
-        sections={["configuration"]}
-      />,
-    );
-    expect(screen.getByRole("button", { name: "Pick Auto" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-
-    await user.click(screen.getByRole("button", { name: /pick api key/i }));
-    await user.click(screen.getByRole("button", { name: /update/i }));
-
-    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
-    expect(savedBody()).toMatchObject({
-      autoRouted: false,
-      llmApiKeyId: "key-1",
-    });
   });
 
   it("automatically uses an existing ChatGPT subscription for the Codex catalog runtime", async () => {

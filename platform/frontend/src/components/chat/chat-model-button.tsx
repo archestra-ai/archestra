@@ -1,7 +1,7 @@
 "use client";
 
 import { E2eTestId } from "@archestra/shared";
-import { LayersIcon, SparklesIcon } from "lucide-react";
+import { LayersIcon } from "lucide-react";
 import { useState } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
@@ -73,9 +73,7 @@ export function ChatModelButton({
           data-testid={E2eTestId.ChatModelSelectorTrigger}
           className="h-8 min-w-0 max-w-72 gap-1.5 px-2 font-normal"
         >
-          {data.autoSelected ? (
-            <SparklesIcon className="size-4 shrink-0" />
-          ) : data.activePool ? (
+          {data.activePool ? (
             <LayersIcon className="size-4 shrink-0" />
           ) : (
             provider && (

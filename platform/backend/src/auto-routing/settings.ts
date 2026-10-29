@@ -265,13 +265,15 @@ async function describe(
   fitted: FitSessions | null = null,
 ): Promise<AutoRoutingSettingsResponse> {
   const tierIds = TIER_NAMES.map((tier) => settings[TIER_FIELDS[tier]]);
-  const [models, active, latest, scorerVersion, scorer] = await Promise.all([
-    ModelModel.findByIds(tierIds.filter((id): id is string => id !== null)),
-    RoutingPlanModel.findActive(organizationId),
-    RoutingPlanModel.findLatestOutcome(organizationId),
-    activeSourceVersion(),
-    scorerState(organizationId),
-  ]);
+  const [models, active, latest, scorerVersion, scorer, routedAgentCount] =
+    await Promise.all([
+      ModelModel.findByIds(tierIds.filter((id): id is string => id !== null)),
+      RoutingPlanModel.findActive(organizationId),
+      RoutingPlanModel.findLatestOutcome(organizationId),
+      activeSourceVersion(),
+      scorerState(organizationId),
+      AgentModel.countFollowingOrganizationRouting(organizationId),
+    ]);
   const byId = new Map(models.map((model) => [model.id, model]));
   const tierModel = (id: string | null) => {
     const model = id ? byId.get(id) : undefined;
@@ -287,6 +289,7 @@ async function describe(
         ? null
         : Number(settings.budgetUsdPerDay),
     tiers: { fast, normal, smart },
+    routedAgentCount,
     generation: settings.generation,
     plannedGeneration: settings.plannedGeneration,
     status: {

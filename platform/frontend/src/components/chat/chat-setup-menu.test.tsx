@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
+import { useOrganizationDefaultModelSummary } from "@/lib/organization.query";
 import { ChatSetupMenu, type ChatSetupMenuProps } from "./chat-setup-menu";
 
 const {
@@ -13,9 +14,7 @@ const {
   mutateConversation,
   hiddenProviders,
   navigate,
-  autoRouting,
 } = vi.hoisted(() => ({
-  autoRouting: { available: false },
   agents: [
     {
       id: "agent-mine",
@@ -26,6 +25,7 @@ const {
       authorId: "user-1",
       builtIn: false,
       runtime: null,
+      modelId: undefined as string | undefined,
     },
     {
       id: "agent-research",
@@ -133,13 +133,11 @@ vi.mock("@/lib/model-pools.query", () => ({
   useAvailableModelPools: () => ({ data: pools }),
 }));
 
-vi.mock("@/lib/auto-routing.query", () => ({
-  useAutoRoutingAvailable: () => autoRouting.available,
-}));
-
 vi.mock("@/lib/chat/chat.query", () => ({
   useUpdateConversation: () => ({ mutate: mutateConversation }),
 }));
+
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/integration-overrides", () => ({
   useModelProviderCatalog: () => ({
@@ -166,7 +164,9 @@ beforeEach(() => {
   readiness.splice(0);
   pools.splice(0);
   mutateConversation.mockReset();
-  autoRouting.available = false;
+  vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
+    data: undefined,
+  } as never);
 });
 
 describe("ChatSetupMenu", () => {
@@ -233,49 +233,6 @@ describe("ChatSetupMenu", () => {
 
     expect(props.onModelPoolChange).toHaveBeenCalledWith("pool-1");
     expect(props.close).toHaveBeenCalledOnce();
-  });
-
-  it("offers Auto only while auto routing is available", async () => {
-    const user = userEvent.setup();
-    renderMenu({ onAutoRoutedChange: vi.fn() });
-    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
-    expect(
-      screen.queryByRole("group", { name: "Auto routing" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("picks Auto at once and closes", async () => {
-    autoRouting.available = true;
-    const user = userEvent.setup();
-    const props = renderMenu({ onAutoRoutedChange: vi.fn() });
-
-    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
-    const group = screen.getByRole("group", { name: "Auto routing" });
-    await user.click(within(group).getByRole("option", { name: /Auto/ }));
-
-    expect(props.onAutoRoutedChange).toHaveBeenCalledWith(true);
-    expect(props.close).toHaveBeenCalledOnce();
-  });
-
-  it("shows Auto in place of the key, with no model tab, and leaves it for the same key", async () => {
-    autoRouting.available = true;
-    const user = userEvent.setup();
-    const props = renderMenu({
-      autoRouted: true,
-      onAutoRoutedChange: vi.fn(),
-    });
-
-    expect(screen.getByRole("tab", { name: "Auto routing" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(
-      screen.queryByRole("tab", { name: /^Model:/ }),
-    ).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("option", { name: /Org vLLM/ }));
-    expect(props.onAutoRoutedChange).toHaveBeenCalledWith(false);
-    expect(mutateConversation).not.toHaveBeenCalled();
   });
 
   it("shows a picked pool in place of the key, with no model tab", () => {
@@ -456,10 +413,48 @@ describe("ChatSetupMenu", () => {
       screen.getAllByRole("radiogroup", { name: "Reasoning effort" }),
     ).toHaveLength(1);
   });
+
+  it("names the trio auto routing runs the organization default on, for an agent on the default", () => {
+    const tier = (id: string, displayName: string) => ({
+      id,
+      provider: "vllm" as const,
+      displayName,
+    });
+    const tiers = {
+      fast: tier("model-fast", "Fast tier"),
+      normal: tier("model-plain", "Llama 3 8B"),
+      smart: tier("model-smart", "Smart tier"),
+    };
+    vi.mocked(useOrganizationDefaultModelSummary).mockReturnValue({
+      data: { model: tiers.normal, autoRouting: { active: true, tiers } },
+    } as never);
+    const defaultRow = () =>
+      screen.getByRole("option", { name: /Llama 3 8B/ }).nextElementSibling;
+
+    const { unmount } = render(<ChatSetupMenu {...menuProps()} />);
+    expect(defaultRow()).toHaveTextContent(/Fast tier.*Llama 3 8B.*Smart tier/);
+    unmount();
+
+    agents[0].modelId = "model-thinker";
+    try {
+      render(<ChatSetupMenu {...menuProps()} />);
+      expect(defaultRow()).not.toHaveTextContent(/Fast tier/);
+    } finally {
+      agents[0].modelId = undefined;
+    }
+  });
 });
 
 function renderMenu(overrides: Partial<ChatSetupMenuProps> = {}) {
-  const props: ChatSetupMenuProps = {
+  const props = menuProps(overrides);
+  render(<ChatSetupMenu {...props} />);
+  return props;
+}
+
+function menuProps(
+  overrides: Partial<ChatSetupMenuProps> = {},
+): ChatSetupMenuProps {
+  return {
     conversationId: "conversation-1",
     close: vi.fn(),
     agentId: "agent-mine",
@@ -481,6 +476,4 @@ function renderMenu(overrides: Partial<ChatSetupMenuProps> = {}) {
     notRecommendedForAgents: false,
     ...overrides,
   };
-  render(<ChatSetupMenu {...props} />);
-  return props;
 }

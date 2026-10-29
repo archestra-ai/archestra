@@ -40,6 +40,8 @@ export const AutoRoutingSettingsResponseSchema = z.object({
     normal: AutoRoutingTierModelSchema.nullable(),
     smart: AutoRoutingTierModelSchema.nullable(),
   }),
+  /** Agents on the organization default, which routing applies to. */
+  routedAgentCount: z.number().int().nonnegative(),
   generation: z.number().int(),
   plannedGeneration: z.number().int(),
   status: z.object({

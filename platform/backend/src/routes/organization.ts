@@ -22,6 +22,7 @@ import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
 import { getPermissionsForUserContext, isGlobalAdmin } from "@/auth/utils";
+import { describeOrganizationDefaultModel } from "@/auto-routing/organization-default";
 import { writeOrganizationTrio } from "@/auto-routing/settings";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -69,6 +70,7 @@ import {
   constructResponseSchema,
   KeywordRankingStatusSchema,
   type NetworkPolicy,
+  OrganizationDefaultModelSchema,
   type OrganizationRole,
   SelectOrganizationSchema,
   type TrustedImageRegistries,
@@ -105,6 +107,21 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send(organization);
     },
+  );
+
+  fastify.get(
+    "/api/organization/default-model",
+    {
+      schema: {
+        operationId: RouteId.GetOrganizationDefaultModel,
+        description:
+          "Get the model agents and chats on the organization default run on, and the tiers auto routing routes them across",
+        tags: ["Organization"],
+        response: constructResponseSchema(OrganizationDefaultModelSchema),
+      },
+    },
+    async ({ organizationId }, reply) =>
+      reply.send(await describeOrganizationDefaultModel(organizationId)),
   );
 
   fastify.patch(

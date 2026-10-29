@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 import config from "@/config";
+import AgentModel from "@/models/agent";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import { beforeEach, describe, expect, test } from "@/test";
 import { configureAutoRouting, setOrganizationTrio } from "@/test/auto-routing";
 import { ApiError } from "@/types";
-import { updateAutoRoutingSettings, writeOrganizationTrio } from "./settings";
+import {
+  getAutoRoutingSettings,
+  updateAutoRoutingSettings,
+  writeOrganizationTrio,
+} from "./settings";
 
 describe("updateAutoRoutingSettings", () => {
   beforeEach(() => {
@@ -34,6 +39,36 @@ describe("updateAutoRoutingSettings", () => {
     expect((await AutoRoutingSettingsModel.find(organizationId))?.enabled).toBe(
       false,
     );
+  });
+});
+
+describe("getAutoRoutingSettings", () => {
+  beforeEach(() => {
+    config.autoRouting.enabled = true;
+  });
+
+  test("counts the agents on the organization default, which routing applies to", async ({
+    makeOrganization,
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const [, normal] = await configureAutoRouting(organizationId);
+    const secret = await makeSecret({ secret: { apiKey: "sk-test" } });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id);
+    const agent = (overrides: Parameters<typeof makeAgent>[0] = {}) =>
+      makeAgent({ organizationId, agentType: "agent", ...overrides });
+    const count = async () =>
+      (await getAutoRoutingSettings(organizationId)).routedAgentCount;
+    const before = await count();
+    await agent();
+    await agent();
+    await agent({ llmApiKeyId: key.id, modelId: normal.id });
+    await AgentModel.delete((await agent()).id);
+    await makeAgent({ organizationId, agentType: "mcp_gateway" });
+
+    expect(await count()).toBe(before + 2);
   });
 });
 

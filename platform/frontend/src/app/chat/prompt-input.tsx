@@ -305,8 +305,6 @@ const PromptInputContent = ({
   onThinkingEffortChange,
   modelPoolId,
   onModelPoolChange,
-  autoRouted,
-  onAutoRoutedChange,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   subscriptionProvider,
@@ -1178,8 +1176,6 @@ const PromptInputContent = ({
           onThinkingEffortChange={onThinkingEffortChange}
           modelPoolId={modelPoolId}
           onModelPoolChange={onModelPoolChange}
-          autoRouted={autoRouted}
-          onAutoRoutedChange={onAutoRoutedChange}
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           subscriptionConnectRequired={subscriptionConnectRequired}
           subscriptionProvider={subscriptionProvider}
@@ -1472,8 +1468,6 @@ const ArchestraPromptInput = ({
   onThinkingEffortChange,
   modelPoolId,
   onModelPoolChange,
-  autoRouted,
-  onAutoRoutedChange,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   subscriptionProvider,
@@ -1601,8 +1595,6 @@ const ArchestraPromptInput = ({
           onThinkingEffortChange={onThinkingEffortChange}
           modelPoolId={modelPoolId}
           onModelPoolChange={onModelPoolChange}
-          autoRouted={autoRouted}
-          onAutoRoutedChange={onAutoRoutedChange}
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
           sandboxAvailable={sandboxAvailable}

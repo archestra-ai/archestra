@@ -31,6 +31,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import LlmThroughputModel from "@/models/llm-throughput";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RoutingDecisionModel from "@/models/routing-decision";
 import RoutingPlanModel from "@/models/routing-plan";
@@ -971,6 +972,46 @@ describe("Model Router auto model", () => {
           providerApiKeyId: org.providerApiKeyId,
         })),
       );
+    });
+
+    test("a limit on the routed tier's model applies to the call, not the anchor's", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+      const smartOnly = await LimitModel.create({
+        entityType: "organization",
+        entityId: org.organizationId,
+        limitType: "requests",
+        cleanupInterval: "calendar_day",
+        limitValue: 1,
+        model: [org.trio[2].modelId],
+      });
+      const spent = await LlmThroughputModel.admit({
+        entities: [{ entityType: "organization", entityId: org.organizationId }],
+        model: org.trio[2].modelId,
+      });
+      expect("reservation" in spent && spent.reservation).toBeTruthy();
+
+      const plain = await sendPlatformCall(org, { userId, autoRouted: false });
+      const routed = await sendPlatformCall(org, { userId, autoRouted: true });
+
+      expect(plain.statusCode, plain.body).toBe(200);
+      expect(routed.statusCode, routed.body).toBe(429);
+      expect(upstreamModels).toEqual([org.trio[1].modelId]);
+      expect(
+        (await LlmThroughputModel.usage([smartOnly])).get(smartOnly.id)
+          ?.currentUsage,
+      ).toBe(1);
     });
 
     test("a tier the client's wire cannot reach keeps the call on its anchor, undecided", async ({

@@ -1859,15 +1859,8 @@ export async function handleLLMProxy<
           ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
           : {}),
       });
-    // A member's own provider client, its own model id and, when it speaks
-    // another wire than the client's, a translator.
-    const reachMember = async (
-      inbound: PoolWire,
-      member: TierMember,
-      signal?: AbortSignal,
-      /** The member's key, not the request's, decides how the call is billed. */
-      options?: { ownsBilling: boolean },
-    ): Promise<MemberTransport> => {
+    // A member's key, its secret and the billing mode that key implies.
+    const memberCredential = async (member: TierMember) => {
       const row = await LlmProviderApiKeyModel.findById(
         member.providerApiKeyId,
       );
@@ -1875,18 +1868,31 @@ export async function handleLLMProxy<
       if (!row || !adapter) {
         throw new ApiError(500, "Model pool member key no longer exists");
       }
-      const sameWire = inboundPoolWire(adapter.interactionType) === inbound;
-      const memberApiKey = row.secretId
+      const apiKey = row.secretId
         ? await getSecretValueForLlmProviderApiKey(row.secretId)
         : undefined;
-      const memberBillingMode = options?.ownsBilling
-        ? utils.resolveInteractionBillingMode({
-            isSubscriptionCredential:
-              adapter.isSubscriptionCredential?.(memberApiKey) === true,
-            autodetectEnabled: config.llmCost.subscriptionAutodetect,
-          })
-        : undefined;
-      if (memberBillingMode) billingMode = memberBillingMode;
+      const memberBillingMode = utils.resolveInteractionBillingMode({
+        isSubscriptionCredential:
+          adapter.isSubscriptionCredential?.(apiKey) === true,
+        autodetectEnabled: config.llmCost.subscriptionAutodetect,
+      });
+      return { row, adapter, apiKey, billingMode: memberBillingMode };
+    };
+    // A member's own provider client, its own model id and, when it speaks
+    // another wire than the client's, a translator.
+    const reachMember = async (
+      inbound: PoolWire,
+      member: TierMember,
+      signal?: AbortSignal,
+      /** Set when the member's key, not the request's, decides billing. */
+      owned?: Awaited<ReturnType<typeof memberCredential>>,
+    ): Promise<MemberTransport> => {
+      const {
+        row,
+        adapter,
+        apiKey: memberApiKey,
+      } = owned ?? (await memberCredential(member));
+      const sameWire = inboundPoolWire(adapter.interactionType) === inbound;
       return memberTransport({
         inbound,
         provider: member.provider,
@@ -1894,7 +1900,7 @@ export async function handleLLMProxy<
         client: createUpstreamClient({
           adapter,
           apiKey: memberApiKey,
-          credentialBillingMode: memberBillingMode,
+          credentialBillingMode: owned?.billingMode,
           baseUrl: row.inferenceBaseUrl ?? row.baseUrl ?? adapter.getBaseUrl(),
           // Protocol headers (anthropic-beta, ...) only mean something to a
           // member on the client's own wire.
@@ -1908,14 +1914,23 @@ export async function handleLLMProxy<
         }),
       });
     };
+    // The routed tier's key is read now: its model, key and billing mode are
+    // what throughput admits and settles, not the anchor's.
+    const routedCredential = autoRoutedMember
+      ? await memberCredential(autoRoutedMember)
+      : undefined;
+    if (routedCredential) billingMode = routedCredential.billingMode;
     const autoRoutedTier: AutoRoutedTier | undefined =
-      autoRoutedMember && autoRouteWire
+      autoRoutedMember && autoRouteWire && routedCredential
         ? {
             member: autoRoutedMember,
             transport: () =>
-              reachMember(autoRouteWire, autoRoutedMember, undefined, {
-                ownsBilling: true,
-              }),
+              reachMember(
+                autoRouteWire,
+                autoRoutedMember,
+                undefined,
+                routedCredential,
+              ),
           }
         : undefined;
 
@@ -2126,8 +2141,8 @@ export async function handleLLMProxy<
       autoRouting: autoRoutingContext(request),
       throughput: new LlmThroughput({
         entities: [...uniqueBillingEntities.values()],
-        model: actualModel,
-        provider: providerName,
+        model: autoRoutedMember?.modelId ?? actualModel,
+        provider: autoRoutedMember?.provider ?? providerName,
         subscription: billingMode === "subscription",
         rules: requestContext.throughputRules,
       }),

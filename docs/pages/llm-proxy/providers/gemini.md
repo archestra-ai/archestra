@@ -2,7 +2,7 @@
 title: Google Gemini
 description: Connect Gemini using Google AI Studio or Vertex AI.
 order: 4
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -34,6 +34,19 @@ To use Vertex AI instead of Google AI Studio, configure these environment variab
 | [`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE) | No       | Path to service account JSON key file  |
 
 Vertex AI mode also gives Knowledge access to Vertex's multimodal embedding model (`multimodalembedding@001`) — see [Image Embedding](/docs/knowledge/settings#image-embedding).
+
+### Priority PayGo
+
+When Archestra uses Vertex AI, request Priority PayGo by sending these headers to its Gemini `generateContent` or `streamGenerateContent` endpoint:
+
+```http
+X-Vertex-AI-LLM-Shared-Request-Type: priority
+X-Vertex-AI-LLM-Request-Type: shared
+```
+
+Archestra forwards both values to Vertex. Omit `X-Vertex-AI-LLM-Request-Type: shared` to use available Provisioned Throughput before spilling over to Priority PayGo.
+
+Check `usageMetadata.trafficType` in the response or streamed usage chunk: `ON_DEMAND_PRIORITY` confirms priority service; `ON_DEMAND` means standard service. Eligibility, pricing, and possible downgrades follow [Vertex AI's Priority PayGo rules](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/priority-paygo).
 
 ### Missing Models and Nano Banana
 

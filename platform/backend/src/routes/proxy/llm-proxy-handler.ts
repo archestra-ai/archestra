@@ -1469,6 +1469,16 @@ export async function handleLLMProxy<
     // and only Anthropic has the anthropic-beta header in its type definition
     const headersToForward: Record<string, string> = {};
     const headersObj = headers as Record<string, unknown>;
+    if (providerName === "gemini") {
+      for (const name of [
+        "x-vertex-ai-llm-request-type",
+        "x-vertex-ai-llm-shared-request-type",
+      ]) {
+        if (typeof headersObj[name] === "string") {
+          headersToForward[name] = headersObj[name];
+        }
+      }
+    }
     if (typeof headersObj["anthropic-beta"] === "string") {
       const baseUrlOverridden = Boolean(perKeyBaseUrl || providerBaseUrlHeader);
       if (

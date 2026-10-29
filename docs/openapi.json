@@ -3749,6 +3749,10 @@
             "description": "Metadata on the generation requests' token usage",
             "type": "object",
             "properties": {
+              "trafficType": {
+                "description": "Traffic tier that served the request.",
+                "type": "string"
+              },
               "promptTokenCount": {
                 "type": "number"
               },
@@ -30900,6 +30904,10 @@
             "description": "Metadata on the generation requests' token usage",
             "type": "object",
             "properties": {
+              "trafficType": {
+                "description": "Traffic tier that served the request.",
+                "type": "string"
+              },
               "promptTokenCount": {
                 "type": "number"
               },
@@ -181135,6 +181143,22 @@
               "type": "string"
             },
             "in": "header",
+            "name": "x-vertex-ai-llm-request-type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-vertex-ai-llm-shared-request-type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "authorization",
             "required": false,
             "description": "OAuth access token as a Bearer credential."
@@ -181454,6 +181478,22 @@
               "type": "string"
             },
             "in": "header",
+            "name": "x-vertex-ai-llm-request-type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-vertex-ai-llm-shared-request-type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "authorization",
             "required": false,
             "description": "OAuth access token as a Bearer credential."
@@ -181767,6 +181807,22 @@
             "name": "model",
             "required": true,
             "description": "The model to use"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-vertex-ai-llm-request-type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-vertex-ai-llm-shared-request-type",
+            "required": false
           },
           {
             "schema": {
@@ -182096,6 +182152,22 @@
             "name": "model",
             "required": true,
             "description": "The model to use"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-vertex-ai-llm-request-type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-vertex-ai-llm-shared-request-type",
+            "required": false
           },
           {
             "schema": {

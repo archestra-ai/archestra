@@ -7,6 +7,8 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { getApiErrorType, throwOnApiError } from "@/lib/utils/api";
 
 const {
@@ -68,9 +70,10 @@ const autoRoutingKeys = {
     [...autoRoutingKeys.all, "diagnostics", budgetUsdPerDay] as const,
 };
 
-export function useAutoRoutingSettings() {
+export function useAutoRoutingSettings(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: autoRoutingKeys.settings(),
+    enabled: options?.enabled,
     queryFn: async () => {
       const { data, error } = await getAutoRoutingSettings();
       throwOnApiError(error, { toastOnError: false });
@@ -80,6 +83,27 @@ export function useAutoRoutingSettings() {
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",
   });
+}
+
+/**
+ * Whether agents and chats may pick "Auto": routing is deployed, switched on
+ * for the organization, and every tier of the organization trio is set. The
+ * settings are read with `llmProxy:read`; without it "Auto" is not offered.
+ */
+export function useAutoRoutingAvailable(): boolean {
+  const deployed = useFeature("autoRoutingEnabled") === true;
+  const { data: canRead = false } = useHasPermissions({ llmProxy: ["read"] });
+  const { data: settings } = useAutoRoutingSettings({
+    enabled: deployed && canRead,
+  });
+  return (
+    deployed &&
+    canRead &&
+    !!settings?.enabled &&
+    !!settings.tiers.fast &&
+    !!settings.tiers.normal &&
+    !!settings.tiers.smart
+  );
 }
 
 export function useAutoRoutingPlans() {

@@ -12,6 +12,7 @@ import {
   Key,
   LayersIcon,
   Plus,
+  Sparkles,
   TriangleAlert,
 } from "lucide-react";
 import Image from "next/image";
@@ -101,6 +102,8 @@ interface LlmProviderApiKeyDropdownProps {
   pools?: AvailableModelPool[];
   selectedPoolId?: string | null;
   onSelectPool?: (poolId: string) => void;
+  /** "Auto", offered before the pools while auto routing is on; it replaces the key. */
+  autoRouting?: { selected: boolean; onSelect: () => void };
 }
 
 export function LlmProviderApiKeyDropdown({
@@ -131,6 +134,7 @@ export function LlmProviderApiKeyDropdown({
   pools = [],
   selectedPoolId = null,
   onSelectPool,
+  autoRouting,
 }: LlmProviderApiKeyDropdownProps) {
   const selectableKeys = useMemo(
     () =>
@@ -167,11 +171,15 @@ export function LlmProviderApiKeyDropdown({
       }),
     [keysByProvider, currentProvider],
   );
-  const selectedPool = pools.find((pool) => pool.id === selectedPoolId);
-  const selectedKey = selectedPool
+  const autoSelected = autoRouting?.selected ?? false;
+  const selectedPool = autoSelected
     ? undefined
-    : availableKeys.find((key) => key.id === selectedApiKeyId);
-  const checkedKeyId = selectedPool ? null : selectedApiKeyId;
+    : pools.find((pool) => pool.id === selectedPoolId);
+  const selectedKey =
+    selectedPool || autoSelected
+      ? undefined
+      : availableKeys.find((key) => key.id === selectedApiKeyId);
+  const checkedKeyId = selectedPool || autoSelected ? null : selectedApiKeyId;
   const selectedKeyIsSubscription =
     selectedKey !== undefined && isPersonalSubscription(selectedKey);
   const fallbackTriggerLabel =
@@ -199,7 +207,12 @@ export function LlmProviderApiKeyDropdown({
             data-testid={triggerTestId}
           >
             <span className="flex min-w-0 items-center gap-1.5">
-              {selectedPool ? (
+              {autoSelected ? (
+                <>
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate font-medium">Auto</span>
+                </>
+              ) : selectedPool ? (
                 <>
                   <LayersIcon className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate font-medium">
@@ -314,6 +327,26 @@ export function LlmProviderApiKeyDropdown({
                 </CommandItem>
               </CommandGroup>
             )}
+            {autoRouting && (
+              <CommandGroup>
+                <CommandItem
+                  value="auto-routing"
+                  keywords={["auto", "auto routing"]}
+                  onSelect={autoRouting.onSelect}
+                  className="cursor-pointer"
+                >
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span>Auto</span>
+                    <span className="text-xs text-muted-foreground">
+                      Routes each session to the organization&apos;s fast,
+                      normal or smart model
+                    </span>
+                  </div>
+                  {autoSelected && <CheckIcon className="h-4 w-4 shrink-0" />}
+                </CommandItem>
+              </CommandGroup>
+            )}
             {onSelectPool && pools.length > 0 && (
               <CommandGroup
                 heading={
@@ -337,7 +370,7 @@ export function LlmProviderApiKeyDropdown({
                       <LayersIcon className="h-3.5 w-3.5 shrink-0" />
                       <span className="truncate">{pool.name}</span>
                     </div>
-                    {selectedPoolId === pool.id && (
+                    {selectedPool?.id === pool.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
                   </CommandItem>
@@ -435,7 +468,7 @@ export function LlmProviderApiKeyDropdown({
                         </span>
                       </div>
                     </div>
-                    {selectedApiKeyId === key.id && (
+                    {checkedKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
                   </CommandItem>

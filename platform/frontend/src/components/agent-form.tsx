@@ -114,11 +114,6 @@ import {
 } from "@/components/knowledge-sources-editor";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { McpConflictServerList } from "@/components/mcp-conflict-server-list";
-import {
-  EMPTY_MODEL_TIERS,
-  ModelTierPickers,
-  type ModelTierSelection,
-} from "@/components/model-tier-pickers";
 import { PageHeaderBanner } from "@/components/page-header-banner";
 import { SettingIcon } from "@/components/setting-icon";
 import {
@@ -200,6 +195,7 @@ import {
 } from "@/lib/agent-tools.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
+import { useAutoRoutingAvailable } from "@/lib/auto-routing.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -221,7 +217,6 @@ import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useAvailableModelPools } from "@/lib/model-pools.query";
-import { useOrganization } from "@/lib/organization.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { isReportedApiError } from "@/lib/utils/api";
 import { mergeById } from "@/lib/utils/merge-by-id";
@@ -1305,21 +1300,9 @@ export function AgentForm({
   // A model pool in place of the key and model; the server stores one of its
   // members as the key and model.
   const [modelPoolId, setModelPoolId] = useState<string | null>(null);
-  // Fast/smart models belong to the key they were picked for; any other key
-  // sees them as unset.
-  const [keyedModelTiers, setKeyedModelTiers] = useState<{
-    keyId: string | null;
-    tiers: ModelTierSelection;
-  }>({ keyId: null, tiers: EMPTY_MODEL_TIERS });
-  const modelTiers =
-    keyedModelTiers.keyId === llmApiKeyId
-      ? keyedModelTiers.tiers
-      : EMPTY_MODEL_TIERS;
-  const { data: organization } = useOrganization();
-  const organizationModelTiers: ModelTierSelection = {
-    fast: organization?.defaultFastModelId ?? null,
-    smart: organization?.defaultSmartModelId ?? null,
-  };
+  // "Auto" in place of the key and model, like a pool; the server stores the
+  // organization's default model as the key and model.
+  const [autoRouted, setAutoRouted] = useState(false);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
   // The tools editor's live selection (pending edits included), so the
@@ -1715,7 +1698,7 @@ export function AgentForm({
             llmApiKeyId: agentData.llmApiKeyId,
             llmModel: agentData.modelId,
             modelPoolId: agentData.modelPoolId ?? null,
-            modelTiers: { fast: null, smart: null },
+            autoRouted: agentData.autoRouted,
             identityProviderId: agentData.identityProviderId ?? undefined,
             environmentId: agentData.environmentId ?? undefined,
             knowledgeBaseIds: agentData.knowledgeBaseIds,
@@ -1748,7 +1731,7 @@ export function AgentForm({
             llmApiKeyId: null,
             llmModel: null,
             modelPoolId: null,
-            modelTiers: EMPTY_MODEL_TIERS,
+            autoRouted: false,
             identityProviderId: undefined,
             environmentId: undefined,
             knowledgeBaseIds: [],
@@ -1775,10 +1758,7 @@ export function AgentForm({
       setLlmApiKeyId(nextValues.llmApiKeyId);
       setLlmModel(nextValues.llmModel);
       setModelPoolId(nextValues.modelPoolId);
-      setKeyedModelTiers({
-        keyId: nextValues.llmApiKeyId,
-        tiers: nextValues.modelTiers,
-      });
+      setAutoRouted(nextValues.autoRouted);
       setAssignedTeamIds(nextValues.assignedTeamIds);
       setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
@@ -1930,6 +1910,8 @@ export function AgentForm({
     enabled: isInternalAgent && !runtime,
   });
   const agentModelPoolId = runtime ? null : modelPoolId;
+  const autoRoutingAvailable = useAutoRoutingAvailable();
+  const agentAutoRouted = !runtime && autoRouted;
   const agentModelPool = agentModelPoolId
     ? modelPools.find((pool) => pool.id === agentModelPoolId)
     : undefined;
@@ -2193,7 +2175,8 @@ export function AgentForm({
     !!persistedAgent &&
     ((llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
       (llmModel ?? null) !== (persistedAgent.modelId ?? null) ||
-      agentModelPoolId !== (persistedAgent.modelPoolId ?? null));
+      agentModelPoolId !== (persistedAgent.modelPoolId ?? null) ||
+      agentAutoRouted !== persistedAgent.autoRouted);
   const hasCompleteLlmSelection = Boolean(llmApiKeyId) === Boolean(llmModel);
   const needsClaudeProviderKey =
     !agent &&
@@ -2310,8 +2293,7 @@ export function AgentForm({
               llmApiKeyId: llmApiKeyId || null,
               modelId: llmModel || null,
               modelPoolId: agentModelPoolId,
-              fastModelId: modelTiers.fast,
-              smartModelId: modelTiers.smart,
+              autoRouted: agentAutoRouted,
             }),
           },
         });
@@ -2348,8 +2330,7 @@ export function AgentForm({
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
                   modelPoolId: agentModelPoolId,
-                  fastModelId: modelTiers.fast,
-                  smartModelId: modelTiers.smart,
+                  autoRouted: agentAutoRouted,
                 }),
               }),
             }),
@@ -2418,8 +2399,7 @@ export function AgentForm({
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
             modelPoolId: agentModelPoolId,
-            fastModelId: modelTiers.fast,
-            smartModelId: modelTiers.smart,
+            autoRouted: agentAutoRouted,
             suggestedPrompts: validSuggestedPrompts,
             ...(activationSkillPolicy && { activationSkillPolicy }),
           }),
@@ -2660,6 +2640,7 @@ export function AgentForm({
     llmApiKeyId,
     llmModel,
     agentModelPoolId,
+    agentAutoRouted,
     llmSelectionChanged,
     identityProviderId,
     environmentId,
@@ -2724,7 +2705,6 @@ export function AgentForm({
     channelAssignmentsDirty,
     isClaudeCodeRuntime,
     runtimeHasLocalChanges,
-    modelTiers,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2815,7 +2795,7 @@ export function AgentForm({
     llmApiKeyId,
     llmModel,
     modelPoolId,
-    modelTiers,
+    autoRouted,
     identityProviderId,
     environmentId,
     knowledgeBaseIds,
@@ -2925,6 +2905,7 @@ export function AgentForm({
         onSelectKey={(keyId) => {
           cancelPendingCreatedKeySelection();
           setModelPoolId(null);
+          setAutoRouted(false);
           handleLlmApiKeyChange(keyId);
           setApiKeySelectorOpen(false);
         }}
@@ -2934,12 +2915,29 @@ export function AgentForm({
           cancelPendingCreatedKeySelection();
           pendingModelAutoSelectionRef.current = null;
           setModelPoolId(poolId);
+          setAutoRouted(false);
           setLlmApiKeyId(null);
           setLlmModel(null);
-          setKeyedModelTiers({ keyId: null, tiers: EMPTY_MODEL_TIERS });
           lastAutoSelectedProviderRef.current = null;
           setApiKeySelectorOpen(false);
         }}
+        autoRouting={
+          !runtime && (autoRoutingAvailable || agentAutoRouted)
+            ? {
+                selected: agentAutoRouted,
+                onSelect: () => {
+                  cancelPendingCreatedKeySelection();
+                  pendingModelAutoSelectionRef.current = null;
+                  setAutoRouted(true);
+                  setModelPoolId(null);
+                  setLlmApiKeyId(null);
+                  setLlmModel(null);
+                  lastAutoSelectedProviderRef.current = null;
+                  setApiKeySelectorOpen(false);
+                },
+              }
+            : undefined
+        }
         onAddApiKey={onAddApiKey}
         currentProvider={currentLlmProvider ?? undefined}
         providerFilter={apiKeyProviderFilter}
@@ -2950,10 +2948,13 @@ export function AgentForm({
         allowOrganizationDefault={
           !!agent || !isClaudeCodeRuntime || usesClaudeSubscription
         }
-        organizationDefaultSelected={!llmApiKeyId && !agentModelPoolId}
+        organizationDefaultSelected={
+          !llmApiKeyId && !agentModelPoolId && !agentAutoRouted
+        }
         onSelectOrganizationDefault={() => {
           cancelPendingCreatedKeySelection();
           setModelPoolId(null);
+          setAutoRouted(false);
           setLlmApiKeyId(null);
           setLlmModel(null);
           lastAutoSelectedProviderRef.current = null;
@@ -3075,9 +3076,11 @@ export function AgentForm({
       ? `${requiredSubscription.label}. ${requiredSubscriptionSatisfied ? "Connected" : "Not connected yet"}`
       : needsClaudeProviderKey
         ? "Select a provider and Claude model"
-        : agentModelPoolId
-          ? `Model pool ${agentModelPool?.name ?? ""}`.trim()
-          : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
+        : agentAutoRouted
+          ? "Auto"
+          : agentModelPoolId
+            ? `Model pool ${agentModelPool?.name ?? ""}`.trim()
+            : `${selectedApiKey?.name ?? "Organization default key"}, ${selectedLlmModelRow?.displayName ?? (llmApiKeyId ? "Select a model" : (organizationDefaultModel.label ?? "default model"))}`;
   const modelBlock = (
     <div className="space-y-2">
       {(agent || !isInternalAgent || !agentRuntimeEnabled) && (
@@ -3118,6 +3121,7 @@ export function AgentForm({
           )}
           {!isClaudeCodeRuntime &&
             !agentModelPoolId &&
+            !agentAutoRouted &&
             (selectedApiKeyIsSubscription ? (
               <Alert>
                 <InfoIcon className="h-4 w-4" />
@@ -3176,28 +3180,12 @@ export function AgentForm({
               }
             />
           ) : (
-            <>
-              <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                <div className="min-w-0">{providerKeyControl}</div>
-                {!agentModelPoolId && (
-                  <div className="min-w-0">{modelControl}</div>
-                )}
-              </div>
-              {selectedApiKey && !agentModelPoolId && (
-                <div className="sm:max-w-sm">
-                  <ModelTierPickers
-                    apiKeyId={selectedApiKey.id}
-                    provider={selectedApiKey.provider}
-                    value={modelTiers}
-                    onChange={(tiers) =>
-                      setKeyedModelTiers({ keyId: selectedApiKey.id, tiers })
-                    }
-                    inherited={organizationModelTiers}
-                    disabled={readOnly}
-                  />
-                </div>
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <div className="min-w-0">{providerKeyControl}</div>
+              {!agentModelPoolId && !agentAutoRouted && (
+                <div className="min-w-0">{modelControl}</div>
               )}
-            </>
+            </div>
           )}
           {runtimeModelIncompatibility &&
             !needsClaudeProviderKey &&
@@ -4410,7 +4398,7 @@ type AgentFormFields = {
   llmApiKeyId: string | null;
   llmModel: string | null;
   modelPoolId: string | null;
-  modelTiers: ModelTierSelection;
+  autoRouted: boolean;
   identityProviderId: string | null | undefined;
   environmentId: string | null | undefined;
   knowledgeBaseIds: string[];

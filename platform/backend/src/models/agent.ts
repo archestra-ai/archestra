@@ -5015,6 +5015,8 @@ class AgentModel {
           // exclusions are copied can only leave a fail-closed (assigned-tools-
           // only) clone, never one wide open in Auto mode with no exclusions.
           accessAllTools: false,
+          // Keep subagents closed until their exclusions have been copied.
+          accessAllSubagents: false,
           // Skill policy rules are copied below. Start closed so a partial
           // clone can never transiently widen a Manual source to All.
           activationSkillMode: "manual",
@@ -5083,19 +5085,18 @@ class AgentModel {
         revision: activationSkillRules.length > 0 ? 1 : 0,
       });
 
-      // Now that the verbatim exclusions exist, flip an All-tools source's
-      // clone on. Skip the pre-fill: the copy above is the authoritative set,
-      // and an additive pre-fill would re-add built-ins the source had
-      // un-excluded.
-      if (sourceAgent.accessAllTools) {
+      // Restore both Auto modes together after copying exclusions, so version
+      // history never records an intermediate tools-only Auto policy.
+      // The copied tool exclusions are authoritative; skip additive pre-fill.
+      if (sourceAgent.accessAllTools || sourceAgent.accessAllSubagents) {
         await AgentModel.update(
           created.id,
-          { accessAllTools: true },
+          {
+            accessAllTools: sourceAgent.accessAllTools,
+            accessAllSubagents: sourceAgent.accessAllSubagents,
+          },
           { skipExclusionPrefill: true },
         );
-      }
-      if (sourceAgent.accessAllSubagents) {
-        await AgentModel.update(created.id, { accessAllSubagents: true });
       }
 
       // Fork last, once the copied assignments and exclusions are in place.

@@ -21,7 +21,8 @@ describe("user limit usage routes", () => {
 
   beforeEach(async ({ makeOrganization, makeAdmin, makeMember, makeAgent }) => {
     organizationId = (await makeOrganization()).id;
-    admin = await makeAdmin({ name: "Admin" });
+    // Also matches the reset test's "bea" search by email.
+    admin = await makeAdmin({ name: "Admin", email: "bea-admin@example.test" });
     await makeMember(admin.id, organizationId, { role: "admin" });
     agentId = (await makeAgent({ organizationId })).id;
 
@@ -360,10 +361,16 @@ describe("user limit usage routes", () => {
         userId: user.id,
       }),
     ).toBeNull();
-    const [row] = (await list("?search=bea")).data;
-    expect(row).toMatchObject({ spent: 0, status: "ok" });
-    expect(row.lastResetAt).not.toBeNull();
-    expect(row.lastResetByName).toBe("Admin");
+    const row = (await list("?search=bea")).data.find(
+      (result) => result.userId === user.id,
+    );
+    expect(row).toBeDefined();
+    expect(row).toMatchObject({
+      spent: 0,
+      status: "ok",
+      lastResetAt: expect.any(String),
+      lastResetByName: "Admin",
+    });
 
     const audit = await AuditLogModel.findPaginated({
       organizationId,

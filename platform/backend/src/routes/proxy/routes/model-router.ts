@@ -4,7 +4,6 @@ import {
   LLM_PROXY_OAUTH_SCOPE,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   providerDisplayNames,
-  providerHasEndpointLocalModels,
   RouteId,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -26,7 +25,6 @@ import {
   ModelPoolModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
-  TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
 import AgentTeamModel from "@/models/agent-team";
@@ -101,13 +99,13 @@ import {
 import { type ModelPoolCaller, mayUseModelPool } from "../model-pool-failover";
 import {
   type ModelRouterAuth,
-  type ModelRouterMappedProviderKey,
   type ModelRouterOAuthClientAuth,
   type ModelRouterUserOAuthAuth,
   modelRequiresResponses,
   modelRouterAuthenticatedUserId,
   nativeResponsesProvider,
   selectModelRouterCredential,
+  userProviderKeyMappings,
 } from "../model-router-access";
 import { assertModelRouterCacheControls } from "../model-router-cache-controls";
 import {
@@ -137,10 +135,6 @@ type EmbeddingsModelRouterProvider = LLMProvider<
   never,
   OpenAi.Types.ChatCompletionsHeaders
 >;
-
-type ModelRouterUserProviderKey = Awaited<
-  ReturnType<typeof LlmProviderApiKeyModel.getAvailableKeysForUser>
->[number];
 
 type OpenAiWireModelRouterProvider = {
   kind: "openai-wire";
@@ -1281,44 +1275,19 @@ async function getModelRouterUserOAuthAuth(params: {
     throw new ApiError(401, "OAuth user is no longer available.");
   }
 
-  const userTeamIds = await TeamModel.getUserTeamIds(params.accessToken.userId);
-  const availableKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
-    member.organizationId,
-    params.accessToken.userId,
-    userTeamIds,
-  );
-  if (availableKeys.length === 0) {
+  const providerApiKeys = await userProviderKeyMappings({
+    organizationId: member.organizationId,
+    userId: params.accessToken.userId,
+  });
+  if (providerApiKeys.length === 0) {
     throw new ApiError(
       401,
       "OAuth user has no provider API keys available for Model Router usage.",
     );
   }
-
   const oauthClient = await OAuthClientModel.findByClientId(
     params.accessToken.clientId,
   );
-  // A user reaches every endpoint of a self-hosted provider they can use; for
-  // a credential-style provider only their best-ranked key, as everywhere else.
-  const providerApiKeys: ModelRouterMappedProviderKey[] = [];
-  for (const apiKey of [...availableKeys].sort(
-    compareModelRouterUserProviderKeys,
-  )) {
-    if (
-      !providerHasEndpointLocalModels(apiKey.provider) &&
-      providerApiKeys.some((mapping) => mapping.provider === apiKey.provider)
-    ) {
-      continue;
-    }
-    providerApiKeys.push({
-      provider: apiKey.provider,
-      providerApiKeyId: apiKey.id,
-      providerApiKeyName: apiKey.name,
-      secretId: apiKey.secretId,
-      baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
-      scope: apiKey.scope,
-      userId: apiKey.userId,
-    });
-  }
 
   return {
     authMethod: "oauth_user",
@@ -1333,40 +1302,4 @@ async function getModelRouterUserOAuthAuth(params: {
         }
       : null,
   };
-}
-
-function compareModelRouterUserProviderKeys(
-  left: ModelRouterUserProviderKey,
-  right: ModelRouterUserProviderKey,
-) {
-  if (left.provider !== right.provider) {
-    return left.provider.localeCompare(right.provider);
-  }
-
-  const leftScopePriority = getModelRouterUserProviderKeyScopePriority(left);
-  const rightScopePriority = getModelRouterUserProviderKeyScopePriority(right);
-  if (leftScopePriority !== rightScopePriority) {
-    return leftScopePriority - rightScopePriority;
-  }
-
-  if (left.isPrimary !== right.isPrimary) {
-    return left.isPrimary ? -1 : 1;
-  }
-
-  return left.createdAt.getTime() - right.createdAt.getTime();
-}
-
-function getModelRouterUserProviderKeyScopePriority(
-  apiKey: ModelRouterUserProviderKey,
-) {
-  switch (apiKey.scope) {
-    case "personal":
-      return 0;
-    case "team":
-      return 1;
-    case "org":
-      return 2;
-    default:
-      return 3;
-  }
 }

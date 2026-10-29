@@ -3,6 +3,7 @@ import {
   isChatCompletionsOnlyRouterProvider,
   isModelRouterSupportedProvider,
   perUserCredentialLabel,
+  providerHasEndpointLocalModels,
   type ResourceVisibilityScope,
   requiresOpenAiResponsesApi,
   requiresResponsesApi,
@@ -10,6 +11,7 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
+import { LlmProviderApiKeyModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import { ApiError } from "@/types";
@@ -187,6 +189,43 @@ export async function selectModelRouterCredential(params: {
 }
 
 /**
+ * The provider keys `userId` may use, as Model Router mappings in preference
+ * order: every endpoint of a self-hosted provider, and for a credential-style
+ * provider only the best-ranked key, as everywhere else.
+ */
+export async function userProviderKeyMappings(params: {
+  organizationId: string;
+  userId: string;
+}): Promise<ModelRouterMappedProviderKey[]> {
+  const availableKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+    params.organizationId,
+    params.userId,
+    await TeamModel.getUserTeamIds(params.userId),
+  );
+  const providerApiKeys: ModelRouterMappedProviderKey[] = [];
+  for (const apiKey of [...availableKeys].sort(
+    compareModelRouterUserProviderKeys,
+  )) {
+    if (
+      !providerHasEndpointLocalModels(apiKey.provider) &&
+      providerApiKeys.some((mapping) => mapping.provider === apiKey.provider)
+    ) {
+      continue;
+    }
+    providerApiKeys.push({
+      provider: apiKey.provider,
+      providerApiKeyId: apiKey.id,
+      providerApiKeyName: apiKey.name,
+      secretId: apiKey.secretId,
+      baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
+      scope: apiKey.scope,
+      userId: apiKey.userId,
+    });
+  }
+  return providerApiKeys;
+}
+
+/**
  * Provider secrets read for one request, keyed by its auth: auto routing
  * checks every tier and forwarding selects the credential again, usually all
  * with the same secret.
@@ -274,5 +313,45 @@ export function modelRouterServesEndpoint(
         nativeResponsesProvider(resolution) !== null ||
         !isChatCompletionsOnlyRouterProvider(resolution.provider)
       );
+  }
+}
+
+type ModelRouterUserProviderKey = Awaited<
+  ReturnType<typeof LlmProviderApiKeyModel.getAvailableKeysForUser>
+>[number];
+
+function compareModelRouterUserProviderKeys(
+  left: ModelRouterUserProviderKey,
+  right: ModelRouterUserProviderKey,
+) {
+  if (left.provider !== right.provider) {
+    return left.provider.localeCompare(right.provider);
+  }
+
+  const leftScopePriority = getModelRouterUserProviderKeyScopePriority(left);
+  const rightScopePriority = getModelRouterUserProviderKeyScopePriority(right);
+  if (leftScopePriority !== rightScopePriority) {
+    return leftScopePriority - rightScopePriority;
+  }
+
+  if (left.isPrimary !== right.isPrimary) {
+    return left.isPrimary ? -1 : 1;
+  }
+
+  return left.createdAt.getTime() - right.createdAt.getTime();
+}
+
+function getModelRouterUserProviderKeyScopePriority(
+  apiKey: ModelRouterUserProviderKey,
+) {
+  switch (apiKey.scope) {
+    case "personal":
+      return 0;
+    case "team":
+      return 1;
+    case "org":
+      return 2;
+    default:
+      return 3;
   }
 }

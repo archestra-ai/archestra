@@ -13,6 +13,7 @@ import {
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
+import { userKeyForModel } from "@/auto-routing/eligibility";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
@@ -238,72 +239,81 @@ async function isParentKeyUsable(params: {
   );
 }
 
-/** The optional `fast` / `smart` halves of a trio (agent or organization). */
-export interface ModelTrioTiers {
+/** The optional `fast` / `smart` tiers of the organization's default trio. */
+interface ModelTrioTiers {
   fastModelId: string | null;
   smartModelId: string | null;
 }
 
-const TRIO_TIER_FIELD = {
-  fast: "fastModelId",
-  smart: "smartModelId",
-} as const satisfies Record<
-  Exclude<SubagentModelTier, "normal">,
-  keyof ModelTrioTiers
->;
+type ForkTier = Exclude<SubagentModelTier, "normal">;
+
+const ORGANIZATION_TIER_FIELD = {
+  fast: "defaultFastModelId",
+  smart: "defaultSmartModelId",
+} as const satisfies Record<ForkTier, string>;
 
 /**
- * The model a forked subagent runs on for `tier`: the agent's trio, then the
- * organization's, then the provider's default trio — whichever the parent's
- * credential serves first. A fork never reaches a credential its parent was not
- * already using: candidates are the parent key's models, or for a per-user
- * provider (Copilot) that provider's catalog, re-resolved per user at request
- * time. Falls back to the parent's own model.
+ * The model and key a forked subagent runs on for `tier`: the organization
+ * trio's model for that tier, else the provider's default tier model on the
+ * parent's key. The trio's model runs on the parent's key when it serves the
+ * model, else on a key the user may use for it, chosen as the Model Router
+ * chooses one for the user. Falls back to the parent's own selection.
  */
 export async function resolveSubagentTierSelection(params: {
   tier: SubagentModelTier;
   parent: ConversationLlmSelection;
-  agentTrio: ModelTrioTiers;
   organizationId: string;
+  userId: string;
 }): Promise<ConversationLlmSelection> {
   const { tier, parent } = params;
   if (tier === "normal" || !parent.modelId) return parent;
-  const tierModel = (await findTierModels(params))[tier];
-  return tierModel
-    ? {
-        modelId: tierModel.id,
-        chatApiKeyId: parent.chatApiKeyId,
-        selectedModel: tierModel.modelId,
-        selectedProvider: tierModel.provider,
-      }
-    : parent;
+  return (await findTierSelection({ ...params, tier })) ?? parent;
 }
 
 /**
  * The tiers a fork of `parent` can run on: every tier that resolves to a model
- * its key serves. A tier that lands on the parent's own model is still offered —
- * what counts as fast or smart is the trio's owner's call.
+ * the user can reach. A tier that lands on the parent's own model is still
+ * offered — what counts as fast or smart is the organization's call.
  */
 export async function availableSubagentTiers(params: {
   parent: ConversationLlmSelection;
-  agentTrio: ModelTrioTiers;
   organizationId: string;
-}): Promise<Exclude<SubagentModelTier, "normal">[]> {
-  const { parent } = params;
-  if (!parent.modelId) return [];
-  const tierModels = await findTierModels(params);
-  return (["fast", "smart"] as const).filter(
-    (tier) => tierModels[tier] !== undefined,
+  userId: string;
+}): Promise<ForkTier[]> {
+  if (!params.parent.modelId) return [];
+  const tiers = await Promise.all(
+    (["fast", "smart"] as const).map(async (tier) =>
+      (await findTierSelection({ ...params, tier })) ? [tier] : [],
+    ),
   );
+  return tiers.flat();
 }
 
-async function findTierModels(params: {
+/** Each set trio tier must be a tool-capable chat model, on any provider. */
+export async function assertModelTrioTiers(
+  trio: ModelTrioTiers,
+): Promise<void> {
+  const ids = [trio.fastModelId, trio.smartModelId].filter((id): id is string =>
+    Boolean(id),
+  );
+  if (ids.length === 0) return;
+  const models = await ModelModel.findByIds(ids);
+  for (const id of ids) {
+    const model = models.find((m) => m.id === id);
+    if (!model || !isSubagentTierCandidate(model)) {
+      throw new ApiError(400, `Model ${id} is not a tool-capable chat model`);
+    }
+  }
+}
+
+async function findTierSelection(params: {
+  tier: ForkTier;
   parent: ConversationLlmSelection;
-  agentTrio: ModelTrioTiers;
   organizationId: string;
-}): Promise<Record<Exclude<SubagentModelTier, "normal">, Model | undefined>> {
-  const { parent } = params;
-  const [organization, keyModels] = await Promise.all([
+  userId: string;
+}): Promise<ConversationLlmSelection | undefined> {
+  const { tier, parent } = params;
+  const [organization, parentKeyModels] = await Promise.all([
     OrganizationModel.getById(params.organizationId),
     parent.chatApiKeyId
       ? LlmProviderApiKeyModelLinkModel.getModelsForApiKey(parent.chatApiKeyId)
@@ -311,27 +321,31 @@ async function findTierModels(params: {
         ? ModelModel.findAll({ provider: parent.selectedProvider })
         : Promise.resolve([]),
   ]);
-  const candidates = keyModels.filter(isSubagentTierCandidate);
-  const orgTrio = organization ? toTrioTiers(organization) : null;
-  const pick = (tier: Exclude<SubagentModelTier, "normal">) => {
-    const field = TRIO_TIER_FIELD[tier];
-    return (
-      [params.agentTrio[field], orgTrio?.[field]]
-        .map((id) => candidates.find((model) => model.id === id))
-        .find(Boolean) ??
-      findTierDefault(candidates, parent.selectedProvider, tier)
-    );
-  };
-  return { fast: pick("fast"), smart: pick("smart") };
+  const trioModelId = organization?.[ORGANIZATION_TIER_FIELD[tier]] ?? null;
+  const trioModel = trioModelId ? await ModelModel.findById(trioModelId) : null;
+  if (trioModel && isSubagentTierCandidate(trioModel)) {
+    const key = parentKeyModels.some((m) => m.id === trioModel.id)
+      ? { kind: "found" as const, apiKeyId: parent.chatApiKeyId }
+      : await userKeyForModel({ ...params, model: trioModel });
+    if (key.kind === "found") return toSelection(trioModel, key.apiKeyId);
+  }
+  const fallback = findTierDefault(
+    parentKeyModels.filter(isSubagentTierCandidate),
+    parent.selectedProvider,
+    tier,
+  );
+  return fallback ? toSelection(fallback, parent.chatApiKeyId) : undefined;
 }
 
-function toTrioTiers(organization: {
-  defaultFastModelId: string | null;
-  defaultSmartModelId: string | null;
-}): ModelTrioTiers {
+function toSelection(
+  model: Model,
+  chatApiKeyId: string | null,
+): ConversationLlmSelection {
   return {
-    fastModelId: organization.defaultFastModelId,
-    smartModelId: organization.defaultSmartModelId,
+    modelId: model.id,
+    chatApiKeyId,
+    selectedModel: model.modelId,
+    selectedProvider: model.provider,
   };
 }
 
@@ -340,41 +354,6 @@ function isSubagentTierCandidate(model: Model): boolean {
   return (
     ModelModel.supportsTextChat(model) && model.supportsToolCalling !== false
   );
-}
-
-/**
- * A trio's `fast` / `smart` tiers run on its key, so each must be a tool-capable
- * chat model linked to that key.
- */
-export async function assertModelTrioTiers(
-  params: {
-    apiKeyId: string | null;
-  } & ModelTrioTiers,
-): Promise<void> {
-  const tierIds = [params.fastModelId, params.smartModelId].filter(
-    (id): id is string => Boolean(id),
-  );
-  if (tierIds.length === 0) return;
-  if (!params.apiKeyId) {
-    throw new ApiError(400, "Fast and smart models require an API key");
-  }
-  // A per-user provider's tiers come from its catalog, as at fork time.
-  const key = await LlmProviderApiKeyModel.findById(params.apiKeyId);
-  const keyModels =
-    key && providerRequiresPerUserCredential(key.provider)
-      ? await ModelModel.findAll({ provider: key.provider })
-      : await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(
-          params.apiKeyId,
-        );
-  for (const id of tierIds) {
-    const model = keyModels.find((m) => m.id === id);
-    if (!model || !isSubagentTierCandidate(model)) {
-      throw new ApiError(
-        400,
-        `Model ${id} is not a tool-capable chat model on the selected API key`,
-      );
-    }
-  }
 }
 
 /**

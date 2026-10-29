@@ -41,7 +41,7 @@ import {
   verifyChildTrajectoryReceipt,
 } from "@/openappa/child-trajectory-receipt";
 import { recordOpenAppaClientFailure } from "@/openappa/client-failure-report";
-import { normalizeCommandExecutionArguments } from "@/openappa/command-normalization";
+import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
   delegationEnabled,
@@ -820,8 +820,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // the user's answer, and then asks again in prose.
       const nativeQuestion =
         binding.adapter?.nativeQuestion &&
-        binding.adapter.nativeQuestion.isAvailable?.(binding.requestHeaders) !==
-          false &&
+        binding.adapter.nativeQuestion.isAvailable?.(
+          binding.requestHeaders,
+          binding.requestBody,
+        ) !== false &&
         declaresNativeQuestion(binding, binding.adapter.nativeQuestion.toolName)
           ? binding.adapter.nativeQuestion.toolName
           : undefined;
@@ -989,7 +991,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           if (!entry.reviewedArguments) return true;
           try {
             return isDeepStrictEqual(
-              normalizeCommandExecutionArguments(
+              normalizeToolArgumentsForPolicy(
                 target.toolCallName,
                 JSON.parse(target.toolCallArgs),
               ),
@@ -2071,7 +2073,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (
       !native?.fromAskUser ||
       !isSpecialToolMember(binding, call, "askUser") ||
-      native.isAvailable?.(binding.requestHeaders) === false ||
+      native.isAvailable?.(binding.requestHeaders, binding.requestBody) ===
+        false ||
       !declaresNativeQuestion(binding, native.toolName) ||
       archestraMcpBranding.getToolShortName(
         this.canonicalize(binding, call),
@@ -5717,7 +5720,8 @@ function inspectsNatively(
   const native = binding.adapter?.nativeQuestion;
   return (
     !!native?.fromAskUser &&
-    native.isAvailable?.(binding.requestHeaders) !== false &&
+    native.isAvailable?.(binding.requestHeaders, binding.requestBody) !==
+      false &&
     declaresNativeQuestion(binding, native.toolName) &&
     ((isClaudeCodeFamilyAdapter(binding.adapter?.id) &&
       canShowToolCallReview) ||
@@ -6330,10 +6334,14 @@ function hitlDecisionGuidance(
       "The user already answered, so do not ask about the same plan again.",
     ].join(" ");
   }
+  // A denial is final for that call in this session (OpenAPPA records it on
+  // the call): a model that asked its own "approve?" question and ran the
+  // denied plan again only got the denial back.
   return [
     "The user did not approve the pending OpenAPPA review.",
     "Do not call execute_remedy_plan for it, and do not retry the blocked call.",
-    "Tell the user briefly that the action stays blocked, and stop that action.",
+    "The denial holds for the rest of this session, also when the user asks for the same call again: do not propose it again, do not change its arguments to get another review, and do not ask the user to approve it yourself.",
+    "Tell the user briefly that the action stays blocked and that a new session can ask for it again, and stop that action.",
   ].join(" ");
 }
 
@@ -6709,7 +6717,8 @@ function toolInputOf(
 /**
  * Appends trajectory stamps to tool-call IDs for supported wire families.
  * Stamped IDs identify source session lineage in future turns.
- * Skips sessions that lack caller scoping, or models that truncate tool-call IDs.
+ * Skips sessions that lack caller scoping, models that truncate tool-call IDs,
+ * and stamps longer than the client's tool-call ID limit.
  */
 function trajectoryStamper(
   binding: AppaPluginBinding,
@@ -6733,9 +6742,9 @@ function trajectoryStamper(
     shortensToolCallIds(context)
   )
     return undefined;
-  return (call) => ({
-    ...call,
-    wireId: stampToolCallId({
+  const limit = binding.adapter?.maxToolCallIdLength;
+  return (call) => {
+    const wireId = stampToolCallId({
       // Compose transport stamps instead of replacing inner wire identities,
       // such as the signed native-question ID used to claim a HITL answer.
       callId: call.wireId ?? call.id,
@@ -6743,8 +6752,12 @@ function trajectoryStamper(
       organizationId: session.organization_id,
       callerId,
       secret,
-    }),
-  });
+    });
+    // A client that cuts longer IDs would send back one the proxy cannot match.
+    return limit !== undefined && wireId.length > limit
+      ? call
+      : { ...call, wireId };
+  };
 }
 
 /**

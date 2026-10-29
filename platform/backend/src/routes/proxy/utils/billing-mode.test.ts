@@ -209,6 +209,12 @@ describe("kimi-code isSubscriptionCredential (credential format)", () => {
     expect(isSubscription("sk-kimi-abc123")).toBe(true);
   });
 
+  test("a Kimi Code sign-in token draws on the plan => subscription", () => {
+    expect(isSubscription("Bearer eyJhbGciOiJIUzI1NiJ9.e30.signature")).toBe(
+      true,
+    );
+  });
+
   test("any other key format stays metered", () => {
     expect(isSubscription("Bearer sk-abc123")).toBe(false);
     expect(isSubscription(undefined)).toBe(false);

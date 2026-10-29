@@ -89,10 +89,15 @@ import {
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { type Agent, ApiError } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
-import { anthropicAdapterFactory, openaiAdapterFactory } from "./adapters";
+import {
+  anthropicAdapterFactory,
+  kimiCodeAdapterFactory,
+  openaiAdapterFactory,
+} from "./adapters";
 import { createOpenAiCodexClient } from "./adapters/openai-codex-client";
 import { openAiResponsesAdapterFactory } from "./adapters/openai-responses";
 import anthropicProxyRoutes from "./routes/anthropic";
+import kimiCodeProxyRoutes from "./routes/kimi-code";
 import openAiProxyRoutes from "./routes/openai";
 
 const native = vi.hoisted(() => ({
@@ -9950,6 +9955,222 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         expect(forwarded()).not.toContain("Push the release token now");
         expect(forwarded()).toContain("[appa] Message withheld");
       });
+    });
+  });
+
+  describe("Kimi Code", () => {
+    const secret = "route-test-kimi-delegation-secret-0123456789";
+    const rootSession = "session_6b1c0f0e-2d8a-4b44-9d41-0c0d7a6f3e21";
+    const spawnPrompt = "Find out why the build fails.";
+    const gitContext =
+      "<git-context>\nWorking directory: /work/app\nBranch: main\nRecent commits:\n  abc1234 Fix the build\n</git-context>\n\n";
+    let providerCalls: Array<{ id: string; name: string; args: object }>;
+    let upstreamHeaders: Array<Record<string, string> | undefined>;
+
+    beforeEach(async () => {
+      config.openappa.offerSigningSecret = secret;
+      await ModelModel.upsert({
+        externalId: "kimi-code/k3.1-pro",
+        provider: "kimi-code",
+        modelId: "k3.1-pro",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      await app.register(kimiCodeProxyRoutes);
+      providerCalls = [];
+      upstreamHeaders = [];
+      vi.spyOn(kimiCodeAdapterFactory, "createClient").mockImplementation(
+        (_apiKey, options) => {
+          upstreamHeaders.push(options.defaultHeaders);
+          return {
+            chat: {
+              completions: {
+                create: async (params: unknown) => {
+                  providerRequests.push(structuredClone(params));
+                  const calls = providerCalls.map((call) => ({
+                    id: call.id,
+                    type: "function",
+                    function: {
+                      name: call.name,
+                      arguments: JSON.stringify(call.args),
+                    },
+                  }));
+                  return {
+                    id: "chatcmpl_kimi",
+                    object: "chat.completion",
+                    created: 1,
+                    model: "k3.1-pro",
+                    choices: [
+                      {
+                        index: 0,
+                        message: calls.length
+                          ? {
+                              role: "assistant",
+                              content: null,
+                              tool_calls: calls,
+                            }
+                          : { role: "assistant", content: "Done." },
+                        finish_reason: calls.length ? "tool_calls" : "stop",
+                        logprobs: null,
+                      },
+                    ],
+                    usage: {
+                      prompt_tokens: 10,
+                      completion_tokens: 5,
+                      total_tokens: 15,
+                    },
+                  };
+                },
+              },
+            },
+          } as never;
+        },
+      );
+    });
+
+    // Kimi Code 2.3.3 sends its session id as the prompt cache key on every
+    // request, its subagents' included, and only its User-Agent names it.
+    const send = (messages: unknown[]) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/kimi-code/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer sk-kimi-test",
+          "x-archestra-virtual-key": platformKey,
+          "user-agent": "kimi-code-cli/2.3.3",
+          "x-msh-platform": "kimi_code_cli",
+        },
+        payload: {
+          model: "k3.1-pro",
+          stream: false,
+          prompt_cache_key: rootSession,
+          messages,
+          tools: [
+            ...["Agent", "AgentSwarm", "Bash", "AskUserQuestion"].map(
+              (name) => ({
+                type: "function",
+                function: {
+                  name,
+                  parameters: { type: "object", properties: {} },
+                },
+              }),
+            ),
+            // Kimi Code cuts each run of underscores to one; the attestation
+            // in the description still names the gateway tool.
+            ...["get_remedy_plans", "execute_remedy_plan"].map((tool) => ({
+              type: "function",
+              function: {
+                name: `mcp__archestra__archestra_${tool}`,
+                description: attestToolDescription({
+                  organizationId: agent.organizationId,
+                  gatewayId: agent.id,
+                  advertisedName: `archestra__${tool}`,
+                  kind: "b",
+                  description: tool,
+                }),
+                parameters: { type: "object", properties: {} },
+              },
+            })),
+          ],
+        },
+      });
+    const released = (body: string) =>
+      (JSON.parse(body).choices[0].message.tool_calls ?? []) as Array<{
+        id: string;
+        function: { name: string; arguments: string };
+      }>;
+
+    test("relays Kimi Code's own client headers to the Kimi Code API", async () => {
+      const response = await send([{ role: "user", content: "Hello" }]);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamHeaders.at(-1)).toEqual({
+        "user-agent": "kimi-code-cli/2.3.3",
+        "x-msh-platform": "kimi_code_cli",
+      });
+    });
+
+    test("binds a subagent through its marker after Kimi's git context, and keeps tool-call IDs unstamped", async () => {
+      providerCalls = [
+        {
+          id: "Agent:0",
+          name: "Agent",
+          args: { description: "Check the build", prompt: spawnPrompt },
+        },
+      ];
+      const root = await send([{ role: "user", content: "Split the work" }]);
+      expect(root.statusCode, root.body).toBe(200);
+      const [spawn] = released(root.body);
+      // A stamp is longer than the 64 characters Kimi Code keeps.
+      expect(spawn.id).toBe("Agent:0");
+      const prompt = JSON.parse(spawn.function.arguments).prompt as string;
+      expect(prompt).toMatch(
+        new RegExp(
+          `^${spawnPrompt.replace(".", "\\.")}\n\n\\[appa\\] delegated trajectory \\S+ — child of ${rootSession}\\.$`,
+        ),
+      );
+      expect(
+        events.some(
+          (event) =>
+            event.event === "tool_call" &&
+            event.tool === "Agent" &&
+            String(event.session_id).endsWith(`|${rootSession}`),
+        ),
+      ).toBe(true);
+
+      events.length = 0;
+      providerRequests.length = 0;
+      providerCalls = [
+        { id: "Bash:0", name: "Bash", args: { command: "npm run build" } },
+      ];
+      const child = await send([
+        { role: "system", content: "You are now running as a subagent." },
+        { role: "user", content: `${gitContext}${prompt}` },
+      ]);
+      expect(child.statusCode, child.body).toBe(200);
+      expect(
+        events.some(
+          (event) =>
+            event.event === "tool_call" &&
+            event.tool === "Bash" &&
+            String(event.session_id).endsWith(`|${rootSession}:Agent:0`),
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(providerRequests)).not.toContain(
+        "delegated trajectory",
+      );
+    });
+
+    test.each([
+      [
+        "Agent",
+        { description: "d", prompt: spawnPrompt, run_in_background: true },
+        "run_in_background",
+      ],
+      [
+        "Agent",
+        { description: "d", prompt: spawnPrompt, resume: "agent-0" },
+        "resume",
+      ],
+      [
+        "AgentSwarm",
+        { description: "d", prompt_template: "Check {{item}}", items: ["a"] },
+        "items",
+      ],
+    ] as const)("refuses a %s spawn a marker cannot bind (%j)", async (name, args, field) => {
+      providerCalls = [{ id: `${name}:0`, name, args }];
+      const response = await send([
+        { role: "user", content: "Split the work" },
+      ]);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(released(response.body)).toEqual([]);
+      expect(response.body).toContain(`does not accept`);
+      expect(response.body).toContain(field);
+      expect(
+        events.some(
+          (event) => event.event === "tool_call" && event.tool === name,
+        ),
+      ).toBe(false);
     });
   });
 

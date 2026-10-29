@@ -9,6 +9,7 @@ import {
   detectCodexClientId,
   detectCursorClientId,
   detectKiloClientId,
+  detectKimiCodeClientId,
   detectOpenCodeClientId,
 } from "./client-app";
 import { getExternalAgentId } from "./external-agent-id";
@@ -42,7 +43,7 @@ export interface AutoRoutingSessionMetadata extends SessionInfo {
  * Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
  * X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client app
  * (Claude from the body; Codex from client_metadata or its originator/User-Agent;
- * OpenCode, Kilo Code and Cursor from their identity headers).
+ * OpenCode, Kilo Code, Kimi Code and Cursor from their identity headers).
  */
 export function detectClientApp(
   headers: Headers,
@@ -54,6 +55,7 @@ export function detectClientApp(
     detectCodexClientId(headers, body) ??
     detectOpenCodeClientId(headers) ??
     detectKiloClientId(headers) ??
+    detectKimiCodeClientId(headers) ??
     detectCursorClientId(headers)
   );
 }

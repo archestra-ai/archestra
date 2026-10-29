@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type ClientMark, PI_MARK } from "../client-mark";
+import { type ClientMark, KIMI_MARK, PI_MARK } from "../client-mark";
 import type { SupportedProvider } from "../model-constants";
 import {
   OPENCODE_FAMILY_CLIENTS,
@@ -103,6 +103,13 @@ export const OPENCODE_CLIENT_ID = "opencode";
 export const KILO_CLIENT_ID = "kilo";
 
 /**
+ * `external_agent_id` value for Moonshot's Kimi Code CLI. Its connection setup
+ * sends it in a provider request header; the Kimi Code User-Agent
+ * ({@link isKimiCodeUserAgent}) is the fallback.
+ */
+export const KIMI_CODE_CLIENT_ID = "kimi-code";
+
+/**
  * First-party Codex originators. Codex stamps its client identity on every
  * request in the `originator` header (default `codex_cli_rs`, overridable via
  * `CODEX_INTERNAL_ORIGINATOR_OVERRIDE`) and repeats it as the leading token of
@@ -183,6 +190,19 @@ export function isOpenCodeUserAgent(
  */
 export function isKiloUserAgent(userAgent: string | null | undefined): boolean {
   return openCodeFamilyClientForUserAgent(userAgent)?.id === "kilo";
+}
+
+/**
+ * Whether a User-Agent denotes the Kimi Code CLI. Kimi Code sends
+ * `kimi-code-cli/<version>` on every model request, whatever the provider type.
+ */
+export function isKimiCodeUserAgent(
+  userAgent: string | null | undefined,
+): boolean {
+  return (
+    !!userAgent &&
+    userAgent.split("/", 1)[0]?.trim().toLowerCase() === "kimi-code-cli"
+  );
 }
 
 /**
@@ -365,6 +385,7 @@ export const ClientFilterSchema = z.enum([
   OPENCODE_CLIENT_FILTER,
   KILO_CLIENT_FILTER,
   "pi",
+  KIMI_CODE_CLIENT_ID,
 ]);
 
 export type ClientFilter = z.infer<typeof ClientFilterSchema>;
@@ -455,6 +476,14 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
     mark: PI_MARK,
     agentIds: ["pi"],
     isClientAgentId: (id) => id?.trim().toLowerCase() === "pi",
+  },
+  {
+    filter: KIMI_CODE_CLIENT_ID,
+    label: "Kimi Code",
+    provider: "kimi-code",
+    mark: KIMI_MARK,
+    agentIds: [KIMI_CODE_CLIENT_ID],
+    isClientAgentId: (id) => id?.trim().toLowerCase() === KIMI_CODE_CLIENT_ID,
   },
   {
     filter: COPILOT_CLI_CLIENT_FILTER,

@@ -36,6 +36,46 @@ export function openCodeQuestionRuling(
 }
 
 /**
+ * Kimi Code answers its question tool with JSON keyed by the question it
+ * showed: `{"answers":{"<question>":"<label>"}}`. A dismissed question has no
+ * answers and a note. Any other shape is "unrecognized", never a guess.
+ */
+export function kimiCodeQuestionRuling(
+  result: NativeQuestionResult,
+  question: string,
+): NativeQuestionReading {
+  if (result.isError) return "unavailable";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(result.content);
+  } catch {
+    return "unrecognized";
+  }
+  const record =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  const answers = record?.answers;
+  if (!answers || typeof answers !== "object" || Array.isArray(answers))
+    return "unrecognized";
+  const entries = Object.entries(answers);
+  if (entries.length === 0)
+    return record?.note === KIMI_CODE_DISMISSED_NOTE
+      ? "declined"
+      : "unrecognized";
+  if (entries.length !== 1 || entries[0][0] !== question) return "unrecognized";
+  const answer = entries[0][1];
+  return answer === "Approve"
+    ? "approve"
+    : answer === "Deny"
+      ? "deny"
+      : "unrecognized";
+}
+
+const KIMI_CODE_DISMISSED_NOTE =
+  "User dismissed the question without answering.";
+
+/**
  * Reads which of the given option labels the answer selects, for a question
  * the platform wrote. Returns the selected label, a known terminal no-answer,
  * or "unrecognized" for a wording the adapter does not know. An unrecognized

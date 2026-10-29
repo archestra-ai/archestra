@@ -3,6 +3,7 @@ import {
   CLAUDE_DESKTOP_CLIENT_ID,
   type ClientMark,
   EXTERNAL_AGENT_ID_HEADER,
+  KIMI_MARK,
   OPENCODE_FAMILY,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   type OpenCodeFamilyDescriptor,
@@ -20,7 +21,6 @@ import {
   COPILOT_MARK,
   GROK_MARK,
   HERMES_AGENT_MARK,
-  KIMI_MARK,
   OPENAI_MARK,
   OPENCLAW_MARK,
 } from "@/components/client-marks";

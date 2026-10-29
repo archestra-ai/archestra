@@ -300,6 +300,13 @@ export const STARTUP_GUARD_INSTALL = {
     markerStart: "# >>> archestra codex guard >>>",
     markerEnd: "# <<< archestra codex guard <<<",
   },
+  "kimi-code": {
+    scriptRelpath: ".archestra/kimi-code-startup-guard.sh",
+    psScriptRelpath: ".archestra/kimi-code-startup-guard.ps1",
+    skipRelpath: ".archestra/kimi-code-startup-guard.skip",
+    markerStart: "# >>> archestra kimi-code guard >>>",
+    markerEnd: "# <<< archestra kimi-code guard <<<",
+  },
   "copilot-cli": {
     scriptRelpath: ".archestra/copilot-startup-guard.sh",
     psScriptRelpath: ".archestra/copilot-startup-guard.ps1",

@@ -121,7 +121,8 @@ export type AppaClientAdapter = {
    */
   nativeQuestion?: {
     toolName: string;
-    isAvailable?(headers: IncomingHttpHeaders): boolean;
+    /** False when the client would refuse the tool, from its headers or request. */
+    isAvailable?(headers: IncomingHttpHeaders, requestBody?: unknown): boolean;
     supportsMultiple?: boolean;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
     /**
@@ -140,6 +141,11 @@ export type AppaClientAdapter = {
      */
     formFallback?: boolean;
   };
+  /**
+   * The longest tool-call ID the client sends back unchanged. A client that
+   * cuts longer IDs gets no trajectory stamps, which are longer than this.
+   */
+  readonly maxToolCallIdLength?: number;
   /**
    * The client's own tool that waits for MCP servers which are still
    * connecting. The client declares it when it sends requests before its tool

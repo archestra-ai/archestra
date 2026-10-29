@@ -20,10 +20,15 @@ export const kimiCodeAdapterFactory = createOpenAiCompatibleAdapterFactory({
   provider: "kimi-code",
   interactionType: "kimi-code:chatCompletions",
   getBaseUrl: () => config.llm["kimi-code"].baseUrl,
-  // A Kimi Code key draws on the membership plan's quota, not per-token
-  // billing; the key format says so.
-  isSubscriptionCredential: (apiKey) =>
-    stripBearerTransportPrefix(apiKey)?.startsWith("sk-kimi-") === true,
+  // A Kimi Code key (sk-kimi-…) or a Kimi Code sign-in token draws on the
+  // membership plan's quota, not per-token billing.
+  isSubscriptionCredential: (apiKey) => {
+    const credential = stripBearerTransportPrefix(apiKey);
+    return (
+      credential?.startsWith("sk-kimi-") === true ||
+      (!!credential && !credential.startsWith("sk-"))
+    );
+  },
   createClient(
     apiKey: string | undefined,
     options: CreateClientOptions,

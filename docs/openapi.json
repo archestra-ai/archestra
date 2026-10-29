@@ -278249,7 +278249,8 @@
                 "cursor",
                 "opencode",
                 "kilo",
-                "pi"
+                "pi",
+                "kimi-code"
               ]
             },
             "in": "query",
@@ -544343,7 +544344,8 @@
                 "cursor",
                 "opencode",
                 "kilo",
-                "pi"
+                "pi",
+                "kimi-code"
               ]
             },
             "in": "query",

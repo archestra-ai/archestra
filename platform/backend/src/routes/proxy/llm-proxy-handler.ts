@@ -310,6 +310,7 @@ export interface LLMProxyContext<TRequest> {
 /** How a request is spread across its model pool's members. */
 export interface ModelPoolRouting {
   plan: ModelPoolPlan;
+  checkLimits: (model: string) => Promise<void>;
   transportFor: (
     member: PlannedMember,
     signal: AbortSignal,
@@ -1212,6 +1213,21 @@ export async function handleLLMProxy<
   const upstreamAttempt: UpstreamAttempt = {
     providerApiKeyId: perKeyChatApiKeyId,
   };
+  const limitContext = {
+    unpricedMediaModel: provider.unavailableUsageAccounting
+      ? actualModel
+      : undefined,
+    agentId: resolvedAgentId,
+    userId,
+    virtualKeyId,
+    passthroughVirtualKeyId,
+    llmOauthClientId: authenticatedApp?.id,
+    billingTeamId,
+    teamMemberUserId: authenticatedUserId ?? null,
+    agent: resolvedAgent,
+    snapshot: requestContext,
+  };
+  const deferModelScopedLimits = config.llmProxy.modelPoolsEnabled;
   try {
     // A redacted audit context cannot retain an enforceable trajectory safely.
     if (
@@ -1238,18 +1254,9 @@ export async function handleLLMProxy<
     );
     const limitViolation =
       await LimitValidationService.checkLimitsBeforeRequest({
-        unpricedMediaModel: provider.unavailableUsageAccounting
-          ? requestAdapter.getModel()
-          : undefined,
-        agentId: resolvedAgentId,
-        userId,
-        virtualKeyId,
-        passthroughVirtualKeyId,
-        llmOauthClientId: authenticatedApp?.id,
-        billingTeamId,
-        teamMemberUserId: authenticatedUserId ?? null,
-        agent: resolvedAgent,
-        snapshot: requestContext,
+        ...limitContext,
+        model: deferModelScopedLimits ? undefined : actualModel,
+        deferModelScopedLimits,
       });
 
     if (limitViolation) {
@@ -1354,6 +1361,14 @@ export async function handleLLMProxy<
         400,
         `${wasOAuthAuthenticated ? "LLM OAuth client" : "Virtual API key"} is not mapped to provider "${providerName}".`,
       );
+    }
+
+    if (deferModelScopedLimits && !modelPoolPlan) {
+      const violation = await LimitValidationService.checkLimitsBeforeRequest({
+        ...limitContext,
+        model: actualModel,
+      });
+      if (violation) return sendUsageLimitRefusal(reply, violation);
     }
 
     // The catalog identity and independent metadata were read together after
@@ -1810,6 +1825,14 @@ export async function handleLLMProxy<
       modelPoolPlan && poolWire
         ? {
             plan: modelPoolPlan,
+            checkLimits: async (model) => {
+              const violation =
+                await LimitValidationService.checkLimitsBeforeRequest({
+                  ...limitContext,
+                  model: stripClaudeContextVariantSuffix(model),
+                });
+              if (violation) throw new ModelBudgetExceededError(violation);
+            },
             transportFor: async (member, signal) => {
               const row = await LlmProviderApiKeyModel.findById(
                 member.providerApiKeyId,
@@ -2120,6 +2143,8 @@ export async function handleLLMProxy<
         );
       }
     }
+    if (lifecycleError instanceof ModelBudgetExceededError)
+      return sendUsageLimitRefusal(reply, lifecycleError.violation);
     if (
       (lifecycleError instanceof ObservedProviderUsageError &&
         lifecycleError.billingRecorded) ||
@@ -3216,6 +3241,8 @@ async function handleStreaming<
         "Plugin cleanup failed while handling proxy error",
       );
     }
+    if (lifecycleError instanceof ModelBudgetExceededError)
+      return sendUsageLimitRefusal(reply, lifecycleError.violation);
     if (codexError?.isIncompleteTerminal) {
       // Preserve Chat's legal partial terminal only after failure cleanup.
       childStream.dropModel();
@@ -4381,6 +4408,8 @@ async function openUpstream<TRequest, T>(params: {
   const { ctx, transport, open, memberTimeoutMs, ...retry } = params;
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
     await ctx.authorizeA2AOAuthAttempt?.();
+    if (ctx.modelPool && ctx.upstreamAttempt.modelId)
+      await ctx.modelPool.checkLimits(ctx.upstreamAttempt.modelId);
     return open(attemptTransport);
   };
   const pool = ctx.modelPool;
@@ -4713,6 +4742,12 @@ export function sendUsageLimitRefusal(
         : undefined,
     },
   });
+}
+
+class ModelBudgetExceededError extends ApiError {
+  constructor(readonly violation: LimitViolationResponse) {
+    super(402, violation[1]);
+  }
 }
 
 function withClaudeSubagentMetadata<TRequest>(

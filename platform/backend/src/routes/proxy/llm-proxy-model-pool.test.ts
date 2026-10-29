@@ -14,11 +14,13 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import type OpenAI from "openai";
 import { vi } from "vitest";
 import { internalCallHeader } from "@/clients/internal-call";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { ModelModel, ModelPoolModel, VirtualApiKeyModel } from "@/models";
+import LimitModel from "@/models/limit";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
@@ -84,6 +86,103 @@ describe("Model pools - LLM Proxy", () => {
   });
 
   for (const stream of [false, true]) {
+    for (const cappedModel of ["model-a", "model-b", "pool-alias"]) {
+      test(`checks the actual pool attempt against ${cappedModel} without budget-based failover (stream: ${stream})`, async ({
+        makeSecret,
+        makeLlmProviderApiKey,
+      }) => {
+        const key = await makeLlmProviderApiKey(
+          proxy.organizationId,
+          (await makeSecret({ secret: { apiKey: "sk-pool" } })).id,
+          { provider: "openai" },
+        );
+        const { value: token } = await VirtualApiKeyModel.create({
+          organizationId: proxy.organizationId,
+          name: "budget-pool-key",
+          providerApiKeys: [{ provider: "openai", providerApiKeyId: key.id }],
+        });
+        const modelIds = ["model-a", "model-b", "model-c"];
+        for (const modelId of modelIds) {
+          await ModelModel.create({
+            externalId: `openai/${modelId}`,
+            provider: "openai",
+            modelId,
+            customPricePerMillionInput: "1",
+            customPricePerMillionOutput: "1",
+          });
+        }
+        await ModelPoolModel.create({
+          organizationId: proxy.organizationId,
+          input: {
+            name: "pool-alias",
+            members: modelIds.map((modelId, index) => ({
+              providerApiKeyId: key.id,
+              modelId,
+              priority: index + 1,
+              weight: 1,
+              enabled: true,
+            })),
+          },
+        });
+        await LimitModel.create({
+          entityType: "agent",
+          entityId: proxy.id,
+          limitType: "token_cost",
+          limitValue: 0,
+          model: [cappedModel],
+          lastCleanup: new Date(),
+        });
+        const dispatched: string[] = [];
+        vi.mocked(openaiAdapterFactory.createClient).mockImplementation(() => {
+          const client = createOpenAiTestClient();
+          return {
+            chat: {
+              completions: {
+                create: async (
+                  request: OpenAI.Chat.Completions.ChatCompletionCreateParams,
+                ) => {
+                  dispatched.push(request.model);
+                  if (request.model === "model-a")
+                    throw Object.assign(new Error("Rate limited"), {
+                      status: 429,
+                    });
+                  return client.chat.completions.create(request);
+                },
+              },
+            },
+          } as never;
+        });
+
+        const response = await app.inject({
+          method: "POST",
+          url: `/v1/openai/${proxy.id}/chat/completions`,
+          headers: { authorization: `Bearer ${token}` },
+          payload: {
+            model: "pool-alias",
+            stream,
+            messages: [{ role: "user", content: "Hello" }],
+          },
+        });
+
+        expect(response.statusCode, response.body).toBe(
+          cappedModel === "pool-alias" ? 200 : 402,
+        );
+        expect(dispatched).toEqual(
+          cappedModel === "model-a"
+            ? []
+            : cappedModel === "model-b"
+              ? ["model-a"]
+              : ["model-a", "model-b"],
+        );
+        if (cappedModel !== "pool-alias") {
+          expect(response.json().error).toMatchObject({
+            type: "usage_limit_exceeded",
+            code: "token_cost_limit_exceeded",
+          });
+        }
+      });
+    }
+
     test(`answers from the next member when the pinned one is rate limited (stream: ${stream})`, async ({
       makeSecret,
       makeLlmProviderApiKey,

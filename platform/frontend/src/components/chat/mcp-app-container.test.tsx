@@ -3,7 +3,7 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { authPermissionState } = vi.hoisted(() => ({
@@ -2631,7 +2631,7 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
             tag: "select",
             type: "select-multiple",
             value: "a",
-            selectedValues: ["a", "b"],
+            selectedValues: ["a", "b", "c", "d", "e"],
           },
         },
       };
@@ -2662,6 +2662,62 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
           const next = reloadDefaultOn.getAttribute("aria-pressed") !== "true";
           reloadDefaultOn.setAttribute("aria-pressed", String(next));
         });
+
+        // Mount real React controlled text input + checkbox inside reloadDoc
+        const reactMount = reloadDoc.createElement("div");
+        reloadDoc.body.appendChild(reactMount);
+        let latestReactChecked = false;
+        let latestReactText = "";
+        function ControlledGuestForm() {
+          const [checked, setChecked] = useState(false);
+          const [text, setText] = useState("");
+          const [rerenders, setRerenders] = useState(0);
+          latestReactChecked = checked;
+          latestReactText = text;
+          return (
+            <div data-rerenders={rerenders}>
+              <input
+                id="react-checkbox"
+                type="checkbox"
+                checked={checked}
+                onChange={(e) => setChecked(e.target.checked)}
+              />
+              <input
+                id="react-text"
+                type="text"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
+              <button
+                id="react-rerender-btn"
+                type="button"
+                onClick={() => setRerenders((c) => c + 1)}
+              >
+                Rerender
+              </button>
+            </div>
+          );
+        }
+        render(<ControlledGuestForm />, { container: reactMount });
+        (restoreState.controls as Record<string, Record<string, unknown>>)[
+          "#react-checkbox"
+        ] = {
+          kind: "form",
+          selector: "#react-checkbox",
+          tag: "input",
+          type: "checkbox",
+          value: "on",
+          checked: true,
+        };
+        (restoreState.controls as Record<string, Record<string, unknown>>)[
+          "#react-text"
+        ] = {
+          kind: "form",
+          selector: "#react-text",
+          tag: "input",
+          type: "text",
+          value: "blue",
+        };
 
         // Emulate React's controlled input _valueTracker and custom instance setter
         const searchInput = reloadDoc.getElementById(
@@ -2748,11 +2804,34 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
         searchInput.value = reactStateValue;
         expect(searchInput.value).toBe("blue");
 
+        const reactCheckboxEl = reloadDoc.getElementById(
+          "react-checkbox",
+        ) as HTMLInputElement;
+        const reactTextEl = reloadDoc.getElementById(
+          "react-text",
+        ) as HTMLInputElement;
+        const reactRerenderBtn = reloadDoc.getElementById(
+          "react-rerender-btn",
+        ) as HTMLButtonElement;
+        expect(latestReactChecked).toBe(true);
+        expect(reactCheckboxEl.checked).toBe(true);
+        expect(latestReactText).toBe("blue");
+        expect(reactTextEl.value).toBe("blue");
+
+        // Trigger an unrelated React re-render and verify both controlled checkbox and text persist
+        await act(async () => {
+          reactRerenderBtn.click();
+        });
+        expect(latestReactChecked).toBe(true);
+        expect(reactCheckboxEl.checked).toBe(true);
+        expect(latestReactText).toBe("blue");
+        expect(reactTextEl.value).toBe("blue");
+
         // Independent sibling toggle that defaulted to "true" was turned off
         expect(reloadDefaultOn.getAttribute("aria-pressed")).toBe("false");
 
-        // Multi-pass initialization: 50ms later, app rebuilds #single-select (resetting to "")
-        // and delivers option "b" to #multi-select
+        // Multi-pass initialization: app rebuilds #single-select (resetting to "")
+        // and delivers options "b", "c", "d", "e" across 4 more separate async batches (5 total)
         const singleSelect = reloadDoc.getElementById(
           "single-select",
         ) as HTMLSelectElement;
@@ -2760,18 +2839,21 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
           '<option value="">All</option><option value="Blue">Blue</option>';
         singleSelect.value = "";
 
-        const optB = reloadDoc.createElement("option");
-        optB.value = "b";
-        optB.textContent = "B";
-        multiSelect.appendChild(optB);
+        for (const val of ["b", "c", "d", "e"]) {
+          const opt = reloadDoc.createElement("option");
+          opt.value = val;
+          opt.textContent = val.toUpperCase();
+          multiSelect.appendChild(opt);
+          await new Promise((r) => setTimeout(r, 15));
+        }
 
-        await new Promise((r) => setTimeout(r, 50));
+        await new Promise((r) => setTimeout(r, 40));
 
         expect(singleSelect.value).toBe("Blue");
         const selectedMultiValues = Array.from(multiSelect.options)
           .filter((o) => o.selected)
           .map((o) => o.value);
-        expect(selectedMultiValues).toEqual(["a", "b"]);
+        expect(selectedMultiValues).toEqual(["a", "b", "c", "d", "e"]);
       } finally {
         reloadFrame.remove();
       }

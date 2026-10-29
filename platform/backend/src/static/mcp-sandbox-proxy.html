@@ -272,6 +272,7 @@ function guestStateBootstrap(restored) {
   var pendingFormKeys = {};
   var pendingToggleKeys = {};
   var restoreAttempts = {};
+  var appliedMultiValues = {};
 
   if (hasRestoredControls) {
     var initKeys = Object.keys(restored.controls);
@@ -766,7 +767,10 @@ function guestStateBootstrap(restored) {
     if (!userInteracted && hasRestoredControls && restorationActive) {
       var prevKeys = Object.keys(currentControls);
       for (var pk = 0; pk < prevKeys.length; pk++) {
-        nextControls[prevKeys[pk]] = currentControls[prevKeys[pk]];
+        var pKey = prevKeys[pk];
+        if (restored && restored.controls && restored.controls[pKey]) {
+          nextControls[pKey] = currentControls[pKey];
+        }
       }
     }
 
@@ -1030,6 +1034,30 @@ function guestStateBootstrap(restored) {
     }
   }
 
+  function setNativeChecked(el, newChecked) {
+    var prevChecked = !!el.checked;
+    var proto = null;
+    try {
+      proto = Object.getPrototypeOf(el);
+    } catch (e) {
+      proto = null;
+    }
+    var descriptor = proto
+      ? Object.getOwnPropertyDescriptor(proto, "checked")
+      : null;
+    if (descriptor && typeof descriptor.set === "function") {
+      descriptor.set.call(el, newChecked);
+    } else {
+      el.checked = newChecked;
+    }
+    var tracker = el._valueTracker;
+    if (tracker && typeof tracker.setValue === "function") {
+      try {
+        tracker.setValue(String(prevChecked));
+      } catch (e) {}
+    }
+  }
+
   function runRestorePass() {
     if (
       !hasRestoredControls ||
@@ -1083,9 +1111,15 @@ function guestStateBootstrap(restored) {
             for (var sv = 0; sv < fSaved.selectedValues.length; sv++) {
               targetSet[fSaved.selectedValues[sv]] = true;
             }
+            var appliedMap = appliedMultiValues[fKey];
+            if (!appliedMap) {
+              appliedMap = {};
+              appliedMultiValues[fKey] = appliedMap;
+            }
             var matchedValueMap = {};
             var matchedCount = 0;
             var needsMultiChange = false;
+            var hadPreviouslyAppliedReset = false;
             for (var moi = 0; moi < fEl.options.length; moi++) {
               var opt = fEl.options[moi];
               var shouldSelect = !!targetSet[opt.value];
@@ -1095,6 +1129,9 @@ function guestStateBootstrap(restored) {
               }
               if (opt.selected !== shouldSelect) {
                 needsMultiChange = true;
+                if (shouldSelect && appliedMap[opt.value]) {
+                  hadPreviouslyAppliedReset = true;
+                }
               }
             }
             var anyMatched =
@@ -1106,10 +1143,15 @@ function guestStateBootstrap(restored) {
             }
             if (needsMultiChange) {
               for (var moi2 = 0; moi2 < fEl.options.length; moi2++) {
-                fEl.options[moi2].selected =
-                  !!targetSet[fEl.options[moi2].value];
+                var shouldSel = !!targetSet[fEl.options[moi2].value];
+                fEl.options[moi2].selected = shouldSel;
+                if (shouldSel) {
+                  appliedMap[fEl.options[moi2].value] = true;
+                }
               }
-              restoreAttempts[fKey] = (restoreAttempts[fKey] || 0) + 1;
+              if (allMatched || hadPreviouslyAppliedReset) {
+                restoreAttempts[fKey] = (restoreAttempts[fKey] || 0) + 1;
+              }
               dispatchFormEvents(fEl);
             }
           } else {
@@ -1150,9 +1192,17 @@ function guestStateBootstrap(restored) {
             typeof fSaved.checked === "boolean" &&
             fEl.checked !== fSaved.checked
           ) {
-            fEl.checked = fSaved.checked;
             restoreAttempts[fKey] = (restoreAttempts[fKey] || 0) + 1;
-            dispatchFormEvents(fEl);
+            if (fEl.type === "checkbox" || fSaved.checked === true) {
+              try {
+                fEl.click();
+              } catch (e) {}
+            }
+            var updatedCheckEl = findControlElement(fKey, fSaved) || fEl;
+            if (updatedCheckEl.checked !== fSaved.checked) {
+              setNativeChecked(updatedCheckEl, fSaved.checked);
+              dispatchFormEvents(updatedCheckEl);
+            }
           }
         } else if (tag === "input" || tag === "textarea") {
           delete pendingFormKeys[fKey];
@@ -1190,11 +1240,34 @@ function guestStateBootstrap(restored) {
   window.addEventListener("keydown", markUserInteracted, true);
   window.addEventListener("touchstart", markUserInteracted, true);
 
+  function retireRestoredControlForTarget(target) {
+    if (!target || target.nodeType !== 1 || !hasRestoredControls) return;
+    var sel = getCssSelector(target);
+    if (sel) {
+      delete pendingFormKeys[sel];
+      delete pendingToggleKeys[sel];
+      if (restored && restored.controls) {
+        delete restored.controls[sel];
+      }
+    }
+    var label = getStableButtonLabel(target);
+    if (sel && isIndexBasedSelector(sel) && label) {
+      var labelKey =
+        sel.replace(/:nth-of-type\(\d+\)$/, "") + "::label=" + label;
+      delete pendingToggleKeys[labelKey];
+      if (restored && restored.controls) {
+        delete restored.controls[labelKey];
+      }
+    }
+  }
+
   function onControlEvent(e) {
     if (isRestoringNow) return;
-    if ((e && e.isTrusted) || restoreReady) {
+    if (e && e.isTrusted) {
       userInteracted = true;
       restorationActive = false;
+    } else if (restoreReady && e && e.target) {
+      retireRestoredControlForTarget(e.target);
     }
     scheduleCapture();
   }

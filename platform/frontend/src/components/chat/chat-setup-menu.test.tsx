@@ -13,7 +13,9 @@ const {
   mutateConversation,
   hiddenProviders,
   navigate,
+  autoRouting,
 } = vi.hoisted(() => ({
+  autoRouting: { available: false },
   agents: [
     {
       id: "agent-mine",
@@ -131,6 +133,10 @@ vi.mock("@/lib/model-pools.query", () => ({
   useAvailableModelPools: () => ({ data: pools }),
 }));
 
+vi.mock("@/lib/auto-routing.query", () => ({
+  useAutoRoutingAvailable: () => autoRouting.available,
+}));
+
 vi.mock("@/lib/chat/chat.query", () => ({
   useUpdateConversation: () => ({ mutate: mutateConversation }),
 }));
@@ -160,6 +166,7 @@ beforeEach(() => {
   readiness.splice(0);
   pools.splice(0);
   mutateConversation.mockReset();
+  autoRouting.available = false;
 });
 
 describe("ChatSetupMenu", () => {
@@ -226,6 +233,49 @@ describe("ChatSetupMenu", () => {
 
     expect(props.onModelPoolChange).toHaveBeenCalledWith("pool-1");
     expect(props.close).toHaveBeenCalledOnce();
+  });
+
+  it("offers Auto only while auto routing is available", async () => {
+    const user = userEvent.setup();
+    renderMenu({ onAutoRoutedChange: vi.fn() });
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+    expect(
+      screen.queryByRole("group", { name: "Auto routing" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("picks Auto at once and closes", async () => {
+    autoRouting.available = true;
+    const user = userEvent.setup();
+    const props = renderMenu({ onAutoRoutedChange: vi.fn() });
+
+    await user.click(screen.getByRole("tab", { name: /^Key:/ }));
+    const group = screen.getByRole("group", { name: "Auto routing" });
+    await user.click(within(group).getByRole("option", { name: /Auto/ }));
+
+    expect(props.onAutoRoutedChange).toHaveBeenCalledWith(true);
+    expect(props.close).toHaveBeenCalledOnce();
+  });
+
+  it("shows Auto in place of the key, with no model tab, and leaves it for the same key", async () => {
+    autoRouting.available = true;
+    const user = userEvent.setup();
+    const props = renderMenu({
+      autoRouted: true,
+      onAutoRoutedChange: vi.fn(),
+    });
+
+    expect(screen.getByRole("tab", { name: "Auto routing" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.queryByRole("tab", { name: /^Model:/ }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("option", { name: /Org vLLM/ }));
+    expect(props.onAutoRoutedChange).toHaveBeenCalledWith(false);
+    expect(mutateConversation).not.toHaveBeenCalled();
   });
 
   it("shows a picked pool in place of the key, with no model tab", () => {

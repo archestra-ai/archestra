@@ -546,22 +546,24 @@ export function ChatPageContent({
   const initialRuntimeCandidate =
     internalAgents.find((agent) => agent.id === initialAgentId) ??
     initialAgentReference;
-  // The new chat's model pool, which the create request carries. Until the
-  // user picks a pool, a key or a model, it is the agent's own pool while the
-  // agent's model is in use.
-  const [initialModelPoolChoice, setInitialModelPoolChoice] = useState<
-    string | null | undefined
+  // The new chat's model pool or "Auto", which the create request carries.
+  // Until the user picks one, a key or a model, it is the agent's own while
+  // the agent's model is in use.
+  const [initialRoutingChoice, setInitialRoutingChoice] = useState<
+    InitialModelRouting | undefined
   >(undefined);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new agent or chat starts from the agent's pool again
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new agent or chat starts from the agent's pool or "Auto" again
   useEffect(() => {
-    setInitialModelPoolChoice(undefined);
+    setInitialRoutingChoice(undefined);
   }, [initialAgentId, routeConversationId]);
+  const initialRouting: InitialModelRouting =
+    initialRoutingChoice ??
+    (initialModelSource === "agent"
+      ? agentModelRouting(initialRuntimeCandidate)
+      : NO_MODEL_ROUTING);
   const initialModelPoolId =
-    initialModelPoolChoice !== undefined
-      ? initialModelPoolChoice
-      : initialModelSource === "agent"
-        ? (initialRuntimeCandidate?.modelPoolId ?? null)
-        : null;
+    initialRouting.kind === "pool" ? initialRouting.poolId : null;
+  const initialAutoRouted = initialRouting.kind === "auto";
   const initialRuntimeAgent =
     runtimeEnabled && initialRuntimeCandidate?.runtime
       ? initialRuntimeCandidate
@@ -1425,6 +1427,19 @@ export function ChatPageContent({
       updateConversationMutateRef.current({
         id: conversation.id,
         modelPoolId,
+      });
+    },
+    [conversation],
+  );
+
+  // "Auto" stands in for the key and model like a pool; the server stores the
+  // organization's default model as the conversation's key and model.
+  const handleConversationAutoRoutedChange = useCallback(
+    (autoRouted: boolean) => {
+      if (!conversation) return;
+      updateConversationMutateRef.current({
+        id: conversation.id,
+        autoRouted,
       });
     },
     [conversation],
@@ -2650,6 +2665,7 @@ export function ChatPageContent({
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
         modelPoolId: initialModelPoolId,
+        autoRouted: initialAutoRouted,
         title,
         projectId: searchParams.get("project"),
         thinkingEffort: initialThinkingEffort,
@@ -2691,6 +2707,7 @@ export function ChatPageContent({
       initialModel,
       initialApiKeyId,
       initialModelPoolId,
+      initialAutoRouted,
       isEncryptedChatDraft,
       initialThinkingEffort,
       isAgentSubscriptionMetadataPending,
@@ -3691,6 +3708,10 @@ export function ChatPageContent({
                               onModelPoolChange={
                                 handleConversationModelPoolChange
                               }
+                              autoRouted={conversation?.autoRouted ?? false}
+                              onAutoRoutedChange={
+                                handleConversationAutoRoutedChange
+                              }
                               agentRequiresPerUserConnect={
                                 isApplyingAgentSelection ||
                                 isAgentSubscriptionMetadataPending ||
@@ -3891,7 +3912,7 @@ export function ChatPageContent({
                               }
                               selectedModel={initialModel}
                               onModelChange={(modelId) => {
-                                setInitialModelPoolChoice(null);
+                                setInitialRoutingChoice(NO_MODEL_ROUTING);
                                 handleInitialModelChange(modelId);
                               }}
                               agentId={newChatAgentId}
@@ -3900,7 +3921,7 @@ export function ChatPageContent({
                               initialApiKeyId={initialApiKeyId}
                               onApiKeyChange={setInitialApiKeyId}
                               onProviderChange={(provider) => {
-                                setInitialModelPoolChoice(null);
+                                setInitialRoutingChoice(NO_MODEL_ROUTING);
                                 handleInitialProviderChange(provider);
                               }}
                               allowFileUploads={
@@ -3971,13 +3992,27 @@ export function ChatPageContent({
                               }
                               modelSource={initialModelSource}
                               onResetModelOverride={() => {
-                                setInitialModelPoolChoice(undefined);
+                                setInitialRoutingChoice(undefined);
                                 handleResetModelOverride();
                               }}
                               thinkingEffort={initialThinkingEffort}
                               onThinkingEffortChange={setInitialThinkingEffort}
                               modelPoolId={initialModelPoolId}
-                              onModelPoolChange={setInitialModelPoolChoice}
+                              onModelPoolChange={(poolId) =>
+                                setInitialRoutingChoice(
+                                  poolId
+                                    ? { kind: "pool", poolId }
+                                    : NO_MODEL_ROUTING,
+                                )
+                              }
+                              autoRouted={initialAutoRouted}
+                              onAutoRoutedChange={(autoRouted) =>
+                                setInitialRoutingChoice(
+                                  autoRouted
+                                    ? { kind: "auto" }
+                                    : NO_MODEL_ROUTING,
+                                )
+                              }
                               agentRequiresPerUserConnect={
                                 isAgentSubscriptionMetadataPending ||
                                 initialModelSource === "agent" ||
@@ -4188,4 +4223,20 @@ function useStartedFromTail(
         : { id: conversationId, fromTail: olderMessageCount > 0 };
   }
   return seen.current?.fromTail ?? false;
+}
+
+/** What a new chat runs on in place of its key and model, if anything. */
+type InitialModelRouting =
+  | { kind: "pool"; poolId: string }
+  | { kind: "auto" }
+  | { kind: "none" };
+
+const NO_MODEL_ROUTING: InitialModelRouting = { kind: "none" };
+
+function agentModelRouting(
+  agent: { autoRouted: boolean; modelPoolId: string | null } | null | undefined,
+): InitialModelRouting {
+  if (agent?.autoRouted) return { kind: "auto" };
+  if (agent?.modelPoolId) return { kind: "pool", poolId: agent.modelPoolId };
+  return NO_MODEL_ROUTING;
 }

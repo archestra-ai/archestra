@@ -42,6 +42,8 @@ export type CreateConversationInput = {
   chatApiKeyId?: string | null;
   /** A model pool picked in place of the key and model. */
   modelPoolId?: string | null;
+  /** "Auto" picked in place of the key and model. */
+  autoRouted?: boolean;
   title?: string;
   /** Project the chat is started in (carried from /chat?project=...). */
   projectId?: string;
@@ -214,6 +216,7 @@ export function buildCreateConversationInput(params: {
   modelId: string;
   chatApiKeyId: string | null;
   modelPoolId?: string | null;
+  autoRouted?: boolean;
   title?: string;
   projectId?: string | null;
   thinkingEffort?: ThinkingEffortSetting;
@@ -227,6 +230,7 @@ export function buildCreateConversationInput(params: {
     modelId: params.modelId || undefined,
     chatApiKeyId: params.chatApiKeyId ?? undefined,
     modelPoolId: params.modelPoolId ?? undefined,
+    autoRouted: params.autoRouted,
     title: params.title,
     projectId: params.projectId ?? undefined,
     thinkingEffort: params.thinkingEffort,

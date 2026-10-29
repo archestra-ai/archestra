@@ -628,14 +628,59 @@ async function lookupAccount(params: { api: string; login: string }) {
   // Private Enterprise Server instances need a sign-in to read profiles.
   if (response.status === 401 || response.status === 403)
     return { login, type: "Organization" as const };
-  if (response.status === 404)
+  if (response.status === 404) {
+    const managed = await isManagedUsersOrganization(params);
+    if (managed === null)
+      throw new ApiError(502, `GitHub didn't return the ${login} account.`);
+    if (managed) return { login, type: "Organization" as const };
     throw new ApiError(400, `GitHub has no account named ${login}.`);
+  }
   const account = response.ok
     ? AccountSchema.safeParse(await response.json())
     : null;
   if (!account?.success)
     throw new ApiError(502, `GitHub didn't return the ${login} account.`);
   return account.data;
+}
+
+/**
+ * Whether a login the API calls missing is an organization of an Enterprise
+ * Managed Users enterprise. GitHub hides those from anonymous API reads, but
+ * their web profile sends visitors to the enterprise's single sign-on, while
+ * a missing account's profile is a 404. Null when GitHub didn't answer.
+ */
+async function isManagedUsersOrganization(params: {
+  api: string;
+  login: string;
+}): Promise<boolean | null> {
+  const web = getGithubWebOrigin(params.api);
+  const response = await fetch(`${web}/${encodeURIComponent(params.login)}`, {
+    method: "HEAD",
+    redirect: "manual",
+    signal: AbortSignal.timeout(15_000),
+  }).catch((error: unknown) => {
+    logger.warn(
+      { err: error, web },
+      "GitHub web profile check for a hidden organization failed",
+    );
+    return null;
+  });
+  if (!response) return null;
+  // A rate limit or server error says nothing about the account.
+  if (response.status === 429 || response.status >= 500) {
+    logger.warn(
+      { status: response.status, web },
+      "GitHub web profile check for a hidden organization failed",
+    );
+    return null;
+  }
+  const location = response.headers.get("location");
+  if (response.status < 300 || response.status > 399 || !location) return false;
+  const target = URL.canParse(location, web) ? new URL(location, web) : null;
+  return (
+    target?.origin === new URL(web).origin &&
+    /^\/enterprises\/[^/]+\/sso\/?$/.test(target.pathname)
+  );
 }
 
 async function listRepositories(params: {

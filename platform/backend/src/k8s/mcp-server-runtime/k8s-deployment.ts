@@ -918,15 +918,15 @@ export default class K8sDeployment {
 
     if (isAwsApplicationNetworkPolicyProvider(this.networkPolicyCapabilities)) {
       if (clusterDnsIps.length === 0) {
-        // Only the AWS ANP floor degrades here — it falls back to allowing :53 to
-        // any IP. The plain floor still resolves via its selector-based rule.
+        // The AWS ANP floor omits the DNS exception until a resolver is known.
+        // The plain floor still has its selector-based DNS rule.
         logger.warn(
           {
             mcpServerId: this.mcpServer.id,
             networkPolicyName: policyName,
             namespace: this.namespace,
           },
-          "Cluster DNS service IP could not be resolved; unrestricted floor will allow DNS egress to any IP",
+          "Cluster DNS service IP could not be resolved; unrestricted floor omits DNS bootstrap access. Set ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS or grant get on kube-system/kube-dns",
         );
       }
 
@@ -1073,7 +1073,7 @@ export default class K8sDeployment {
           networkPolicyName: policyName,
           namespace: this.namespace,
         },
-        "Cluster DNS service IP could not be resolved; ApplicationNetworkPolicy will allow DNS egress to any IP",
+        "Cluster DNS service IP could not be resolved; ApplicationNetworkPolicy omits DNS bootstrap access. Set ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS or grant get on kube-system/kube-dns",
       );
     }
 

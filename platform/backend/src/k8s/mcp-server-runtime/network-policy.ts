@@ -189,7 +189,7 @@ export function buildManagedAwsApplicationNetworkPolicy(params: {
       annotations: {
         ...buildPolicyAnnotations(params.effectivePolicy, "active"),
         "archestra.io/network-policy-cluster-dns":
-          params.clusterDnsIps.join(",") || "any",
+          params.clusterDnsIps.join(",") || "unresolved",
       },
     },
     spec: {
@@ -313,7 +313,7 @@ export function buildUnrestrictedFloorAwsApplicationNetworkPolicy(params: {
       podSelector: { matchLabels: params.podSelectorLabels },
       policyTypes: ["Egress"],
       egress: [
-        buildAwsDnsBootstrapEgressRule(params.clusterDnsIps ?? []),
+        ...buildAwsDnsBootstrapEgressRules(params.clusterDnsIps ?? []),
         ...floorPublicEgressRules({
           allowedCidrs: params.allowedCidrs ?? [],
           clusterIpFamilies: params.clusterIpFamilies ?? [],
@@ -518,7 +518,7 @@ function buildAwsApplicationEgressRules(
   const domains = networkPolicyDomains(policy);
 
   return [
-    buildAwsDnsBootstrapEgressRule(clusterDnsIps),
+    ...buildAwsDnsBootstrapEgressRules(clusterDnsIps),
     ...policy.allowedCidrs.map((cidr) => ({
       to: [{ ipBlock: { cidr } }],
     })),
@@ -529,27 +529,25 @@ function buildAwsApplicationEgressRules(
 }
 
 /**
- * DNS bootstrap rule for EKS Auto Mode. When the cluster DNS ClusterIP could
- * not be resolved, fall back to allowing port 53 anywhere — restricting DNS
- * to an unknown IP would break every domainNames rule in the policy.
+ * Only known resolvers receive the DNS bootstrap exception. Omitting the rule
+ * when discovery fails keeps private DNS endpoints outside the allowlist.
  */
-function buildAwsDnsBootstrapEgressRule(
+function buildAwsDnsBootstrapEgressRules(
   clusterDnsIps: string[],
-): Record<string, unknown> {
-  const to =
-    clusterDnsIps.length > 0
-      ? clusterDnsIps.map((ip) => ({
-          ipBlock: { cidr: ip.includes(":") ? `${ip}/128` : `${ip}/32` },
-        }))
-      : [{ ipBlock: { cidr: "0.0.0.0/0" } }];
+): Array<Record<string, unknown>> {
+  if (clusterDnsIps.length === 0) return [];
 
-  return {
-    to,
-    ports: [
-      { protocol: "UDP", port: 53 },
-      { protocol: "TCP", port: 53 },
-    ],
-  };
+  return [
+    {
+      to: clusterDnsIps.map((ip) => ({
+        ipBlock: { cidr: ip.includes(":") ? `${ip}/128` : `${ip}/32` },
+      })),
+      ports: [
+        { protocol: "UDP", port: 53 },
+        { protocol: "TCP", port: 53 },
+      ],
+    },
+  ];
 }
 
 function buildCiliumDnsEgressRule(): Record<string, unknown> {

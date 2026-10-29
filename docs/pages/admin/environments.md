@@ -2,7 +2,7 @@
 title: "Environments"
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -91,7 +91,9 @@ A **remote MCP server** runs outside Archestra and is reached over HTTP, so the 
 
 See Kubernetes [NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies/), Cilium [DNS policy](https://docs.cilium.io/en/latest/security/dns/), GKE [FQDN network policy](https://cloud.google.com/kubernetes-engine/docs/how-to/fqdn-network-policies), and EKS Auto Mode [network policy](https://docs.aws.amazon.com/eks/latest/userguide/auto-net-pol.html) docs for provider details. AWS DNS-based rules apply only to workloads running on EKS Auto Mode-launched EC2 instances.
 
-On EKS Auto Mode, `ApplicationNetworkPolicy` only supports IP and domain egress peers, so Archestra automatically adds a DNS bootstrap rule allowing port 53 to the cluster DNS service IP (recorded in the `archestra.io/network-policy-cluster-dns` annotation).
+On EKS Auto Mode, Archestra allows DNS bootstrap traffic only to the discovered cluster resolver. If discovery fails, Auto Mode policies omit that exception; domain lookups can fail until you restore discovery or configure the resolver.
+
+The Helm chart grants `get` on the `kube-system/kube-dns` Service. Installers without permission to create that grant can set `rbac.kubeDnsServiceRead: false` and configure [`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS).
 
 ### The Public Internet Floor
 
@@ -104,7 +106,7 @@ Public internet mode blocks a fixed set of destinations for pods in your cluster
 - `127.0.0.0/8` and `0.0.0.0/8` — loopback
 - `::1/128`, `fc00::/7`, `fe80::/10`, `64:ff9b::/96` — the IPv6 equivalents
 
-The floor stops a server that fetches a URL from reaching your internal network or a cloud metadata endpoint. DNS to the cluster resolver stays allowed.
+The floor stops a server that fetches a URL from reaching your internal network or a cloud metadata endpoint. DNS to a known cluster resolver stays allowed.
 
 To retain public internet access and reach one private range, add that range under **Additional allowed CIDRs**. The explicit CIDR becomes an exception to the floor. Other private and reserved ranges stay blocked. For example, adding `10.20.0.0/16` does not open the rest of `10.0.0.0/8`.
 

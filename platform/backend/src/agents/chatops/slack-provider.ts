@@ -2384,9 +2384,18 @@ class SlackProvider implements ChatOpsProvider {
     );
 
     let onAbort: (() => void) | undefined;
+    let onInitialClose: (() => void) | undefined;
     const cancelled = new Promise<never>((_resolve, reject) => {
       onAbort = () => reject(signal.reason);
       signal.addEventListener("abort", onAbort, { once: true });
+      // Fail the initial attempt before the SDK's delayed reconnect can start.
+      // initialize() disconnects on rejection; established sessions keep the
+      // SDK's ordinary reconnect listener after this one is removed.
+      onInitialClose = () =>
+        reject(
+          new Error("Slack closed the connection before setup completed."),
+        );
+      this.socketModeClient?.once("close", onInitialClose);
     });
     try {
       await Promise.race([this.socketModeClient.start(), cancelled]);
@@ -2400,6 +2409,8 @@ class SlackProvider implements ChatOpsProvider {
       agent.createConnection = createConnection;
       initialSockets.clear();
       if (onAbort) signal.removeEventListener("abort", onAbort);
+      if (onInitialClose)
+        this.socketModeClient.removeListener("close", onInitialClose);
     }
   }
 

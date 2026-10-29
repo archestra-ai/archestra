@@ -16,6 +16,7 @@ export async function createSlackSocketFixture() {
   let abortedRequests = 0;
   let stallHandshake = false;
   let dropHelloAndClose = false;
+  let closeBeforeHello = false;
   const connectionFailures: { status: number; retryAfter: number }[] = [];
   let connections = 0;
   const calls: string[] = [];
@@ -81,7 +82,11 @@ export async function createSlackSocketFixture() {
     const upgrade = () =>
       websocket.handleUpgrade(request, socket, head, (client) => {
         connections++;
-        if (dropHelloAndClose) socket.pause();
+        if (closeBeforeHello) {
+          closeBeforeHello = false;
+          stalledMethod = "apps.connections.open";
+          client.close();
+        } else if (dropHelloAndClose) socket.pause();
         else client.send(JSON.stringify({ type: "hello" }));
       });
     if (stallHandshake) pending.push(upgrade);
@@ -127,6 +132,9 @@ export async function createSlackSocketFixture() {
     },
     dropHelloAndClose() {
       dropHelloAndClose = true;
+    },
+    closeBeforeHello() {
+      closeBeforeHello = true;
     },
     stallHandshake() {
       stallHandshake = true;

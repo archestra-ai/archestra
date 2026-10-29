@@ -3,7 +3,10 @@ import {
   PROVIDERS_REQUIRING_BASE_URL,
   type SupportedProvider,
 } from "@archestra/shared";
+import { OPENCODE_PRIMARY_PROVIDERS } from "@archestra/shared/opencode-provider-routes";
+import ConnectionSetupModel from "@/models/connection-setup";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import TeamModel from "@/models/team";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 
@@ -29,7 +32,6 @@ export async function getSharedPrimaryProviderKeys(organizationId: string) {
   return keys.filter((key) => key !== null);
 }
 
-/** Explicit provider mappings take precedence over automatic shared primaries. */
 export async function resolveVirtualKeyProviderMappings(
   virtualApiKeyId: string,
 ) {
@@ -37,22 +39,41 @@ export async function resolveVirtualKeyProviderMappings(
   if (!key) return [];
   const mappings =
     await VirtualApiKeyModel.getProviderApiKeysForRouting(virtualApiKeyId);
+  const ownerPrimaries =
+    key.keyType === "standard" &&
+    key.scope === "personal" &&
+    key.authorId &&
+    (await ConnectionSetupModel.hasManagedPrimaryInstallation({
+      organizationId: key.organizationId,
+      userId: key.authorId,
+      virtualApiKeyId,
+    }))
+      ? (
+          await LlmProviderApiKeyModel.getUsablePrimaryKeys({
+            organizationId: key.organizationId,
+            userId: key.authorId,
+            userTeamIds: await TeamModel.getUserTeamIds(key.authorId),
+          })
+        ).filter(
+          (primary) =>
+            primary.userId === key.authorId &&
+            OPENCODE_PRIMARY_PROVIDERS.includes(primary.provider),
+        )
+      : [];
   return resolveProviderMappings({
     organizationId: key.organizationId,
     includeFutureProviders:
       key.keyType === "standard" && key.includeFutureProviders,
-    mappings,
-    mapPrimary: (primary) => ({
-      provider: primary.provider,
-      providerApiKeyId: primary.id,
-      providerApiKeyName: primary.name,
-      organizationId: primary.organizationId,
-      providerApiKeyProvider: primary.provider,
-      secretId: primary.secretId,
-      scope: primary.scope,
-      userId: primary.userId,
-      baseUrl: primary.inferenceBaseUrl ?? primary.baseUrl,
-    }),
+    mappings: [
+      ...mappings,
+      ...ownerPrimaries
+        .filter(
+          (primary) =>
+            !mappings.some((mapping) => mapping.provider === primary.provider),
+        )
+        .map(primaryProviderMapping),
+    ],
+    mapPrimary: primaryProviderMapping,
   });
 }
 
@@ -76,4 +97,20 @@ export async function resolveProviderMappings<
       .filter((primary) => !providers.has(primary.provider))
       .map(params.mapPrimary),
   ];
+}
+
+function primaryProviderMapping(
+  primary: Awaited<ReturnType<typeof getSharedPrimaryProviderKeys>>[number],
+) {
+  return {
+    provider: primary.provider,
+    providerApiKeyId: primary.id,
+    providerApiKeyName: primary.name,
+    organizationId: primary.organizationId,
+    providerApiKeyProvider: primary.provider,
+    secretId: primary.secretId,
+    scope: primary.scope,
+    userId: primary.userId,
+    baseUrl: primary.inferenceBaseUrl ?? primary.baseUrl,
+  };
 }

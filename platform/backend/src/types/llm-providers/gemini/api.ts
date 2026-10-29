@@ -224,6 +224,10 @@ const ModalityTokenCountSchema = z
 
 export const UsageMetadataSchema = z
   .object({
+    trafficType: z
+      .string()
+      .optional()
+      .describe("Traffic tier that served the request."),
     promptTokenCount: z.number().optional(),
     cachedContentTokenCount: z.number().optional(),
     candidatesTokenCount: z.number().optional(),
@@ -306,6 +310,8 @@ https://ai.google.dev/api/generate-content#v1beta.GenerateContentResponse
 `);
 
 export const GenerateContentHeadersSchema = z.object({
+  "x-vertex-ai-llm-request-type": z.string().optional(),
+  "x-vertex-ai-llm-shared-request-type": z.string().optional(),
   authorization: z
     .string()
     .optional()

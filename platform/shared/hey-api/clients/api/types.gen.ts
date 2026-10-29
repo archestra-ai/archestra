@@ -1399,6 +1399,10 @@ export type GeminiGenerateContentResponseInput = {
      * Metadata on the generation requests' token usage
      */
     usageMetadata?: {
+        /**
+         * Traffic tier that served the request.
+         */
+        trafficType?: string;
         promptTokenCount?: number;
         cachedContentTokenCount?: number;
         candidatesTokenCount?: number;
@@ -9074,6 +9078,10 @@ export type GeminiGenerateContentResponse = {
      * Metadata on the generation requests' token usage
      */
     usageMetadata?: {
+        /**
+         * Traffic tier that served the request.
+         */
+        trafficType?: string;
         promptTokenCount?: number;
         cachedContentTokenCount?: number;
         candidatesTokenCount?: number;
@@ -55397,6 +55405,8 @@ export type GeminiEmbeddingsWithAgentResponse = GeminiEmbeddingsWithAgentRespons
 export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
     body: GeminiGenerateContentRequestInput;
     headers?: {
+        'x-vertex-ai-llm-request-type'?: string;
+        'x-vertex-ai-llm-shared-request-type'?: string;
         /**
          * OAuth access token as a Bearer credential.
          */
@@ -55508,6 +55518,8 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentResponse = PostV1Gemin
 export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentData = {
     body: GeminiGenerateContentRequestInput;
     headers?: {
+        'x-vertex-ai-llm-request-type'?: string;
+        'x-vertex-ai-llm-shared-request-type'?: string;
         /**
          * OAuth access token as a Bearer credential.
          */
@@ -55610,6 +55622,8 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentError = PostV1Ge
 export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData = {
     body: GeminiGenerateContentRequestInput;
     headers?: {
+        'x-vertex-ai-llm-request-type'?: string;
+        'x-vertex-ai-llm-shared-request-type'?: string;
         /**
          * OAuth access token as a Bearer credential.
          */
@@ -55722,6 +55736,8 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponse = Po
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData = {
     body: GeminiGenerateContentRequestInput;
     headers?: {
+        'x-vertex-ai-llm-request-type'?: string;
+        'x-vertex-ai-llm-shared-request-type'?: string;
         /**
          * OAuth access token as a Bearer credential.
          */

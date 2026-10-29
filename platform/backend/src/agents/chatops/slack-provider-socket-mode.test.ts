@@ -1,16 +1,58 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import ChatOpsConfigModel from "@/models/chatops-config";
 import { setupTestCacheManager } from "@/test/cache-manager";
-import { useMswServer } from "@/test/msw";
 import { createSlackSocketFixture } from "@/test/slack-socket-fixture";
-import { SLACK_CONNECT_TIMEOUT_MS } from "./constants";
 import SlackProvider from "./slack-provider";
 
 setupTestCacheManager();
-// biome-ignore lint/correctness/useHookAtTopLevel: test lifecycle helper
-const boundary = useMswServer();
-afterEach(() => vi.useRealTimers());
+
+// Keep the real SDK and Node sockets; only select the local endpoint and plain
+// transport. The provider still owns and destroys its initial Agent sockets.
+vi.mock("node:https", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:https")>()),
+  Agent: (await import("node:http")).Agent,
+}));
+vi.mock("@slack/web-api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@slack/web-api")>();
+  const { slackSocketBoundary } = await import("@/test/slack-socket-fixture");
+  return {
+    ...actual,
+    WebClient: class extends actual.WebClient {
+      constructor(
+        ...[token, options]: ConstructorParameters<typeof actual.WebClient>
+      ) {
+        super(token, {
+          ...options,
+          slackApiUrl: slackSocketBoundary.apiUrl ?? options?.slackApiUrl,
+        });
+      }
+    },
+  };
+});
+vi.mock("@slack/socket-mode", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@slack/socket-mode")>();
+  const { slackSocketBoundary } = await import("@/test/slack-socket-fixture");
+  return {
+    ...actual,
+    SocketModeClient: class extends actual.SocketModeClient {
+      constructor(
+        options: NonNullable<
+          ConstructorParameters<typeof actual.SocketModeClient>[0]
+        >,
+      ) {
+        super({
+          ...options,
+          clientOptions: {
+            ...options.clientOptions,
+            slackApiUrl:
+              slackSocketBoundary.apiUrl ?? options.clientOptions?.slackApiUrl,
+          },
+        });
+      }
+    },
+  };
+});
 
 const slackConfig = {
   enabled: true,
@@ -32,7 +74,6 @@ describe("Slack startup cancellation", () => {
   ]) {
     test(`cancels stalled ${stage}, ignores its late response, and permits a fresh retry`, async () => {
       const fixture = await createSlackSocketFixture();
-      boundary.use(...fixture.handlers);
       if (stage === "hello-and-close") fixture.dropHelloAndClose();
       else if (stage === "handshake") fixture.stallHandshake();
       else fixture.stall(stage);
@@ -51,7 +92,6 @@ describe("Slack startup cancellation", () => {
         managed,
       });
       try {
-        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
         const pending = provider.initialize().then(
           () => undefined,
           (error: unknown) => error,
@@ -66,15 +106,15 @@ describe("Slack startup cancellation", () => {
         )
           await delay(10);
         expect(fixture.calls).toContain(expectedMethod);
-        // Let the real TCP handshake reach the server before advancing the deadline.
+        // Allow the real TCP handshake to reach the server.
         await delay(50);
-        await vi.advanceTimersByTimeAsync(SLACK_CONNECT_TIMEOUT_MS);
         expect(await pending).toMatchObject({
           message: expect.stringContaining("slack.com"),
         });
-        vi.useRealTimers();
         expect(provider.getBotUserId()).toBeNull();
         await delay(100);
+        if (!["handshake", "hello-and-close"].includes(stage))
+          expect(fixture.abortedRequests).toBe(1);
         fixture.release();
         await delay(100);
         expect(fixture.connections).toBe(stage === "hello-and-close" ? 1 : 0);
@@ -91,7 +131,6 @@ describe("Slack startup cancellation", () => {
           await retry.cleanup();
         }
       } finally {
-        vi.useRealTimers();
         await provider.cleanup();
         await fixture.close();
       }
@@ -100,43 +139,19 @@ describe("Slack startup cancellation", () => {
 
   test("initial rate limiting fails promptly without retaining a Retry-After timer", async () => {
     const fixture = await createSlackSocketFixture();
-    boundary.use(...fixture.handlers);
     fixture.failNextConnection(429, 60);
     const provider = new SlackProvider(slackConfig);
     try {
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-      let settled = false;
-      const pending = provider.initialize().then(
-        () => {
-          settled = true;
-        },
-        (error: unknown) => {
-          settled = true;
-          return error;
-        },
-      );
-      for (
-        let attempt = 0;
-        attempt < 100 && !fixture.calls.includes("apps.connections.open");
-        attempt++
-      )
-        await delay(10);
-      expect(fixture.calls).toContain("apps.connections.open");
+      const started = performance.now();
+      await expect(provider.initialize()).rejects.toThrow("slack.com");
+      expect(performance.now() - started).toBeLessThan(1000);
       await delay(100);
-      const failedPromptly = settled;
-      await vi.advanceTimersByTimeAsync(SLACK_CONNECT_TIMEOUT_MS);
-      expect(await pending).toMatchObject({
-        message: expect.stringContaining("slack.com"),
-      });
-      expect(failedPromptly).toBe(true);
-      expect(vi.getTimerCount()).toBe(0);
-      await vi.advanceTimersByTimeAsync(60000);
+      expect(process.getActiveResourcesInfo()).not.toContain("Timeout");
       expect(
         fixture.calls.filter((method) => method === "apps.connections.open"),
       ).toHaveLength(1);
       expect(fixture.connections).toBe(0);
     } finally {
-      vi.useRealTimers();
       await provider.cleanup();
       await fixture.close();
     }
@@ -144,7 +159,6 @@ describe("Slack startup cancellation", () => {
 
   test("an established session reconnects through rate limiting and a transient HTTP failure", async () => {
     const fixture = await createSlackSocketFixture();
-    boundary.use(...fixture.handlers);
     const provider = new SlackProvider(slackConfig);
     try {
       await provider.initialize();

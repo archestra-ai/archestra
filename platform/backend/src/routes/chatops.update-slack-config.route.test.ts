@@ -1,7 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { TimeInMs } from "@archestra/shared";
 import { eq } from "drizzle-orm";
-import { HttpResponse, http, passthrough } from "msw";
+import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { SLACK_CONNECT_TIMEOUT_MS } from "@/agents/chatops/constants";
@@ -9,7 +9,7 @@ import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { ChatOpsConfigModel } from "@/models";
-import { afterEach, describe, expect, test } from "@/test";
+import { describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import { createSlackSocketFixture } from "@/test/slack-socket-fixture";
@@ -17,12 +17,55 @@ import chatopsRoutes from "./chatops";
 
 setupTestCacheManager();
 
+// Keep the real SDK and Node sockets; only select the local endpoint and plain
+// transport. The provider still owns and destroys its initial Agent sockets.
+vi.mock("node:https", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:https")>()),
+  Agent: (await import("node:http")).Agent,
+}));
+vi.mock("@slack/web-api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@slack/web-api")>();
+  const { slackSocketBoundary } = await import("@/test/slack-socket-fixture");
+  return {
+    ...actual,
+    WebClient: class extends actual.WebClient {
+      constructor(
+        ...[token, options]: ConstructorParameters<typeof actual.WebClient>
+      ) {
+        super(token, {
+          ...options,
+          slackApiUrl: slackSocketBoundary.apiUrl ?? options?.slackApiUrl,
+        });
+      }
+    },
+  };
+});
+vi.mock("@slack/socket-mode", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@slack/socket-mode")>();
+  const { slackSocketBoundary } = await import("@/test/slack-socket-fixture");
+  return {
+    ...actual,
+    SocketModeClient: class extends actual.SocketModeClient {
+      constructor(
+        options: NonNullable<
+          ConstructorParameters<typeof actual.SocketModeClient>[0]
+        >,
+      ) {
+        super({
+          ...options,
+          clientOptions: {
+            ...options.clientOptions,
+            slackApiUrl:
+              slackSocketBoundary.apiUrl ?? options.clientOptions?.slackApiUrl,
+          },
+        });
+      }
+    },
+  };
+});
+
 describe("PUT /api/chatops/config/slack when Slack is unreachable", () => {
   const server = useMswServer();
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
 
   test("names slack.com when the connection fails", async ({
     makeOrganization,
@@ -88,22 +131,11 @@ describe("PUT /api/chatops/config/slack when Slack is unreachable", () => {
       http.post("https://slack.com/api/auth.test", () => new Promise(() => {})),
     );
     const app = await makeApp({ makeOrganization, makeUser });
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-
     const pending = app.inject({
       method: "PUT",
       url: "/api/chatops/config/slack",
       payload: slackConfig,
     });
-    let settled = false;
-    void pending.finally(() => {
-      settled = true;
-    });
-    for (let waited = 0; !settled && waited < SLACK_CONNECT_TIMEOUT_MS * 2; ) {
-      await vi.advanceTimersByTimeAsync(TimeInMs.Second);
-      waited += TimeInMs.Second;
-    }
-    vi.useRealTimers();
     const response = await pending;
 
     expect(response.statusCode).toBe(502);
@@ -117,10 +149,8 @@ describe("PUT /api/chatops/config/slack when Slack is unreachable", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const fixture = await createSlackSocketFixture();
-      // MSW's intercepted socket timeout is absolute; bypass it to exercise
-      // the SDK's real Node HTTP inactivity timeout while bytes keep arriving.
       server.close();
+      const fixture = await createSlackSocketFixture();
       fixture.dribble(method);
       const app = await makeApp({ makeOrganization, makeUser });
       let finished = false;
@@ -164,8 +194,8 @@ describe("PUT /api/chatops/config/slack when Slack is unreachable", () => {
       makeUser,
       makeInternalAgent,
     }) => {
+      server.close();
       const fixture = await createSlackSocketFixture();
-      server.use(...fixture.handlers);
       if (target === "main") fixture.dropHelloAndClose();
       else fixture.stallHandshake();
       const org = await makeOrganization();
@@ -182,12 +212,6 @@ describe("PUT /api/chatops/config/slack when Slack is unreachable", () => {
       registerAuditLogHook(app);
       await app.register(chatopsRoutes);
       const origin = await app.listen({ host: "127.0.0.1", port: 0 });
-      server.use(
-        http.all(`${origin}/api/chatops/config/slack`, () => passthrough()),
-        http.all(`${origin}/api/chatops/config/slack/agents/:agentId`, () =>
-          passthrough(),
-        ),
-      );
       const url = `${origin}/api/chatops/config/slack${agent ? `/agents/${agent.id}` : ""}`;
       const save = () =>
         fetch(url, {

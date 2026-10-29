@@ -70,17 +70,26 @@ start_backend() {
     # compiler error, and the next successful trigger brings it back. Once the
     # server has started, restart it when it exits: unlike tsdown --watch, this
     # process is the server, and Tilt does not restart a serve_cmd that exits.
-    # Five exits in a row within 10 s of starting end the loop, so a server
-    # that cannot start does not spin.
+    # Five exits in a row within 60 s of starting end the loop (startup takes
+    # about 15 s), so a server that cannot start does not spin. The loop runs
+    # its child in the background and passes TERM and INT on to it, so
+    # stop_backend also stops a server that is still starting.
     (
       cd backend || exit 1
-      ./node_modules/.bin/tsdown || { echo "backend build failed; the server stays down until the next successful 'tilt trigger pnpm-dev-backend'" >&2; exit 1; }
+      child=""
+      trap 'if [ -n "$child" ]; then kill -TERM "$child" 2>/dev/null; wait "$child"; fi; exit 143' TERM INT
+      ./node_modules/.bin/tsdown &
+      child=$!
+      wait "$child" || { echo "backend build failed; the server stays down until the next successful 'tilt trigger pnpm-dev-backend'" >&2; exit 1; }
       quick_exits=0
       while :; do
         started=$(date +%s)
-        node --enable-source-maps $inspect dist/server.mjs
+        node --enable-source-maps $inspect dist/server.mjs &
+        child=$!
+        wait "$child"
         status=$?
-        if [ $(( $(date +%s) - started )) -ge 10 ]; then quick_exits=0; else quick_exits=$((quick_exits + 1)); fi
+        child=""
+        if [ $(( $(date +%s) - started )) -ge 60 ]; then quick_exits=0; else quick_exits=$((quick_exits + 1)); fi
         if [ "$quick_exits" -ge 5 ]; then
           echo "backend exited ($status) five times right after starting; giving up until the next 'tilt trigger pnpm-dev-backend'" >&2
           exit "$status"

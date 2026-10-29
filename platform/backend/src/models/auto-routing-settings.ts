@@ -73,7 +73,8 @@ class AutoRoutingSettingsModel {
    */
   static async updateTrio<T>(params: {
     organizationId: string;
-    trio: AutoRoutingTrio;
+    /** The tiers the write sets; the others keep their current models. */
+    patch: Partial<AutoRoutingTrio>;
     validate: (
       next: AutoRoutingSettings,
       tx: Transaction,
@@ -87,11 +88,16 @@ class AutoRoutingSettingsModel {
         params.organizationId,
         tx,
       );
-      if (current) {
-        await params.validate({ ...current, ...params.trio }, tx, current);
-      }
+      const next = current ? { ...current, ...params.patch } : null;
+      const changed =
+        current !== null &&
+        next !== null &&
+        (next.fastModelId !== current.fastModelId ||
+          next.normalModelId !== current.normalModelId ||
+          next.smartModelId !== current.smartModelId);
+      if (changed) await params.validate(next, tx, current);
       const written = await params.write(tx);
-      if (current) {
+      if (changed) {
         await tx
           .update(agents)
           .set({

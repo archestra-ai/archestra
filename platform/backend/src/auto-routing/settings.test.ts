@@ -42,18 +42,13 @@ describe("writeOrganizationTrio", () => {
     config.autoRouting.enabled = true;
   });
 
-  const patchTrio = async (
+  const patchTrio = (
     organizationId: string,
     patch: { fastModelId: string | null },
-  ) => {
-    const current = await AutoRoutingSettingsModel.find(organizationId);
-    return writeOrganizationTrio({
+  ) =>
+    writeOrganizationTrio({
       organizationId,
-      trio: {
-        fastModelId: patch.fastModelId,
-        normalModelId: current?.normalModelId ?? null,
-        smartModelId: current?.smartModelId ?? null,
-      },
+      patch,
       write: (tx) =>
         OrganizationModel.patchInTransaction({
           id: organizationId,
@@ -61,7 +56,6 @@ describe("writeOrganizationTrio", () => {
           tx,
         }),
     });
-  };
 
   test("auto routing reads a changed tier from the organization and re-plans", async ({
     makeOrganization,

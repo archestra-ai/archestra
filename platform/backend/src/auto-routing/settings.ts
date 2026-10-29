@@ -94,17 +94,18 @@ export async function updateAutoRoutingSettings(
  */
 export async function writeOrganizationTrio<T>(params: {
   organizationId: string;
-  trio: AutoRoutingTrio;
+  /** The tiers the write sets, merged over the current row under the lock. */
+  patch: Partial<AutoRoutingTrio>;
   write: (tx: Transaction) => Promise<T>;
 }): Promise<T> {
-  const { organizationId, trio, write } = params;
+  const { organizationId, patch, write } = params;
   const checked = await AutoRoutingSettingsModel.find(organizationId);
   if (checked?.enabled) {
-    await assertFeasibleBudget(organizationId, { ...checked, ...trio });
+    await assertFeasibleBudget(organizationId, { ...checked, ...patch });
   }
   return AutoRoutingSettingsModel.updateTrio({
     organizationId,
-    trio,
+    patch,
     write,
     validate: async (next, tx, current) => {
       if (current.generation !== checked?.generation) {
@@ -211,9 +212,19 @@ async function assertValidSettings(
     const id = next[TIER_FIELDS[tier]];
     return id === null ? [] : [id];
   });
-  const shared = sharedLongContextThreshold(
-    await ModelModel.findByIds(ids, tx),
+  const models = await ModelModel.findByIds(ids, tx);
+  const unfit = models.find(
+    (model) =>
+      !ModelModel.supportsTextChat(model) ||
+      model.supportsToolCalling === false,
   );
+  if (unfit) {
+    throw new ApiError(
+      400,
+      `Auto routing tier "${unfit.provider}/${unfit.modelId}" is not a tool-capable chat model.`,
+    );
+  }
+  const shared = sharedLongContextThreshold(models);
   if (shared.kind === "mismatched") {
     throw new ApiError(
       400,

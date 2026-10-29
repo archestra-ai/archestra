@@ -394,31 +394,33 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // The trio is also auto routing's tiers: a change must keep it routable
-      // and re-plans it.
-      const trio = {
-        fastModelId: merged.fastModelId,
-        normalModelId: merged.modelId,
-        smartModelId: merged.smartModelId,
+      // and re-plans it, merged and checked against the row under the lock.
+      const trioPatch = {
+        ...(body.defaultFastModelId !== undefined && {
+          fastModelId: body.defaultFastModelId,
+        }),
+        ...(body.defaultModelId !== undefined && {
+          normalModelId: body.defaultModelId,
+        }),
+        ...(body.defaultSmartModelId !== undefined && {
+          smartModelId: body.defaultSmartModelId,
+        }),
       };
-      const trioChanged =
-        currentOrg !== null &&
-        (trio.fastModelId !== currentOrg.defaultFastModelId ||
-          trio.normalModelId !== currentOrg.defaultModelId ||
-          trio.smartModelId !== currentOrg.defaultSmartModelId);
-      const organization = trioChanged
-        ? await writeOrganizationTrio({
-            organizationId,
-            trio,
-            write: (tx) =>
-              OrganizationModel.patchInTransaction({
-                id: organizationId,
-                data: body,
-                tx,
-              }),
-          }).finally(() =>
-            OrganizationModel.invalidateSettingsCaches(organizationId),
-          )
-        : await OrganizationModel.patch(organizationId, body);
+      const organization =
+        Object.keys(trioPatch).length > 0
+          ? await writeOrganizationTrio({
+              organizationId,
+              patch: trioPatch,
+              write: (tx) =>
+                OrganizationModel.patchInTransaction({
+                  id: organizationId,
+                  data: body,
+                  tx,
+                }),
+            }).finally(() =>
+              OrganizationModel.invalidateSettingsCaches(organizationId),
+            )
+          : await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");

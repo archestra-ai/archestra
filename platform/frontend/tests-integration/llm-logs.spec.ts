@@ -58,17 +58,22 @@ test.describe("LLM logs — Client filter", () => {
     await llmLogsPage.goto();
     await llmLogsPage.clientFilter.click();
 
-    // Options carry the Anthropic
-    // logo's alt text alongside the label, so match the label as a substring.
+    // App and request-source options share a search but remain distinct groups.
     await expect(
       page.getByRole("option", { name: "Claude Code" }),
     ).toBeVisible();
     await expect(
       page.getByRole("option", { name: "Claude Desktop" }),
     ).toBeVisible();
-    await expect(page.getByRole("option", { name: "OpenCode" })).toBeVisible();
-    await expect(page.getByRole("option")).toHaveText([
-      "All Clients",
+    await expect(
+      page.getByRole("option", { name: "OpenCode", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("group", { name: "Client apps", exact: true })
+        .getByRole("option"),
+    ).toHaveText([
+      "All client apps",
       "Claude Code",
       "Claude Desktop",
       "Cursor",
@@ -78,6 +83,48 @@ test.describe("LLM logs — Client filter", () => {
       "Pi",
       "Copilot CLI",
     ]);
+  });
+
+  test("finds Claude by partial search, applies it with the keyboard, and clears all filters", async ({
+    page,
+    llmLogsPage,
+  }) => {
+    await llmLogsPage.goto();
+    await llmLogsPage.clientFilter.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("dialog")).toHaveAttribute(
+      "id",
+      (await llmLogsPage.clientFilter.getAttribute("aria-controls")) ?? "",
+    );
+    const search = page.getByRole("combobox", {
+      name: "Search apps and sources",
+    });
+    await search.fill("Cla");
+    await expect(
+      page.getByRole("option", { name: "Claude Code", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("option", { name: "Claude Desktop", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("option", { name: "API", exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByRole("option")).toHaveCount(2);
+    await search.fill("Claude Code");
+    await search.press("ArrowDown");
+    await search.press("Enter");
+    await expect(page).toHaveURL(/client=claude-code/);
+    await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toBeVisible();
+    await expect(llmLogsPage.rowForText(API_TITLE)).toHaveCount(0);
+    await expect(llmLogsPage.clientFilter).toBeFocused();
+    await llmLogsPage.clientFilter.click();
+    await search.fill("no-matching-app");
+    await expect(page.getByText("No apps or sources found.")).toBeVisible();
+    await search.press("Escape");
+    await expect(llmLogsPage.clientFilter).toBeFocused();
+    await page.getByRole("button", { name: "Clear", exact: true }).click();
+    await expect(page).not.toHaveURL(/client=|source=/);
+    await expect(llmLogsPage.rowForText(API_TITLE)).toBeVisible();
   });
 
   test("narrows the list to OpenCode traffic and reflects it in the URL", async ({
@@ -115,8 +162,8 @@ test.describe("LLM logs — Client filter", () => {
     await expect(llmLogsPage.rowForText(CLAUDE_DESKTOP_TITLE)).toBeVisible();
     await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toHaveCount(0);
 
-    // Clearing back to "All Clients" drops the param and restores the list.
-    await llmLogsPage.selectClient("All Clients");
+    // Clearing the client dimension drops its param and restores the list.
+    await llmLogsPage.selectClient("All client apps");
 
     await expect(page).not.toHaveURL(/client=/);
     await expect(llmLogsPage.rowForText(API_TITLE)).toBeVisible();
@@ -128,8 +175,8 @@ test.describe("LLM logs — Client filter", () => {
   }) => {
     await llmLogsPage.goto();
 
-    // Source filter is the 3rd combobox; pick "API".
-    await page.getByRole("combobox").nth(2).click();
+    // Choose a request source from the same picker.
+    await llmLogsPage.clientFilter.click();
     await page.getByRole("option", { name: "API", exact: true }).click();
     await expect(page).toHaveURL(/source=api/);
 
@@ -141,6 +188,11 @@ test.describe("LLM logs — Client filter", () => {
     // (the Desktop seed uses a non-api source, the API seed is not a Claude client).
     await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toBeVisible();
     await expect(llmLogsPage.rowForText(CLAUDE_DESKTOP_TITLE)).toHaveCount(0);
+    await expect(llmLogsPage.rowForText(API_TITLE)).toHaveCount(0);
+    await llmLogsPage.selectClient("All request sources");
+    await expect(page).not.toHaveURL(/source=/);
+    await expect(page).toHaveURL(/client=claude-code/);
+    await expect(llmLogsPage.rowForText(CLAUDE_CODE_TITLE)).toBeVisible();
     await expect(llmLogsPage.rowForText(API_TITLE)).toHaveCount(0);
   });
 });

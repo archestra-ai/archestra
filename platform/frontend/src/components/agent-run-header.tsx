@@ -25,7 +25,7 @@ export function AgentRunHeader({
   actions,
 }: AgentRunHeaderProps) {
   return (
-    <header className="grid shrink-0 grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 border-b px-4 py-2.5">
+    <header className="grid shrink-0 grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 border-b px-4 py-2.5 lg:grid-cols-[2.25rem_minmax(0,1fr)_auto]">
       <Link
         href={agentHref}
         aria-label={`View Agent ${agentName}`}
@@ -36,7 +36,7 @@ export function AgentRunHeader({
       <div className="grid min-w-0 grid-cols-[minmax(0,max-content)_auto] items-center gap-x-2 gap-y-1">
         <nav
           aria-label="Session context"
-          className="col-span-2 hidden min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground sm:flex"
+          className="col-span-2 hidden min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground lg:flex"
         >
           <Link
             href={agentHref}
@@ -50,22 +50,22 @@ export function AgentRunHeader({
           <time title={startedTitle}>{started}</time>
         </nav>
         <h1
-          className="col-span-2 row-start-1 min-w-0 truncate text-sm font-medium leading-5 sm:col-span-1 sm:row-start-2"
+          className="col-span-2 row-start-1 min-w-0 truncate text-sm font-medium leading-5 lg:col-span-1 lg:row-start-2"
           title={title}
         >
           {title}
         </h1>
         <Link
           href={agentHref}
-          className="col-start-1 row-start-2 min-w-0 truncate rounded text-xs text-muted-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring sm:hidden"
+          className="col-span-2 col-start-1 row-start-2 min-w-0 truncate rounded text-xs text-muted-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring lg:hidden"
         >
           {agentName}
         </Link>
-        <span className="col-start-2 row-start-2 inline-flex shrink-0 text-xs [&_span]:text-xs">
+        <span className="col-span-2 col-start-1 row-start-3 inline-flex shrink-0 text-xs lg:col-span-1 lg:col-start-2 lg:row-start-2 [&_span]:text-xs">
           {status}
         </span>
       </div>
-      <div className="flex shrink-0 items-center justify-end">{actions}</div>
+      <div className="col-span-2 flex shrink-0 items-center justify-end lg:col-span-1">{actions}</div>
     </header>
   );
 }

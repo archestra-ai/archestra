@@ -47,7 +47,8 @@ vi.mock("@/components/agent-run-terminal", () => ({
   },
 }));
 
-vi.mock("@/components/agent-run-logs", () => ({
+vi.mock("@/components/agent-run-logs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/agent-run-logs")>()),
   AgentRunLogs: () => <div>Retained run output</div>,
 }));
 
@@ -96,7 +97,7 @@ describe("AgentRunChatSession", () => {
       },
     });
     const { rerender } = render(<AgentRunChatSession taskId="task-1" />);
-    await user.click(screen.getByRole("button", { name: "Resume" }));
+    await user.click(screen.getAllByRole("button", { name: "Resume" })[0]);
     expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
     expect(screen.queryByText("Retained run output")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More run actions" }));
@@ -113,7 +114,9 @@ describe("AgentRunChatSession", () => {
       },
     };
     rerender(<AgentRunChatSession taskId="task-1" />);
-    expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Resume" })[0],
+    ).toBeInTheDocument();
   });
 
   it("opens the shared terminal while the session is being created", () => {

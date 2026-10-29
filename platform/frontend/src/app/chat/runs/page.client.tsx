@@ -9,7 +9,9 @@ import {
   Info,
   Loader2,
   type LucideIcon,
+  Maximize2,
   MoreHorizontal,
+  PanelRight,
   Play,
   Share2,
   Square,
@@ -18,14 +20,19 @@ import {
   Unplug,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentRunLiveness } from "@/components/agent-run-liveness";
-import { AgentRunLogs } from "@/components/agent-run-logs";
+import {
+  AgentRunDownloadMenuItems,
+  AgentRunLogs,
+  type AgentRunLogsHandle,
+} from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
 import { ShareAgentRunDialog } from "@/components/chat/share-agent-run-dialog";
+import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExecTerminalStatus } from "@/components/exec/exec-terminal-progress";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -34,6 +41,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -53,8 +61,24 @@ import {
 import { copyToClipboard } from "@/lib/clipboard";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { llmSessionHref } from "@/lib/interactions/llm-log-links";
+import { useProject } from "@/lib/projects/projects.query";
+import { AgentRunHeader } from "./_parts/agent-run-header";
 
-export function AgentRunChatSession({ taskId }: { taskId: string }) {
+export function AgentRunChatSession({
+  taskId,
+  embedded = false,
+  headerLeading,
+  drawerFooter,
+  initiatorName,
+}: {
+  taskId: string;
+  embedded?: boolean;
+  headerLeading?: ReactNode;
+  drawerFooter?: ReactNode;
+  initiatorName?: string;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const logsRef = useRef<AgentRunLogsHandle>(null);
   const [resumedRun, setResumedRun] = useState<{
     sourceId: string;
     taskId: string;
@@ -86,16 +110,13 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const [commandCopied, setCommandCopied] = useState(false);
   const [portCommandCopied, setPortCommandCopied] = useState(false);
   const run = query.data;
-  usePageTitle(run?.title ?? "Agent Runtime");
   const now = useRuntimeClock(true);
 
   // The run's LLM requests are logged under its session id, which only the
   // owner is sent; `log:read` lets them open their own trace.
   const { data: canReadLogs } = useHasPermissions({ log: ["read"] });
 
-  // Metadata and the log stream are readable by shared viewers, but attaching
-  // to the live terminal runs a shell under the owner's own credentials — so it
-  // stays owner-only. Everyone else gets the read-only output stream.
+  // Only the run owner can attach under this release's terminal permissions.
   const isOwner = run?.viewerRole === "owner";
 
   if (!query.isPending && !run) {
@@ -201,218 +222,376 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     });
   }
 
+  const headerActions = run ? (
+    <div
+      className={
+        embedded
+          ? "flex w-full items-center gap-1 @3xl:w-auto @3xl:row-start-1 @3xl:col-start-2 @3xl:self-center"
+          : "flex shrink-0 items-center gap-1"
+      }
+    >
+      {embedded && (
+        <div className="mr-2 min-w-0 flex-1 @3xl:hidden">{headerLeading}</div>
+      )}
+      {actions
+        .filter((action) => action.primary || action.prominent)
+        .map((action) => (
+          <span key={action.label} className="inline-flex shrink-0">
+            {action.primary && (
+              <Button
+                type="button"
+                size="icon-sm"
+                className="sm:hidden"
+                variant="default"
+                aria-label={action.label}
+                title={action.label}
+                disabled={action.disabled}
+                onClick={action.onSelect}
+              >
+                <action.icon
+                  className={
+                    action.disabled ? "size-3.5 animate-spin" : "size-3.5"
+                  }
+                />
+              </Button>
+            )}{" "}
+            <Button
+              key={action.label}
+              size="sm"
+              className={action.primary ? "hidden sm:inline-flex" : undefined}
+              variant={action.primary ? "default" : "outline"}
+              disabled={action.disabled}
+              onClick={action.onSelect}
+            >
+              <action.icon
+                className={
+                  action.disabled ? "size-3.5 animate-spin" : "size-3.5"
+                }
+              />
+              <span>{action.label}</span>
+            </Button>{" "}
+          </span>
+        ))}
+      {(isOwner || canManageAccess || !showLiveTerminal) && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="More run actions"
+            >
+              {continuation.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <MoreHorizontal className="size-4" />
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onSelect={() => {
+                void copyToClipboard(run.taskId).then(() =>
+                  toast.success("Run ID copied"),
+                );
+              }}
+            >
+              <Copy />
+              <span>Copy run ID</span>
+            </DropdownMenuItem>
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground sm:hidden">
+              Started{" "}
+              {formatDistance(new Date(run.startedAt), now, {
+                addSuffix: true,
+              })}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {!showLiveTerminal && (
+              <>
+                <AgentRunDownloadMenuItems
+                  onDownload={(kind) => logsRef.current?.download(kind)}
+                  trajectoryDisabled={live}
+                />
+                <DropdownMenuSeparator />
+              </>
+            )}
+            {actions
+              .filter((action) => !action.primary && !action.prominent)
+              .map((action) => (
+                <DropdownMenuItem
+                  key={action.label}
+                  disabled={action.disabled}
+                  onSelect={action.onSelect}
+                >
+                  <action.icon
+                    className={
+                      action.disabled ? "size-4 animate-spin" : "size-4"
+                    }
+                  />
+                  <span>{action.label}</span>
+                </DropdownMenuItem>
+              ))}
+            {actions.some((action) => !action.primary && !action.prominent) &&
+              isOwner && <DropdownMenuSeparator />}
+            {isOwner && (
+              <>
+                <DropdownMenuItem onSelect={() => setShareDialogOpen(true)}>
+                  <Share2 className="size-4" />
+                  <span>Share</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={`/agents/${run.agent.id}?section=runs`}>
+                    <Bot className="size-4" />
+                    <span>View Agent</span>
+                  </Link>
+                </DropdownMenuItem>
+                {canReadLogs && run.sessionId ? (
+                  <DropdownMenuItem asChild>
+                    <Link href={llmSessionHref(run.sessionId)}>
+                      <Activity className="size-4" />
+                      <span>View trace</span>
+                    </Link>
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem
+                  disabled={!availableConnectionCommand}
+                  onSelect={() => setConnectionDialogOpen(true)}
+                >
+                  <TerminalSquare className="size-4" />
+                  <span>View connection details</span>
+                </DropdownMenuItem>
+                {run.workspace &&
+                  ["idle", "suspended", "deleting"].includes(
+                    run.workspace.state,
+                  ) && (
+                    <DropdownMenuItem
+                      onSelect={() => setDeleteWorkspaceDialogOpen(true)}
+                    >
+                      <Trash2 className="size-4" />
+                      <span>Delete saved files</span>
+                    </DropdownMenuItem>
+                  )}
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      {embedded && (
+        <Button variant="ghost" size="icon-sm" asChild>
+          <Link href={`/chat/runs/${activeTaskId}`} aria-label="Open full view">
+            <Maximize2 />
+          </Link>
+        </Button>
+      )}
+      {embedded && (
+        <Button
+          variant={detailsOpen ? "secondary" : "ghost"}
+          size="icon-sm"
+          aria-label="Details"
+          title="Details"
+          aria-expanded={detailsOpen}
+          onClick={() => setDetailsOpen(!detailsOpen)}
+        >
+          <PanelRight />
+        </Button>
+      )}
+    </div>
+  ) : null;
+
   return (
-    <main className="@container flex h-full min-h-0 flex-col bg-background">
+    <main className="@container flex h-full min-h-0 min-w-0 flex-col bg-background">
+      {!embedded && <RunPageTitle title={run?.title ?? "Agent Runtime"} />}
       {/* Keep this slot mounted while metadata loads so inserting the header
           cannot remount the terminal and restart its attach progress. */}
-      <header
-        className={
-          run
-            ? "flex shrink-0 flex-wrap items-start justify-between gap-3 border-b px-4 py-3 @2xl:px-5"
-            : "hidden"
-        }
-      >
+      <div className="contents">
         {run ? (
-          <>
-            <div className="flex min-w-0 flex-1 basis-48 items-center gap-3">
-              <div className="hidden size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40 @2xl:flex">
-                <AgentIcon icon={run.agent.icon} size={20} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <h1 className="min-w-0 basis-full truncate text-sm font-medium @2xl:basis-auto">
+          embedded ? (
+            <header className="grid shrink-0 grid-cols-1 items-center gap-2 border-b px-4 py-3 @3xl:grid-cols-[minmax(0,1fr)_auto] @3xl:gap-x-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="hidden @3xl:block">{headerLeading}</div>
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <h1 className="min-w-0 truncate text-sm font-medium">
                     {run.title}
                   </h1>
-                  <AgentRunState
-                    state={run.state}
-                    attentionState={run.attentionState}
-                    statusReason={run.statusReason}
-                    lastModelActivityAt={run.lastModelActivityAt}
-                    startedAt={run.startedAt}
-                    endedAt={run.endedAt}
-                    hardDeadlineAt={run.hardDeadlineAt}
-                    terminalRetained={run.terminalRetained}
-                    workspace={run.workspace}
+                  <span className="inline-flex shrink-0 text-xs [&_span]:text-xs">
+                    <AgentRunState
+                      state={run.state}
+                      attentionState={run.attentionState}
+                      statusReason={run.statusReason}
+                      lastModelActivityAt={run.lastModelActivityAt}
+                      startedAt={run.startedAt}
+                      endedAt={run.endedAt}
+                      hardDeadlineAt={run.hardDeadlineAt}
+                      terminalRetained={run.terminalRetained}
+                      workspace={run.workspace}
+                      compact
+                    />
+                  </span>
+                </div>
+              </div>
+              {headerActions}
+            </header>
+          ) : (
+            <AgentRunHeader
+              title={run.title}
+              status={
+                <AgentRunState
+                  state={run.state}
+                  attentionState={run.attentionState}
+                  statusReason={run.statusReason}
+                  lastModelActivityAt={run.lastModelActivityAt}
+                  startedAt={run.startedAt}
+                  endedAt={run.endedAt}
+                  hardDeadlineAt={run.hardDeadlineAt}
+                  terminalRetained={run.terminalRetained}
+                  workspace={run.workspace}
+                  compact
+                />
+              }
+              agentName={run.agent.name}
+              agentHref={`/agents/${run.agent.id}?section=runs`}
+              agentImage={<AgentIcon icon={run.agent.icon} size={20} />}
+              started={`Started ${formatDistance(new Date(run.startedAt), now, { addSuffix: true })}`}
+              startedTitle={new Date(run.startedAt).toLocaleString()}
+              actions={headerActions}
+            />
+          )
+        ) : null}
+      </div>
+      <div className="relative flex min-h-0 min-w-0 flex-1">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 px-4 pt-3 pb-4 md:px-6 md:pb-6">
+          {run && live && <AgentRunLiveness run={run} />}
+          {isOwner && !live && run?.workspace && (
+            <InlineNotice
+              variant={run.state === "TASK_STATE_FAILED" ? "error" : "neutral"}
+              role={run.state === "TASK_STATE_FAILED" ? "alert" : "status"}
+              className="shrink-0"
+            >
+              {workspaceNotice && (
+                <>
+                  <Info aria-hidden />
+                  <InlineNoticeText>{workspaceNotice}</InlineNoticeText>
+                </>
+              )}
+              {run.workspace.state !== "deleted" && (
+                <WorkspaceRetention expiresAt={run.workspace.expiresAt} />
+              )}
+            </InlineNotice>
+          )}
+          {showLiveTerminal ? (
+            <AgentRunTerminal
+              taskId={run?.taskId ?? activeTaskId}
+              active
+              title={live ? "Live terminal" : "Output"}
+              showManualCommand={false}
+              showDisconnectedStatus={false}
+              onCommandChange={setConnectionCommand}
+              onError={() => {
+                setReattachedTaskId(null);
+                void query.refetch();
+              }}
+              onClosed={() => {
+                setReattachedTaskId(null);
+                void query.refetch();
+              }}
+            />
+          ) : run ? (
+            <>
+              {live && !isOwner && (
+                <div className="shrink-0 overflow-hidden rounded-md border bg-slate-950">
+                  <ExecTerminalStatus
+                    title="Read-only terminal"
+                    detail="Only the person who started this run can attach to it. You're viewing its terminal output in read-only mode."
                     compact
                   />
                 </div>
-                <div className="mt-1 flex flex-wrap gap-x-1.5 text-xs text-muted-foreground @2xl:mt-0">
-                  <span>{run.agent.name}</span>
-                  <span aria-hidden>·</span>
-                  <time
-                    dateTime={run.startedAt}
-                    title={`Started ${new Date(run.startedAt).toLocaleString()}`}
-                  >
-                    Started{" "}
+              )}
+              <AgentRunLogs
+                ref={logsRef}
+                key={run.taskId}
+                run={run}
+                sessionId={isOwner ? run.sessionId : undefined}
+              />
+            </>
+          ) : null}
+        </section>
+        {run && embedded && detailsOpen && (
+          <aside
+            aria-label="Run details"
+            className="absolute inset-y-0 right-0 z-10 flex w-full min-h-0 shrink-0 flex-col border-l bg-background @3xl:static @3xl:w-64"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setDetailsOpen(false);
+            }}
+          >
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-4 text-sm">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Started by</dt>
+                  <dd className="mt-1">
+                    {initiatorName ?? (isOwner ? "You" : "Run owner")}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Started</dt>
+                  <dd className="mt-1">
                     {formatDistance(new Date(run.startedAt), now, {
                       addSuffix: true,
                     })}
-                  </time>
+                  </dd>
                 </div>
-              </div>
-            </div>
-            <div className="ml-auto flex shrink-0 items-center gap-1">
-              {actions
-                .filter((action) => action.primary || action.prominent)
-                .map((action) => (
-                  <Button
-                    key={action.label}
-                    size="sm"
-                    variant={action.primary ? "default" : "outline"}
-                    disabled={action.disabled}
-                    onClick={action.onSelect}
-                  >
-                    <action.icon
-                      className={
-                        action.disabled ? "size-3.5 animate-spin" : "size-3.5"
-                      }
+                <div className="col-span-2">
+                  <dt className="mb-2 text-xs text-muted-foreground">Run ID</dt>
+                  <dd>
+                    <CopyableCode
+                      value={run.taskId}
+                      toastMessage="Run ID copied"
                     />
-                    <span>{action.label}</span>
-                  </Button>
-                ))}
-              {(isOwner || canManageAccess) && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="More run actions"
-                    >
-                      {continuation.isPending ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <MoreHorizontal className="size-4" />
-                      )}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {actions
-                      .filter((action) => !action.primary && !action.prominent)
-                      .map((action) => (
-                        <DropdownMenuItem
-                          key={action.label}
-                          disabled={action.disabled}
-                          onSelect={action.onSelect}
-                        >
-                          <action.icon
-                            className={
-                              action.disabled ? "size-4 animate-spin" : "size-4"
-                            }
-                          />
-                          <span>{action.label}</span>
-                        </DropdownMenuItem>
-                      ))}
-                    {actions.some(
-                      (action) => !action.primary && !action.prominent,
-                    ) &&
-                      isOwner && <DropdownMenuSeparator />}
-                    {isOwner && (
-                      <>
-                        <DropdownMenuItem
-                          onSelect={() => setShareDialogOpen(true)}
-                        >
-                          <Share2 className="size-4" />
-                          <span>Share</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href={`/agents/${run.agent.id}?section=runs`}>
-                            <Bot className="size-4" />
-                            <span>View Agent</span>
-                          </Link>
-                        </DropdownMenuItem>
-                        {canReadLogs && run.sessionId ? (
-                          <DropdownMenuItem asChild>
-                            <Link href={llmSessionHref(run.sessionId)}>
-                              <Activity className="size-4" />
-                              <span>View trace</span>
-                            </Link>
-                          </DropdownMenuItem>
-                        ) : null}
-                        <DropdownMenuItem
-                          disabled={!availableConnectionCommand}
-                          onSelect={() => setConnectionDialogOpen(true)}
-                        >
-                          <TerminalSquare className="size-4" />
-                          <span>View connection details</span>
-                        </DropdownMenuItem>
-                        {run.workspace &&
-                          ["idle", "suspended", "deleting"].includes(
-                            run.workspace.state,
-                          ) && (
-                            <DropdownMenuItem
-                              onSelect={() =>
-                                setDeleteWorkspaceDialogOpen(true)
-                              }
-                            >
-                              <Trash2 className="size-4" />
-                              <span>Delete saved files</span>
-                            </DropdownMenuItem>
-                          )}
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+                  </dd>
+                </div>
+                {run.projectId && (
+                  <div className="col-span-2">
+                    <dt className="text-xs text-muted-foreground">Project</dt>
+                    <dd className="mt-1">
+                      <RunProjectLink projectId={run.projectId} />
+                    </dd>
+                  </div>
+                )}
+                {run.workspace && (
+                  <div className="col-span-2">
+                    <dt className="text-xs text-muted-foreground">Workspace</dt>
+                    <dd className="mt-1">
+                      {run.workspace.state === "suspended"
+                        ? "Paused; saved files retained"
+                        : run.workspace.state}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+              <section className="mt-5 space-y-3 border-t pt-4 text-xs leading-relaxed">
+                <h3 className="text-sm font-medium">Access</h3>
+                <p className="text-muted-foreground">
+                  The run owner, Agent administrators, and shared viewers can
+                  read output.
+                  {run.projectId && (
+                    <span>
+                      {" "}
+                      Project viewers also need permission to read all project
+                      sessions.
+                    </span>
+                  )}
+                </p>
+                <p className="text-muted-foreground">
+                  The owner can connect. Managers of an owning service account
+                  also need Agent use access. Sharing and project visibility
+                  grant read-only access.
+                </p>
+              </section>
             </div>
-          </>
-        ) : null}
-      </header>
-
-      <section className="flex min-h-0 flex-1 flex-col gap-3 px-4 pt-3 pb-4 md:px-6 md:pb-6">
-        {run && live && <AgentRunLiveness run={run} />}
-        {isOwner && !live && run?.workspace && (
-          <InlineNotice
-            variant={run.state === "TASK_STATE_FAILED" ? "error" : "neutral"}
-            role={run.state === "TASK_STATE_FAILED" ? "alert" : "status"}
-            className="shrink-0"
-          >
-            {workspaceNotice && (
-              <>
-                <Info aria-hidden />
-                <InlineNoticeText>{workspaceNotice}</InlineNoticeText>
-              </>
+            {drawerFooter && (
+              <footer className="shrink-0 border-t p-2">{drawerFooter}</footer>
             )}
-            {run.workspace.state !== "deleted" && (
-              <WorkspaceRetention expiresAt={run.workspace.expiresAt} />
-            )}
-          </InlineNotice>
+          </aside>
         )}
-        {showLiveTerminal ? (
-          <AgentRunTerminal
-            taskId={run?.taskId ?? activeTaskId}
-            active
-            title={live ? "Live terminal" : "Output"}
-            showManualCommand={false}
-            showDisconnectedStatus={false}
-            onCommandChange={setConnectionCommand}
-            onError={() => {
-              setReattachedTaskId(null);
-              void query.refetch();
-            }}
-            onClosed={() => {
-              setReattachedTaskId(null);
-              void query.refetch();
-            }}
-          />
-        ) : run ? (
-          <>
-            {live && !isOwner && (
-              <div className="shrink-0 overflow-hidden rounded-md border bg-slate-950">
-                <ExecTerminalStatus
-                  title="Read-only terminal"
-                  detail="Only the person who started this run can attach to it. You're viewing its terminal output in read-only mode."
-                  compact
-                />
-              </div>
-            )}
-            <AgentRunLogs
-              key={run.taskId}
-              run={run}
-              sessionId={isOwner ? run.sessionId : undefined}
-            />
-          </>
-        ) : null}
-      </section>
+      </div>
       <DeleteConfirmDialog
         open={stopDialogOpen}
         onOpenChange={setStopDialogOpen}
@@ -539,4 +718,21 @@ function workspaceNoticeFor({
     default:
       return "The Agent is busy or changing state. Try again shortly.";
   }
+}
+
+function RunProjectLink({ projectId }: { projectId: string }) {
+  const project = useProject(projectId);
+  return (
+    <Link
+      className="underline underline-offset-4"
+      href={`/projects/${projectId}`}
+    >
+      {project.data?.name ?? "View project"}
+    </Link>
+  );
+}
+
+function RunPageTitle({ title }: { title: string }) {
+  usePageTitle(title);
+  return null;
 }

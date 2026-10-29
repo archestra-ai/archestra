@@ -16,6 +16,7 @@ import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-erro
 import {
   APP_ID_HEADER,
   ArchestraInternalErrorCode,
+  AUTO_ROUTED_HEADER,
   type BillingMode,
   CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
@@ -31,6 +32,7 @@ import {
   providerDisplayNames,
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
+  type SupportedProvider,
   stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
 import {
@@ -43,7 +45,10 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { assertNotAutoOnNativeRoute } from "@/auto-routing/router";
+import {
+  assertNotAutoOnNativeRoute,
+  routeInternalAutoSession,
+} from "@/auto-routing/router";
 import { a2aOAuthExecutionReference } from "@/clients/a2a-oauth-execution";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
@@ -196,10 +201,12 @@ import {
   type UpstreamAttempt,
 } from "./model-pool-failover";
 import {
+  canReachMember,
   inboundPoolWire,
   type MemberTransport,
   memberAdapter,
   memberTransport,
+  type PoolWire,
   requestedMaxOutputTokens,
 } from "./model-pool-transport";
 import { StreamKeepAlive } from "./stream-keepalive";
@@ -247,6 +254,8 @@ export interface LLMProxyContext<TRequest> {
   upstreamAttempt: UpstreamAttempt;
   /** Set when the request's model is a model pool's name. */
   modelPool?: ModelPoolRouting;
+  /** Set when an "Auto" platform call was routed to another model than it named. */
+  autoRoutedTier?: AutoRoutedTier;
   billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
   appaReceipts?: OpenappaReceipts;
@@ -320,6 +329,19 @@ export interface ModelPoolRouting {
   ) => Promise<MemberTransport>;
   recordFailedAttempt: (attempt: UpstreamAttempt) => Promise<void>;
   setResponseHeaders: (attempt: UpstreamAttempt) => void;
+}
+
+/** The tier an "Auto" call runs on, reached the way a pool member is. */
+interface AutoRoutedTier {
+  member: TierMember;
+  transport: () => Promise<MemberTransport>;
+}
+
+/** A provider key and the model id its provider knows the model by. */
+interface TierMember {
+  providerApiKeyId: string;
+  provider: SupportedProvider;
+  modelId: string;
 }
 
 export interface StreamTiming {
@@ -1355,6 +1377,41 @@ export async function handleLLMProxy<
             sessionId,
           })
         : null;
+    // A chat or agent set to "Auto" names its anchor, the organization's
+    // default model. The router picks the session's tier; another model than
+    // the anchor is reached the way a pool member is.
+    const autoRoute =
+      internalCall &&
+      config.autoRouting.enabled &&
+      headersForExtraction[AUTO_ROUTED_HEADER.toLowerCase()] === "true"
+        ? await routeInternalAutoSession({
+            request,
+            organizationId: resolvedAgent.organizationId,
+            userId: requireAutoRoutedUser(userId),
+            sessionId,
+            body: requestAdapter.getOriginalRequest(),
+          })
+        : null;
+    const autoRoutedMember: TierMember | null =
+      autoRoute &&
+      !(
+        autoRoute.model.provider === providerName &&
+        autoRoute.model.modelId === actualModel
+      )
+        ? {
+            providerApiKeyId: autoRoute.providerApiKeyId,
+            provider: autoRoute.model.provider,
+            modelId: autoRoute.model.modelId,
+          }
+        : null;
+    const autoRoutedWire = autoRoutedMember
+      ? reachableWire({
+          inbound: poolWire,
+          member: autoRoutedMember,
+          from: providerName,
+        })
+      : null;
+
     // A credential let in only for a pool has no key for this provider, so
     // the request can't go anywhere but the pool.
     if (grantedPoolId && !perKeyChatApiKeyId && !modelPoolPlan) {
@@ -1370,7 +1427,7 @@ export async function handleLLMProxy<
     // instead.
     const catalogModel = requestContext.model;
     const discovered =
-      modelPoolPlan || catalogModel
+      modelPoolPlan || autoRoutedMember || catalogModel
         ? []
         : [
             await ModelModel.ensureModelExists(actualModel, providerName),
@@ -1795,65 +1852,76 @@ export async function handleLLMProxy<
           ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
           : {}),
       });
-    // A pooled request never uses the caller's own key, which a Model Router
-    // pool request doesn't even carry.
-    const client = modelPoolPlan
-      ? undefined
-      : createUpstreamClient({
-          adapter: provider,
-          apiKey,
-          baseUrl: effectiveBaseUrl,
-          headers: mergedHeaders,
-          providerApiKeyId: perKeyChatApiKeyId,
-          model: requestAdapter.getModel(),
-          azureRequest:
-            providerName === "azure"
-              ? getAzureProxyIngress(request)
-              : undefined,
-        });
+    // A member's own provider client, its own model id and, when it speaks
+    // another wire than the client's, a translator.
+    const reachMember = async (
+      inbound: PoolWire,
+      member: TierMember,
+      signal?: AbortSignal,
+    ): Promise<MemberTransport> => {
+      const row = await LlmProviderApiKeyModel.findById(
+        member.providerApiKeyId,
+      );
+      const adapter = memberAdapter(member.provider);
+      if (!row || !adapter) {
+        throw new ApiError(500, "Model pool member key no longer exists");
+      }
+      const sameWire = inboundPoolWire(adapter.interactionType) === inbound;
+      return memberTransport({
+        inbound,
+        provider: member.provider,
+        modelId: member.modelId,
+        client: createUpstreamClient({
+          adapter,
+          apiKey: row.secretId
+            ? await getSecretValueForLlmProviderApiKey(row.secretId)
+            : undefined,
+          baseUrl: row.inferenceBaseUrl ?? row.baseUrl ?? adapter.getBaseUrl(),
+          // Protocol headers (anthropic-beta, ...) only mean something to a
+          // member on the client's own wire.
+          headers: {
+            ...(row.extraHeaders ?? {}),
+            ...(sameWire ? headersToForward : {}),
+          },
+          providerApiKeyId: row.id,
+          model: member.modelId,
+          attemptSignal: signal,
+        }),
+      });
+    };
+    const autoRoutedTier: AutoRoutedTier | undefined =
+      autoRoutedMember && autoRoutedWire
+        ? {
+            member: autoRoutedMember,
+            transport: () => reachMember(autoRoutedWire, autoRoutedMember),
+          }
+        : undefined;
 
-    // Each pool member is reached with its own provider's client, its own
-    // model id and, when it speaks another wire, a translator.
+    // A pooled or routed request never uses the caller's own key, which a
+    // Model Router pool request doesn't even carry.
+    const client =
+      modelPoolPlan || autoRoutedTier
+        ? undefined
+        : createUpstreamClient({
+            adapter: provider,
+            apiKey,
+            baseUrl: effectiveBaseUrl,
+            headers: mergedHeaders,
+            providerApiKeyId: perKeyChatApiKeyId,
+            model: requestAdapter.getModel(),
+            azureRequest:
+              providerName === "azure"
+                ? getAzureProxyIngress(request)
+                : undefined,
+          });
+
+    // Each pool member is reached with its own provider's client.
     const modelPool: ModelPoolRouting | undefined =
       modelPoolPlan && poolWire
         ? {
             plan: modelPoolPlan,
-            transportFor: async (member, signal) => {
-              const row = await LlmProviderApiKeyModel.findById(
-                member.providerApiKeyId,
-              );
-              const adapter = memberAdapter(member.provider);
-              if (!row || !adapter) {
-                throw new ApiError(
-                  500,
-                  "Model pool member key no longer exists",
-                );
-              }
-              const sameWire =
-                inboundPoolWire(adapter.interactionType) === poolWire;
-              return memberTransport({
-                inbound: poolWire,
-                provider: member.provider,
-                modelId: member.modelId,
-                client: createUpstreamClient({
-                  adapter,
-                  apiKey: row.secretId
-                    ? await getSecretValueForLlmProviderApiKey(row.secretId)
-                    : undefined,
-                  baseUrl:
-                    row.inferenceBaseUrl ?? row.baseUrl ?? adapter.getBaseUrl(),
-                  // Protocol headers (anthropic-beta, ...) only mean something
-                  // to a member on the client's own wire.
-                  headers: {
-                    ...(row.extraHeaders ?? {}),
-                    ...(sameWire ? headersToForward : {}),
-                  },
-                  providerApiKeyId: row.id,
-                  model: member.modelId,
-                  attemptSignal: signal,
-                }),
-              });
-            },
+            transportFor: (member, signal) =>
+              reachMember(poolWire, member, signal),
             recordFailedAttempt: async (attempt) => {
               const cutOff = attempt.cutOff
                 ? await estimateCutOffAttemptUsage({
@@ -2032,7 +2100,8 @@ export async function handleLLMProxy<
             })
         : undefined,
       attributionLabels,
-      autoRouting,
+      // Read again: an "Auto" platform call records its decision above.
+      autoRouting: autoRoutingContext(request),
       throughput: new LlmThroughput({
         entities: [...uniqueBillingEntities.values()],
         model: actualModel,
@@ -2044,6 +2113,7 @@ export async function handleLLMProxy<
       providerApiKeyId: perKeyChatApiKeyId,
       upstreamAttempt,
       ...(modelPool ? { modelPool } : {}),
+      ...(autoRoutedTier ? { autoRoutedTier } : {}),
       billingAttribution: {
         organizationId: resolvedAgent.organizationId,
         environmentId: resolvedAgent.environmentId,
@@ -4398,6 +4468,16 @@ async function openUpstream<TRequest, T>(params: {
     await ctx.authorizeA2AOAuthAttempt?.();
     return open(attemptTransport);
   };
+  const routed = ctx.autoRoutedTier;
+  if (routed) {
+    Object.assign(ctx.upstreamAttempt, routed.member);
+    ctx.providerApiKeyId = routed.member.providerApiKeyId;
+    const routedTransport = await routed.transport();
+    return openUpstreamWithRetry({
+      open: () => authorizedOpen(routedTransport),
+      ...retry,
+    });
+  }
   const pool = ctx.modelPool;
   if (!pool) {
     return openUpstreamWithRetry({
@@ -4434,6 +4514,33 @@ function poolResponseTimeoutMs(request: unknown): number {
     MODEL_POOL_RESPONSE_TIMEOUT_MS +
       maxOutputTokens * MODEL_POOL_MS_PER_OUTPUT_TOKEN,
   );
+}
+
+/** An "Auto" call is routed for its user, whose keys decide the tier's key. */
+function requireAutoRoutedUser(userId: string | undefined): string {
+  if (!userId) {
+    throw new ApiError(400, "An auto-routed call must name its user.");
+  }
+  return userId;
+}
+
+/**
+ * The wire a routed tier on another model is reached over: the client's own,
+ * when that wire can be translated for the tier's provider.
+ */
+function reachableWire(params: {
+  inbound: PoolWire | null;
+  member: TierMember;
+  from: SupportedProvider;
+}): PoolWire {
+  const { inbound, member, from } = params;
+  if (!inbound || !canReachMember(inbound, member.provider)) {
+    throw new ApiError(
+      400,
+      `Auto routing cannot send a ${from} request to the "${member.provider}/${member.modelId}" tier.`,
+    );
+  }
+  return inbound;
 }
 
 /** The request's own provider and client, as a transport. */

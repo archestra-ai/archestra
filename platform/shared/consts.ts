@@ -472,6 +472,14 @@ export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
  */
 export const MODEL_POOL_ID_HEADER = "X-Archestra-Model-Pool-Id";
 
+/**
+ * Header marking a chat or agent call set to "Auto": the proxy routes the
+ * session to one tier of the organization's model trio instead of the anchor
+ * model the call names. Like MODEL_POOL_ID_HEADER, it is only honored with
+ * the in-process proof.
+ */
+export const AUTO_ROUTED_HEADER = "X-Archestra-Auto-Routed";
+
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 
 export const TimeInMs = {

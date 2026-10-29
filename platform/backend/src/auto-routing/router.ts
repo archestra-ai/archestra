@@ -40,7 +40,7 @@ import {
 import { setAutoRoutingContext } from "@/routes/proxy/utils/auto-routing-context";
 import { extractAutoRoutingSessionMetadata } from "@/routes/proxy/utils/headers/session-metadata";
 import { routingPlanCache } from "@/services/routing-plan-cache";
-import { ApiError } from "@/types";
+import { ApiError, type Model } from "@/types";
 import {
   type AutoRoutingSettings,
   FEATURES_SCHEMA_VERSION,
@@ -56,6 +56,7 @@ import {
   type EligibleTier,
   type IneligibleTier,
   type TierEligibility,
+  userModelRouterAuth,
 } from "./eligibility";
 import { firstUserText } from "./first-user-text";
 import {
@@ -153,54 +154,98 @@ export async function resolveAutoModel(params: {
     virtualKeyId: auth.authMethod === "virtual_key" ? auth.virtualKeyId : null,
     firstUserMessage: text,
   });
-  const route = async (
-    decision: RoutingDecision,
-  ): Promise<AutoModelResolution> => ({
-    kind: "routed",
-    model: await routeByDecision({
-      request,
-      auth,
-      endpoint,
-      trio,
-      tiers,
-      decision,
-      derivedSessionKey: sessionId ? null : sessionKey,
-    }),
+  const decided = await sessionDecision({
+    organizationId: auth.organizationId,
+    settings,
+    trio,
+    sessionKey,
+    text,
+    client: metadata.client,
+    beforeScoring: async () =>
+      LimitValidationService.checkLimitsBeforeRequest(
+        modelRouterLimitScope(auth, params.agent),
+      ),
   });
-
-  const existing = sessionKey
-    ? await RoutingDecisionModel.find({
-        organizationId: auth.organizationId,
-        sessionKey,
-      })
-    : null;
-  if (existing) return route(existing);
-  if (!sessionKey || text === null) {
-    logger.info(
-      {
-        organizationId: auth.organizationId,
-        reason: sessionKey ? "no_user_text" : "no_session_key",
-      },
-      "[AutoRouting] Nothing to decide on; routing to the normal tier",
-    );
-    return { kind: "routed", model: tiers[NORMAL_TIER].routedModel };
+  switch (decided.kind) {
+    case "usage_limited":
+      return decided;
+    case "undecided":
+      return { kind: "routed", model: tiers[NORMAL_TIER].routedModel };
+    case "decided": {
+      const routed = await routeByDecision({
+        request,
+        auth,
+        endpoint,
+        trio,
+        tiers,
+        decision: decided.decision,
+        derivedSessionKey: sessionId ? null : sessionKey,
+      });
+      return { kind: "routed", model: routed.tier.routedModel };
+    }
   }
-  const violation = await LimitValidationService.checkLimitsBeforeRequest(
-    modelRouterLimitScope(auth, params.agent),
+}
+
+/** The tier model an "Auto" platform call runs on, with the key it is sent with. */
+type InternalAutoRoute = { model: Model; providerApiKeyId: string };
+
+/**
+ * Routes a platform call from a chat or agent set to "Auto" on a native
+ * provider route: the session's sticky tier, decided on first sight as for the
+ * Model Router, on a key `userId` may use for it. The caller already checked
+ * usage limits. Records the decision on `request` for the interaction write.
+ */
+export async function routeInternalAutoSession(params: {
+  request: FastifyRequest;
+  organizationId: string;
+  userId: string;
+  sessionId: string | null;
+  /** The body as the platform sent it, in OpenAI or Anthropic message shapes. */
+  body: unknown;
+}): Promise<InternalAutoRoute> {
+  const { request, organizationId } = params;
+  const auth = await userModelRouterAuth({
+    organizationId,
+    userId: params.userId,
+  });
+  const { settings, trio } = await loadEnabledTrio(organizationId);
+  const tiers = requireEligible(
+    await checkTrio({ auth, endpoint: null, trio }),
   );
-  if (violation) return { kind: "usage_limited", violation };
-  return route(
-    await createDecisionOnce({
-      organizationId: auth.organizationId,
-      settings,
-      trio,
-      sessionKey,
-      scorerInput: {
-        firstUserText: text,
-        client: metadata.client,
-      },
-    }),
-  );
+  const text = firstUserText("chat_completions", params.body);
+  const sessionKey = RoutingDecisionModel.sessionKey({
+    sessionId: params.sessionId,
+    virtualKeyId: null,
+    firstUserMessage: text,
+  });
+  const decided = await sessionDecision({
+    organizationId,
+    settings,
+    trio,
+    sessionKey,
+    text,
+    client: null,
+    beforeScoring: async () => null,
+  });
+  if (decided.kind !== "decided") {
+    return {
+      model: trio[NORMAL_TIER],
+      providerApiKeyId: tiers[NORMAL_TIER].providerApiKeyId,
+    };
+  }
+  const routed = await routeByDecision({
+    request,
+    auth,
+    endpoint: null,
+    trio,
+    tiers,
+    decision: decided.decision,
+    derivedSessionKey: params.sessionId ? null : sessionKey,
+  });
+  return {
+    model: routed.model,
+    providerApiKeyId: routed.tier.providerApiKeyId,
+  };
 }
 
 /**
@@ -344,15 +389,62 @@ async function loadEnabledTrio(
   if (loaded.kind === "missing") {
     throw new ApiError(
       400,
-      `Auto routing has no ${loaded.tier} tier model configured. Configure all three tiers in the auto routing settings.`,
+      `Auto routing has no ${loaded.tier} tier model configured. Set the organization's default ${loaded.tier} model.`,
     );
   }
   return { settings, trio: loaded.trio };
 }
 
+/**
+ * The session's decision: the stored one, else a new one when there is a
+ * session key and opening text to score. `beforeScoring` may refuse a new
+ * decision for being over a usage limit.
+ */
+async function sessionDecision(params: {
+  organizationId: string;
+  settings: AutoRoutingSettings;
+  trio: Trio;
+  sessionKey: RoutingSessionKey | null;
+  text: string | null;
+  client: string | null;
+  beforeScoring: () => Promise<LimitViolationResponse | null>;
+}): Promise<
+  | { kind: "decided"; decision: RoutingDecision }
+  | { kind: "undecided" }
+  | { kind: "usage_limited"; violation: LimitViolationResponse }
+> {
+  const { organizationId, sessionKey, text } = params;
+  const existing = sessionKey
+    ? await RoutingDecisionModel.find({ organizationId, sessionKey })
+    : null;
+  if (existing) return { kind: "decided", decision: existing };
+  if (!sessionKey || text === null) {
+    logger.info(
+      {
+        organizationId,
+        reason: sessionKey ? "no_user_text" : "no_session_key",
+      },
+      "[AutoRouting] Nothing to decide on; routing to the normal tier",
+    );
+    return { kind: "undecided" };
+  }
+  const violation = await params.beforeScoring();
+  if (violation) return { kind: "usage_limited", violation };
+  return {
+    kind: "decided",
+    decision: await createDecisionOnce({
+      organizationId,
+      settings: params.settings,
+      trio: params.trio,
+      sessionKey,
+      scorerInput: { firstUserText: text, client: params.client },
+    }),
+  };
+}
+
 function checkTrio(params: {
   auth: ModelRouterAuth;
-  endpoint: ModelRouterEndpoint;
+  endpoint: ModelRouterEndpoint | null;
   trio: Trio;
 }): Promise<TierEligibility[]> {
   return Promise.all(
@@ -370,16 +462,18 @@ function checkTrio(params: {
 async function routeByDecision(params: {
   request: FastifyRequest;
   auth: ModelRouterAuth;
-  endpoint: ModelRouterEndpoint;
+  endpoint: ModelRouterEndpoint | null;
   trio: Trio;
   tiers: readonly [EligibleTier, EligibleTier, EligibleTier];
   decision: RoutingDecision;
   derivedSessionKey: RoutingSessionKey | null;
-}): Promise<string> {
+}): Promise<{ model: Model; tier: EligibleTier }> {
   const { decision, trio } = params;
   const tier = trio.findIndex((model) => model.id === decision.modelId);
-  const eligibility =
-    tier === -1 ? await checkDecisionModel(params) : params.tiers[tier];
+  const { model, eligibility } =
+    tier === -1
+      ? await checkDecisionModel(params)
+      : { model: trio[tier], eligibility: params.tiers[tier] };
   if (!eligibility.eligible) {
     throw tierUnavailable(TIER_NAMES[decision.tierIndex], eligibility);
   }
@@ -393,14 +487,14 @@ async function routeByDecision(params: {
     },
     derivedSessionKey: params.derivedSessionKey,
   });
-  return eligibility.routedModel;
+  return { model, tier: eligibility };
 }
 
 async function checkDecisionModel(params: {
   auth: ModelRouterAuth;
-  endpoint: ModelRouterEndpoint;
+  endpoint: ModelRouterEndpoint | null;
   decision: RoutingDecision;
-}): Promise<TierEligibility> {
+}): Promise<{ model: Model; eligibility: TierEligibility }> {
   const model = await ModelModel.findById(params.decision.modelId);
   if (!model) {
     // The decision's model is gone; the FK cascade removes the decision too.
@@ -409,11 +503,14 @@ async function checkDecisionModel(params: {
       "The model this session was routed to no longer exists.",
     );
   }
-  return checkAutoTierEligibility({
-    auth: params.auth,
-    endpoint: params.endpoint,
+  return {
     model,
-  });
+    eligibility: await checkAutoTierEligibility({
+      auth: params.auth,
+      endpoint: params.endpoint,
+      model,
+    }),
+  };
 }
 
 function requireEligible([fast, normal, smart]: TierEligibility[]): readonly [

@@ -1,7 +1,11 @@
 import { plan as fitPlan } from "@archestra/router-rs";
 import {
+  AUTO_ROUTED_HEADER,
+  CHAT_API_KEY_ID_HEADER,
   MEMBER_ROLE_NAME,
+  PROVIDER_BASE_URL_HEADER,
   type ResourcePermissionGrant,
+  USER_ID_HEADER,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import Fastify from "fastify";
@@ -15,6 +19,7 @@ import { vi } from "vitest";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import { type Trio, tiersFingerprint } from "@/auto-routing/tiers";
+import { internalCallHeader } from "@/clients/internal-call";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -33,6 +38,7 @@ import RoutingScorerVersionModel from "@/models/routing-scorer-version";
 import { secretManager } from "@/secrets-manager";
 import { handleAutoRoutingFit } from "@/task-queue/handlers/auto-routing-fit-handler";
 import { accessGrants, beforeEach, describe, expect, test } from "@/test";
+import { setOrganizationTrio } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useMswServer } from "@/test/msw";
 import { ApiError, type Model } from "@/types";
@@ -721,9 +727,7 @@ describe("Model Router auto model", () => {
       await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(copilotKey.id, [
         copilotModel.id,
       ]);
-      await AutoRoutingSettingsModel.update(org.organizationId, {
-        smartModelId: copilotModel.id,
-      });
+      await setOrganizationTrio(org.organizationId, { smart: copilotModel });
       const credential = await virtualKey(org, {
         authorId: null,
         extraKeys: [
@@ -756,9 +760,7 @@ describe("Model Router auto model", () => {
       await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(nativeKey.id, [
         nativeModel.id,
       ]);
-      await AutoRoutingSettingsModel.update(org.organizationId, {
-        normalModelId: nativeModel.id,
-      });
+      await setOrganizationTrio(org.organizationId, { normal: nativeModel });
       const credential = await virtualKey(org, {
         authorId: null,
         extraKeys: [
@@ -889,6 +891,118 @@ describe("Model Router auto model", () => {
     );
     expect(upstreamModels).toEqual([]);
   });
+
+  describe("a platform call from a chat set to Auto on the native route", () => {
+    async function sendPlatformCall(
+      org: Org,
+      params: { userId: string; autoRouted: boolean; internal?: boolean },
+    ) {
+      const app = createApp();
+      await app.register(openAiProxyRoutes);
+      return app.inject({
+        method: "POST",
+        url: `/v1/openai/${org.agentId}/chat/completions`,
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...(params.internal === false ? {} : internalCallHeader()),
+          authorization: "Bearer sk-openai",
+          [CHAT_API_KEY_ID_HEADER]: org.providerApiKeyId,
+          [USER_ID_HEADER]: params.userId,
+          [PROVIDER_BASE_URL_HEADER]: UPSTREAM,
+          "x-archestra-session-id": "chat-1",
+          ...(params.autoRouted ? { [AUTO_ROUTED_HEADER]: "true" } : {}),
+        },
+        payload: {
+          // The anchor: the organization's normal tier.
+          model: org.trio[1].modelId,
+          messages: [{ role: "user", content: PROMPT }],
+        },
+      });
+    }
+
+    async function member(
+      org: Org,
+      makeUser: () => Promise<{ id: string }>,
+      makeMember: (userId: string, organizationId: string) => Promise<unknown>,
+    ) {
+      const user = await makeUser();
+      await makeMember(user.id, org.organizationId);
+      return user.id;
+    }
+
+    test("runs on the session's routed tier and records the decision", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+
+      const first = await sendPlatformCall(org, { userId, autoRouted: true });
+      const replay = await sendPlatformCall(org, { userId, autoRouted: true });
+
+      expect(first.statusCode, first.body).toBe(200);
+      expect(replay.statusCode, replay.body).toBe(200);
+      expect(upstreamModels).toEqual([
+        org.trio[2].modelId,
+        org.trio[2].modelId,
+      ]);
+      expect(jevCalls).toBe(1);
+      const [decision] = await decisions(org.organizationId);
+      expect(decision).toMatchObject({ tierIndex: 2, modelId: org.trio[2].id });
+      expect(await usage(decision.id)).toHaveLength(2);
+      const rows = await db
+        .select({
+          model: schema.interactionsTable.model,
+          providerApiKeyId: schema.interactionsTable.providerApiKeyId,
+        })
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, org.agentId));
+      expect(rows).toEqual(
+        [1, 2].map(() => ({
+          model: org.trio[2].modelId,
+          providerApiKeyId: org.providerApiKeyId,
+        })),
+      );
+    });
+
+    test("a call not set to Auto, or not proven internal, runs on the model it names", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+
+      const plain = await sendPlatformCall(org, { userId, autoRouted: false });
+      // Without the internal proof the header means nothing; the call goes to
+      // the provider's own endpoint, which this test does not serve.
+      await sendPlatformCall(org, {
+        userId,
+        autoRouted: true,
+        internal: false,
+      });
+
+      expect(plain.statusCode, plain.body).toBe(200);
+      expect(upstreamModels).toEqual([org.trio[1].modelId]);
+      expect(jevCalls).toBe(0);
+      expect(await decisions(org.organizationId)).toEqual([]);
+    });
+  });
 });
 
 // === Helpers ===
@@ -973,12 +1087,12 @@ async function setupOrganization(params: {
     providerApiKey.id,
     trio.map((model) => model.id),
   );
-  await AutoRoutingSettingsModel.update(organizationId, {
-    enabled: true,
-    fastModelId: trio[0].id,
-    normalModelId: trio[1].id,
-    smartModelId: trio[2].id,
+  await setOrganizationTrio(organizationId, {
+    fast: trio[0],
+    normal: trio[1],
+    smart: trio[2],
   });
+  await AutoRoutingSettingsModel.update(organizationId, { enabled: true });
   const base = {
     organizationId,
     agentId: agent.id,

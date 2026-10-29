@@ -50,7 +50,6 @@ import {
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
-  LlmProviderApiKeyModel,
   MemberModel,
   OrganizationModel,
   ProjectModel,
@@ -80,6 +79,7 @@ import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
+import { applyAutoRoutedChoice } from "@/services/auto-routed-model";
 import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
 import { applyAgentModelPool } from "@/services/chat-model-pools";
 import { getObservedClaudeCodeToolTokenCount } from "@/services/claude-code-tool-token-count";
@@ -132,7 +132,6 @@ import {
   RestoreAgentVersionBodySchema,
   SelectPublicAgentVersionSchema,
 } from "@/types/agent-version";
-import { assertModelTrioTiers } from "@/utils/llm-resolution";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -833,6 +832,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      await applyAutoRoutedChoice({
+        body,
+        keyField: "llmApiKeyId",
+        organizationId,
+        userId: user.id,
+      });
       await applyAgentModelPool(body, { organizationId, userId: user.id });
       // A model and its API key are a pair: persist both or neither.
       if (
@@ -846,11 +851,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "An agent's model and API key must be set together",
         );
       }
-      await assertModelTrioTiers({
-        apiKeyId: body.llmApiKeyId ?? null,
-        fastModelId: body.fastModelId ?? null,
-        smartModelId: body.smartModelId ?? null,
-      });
       await assertAgentRuntimeModelCompatibility({
         runtime: body.runtime,
         agent: {
@@ -2234,6 +2234,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      await applyAutoRoutedChoice({
+        body,
+        keyField: "llmApiKeyId",
+        organizationId,
+        userId: user.id,
+      });
       await applyAgentModelPool(body, { organizationId, userId: user.id });
 
       // Built-in agent guard: restrict which fields can be modified
@@ -2264,11 +2270,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(body.modelPoolId !== undefined && {
             modelPoolId: body.modelPoolId,
           }),
-          ...(body.fastModelId !== undefined && {
-            fastModelId: body.fastModelId,
-          }),
-          ...(body.smartModelId !== undefined && {
-            smartModelId: body.smartModelId,
+          ...(body.autoRouted !== undefined && {
+            autoRouted: body.autoRouted,
           }),
         };
       } else {
@@ -2301,27 +2304,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "An agent's model and API key must be set together",
           );
         }
-      }
-
-      if (
-        body.llmApiKeyId !== undefined ||
-        body.fastModelId !== undefined ||
-        body.smartModelId !== undefined
-      ) {
-        await assertModelTrioTiers({
-          apiKeyId:
-            body.llmApiKeyId !== undefined
-              ? body.llmApiKeyId
-              : existingAgent.llmApiKeyId,
-          fastModelId:
-            body.fastModelId !== undefined
-              ? body.fastModelId
-              : existingAgent.fastModelId,
-          smartModelId:
-            body.smartModelId !== undefined
-              ? body.smartModelId
-              : existingAgent.smartModelId,
-        });
       }
 
       if (

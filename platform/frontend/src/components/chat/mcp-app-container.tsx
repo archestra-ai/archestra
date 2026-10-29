@@ -499,6 +499,7 @@ export function McpAppEntryContent({
       appVersion={appVersion ?? ownedApp?.latestVersion ?? null}
       reloadNonce={reloadNonce}
       onReload={reload}
+      instanceId={appId ?? toolCallId}
       // Owned apps only: their file store is what agent-side copy_file writes
       // into, and their SDK is what reports display state back.
       filesRevision={appId ? (appFilesRevisions.get(appId) ?? 0) : undefined}

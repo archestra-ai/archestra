@@ -366,8 +366,8 @@ describe("AgentRunChatSession", () => {
       screen.queryByRole("button", { name: "Share" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "More run actions" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "More run actions" }),
+    ).toBeInTheDocument();
   });
 
   it("shows a shared viewer retained output for an ended run without owner controls", () => {

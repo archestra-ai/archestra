@@ -589,6 +589,7 @@ VOLUME /var/lib/postgresql/data /app/data
 # or `pnpm install` are needed in this stage.
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
+COPY docker/scripts/shutdown-budget.mjs /app/shutdown-budget.mjs
 # slim Dagger Engine manifest applied into the embedded KinD cluster in quickstart
 # mode; backs the skill sandbox / code runtime (archestra__run_command and friends).
 # Real deployments provision engines in code instead — the quickstart runs this one

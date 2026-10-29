@@ -1,0 +1,53 @@
+suite: coordinated shutdown budgets
+templates:
+  - archestra-platform.yaml
+  - archestra-worker.yaml
+  - migration-job.yaml
+tests:
+  - it: derives matching web and worker grace for long requests
+    set:
+      archestra.worker.enabled: true
+      archestra.shutdown.requestDrainSeconds: 200
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 260
+        template: archestra-platform.yaml
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 260
+        template: archestra-worker.yaml
+  - it: rejects a pod limit shorter than its application budgets
+    template: archestra-worker.yaml
+    set:
+      archestra.shutdown.requestDrainSeconds: 180
+      archestra.terminationGracePeriodSeconds: 120
+    asserts:
+      - failedTemplate:
+          errorMessage: terminationGracePeriodSeconds must be at least 240 for the configured shutdown budgets
+  - it: honors literal environment overrides in both budget and runtime
+    set:
+      archestra.env.ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS: "180"
+      archestra.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS: "240"
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 300
+        template: archestra-platform.yaml
+        documentIndex: 1
+  - it: rejects fractional drain seconds
+    template: migration-job.yaml
+    set:
+      archestra.shutdown.requestDrainSeconds: 1.5
+    asserts:
+      - failedTemplate:
+          errorMessage: requestDrainSeconds must be integer seconds between 1 and 86400
+  - it: rejects zero environment overrides
+    template: archestra-worker.yaml
+    set:
+      archestra.env.ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS: 0
+    asserts:
+      - failedTemplate:
+          errorMessage: requestDrainSeconds must be integer seconds between 1 and 86400
+

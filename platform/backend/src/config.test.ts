@@ -76,6 +76,7 @@ import config, {
   parseRetentionDays,
   parseSampleRate,
   parseSandboxMemoryMaxBytes,
+  parseShutdownSeconds,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
   resolveAllowedOrigins,
@@ -3717,5 +3718,31 @@ describe("OpenAPPA feature configuration", () => {
         `ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER "${provider}" does not support chat completions`,
       );
     });
+  });
+});
+
+describe("shutdown durations", () => {
+  test("accepts whole seconds and uses defaults only when absent", () => {
+    expect(parseShutdownSeconds(undefined, 60)).toBe(60);
+    expect(parseShutdownSeconds("180", 60)).toBe(180);
+    expect(parseShutdownSeconds("0008", 60)).toBe(8);
+    expect(parseShutdownSeconds("86400", 60)).toBe(86400);
+  });
+  test.each([
+    "",
+    "0",
+    "-1",
+    "1.5",
+    "1s",
+    " 60",
+    "Infinity",
+    "86401",
+    "9007199254740992",
+  ])("rejects invalid duration %s", (value) => {
+    expect(() => parseShutdownSeconds(value, 60)).toThrow();
+  });
+  test("reserves at least five seconds for cleanup", () => {
+    expect(() => parseShutdownSeconds("4", 20, 5)).toThrow();
+    expect(parseShutdownSeconds("5", 20, 5)).toBe(5);
   });
 });

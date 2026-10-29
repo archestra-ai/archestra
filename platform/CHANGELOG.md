@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.10](https://github.com/archestra-ai/archestra/compare/platform-v1.4.9...platform-v1.4.10) (2026-10-29)
+
+
+### Bug Fixes
+
+* **deps:** lift systeminformation past CVE-2026-116576 in the platform image (backport release/1.4) ([#9836](https://github.com/archestra-ai/archestra/issues/9836)) ([592320b](https://github.com/archestra-ai/archestra/commit/592320b4bb1d09b900de5334b7ee7f4afb64a6ee))
+* **llm-providers:** stop provider key deletes from failing after model cleanup (backport release/1.4) ([#9831](https://github.com/archestra-ai/archestra/issues/9831)) ([1ea974a](https://github.com/archestra-ai/archestra/commit/1ea974a24d2fbaf17c552c8faee459f1b71dde3a))
+* **logs:** unify app and source filter discovery (backport release/1.4) ([#9830](https://github.com/archestra-ai/archestra/issues/9830)) ([84e9483](https://github.com/archestra-ai/archestra/commit/84e9483da6f279a006df8a40f6f0be5a4a77d6a1))
+* **mcp-registry:** show header authFields as token header auth in the editor (backport release/1.4) ([#9817](https://github.com/archestra-ai/archestra/issues/9817)) ([1ad9a20](https://github.com/archestra-ai/archestra/commit/1ad9a20eb7b0e21f6778a16468bc015ec427b508))
+
 ## [1.4.9](https://github.com/archestra-ai/archestra/compare/platform-v1.4.8...platform-v1.4.9) (2026-10-28)
 
 

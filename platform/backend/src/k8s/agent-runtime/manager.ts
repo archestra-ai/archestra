@@ -615,7 +615,7 @@ class AgentRuntimeManager {
     // lease is held) it wakes the workspace itself. Otherwise its process
     // ended before the replacement ran: name the turn in the template it
     // left, so the supervisor continues the turn there, and wake it below.
-    let interruptedTierSwitch =
+    const interruptedTierSwitch =
       sandbox.metadata.annotations?.[AGENT_RUNTIME_TIER_SWITCH_ANNOTATION] ===
       session.taskId;
     if (interruptedTierSwitch) {
@@ -642,7 +642,6 @@ class AgentRuntimeManager {
         throw error;
       });
       if (!recovered) return;
-      interruptedTierSwitch = true;
     }
     // The initial turn is already part of the Sandbox's bootstrap contract.
     if (
@@ -1475,25 +1474,6 @@ class AgentRuntimeManager {
     }
     if (errors.length)
       throw new AggregateError(errors, "Saved file cleanup did not complete");
-  }
-
-  /** Whether the workspace's Pod template already runs these tier settings. */
-  async workspaceRunsTierSettings(params: {
-    session: AgentRunRecord;
-    settings: AgentRuntimeTierSettings;
-  }): Promise<boolean> {
-    const sandbox = await readWorkspaceSandbox({
-      api: this.requireClients().customObjectsApi,
-      namespace: params.session.runtimeScope,
-      name: params.session.workloadName,
-    });
-    return runsTierSettings(
-      findAgentRuntimeContainer(sandbox),
-      params.settings,
-      {
-        resources: true,
-      },
-    );
   }
 
   /**

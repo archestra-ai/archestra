@@ -79,12 +79,16 @@ describe("switchWorkspaceTier", () => {
       });
       expect(cluster.pods[0]?.spec?.containers[0]?.image).toBe(FULL.image);
 
+      // A second request finds the workspace already there.
       expect(
-        await manager.workspaceRunsTierSettings({
+        await manager.switchWorkspaceTier({
           session: SESSION,
+          tier: "full",
           settings: FULL,
+          resumePrompt: "unused",
+          shouldResume: async () => true,
         }),
-      ).toBe(true);
+      ).toBe(false);
     } finally {
       cluster.restore();
     }

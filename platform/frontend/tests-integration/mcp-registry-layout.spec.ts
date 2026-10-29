@@ -299,6 +299,63 @@ test.describe("MCP Registry layout", () => {
     ).toBeVisible();
   });
 
+  test("filters local registry search before its URL update completes", async ({
+    mcpRegistryPage,
+    mswControl,
+    page,
+  }) => {
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+    await expect(
+      mcpRegistryPage.cardForCatalogItem("org-crowded"),
+    ).toBeVisible();
+
+    // The list must respond to typing independently of the router's URL
+    // update. Hold that update to exercise a slow client navigation reliably.
+    await page.evaluate(() => {
+      const replaceState = window.history.replaceState.bind(window.history);
+      window.history.replaceState = (data, unused, url) => {
+        if (
+          url &&
+          new URL(String(url), window.location.href).searchParams.has("search")
+        ) {
+          window.setTimeout(() => replaceState(data, unused, url), 1000);
+          return;
+        }
+        replaceState(data, unused, url);
+      };
+    });
+
+    await page
+      .getByRole("textbox", { name: "Search MCP servers by name" })
+      .fill("not-installed");
+    await expect(mcpRegistryPage.cardForCatalogItem("org-crowded")).toHaveCount(
+      0,
+      { timeout: 200 },
+    );
+    await expect(
+      mcpRegistryPage.cardForCatalogItem("not-installed"),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/search=not-installed/);
+
+    await page.evaluate(() => {
+      window.history.pushState(null, "", window.location.pathname);
+    });
+    await expect(
+      page.getByRole("textbox", { name: "Search MCP servers by name" }),
+    ).toHaveValue("");
+    await expect(
+      mcpRegistryPage.cardForCatalogItem("org-crowded"),
+    ).toBeVisible();
+    await page.goBack();
+    await expect(
+      page.getByRole("textbox", { name: "Search MCP servers by name" }),
+    ).toHaveValue("not-installed");
+    await expect(mcpRegistryPage.cardForCatalogItem("org-crowded")).toHaveCount(
+      0,
+    );
+  });
+
   test("keeps foreign personal servers out of All and reaches them through Other users", async ({
     mcpRegistryPage,
     mswControl,

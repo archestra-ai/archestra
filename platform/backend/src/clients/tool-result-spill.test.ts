@@ -218,6 +218,40 @@ describe("capChatToolResult", () => {
   );
 
   sandboxTest(
+    "truncates without creating a sandbox when the result exceeds the upload limit",
+    async ({ spillContext: context }) => {
+      const originalLimit = config.skillsSandbox.artifactBytesLimit;
+      (
+        config.skillsSandbox as { artifactBytesLimit: number }
+      ).artifactBytesLimit = oversized.length - 1;
+      try {
+        const capped = await capChatToolResult({
+          result: { content: oversized },
+          hookFeedback: null,
+          context,
+          toolCallId: "call-too-big",
+        });
+
+        expectTruncatedWithoutPath(capped);
+        const sandboxes = await db
+          .select()
+          .from(schema.skillSandboxesTable)
+          .where(
+            eq(
+              schema.skillSandboxesTable.conversationId,
+              context.conversationId,
+            ),
+          );
+        expect(sandboxes).toHaveLength(0);
+      } finally {
+        (
+          config.skillsSandbox as { artifactBytesLimit: number }
+        ).artifactBytesLimit = originalLimit;
+      }
+    },
+  );
+
+  sandboxTest(
     "truncates without storing anything in an encrypted chat",
     async ({ spillContext: context }) => {
       const capped = await capChatToolResult({

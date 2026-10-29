@@ -1,10 +1,10 @@
+import config from "@/config";
 import logger from "@/logging";
-import { SkillSandboxModel } from "@/models";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
-import { asSandboxId, type SkillSandbox } from "@/types";
+import { asSandboxId } from "@/types";
 import {
   CAPPED_TOOL_RESULT_META_KEY,
   type CappedToolResult,
@@ -33,11 +33,12 @@ export async function capChatToolResult(params: {
   const { result, hookFeedback, context, toolCallId } = params;
   const text = typeof result === "string" ? result : result.content;
   const suffix = hookFeedback ? `\n\n[hook feedback] ${hookFeedback}` : "";
-  if (utf8Length(text + suffix) <= MAX_TOOL_RESULT_CONTEXT_BYTES) {
+  const textBytes = utf8Length(text);
+  if (textBytes + utf8Length(suffix) <= MAX_TOOL_RESULT_CONTEXT_BYTES) {
     return withContent(result, text + suffix);
   }
 
-  const path = await spillToSandbox({ context, toolCallId, text });
+  const path = await spillToSandbox({ context, toolCallId, text, textBytes });
   const content = capToolResultText({ text, path, suffix });
   if (typeof result === "string") return content;
   const marker: CappedToolResult = {
@@ -69,10 +70,12 @@ async function spillToSandbox(params: {
   context: SpillContext;
   toolCallId: string | undefined;
   text: string;
+  textBytes: number;
 }): Promise<string | null> {
-  const { context, toolCallId, text } = params;
+  const { context, toolCallId, text, textBytes } = params;
   const { conversationId, scopeKey } = context;
   if (!toolCallId || context.suppressContentLogging) return null;
+  if (textBytes > config.skillsSandbox.artifactBytesLimit) return null;
   try {
     const available = await isSkillSandboxAvailableForAgent({
       userId: context.userId,
@@ -81,7 +84,15 @@ async function spillToSandbox(params: {
     });
     if (!available) return null;
 
-    const sandbox = await findOrCreateDefaultSandbox(context);
+    // run_command's default target, so the file lands where the model's next
+    // command runs.
+    const sandbox = await executionSandboxRegistry.getOrCreateRunDefault({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      conversationId: conversationId ?? null,
+      isolationKey: scopeKey ?? null,
+      defaultCwd: SKILL_SANDBOX_HOME,
+    });
     if (!sandbox) return null;
     const fileId = uuidv5(toolCallId, sandbox.id);
     const path = `${SKILL_SANDBOX_HOME}/tool-results/${fileId}.txt`;
@@ -101,32 +112,6 @@ async function spillToSandbox(params: {
     );
     return null;
   }
-}
-
-// Same resolution as run_command's default target, so the file lands where the
-// model's next command runs: the conversation's sandbox, or the execution's for
-// headless runs (A2A, ChatOps, schedules, email).
-async function findOrCreateDefaultSandbox(
-  context: SpillContext,
-): Promise<SkillSandbox | null> {
-  const { organizationId, userId, conversationId, scopeKey } = context;
-  if (conversationId) {
-    return SkillSandboxModel.findOrCreateDefault({
-      organizationId,
-      userId,
-      conversationId,
-      defaultCwd: SKILL_SANDBOX_HOME,
-    });
-  }
-  if (scopeKey) {
-    return executionSandboxRegistry.getOrCreateDefault({
-      organizationId,
-      userId,
-      isolationKey: scopeKey,
-      defaultCwd: SKILL_SANDBOX_HOME,
-    });
-  }
-  return null;
 }
 
 function withContent(result: ToolResult, content: string): ToolResult {

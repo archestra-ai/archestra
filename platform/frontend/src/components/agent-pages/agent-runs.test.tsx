@@ -130,10 +130,12 @@ describe("AgentRuns", () => {
       ),
     );
     renderRuns();
-    await user.click(await screen.findByRole("button", { name: "Stop" }));
+    await user.click(
+      (await screen.findAllByRole("button", { name: "Stop" }))[0],
+    );
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(requests).toBe(0);
-    await user.click(screen.getByRole("button", { name: "Stop" }));
+    await user.click(screen.getAllByRole("button", { name: "Stop" })[0]);
     await user.click(screen.getByRole("button", { name: "Stop run" }));
     expect(await screen.findByText("Retained output")).toBeVisible();
     expect(requests).toBe(1);

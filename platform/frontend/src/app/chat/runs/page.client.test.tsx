@@ -183,7 +183,9 @@ describe("AgentRunChatSession", () => {
 
     expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Stop" })[0],
+    ).toBeInTheDocument();
     expect(terminalState.props).toMatchObject({
       showManualCommand: false,
       showDisconnectedStatus: false,

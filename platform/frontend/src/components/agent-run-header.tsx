@@ -65,9 +65,7 @@ export function AgentRunHeader({
           {status}
         </span>
       </div>
-      <div className="col-span-2 flex shrink-0 items-center justify-end lg:col-span-1">
-        {actions}
-      </div>
+      <div className="col-span-2 flex shrink-0 items-center justify-end lg:col-span-1">{actions}</div>
     </header>
   );
 }

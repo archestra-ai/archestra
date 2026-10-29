@@ -30,7 +30,7 @@ Your sign-in belongs only to you and is never shared across your organization. I
 
 ## Enterprise Plans
 
-Share your organization's Copilot Business or Enterprise models across teams, agents, and CI pipelines without purchasing per-user seats.
+Share your organization's Copilot Business or Enterprise models across teams, agents, and CI pipelines without purchasing per-user seats. Requests consume the organization's Copilot AI credits.
 
 To connect a plan, your Archestra account needs permission to create provider keys and credentials ([`llmProviderApiKey:create`](/docs/reference/permissions#llmProviderApiKey:create) and [`credential:create`](/docs/reference/permissions#credential:create)).
 

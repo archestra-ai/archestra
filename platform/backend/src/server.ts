@@ -812,12 +812,6 @@ const startMcpServerRuntime = async (
 };
 
 const startWebServer = async () => {
-  validateShutdownPodGrace(
-    config.shutdown.podGraceSeconds,
-    config.shutdown.drainSeconds,
-    config.shutdown.cleanupSeconds,
-    config.kb.taskWorkerShutdownTimeoutSeconds,
-  );
   const fastify = createFastifyInstance();
   const startupHealth = createStartupHealthServer();
 
@@ -1480,12 +1474,6 @@ function registerWebServerShutdown(
  * Used in Helm deployments where the worker runs as a separate Deployment.
  */
 const startWorker = async () => {
-  validateShutdownPodGrace(
-    config.shutdown.podGraceSeconds,
-    config.shutdown.drainSeconds,
-    config.shutdown.cleanupSeconds,
-    config.kb.taskWorkerShutdownTimeoutSeconds,
-  );
   logger.info("Starting in worker-only mode (ARCHESTRA_PROCESS_TYPE=worker)");
 
   try {
@@ -1698,9 +1686,20 @@ process.on("unhandledRejection", (reason) => {
  * This allows other scripts to import helper functions without starting the server
  */
 if (isMainModule) {
-  if (shouldRunWorker && !shouldRunWebServer) {
-    startWorker();
-  } else if (shouldRunWebServer) {
-    startWebServer();
+  try {
+    validateShutdownPodGrace(
+      config.shutdown.podGraceSeconds,
+      config.shutdown.drainSeconds,
+      config.shutdown.cleanupSeconds,
+      config.kb.taskWorkerShutdownTimeoutSeconds,
+    );
+    if (shouldRunWorker && !shouldRunWebServer) {
+      await startWorker();
+    } else if (shouldRunWebServer) {
+      await startWebServer();
+    }
+  } catch (error) {
+    logger.error({ err: error }, "Server failed to start");
+    process.exit(1);
   }
 }

@@ -135,6 +135,9 @@ local_resource(
   auto_init=False,
 )
 
+# Drizzle Studio on demand: tilt trigger database-gui. Started by default it
+# costs about 0.35 GB of RSS (drizzle-kit, esbuild and a pnpm wrapper) in
+# every session and is used in few of them.
 local_resource(
   'database-gui',
   # NOTE: we need to cd into the backend directory to run the migrate command
@@ -143,5 +146,7 @@ local_resource(
   serve_cmd='pnpm db:studio',
   serve_dir='../backend',
   labels=['database'],
-  resource_deps=['postgresql']
+  resource_deps=['postgresql'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
 )

@@ -267,7 +267,10 @@ else:
       '../archestra-rs/Cargo.lock',
     ])
 
-  # Backend dev server
+  # Backend dev server. ARCHESTRA_DEV_BACKEND_WATCH=false (in .env) runs it
+  # without the tsdown watcher; `tilt trigger pnpm-dev-backend` rebuilds and
+  # restarts it on demand. See run-backend-dev.sh. The Windows serve command
+  # keeps `pnpm dev`.
   local_resource(
     dev_resource_name + '-backend',
     cmd=backend_build_cmd,
@@ -294,10 +297,15 @@ else:
   frontend_serve_env = dict(frontend_env_vars)
   frontend_serve_env['PORT'] = frontend_port
   frontend_serve_env['ARCHESTRA_DEV_BUNDLER'] = dev_bundler
+  # Launch scripts/dev.mjs directly, as the int-tests resource below does. The
+  # `pnpm dev --filter` route adds pnpm, turbo, pnpm and sh wrappers around the
+  # same command: four extra Node processes and about 0.35 GB of RSS per dev
+  # server that only forward signals. Tilt already loaded .env into the
+  # environment the serve command inherits.
   local_resource(
     dev_resource_name + '-frontend',
-    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; pnpm dev --filter @frontend & wait $!',
-    serve_cmd_bat='pnpm dev --filter @frontend',
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; (cd ../frontend && exec node ./scripts/dev.mjs) & wait $!',
+    serve_cmd_bat='cd ..\\frontend && node .\\scripts\\dev.mjs',
     labels=['dev'],
     resource_deps=[dev_resource_name + '-backend'],
     deps=['../.env'],
@@ -311,13 +319,21 @@ else:
   # server's `.next/dev/lock`. Pointing the SDK base URL at an unreachable
   # port surfaces any escaped (un-mocked) request as ECONNREFUSED instead of
   # silently hitting the real backend.
+  #
+  # Manual: frontend/playwright.config.ts declares this server as its
+  # `webServer` and starts it on demand when nothing listens on :3010, so a
+  # second Next dev server (about 0.6 GB idle, a second watcher over the
+  # frontend tree) only exists once the integration tests run. Keep a
+  # persistent one across runs with: tilt trigger pnpm-dev-frontend-int-tests
   local_resource(
     dev_resource_name + '-frontend-int-tests',
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False,
     # Route through scripts/dev.mjs so the int-tests frontend gets the same
     # bundler handling as `pnpm dev` (ARCHESTRA_DEV_BUNDLER validation plus the
     # platform-aware fallback outside Tilt — see the "//dev" comment in
     # frontend/package.json). The script adds `-H 127.0.0.1`.
-    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../frontend && node ./scripts/dev.mjs -p ' + frontend_int_tests_port + ' & wait $!',
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; (cd ../frontend && exec node ./scripts/dev.mjs -p ' + frontend_int_tests_port + ') & wait $!',
     serve_cmd_bat='cd ..\\frontend && node .\\scripts\\dev.mjs -p ' + frontend_int_tests_port,
     labels=['dev'],
     deps=['../.env'],

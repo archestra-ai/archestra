@@ -218,6 +218,9 @@ function safeJsonForInlineScript(value) {
 function guestStateBootstrap(restored) {
   var STATE_SYNC_TYPE = "mcp-apps:state-sync";
   var RESTORE_WINDOW_MS = 8000;
+  var TOGGLE_RPC_GATE_MAX_MS = 2500;
+  // Matches SANDBOX_REVEAL_FALLBACK_MS in platform/frontend/src/components/mcp-app/mcp-app-view.tsx
+  var GUEST_READY_FALLBACK_MS = 900;
   var MAX_RESTORE_ATTEMPTS_PER_CONTROL = 4;
 
   var DATA_KEY_ATTRS = [
@@ -269,6 +272,7 @@ function guestStateBootstrap(restored) {
   );
 
   var currentControls = {};
+  var dirtyControlKeys = {};
   var pendingFormKeys = {};
   var pendingToggleKeys = {};
   var restoreAttempts = {};
@@ -280,6 +284,10 @@ function guestStateBootstrap(restored) {
       var rk = initKeys[i];
       var entry = restored.controls[rk];
       currentControls[rk] = entry;
+      dirtyControlKeys[rk] = true;
+      if (entry && typeof entry.selector === "string") {
+        dirtyControlKeys[entry.selector] = true;
+      }
       if (entry && entry.kind === "form") {
         pendingFormKeys[rk] = true;
       } else if (entry && entry.kind === "toggle") {
@@ -292,9 +300,14 @@ function guestStateBootstrap(restored) {
   var restorationActive = hasRestoredControls;
   var isRestoringNow = false;
   var restoreReady = false;
+  var activeRpcCount = 0;
+  var toggleGateExpired = false;
+  var guestReadySent = false;
+  var guestReadyRetryCount = 0;
   var lastSentJson = "";
   var syncTimer = null;
   var restoreTimer = null;
+  var guestReadyTimer = null;
 
   var localStore = {};
   if (
@@ -761,6 +774,44 @@ function guestStateBootstrap(restored) {
     return el;
   }
 
+  function markControlDirty(target, eventType) {
+    if (!target || target.nodeType !== 1 || typeof target.closest !== "function") {
+      return;
+    }
+    if (eventType === "change" || eventType === "input") {
+      var formEl = target.closest("select, input, textarea");
+      if (formEl && !isExcludedElement(formEl)) {
+        var fSel = getCssSelector(formEl);
+        if (fSel) {
+          dirtyControlKeys[fSel] = true;
+        }
+      }
+      return;
+    }
+    if (eventType === "click") {
+      var checkEl = target.closest('input[type="checkbox"], input[type="radio"]');
+      if (checkEl && !isExcludedElement(checkEl)) {
+        var cSel = getCssSelector(checkEl);
+        if (cSel) {
+          dirtyControlKeys[cSel] = true;
+        }
+      }
+      var toggleEl = target.closest(TOGGLE_SELECTOR);
+      if (toggleEl && !isExcludedElement(toggleEl)) {
+        var tSel = getCssSelector(toggleEl);
+        if (tSel) {
+          var label = getStableButtonLabel(toggleEl);
+          var key =
+            isIndexBasedSelector(tSel) && label
+              ? tSel.replace(/:nth-of-type\(\d+\)$/, "") + "::label=" + label
+              : tSel;
+          dirtyControlKeys[key] = true;
+          dirtyControlKeys[tSel] = true;
+        }
+      }
+    }
+  }
+
   function snapshotControls() {
     if (!document.body) return;
     var nextControls = {};
@@ -795,8 +846,18 @@ function guestStateBootstrap(restored) {
       if (tag === "textarea" && !el.id && !el.name && !hasAnyDataAttr(el)) {
         continue;
       }
+      if (
+        tag === "input" &&
+        (type === "checkbox" || type === "radio") &&
+        !el.id &&
+        !el.name &&
+        !hasAnyDataAttr(el) &&
+        el.closest("li, tr, td")
+      ) {
+        continue;
+      }
       var sel = getCssSelector(el);
-      if (!sel) continue;
+      if (!sel || !dirtyControlKeys[sel]) continue;
 
       if (tag === "select") {
         if (!el.options || el.options.length === 0) continue;
@@ -869,6 +930,7 @@ function guestStateBootstrap(restored) {
         isIndexBasedSelector(tSel) && label
           ? tSel.replace(/:nth-of-type\(\d+\)$/, "") + "::label=" + label
           : tSel;
+      if (!dirtyControlKeys[key] && !dirtyControlKeys[tSel]) continue;
       if (!userInteracted && restorationActive && pendingToggleKeys[key]) {
         continue;
       }
@@ -1073,10 +1135,15 @@ function guestStateBootstrap(restored) {
     try {
       var keys = Object.keys(restored.controls);
 
-      // Pass 1: Restore active tabs/toggles/chips. If switching a tab renders
-      // nested filter chips, run one follow-up toggle pass immediately.
-      if (restoreTogglesPass(keys)) {
-        restoreTogglesPass(keys);
+      // Pass 1: Restore active tabs/toggles/chips only after in-flight startup
+      // RPCs settle (or after TOGGLE_RPC_GATE_MAX_MS if a startup RPC is slow)
+      // so we never click toggles before initial state is loaded.
+      // If switching a tab renders nested filter chips, run one follow-up
+      // toggle pass immediately.
+      if (activeRpcCount === 0 || toggleGateExpired) {
+        if (restoreTogglesPass(keys)) {
+          restoreTogglesPass(keys);
+        }
       }
 
       // Pass 2: Restore form controls (<select>, <input>, <textarea>).
@@ -1215,6 +1282,74 @@ function guestStateBootstrap(restored) {
       }
     } finally {
       isRestoringNow = false;
+      if (
+        !guestReadySent &&
+        restoreReady &&
+        (activeRpcCount === 0 || toggleGateExpired) &&
+        !hasPendingRestorations()
+      ) {
+        scheduleGuestReady(16);
+      }
+    }
+  }
+
+  function hasPendingRestorations() {
+    return (
+      hasRestoredControls &&
+      !userInteracted &&
+      restorationActive &&
+      (Object.keys(pendingFormKeys).length > 0 ||
+        Object.keys(pendingToggleKeys).length > 0)
+    );
+  }
+
+  function notifyGuestReady() {
+    if (guestReadySent) return;
+    guestReadySent = true;
+    if (guestReadyTimer) {
+      clearTimeout(guestReadyTimer);
+      guestReadyTimer = null;
+    }
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: "mcp-apps:guest-ready" }, "*");
+      }
+    } catch (e) {}
+  }
+
+  function scheduleGuestReady(delayMs) {
+    if (guestReadySent) return;
+    if (guestReadyTimer) clearTimeout(guestReadyTimer);
+    guestReadyTimer = setTimeout(
+      function () {
+        guestReadyTimer = null;
+        if (activeRpcCount > 0 && !toggleGateExpired) return;
+        if (
+          hasRestoredControls &&
+          !userInteracted &&
+          restorationActive &&
+          restoreReady
+        ) {
+          runRestorePass();
+        }
+        if (hasPendingRestorations() && guestReadyRetryCount < 8) {
+          guestReadyRetryCount++;
+          scheduleGuestReady(30);
+          return;
+        }
+        notifyGuestReady();
+      },
+      typeof delayMs === "number" ? delayMs : 16,
+    );
+  }
+
+  function runRestoreMicrotask() {
+    if (!hasRestoredControls || userInteracted || !restorationActive) return;
+    runRestorePass();
+    if (typeof queueMicrotask === "function") {
+      queueMicrotask(function () {
+        runRestorePass();
+      });
     }
   }
 
@@ -1240,8 +1375,12 @@ function guestStateBootstrap(restored) {
   window.addEventListener("keydown", markUserInteracted, true);
   window.addEventListener("touchstart", markUserInteracted, true);
 
-  function retireOrScheduleForTarget(target) {
-    if (!target || target.nodeType !== 1 || !hasRestoredControls) return;
+  function retireOrScheduleForTarget(target, eventType) {
+    if (!target || target.nodeType !== 1) return;
+    if (!hasRestoredControls) {
+      markControlDirty(target, eventType);
+      return;
+    }
     var sel = getCssSelector(target);
     var label = getStableButtonLabel(target);
     var labelKey =
@@ -1255,6 +1394,7 @@ function guestStateBootstrap(restored) {
 
     if (isStillPending) {
       if (!userInteracted && restorationActive && restoreReady) {
+        runRestoreMicrotask();
         scheduleRestore();
       }
       return;
@@ -1266,6 +1406,7 @@ function guestStateBootstrap(restored) {
     if (labelKey && restored && restored.controls) {
       delete restored.controls[labelKey];
     }
+    markControlDirty(target, eventType);
   }
 
   function onControlEvent(e) {
@@ -1273,8 +1414,15 @@ function guestStateBootstrap(restored) {
     if (e && e.isTrusted) {
       userInteracted = true;
       restorationActive = false;
-    } else if (restoreReady && e && e.target) {
-      retireOrScheduleForTarget(e.target);
+      if (e.target) {
+        markControlDirty(e.target, e.type);
+      }
+    } else if (e && e.target) {
+      if (hasRestoredControls && restoreReady) {
+        retireOrScheduleForTarget(e.target, e.type);
+      } else if (!hasRestoredControls || userInteracted || !restorationActive) {
+        markControlDirty(e.target, e.type);
+      }
     }
     scheduleCapture();
   }
@@ -1283,35 +1431,57 @@ function guestStateBootstrap(restored) {
   window.addEventListener("input", onControlEvent, true);
   window.addEventListener("click", onControlEvent, true);
 
-  if (hasRestoredControls) {
-    window.addEventListener("message", function (event) {
-      if (userInteracted || !restorationActive) return;
-      var data = event.data;
-      if (!data || typeof data !== "object") return;
-      if (data.jsonrpc === "2.0") {
-        if (data.method === "ui/notifications/tool-result") {
-          setTimeout(function () {
+  window.addEventListener("message", function (event) {
+    var data = event.data;
+    if (!data || typeof data !== "object") return;
+    if (data.type === "mcp-apps:rpc-flight") {
+      activeRpcCount = typeof data.count === "number" ? data.count : 0;
+      if (activeRpcCount === 0) {
+        restoreReady = true;
+        if (!userInteracted && restorationActive) {
+          runRestoreMicrotask();
+        }
+        scheduleGuestReady(16);
+      }
+      return;
+    }
+    if (data.jsonrpc === "2.0") {
+      if (data.method === "ui/notifications/tool-result") {
+        restoreReady = true;
+        if (!userInteracted && restorationActive) {
+          runRestoreMicrotask();
+        }
+        if (activeRpcCount === 0) {
+          scheduleGuestReady(32);
+        }
+      } else if (
+        data.result &&
+        typeof data.result === "object" &&
+        data.result.protocolVersion &&
+        data.result.hostInfo
+      ) {
+        // Initialize handshake response: allow microtasks (await app.connect())
+        // and any immediate startup tools/call requests to start first.
+        setTimeout(function () {
+          if (activeRpcCount === 0) {
             restoreReady = true;
-            runRestorePass();
-          }, 0);
-        } else if (
-          data.result &&
-          typeof data.result === "object" &&
-          data.result.protocolVersion &&
-          data.result.hostInfo
-        ) {
-          // Initialize handshake response: allow microtasks (await app.connect())
-          // and any immediate tool-result notification to run, then restore.
-          setTimeout(function () {
-            restoreReady = true;
-            runRestorePass();
-          }, 20);
-        } else if (restoreReady) {
-          scheduleRestore();
+            if (!userInteracted && restorationActive) {
+              runRestoreMicrotask();
+            }
+            scheduleGuestReady(24);
+          }
+        }, 30);
+      } else if (data.result !== undefined || data.error !== undefined) {
+        restoreReady = true;
+        if (!userInteracted && restorationActive) {
+          runRestoreMicrotask();
+        }
+        if (activeRpcCount === 0) {
+          scheduleGuestReady(16);
         }
       }
-    });
-  }
+    }
+  });
 
   var observer = null;
   function startObserver() {
@@ -1324,6 +1494,7 @@ function guestStateBootstrap(restored) {
         restorationActive &&
         restoreReady
       ) {
+        runRestorePass();
         scheduleRestore();
       }
       if (userInteracted || !hasRestoredControls || !restorationActive) {
@@ -1350,24 +1521,50 @@ function guestStateBootstrap(restored) {
 
   function onDomReady() {
     startObserver();
-    if (!hasRestoredControls) return;
     var isSdkApp = !!(
       window.__ARCHESTRA_APP_CONTEXT__ ||
       window.__ARCHESTRA_APP_SDK_URL__ ||
       window.MCP_EXTAPPS ||
       window.archestra
     );
-    setTimeout(
-      function () {
+    if (!isSdkApp) {
+      restoreReady = true;
+      if (hasRestoredControls) {
+        runRestoreMicrotask();
+      }
+      scheduleGuestReady(16);
+    } else {
+      setTimeout(function () {
+        if (activeRpcCount === 0) {
+          restoreReady = true;
+          if (hasRestoredControls) {
+            runRestoreMicrotask();
+          }
+          scheduleGuestReady(16);
+        }
+      }, 250);
+      setTimeout(function () {
         restoreReady = true;
-        runRestorePass();
-      },
-      isSdkApp ? 250 : 0,
-    );
-    setTimeout(function () {
-      restorationActive = false;
-      scheduleMutationCapture();
-    }, RESTORE_WINDOW_MS);
+        if (hasRestoredControls) {
+          runRestoreMicrotask();
+        }
+        notifyGuestReady();
+      }, GUEST_READY_FALLBACK_MS);
+    }
+    if (hasRestoredControls) {
+      setTimeout(function () {
+        toggleGateExpired = true;
+        restoreReady = true;
+        if (!userInteracted && restorationActive) {
+          runRestoreMicrotask();
+        }
+        scheduleGuestReady(16);
+      }, TOGGLE_RPC_GATE_MAX_MS);
+      setTimeout(function () {
+        restorationActive = false;
+        scheduleMutationCapture();
+      }, RESTORE_WINDOW_MS);
+    }
   }
 
   if (document.readyState === "loading") {
@@ -1511,6 +1708,37 @@ const RESOURCE_READY_NOTIFICATION =
   "ui/notifications/sandbox-resource-ready";
 const PROXY_READY_NOTIFICATION =
   "ui/notifications/sandbox-proxy-ready";
+const GUEST_RPC_FLIGHT_MAX_MS = 2500;
+const pendingGuestRpcTimers = new Map();
+
+function postGuestRpcFlightCount() {
+  if (inner && inner.contentWindow) {
+    inner.contentWindow.postMessage(
+      { type: "mcp-apps:rpc-flight", count: pendingGuestRpcTimers.size },
+      IS_OPAQUE_ORIGIN ? "*" : OWN_ORIGIN,
+    );
+  }
+}
+
+function clearPendingGuestRpc(id, notify) {
+  const timer = pendingGuestRpcTimers.get(id);
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    pendingGuestRpcTimers.delete(id);
+    if (notify) {
+      postGuestRpcFlightCount();
+    }
+    return true;
+  }
+  return false;
+}
+
+function clearAllPendingGuestRpcs() {
+  for (const timer of pendingGuestRpcTimers.values()) {
+    clearTimeout(timer);
+  }
+  pendingGuestRpcTimers.clear();
+}
 
 
 // Message relay: This Sandbox (outer iframe) acts as a bidirectional bridge,
@@ -1539,6 +1767,7 @@ window.addEventListener("message", async (event) => {
     }
 
     if (event.data && event.data.method === RESOURCE_READY_NOTIFICATION) {
+      clearAllPendingGuestRpcs();
       // `ownedApp` is set by the trusted host (origin-validated above) only for
       // Archestra-owned apps, whose envelope already carries the platform CSP.
       const { html, sandbox, csp, permissions, ownedApp, restoredState } = event.data.params;
@@ -1583,9 +1812,21 @@ window.addEventListener("message", async (event) => {
       }
     } else {
       if (inner && inner.contentWindow) {
+        const wasPendingRpc =
+          event.data &&
+          typeof event.data === "object" &&
+          event.data.jsonrpc === "2.0" &&
+          event.data.method === undefined &&
+          (event.data.result !== undefined || event.data.error !== undefined) &&
+          event.data.id !== undefined &&
+          clearPendingGuestRpc(event.data.id, false);
         // With opaque origin, postMessage targetOrigin cannot be a specific origin.
         // Use "*" — safe because the inner iframe is sandboxed.
-        inner.contentWindow.postMessage(event.data, IS_OPAQUE_ORIGIN ? "*" : OWN_ORIGIN);
+        const targetOrigin = IS_OPAQUE_ORIGIN ? "*" : OWN_ORIGIN;
+        inner.contentWindow.postMessage(event.data, targetOrigin);
+        if (wasPendingRpc) {
+          postGuestRpcFlightCount();
+        }
       }
     }
   } else if (event.source === inner.contentWindow) {
@@ -1596,12 +1837,28 @@ window.addEventListener("message", async (event) => {
     var data = event.data;
     if (data && typeof data === "object") {
       if (
+        data.jsonrpc === "2.0" &&
+        data.id !== undefined &&
+        (data.method === "tools/call" ||
+          data.method === "resources/read" ||
+          data.method === "prompts/get")
+      ) {
+        clearPendingGuestRpc(data.id, false);
+        const rpcId = data.id;
+        const expiryTimer = setTimeout(() => {
+          clearPendingGuestRpc(rpcId, true);
+        }, GUEST_RPC_FLIGHT_MAX_MS);
+        pendingGuestRpcTimers.set(rpcId, expiryTimer);
+        postGuestRpcFlightCount();
+      }
+      if (
         data.jsonrpc === "2.0" ||
         data.type === "mcp-apps:csp-violation" ||
         data.type === "mcp-apps:runtime-error" ||
         data.type === "mcp-apps:screenshot" ||
         data.type === "mcp-apps:sandbox-content-loaded" ||
-        data.type === "mcp-apps:state-sync"
+        data.type === "mcp-apps:state-sync" ||
+        data.type === "mcp-apps:guest-ready"
       ) {
         window.parent.postMessage(data, EXPECTED_HOST_ORIGIN || "*");
       }

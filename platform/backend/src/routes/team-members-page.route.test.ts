@@ -87,6 +87,40 @@ describe("single team and team member pages", () => {
     expect(loadAllMembers).not.toHaveBeenCalled();
   });
 
+  test("filters members by team role, so a one-row page counts the admins", async ({
+    makeMember,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const team = await makeTeam(ctx.organizationId, ctx.user.id);
+    for (const [name, role] of [
+      ["Ada Admin", "admin"],
+      ["Bea Admin", "admin"],
+      ["Carl Member", "member"],
+    ] as const) {
+      const user = await makeUser({ name });
+      await makeTeamMember(team.id, user.id, { role });
+    }
+
+    const admins = await ctx.app.inject({
+      method: "GET",
+      url: `/api/teams/${team.id}/members/page?role=admin&limit=1`,
+    });
+    expect(admins.statusCode, admins.body).toBe(200);
+    expect(admins.json().pagination.total).toBe(2);
+    expect(admins.json().data).toEqual([
+      expect.objectContaining({ name: "Ada Admin", role: "admin" }),
+    ]);
+
+    const invalid = await ctx.app.inject({
+      method: "GET",
+      url: `/api/teams/${team.id}/members/page?role=owner`,
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
   test("rejects an empty user id list and an overlong search", async ({
     makeMember,
     makeTeam,

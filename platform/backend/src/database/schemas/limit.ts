@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -37,6 +38,12 @@ const limitsTable = pgTable(
     model: jsonb("model").$type<string[] | null>(),
     /** Why an admin set this limit, e.g. for a custom per-user limit. */
     reason: text("reason"),
+    /**
+     * Set when a team admin created this team limit for their own team. Team
+     * admins may change or delete only these; a limit an organization limit
+     * manager set stays binding on the team it caps.
+     */
+    teamManaged: boolean("team_managed").notNull().default(false),
     cleanupInterval: varchar("cleanup_interval")
       .$type<LimitCleanupInterval>()
       .notNull()

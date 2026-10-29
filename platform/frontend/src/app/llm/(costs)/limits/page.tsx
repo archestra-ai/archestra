@@ -14,6 +14,7 @@ import {
   Info,
   Key,
   KeyRound,
+  Lock,
   type LucideIcon,
   MessageSquareText,
   Plus,
@@ -101,6 +102,7 @@ import {
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
+import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useLlmModelOptions } from "@/lib/llm-models.query";
 import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import { useMemberOptionsReferences } from "@/lib/member-options.query";
@@ -123,6 +125,9 @@ type UsageSummary = {
 
 const canBulkDeleteLimit = (limit: LimitData) => limit.entityType !== "user";
 
+const ORG_SET_LIMIT_HINT =
+  "Set by your organization. Ask someone who manages organization limits to change it.";
+
 type LimitFormState = {
   behavior: "hard" | "soft";
   limitType: "token_cost" | "requests" | "tokens";
@@ -134,6 +139,7 @@ type LimitFormState = {
   models: string[];
   isAllModels: boolean;
   labels: ProfileLabel[];
+  reason: string;
 };
 
 const DEFAULT_FORM_STATE: LimitFormState = {
@@ -147,6 +153,7 @@ const DEFAULT_FORM_STATE: LimitFormState = {
   models: [],
   isAllModels: true,
   labels: [],
+  reason: "",
 };
 
 const LIMITS_ENTITY_SELECTOR_PAGE_SIZE = 100;
@@ -254,6 +261,7 @@ import { UserLimitsOverview } from "./_parts/user-limits-overview";
 
 export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
+  const access = useTeamLimitAccess();
   const {
     data: limits = [],
     isPending,
@@ -261,20 +269,30 @@ export default function LimitsPage() {
     isLoadingError: isLimitsLoadError,
     refetch: refetchLimits,
   } = useLimits();
-  const { data: teams = [] } = useTeams({ includeRelations: false });
+  const { data: allTeams = [] } = useTeams({
+    includeRelations: false,
+    enabled: access.globalCreate || access.globalRead,
+  });
+  const teams =
+    access.globalCreate || access.globalRead ? allTeams : access.teams;
+  const createTeams = access.globalCreate ? allTeams : access.teams;
   const { data: organization } = useOrganization();
   const { data: members = EMPTY_ENTITY_OPTIONS } = useMemberOptionsReferences({
     ids: limits
       .filter((limit) => limit.entityType === "user")
       .map((limit) => limit.entityId),
   });
-  const { data: defaultUserLimits = [] } = useDefaultUserLimits();
+  const { data: defaultUserLimits = [] } = useDefaultUserLimits(
+    access.globalRead,
+  );
   const { data: virtualKeysData } = useAllVirtualApiKeys({
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
+    enabled: access.globalRead,
   });
   const virtualKeys = virtualKeysData?.data ?? [];
   const { data: oauthClientsData } = useLlmOauthClients({
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
+    enabled: access.globalRead,
   });
   const oauthClients = oauthClientsData?.data ?? [];
   const { data: agents = EMPTY_ENTITY_OPTIONS } = useAgentOptionsByIds({
@@ -283,7 +301,7 @@ export default function LimitsPage() {
       .map((limit) => limit.entityId),
     filters: { agentType: "agent" },
   });
-  const { data: environmentsData } = useEnvironments();
+  const { data: environmentsData } = useEnvironments(access.globalRead);
   const environments = environmentsData?.environments ?? [];
   const { data: modelsWithApiKeys = [] } = useLlmModelOptions();
   const createLimit = useCreateLimit();
@@ -396,14 +414,19 @@ export default function LimitsPage() {
 
   const handleCreateOpen = useCallback(() => {
     closeEditDialog();
-    setFormState({ ...DEFAULT_FORM_STATE, labels: [] });
+    setFormState({
+      ...DEFAULT_FORM_STATE,
+      entityType: access.globalCreate ? "organization" : "team",
+      entityId: access.globalCreate ? "" : (access.teams[0]?.id ?? ""),
+      labels: [],
+    });
     setIsCreateDialogOpen(true);
-  }, [closeEditDialog]);
+  }, [closeEditDialog, access.globalCreate, access.teams[0]?.id]);
 
   useEffect(() => {
     setActionButton(
       <PermissionButton
-        permissions={{ llmLimit: ["create"] }}
+        permissions={access.allows("create") ? {} : { llmLimit: ["create"] }}
         size="sm"
         onClick={handleCreateOpen}
       >
@@ -413,7 +436,7 @@ export default function LimitsPage() {
     );
 
     return () => setActionButton(null);
-  }, [handleCreateOpen, setActionButton]);
+  }, [handleCreateOpen, setActionButton, access.allows]);
 
   const buildEditFormState = useCallback((limit: LimitData): LimitFormState => {
     const models = getLimitModels(limit);
@@ -437,6 +460,7 @@ export default function LimitsPage() {
       // A limit read before labels existed carries none; the labels field
       // shows open now, so it needs a list.
       labels: limit.labels ?? [],
+      reason: limit.reason ?? "",
     };
   }, []);
 
@@ -599,7 +623,7 @@ export default function LimitsPage() {
   } = useBulkSelection({
     rows: filteredLimits,
     getId: (limit) => limit.id,
-    canSelect: canBulkDeleteLimit,
+    canSelect: (limit) => canBulkDeleteLimit(limit) && !access.isLocked(limit),
     filterSignature: JSON.stringify({
       statusFilter,
       unitsFilter,
@@ -617,9 +641,12 @@ export default function LimitsPage() {
         rowLabel: (limit) =>
           `Select ${getEntityLabel(limit)} ${limitMetricLabel(limit)} rule`,
         allLabel: "Select all limits on this page",
-        canSelect: canBulkDeleteLimit,
-        disabledReason: () =>
-          "User limits must be deleted individually because they can span organizations",
+        canSelect: (limit) =>
+          canBulkDeleteLimit(limit) && !access.isLocked(limit),
+        disabledReason: (limit) =>
+          access.isLocked(limit)
+            ? ORG_SET_LIMIT_HINT
+            : "User limits must be deleted individually because they can span organizations",
       }),
       {
         id: "entityId",
@@ -634,8 +661,22 @@ export default function LimitsPage() {
                 {getEntityIcon(limit)}
               </span>
               <div className="min-w-0">
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="flex min-w-0 items-center gap-1.5">
                   <span className="truncate">{getEntityLabel(limit)}</span>
+                  {access.isLocked(limit) && (
+                    <EntityNote
+                      icon={Lock}
+                      label="Set by your organization"
+                      text={ORG_SET_LIMIT_HINT}
+                    />
+                  )}
+                  {limit.reason ? (
+                    <EntityNote
+                      icon={MessageSquareText}
+                      label={`Reason: ${limit.reason}`}
+                      text={limit.reason}
+                    />
+                  ) : null}
                   <LabelTags labels={limit.labels} />
                 </div>
                 {limit.entityType !== "organization" && (
@@ -643,19 +684,6 @@ export default function LimitsPage() {
                     {getEntityScopeLabel(limit)}
                   </div>
                 )}
-                {limit.reason ? (
-                  <div
-                    title={limit.reason}
-                    className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
-                  >
-                    <MessageSquareText
-                      aria-hidden
-                      className="size-3 shrink-0"
-                    />
-                    <span className="sr-only">Reason: </span>
-                    <span className="truncate">{limit.reason}</span>
-                  </div>
-                ) : null}
               </div>
             </div>
           );
@@ -704,27 +732,41 @@ export default function LimitsPage() {
         header: "Actions",
         size: 100,
         minSize: 80,
-        cell: ({ row }) => (
-          <TableRowActions
-            size="sm"
-            itemName={`${getEntityLabel(row.original)} ${limitMetricLabel(row.original)}`}
-            actions={[
-              {
-                icon: <Edit className="h-4 w-4" />,
-                label: "Edit limit",
-                permissions: { llmLimit: ["update"] },
-                onClick: () => openEditDialog(row.original),
-              },
-              {
-                icon: <Trash2 className="h-4 w-4" />,
-                label: "Delete limit",
-                variant: "destructive",
-                permissions: { llmLimit: ["delete"] },
-                onClick: () => setLimitToDelete(row.original),
-              },
-            ]}
-          />
-        ),
+        cell: ({ row }) => {
+          const locked = access.isLocked(row.original);
+          const lockedState = locked
+            ? { disabled: true, disabledTooltip: ORG_SET_LIMIT_HINT }
+            : {};
+          return (
+            <TableRowActions
+              size="sm"
+              itemName={`${getEntityLabel(row.original)} ${limitMetricLabel(row.original)}`}
+              actions={[
+                {
+                  icon: <Edit className="h-4 w-4" />,
+                  label: "Edit limit",
+                  permissions:
+                    locked || access.allows("update", row.original)
+                      ? {}
+                      : { llmLimit: ["update"] },
+                  ...lockedState,
+                  onClick: () => openEditDialog(row.original),
+                },
+                {
+                  icon: <Trash2 className="h-4 w-4" />,
+                  label: "Delete limit",
+                  variant: "destructive",
+                  permissions:
+                    locked || access.allows("delete", row.original)
+                      ? {}
+                      : { llmLimit: ["delete"] },
+                  ...lockedState,
+                  onClick: () => setLimitToDelete(row.original),
+                },
+              ]}
+            />
+          );
+        },
       },
     ],
     [
@@ -734,6 +776,7 @@ export default function LimitsPage() {
       getUsageStatus,
       modelByModelId,
       openEditDialog,
+      access,
     ],
   );
 
@@ -776,7 +819,9 @@ export default function LimitsPage() {
     [updateQueryParams],
   );
   const shouldShowDefaultUserLimitNotice =
-    formState.entityType === "user" && defaultUserLimits.length > 0;
+    access.globalRead &&
+    formState.entityType === "user" &&
+    defaultUserLimits.length > 0;
 
   function closeDialog() {
     if (editingLimit) {
@@ -802,6 +847,7 @@ export default function LimitsPage() {
       cleanupInterval: formState.cleanupInterval,
       model: formState.isAllModels ? null : formState.models,
       labels: finalLabels,
+      reason: formState.reason.trim() || null,
     };
 
     if (editingLimit) {
@@ -857,6 +903,7 @@ export default function LimitsPage() {
   return (
     <div className="-mt-3">
       <UserLimitsOverview
+        enabled={access.globalRead}
         limitsTable={
           <BulkActionsScope>
             <CollectionFilters>
@@ -1039,7 +1086,13 @@ export default function LimitsPage() {
               selectAllMatching={selectAllMatching}
             >
               <PermissionButton
-                permissions={{ llmLimit: ["delete"] }}
+                permissions={
+                  selectedLimits.every((limit) =>
+                    access.allows("delete", limit),
+                  )
+                    ? {}
+                    : { llmLimit: ["delete"] }
+                }
                 variant="destructive"
                 size="sm"
                 onClick={() => setIsBulkDeleteDialogOpen(true)}
@@ -1146,6 +1199,7 @@ export default function LimitsPage() {
                     ).map((item) => ({
                       value: item.value,
                       label: item.label,
+                      disabled: !access.globalCreate && item.value !== "team",
                       searchText: `${item.label} ${item.description}`,
                       content: (
                         <span className="flex flex-col gap-0.5">
@@ -1154,9 +1208,11 @@ export default function LimitsPage() {
                             {item.label}
                           </span>
                           <span className="pl-6 text-xs text-muted-foreground">
-                            {formState.limitType === "token_cost"
-                              ? item.description
-                              : "Shared allowance across matching requests."}
+                            {!access.globalCreate && item.value !== "team"
+                              ? "Requires organization-wide Limits permission."
+                              : formState.limitType === "token_cost"
+                                ? item.description
+                                : "Shared allowance across matching requests."}
                           </span>
                         </span>
                       ),
@@ -1181,11 +1237,13 @@ export default function LimitsPage() {
                         }))
                       }
                       placeholder="Select team"
-                      items={teams.map((team) => ({
-                        value: team.id,
-                        label: team.name,
-                        description: team.description ?? undefined,
-                      }))}
+                      items={(editingLimit ? teams : createTeams).map(
+                        (team) => ({
+                          value: team.id,
+                          label: team.name,
+                          description: team.description ?? undefined,
+                        }),
+                      )}
                       className="w-full sm:flex-1"
                       disabled={Boolean(editingLimit)}
                     />
@@ -1466,6 +1524,25 @@ export default function LimitsPage() {
                   flight can exceed this limit.
                 </FieldDescription>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="limit-reason">Reason (optional)</Label>
+              <FieldDescription>
+                Shown with the limit so others know why it is there.
+              </FieldDescription>
+              <Input
+                id="limit-reason"
+                placeholder="For example, keep Opus experiments in check"
+                maxLength={500}
+                value={formState.reason}
+                onChange={(event) =>
+                  setFormState((current) => ({
+                    ...current,
+                    reason: event.target.value,
+                  }))
+                }
+              />
             </div>
 
             <AdvancedSection keepMounted>
@@ -1997,4 +2074,34 @@ function getLimitInterval(limit: LimitData): LimitCleanupInterval {
     return "minute";
   }
   return limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL;
+}
+
+/** A small icon beside a limit's name whose text shows on hover or focus. */
+function EntityNote({
+  icon: Icon,
+  label,
+  text,
+}: {
+  icon: typeof Lock;
+  label: string;
+  text: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="img"
+          aria-label={label}
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: lets keyboard users open the tooltip
+          tabIndex={0}
+          className="inline-flex shrink-0 cursor-default rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <Icon aria-hidden className="size-3.5" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-72">{text}</TooltipContent>
+    </Tooltip>
+  );
 }

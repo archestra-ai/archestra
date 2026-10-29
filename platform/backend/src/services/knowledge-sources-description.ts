@@ -99,14 +99,7 @@ export async function buildKnowledgeSourcesDescription(
           access,
           directConnectors,
         )
-      : await knowledgeSourceAccessControlService.filterPublishedToOrganization(
-          {
-            organizationId,
-            resource: "knowledgeConnector",
-            sources: directConnectors,
-            action: "use",
-          },
-        );
+      : directConnectors;
     connectors = [
       ...new Map(
         [...kbConnectors, ...visibleDirect]
@@ -118,6 +111,20 @@ export async function buildKnowledgeSourcesDescription(
           .map((connector) => [connector.id, connector]),
       ).values(),
     ];
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    if (!access) {
+      connectors =
+        await knowledgeSourceAccessControlService.filterQueryableConnectorsForOrganization(
+          {
+            organizationId,
+            connectors,
+            knowledgeBaseIds: knowledgeBases.map((kb) => kb.id),
+          },
+        );
+    }
+    // SPDX-SnippetEnd
     const visibleConnectorIds = new Set(
       connectors.map((connector) => connector.id),
     );

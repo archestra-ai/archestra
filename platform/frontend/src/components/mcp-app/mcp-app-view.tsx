@@ -509,6 +509,9 @@ export const McpAppRuntime = function McpAppRuntime({
       },
       signal?: AbortSignal,
     ) => {
+      if (cancelled) {
+        throw new Error("MCP App bridge is closed");
+      }
       const generation = ++nextToolCallGeneration;
       const result = await mcpProxy("tools/call", params, signal);
       if (cancelled) return result;
@@ -574,6 +577,9 @@ export const McpAppRuntime = function McpAppRuntime({
       const prefixSeparator = `${serverPrefix}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 
       appBridge.onreadresource = async (params) => {
+        if (cancelled) {
+          throw new Error("MCP App bridge is closed");
+        }
         const uri = (params as { uri?: string }).uri;
         if (
           typeof uri === "string" &&
@@ -585,6 +591,9 @@ export const McpAppRuntime = function McpAppRuntime({
         return mcpProxy("resources/read", params);
       };
       appBridge.onlistresources = async () => {
+        if (cancelled) {
+          throw new Error("MCP App bridge is closed");
+        }
         const result = await mcpProxy("resources/list", {});
         if (result?.resources) {
           result.resources = (result.resources as { uri?: string }[]).filter(
@@ -597,6 +606,9 @@ export const McpAppRuntime = function McpAppRuntime({
         return result;
       };
       appBridge.onlistresourcetemplates = async () => {
+        if (cancelled) {
+          throw new Error("MCP App bridge is closed");
+        }
         const result = await mcpProxy("resources/templates/list", {});
         if (result?.resourceTemplates) {
           result.resourceTemplates = (
@@ -611,6 +623,9 @@ export const McpAppRuntime = function McpAppRuntime({
         return result;
       };
       appBridge.onlistprompts = async () => {
+        if (cancelled) {
+          throw new Error("MCP App bridge is closed");
+        }
         const result = await mcpProxy("prompts/list", {});
         if (result?.prompts) {
           result.prompts = (result.prompts as { name?: string }[]).filter(
@@ -637,8 +652,12 @@ export const McpAppRuntime = function McpAppRuntime({
           },
           extra.signal,
         );
-      appBridge.onreadresource = async (params) =>
-        mcpProxy("resources/read", params);
+      appBridge.onreadresource = async (params) => {
+        if (cancelled) {
+          throw new Error("MCP App bridge is closed");
+        }
+        return mcpProxy("resources/read", params);
+      };
       appBridge.onlistresources = async () => ({ resources: [] });
       appBridge.onlistresourcetemplates = async () => ({
         resourceTemplates: [],
@@ -665,6 +684,7 @@ export const McpAppRuntime = function McpAppRuntime({
     // ui/message — View injects a user message into the conversation.
     const MAX_MESSAGE_LENGTH = 10_000;
     appBridge.onmessage = async (params) => {
+      if (cancelled) return {};
       const text = contentBlocksToText(params.content, MAX_MESSAGE_LENGTH);
       if (text) onSendMessageRef.current?.(text);
       return {};
@@ -676,6 +696,7 @@ export const McpAppRuntime = function McpAppRuntime({
     // The cap matches the metadata schema's bound.
     const MAX_MODEL_CONTEXT_LENGTH = 2_000;
     appBridge.onupdatemodelcontext = async (params) => {
+      if (cancelled) return {};
       const text = contentBlocksToText(
         params.content,
         MAX_MODEL_CONTEXT_LENGTH,
@@ -700,7 +721,6 @@ export const McpAppRuntime = function McpAppRuntime({
       }
       return () => {
         cancelled = true;
-        appBridge.teardownResource({}).catch(() => {});
       };
     }
 
@@ -732,7 +752,19 @@ export const McpAppRuntime = function McpAppRuntime({
         const permissions = content._meta?.ui?.permissions;
 
         if (!cancelled && !fetchCancelledRef.current) {
-          setAppResource({ html, csp, permissions });
+          setAppResource((prev) => {
+            if (
+              prev &&
+              prev.html === html &&
+              JSON.stringify(prev.csp ?? null) ===
+                JSON.stringify(csp ?? null) &&
+              JSON.stringify(prev.permissions ?? null) ===
+                JSON.stringify(permissions ?? null)
+            ) {
+              return prev;
+            }
+            return { html, csp, permissions };
+          });
           onResourceStateChangeRef.current(
             isRenderableMcpAppHtml(html) ? "renderable" : "empty",
           );
@@ -750,7 +782,6 @@ export const McpAppRuntime = function McpAppRuntime({
     return () => {
       cancelled = true;
       fetchCancelledRef.current = true;
-      appBridge.teardownResource({}).catch(() => {});
     };
     // reloadNonce: bumping it rebuilds the bridge from scratch (a clean reload).
     // The iframe reconnects automatically since SandboxIframe's connect effect
@@ -962,6 +993,9 @@ function isSuccessfulMcpToolCallResult(
 
 const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
 const SANDBOX_READY_TIMEOUT = 10_000;
+// Fallback reveal timeout if a reloaded guest never emits mcp-apps:guest-ready.
+// Matches GUEST_READY_FALLBACK_MS in platform/backend/src/static/mcp-sandbox-proxy.html.
+const SANDBOX_REVEAL_FALLBACK_MS = 900;
 
 // Coalesce a burst of render errors into one early server post.
 const RENDER_DIAGNOSTIC_POST_DEBOUNCE_MS = 400;
@@ -1052,6 +1086,12 @@ function SandboxIframe({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const outgoingIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const outgoingBridgeRef = useRef<{
+    bridge: AppBridge;
+    transport: PostMessageTransport | null;
+  } | null>(null);
+  const hasRenderedContentRef = useRef(false);
   // Track WHICH bridge is connected, not just a boolean: a reload swaps in a new
   // bridge instance, and `ready` must read false the instant the identity changes
   // — otherwise the send effects below fire against the not-yet-connected bridge
@@ -1087,6 +1127,12 @@ function SandboxIframe({
     () => buildAllowAttribute(permissions),
     [permissions],
   );
+  const cspSerialized = JSON.stringify(csp ?? null);
+  const permissionsSerialized = JSON.stringify(permissions ?? null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stabilize by serialized value so identical refreshes do not re-send sandbox-resource-ready
+  const stableCsp = useMemo(() => csp, [cspSerialized]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stabilize by serialized value so identical refreshes do not re-send sandbox-resource-ready
+  const stablePermissions = useMemo(() => permissions, [permissionsSerialized]);
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
@@ -1102,17 +1148,55 @@ function SandboxIframe({
     maxHeightRef.current = maxHeight;
   });
 
+  const disposeOutgoingFrame = useCallback(() => {
+    const prevBridge = outgoingBridgeRef.current;
+    outgoingBridgeRef.current = null;
+    if (prevBridge) {
+      prevBridge.bridge.teardownResource({}).catch(() => {});
+      prevBridge.transport?.close?.()?.catch(() => {});
+    }
+    if (outgoingIframeRef.current) {
+      outgoingIframeRef.current.remove();
+      outgoingIframeRef.current = null;
+    }
+  }, []);
+
   // Create iframe, wait for proxy-ready, connect bridge
   useEffect(() => {
     let cancelled = false;
+    let activeTransport: PostMessageTransport | null = null;
     const container = containerRef.current;
     if (!container) return;
 
+    const previousIframe = outgoingIframeRef.current;
     const iframe = document.createElement("iframe");
     iframe.style.width = "100%";
     iframe.style.height = `${initialHeightRef.current}px`;
     iframe.style.border = "none";
     iframe.style.backgroundColor = "transparent";
+    if (previousIframe) {
+      iframe.style.opacity = "0";
+      iframe.style.position = "absolute";
+      iframe.style.top = "0";
+      iframe.style.left = "0";
+      iframe.style.pointerEvents = "none";
+    }
+    let revealed = !previousIframe;
+    let revealFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    const revealIncomingIframe = () => {
+      if (revealed) return;
+      revealed = true;
+      if (revealFallbackTimer) {
+        clearTimeout(revealFallbackTimer);
+        revealFallbackTimer = null;
+      }
+      iframe.style.opacity = "";
+      iframe.style.position = "";
+      iframe.style.top = "";
+      iframe.style.left = "";
+      iframe.style.pointerEvents = "";
+      disposeOutgoingFrame();
+    };
     // Propagate the host theme into the sandbox chain: per CSS Color
     // Adjustment, the frame element's used color-scheme sets the embedded
     // document's *preferred* color scheme, and the proxy hands it on to the
@@ -1158,6 +1242,7 @@ function SandboxIframe({
     // Wait for sandbox-proxy-ready message from the iframe
     const timeout = setTimeout(() => {
       if (!cancelled) {
+        revealIncomingIframe();
         const err = new Error("Timed out waiting for sandbox proxy iframe");
         setError(err);
         onErrorRef.current?.(err);
@@ -1182,6 +1267,7 @@ function SandboxIframe({
         // contentWindow is guaranteed non-null here (checked in event.source === iframe.contentWindow above)
         const cw = iframe.contentWindow as Window;
         const transport = new PostMessageTransport(cw, cw);
+        activeTransport = transport;
         appBridge
           .connect(transport)
           .then(() => {
@@ -1189,10 +1275,17 @@ function SandboxIframe({
               setError(null);
               setConnectedBridge(appBridge);
               onConnectedRef.current?.();
+              if (!revealed) {
+                revealFallbackTimer = setTimeout(
+                  revealIncomingIframe,
+                  SANDBOX_REVEAL_FALLBACK_MS,
+                );
+              }
             }
           })
           .catch((err) => {
             if (!cancelled) {
+              revealIncomingIframe();
               const error = err instanceof Error ? err : new Error(String(err));
               setError(error);
               onErrorRef.current?.(error);
@@ -1223,20 +1316,56 @@ function SandboxIframe({
         onStateSyncRef.current?.(event.data);
       } else if (type === "mcp-apps:sandbox-content-loaded") {
         onContentLoadedRef.current?.();
+      } else if (type === "mcp-apps:guest-ready") {
+        revealIncomingIframe();
       }
     };
 
     window.addEventListener("message", onMessage);
     window.addEventListener("message", onDiagnosticMessage);
-    container.appendChild(iframe);
+    container.insertBefore(iframe, container.firstChild);
 
     return () => {
       cancelled = true;
       clearTimeout(timeout);
+      if (revealFallbackTimer) {
+        clearTimeout(revealFallbackTimer);
+        revealFallbackTimer = null;
+      }
       themeObserver.disconnect();
       window.removeEventListener("message", onMessage);
       window.removeEventListener("message", onDiagnosticMessage);
-      iframe.remove();
+      if (activeTransport) {
+        activeTransport.onmessage = undefined;
+      }
+      if (revealed && hasRenderedContentRef.current && container.isConnected) {
+        if (outgoingIframeRef.current && outgoingIframeRef.current !== iframe) {
+          disposeOutgoingFrame();
+        }
+        iframe.style.opacity = "";
+        iframe.style.position = "";
+        iframe.style.top = "";
+        iframe.style.left = "";
+        iframe.style.pointerEvents = "none";
+        outgoingIframeRef.current = iframe;
+        outgoingBridgeRef.current = {
+          bridge: appBridge,
+          transport: activeTransport,
+        };
+      } else if (
+        !revealed &&
+        outgoingIframeRef.current &&
+        container.isConnected
+      ) {
+        appBridge.teardownResource({}).catch(() => {});
+        activeTransport?.close?.()?.catch(() => {});
+        iframe.remove();
+      } else {
+        disposeOutgoingFrame();
+        appBridge.teardownResource({}).catch(() => {});
+        activeTransport?.close?.()?.catch(() => {});
+        iframe.remove();
+      }
       iframeRef.current = null;
       // Reset connection state so the send effects below don't fire against a
       // bridge whose iframe we just removed. Without this, ready/initialized
@@ -1252,7 +1381,15 @@ function SandboxIframe({
     appBridge,
     useDedicatedOrigin,
     allowAttribute,
+    disposeOutgoingFrame,
   ]);
+
+  // Clean up any retained outgoing iframe if the component itself unmounts.
+  useEffect(() => {
+    return () => {
+      disposeOutgoingFrame();
+    };
+  }, [disposeOutgoingFrame]);
 
   // Set up size change and initialized handlers
   useEffect(() => {
@@ -1286,6 +1423,8 @@ function SandboxIframe({
   // Send HTML to sandbox once connected
   useEffect(() => {
     if (!ready || !html) return;
+    hasRenderedContentRef.current = true;
+    setInitialized(false);
     appBridge
       // `ownedApp` is a trusted host signal: Archestra-owned apps carry the
       // platform CSP in their backend envelope, so the proxy must not add a
@@ -1293,8 +1432,8 @@ function SandboxIframe({
       // notification forwards params verbatim and the proxy reads it raw.
       .sendSandboxResourceReady({
         html,
-        csp,
-        permissions,
+        csp: stableCsp,
+        permissions: stablePermissions,
         ...(ownedApp ? { ownedApp: true } : {}),
         ...(restoredStateRef.current
           ? { restoredState: restoredStateRef.current }
@@ -1305,7 +1444,7 @@ function SandboxIframe({
         setError(error);
         onErrorRef.current?.(error);
       });
-  }, [ready, html, appBridge, csp, permissions, ownedApp]);
+  }, [ready, html, appBridge, stableCsp, stablePermissions, ownedApp]);
 
   // Send tool input when available
   useEffect(() => {
@@ -1363,6 +1502,7 @@ function SandboxIframe({
     <div
       ref={containerRef}
       style={{
+        position: "relative",
         width: "100%",
         height: "100%",
         display: "flex",

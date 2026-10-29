@@ -1,4 +1,6 @@
 import { pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import type { TeamMemberRole } from "@/types/team-role";
+import identityProvidersTable from "./identity-provider";
 import { team } from "./team";
 
 /**
@@ -24,14 +26,25 @@ const teamExternalGroupsTable = pgTable(
      * - Azure AD: Group Object ID (GUID) e.g., "00000000-0000-0000-0000-000000000000"
      */
     groupIdentifier: text("group_identifier").notNull(),
+    /**
+     * The identity provider whose sign-ins this group is matched for. Null
+     * matches the group from any provider (mappings created before groups
+     * were scoped to a provider).
+     */
+    identityProviderId: text("identity_provider_id").references(
+      () => identityProvidersTable.id,
+      { onDelete: "cascade" },
+    ),
+    /** The team role synced members of this group receive. */
+    role: text("role").$type<TeamMemberRole>().default("member").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [
-    // Ensure unique combination of team and group
-    unique("team_external_group_team_group_unique").on(
-      table.teamId,
-      table.groupIdentifier,
-    ),
+    // One mapping per group and provider on a team. A null provider counts as
+    // one value, so an unscoped group cannot be mapped twice.
+    unique("team_external_group_team_provider_group_unique")
+      .on(table.teamId, table.identityProviderId, table.groupIdentifier)
+      .nullsNotDistinct(),
   ],
 );
 

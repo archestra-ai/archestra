@@ -31,7 +31,9 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import McpDeploymentLeaseModel, {
+  type ClusterLeaseGuard,
   ClusterLeaseHeldError,
+  ClusterLeaseLostError,
 } from "@/models/mcp-deployment-lease";
 import ServiceAccountModel from "@/models/service-account";
 import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
@@ -1500,7 +1502,7 @@ class AgentRuntimeManager {
   }): Promise<boolean> {
     return McpDeploymentLeaseModel.withLease(
       { scope: AGENT_RUNTIME_TIER_SWITCH_LEASE_SCOPE, key: params.session.id },
-      () => this.switchWorkspaceTierUnderLease(params),
+      (lease) => this.switchWorkspaceTierUnderLease({ ...params, lease }),
     );
   }
 
@@ -1511,8 +1513,9 @@ class AgentRuntimeManager {
     resumePrompt: string;
     shouldResume: () => Promise<boolean>;
     onStarted?: (switching: boolean) => void;
+    lease: ClusterLeaseGuard;
   }): Promise<boolean> {
-    const { session } = params;
+    const { session, lease } = params;
     const sandbox = await readWorkspaceSandbox({
       api: this.requireClients().customObjectsApi,
       namespace: session.runtimeScope,
@@ -1550,6 +1553,9 @@ class AgentRuntimeManager {
           timeoutMessage: "The workspace was not running",
         })
       : null;
+    // Every step re-checks the lease: recovery may take over a switch whose
+    // lease was lost, and two writers must never wake the volume twice.
+    await lease.assertOwned();
     if (podName)
       await this.execInPod({
         session,
@@ -1579,18 +1585,20 @@ class AgentRuntimeManager {
         ? { initContainers: podSpec.initContainers }
         : {}),
     };
-    const applyTemplate = (
+    const applyTemplate = async (
       spec: Pick<k8s.V1PodSpec, "containers" | "initContainers">,
       tier: string | null,
       resumeTaskId: string | null,
-    ) =>
-      this.patchSandbox(session, sandboxName, {
+    ) => {
+      await lease.assertOwned();
+      await this.patchSandbox(session, sandboxName, {
         metadata: {
           annotations: { [AGENT_RUNTIME_TIER_ANNOTATION]: tier },
         },
         // A merge patch replaces arrays whole, so send every container back.
         spec: { podTemplate: { spec: withTurnResume(spec, resumeTaskId) } },
       });
+    };
     // Wake only a turn still in progress, checked right before each start. A
     // turn that ended stays stopped on its previous tier, naming no turn.
     const wake = async (
@@ -1603,11 +1611,13 @@ class AgentRuntimeManager {
         return;
       }
       await applyTemplate(spec, tier, session.taskId);
+      await lease.assertOwned();
       await this.wakeAfterTierSwitch(session, sandboxName);
       // Ended while the Pod started: stop the continuation it just began.
       if (!(await params.shouldResume())) await this.cancelTurnInPod(session);
     };
     try {
+      await lease.assertOwned();
       await this.suspendWorkspace(session);
       await this.waitForPodRemoval(session);
       await wake(
@@ -1619,6 +1629,8 @@ class AgentRuntimeManager {
         params.tier,
       );
     } catch (error) {
+      // Without the lease, recovery owns the workspace now; touch nothing.
+      if (error instanceof ClusterLeaseLostError) throw error;
       logger.warn(
         { error, taskId: session.taskId, tier: params.tier },
         "The workspace did not start on its new runtime tier; restoring the previous tier",
@@ -1626,6 +1638,7 @@ class AgentRuntimeManager {
       await this.restorePreviousTier({
         session,
         sandboxName,
+        lease,
         restore: () => wake(previous, previousTier),
       });
       throw error;
@@ -1641,13 +1654,18 @@ class AgentRuntimeManager {
   private async restorePreviousTier(params: {
     session: AgentRunRecord;
     sandboxName: string;
+    lease: ClusterLeaseGuard;
     restore: () => Promise<unknown>;
   }): Promise<void> {
     try {
+      // The new tier's Pod may exist, failed or still starting: stop it and
+      // wait until the volume is free before the previous template comes back.
+      await params.lease.assertOwned();
       await this.suspendWorkspace(params.session);
       await this.waitForPodRemoval(params.session);
       await params.restore();
     } catch (error) {
+      if (error instanceof ClusterLeaseLostError) return;
       logger.warn(
         { error, taskId: params.session.taskId },
         "Could not restore the previous runtime tier; waking the workspace as it is",

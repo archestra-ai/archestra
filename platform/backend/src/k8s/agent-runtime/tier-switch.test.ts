@@ -155,6 +155,42 @@ describe("switchWorkspaceTier", () => {
     }
   });
 
+  test("stops touching the workspace once the switch lost its lease", async () => {
+    const cluster = fakeCluster();
+    // Renewal is the lease model's own check of ownership.
+    const renew = vi.spyOn(
+      McpDeploymentLeaseModel as unknown as {
+        renew: () => Promise<boolean>;
+      },
+      "renew",
+    );
+    try {
+      await expect(
+        manager.switchWorkspaceTier({
+          session: SESSION,
+          tier: "full",
+          settings: FULL,
+          resumePrompt: "continue on full",
+          shouldResume: async () => {
+            // Another replica took the lease while the Pod stopped.
+            renew.mockResolvedValue(false);
+            return true;
+          },
+        }),
+      ).rejects.toThrow("was lost");
+      // No template move, no wake, no restore: recovery owns it now.
+      expect(cluster.events).toEqual([
+        "exec:plan-turn-resume",
+        `annotate:${AGENT_RUNTIME_TIER_SWITCH_ANNOTATION}=${TASK_ID}`,
+        "mode:Suspended",
+      ]);
+      expect(agentContainer(cluster.sandbox)?.image).toBe(LIGHT.image);
+    } finally {
+      renew.mockRestore();
+      cluster.restore();
+    }
+  });
+
   test("stops the continuation of a turn that ended while the Pod started", async () => {
     const cluster = fakeCluster();
     let checks = 0;
@@ -206,6 +242,13 @@ describe("switchWorkspaceTier", () => {
       });
       expect(cluster.sandbox.spec.operatingMode).toBe("Running");
       expect(cluster.pods[0]?.status?.phase).toBe("Running");
+      // The failed Full Pod is stopped, and the volume freed, before the
+      // previous template returns.
+      const failedStart = cluster.events.indexOf("mode:Running");
+      expect(cluster.events.slice(failedStart + 1, failedStart + 3)).toEqual([
+        "mode:Suspended",
+        `annotate:${AGENT_RUNTIME_TIER_ANNOTATION}=light`,
+      ]);
     } finally {
       cluster.restore();
     }

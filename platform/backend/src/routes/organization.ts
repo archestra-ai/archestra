@@ -23,6 +23,7 @@ import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
 import { getPermissionsForUserContext, isGlobalAdmin } from "@/auth/utils";
+import { writeOrganizationTrio } from "@/auto-routing/settings";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
@@ -379,7 +380,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (
-        body.defaultLlmApiKeyId !== undefined ||
         body.defaultFastModelId !== undefined ||
         body.defaultSmartModelId !== undefined
       ) {
@@ -393,7 +393,32 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const organization = await OrganizationModel.patch(organizationId, body);
+      // The trio is also auto routing's tiers: a change must keep it routable
+      // and re-plans it.
+      const trio = {
+        fastModelId: merged.fastModelId,
+        normalModelId: merged.modelId,
+        smartModelId: merged.smartModelId,
+      };
+      const trioChanged =
+        currentOrg !== null &&
+        (trio.fastModelId !== currentOrg.defaultFastModelId ||
+          trio.normalModelId !== currentOrg.defaultModelId ||
+          trio.smartModelId !== currentOrg.defaultSmartModelId);
+      const organization = trioChanged
+        ? await writeOrganizationTrio({
+            organizationId,
+            trio,
+            write: (tx) =>
+              OrganizationModel.patchInTransaction({
+                id: organizationId,
+                data: body,
+                tx,
+              }),
+          }).finally(() =>
+            OrganizationModel.invalidateSettingsCaches(organizationId),
+          )
+        : await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");

@@ -2,46 +2,119 @@ import { randomUUID } from "node:crypto";
 import config from "@/config";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
 import { beforeEach, describe, expect, test } from "@/test";
-import { configureAutoRouting } from "@/test/auto-routing";
+import { configureAutoRouting, setOrganizationTrio } from "@/test/auto-routing";
 import { ApiError } from "@/types";
-import { updateAutoRoutingSettings } from "./settings";
-import { sharedLongContextThreshold } from "./tiers";
+import { updateAutoRoutingSettings, writeOrganizationTrio } from "./settings";
 
 describe("updateAutoRoutingSettings", () => {
   beforeEach(() => {
     config.autoRouting.enabled = true;
   });
 
-  test("concurrent partial updates cannot jointly store tiers with different long-context thresholds", async ({
+  test("enabling is refused while the organization trio has different long-context thresholds", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const [fast, normal, smart] = [
+      await withThreshold(128_000),
+      await withThreshold(200_000),
+      await withThreshold(128_000),
+    ];
+    await setOrganizationTrio(organizationId, { fast, normal, smart });
+
+    const error = await updateAutoRoutingSettings(organizationId, {
+      enabled: true,
+      budgetUsdPerDay: 10,
+    }).catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ statusCode: 400 });
+    expect((await AutoRoutingSettingsModel.find(organizationId))?.enabled).toBe(
+      false,
+    );
+  });
+});
+
+describe("writeOrganizationTrio", () => {
+  beforeEach(() => {
+    config.autoRouting.enabled = true;
+  });
+
+  const patchTrio = async (
+    organizationId: string,
+    patch: { fastModelId: string | null },
+  ) => {
+    const current = await AutoRoutingSettingsModel.find(organizationId);
+    return writeOrganizationTrio({
+      organizationId,
+      trio: {
+        fastModelId: patch.fastModelId,
+        normalModelId: current?.normalModelId ?? null,
+        smartModelId: current?.smartModelId ?? null,
+      },
+      write: (tx) =>
+        OrganizationModel.patchInTransaction({
+          id: organizationId,
+          data: { defaultFastModelId: patch.fastModelId },
+          tx,
+        }),
+    });
+  };
+
+  test("auto routing reads a changed tier from the organization and re-plans", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const [fast] = await configureAutoRouting(organizationId);
+    const before = await AutoRoutingSettingsModel.find(organizationId);
+    const cheaper = await ModelModel.create({
+      externalId: `openai/cheaper-${randomUUID()}`,
+      provider: "openai",
+      modelId: `cheaper-${randomUUID()}`,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      customPricePerMillionInput: fast.customPricePerMillionInput,
+      customPricePerMillionOutput: fast.customPricePerMillionOutput,
+    });
+
+    await patchTrio(organizationId, { fastModelId: cheaper.id });
+
+    const after = await AutoRoutingSettingsModel.find(organizationId);
+    expect(after?.fastModelId).toBe(cheaper.id);
+    expect(after?.generation).toBe((before?.generation ?? 0) + 1);
+  });
+
+  test("clearing a tier while auto routing is enabled is refused", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const [fast] = await configureAutoRouting(organizationId);
+
+    const error = await patchTrio(organizationId, { fastModelId: null }).catch(
+      (reason) => reason,
+    );
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ statusCode: 400 });
+    expect(
+      (await OrganizationModel.getById(organizationId))?.defaultFastModelId,
+    ).toBe(fast.id);
+  });
+
+  test("a disabled organization may change its trio freely", async ({
     makeOrganization,
   }) => {
     const organizationId = (await makeOrganization()).id;
     await configureAutoRouting(organizationId);
-    const fast = await withThreshold(128_000);
-    const normal = await withThreshold(200_000);
+    await AutoRoutingSettingsModel.update(organizationId, { enabled: false });
 
-    const results = await Promise.allSettled([
-      updateAutoRoutingSettings(organizationId, { fastModelId: fast.id }),
-      updateAutoRoutingSettings(organizationId, { normalModelId: normal.id }),
-    ]);
+    await patchTrio(organizationId, { fastModelId: null });
 
-    const rejected = results.flatMap((result) =>
-      result.status === "rejected" ? [result.reason] : [],
-    );
-    expect(rejected).toHaveLength(1);
-    expect(rejected[0]).toBeInstanceOf(ApiError);
-    expect(rejected[0]).toMatchObject({ statusCode: 400 });
-    const settings = await AutoRoutingSettingsModel.find(organizationId);
-    if (!settings) throw new Error("settings missing");
-    const stored = await ModelModel.findByIds(
-      [
-        settings.fastModelId,
-        settings.normalModelId,
-        settings.smartModelId,
-      ].filter((id): id is string => id !== null),
-    );
-    expect(sharedLongContextThreshold(stored).kind).toBe("ok");
+    expect(
+      (await AutoRoutingSettingsModel.find(organizationId))?.fastModelId,
+    ).toBeNull();
   });
 });
 

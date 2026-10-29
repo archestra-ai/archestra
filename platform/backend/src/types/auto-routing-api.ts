@@ -93,9 +93,6 @@ export type AutoRoutingSettingsChangeResponse = z.infer<
 export const UpdateAutoRoutingSettingsBodySchema = z.strictObject({
   enabled: z.boolean().optional(),
   budgetUsdPerDay: BudgetUsdPerDaySchema.optional(),
-  fastModelId: z.string().uuid().optional(),
-  normalModelId: z.string().uuid().optional(),
-  smartModelId: z.string().uuid().optional(),
 });
 export type UpdateAutoRoutingSettingsBody = z.infer<
   typeof UpdateAutoRoutingSettingsBodySchema

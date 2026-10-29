@@ -501,6 +501,19 @@ genuinely missing key loudly at startup.
   valueFrom:
     {{- toYaml .valueFrom | nindent 4 }}
 {{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS") }}
+- name: ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS
+  value: {{ include "archestra-platform.shutdownDrain" . | quote }}
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS") }}
+- name: ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS
+  value: {{ include "archestra-platform.shutdownCleanup" . | quote }}
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS") }}
+- name: ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS
+  value: {{ include "archestra-platform.shutdownWorker" . | quote }}
+{{- end }}
+
 {{- end }}
 
 {{/*
@@ -1172,5 +1185,55 @@ it treats empty collections as unset and would restore global constraints.
 {{ $field }}:
   {{- toYaml . | nindent 2 }}
   {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Durations are rendered explicitly, so envFrom cannot desynchronize budgets. */}}
+{{- define "archestra-platform.shutdownDuration" -}}
+{{- $value := toString .value -}}
+{{- if or (not (regexMatch "^[0-9]+$" $value)) (lt (int $value) .minimum) (gt (int $value) 86400) -}}
+{{- fail (printf "%s must be integer seconds between %d and 86400" .name .minimum) -}}
+{{- end -}}
+{{- $value -}}
+{{- end -}}
+
+{{- define "archestra-platform.shutdownDrain" -}}
+{{- $value := .Values.archestra.shutdown.requestDrainSeconds -}}
+{{- if hasKey .Values.archestra.env "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS" -}}
+{{- $value = get .Values.archestra.env "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS" -}}
+{{- end -}}
+{{- include "archestra-platform.shutdownDuration" (dict "name" "requestDrainSeconds" "minimum" 1 "value" $value) -}}
+{{- end -}}
+{{- define "archestra-platform.shutdownCleanup" -}}
+{{- $value := .Values.archestra.shutdown.cleanupSeconds -}}
+{{- if hasKey .Values.archestra.env "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS" -}}
+{{- $value = get .Values.archestra.env "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS" -}}
+{{- end -}}
+{{- include "archestra-platform.shutdownDuration" (dict "name" "cleanupSeconds" "minimum" 5 "value" $value) -}}
+{{- end -}}
+{{- define "archestra-platform.shutdownWorker" -}}
+{{- $value := toString .Values.archestra.shutdown.workerTaskTimeoutSeconds -}}
+{{- if hasKey .Values.archestra.env "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS" -}}
+{{- $value = toString (get .Values.archestra.env "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS") -}}
+{{- end -}}
+{{- include "archestra-platform.shutdownDuration" (dict "name" "worker shutdown timeout" "minimum" 1 "value" $value) -}}
+{{- end -}}
+{{- define "archestra-platform.shutdownPodGrace" -}}
+{{- range concat (.Values.archestra.envWithValueFrom | default list) (.Values.archestra.envFromSecrets | default list) -}}
+{{- if has .name (list "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS" "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS" "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS") -}}
+{{- fail "Shutdown durations must use archestra.shutdown or literal archestra.env values so pod budgets can be validated" -}}
+{{- end -}}
+{{- end -}}
+
+{{- $minimum := add (max (int (include "archestra-platform.shutdownDrain" .)) (int (include "archestra-platform.shutdownWorker" .))) (int (include "archestra-platform.shutdownCleanup" .)) 40 -}}
+{{- $provided := .Values.archestra.terminationGracePeriodSeconds -}}
+{{- if ne (toString $provided) "<nil>" -}}
+{{- $provided = include "archestra-platform.shutdownDuration" (dict "name" "terminationGracePeriodSeconds" "minimum" 1 "value" $provided) -}}
+{{- if lt (int $provided) (int $minimum) -}}
+{{- fail (printf "terminationGracePeriodSeconds must be at least %d for the configured shutdown budgets" $minimum) -}}
+{{- end -}}
+{{- $provided -}}
+{{- else -}}
+{{- $minimum -}}
 {{- end -}}
 {{- end -}}

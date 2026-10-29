@@ -2,12 +2,21 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Archestra reads these environment variables at startup. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. The Docker quickstart and the Helm chart run with none set. See [Helm](/docs/admin/deployment/helm) for Kubernetes installation.
+
+## Shutdown
+
+Give long model requests and MCP tool calls time to finish when a replica stops.
+
+- **`ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS`** — Seconds after a stop signal for admitted requests, handlers and background persistence to finish. Default `60`; integer `1`–`86400`.
+- **`ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS`** — Extra time for persistence, dependency cleanup and telemetry. Default `20`; integer `5`–`86400`. The backend deadline is `max(request drain, worker task shutdown timeout) + cleanup`. The unified container gives the backend another 10 seconds before forcing it to stop.
+
+The Helm chart derives both web and worker pod grace periods from these budgets, reserving another 40 seconds beyond the backend deadline. Set `archestra.shutdown.requestDrainSeconds`, `archestra.shutdown.cleanupSeconds` and `archestra.shutdown.workerTaskTimeoutSeconds`, or use literal `archestra.env` overrides. The chart renders these durations explicitly, overriding any corresponding bulk `envFrom` values. An explicit `archestra.terminationGracePeriodSeconds` must cover the derived budget.
 
 ## Database
 

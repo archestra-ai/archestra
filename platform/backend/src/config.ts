@@ -2248,7 +2248,38 @@ const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,
 );
 
+/** @public — validated directly by configuration tests. */
+export function parseShutdownSeconds(
+  value: string | undefined,
+  fallback: number,
+  minimum = 1,
+): number {
+  if (value === undefined) return fallback;
+  if (
+    !/^\d+$/.test(value) ||
+    !Number.isSafeInteger(Number(value)) ||
+    Number(value) < minimum ||
+    Number(value) > 86400
+  ) {
+    throw new Error(
+      `Shutdown durations must be integer seconds between ${minimum} and 86400`,
+    );
+  }
+  return Number(value);
+}
+
 const config = {
+  shutdown: {
+    drainSeconds: parseShutdownSeconds(
+      process.env.ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS,
+      60,
+    ),
+    cleanupSeconds: parseShutdownSeconds(
+      process.env.ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS,
+      20,
+      5,
+    ),
+  },
   openappa,
   frontendBaseUrl,
   api: {
@@ -3660,7 +3691,7 @@ const config = {
         .ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT,
       1,
     ),
-    taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
+    taskWorkerShutdownTimeoutSeconds: parseShutdownSeconds(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
       30,
     ),

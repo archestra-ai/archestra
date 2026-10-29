@@ -225,11 +225,7 @@ if (sentryClient) {
   }
 }
 
-// Gracefully shutdown the SDK on process exit
-process.on("SIGTERM", () => {
-  sdk
-    .shutdown()
-    .then(() => logger.info("Tracing terminated"))
-    .catch((error) => logger.error("Error terminating tracing", error))
-    .finally(() => process.exit(0));
-});
+// The server owns signals and flushes telemetry after requests and audit writes.
+export async function shutdownTelemetry(): Promise<void> {
+  await sdk.shutdown();
+}

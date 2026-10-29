@@ -2,7 +2,7 @@
 title: Subagents
 description: Let an agent delegate work to its own copy, your agents, built-in subagents, or external A2A agents
 order: 5
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -38,12 +38,12 @@ The agent picks the model the copy runs on for each task:
 - **Smart**: a stronger model, for hard reasoning or checking a conclusion.
 - **Fast**: a cheaper, quicker model, for bulk reading, searching, or extraction.
 
-To choose the Smart and Fast models, set **Fast model** and **Smart model** next to the agent's model in the agent form, or next to the default model in **Settings → Agents**. The agent's choice comes first, then the organization's. Unset tiers use the provider's latest small model for Fast and its latest flagship for Smart.
+To choose the Smart and Fast models, set **Fast model** and **Smart model** next to the default model in **Settings → Agents**. They apply to every agent and can be on any provider. They are also the tiers of [auto routing](/docs/llm-proxy/auto-routing). Unset tiers use the provider's latest small model for Fast and its latest flagship for Smart.
 
 What to know:
 
 - The copy has the same tools and instructions, but none of the conversation. The agent writes everything the copy needs into the task.
-- Smart and Fast stay on the agent's provider key. If that key has no matching model, the copy runs on the agent's own model.
+- The copy uses the agent's key when that key serves the tier's model, and otherwise a key the person may use for it. With no such key, it uses the provider default for the tier on the agent's key, or else the agent's own model.
 - A copy cannot fork again.
 
 ## Get Trusted Answers From Untrusted Data

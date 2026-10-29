@@ -9,11 +9,11 @@ export ARCHESTRA_ANALYTICS=disabled
 backend_pid=""
 backend_ports="$(node --env-file-if-exists=.env -e 'let port = "9000"; try { port = new URL(process.env.ARCHESTRA_INTERNAL_API_BASE_URL).port || port; } catch {} process.stdout.write(port + " " + (process.env.ARCHESTRA_METRICS_PORT || "9050"));')"
 
-# The node server is a grandchild of $backend_pid (pnpm → tsdown --watch →
-# node), so the TERM to $backend_pid and its direct children can miss it. A
-# survivor keeps 9000/9050 bound and the next serve dies with EADDRINUSE, which
-# is why `tilt trigger pnpm-dev-backend` used to leave the old server running.
-# Sweep the dev ports on both stop and start.
+# The node server is a child of $backend_pid (tsdown --watch → node), and the
+# TERM to $backend_pid and its direct children can still miss it. A survivor
+# keeps 9000/9050 bound and the next serve dies with EADDRINUSE, which is why
+# `tilt trigger pnpm-dev-backend` used to leave the old server running. Sweep
+# the dev ports on both stop and start.
 free_backend_ports() {
   for port in $backend_ports; do
     pids="$(lsof -t -i "tcp:$port" -s tcp:LISTEN 2>/dev/null || true)"
@@ -42,7 +42,36 @@ stop_backend() {
 
 start_backend() {
   free_backend_ports
-  pnpm dev --filter @backend &
+  # Run tsdown directly. `pnpm dev --filter @backend` wraps the same command in
+  # pnpm → turbo → pnpm → sh: four extra Node processes and about 0.35 GB of
+  # RSS that only forward signals. Tilt already loaded .env into this
+  # environment.
+  #
+  # ARCHESTRA_DEV_BACKEND_WATCH=false builds once and runs the server without
+  # the watcher. The watcher is the build kept resident: about 1.2 GB of RSS
+  # for a build that takes 3 s. Inside an Agent Runtime (the pod sets
+  # ARCHESTRA_AGENT_RUNTIME_TASK_ID) the default is false: the agent rebuilds
+  # on demand with `tilt trigger pnpm-dev-backend`, which reruns this script.
+  #
+  # Without turbo in between, the shell's environment reaches tsdown and the
+  # server. tsdown.config.ts treats any DEBUG value as "start the server with
+  # --inspect", and shells often export DEBUG=* for the debug package, so only
+  # the documented DEBUG=1 passes through.
+  [ "${DEBUG:-}" = "1" ] || unset DEBUG
+  watch="${ARCHESTRA_DEV_BACKEND_WATCH:-}"
+  if [ -z "$watch" ]; then
+    if [ -n "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:-}" ]; then watch=false; else watch=true; fi
+  fi
+  if [ "$watch" = "false" ]; then
+    echo "backend watcher off: run 'tilt trigger pnpm-dev-backend' after backend changes" >&2
+    inspect=""
+    [ "${DEBUG:-}" = "1" ] && inspect="--inspect"
+    # A failed build leaves no server: Tilt shows the resource red with the
+    # compiler error, and the next successful trigger brings it back.
+    (cd backend && { ./node_modules/.bin/tsdown || { echo "backend build failed; the server stays down until the next successful 'tilt trigger pnpm-dev-backend'" >&2; exit 1; }; } && exec node --enable-source-maps $inspect dist/server.mjs) &
+  else
+    (cd backend && exec ./node_modules/.bin/tsdown --watch) &
+  fi
   backend_pid=$!
 }
 

@@ -706,7 +706,7 @@ archestra:
         # Service (a Role + RoleBinding in kube-system, scoped to that one
         # object). Egress policies pin DNS to its ClusterIP. Without this read,
         # and with no clusterDnsIps set, the AWS ApplicationNetworkPolicy DNS rule
-        # falls back to every private range. Requires rbac.create.
+        # omits the DNS bootstrap exception. Requires rbac.create.
         kubeDnsServiceRead: true
 
         # Kubernetes namespaces backing deployment environments that the platform

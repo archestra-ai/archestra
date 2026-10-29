@@ -7401,28 +7401,24 @@ export const bulkDeleteKnowledgeDirectories = <ThrowOnError extends boolean = fa
 });
 
 /**
- * Get all label keys used by limits
- *
  * Authentication:
  *
  * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Authorization:
  *
- * `llmLimit:read`: View token usage limits
+ * Requires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits.
  */
 export const limitLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<LimitLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<LimitLabelKeysResponses, LimitLabelKeysErrors, ThrowOnError>({ url: '/api/limits/labels/keys', ...options });
 
 /**
- * Get all label values used by limits
- *
  * Authentication:
  *
  * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
  *
  * Authorization:
  *
- * `llmLimit:read`: View token usage limits
+ * Requires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits.
  */
 export const limitLabelValues = <ThrowOnError extends boolean = false>(options?: Options<LimitLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<LimitLabelValuesResponses, LimitLabelValuesErrors, ThrowOnError>({ url: '/api/limits/labels/values', ...options });
 
@@ -7435,7 +7431,7 @@ export const limitLabelValues = <ThrowOnError extends boolean = false>(options?:
  *
  * Authorization:
  *
- * `llmLimit:read`: View token usage limits
+ * Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin receives only limits for teams they directly administer, with optional entity filters.
  */
 export const getLimits = <ThrowOnError extends boolean = false>(options?: Options<GetLimitsData, ThrowOnError>) => (options?.client ?? client).get<GetLimitsResponses, GetLimitsErrors, ThrowOnError>({ url: '/api/limits', ...options });
 
@@ -7448,7 +7444,7 @@ export const getLimits = <ThrowOnError extends boolean = false>(options?: Option
  *
  * Authorization:
  *
- * `llmLimit:create`: Create new usage limits
+ * Requires `llmLimit:create`, or a session-authenticated team admin creating a limit on their own team.
  */
 export const createLimit = <ThrowOnError extends boolean = false>(options: Options<CreateLimitData, ThrowOnError>) => (options.client ?? client).post<CreateLimitResponses, CreateLimitErrors, ThrowOnError>({
     url: '/api/limits',
@@ -7468,7 +7464,7 @@ export const createLimit = <ThrowOnError extends boolean = false>(options: Optio
  *
  * Authorization:
  *
- * `llmLimit:delete`: Remove usage limits
+ * Requires `llmLimit:delete`, or a session-authenticated team admin deleting a limit on their own team.
  */
 export const deleteLimit = <ThrowOnError extends boolean = false>(options: Options<DeleteLimitData, ThrowOnError>) => (options.client ?? client).delete<DeleteLimitResponses, DeleteLimitErrors, ThrowOnError>({ url: '/api/limits/{id}', ...options });
 
@@ -7481,7 +7477,7 @@ export const deleteLimit = <ThrowOnError extends boolean = false>(options: Optio
  *
  * Authorization:
  *
- * `llmLimit:read`: View token usage limits
+ * Requires `llmLimit:read`, or a session-authenticated team admin for a limit on their own team.
  */
 export const getLimit = <ThrowOnError extends boolean = false>(options: Options<GetLimitData, ThrowOnError>) => (options.client ?? client).get<GetLimitResponses, GetLimitErrors, ThrowOnError>({ url: '/api/limits/{id}', ...options });
 
@@ -7494,7 +7490,7 @@ export const getLimit = <ThrowOnError extends boolean = false>(options: Options<
  *
  * Authorization:
  *
- * `llmLimit:update`: Modify existing usage limits
+ * Requires `llmLimit:update`, or a session-authenticated team admin updating a limit on their own team.
  */
 export const updateLimit = <ThrowOnError extends boolean = false>(options: Options<UpdateLimitData, ThrowOnError>) => (options.client ?? client).patch<UpdateLimitResponses, UpdateLimitErrors, ThrowOnError>({
     url: '/api/limits/{id}',
@@ -7514,7 +7510,7 @@ export const updateLimit = <ThrowOnError extends boolean = false>(options: Optio
  *
  * Authorization:
  *
- * `llmLimit:delete`: Remove usage limits
+ * Requires `llmLimit:delete`, or a session-authenticated team admin deleting only limits for teams they administer. Unauthorized targets are reported as not found.
  */
 export const bulkDeleteLimits = <ThrowOnError extends boolean = false>(options: Options<BulkDeleteLimitsData, ThrowOnError>) => (options.client ?? client).delete<BulkDeleteLimitsResponses, BulkDeleteLimitsErrors, ThrowOnError>({
     url: '/api/limits/bulk',
@@ -13090,7 +13086,7 @@ export const getTeamLabelValues = <ThrowOnError extends boolean = false>(options
 export const getTeamExternalGroups = <ThrowOnError extends boolean = false>(options: Options<GetTeamExternalGroupsData, ThrowOnError>) => (options.client ?? client).get<GetTeamExternalGroupsResponses, GetTeamExternalGroupsErrors, ThrowOnError>({ url: '/api/teams/{id}/external-groups', ...options });
 
 /**
- * Add an external group mapping to a team for SSO team sync
+ * Link an identity provider group to a team for Team Sync
  *
  * Authentication:
  *
@@ -13110,7 +13106,7 @@ export const addTeamExternalGroup = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Remove an external group mapping from a team for SSO team sync
+ * Unlink an identity provider group from a team's Team Sync
  *
  * Authentication:
  *

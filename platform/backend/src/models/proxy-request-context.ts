@@ -79,6 +79,11 @@ export default class ProxyRequestContextModel {
       passthroughVirtualKeyId?: string;
       llmOauthClientId?: string;
       includeRuntime?: boolean;
+      /**
+       * Authenticated caller whose team memberships attribute the call to the
+       * agent's teams for team limits. Null when no credential proves a user.
+       */
+      teamMemberUserId?: string | null;
     },
   ) {
     const runtimeVirtualKeyIds = [
@@ -95,6 +100,7 @@ export default class ProxyRequestContextModel {
       virtualKeyId: params.virtualKeyId ?? null,
       oauthClientId: params.oauthClientId ?? null,
       includeRuntime: params.includeRuntime === true,
+      teamMemberUserId: params.teamMemberUserId ?? null,
       runtimeKey1: runtimeVirtualKeyIds[0] ?? null,
       runtimeKey2: runtimeVirtualKeyIds[1] ?? null,
       ...limitEntityParameters({
@@ -135,6 +141,7 @@ export default class ProxyRequestContextModel {
         virtualKeyId: params.limitVirtualKeyId,
         passthroughVirtualKeyId: params.passthroughVirtualKeyId,
         llmOauthClientId: params.llmOauthClientId,
+        teamMemberUserId: params.teamMemberUserId ?? null,
       },
       limitState: {
         limits: limitRows.map((raw) => {
@@ -189,8 +196,13 @@ export default class ProxyRequestContextModel {
     const defaults = schema.environmentDefaultUserLimitsTable;
     const teams = schema.teamsTable;
     const billingTeamId = sql.placeholder("billingTeamId");
+    // Team limits apply to a call only through a team it belongs to: the
+    // credential's billing team, or else the agent's teams the authenticated
+    // caller is in, directly or through a sub-team. Another team's limit on a
+    // shared agent never reaches this call.
     const teamArray = sql`ARRAY(
       SELECT ${teamId} FROM ${teamIds} WHERE ${billingTeamId}::text IS NULL
+        AND ${teamId} IN (${callerTeamIdsQuery(sql.placeholder("teamMemberUserId"))})
       UNION ALL SELECT ${billingTeamId}::text WHERE ${billingTeamId}::text IS NOT NULL
     )`;
     return buildContextQuery(database.with(teamIds), {
@@ -198,6 +210,7 @@ export default class ProxyRequestContextModel {
       agentTeamIds: sql<
         string[]
       >`(SELECT coalesce(jsonb_agg(${teamId} ORDER BY ${teamPosition}, ${teamId}), '[]'::jsonb) FROM ${teamIds})`,
+      limitTeamIds: sql<string[]>`to_jsonb(${teamArray})`,
       agentTeams: sql<TraceTeam[]>`(
         SELECT coalesce(jsonb_agg(jsonb_build_object(
           'id', ${qualified(teams.id)}, 'name', ${qualified(teams.name)},
@@ -382,6 +395,22 @@ function buildContextQuery<T extends SelectedFields>(
       schema.guardrailsDeploymentTable,
       eq(schema.guardrailsDeploymentTable.id, "global"),
     );
+}
+
+/**
+ * The teams a user is in, plus every ancestor of those teams: membership in a
+ * sub-team counts as membership in its parents, as it does for access.
+ */
+function callerTeamIdsQuery(userId: unknown) {
+  const members = schema.teamMembersTable;
+  const teams = schema.teamsTable;
+  return sql`WITH RECURSIVE caller_teams(id) AS (
+      SELECT ${qualified(members.teamId)} FROM ${members}
+      WHERE ${qualified(members.userId)} = ${userId}::text
+      UNION SELECT ${qualified(teams.parentId)} FROM ${teams}
+      INNER JOIN caller_teams ON ${qualified(teams.id)} = caller_teams.id
+      WHERE ${qualified(teams.parentId)} IS NOT NULL
+    ) SELECT id FROM caller_teams`;
 }
 
 function traceTeamLabels() {

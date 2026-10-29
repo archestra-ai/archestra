@@ -2,7 +2,7 @@
 title: Model Providers
 description: Connect provider API keys and personal subscriptions for Chat and the LLM Proxy
 order: 2
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -81,7 +81,7 @@ Each provider has its own proxy URL, `https://<archestra-host>/v1/<path>`, with 
 | Cerebras | `cerebras` | Chat Completions | Yes | |
 | Cohere | `cohere` | Chat | Yes | |
 | DeepSeek | `deepseek` | Chat Completions | Yes | |
-| [GitHub Copilot](/docs/llm-proxy/providers/github-copilot) | `github-copilot` | Chat Completions, Responses | Yes | Personal sign-in only |
+| [GitHub Copilot](/docs/llm-proxy/providers/github-copilot) | `github-copilot` | Chat Completions, Responses | Yes | Personal sign-in or organization GitHub App |
 | [Google Gemini](/docs/llm-proxy/providers/gemini) | `gemini` | Generate Content, Embeddings | Yes | Google AI Studio or Vertex AI |
 | Groq | `groq` | Chat Completions | Yes | |
 | Jev | `jev` | Decisions | No | Scores content, such as a tool call. It does not chat. See [Jev](#jev). |

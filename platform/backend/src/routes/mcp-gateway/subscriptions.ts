@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
-
 import config from "@/config";
 import logger from "@/logging";
+import { registerShutdownStream } from "@/server/llm-proxy-drain";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
   type CatalogAccessCaller,
@@ -186,6 +186,8 @@ export async function runSubscriptionStream(params: {
       notifications: honored,
     },
   });
+
+  registerShutdownStream(params.request, reply, endGracefully);
 
   const timers: NodeJS.Timeout[] = [];
   let closed = false;

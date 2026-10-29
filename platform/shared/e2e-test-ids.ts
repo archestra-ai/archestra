@@ -25,7 +25,7 @@ export const E2eTestId = {
   CredentialTeamSelect: "credential-team-select",
   ManageCredentialsButton: "manage-credentials-button",
   ConfigureIdpTeamSyncButton: "configure-idp-team-sync-button",
-  TeamExternalGroupMappingRow: "team-external-group-mapping-row",
+  TeamSyncGroupRow: "team-sync-group-row",
   IdentityProviderCard: "identity-provider-card",
   IdentityProviderOpenDialogButton: "identity-provider-open-dialog-button",
   IdentityProviderCreateButton: "identity-provider-create-button",

@@ -16,6 +16,7 @@ test("one scoped read preserves grants, labels, both credentials and typed budge
   makeUser,
   makeMember,
   makeTeam,
+  makeTeamMember,
   makeAgent,
   makeVirtualApiKey,
 }) => {
@@ -24,6 +25,10 @@ test("one scoped read preserves grants, labels, both credentials and typed budge
   await makeMember(user.id, org.id);
   const first = await makeTeam(org.id, user.id);
   const second = await makeTeam(org.id, user.id);
+  // The caller is in `first` directly and in `second` through a sub-team.
+  await makeTeamMember(first.id, user.id);
+  const secondChild = await makeTeam(org.id, user.id, { parentId: second.id });
+  await makeTeamMember(secondChild.id, user.id);
   await TeamLabelModel.syncTeamLabels(first.id, [
     { key: "environment", value: "synthetic" },
   ]);
@@ -49,6 +54,7 @@ test("one scoped read preserves grants, labels, both credentials and typed budge
     virtualKeyId: key.id,
     limitVirtualKeyId: key.id,
     passthroughVirtualKeyId: passthrough.id,
+    teamMemberUserId: user.id,
   };
   for (const [entityType, entityId] of [
     ["agent", agent.id],
@@ -104,6 +110,20 @@ test("one scoped read preserves grants, labels, both credentials and typed budge
   expect(state.limitState.defaultUserLimit).toEqual(override);
   expect(state.limitState.defaultUserLimit?.createdAt).toBeInstanceOf(Date);
   expect(state.limitState.limits[0].createdAt).toBeInstanceOf(Date);
+  expect(state.limitTeamIds.toSorted()).toEqual(
+    [first.id, second.id].toSorted(),
+  );
+
+  // A caller in none of the agent's teams meets none of their limits.
+  const outsider = await ProxyRequestContextModel.readForProxy({
+    ...params,
+    teamMemberUserId: null,
+  });
+  expect(outsider.limitTeamIds).toEqual([]);
+  expect(outsider.limitState.limits.some((l) => l.entityType === "team")).toBe(
+    false,
+  );
+  expect(outsider.agentTeamIds).toEqual(state.agentTeamIds);
 
   const billed = await ProxyRequestContextModel.readForProxy({
     ...params,

@@ -11,11 +11,13 @@ import {
 import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { ClientRedirect } from "@/components/client-redirect";
 import { useHasPagePermissions } from "@/lib/auth/auth.query";
+import { useTeamLimitAccess } from "@/lib/limits-access";
 
 export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   children,
 }) => {
   const pathname = usePathname();
+  const limitsAccess = useTeamLimitAccess();
 
   // Get required permissions for current page
   const requiredPermissions = resolvePagePermissions(pathname);
@@ -34,7 +36,10 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   // Chat is the exception: it is what nearly every visitor opens first, and
   // almost everyone may use it, so it renders while the check runs and gives
   // way to the Forbidden page only if the answer is "no chat:read".
-  if (isPending && requiredPermissions) {
+  if (
+    (isPending || (pathname === "/llm/limits" && limitsAccess.isPending)) &&
+    requiredPermissions
+  ) {
     return isOptimisticChatPath(pathname) ? <>{children}</> : null;
   }
 
@@ -57,7 +62,11 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   }
 
   // Show forbidden page if user doesn't have required permissions
-  if (requiredPermissions && !hasRequiredPermissions) {
+  if (
+    requiredPermissions &&
+    !hasRequiredPermissions &&
+    !(pathname === "/llm/limits" && limitsAccess.canRead)
+  ) {
     return <ForbiddenPage />;
   }
 

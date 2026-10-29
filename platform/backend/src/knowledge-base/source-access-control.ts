@@ -7,6 +7,7 @@ import {
   KbContainerAclModel,
   KbDocumentModel,
   KbExternalUserGroupModel,
+  KbFileModel,
   KnowledgeBaseConnectorModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -336,6 +337,40 @@ class KnowledgeSourceAccessControlService {
         published.has(source.id),
     );
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  async filterQueryableConnectorsForOrganization(params: {
+    organizationId: string;
+    connectors: KnowledgeBaseConnector[];
+    /** Already-visible assigned bases; direct assignments do not add upload access. */
+    knowledgeBaseIds: string[];
+  }): Promise<KnowledgeBaseConnector[]> {
+    const [published, uploadConnectorIds] = await Promise.all([
+      this.filterPublishedToOrganization({
+        organizationId: params.organizationId,
+        resource: "knowledgeConnector",
+        sources: params.connectors,
+        action: "use",
+      }),
+      params.connectors.some(
+        (connector) => connector.connectorType === "file_upload",
+      )
+        ? KbFileModel.findPublishedUploadConnectorIds(params)
+        : Promise.resolve([]),
+    ]);
+    const publishedIds = new Set(published.map((connector) => connector.id));
+    const uploadIds = new Set(uploadConnectorIds);
+    return params.connectors.filter(
+      (connector) =>
+        connector.organizationId === params.organizationId &&
+        (connector.connectorType === "file_upload"
+          ? uploadIds.has(connector.id)
+          : publishedIds.has(connector.id)),
+    );
+  }
+  // SPDX-SnippetEnd
 
   filterKnowledgeBases(
     accessControl: KnowledgeSourceAccessControlContext,

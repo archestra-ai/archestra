@@ -64,6 +64,10 @@ const LimitReasonSchema = z.string().trim().max(500).nullable().optional();
  * Base database schema derived from Drizzle
  */
 export const SelectLimitSchema = createSelectSchema(schema.limitsTable, {
+  teamManaged: (schema) =>
+    schema.describe(
+      "Whether a team admin created this team limit. Team admins can change or delete only these.",
+    ),
   behavior: LimitBehaviorSchema,
   reason: z.string().nullable().optional(),
   entityType: LimitEntityTypeSchema,
@@ -91,6 +95,7 @@ export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
     id: true,
     createdAt: true,
     updatedAt: true,
+    teamManaged: true,
   })
   .extend({ labels: z.array(LabelWithDetailsSchema).optional() });
 
@@ -101,6 +106,7 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  teamManaged: true,
 })
   .extend({ labels: z.array(LabelWithDetailsSchema).optional() })
   .refine(

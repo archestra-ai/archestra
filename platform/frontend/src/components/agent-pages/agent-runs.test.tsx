@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { toast } from "sonner";
 import {
   afterAll,
   afterEach,
@@ -14,12 +15,17 @@ import {
   it,
   vi,
 } from "vitest";
+import { Button } from "@/components/ui/button";
 import type { AgentRunListItem } from "@/lib/agent-runtime.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useConversationSearch } from "@/lib/chat/conversation-search.hook";
 import { copyToClipboard } from "@/lib/clipboard";
 
 const state = { runs: [] as AgentRunListItem[] };
 const server = setupServer(
+  http.get("http://localhost:9000/api/config", () =>
+    HttpResponse.json({ features: { encryptedChatEnabled: false } }),
+  ),
   http.get("http://localhost:9000/api/agents/:agentId/runs", () =>
     HttpResponse.json(state.runs),
   ),
@@ -51,7 +57,20 @@ vi.mock("@/lib/clipboard", () => ({
 }));
 // Terminal process boundaries are covered by their own WebSocket suites.
 vi.mock("@/components/agent-run-terminal", () => ({
-  AgentRunTerminal: () => <div>Live terminal</div>,
+  AgentRunTerminal: ({
+    taskId,
+    onCommandChange,
+  }: {
+    taskId: string;
+    onCommandChange?: (command: string) => void;
+  }) => (
+    <div>
+      <span>Live terminal</span>
+      <Button onClick={() => onCommandChange?.(`connect ${taskId}`)}>
+        Publish terminal command
+      </Button>
+    </div>
+  ),
 }));
 vi.mock("@/components/agent-run-logs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/components/agent-run-logs")>()),
@@ -137,7 +156,7 @@ describe("AgentRuns", () => {
       name: "Search all runs",
     });
     await user.type(search, "sam");
-    expect(within(dialog).getByText("1 matching runs")).toBeVisible();
+    expect(within(dialog).getByText("1 matching run")).toBeVisible();
     expect(
       within(dialog).queryByRole("button", { name: /Native TUI/ }),
     ).toBeNull();
@@ -187,14 +206,63 @@ describe("AgentRuns", () => {
     expect(screen.getByRole("button", { name: /Release run/ })).toBeVisible();
     expect(screen.queryByRole("button", { name: /Build run/ })).toBeNull();
   });
-  it("opens the switcher with the keyboard and keeps it closed when typing elsewhere", async () => {
-    renderRuns();
-    await screen.findByText("Live terminal");
+  it("keeps global search on Ctrl+K and opens the run switcher on Ctrl+Shift+K", async () => {
+    renderRuns("agent-1", true);
+    await screen.findByRole("button", { name: "Details" });
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    expect(
+      screen.getByRole("dialog", { name: "Search conversations" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "Switch run" })).toBeNull();
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true, shiftKey: true });
     expect(screen.getByRole("dialog", { name: "Switch run" })).toBeVisible();
-    const search = screen.getByRole("textbox", { name: "Search all runs" });
-    fireEvent.keyDown(search, { key: "k", ctrlKey: true });
+    expect(
+      screen.queryByRole("dialog", { name: "Search conversations" }),
+    ).toBeNull();
+    fireEvent.keyDown(
+      screen.getByRole("textbox", { name: "Search all runs" }),
+      { key: "k", ctrlKey: true, shiftKey: true },
+    );
     expect(screen.getByRole("dialog", { name: "Switch run" })).toBeVisible();
+  });
+  it("resets history and connection commands when selecting another live run", async () => {
+    state.runs.push({
+      ...createRun(null),
+      taskId: "second-live",
+      title: "Second live run",
+    });
+    renderRuns();
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Publish terminal command" }),
+    );
+    await user.click(screen.getByRole("button", { name: "More run actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: "View connection details" }),
+    ).not.toHaveAttribute("aria-disabled", "true");
+    await user.click(screen.getByRole("menuitem", { name: "Run history" }));
+    expect(screen.getByText("Retained output")).toBeVisible();
+    await user.click(screen.getAllByRole("button", { name: "Switch run" })[0]);
+    await user.click(screen.getByRole("button", { name: /Second live run/ }));
+    await screen.findByRole("heading", { name: "Second live run" });
+    expect(screen.getByText("Live terminal")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "More run actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: "View connection details" }),
+    ).toHaveAttribute("aria-disabled", "true");
+  });
+  it("reports a clipboard failure from the run actions menu", async () => {
+    vi.mocked(copyToClipboard).mockRejectedValueOnce(
+      new Error("Clipboard unavailable"),
+    );
+    renderRuns();
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "More run actions" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Copy run ID" }));
+    expect(toast.error).toHaveBeenCalledWith("Could not copy run ID");
   });
   it("shows metadata only on demand and keeps the inspector open while paging", async () => {
     state.runs[0].projectId = "project-1";
@@ -258,9 +326,10 @@ describe("AgentRuns", () => {
     );
   });
 });
-function renderRuns(agentId = "agent-1") {
+function renderRuns(agentId = "agent-1", globalSearch = false) {
   return render(
     <QueryClientProvider client={queryClient}>
+      {globalSearch && <GlobalSearchHarness />}
       <AgentRuns agentId={agentId} />
     </QueryClientProvider>,
   );
@@ -295,4 +364,11 @@ function createRun(endedAt: string | null): AgentRunListItem {
     shareTeamNames: [],
     shareUserNames: [],
   };
+}
+
+function GlobalSearchHarness() {
+  const { isOpen } = useConversationSearch();
+  return isOpen ? (
+    <div role="dialog" aria-label="Search conversations" />
+  ) : null;
 }

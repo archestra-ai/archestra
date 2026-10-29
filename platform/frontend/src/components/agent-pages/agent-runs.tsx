@@ -7,8 +7,8 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { AgentRunChatSession } from "@/app/chat/runs/page.client";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { AgentRunChatSession } from "@/components/agent-run-session";
 import { AgentRunState } from "@/components/agent-run-state";
 import { EmptyState } from "@/components/empty-state";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -43,6 +43,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
   } = useAgentRuns(agentId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [starter, setStarter] = useState("anyone");
   const [highlighted, setHighlighted] = useState(0);
@@ -51,6 +52,8 @@ export function AgentRuns({ agentId }: { agentId: string }) {
       if (
         (event.metaKey || event.ctrlKey) &&
         event.key.toLowerCase() === "k" &&
+        event.shiftKey &&
+        !event.altKey &&
         !(
           event.target instanceof HTMLElement &&
           event.target.closest("input,textarea,[contenteditable=true]")
@@ -114,6 +117,9 @@ export function AgentRuns({ agentId }: { agentId: string }) {
   return (
     <div className="flex h-[calc(100dvh-16rem)] min-h-[520px] min-w-0 flex-col overflow-hidden rounded-xl border bg-card/30">
       <AgentRunChatSession
+        key={selected.taskId}
+        detailsOpen={detailsOpen}
+        onDetailsOpenChange={setDetailsOpen}
         taskId={selected.taskId}
         embedded
         initiatorName={
@@ -131,9 +137,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
           >
             <Search />
             <span>Switch run</span>
-            <kbd className="hidden rounded border px-1 text-[10px] lg:inline">
-              ⌘K
-            </kbd>
+            <RunSwitcherShortcut />
           </Button>
         }
         drawerFooter={
@@ -247,7 +251,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
             )}
           </div>
           <div className="border-t px-4 py-2 text-xs text-muted-foreground">
-            {filtered.length} matching runs
+            {filtered.length} matching {filtered.length === 1 ? "run" : "runs"}
           </div>
         </DialogContent>
       </Dialog>
@@ -265,4 +269,21 @@ function initiatorLabel(run: AgentRunListItem): string {
   if (run.actorKind === "team") return "a team";
   if (run.actorKind === "system") return "automation";
   return "an unknown user";
+}
+
+function RunSwitcherShortcut() {
+  const modifier = useSyncExternalStore(
+    subscribeToPlatform,
+    () =>
+      navigator.platform.toUpperCase().includes("MAC") ? "⇧⌘" : "Ctrl+Shift+",
+    () => null,
+  );
+  return modifier ? (
+    <kbd className="hidden rounded border px-1 text-[10px] lg:inline">
+      {modifier}K
+    </kbd>
+  ) : null;
+}
+function subscribeToPlatform() {
+  return () => {};
 }

@@ -1862,7 +1862,12 @@ function ensureExplicitSchemaTypes(
   for (const key of SINGLE_SUBSCHEMA_KEYS) {
     const sub = result[key];
     if (isRecord(sub)) {
-      result[key] = ensureExplicitSchemaTypes(sub);
+      // `{}` and `true` both accept any member value; typing the bare node
+      // would narrow every map value to an object.
+      result[key] =
+        key === "additionalProperties" && Object.keys(sub).length === 0
+          ? true
+          : ensureExplicitSchemaTypes(sub);
     }
   }
 

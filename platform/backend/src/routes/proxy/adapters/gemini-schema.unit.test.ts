@@ -225,6 +225,30 @@ describe("sanitizeGeminiToolSchema", () => {
     });
   });
 
+  it("keeps the values of a map of anything unconstrained (z.record(z.string(), z.unknown()))", () => {
+    expect(
+      sanitizeGeminiToolSchema({
+        type: "object",
+        properties: {
+          tool_args: {
+            type: "object",
+            propertyNames: { type: "string" },
+            additionalProperties: {},
+          },
+        },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        tool_args: {
+          type: "object",
+          propertyNames: { type: "string" },
+          additionalProperties: true,
+        },
+      },
+    });
+  });
+
   it("types untyped anyOf branches but leaves the composite node untyped (the reported Vertex failure shape)", () => {
     // posthog__cohorts-partial-update `query`: zod.unknown().nullable()
     expect(

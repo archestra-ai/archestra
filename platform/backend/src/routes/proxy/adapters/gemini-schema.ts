@@ -212,7 +212,12 @@ function recurseSubschemas(node: SchemaObject): void {
   for (const key of SINGLE_SUBSCHEMA_KEYS) {
     const value = node[key];
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-      node[key] = sanitizeGeminiToolSchema(value);
+      // `{}` and `true` both accept any member value; typing the bare node
+      // would narrow every map value to an object.
+      node[key] =
+        key === "additionalProperties" && Object.keys(value).length === 0
+          ? true
+          : sanitizeGeminiToolSchema(value);
     }
   }
 }

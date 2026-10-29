@@ -19,6 +19,7 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import logger from "@/logging";
 import { resolveBedrockAwsPrices } from "@/services/bedrock-aws-pricing";
+import { mediaPricingFor } from "@/services/media-pricing";
 import type {
   CreateModel,
   Model,
@@ -1309,6 +1310,7 @@ class ModelModel {
         pricePerMillionCacheRead: null,
         pricePerMillionCacheWrite: null,
         cachePriceSource: null,
+        mediaPricing: null,
       };
     }
 
@@ -1343,6 +1345,7 @@ class ModelModel {
       pricePerMillionCacheRead: pricing.pricePerMillionCacheRead,
       pricePerMillionCacheWrite: pricing.pricePerMillionCacheWrite,
       cachePriceSource: pricing.cacheSource,
+      mediaPricing: mediaPricingFor(model.provider, model.modelId),
     };
   }
 

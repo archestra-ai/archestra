@@ -21,3 +21,29 @@ export function formatPricePerMillion(price: string): string {
   const decimals = significant.split(".")[1]?.length ?? 0;
   return parsed.toFixed(Math.max(2, decimals));
 }
+
+interface MediaRate {
+  kind: "text" | "image" | "audio" | "text_and_image";
+  usd: number;
+}
+
+/**
+ * Render a media model's rates as "input / output", each rate named by what it
+ * meters: an image model bills text and image tokens apart, a speech model per
+ * character, a Whisper-style model per minute of audio.
+ */
+export function formatMediaPricing(pricing: {
+  per: "million_tokens" | "million_characters" | "minute";
+  input: MediaRate[];
+  output: MediaRate[];
+}): string {
+  const rate = ({ kind, usd }: MediaRate) =>
+    `$${formatPricePerMillion(String(usd))}${kind === "text_and_image" ? "" : ` ${kind}`}`;
+  if (pricing.per === "minute")
+    return `$${formatPricePerMillion(String(pricing.input[0]?.usd ?? 0))} / min`;
+  if (pricing.per === "million_characters")
+    return `$${formatPricePerMillion(String(pricing.input[0]?.usd ?? 0))} / 1M chars`;
+  const input = pricing.input.map(rate).join(" · ") || "-";
+  const output = pricing.output.map(rate).join(" · ") || "-";
+  return `${input} / ${output}`;
+}

@@ -100,6 +100,7 @@ const model = {
   longContextPricePerMillionCacheRead: null,
   longContextPricePerMillionCacheWrite: null,
   cachePriceSource: "models_dev",
+  mediaPricing: null,
   isFree: false,
   effectiveContextLength: 200_000,
   embeddingClientImageCapable: null,
@@ -575,6 +576,40 @@ describe("ModelsPage", () => {
     expect(screen.getByText("$/M In/Out")).toBeVisible();
     expect(screen.queryByText("$/M Input")).not.toBeInTheDocument();
     expect(screen.queryByText("$/M Output")).not.toBeInTheDocument();
+  });
+
+  it("shows a media model's media rates in place of the fallback token price", async () => {
+    keyCreated = true;
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([
+          {
+            ...model,
+            id: "model-tts",
+            externalId: "openai/tts-1",
+            provider: "openai",
+            modelId: "tts-1",
+            inputModalities: ["text"],
+            outputModalities: ["audio"],
+            pricePerMillionInput: "50.00",
+            pricePerMillionOutput: "50.00",
+            priceSource: "default",
+            pricePerMillionCacheRead: "12.50",
+            pricePerMillionCacheWrite: null,
+            mediaPricing: {
+              per: "million_characters",
+              input: [{ kind: "text", usd: 15 }],
+              output: [],
+            },
+          },
+        ]),
+      ),
+    );
+    renderPage();
+
+    expect(await screen.findByText("$15.00 / 1M chars")).toBeVisible();
+    expect(screen.queryByText("$50.00 / $50.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("$12.50 / -")).not.toBeInTheDocument();
   });
 
   it("loads the selected instance's prices and keeps an unknown cache direction visible", async () => {

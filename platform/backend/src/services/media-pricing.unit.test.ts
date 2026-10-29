@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  mediaPricingFor,
   mediaTariffCovers,
   priceGeminiImage,
   priceOpenAiAudio,
@@ -237,5 +238,49 @@ describe("mediaTariffCovers", () => {
         }),
       ).toBe(true);
     }
+  });
+});
+
+describe("mediaPricingFor", () => {
+  test("states each media model's rates in the unit it is billed by", () => {
+    expect(mediaPricingFor("openai", "gpt-image-1")).toEqual({
+      per: "million_tokens",
+      input: [
+        { kind: "text", usd: 5 },
+        { kind: "image", usd: 10 },
+      ],
+      output: [{ kind: "image", usd: 40 }],
+    });
+    expect(mediaPricingFor("azure", "tts-1-hd-1106")).toEqual({
+      per: "million_characters",
+      input: [{ kind: "text", usd: 30 }],
+      output: [],
+    });
+    expect(mediaPricingFor("openai", "whisper-1")).toEqual({
+      per: "minute",
+      input: [{ kind: "audio", usd: 0.006 }],
+      output: [],
+    });
+    expect(
+      mediaPricingFor("openai", "gpt-4o-mini-transcribe-2025-12-15"),
+    ).toEqual({
+      per: "million_tokens",
+      input: [{ kind: "audio", usd: 1.25 }],
+      output: [{ kind: "text", usd: 5 }],
+    });
+    expect(mediaPricingFor("gemini", "gemini-3-pro-image-preview")).toEqual({
+      per: "million_tokens",
+      input: [{ kind: "text_and_image", usd: 2 }],
+      output: [
+        { kind: "image", usd: 120 },
+        { kind: "text", usd: 12 },
+      ],
+    });
+  });
+
+  test("returns null for chat models and for providers it does not price", () => {
+    expect(mediaPricingFor("openai", "gpt-4o-mini")).toBeNull();
+    expect(mediaPricingFor("anthropic", "gpt-image-1")).toBeNull();
+    expect(mediaPricingFor("gemini", "gemini-2.5-flash")).toBeNull();
   });
 });

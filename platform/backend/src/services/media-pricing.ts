@@ -17,6 +17,8 @@
  * cost is reported as unknown, never as zero.
  */
 
+import type { MediaPricing } from "@/types";
+
 export type MediaOperation =
   | "image-generation"
   | "image-edit"
@@ -206,6 +208,73 @@ export function priceOpenAiAudio(params: {
   return undefined;
 }
 
+/**
+ * A model's media rates as its vendor publishes them, for display beside the
+ * per-token prices of chat models; `null` for a model these tables do not
+ * price. The rates are the ones the proxy charges media calls by.
+ */
+export function mediaPricingFor(
+  provider: string,
+  model: string,
+): MediaPricing | null {
+  if (provider === "gemini") {
+    const tariff = lookup(GEMINI_IMAGE, model);
+    return tariff
+      ? {
+          per: "million_tokens",
+          input: [{ kind: "text_and_image", usd: tariff.input }],
+          output: [
+            { kind: "image", usd: tariff.imageOutput },
+            { kind: "text", usd: tariff.textOutput },
+          ],
+        }
+      : null;
+  }
+  if (provider !== "openai" && provider !== "azure") return null;
+  const image = lookup(OPENAI_IMAGE, model);
+  if (image)
+    return {
+      per: "million_tokens",
+      input: [
+        { kind: "text", usd: image.textInput },
+        { kind: "image", usd: image.imageInput },
+      ],
+      output: [
+        { kind: "image", usd: image.imageOutput },
+        ...(image.textOutput === undefined
+          ? []
+          : [{ kind: "text" as const, usd: image.textOutput }]),
+      ],
+    };
+  const speech = lookup(OPENAI_SPEECH, model);
+  if (speech)
+    return "perMillionCharacters" in speech
+      ? {
+          per: "million_characters",
+          input: [{ kind: "text", usd: speech.perMillionCharacters }],
+          output: [],
+        }
+      : {
+          per: "million_tokens",
+          input: [{ kind: "text", usd: speech.textInput }],
+          output: [{ kind: "audio", usd: speech.audioOutput }],
+        };
+  const transcription = lookup(OPENAI_TRANSCRIPTION, model);
+  if (transcription)
+    return "perMinute" in transcription
+      ? {
+          per: "minute",
+          input: [{ kind: "audio", usd: transcription.perMinute }],
+          output: [],
+        }
+      : {
+          per: "million_tokens",
+          input: [{ kind: "audio", usd: transcription.input }],
+          output: [{ kind: "text", usd: transcription.output }],
+        };
+  return null;
+}
+
 // =============================================================================
 // Tariffs and helpers
 // =============================================================================
@@ -286,15 +355,15 @@ const OPENAI_TRANSCRIPTION: Record<
 };
 
 /**
- * A tariff by model id. Dated snapshots (`gpt-image-2-2026-04-21`), revisions
- * (`gemini-2.5-flash-image-001`) and preview ids (`gemini-3-pro-image-preview`)
- * bill as the model they snapshot, and a provider prefix (`google/…`) is
- * ignored.
+ * A tariff by model id. Dated snapshots (`gpt-image-2-2026-04-21`,
+ * `tts-1-1106`), revisions (`gemini-2.5-flash-image-001`) and preview ids
+ * (`gemini-3-pro-image-preview`) bill as the model they snapshot, and a
+ * provider prefix (`google/…`) is ignored.
  */
 function lookup<T>(table: Record<string, T>, model: string): T | undefined {
   const id = model.split("/").at(-1)?.toLowerCase() ?? "";
   const base = id
-    .replace(/-(?:\d{4}-\d{2}-\d{2}|\d{3})$/, "")
+    .replace(/-(?:\d{4}-\d{2}-\d{2}|\d{3,4})$/, "")
     .replace(/-preview(?:-\d{2}-\d{4})?$/, "");
   return Object.hasOwn(table, id)
     ? table[id]

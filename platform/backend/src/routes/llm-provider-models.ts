@@ -1036,6 +1036,7 @@ function toModelWithApiKeysResponse(params: {
     pricePerMillionCacheRead: capabilities.pricePerMillionCacheRead,
     pricePerMillionCacheWrite: capabilities.pricePerMillionCacheWrite,
     cachePriceSource: capabilities.cachePriceSource,
+    mediaPricing: capabilities.mediaPricing,
     isFree: isFreeModel(model),
   };
 }

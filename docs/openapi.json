@@ -154583,6 +154583,76 @@
                                   "derived_multiplier",
                                   "default"
                                 ]
+                              },
+                              "mediaPricing": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "per": {
+                                    "type": "string",
+                                    "enum": [
+                                      "million_tokens",
+                                      "million_characters",
+                                      "minute"
+                                    ]
+                                  },
+                                  "input": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "text",
+                                            "image",
+                                            "audio",
+                                            "text_and_image"
+                                          ]
+                                        },
+                                        "usd": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "usd"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "output": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "text",
+                                            "image",
+                                            "audio",
+                                            "text_and_image"
+                                          ]
+                                        },
+                                        "usd": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "usd"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "per",
+                                  "input",
+                                  "output"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "required": [
@@ -154598,7 +154668,8 @@
                               "priceSource",
                               "pricePerMillionCacheRead",
                               "pricePerMillionCacheWrite",
-                              "cachePriceSource"
+                              "cachePriceSource",
+                              "mediaPricing"
                             ],
                             "additionalProperties": false
                           },
@@ -155832,6 +155903,76 @@
                                       "derived_multiplier",
                                       "default"
                                     ]
+                                  },
+                                  "mediaPricing": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "properties": {
+                                      "per": {
+                                        "type": "string",
+                                        "enum": [
+                                          "million_tokens",
+                                          "million_characters",
+                                          "minute"
+                                        ]
+                                      },
+                                      "input": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "enum": [
+                                                "text",
+                                                "image",
+                                                "audio",
+                                                "text_and_image"
+                                              ]
+                                            },
+                                            "usd": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "usd"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "output": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "enum": [
+                                                "text",
+                                                "image",
+                                                "audio",
+                                                "text_and_image"
+                                              ]
+                                            },
+                                            "usd": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "usd"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "per",
+                                      "input",
+                                      "output"
+                                    ],
+                                    "additionalProperties": false
                                   }
                                 },
                                 "required": [
@@ -155847,7 +155988,8 @@
                                   "priceSource",
                                   "pricePerMillionCacheRead",
                                   "pricePerMillionCacheWrite",
-                                  "cachePriceSource"
+                                  "cachePriceSource",
+                                  "mediaPricing"
                                 ],
                                 "additionalProperties": false
                               },
@@ -157667,6 +157809,76 @@
                                       "derived_multiplier",
                                       "default"
                                     ]
+                                  },
+                                  "mediaPricing": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "properties": {
+                                      "per": {
+                                        "type": "string",
+                                        "enum": [
+                                          "million_tokens",
+                                          "million_characters",
+                                          "minute"
+                                        ]
+                                      },
+                                      "input": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "enum": [
+                                                "text",
+                                                "image",
+                                                "audio",
+                                                "text_and_image"
+                                              ]
+                                            },
+                                            "usd": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "usd"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "output": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "enum": [
+                                                "text",
+                                                "image",
+                                                "audio",
+                                                "text_and_image"
+                                              ]
+                                            },
+                                            "usd": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "usd"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "per",
+                                      "input",
+                                      "output"
+                                    ],
+                                    "additionalProperties": false
                                   }
                                 },
                                 "required": [
@@ -157682,7 +157894,8 @@
                                   "priceSource",
                                   "pricePerMillionCacheRead",
                                   "pricePerMillionCacheWrite",
-                                  "cachePriceSource"
+                                  "cachePriceSource",
+                                  "mediaPricing"
                                 ],
                                 "additionalProperties": false
                               },
@@ -158916,6 +159129,76 @@
                                           "derived_multiplier",
                                           "default"
                                         ]
+                                      },
+                                      "mediaPricing": {
+                                        "nullable": true,
+                                        "type": "object",
+                                        "properties": {
+                                          "per": {
+                                            "type": "string",
+                                            "enum": [
+                                              "million_tokens",
+                                              "million_characters",
+                                              "minute"
+                                            ]
+                                          },
+                                          "input": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "kind": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "text",
+                                                    "image",
+                                                    "audio",
+                                                    "text_and_image"
+                                                  ]
+                                                },
+                                                "usd": {
+                                                  "type": "number"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "usd"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "output": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "kind": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "text",
+                                                    "image",
+                                                    "audio",
+                                                    "text_and_image"
+                                                  ]
+                                                },
+                                                "usd": {
+                                                  "type": "number"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "usd"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          }
+                                        },
+                                        "required": [
+                                          "per",
+                                          "input",
+                                          "output"
+                                        ],
+                                        "additionalProperties": false
                                       }
                                     },
                                     "required": [
@@ -158931,7 +159214,8 @@
                                       "priceSource",
                                       "pricePerMillionCacheRead",
                                       "pricePerMillionCacheWrite",
-                                      "cachePriceSource"
+                                      "cachePriceSource",
+                                      "mediaPricing"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -271214,6 +271498,10 @@
                                             "type": "integer",
                                             "minimum": 0,
                                             "maximum": 9007199254740991
+                                          },
+                                          "duration_seconds": {
+                                            "type": "number",
+                                            "minimum": 0
                                           }
                                         },
                                         "required": [
@@ -271277,6 +271565,10 @@
                                             "type": "integer",
                                             "minimum": 0,
                                             "maximum": 9007199254740991
+                                          },
+                                          "duration_seconds": {
+                                            "type": "number",
+                                            "minimum": 0
                                           }
                                         },
                                         "required": [
@@ -272000,6 +272292,10 @@
                                             "type": "integer",
                                             "minimum": 0,
                                             "maximum": 9007199254740991
+                                          },
+                                          "duration_seconds": {
+                                            "type": "number",
+                                            "minimum": 0
                                           }
                                         },
                                         "required": [
@@ -272063,6 +272359,10 @@
                                             "type": "integer",
                                             "minimum": 0,
                                             "maximum": 9007199254740991
+                                          },
+                                          "duration_seconds": {
+                                            "type": "number",
+                                            "minimum": 0
                                           }
                                         },
                                         "required": [
@@ -323804,6 +324104,10 @@
                                       "type": "integer",
                                       "minimum": 0,
                                       "maximum": 9007199254740991
+                                    },
+                                    "duration_seconds": {
+                                      "type": "number",
+                                      "minimum": 0
                                     }
                                   },
                                   "required": [
@@ -323867,6 +324171,10 @@
                                       "type": "integer",
                                       "minimum": 0,
                                       "maximum": 9007199254740991
+                                    },
+                                    "duration_seconds": {
+                                      "type": "number",
+                                      "minimum": 0
                                     }
                                   },
                                   "required": [
@@ -324590,6 +324898,10 @@
                                       "type": "integer",
                                       "minimum": 0,
                                       "maximum": 9007199254740991
+                                    },
+                                    "duration_seconds": {
+                                      "type": "number",
+                                      "minimum": 0
                                     }
                                   },
                                   "required": [
@@ -324653,6 +324965,10 @@
                                       "type": "integer",
                                       "minimum": 0,
                                       "maximum": 9007199254740991
+                                    },
+                                    "duration_seconds": {
+                                      "type": "number",
+                                      "minimum": 0
                                     }
                                   },
                                   "required": [
@@ -386311,6 +386627,76 @@
                               "derived_multiplier",
                               "default"
                             ]
+                          },
+                          "mediaPricing": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "per": {
+                                "type": "string",
+                                "enum": [
+                                  "million_tokens",
+                                  "million_characters",
+                                  "minute"
+                                ]
+                              },
+                              "input": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text",
+                                        "image",
+                                        "audio",
+                                        "text_and_image"
+                                      ]
+                                    },
+                                    "usd": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "usd"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "output": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text",
+                                        "image",
+                                        "audio",
+                                        "text_and_image"
+                                      ]
+                                    },
+                                    "usd": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "usd"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "per",
+                              "input",
+                              "output"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -386326,7 +386712,8 @@
                           "priceSource",
                           "pricePerMillionCacheRead",
                           "pricePerMillionCacheWrite",
-                          "cachePriceSource"
+                          "cachePriceSource",
+                          "mediaPricing"
                         ],
                         "additionalProperties": false
                       },
@@ -387455,6 +387842,76 @@
                           "default"
                         ]
                       },
+                      "mediaPricing": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "enum": [
+                              "million_tokens",
+                              "million_characters",
+                              "minute"
+                            ]
+                          },
+                          "input": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text",
+                                    "image",
+                                    "audio",
+                                    "text_and_image"
+                                  ]
+                                },
+                                "usd": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "usd"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "output": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text",
+                                    "image",
+                                    "audio",
+                                    "text_and_image"
+                                  ]
+                                },
+                                "usd": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "usd"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "input",
+                          "output"
+                        ],
+                        "additionalProperties": false
+                      },
                       "isFree": {
                         "type": "boolean"
                       },
@@ -387515,6 +387972,7 @@
                       "pricePerMillionCacheRead",
                       "pricePerMillionCacheWrite",
                       "cachePriceSource",
+                      "mediaPricing",
                       "isFree",
                       "effectiveContextLength",
                       "embeddingClientImageCapable"

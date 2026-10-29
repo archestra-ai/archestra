@@ -41598,6 +41598,17 @@ export type GetNewChatBootstrapResponses = {
                 pricePerMillionCacheRead: string | null;
                 pricePerMillionCacheWrite: string | null;
                 cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                mediaPricing: {
+                    per: 'million_tokens' | 'million_characters' | 'minute';
+                    input: Array<{
+                        kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                        usd: number;
+                    }>;
+                    output: Array<{
+                        kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                        usd: number;
+                    }>;
+                } | null;
             };
             isBest?: boolean;
             isFree: boolean;
@@ -41818,6 +41829,17 @@ export type GetNewChatBootstrapResponses = {
                     pricePerMillionCacheRead: string | null;
                     pricePerMillionCacheWrite: string | null;
                     cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                    mediaPricing: {
+                        per: 'million_tokens' | 'million_characters' | 'minute';
+                        input: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                        output: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                    } | null;
                 };
                 isBest?: boolean;
                 isFree: boolean;
@@ -42159,6 +42181,17 @@ export type GetConversationBootstrapResponses = {
                     pricePerMillionCacheRead: string | null;
                     pricePerMillionCacheWrite: string | null;
                     cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                    mediaPricing: {
+                        per: 'million_tokens' | 'million_characters' | 'minute';
+                        input: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                        output: Array<{
+                            kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                            usd: number;
+                        }>;
+                    } | null;
                 };
                 isBest?: boolean;
                 isFree: boolean;
@@ -42379,6 +42412,17 @@ export type GetConversationBootstrapResponses = {
                         pricePerMillionCacheRead: string | null;
                         pricePerMillionCacheWrite: string | null;
                         cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+                        mediaPricing: {
+                            per: 'million_tokens' | 'million_characters' | 'minute';
+                            input: Array<{
+                                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                                usd: number;
+                            }>;
+                            output: Array<{
+                                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                                usd: number;
+                            }>;
+                        } | null;
                     };
                     isBest?: boolean;
                     isFree: boolean;
@@ -70867,6 +70911,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -70881,6 +70926,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -70997,6 +71043,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -71011,6 +71058,7 @@ export type GetInteractionsResponses = {
                     filename: string;
                     mimetype: string;
                     size: number;
+                    duration_seconds?: number;
                 };
             } | {
                 [key: string]: unknown;
@@ -81615,6 +81663,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -81629,6 +81678,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -81745,6 +81795,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -81759,6 +81810,7 @@ export type GetInteractionResponses = {
                 filename: string;
                 mimetype: string;
                 size: number;
+                duration_seconds?: number;
             };
         } | {
             [key: string]: unknown;
@@ -97545,6 +97597,17 @@ export type GetLlmModelsResponses = {
             pricePerMillionCacheRead: string | null;
             pricePerMillionCacheWrite: string | null;
             cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+            mediaPricing: {
+                per: 'million_tokens' | 'million_characters' | 'minute';
+                input: Array<{
+                    kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                    usd: number;
+                }>;
+                output: Array<{
+                    kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                    usd: number;
+                }>;
+            } | null;
         };
         isBest?: boolean;
         isFree: boolean;
@@ -97828,6 +97891,17 @@ export type GetModelsWithApiKeysResponses = {
         pricePerMillionCacheRead: string | null;
         pricePerMillionCacheWrite: string | null;
         cachePriceSource: 'custom' | 'models_dev' | 'provider' | 'aws' | 'derived_multiplier' | 'default';
+        mediaPricing: {
+            per: 'million_tokens' | 'million_characters' | 'minute';
+            input: Array<{
+                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                usd: number;
+            }>;
+            output: Array<{
+                kind: 'text' | 'image' | 'audio' | 'text_and_image';
+                usd: number;
+            }>;
+        } | null;
         isFree: boolean;
         effectiveContextLength: number | null;
         embeddingClientImageCapable: boolean | null;

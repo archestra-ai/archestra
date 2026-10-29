@@ -82,11 +82,25 @@ test("keeps a long run owner and the access details inside the phone viewport", 
     url: `/api/agents/${agent.id}/runs`,
     body: [run],
   });
+  await mswControl.use({
+    method: "get",
+    url: `/api/agent-runs/${run.taskId}`,
+    body: {
+      ...run,
+      viewerRole: "shared",
+      workspace: null,
+      agent: { id: agent.id, name: agent.name, icon: null },
+    },
+  });
   await page.goto(`/agents/${agent.id}?section=runs`);
-  const owner = page.getByText(`by ${ownerName}`, { exact: true });
-  // Access comes from the run's permission policy, explained behind this
-  // button, rather than from a sharing label.
-  const access = page.getByRole("button", { name: "Who can access this run?" });
+  const details = page.getByRole("button", { name: "Details", exact: true });
+  await details.click();
+  const inspector = page.getByRole("complementary", { name: "Run details" });
+  const owner = inspector.getByText(ownerName, { exact: true });
+  const access = inspector.getByRole("heading", {
+    name: "Access",
+    exact: true,
+  });
   await expect(owner).toBeVisible();
   await expect(access).toBeVisible();
   await owner.scrollIntoViewIfNeeded();
@@ -98,6 +112,8 @@ test("keeps a long run owner and the access details inside the phone viewport", 
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
   }
 
+  await details.click();
+  await expect(inspector).toHaveCount(0);
   const fullView = page.getByRole("link", { name: "Open full view" });
   await expect(fullView).toHaveAttribute("href", `/chat/runs/${run.taskId}`);
   await expect(
@@ -157,4 +173,36 @@ test("keeps a long run owner and the access details inside the phone viewport", 
   await expect(
     page.getByRole("heading", { name: "Live terminal", exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Details", exact: true }),
+  ).toHaveCount(0);
+  await mswControl.use({
+    method: "get",
+    url: `/api/agent-runs/${run.taskId}`,
+    body: {
+      ...run,
+      viewerRole: "owner",
+      workspace: {
+        state: "suspended",
+        expiresAt: "2099-01-01T00:00:00Z",
+        connection: null,
+        idleAt: null,
+      },
+      agent: { id: agent.id, name: agent.name, icon: null },
+    },
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  const resume = page.getByRole("button", { name: "Resume", exact: true });
+  await expect(resume).toBeVisible();
+  await expect(resume).toHaveText("");
+  const title = page.getByRole("heading", { name: run.title, exact: true });
+  const header = page
+    .getByRole("main")
+    .locator("header")
+    .filter({ has: title });
+  const bounds = await header.boundingBox();
+  if (!bounds) throw new Error("Chat run header is not rendered");
+  expect(bounds.height).toBeLessThanOrEqual(76);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
 });

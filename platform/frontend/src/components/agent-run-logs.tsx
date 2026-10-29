@@ -5,28 +5,64 @@ import type {
   AgentRunLogsErrorMessage,
   AgentRunLogsMessage,
 } from "@archestra/shared";
-import { FileX2, TerminalSquare } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Download, FileX2, TerminalSquare } from "lucide-react";
+import { type Ref, useEffect, useImperativeHandle, useState } from "react";
+import { toast } from "sonner";
 import { DeploymentLogPanel } from "@/components/deployment-console";
 import { TerminalRecording } from "@/components/terminal-recording";
 import { Button } from "@/components/ui/button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import type { AgentRun } from "@/lib/agent-runtime.query";
 import { formatBytes } from "@/lib/utils/format-bytes";
 import websocketService from "@/lib/websocket/websocket";
+
+export type AgentRunLogsHandle = {
+  download: (kind: "logs" | "trajectory") => void;
+};
+
+export function AgentRunDownloadMenuItems({
+  onDownload,
+  trajectoryDisabled = false,
+}: {
+  onDownload: AgentRunLogsHandle["download"];
+  trajectoryDisabled?: boolean;
+}) {
+  return (
+    <>
+      <DropdownMenuItem onSelect={() => onDownload("logs")}>
+        <Download />
+        <span>Download logs</span>
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        disabled={trajectoryDisabled}
+        onSelect={() => onDownload("trajectory")}
+      >
+        <Download />
+        <span>Download trajectory</span>
+      </DropdownMenuItem>
+    </>
+  );
+}
 
 export function AgentRunLogs({
   run,
   title = "Output",
   sessionId,
+  ref,
 }: {
   run: AgentRun;
   title?: string;
   sessionId?: string;
+  ref?: Ref<AgentRunLogsHandle>;
 }) {
   const includeSessionHistory = Boolean(sessionId);
   const logId = sessionId ?? run.taskId;
   const [terminalContent, setTerminalContent] = useState("");
   const [error, setError] = useState<string>();
+  const [readableContent, setReadableContent] = useState("");
+  const [pendingDownload, setPendingDownload] = useState<
+    "logs" | "trajectory" | null
+  >(null);
   const [isStreaming, setIsStreaming] = useState(!run.endedAt);
   // An ended run's history is on its way until the server says it has ended:
   // until then the panel is loading, not empty.
@@ -42,6 +78,54 @@ export function AgentRunLogs({
   const [omittedBytes, setOmittedBytes] = useState(0);
   const requestTail = Boolean(run.endedAt) && !fullRecording;
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      download: (kind) => {
+        if (kind === "trajectory" && !run.endedAt) {
+          toast.info("Native trajectory is available after the run ends.");
+          return;
+        }
+        if (kind === "logs" && !run.endedAt && !terminalContent) {
+          toast.info("No terminal output is available yet.");
+          return;
+        }
+        if (
+          !error &&
+          kind === "logs" &&
+          terminalContent &&
+          omittedBytes === 0
+        ) {
+          downloadRunOutput(run.taskId, terminalContent, "log", "text/plain");
+          return;
+        }
+        if (!error && kind === "trajectory" && readableContent) {
+          downloadRunOutput(
+            run.taskId,
+            readableContent,
+            "json",
+            "application/json",
+          );
+          return;
+        }
+        setPendingDownload(kind);
+        if (kind === "logs" && requestTail) {
+          setHistoryLoaded(false);
+          setFullRecording(true);
+        }
+      },
+    }),
+    [
+      requestTail,
+      error,
+      terminalContent,
+      omittedBytes,
+      readableContent,
+      run.taskId,
+      run.endedAt,
+    ],
+  );
+
   useEffect(() => {
     let receivedOutput = false;
     let emptyRetryCount = 0;
@@ -52,6 +136,7 @@ export function AgentRunLogs({
     // An ended run's history renders once it has all arrived; a live run's
     // output at most every LIVE_FLUSH_MS.
     let received = "";
+    let readable = "";
     let pending: string[] = [];
     let flushTimer: ReturnType<typeof setTimeout> | undefined;
     const flush = () => {
@@ -82,6 +167,7 @@ export function AgentRunLogs({
       });
     };
     setTerminalContent("");
+    setReadableContent("");
     setError(undefined);
     setIsStreaming(!run.endedAt);
     setHistoryLoaded(!run.endedAt);
@@ -92,10 +178,10 @@ export function AgentRunLogs({
       websocketService.subscribe(
         "agent_run_logs",
         (message: AgentRunLogsMessage) => {
-          if (
-            message.payload.runId === logId &&
-            message.payload.channel !== "readable"
-          ) {
+          if (message.payload.runId !== logId) return;
+          if (message.payload.channel === "readable") {
+            readable += message.payload.logs;
+          } else {
             receivedOutput = true;
             pending.push(message.payload.logs);
             scheduleFlush();
@@ -121,6 +207,7 @@ export function AgentRunLogs({
             // end is retried; not when the server says what it left out.
             if (
               !receivedOutput &&
+              !readable &&
               !message.payload.omittedBytes &&
               emptyRetryCount < EMPTY_LOG_RETRY_LIMIT
             ) {
@@ -133,6 +220,7 @@ export function AgentRunLogs({
               return;
             }
             flush();
+            setReadableContent(readable);
             setIsStreaming(false);
             setHistoryLoaded(true);
             setOmittedBytes(message.payload.omittedBytes ?? 0);
@@ -157,6 +245,56 @@ export function AgentRunLogs({
       });
     };
   }, [run.endedAt, logId, includeSessionHistory, requestTail]);
+
+  useEffect(() => {
+    if (
+      !pendingDownload ||
+      !historyLoaded ||
+      (run.endedAt && isStreaming) ||
+      (pendingDownload === "logs" && (omittedBytes > 0 || requestTail))
+    )
+      return;
+    if (
+      !error &&
+      pendingDownload === "logs" &&
+      !terminalContent &&
+      !run.endedAt
+    )
+      return;
+    setPendingDownload(null);
+    if (error) {
+      toast.error("Could not download run output. Try again.");
+      return;
+    }
+    if (pendingDownload === "logs") {
+      if (terminalContent)
+        downloadRunOutput(run.taskId, terminalContent, "log", "text/plain");
+      else toast.info("No terminal output was recorded for this run.");
+    } else if (pendingDownload === "trajectory") {
+      if (readableContent)
+        downloadRunOutput(
+          run.taskId,
+          readableContent,
+          "json",
+          "application/json",
+        );
+      else
+        toast.info(
+          "No native trajectory was recorded for this run. Its retained terminal output is available in Download logs.",
+        );
+    }
+  }, [
+    pendingDownload,
+    historyLoaded,
+    isStreaming,
+    omittedBytes,
+    requestTail,
+    error,
+    terminalContent,
+    readableContent,
+    run.taskId,
+    run.endedAt,
+  ]);
 
   return (
     <DeploymentLogPanel
@@ -268,4 +406,21 @@ function RetainedTranscriptStatus({
       </span>
     </div>
   );
+}
+
+/** Export recorded bytes without copying the rendered terminal's viewport. */
+function downloadRunOutput(
+  taskId: string,
+  content: string,
+  extension: string,
+  type: string,
+) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `agent-run-${taskId}.${extension}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

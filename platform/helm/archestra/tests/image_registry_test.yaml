@@ -1,0 +1,175 @@
+suite: registry-only BusyBox overrides
+templates:
+  - archestra-platform.yaml
+  - archestra-worker.yaml
+  - migration-job.yaml
+  - network-policy-probe.yaml
+values:
+  - ../ci/test-values.yaml
+tests:
+  - it: mirrors startup images in archestra-platform.yaml
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImageRegistry: "mirror.example.com/dockerhub/"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "mirror.example.com/dockerhub/library/busybox:1.36"
+
+  - it: mirrors startup images in archestra-worker.yaml
+    template: archestra-worker.yaml
+    documentIndex: 0
+    set:
+      archestra.initContainers.busyboxImageRegistry: "mirror.example.com/dockerhub/"
+      archestra.worker.enabled: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "mirror.example.com/dockerhub/library/busybox:1.36"
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: "mirror.example.com/dockerhub/library/busybox:1.36"
+
+  - it: mirrors startup images in migration-job.yaml
+    template: migration-job.yaml
+    documentIndex: 0
+    set:
+      archestra.initContainers.busyboxImageRegistry: "mirror.example.com/dockerhub/"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "mirror.example.com/dockerhub/library/busybox:1.36"
+
+  - it: mirrors network probe arm 1
+    template: network-policy-probe.yaml
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImageRegistry: "mirror.example.com:5000"
+    asserts:
+      - equal:
+          path: spec.containers[0].image
+          value: "mirror.example.com:5000/library/busybox:1.36"
+
+  - it: mirrors network probe arm 2
+    template: network-policy-probe.yaml
+    documentIndex: 2
+    set:
+      archestra.initContainers.busyboxImageRegistry: "mirror.example.com:5000"
+    asserts:
+      - equal:
+          path: spec.containers[0].image
+          value: "mirror.example.com:5000/library/busybox:1.36"
+
+  - it: mirrors the static pre-puller independently of startup images
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImageRegistry: "init.example.com"
+      archestra.orchestrator.mcpImagePrepull.bootstrapImageRegistry: "static.example.com"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "init.example.com/library/busybox:1.36"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
+            value: "static.example.com/library/busybox:1.36-musl"
+
+  - it: passes the bootstrap mirror to workers
+    template: archestra-worker.yaml
+    documentIndex: 0
+    set:
+      archestra.worker.enabled: "true"
+      archestra.orchestrator.mcpImagePrepull.bootstrapImageRegistry: "mirror.example.com"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
+            value: "mirror.example.com/library/busybox:1.36-musl"
+
+  - it: preserves repository and version for digest
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImage: "docker.io/library/busybox@sha256:abcdef"
+      archestra.initContainers.busyboxImageRegistry: "mirror.example.com"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "mirror.example.com/library/busybox@sha256:abcdef"
+
+  - it: preserves repository and version for registry port
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImage: "registry.example.com:5000/team/busybox:custom"
+      archestra.initContainers.busyboxImageRegistry: "mirror.example.com"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "mirror.example.com/team/busybox:custom"
+
+  - it: preserves repository and version for localhost
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImage: "localhost/team/busybox:custom"
+      archestra.initContainers.busyboxImageRegistry: "mirror.example.com"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "mirror.example.com/team/busybox:custom"
+
+  - it: preserves repository and version for unqualified namespace
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImage: "team/busybox:custom"
+      archestra.initContainers.busyboxImageRegistry: "mirror.example.com"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "mirror.example.com/team/busybox:custom"
+
+  - it: preserves repository and version for bare name
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImage: "busybox:custom"
+      archestra.initContainers.busyboxImageRegistry: "mirror.example.com"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "mirror.example.com/busybox:custom"
+
+  - it: keeps full image overrides unchanged when registries are empty
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.initContainers.busyboxImage: "private.example.com/team/busybox:custom"
+      archestra.orchestrator.mcpImagePrepull.bootstrapImage: "private.example.com/static/busybox@sha256:abcdef"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "private.example.com/team/busybox:custom"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
+            value: "private.example.com/static/busybox@sha256:abcdef"
+
+  - it: mirrors the bootstrap fallback while retaining its static tag
+    template: archestra-platform.yaml
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpImagePrepull.bootstrapImage: ""
+      archestra.orchestrator.mcpImagePrepull.bootstrapImageRegistry: "mirror.example.com"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
+            value: "mirror.example.com/library/busybox:1.36-musl"

@@ -92,7 +92,28 @@ const gated = async (budget: number | null) => {
   return HttpResponse.json(ready(budget ?? SAVED));
 };
 
+const PLAN_ID = "00000000-0000-4000-8000-000000000001";
+
 const server = setupServer(
+  http.get(`${API_ORIGIN}/api/auto-routing/settings`, () =>
+    HttpResponse.json({
+      status: {
+        activePlan: { id: PLAN_ID, createdAt: "2026-10-27T22:10:33Z" },
+      },
+    }),
+  ),
+  http.get(`${API_ORIGIN}/api/auto-routing/plans/${PLAN_ID}`, () =>
+    HttpResponse.json({
+      id: PLAN_ID,
+      diagnostics: {
+        history: {
+          sessions: 3000,
+          past_sessions: 2400,
+          last_created_at: "2026-10-25T21:09:27Z",
+        },
+      },
+    }),
+  ),
   http.get(`${API_ORIGIN}/api/auto-routing/diagnostics`, ({ request }) => {
     const param = new URL(request.url).searchParams.get("budgetUsdPerDay");
     const budget = param === null ? null : Number(param);
@@ -156,6 +177,17 @@ describe("AutoRoutingDiagnosticsPage", () => {
     expect(within(size).getByText("0.79×")).toBeInTheDocument();
     expectShown(SAVED);
     expect(requestedBudgets).toEqual([null]);
+  });
+
+  it("summarizes what the active plan was trained on", async () => {
+    renderPage();
+
+    const summary = await screen.findByTestId("auto-routing-training-summary");
+    await waitFor(() =>
+      expect(summary).toHaveTextContent(
+        "Trained on3,000 sessionsPast traffic80%Data up toOct 25, 2026",
+      ),
+    );
   });
 
   it("shows no size metrics without a holdout", async () => {

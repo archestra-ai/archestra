@@ -775,6 +775,13 @@ function ConnectArea({
                   {nameOf(client)}. It needs Node.js{" "}
                   <span>{client.id === "pi" ? "22.19" : "18"}</span> or newer,
                   opens a browser page, and changes nothing until you approve.
+                  {client.id === "kimi-code" && (
+                    <span>
+                      {" "}
+                      Install Kimi Code 2.3.3 or later first, so kimi --version
+                      works in a new terminal.
+                    </span>
+                  )}
                   {client.id === "pi" && (
                     <span>
                       {" "}
@@ -943,6 +950,12 @@ function scriptNextSteps(client: ConnectClient): string[] {
         "Open a new terminal and run arcpi. It checks proxy access, gateway sign-in and shared skills before starting.",
         "Use the startup menu or arcpi --disconnect to restore the saved configuration. Shared marketplace files and local skills are preserved.",
         "Compaction and tree summaries use the connected proxy and retain the policy session. Nested tool calls remain blocked.",
+      ];
+    case "kimi-code":
+      return [
+        "If you use your own Kimi key, sign in to Kimi Code first with kimi login, or set KIMI_API_KEY (MOONSHOT_API_KEY for Moonshot).",
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Press Enter when it offers to start Kimi Code, or run the kimi command it prints in a new terminal.",
       ];
     case "copilot-cli":
       return [

@@ -1024,6 +1024,50 @@ describe("POST /api/connection-setups", () => {
     expect(attributionKey?.authorId).toBe(user.id);
   });
 
+  test("kimi-code passthrough provisions an attribution key and the provider's default model", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    const create = (payload: Record<string, unknown>) =>
+      app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: {
+          clientId: "kimi-code",
+          baseUrl: "http://localhost:9000/v1",
+          llmProxyId: proxy.id,
+          ...payload,
+        },
+      });
+
+    const response = await create({ provider: "kimi-code" });
+    expect(response.statusCode, response.body).toBe(200);
+    const setup = await ConnectionSetupModel.findByToken(
+      response.json().command.match(/script\/([^']+)'/)?.[1] as string,
+    );
+    // Kimi Code keeps the person's own Kimi Code key; the passthrough key
+    // only attributes requests, as for Claude Code.
+    expect(setup?.proxyAuth).toBe("provider-key");
+    expect(setup?.model).toBe("k3.1-pro");
+    const attributionKey = await VirtualApiKeyModel.findById(
+      setup?.virtualApiKeyId as string,
+    );
+    expect(attributionKey?.keyType).toBe("passthrough");
+
+    const chosen = await create({ provider: "kimi", model: "kimi-k3" });
+    expect(chosen.statusCode, chosen.body).toBe(200);
+    expect(
+      (
+        await ConnectionSetupModel.findByToken(
+          chosen.json().command.match(/script\/([^']+)'/)?.[1] as string,
+        )
+      )?.model,
+    ).toBe("kimi-k3");
+
+    const unsupported = await create({ provider: "anthropic" });
+    expect(unsupported.statusCode).toBe(400);
+  });
+
   test("copilot-cli github-copilot passthrough provisions an attribution key by default (mirrors Claude Code)", async ({
     makeAgent,
   }) => {

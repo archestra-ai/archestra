@@ -1,6 +1,6 @@
 ---
 title: Auto Routing
-description: Let Archestra pick a fast, normal, or smart model for each agent session, from apps, agents, and chats
+description: Let Archestra pick a fast, normal, or smart model for each session of agents and chats on the organization default, and of apps
 order: 6
 alpha: "Set [`ARCHESTRA_AUTO_ROUTING_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_ENABLED) to turn it on."
 lastUpdated: 2026-10-29
@@ -8,7 +8,7 @@ lastUpdated: 2026-10-29
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Pick **Auto** as an agent's or a chat's model, or send `auto` from an app, and Archestra picks a fast, normal, or smart model for each session so that average daily spend stays near your target. Easy sessions run on the cheap model, hard ones on the smart model. Neither the agent's instructions nor the app code change.
+Turn it on once, and every agent and chat on the organization default model gets a fast, normal, or smart model per session, so that average daily spend stays near your target. Easy sessions run on the cheap model, hard ones on the smart model. Agent makers change nothing, and apps opt in by sending `auto`.
 
 ## Set It Up
 
@@ -16,23 +16,22 @@ The three tiers are your organization's default models: the default model is the
 
 1. Add a Jev API key under [Model Providers](/docs/llm-proxy/providers#jev). Jev scores each new session.
 2. Go to **Settings → Agents**. Under **Default Model for Agents and New Chats**, pick the default key and model, then the **Fast model** and **Smart model**.
-3. Go to **LLM → Auto Routing**, check the three tiers it shows, and set a daily budget in USD.
+3. Go to **LLM → Auto Routing**, check the three tiers it shows, and set a daily budget in USD. The page says how many agents use the organization default.
 4. Turn auto routing on and save.
 
-The **Auto** entry then appears in agent and chat model pickers. Each tier can come from a different provider.
+Each tier can come from a different provider.
 
-## Use Auto
+## What Gets Routed
 
-Auto runs in one of two ways:
+Routing is the admin's call: whatever runs on the organization default is routed, and everything with a model of its own is not.
 
-- **Agents and chats:** in the agent form, open the key list next to the model and pick **Auto**. In chat, open the model button, go to the key tab, and pick **Auto**. A chat on an agent set to Auto starts on Auto.
+- **Agents and chats:** an agent with no model or [model pool](/docs/llm-proxy/model-pools) of its own, and its chats on the default model. In the agent form and the chat model list, **Organization default** names the three tiers while routing is on.
 - **Apps:** send `auto` as the model to the [Model Router](/docs/llm-proxy/model-router) with a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys). `auto` appears in a key's model list only when the key can reach all three tiers. Native provider routes answer `auto` from an app with a 400 error.
 
 What to know:
 
-- Auto takes the place of a [model pool](/docs/llm-proxy/model-pools). Picking a pool, a key, or a model leaves Auto.
-- The **Auto** entry is shown to people with [`llmProxy:read`](/docs/reference/permissions#llmProxy:read).
-- A [forked subagent](/docs/agents/subagents#fork-the-agent) of an Auto agent is routed too, unless the agent asks for the Fast or Smart model.
+- An agent or chat with an explicit model or pool is never routed. Agent Runtime agents are not routed either: they stay on the default model.
+- A [forked subagent](/docs/agents/subagents#fork-the-agent) of a routed agent is routed too, unless the agent asks for the Fast or Smart model.
 
 ## How Sessions Are Routed
 
@@ -60,7 +59,7 @@ Archestra uses the normal model, the organization's default model, when it canno
 - **Scorer error or timeout.** See [`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS).
 - **No user text** in the request to score.
 
-The session keeps that fallback until it ends. An agent or chat set to Auto also runs on the normal model, without being routed, while auto routing is off, a tier is unset, or the person has no key for one of the tiers.
+The session keeps that fallback until it ends. An agent or chat on the organization default also runs on the normal model, without being routed, while auto routing is off, a tier is unset or on a per-user provider such as GitHub Copilot, or the person has no key for one of the tiers.
 
 ## Savings
 

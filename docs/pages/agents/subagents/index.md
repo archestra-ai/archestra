@@ -38,7 +38,7 @@ The agent picks the model the copy runs on for each task:
 - **Smart**: a stronger model, for hard reasoning or checking a conclusion.
 - **Fast**: a cheaper, quicker model, for bulk reading, searching, or extraction.
 
-To choose the Smart and Fast models, set **Fast model** and **Smart model** next to the default model in **Settings → Agents**. They apply to every agent and can be on any provider. They are also the tiers of [auto routing](/docs/llm-proxy/auto-routing). Unset tiers use the provider's latest small model for Fast and its latest flagship for Smart.
+To choose the Smart and Fast models, set **Fast model** and **Smart model** next to the default model in **Settings → Agents**. They apply to every agent and can be on any provider. They are also the tiers of [auto routing](/docs/llm-proxy/auto-routing), which routes a Normal copy of an agent on the organization default too. Unset tiers use the provider's latest small model for Fast and its latest flagship for Smart.
 
 What to know:
 

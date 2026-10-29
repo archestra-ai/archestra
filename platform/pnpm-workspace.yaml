@@ -245,6 +245,15 @@ overrides:
   # GHSA-wq5f-xc86-pv6w (HIGH, dependency on vulnerable third-party component)
   # fixed in 0.35.5.
   sharp: 0.35.5
+  # CVE-2026-116576 (GHSA-3f7j-7jwc-fxfj, HIGH, OS command injection in
+  # services() through Unicode quotation marks on Windows) affects <5.33.16.
+  # Transitive-only (@opentelemetry/instrumentation-host-metrics), so an
+  # override is the only way to lift the resolution; the release image scan
+  # (Docker Scout, fixable critical/high) fails the platform image on it.
+  # 5.33.16 was published 2026-10-19 and clears the 7-day window. Bounded to
+  # <6 so the floor cannot carry the host-metrics instrumentation onto a major
+  # it has not been tested with.
+  systeminformation: '>=5.33.16 <6'
 packageExtensions:
   '@hookform/resolvers@*':
     dependencies:

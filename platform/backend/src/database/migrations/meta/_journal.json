@@ -4271,6 +4271,13 @@
       "when": 1793228884954,
       "tag": "0609_absent_scourge",
       "breakpoints": true
+    },
+    {
+      "idx": 610,
+      "version": "7",
+      "when": 1793287215635,
+      "tag": "0610_org_trio_auto_routed",
+      "breakpoints": true
     }
   ]
 }

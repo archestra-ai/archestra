@@ -2,6 +2,7 @@ import type { SupportedProvider, ThinkingEffort } from "@archestra/shared";
 import { desc, isNull, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   jsonb,
   text,
@@ -57,6 +58,13 @@ const conversationsTable = softDeletablePgTable(
     modelPoolId: uuid("model_pool_id").references(() => modelPoolsTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * The user picked "Auto": turns are routed per session across the
+     * organization's model trio. `modelId` on `chatApiKeyId` hold the anchor,
+     * the organization's default model on a key the user can use. Never
+     * together with `modelPoolId`.
+     */
+    autoRouted: boolean("auto_routed").notNull().default(false),
     /**
      * How hard the model should reason before answering. Each provider decides
      * what the three levels mean for a given model, and a model with no such
@@ -167,6 +175,10 @@ const conversationsTable = softDeletablePgTable(
     index("conversations_model_id_idx")
       .on(table.modelId)
       .where(sql`${table.modelId} IS NOT NULL`),
+    check(
+      "conversations_auto_routed_model_pool_check",
+      sql`NOT (${table.autoRouted} AND ${table.modelPoolId} IS NOT NULL)`,
+    ),
   ],
 );
 

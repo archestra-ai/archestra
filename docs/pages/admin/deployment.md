@@ -232,8 +232,6 @@ Reconnect notification streams to a live replica. An interrupted tool call can a
 
 For Docker, set the same [shutdown environment variables](/docs/reference/configuration#shutdown) and allow at least `max(drain, worker timeout) + cleanup + 40` seconds in `docker stop --time` or Compose's `stop_grace_period`.
 
-
-
 The proxy retries a provider connection failure at most twice before receiving the first response chunk. It does not retry provider error responses, timeouts, or failures after output starts. Recovery after partial output depends on your client's retry policy.
 
 Gemini is excluded from these proxy retries because its SDK can report an interrupted error response as a connection failure.

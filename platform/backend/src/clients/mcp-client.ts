@@ -6253,21 +6253,6 @@ function isMethodNotFoundError(error: unknown): boolean {
 const mcpClient = new McpClient();
 export default mcpClient;
 
-// Clean up connections on process exit
-process.on("exit", () => {
-  mcpClient.disconnectAll().catch(logger.error);
-});
-
-process.on("SIGINT", () => {
-  mcpClient.disconnectAll().catch(logger.error);
-  process.exit(0);
-});
-
-process.on("SIGTERM", () => {
-  mcpClient.disconnectAll().catch(logger.error);
-  process.exit(0);
-});
-
 /**
  * Format an actionable auth error message that strongly encourages the LLM
  * to display the URL to the user. The wording is intentionally directive

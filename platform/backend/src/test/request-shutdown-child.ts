@@ -29,6 +29,7 @@ const wait = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 // Import the real telemetry module: it must not own a process signal listener.
 const { shutdownTelemetry } = await import("../observability/tracing/sdk");
+const { default: mcpClient } = await import("../clients/mcp-client");
 let dependencyClosed = false;
 app.addHook("onClose", async () => {
   dependencyClosed = true;
@@ -130,6 +131,12 @@ const context = {
   metricsServerInstance: undefined,
   publicEndpointsServerInstance: undefined,
   websocketService: noopService,
+  mcpClient: {
+    disconnectAll: async () => {
+      await mcpClient.disconnectAll();
+      emit("mcp-disconnected");
+    },
+  },
   cacheManager: { shutdown: () => emit("cache-closed") },
   posthogErrorTrackingService: asyncService,
   skillSandboxRuntimeService: asyncService,

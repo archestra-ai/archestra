@@ -1,6 +1,16 @@
+import { createServer } from "node:http";
 import { fork } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import assert from "node:assert/strict";
+// A local collector keeps telemetry shutdown real without external service calls.
+const collector = createServer((request, response) => {
+  request.resume();
+  response.writeHead(200, { "Content-Type": "application/x-protobuf" });
+  response.end();
+});
+await new Promise((resolve) => collector.listen(0, "127.0.0.1", resolve));
+const collectorUrl = `http://127.0.0.1:${collector.address().port}`;
+const children = new Set();
 const realTime = process.env.SHUTDOWN_REAL_TIME === "1";
 const durations = realTime ? [90000, 180000] : [900, 1800];
 const drainSeconds = realTime ? 200 : 2;
@@ -63,7 +73,7 @@ async function run(opts) {
         ARCHESTRA_DATABASE_URL:
           "postgresql://synthetic:synthetic@127.0.0.1:1/synthetic",
         ARCHESTRA_ANALYTICS: "disabled",
-        ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:1",
+        ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: collectorUrl,
         ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS: String(opts.drainSeconds),
         ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS: "5",
         ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS: "1",
@@ -74,6 +84,9 @@ async function run(opts) {
     },
   );
   const bootTimeout = setTimeout(() => child.kill("SIGKILL"), 30000);
+  children.add(child);
+  child.on("exit", () => children.delete(child));
+  child.stdout.resume();
   let stderr = "";
   child.stderr.on("data", (d) => (stderr += d));
   let exited;
@@ -174,6 +187,16 @@ async function run(opts) {
     );
   }
   assert.equal(exit.code, 0, opts.name);
+  assert.ok(
+    events.findIndex((e) => e.event === "mcp-disconnected") >
+      events.findIndex((e) => e.event === "dependency-closed"),
+    opts.name,
+  );
+  assert.ok(
+    events.findIndex((e) => e.event === "cache-closed") >
+      events.findIndex((e) => e.event === "mcp-disconnected"),
+    opts.name,
+  );
   if (result.outcome === "completed") {
     assert.equal(result.status, 200);
     assert.match(result.body, /completed|data: done/);
@@ -195,11 +218,16 @@ async function run(opts) {
     );
   return summary;
 }
-const selected = scenarios;
-const results = await Promise.all(selected.map(run));
-if (process.env.SHUTDOWN_RESULTS_PATH)
-  writeFileSync(
-    process.env.SHUTDOWN_RESULTS_PATH,
-    JSON.stringify(results, null, 2),
-  );
-console.log(`PASS: ${results.length} synthetic shutdown cases`);
+try {
+  const results = await Promise.all(scenarios.map(run));
+  if (process.env.SHUTDOWN_RESULTS_PATH)
+    writeFileSync(
+      process.env.SHUTDOWN_RESULTS_PATH,
+      JSON.stringify(results, null, 2),
+    );
+  console.log(`PASS: ${results.length} synthetic shutdown cases`);
+} finally {
+  for (const child of children) child.kill("SIGKILL");
+  collector.closeAllConnections();
+  await new Promise((resolve) => collector.close(resolve));
+}

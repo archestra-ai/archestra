@@ -172,24 +172,30 @@ function BackfillStatus({
       <details>
         <summary className="cursor-pointer select-none tabular-nums">
           <span data-testid="auto-routing-past-sessions-funnel">
-            {funnel(backfill.eligibleSessions, progress).join(" · ")}
+            {[
+              ...funnel(backfill.eligibleSessions, progress),
+              ...(backfill.status === "running" && backfill.phase === "score"
+                ? [`scoring, ${spend(backfill)}`]
+                : []),
+            ].join(" · ")}
           </span>
         </summary>
         <div className="mt-2 space-y-3 text-muted-foreground tabular-nums">
           <div className="space-y-1">
             <p>
-              {formatDate({ date: backfill.windowStart, dateFormat: "MMM d" })}{" "}
+              {formatDate({
+                date: backfill.windowStart,
+                dateFormat:
+                  new Date(backfill.windowStart).getFullYear() ===
+                  new Date(backfill.cutoff).getFullYear()
+                    ? "MMM d"
+                    : "MMM d, yyyy",
+              })}{" "}
               –{" "}
               {formatDate({ date: backfill.cutoff, dateFormat: "MMM d, yyyy" })}
             </p>
             {unread.length > 0 && <p>Not scored: {unread.join(", ")}</p>}
-            {backfill.phase === "score" && (
-              <p>
-                Spent {formatCurrency(backfill.spentCostUsd)}
-                {backfill.maxCostUsd !== null &&
-                  ` of ${formatCurrency(backfill.maxCostUsd)}`}
-              </p>
-            )}
+            {backfill.phase === "score" && <p>Spent {spend(backfill)}</p>}
           </div>
           <ClientBreakdown breakdown={backfill.breakdown} />
         </div>
@@ -211,6 +217,13 @@ function BackfillStatus({
       )}
     </div>
   );
+}
+
+function spend(backfill: Backfill): string {
+  const spent = formatCurrency(backfill.spentCostUsd);
+  return backfill.maxCostUsd === null
+    ? spent
+    : `${spent} of ${formatCurrency(backfill.maxCostUsd)}`;
 }
 
 /** Found, then scored; unread sessions count against the sample, not as pending. */

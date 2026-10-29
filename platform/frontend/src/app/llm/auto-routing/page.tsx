@@ -84,9 +84,11 @@ function PlanStatus({ settings }: { settings: AutoRoutingSettings }) {
           ) : (
             <span>
               <span className="font-medium">
-                {settings.enabled
-                  ? "Fitting the first plan"
-                  : "Auto routing is off"}
+                {!settings.enabled
+                  ? "Auto routing is off"
+                  : fitError
+                    ? "No plan yet"
+                    : "Fitting the first plan"}
               </span>
               <span className="text-muted-foreground">
                 {" "}

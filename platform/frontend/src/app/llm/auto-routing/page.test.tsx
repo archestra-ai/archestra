@@ -411,6 +411,22 @@ describe("AutoRoutingOverviewPage", () => {
     );
   });
 
+  it("does not claim a fit is coming after the last one failed", async () => {
+    const base = makeSettings();
+    settings = makeSettings({
+      status: {
+        ...base.status,
+        coldStart: { ...base.status.coldStart, sessions: 1064, required: 1000 },
+        lastFitError: "fit exploded",
+      },
+    });
+    renderPage();
+
+    expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
+      "No plan yet · 1,064 sessions scored",
+    );
+  });
+
   it("summarizes the active plan", async () => {
     settings = makeSettings({
       status: {
@@ -961,6 +977,26 @@ describe("past sessions", () => {
     expect(
       await screen.findByTestId("auto-routing-past-sessions-funnel"),
     ).toHaveTextContent("240 found · 30 of 240 scored");
+  });
+
+  it("keeps a running scoring run's spend on the summary line", async () => {
+    serveBackfill({
+      backfill: scanned({
+        status: "running",
+        phase: "score",
+        spentCostUsd: 0.5,
+        maxCostUsd: 2,
+        progress: { sample: 240, scored: 30, noText: 0, failed: 0 },
+      }),
+      scoreOffer: null,
+    });
+    renderPage();
+
+    expect(
+      await screen.findByTestId("auto-routing-past-sessions-funnel"),
+    ).toHaveTextContent(
+      "240 found · 30 of 240 scored · scoring, $0.50 of $2.00",
+    );
   });
 
   it("counts unreadable and failed sessions as done, not pending", async () => {

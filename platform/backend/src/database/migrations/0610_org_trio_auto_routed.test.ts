@@ -132,6 +132,13 @@ async function trioOf(database: PGlite, organizationId: string) {
   return rows[0];
 }
 
+async function pendingNormalTiers(database: PGlite) {
+  const { rows } = await database.query(
+    "SELECT * FROM org_trio_pending_normal_tier ORDER BY organization_id",
+  );
+  return rows;
+}
+
 test("auto-routing tiers move into the organization trio, the normal tier only with a shared key, and routing left without its trio is disabled", async () => {
   const database = await makeDatabase();
   try {
@@ -248,6 +255,7 @@ test("auto-routing tiers move into the organization trio, the normal tier only w
       [TIER_COLUMNS],
     );
     expect(columns).toEqual([]);
+    expect(await pendingNormalTiers(database)).toEqual([]);
     // Routing stays on only where the trio is exactly the tiers it routed.
     const { rows: enabled } = await database.query(
       "SELECT organization_id, auto_routing_enabled AS enabled FROM agents ORDER BY 1",
@@ -302,7 +310,7 @@ test("an enabled organization missing a tier is disabled", async () => {
   }
 });
 
-test("the default model stays while an Agent Runtime agent inherits it", async () => {
+test("the normal tier waits for the startup check while an Agent Runtime agent inherits the default model", async () => {
   const database = await makeDatabase();
   try {
     await addOrganization(database, {
@@ -334,6 +342,14 @@ test("the default model stays while an Agent Runtime agent inherits it", async (
       "SELECT auto_routing_enabled AS enabled FROM agents WHERE id = 'proxy-runtime'",
     );
     expect(rows).toEqual([{ enabled: false }]);
+    expect(await pendingNormalTiers(database)).toEqual([
+      {
+        organization_id: "runtime",
+        normal_model_id: "normal-1",
+        api_key_id: "runtime-default",
+        auto_routing_was_enabled: true,
+      },
+    ]);
   } finally {
     await database.close();
   }

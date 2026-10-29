@@ -2,12 +2,12 @@
 title: Model Router
 description: Call models from multiple providers through an OpenAI-compatible endpoint
 order: 4
-lastUpdated: 2026-10-22
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Use one OpenAI-compatible URL for every provider. Any app built on the OpenAI SDK can reach Anthropic, Gemini, Bedrock, or your own vLLM server. To change the model, change the model name. The app code stays the same. Requests use the same credential permissions, applicable Guardrails, accounting, and logs.
+Use one OpenAI-compatible URL for every provider. Any app built on the OpenAI SDK can reach Anthropic, Gemini, Bedrock, or your own vLLM server. To change the model, change the model name. The app code stays the same. Every request still gets Guardrails, costs, and logs.
 
 ## Connect an App
 
@@ -51,7 +51,7 @@ The router speaks the OpenAI API. It supports these endpoints:
 | `/models` | Lists only the models your credential can reach |
 | `/embeddings` | All router providers except Anthropic, Bedrock, Cohere, and GitHub Copilot |
 | `/images/generations` | OpenAI, Azure, and Gemini image models |
-| `/images/edits` | OpenAI, Azure, and Gemini image models, using multipart reference images and masks |
+| `/images/edits` | OpenAI, Azure, and Gemini image models |
 | `/audio/speech` | OpenAI and Azure speech models |
 | `/audio/transcriptions` and `/audio/translations` | OpenAI and Azure models that support the requested operation |
 
@@ -59,7 +59,7 @@ Sign in with a [standard virtual key](/docs/llm-proxy/authentication#standard-vi
 
 ## Images and Audio
 
-Use the same OpenAI SDK client, base URL, and virtual key for text, image generation, and audio. The mapped provider key must have access to the requested model.
+Use the same OpenAI SDK client, base URL, and virtual key for text, images, and audio. The mapped provider key must have access to the requested model.
 
 ```python
 from openai import OpenAI
@@ -70,14 +70,14 @@ with open("speech.wav", "rb") as audio:
     transcript = client.audio.transcriptions.create(model="openai:<transcription-model>", file=audio)
 ```
 
-The image result contains the provider's image data; the transcription result has a `text` field. Audio speech responses retain their native bytes, and supported transcription streaming retains its SSE events. Add `/<proxy-id>` after `/v1/model-router` to select a specific LLM proxy.
+Image responses carry the provider's image data, and transcriptions carry a `text` field. Speech responses are the audio bytes, and streamed transcriptions are SSE events, as the provider sends them. Add `/<proxy-id>` after `/v1/model-router` to select a specific LLM proxy.
 
-- **Provider parameters:** OpenAI and Azure retain native image parameters. Image generation streaming is rejected. Gemini accepts one base64 image with automatic sizing; unsupported quality, size, output-format, and other conversions are rejected. Gemini edits take reference images but no mask.
-- **Uploads and logs:** audio uploads are bounded to 25 MiB per file. Logs retain file metadata and usage rather than audio bytes or transcription text.
-- **Pricing:** image, speech, transcription, and translation calls are priced at the provider's published media rates: per image token, per character of speech, per minute of audio. A translation or a text-format transcript reports no usage, so its minutes come from the uploaded file; a WebM upload has no readable length and records no cost. **Models** lists each media model's rates.
-- **Budgets:** with [`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE=enforce`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE), a priced media call counts toward cost budgets like a chat call. Otherwise, and for a call that cannot be priced, a cost budget rejects the request before it reaches the provider.
+- **Provider parameters:** OpenAI and Azure accept their native image parameters. Gemini returns one base64 image at its own size and rejects `quality`, `size`, `output_format`, and a mask on edits. Image streaming is rejected for every provider.
+- **Uploads and logs:** audio uploads are limited to 25 MiB per file. Logs keep file metadata and usage, never audio bytes or transcript text.
+- **Pricing:** image, speech, transcription, and translation calls are priced at the vendor's published media rates: per image token, per speech character, per minute of audio. A translation or a text-format transcript reports no usage, so Archestra reads its length from the uploaded file. A WebM upload has no readable length and records no cost. **Models** lists each media model's rates.
+- **Budgets:** with [`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE=enforce`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE), a priced media call counts toward cost budgets like a chat call. In the default mode, and for a call that cannot be priced, a cost budget rejects the request before it reaches the provider.
 
-File lifecycle operations use the provider-specific Azure proxy URL. A common router model name cannot select a file account, and uploaded file handles cannot replace multipart image inputs.
+Azure file operations stay on the Azure provider route: a router model name cannot select a file account, and a file id cannot replace a multipart image upload.
 
 ## Fix a Failed Request
 

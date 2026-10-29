@@ -973,6 +973,35 @@ describe("Model Router auto model", () => {
       );
     });
 
+    test("a tier the client's wire cannot reach keeps the call on its anchor, undecided", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+      await setOrganizationTrio(org.organizationId, {
+        smart: await createModel("gemini", `smart-${crypto.randomUUID()}`),
+      });
+
+      const response = await sendPlatformCall(org, {
+        userId,
+        autoRouted: true,
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamModels).toEqual([org.trio[1].modelId]);
+      expect(jevCalls).toBe(0);
+      expect(await decisions(org.organizationId)).toEqual([]);
+    });
+
     test("a call not set to Auto, or not proven internal, runs on the model it names", async ({
       makeOrganization,
       makeSecret,

@@ -203,6 +203,7 @@ import {
 import {
   canReachMember,
   inboundPoolWire,
+  isPoolableProvider,
   type MemberTransport,
   memberAdapter,
   memberTransport,
@@ -620,7 +621,7 @@ export async function handleLLMProxy<
       externalAgentId,
     }),
   });
-  const { sessionId, sessionSource }: utils.headers.sessionId.SessionInfo =
+  let { sessionId, sessionSource }: utils.headers.sessionId.SessionInfo =
     extractedSession.sessionId === null && autoRouting?.derivedSessionKey
       ? {
           sessionId: autoRouting.derivedSessionKey,
@@ -1378,39 +1379,42 @@ export async function handleLLMProxy<
           })
         : null;
     // A chat or agent set to "Auto" names its anchor, the organization's
-    // default model. The router picks the session's tier; another model than
-    // the anchor is reached the way a pool member is.
+    // default model. The router picks the session's tier and key, which the
+    // call is sent with the way a pool member is, even when the tier is the
+    // anchor's own model. Routing is only offered when every tier is
+    // reachable from the client's wire; otherwise the call runs on the anchor.
+    const autoRouteWire = poolWire;
     const autoRoute =
       internalCall &&
       config.autoRouting.enabled &&
-      headersForExtraction[AUTO_ROUTED_HEADER.toLowerCase()] === "true"
+      headersForExtraction[AUTO_ROUTED_HEADER.toLowerCase()] === "true" &&
+      // A pooled call is accounted for by its pool; it is never also routed.
+      !modelPoolPlan &&
+      autoRouteWire
         ? await routeInternalAutoSession({
             request,
             organizationId: resolvedAgent.organizationId,
             userId: requireAutoRoutedUser(userId),
             sessionId,
             body: requestAdapter.getOriginalRequest(),
+            reachable: (tierProvider) =>
+              isPoolableProvider(tierProvider) &&
+              canReachMember(autoRouteWire, tierProvider),
           })
         : null;
-    const autoRoutedMember: TierMember | null =
-      autoRoute &&
-      !(
-        autoRoute.model.provider === providerName &&
-        autoRoute.model.modelId === actualModel
-      )
-        ? {
-            providerApiKeyId: autoRoute.providerApiKeyId,
-            provider: autoRoute.model.provider,
-            modelId: autoRoute.model.modelId,
-          }
-        : null;
-    const autoRoutedWire = autoRoutedMember
-      ? reachableWire({
-          inbound: poolWire,
-          member: autoRoutedMember,
-          from: providerName,
-        })
+    const autoRoutedMember: TierMember | null = autoRoute
+      ? {
+          providerApiKeyId: autoRoute.providerApiKeyId,
+          provider: autoRoute.model.provider,
+          modelId: autoRoute.model.modelId,
+        }
       : null;
+    // A session the router keyed itself is logged under that key.
+    const derivedSessionKey = autoRoutingContext(request)?.derivedSessionKey;
+    if (sessionId === null && derivedSessionKey) {
+      sessionId = derivedSessionKey;
+      sessionSource = "auto_routing";
+    }
 
     // A credential let in only for a pool has no key for this provider, so
     // the request can't go anywhere but the pool.
@@ -1822,6 +1826,8 @@ export async function handleLLMProxy<
       attemptSignal?: AbortSignal;
       /** The deployment and query of an Azure-shaped inbound URL. */
       azureRequest?: ReturnType<typeof getAzureProxyIngress>;
+      /** Set when this client's key, not the request's, decides billing. */
+      credentialBillingMode?: BillingMode;
     }) =>
       target.adapter.createClient(target.apiKey, {
         ...(target.azureRequest ? { azureRequest: target.azureRequest } : {}),
@@ -1841,7 +1847,8 @@ export async function handleLLMProxy<
           if (target.adapter.provider === "anthropic") {
             billingMode = utils.refineAnthropicBillingModeFromHeaders({
               // A retry's response must not inherit a failed attempt's overage.
-              billingMode: credentialBillingMode,
+              billingMode:
+                target.credentialBillingMode ?? credentialBillingMode,
               headers: responseHeaders,
             });
           }
@@ -1858,6 +1865,8 @@ export async function handleLLMProxy<
       inbound: PoolWire,
       member: TierMember,
       signal?: AbortSignal,
+      /** The member's key, not the request's, decides how the call is billed. */
+      options?: { ownsBilling: boolean },
     ): Promise<MemberTransport> => {
       const row = await LlmProviderApiKeyModel.findById(
         member.providerApiKeyId,
@@ -1867,15 +1876,25 @@ export async function handleLLMProxy<
         throw new ApiError(500, "Model pool member key no longer exists");
       }
       const sameWire = inboundPoolWire(adapter.interactionType) === inbound;
+      const memberApiKey = row.secretId
+        ? await getSecretValueForLlmProviderApiKey(row.secretId)
+        : undefined;
+      const memberBillingMode = options?.ownsBilling
+        ? utils.resolveInteractionBillingMode({
+            isSubscriptionCredential:
+              adapter.isSubscriptionCredential?.(memberApiKey) === true,
+            autodetectEnabled: config.llmCost.subscriptionAutodetect,
+          })
+        : undefined;
+      if (memberBillingMode) billingMode = memberBillingMode;
       return memberTransport({
         inbound,
         provider: member.provider,
         modelId: member.modelId,
         client: createUpstreamClient({
           adapter,
-          apiKey: row.secretId
-            ? await getSecretValueForLlmProviderApiKey(row.secretId)
-            : undefined,
+          apiKey: memberApiKey,
+          credentialBillingMode: memberBillingMode,
           baseUrl: row.inferenceBaseUrl ?? row.baseUrl ?? adapter.getBaseUrl(),
           // Protocol headers (anthropic-beta, ...) only mean something to a
           // member on the client's own wire.
@@ -1890,10 +1909,13 @@ export async function handleLLMProxy<
       });
     };
     const autoRoutedTier: AutoRoutedTier | undefined =
-      autoRoutedMember && autoRoutedWire
+      autoRoutedMember && autoRouteWire
         ? {
             member: autoRoutedMember,
-            transport: () => reachMember(autoRoutedWire, autoRoutedMember),
+            transport: () =>
+              reachMember(autoRouteWire, autoRoutedMember, undefined, {
+                ownsBilling: true,
+              }),
           }
         : undefined;
 
@@ -4522,25 +4544,6 @@ function requireAutoRoutedUser(userId: string | undefined): string {
     throw new ApiError(400, "An auto-routed call must name its user.");
   }
   return userId;
-}
-
-/**
- * The wire a routed tier on another model is reached over: the client's own,
- * when that wire can be translated for the tier's provider.
- */
-function reachableWire(params: {
-  inbound: PoolWire | null;
-  member: TierMember;
-  from: SupportedProvider;
-}): PoolWire {
-  const { inbound, member, from } = params;
-  if (!inbound || !canReachMember(inbound, member.provider)) {
-    throw new ApiError(
-      400,
-      `Auto routing cannot send a ${from} request to the "${member.provider}/${member.modelId}" tier.`,
-    );
-  }
-  return inbound;
 }
 
 /** The request's own provider and client, as a transport. */

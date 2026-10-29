@@ -194,6 +194,11 @@ type InternalAutoRoute = { model: Model; providerApiKeyId: string };
  * provider route: the session's sticky tier, decided on first sight as for the
  * Model Router, on a key `userId` may use for it. The caller already checked
  * usage limits. Records the decision on `request` for the interaction write.
+ *
+ * Null when the call cannot be routed: auto routing is off, a tier is out of
+ * the user's reach, or `reachable` says the client's wire cannot get to a
+ * tier's provider. The call then runs on the anchor it names, and no decision
+ * is stored that a later call could not follow.
  */
 export async function routeInternalAutoSession(params: {
   request: FastifyRequest;
@@ -202,16 +207,41 @@ export async function routeInternalAutoSession(params: {
   sessionId: string | null;
   /** The body as the platform sent it, in OpenAI or Anthropic message shapes. */
   body: unknown;
-}): Promise<InternalAutoRoute> {
+  reachable: (provider: Model["provider"]) => boolean;
+}): Promise<InternalAutoRoute | null> {
   const { request, organizationId } = params;
+  const unroutable = (reason: string) => {
+    logger.warn(
+      { organizationId, reason },
+      "[AutoRouting] Auto call runs on its anchor model",
+    );
+    return null;
+  };
+  const settings = await AutoRoutingSettingsModel.find(organizationId);
+  if (!settings?.enabled) return unroutable("auto routing is not enabled");
+  const loaded = await loadTrio(settings);
+  if (loaded.kind === "missing") {
+    return unroutable(`no ${loaded.tier} tier model is configured`);
+  }
+  const { trio } = loaded;
+  const unreachable = trio.find((model) => !params.reachable(model.provider));
+  if (unreachable) {
+    return unroutable(
+      `the client's wire cannot reach the "${unreachable.provider}/${unreachable.modelId}" tier`,
+    );
+  }
   const auth = await userModelRouterAuth({
     organizationId,
     userId: params.userId,
   });
-  const { settings, trio } = await loadEnabledTrio(organizationId);
-  const tiers = requireEligible(
-    await checkTrio({ auth, endpoint: null, trio }),
-  );
+  const eligibility = await checkTrio({ auth, endpoint: null, trio });
+  const ineligible = eligibility.find((tier) => !tier.eligible);
+  if (ineligible && !ineligible.eligible) {
+    return unroutable(
+      `tier "${ineligible.routedModel}" is not available to the user: ${ineligible.reason}`,
+    );
+  }
+  const tiers = requireEligible(eligibility);
   const text = firstUserText("chat_completions", params.body);
   const sessionKey = RoutingDecisionModel.sessionKey({
     sessionId: params.sessionId,

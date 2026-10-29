@@ -6,6 +6,7 @@ import { useSession } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
 import { ConnectorDocumentOcrNotice } from "./connector-document-ocr-notice";
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
 
@@ -45,7 +46,7 @@ describe("ConnectorDocumentOcrNotice", () => {
     // link entirely instead of pointing at the vendor's docs site.
     expect(screen.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
       "href",
-      getDocsUrl(DocsPage.PlatformKnowledge, "document-ocr"),
+      getDocsUrl(DocsPage.PlatformKnowledgeSettings, "document-ocr"),
     );
   });
 

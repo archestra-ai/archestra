@@ -1,9 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import {
-  compareSkillVersionFiles,
-  groupFilesByFolder,
-} from "./skill-version-diff";
+import { compareSkillVersionFiles } from "./skill-version-diff";
 
 const file = (path: string, content: string) => ({ path, content });
 
@@ -74,38 +71,5 @@ describe("compareSkillVersionFiles", () => {
     );
 
     expect(compared.every((entry) => entry.change === "unchanged")).toBe(true);
-  });
-});
-
-describe("groupFilesByFolder", () => {
-  it("puts sorted folders first and loose files last", () => {
-    const groups = groupFilesByFolder([
-      { path: "README.md" },
-      { path: "scripts/extract.py" },
-      { path: "assets/logo.png" },
-      { path: "scripts/split.py" },
-    ]);
-
-    expect(
-      groups.map((group) => [group.folder, group.files.map((f) => f.path)]),
-    ).toEqual([
-      ["assets", ["assets/logo.png"]],
-      ["scripts", ["scripts/extract.py", "scripts/split.py"]],
-      [null, ["README.md"]],
-    ]);
-  });
-
-  it("omits the root group when every file lives in a folder", () => {
-    const groups = groupFilesByFolder([{ path: "scripts/only.py" }]);
-
-    expect(groups.map((group) => group.folder)).toEqual(["scripts"]);
-  });
-
-  it("keeps nested paths in their top-level folder, the only level a skill has", () => {
-    const groups = groupFilesByFolder([{ path: "references/deep/nested.md" }]);
-
-    expect(groups).toEqual([
-      { folder: "references", files: [{ path: "references/deep/nested.md" }] },
-    ]);
   });
 });

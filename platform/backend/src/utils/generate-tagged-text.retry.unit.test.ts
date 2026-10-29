@@ -67,6 +67,34 @@ describe("generateTaggedText retry policy", () => {
     expect(mockGen.mock.calls[1][0].prompt).toBeUndefined();
   });
 
+  it.each([
+    ["finished with no text", "", "stop", 100],
+    ["finished with only whitespace", " \n\t", "stop", 100],
+    [
+      "truncated before any text with no ceiling to raise",
+      "",
+      "length",
+      undefined,
+    ],
+  ] as const)("re-asks the prompt instead of sending an empty assistant turn when the first reply %s", async (_case, text, finishReason, maxOutputTokens) => {
+    mockGen
+      .mockResolvedValueOnce(res(text, finishReason))
+      .mockResolvedValueOnce(res("<x>answer</x>", "stop"));
+
+    const result = await generateTaggedText({
+      model: MODEL,
+      tag: "x",
+      system: "sys",
+      prompt: "the ask",
+      maxOutputTokens,
+    });
+
+    expect(result).toBe("answer");
+    expect(mockGen.mock.calls[1][0].prompt).toBe("the ask");
+    expect(mockGen.mock.calls[1][0].messages).toBeUndefined();
+    expect(mockGen.mock.calls[1][0].maxOutputTokens).toBe(maxOutputTokens);
+  });
+
   it("returns null when even the headroom retry truncates again", async () => {
     mockGen
       .mockResolvedValueOnce(res("<x>trunc", "length"))

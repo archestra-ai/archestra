@@ -10,12 +10,11 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
-import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
 import logger from "@/logging";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
 import { agentOwner, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
@@ -65,7 +64,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RUN_TOOL_SHORT_NAME,
     title: "Run Tool",
-    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). When the agent allows dynamic tool access, a tool the user can access but the agent does not have runs directly without being assigned to the agent; the MCP server's connection policy decides which credential the call uses. Target-tool RBAC, invocation policies, argument validation, and output validation all still apply. The app-authoring tools, when available to this agent, are reached this way too: when asked to make, build, or create an interactive app, start with 'scaffold_app' through this tool instead of writing app code in a reply (an unavailable tool is refused with a clear error).`,
+    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). When the agent allows dynamic tool access, a tool the user can access but the agent does not have runs directly without being assigned to the agent; the MCP server's connection policy decides which credential the call uses. Target-tool RBAC, guardrails, argument validation, and output validation all still apply. The app-authoring tools, when available to this agent, are reached this way too: when asked to make, build, or create an interactive app, start with 'scaffold_app' through this tool instead of writing app code in a reply (an unavailable tool is refused with a clear error).`,
     schema: RunToolArgsSchema,
     handler: ({ args, context }) => runToolHandler({ args, context }),
   }),
@@ -272,8 +271,12 @@ async function visibleCandidates(params: {
   // Per-agent exclusions (Auto-tool mode): an excluded tool must not be
   // recovered from a short name, nor disclosed as a "did you mean" candidate.
   // Loaded once and applied to the assigned + discoverable contributions.
-  const { tools: assigned, exclusionSets } =
+  const { tools: agentTools, exclusionSets } =
     await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+  const assigned = await filterToolsByCallerCatalogAccess(
+    agentTools,
+    accessParams,
+  );
   const names = assigned.map((tool) => tool.name);
   if (await dynamicAccessContext(accessParams)) {
     const discoverable = await getUnassignedDiscoverableTools({
@@ -448,10 +451,16 @@ async function dispatchTool({
   // Per-agent exclusions (Auto-tool mode, loaded once per dispatch): an
   // assigned-but-excluded tool drops out of the assigned set here and the
   // dynamic fallback refuses it too, so it resolves to "unavailable".
-  const { tools: assignedTools, exclusionSets } =
+  // An assigned tool whose MCP server the user cannot see is not in their
+  // assigned set: it falls through to the dynamic fallback, which refuses it.
+  const { tools: agentTools, exclusionSets } =
     await agentToolExclusionsService.getFilteredMcpToolsByAgent(
       context.agentId,
     );
+  const assignedTools = await filterToolsByCallerCatalogAccess(agentTools, {
+    userId: context.userId,
+    organizationId: context.organizationId,
+  });
   const assignedToolNames = new Set(assignedTools.map((tool) => tool.name));
   let availableTool: Tool | null = null;
   if (!assignedToolNames.has(resolvedName)) {
@@ -494,9 +503,8 @@ async function dispatchTool({
     if (gateError) return gateError;
   }
 
-  // The target's stored input schema, resolved BEFORE the policy gate so the
-  // envelope repair below runs first and invocation policy evaluation, the
-  // shallow pre-check, and dispatch all see the same repaired tool_args.
+  // The target's stored input schema, resolved before the envelope repair so
+  // the shallow pre-check and dispatch both see the same repaired tool_args.
   // Dynamic dispatch passes availableTool straight through, so its schema is
   // exactly what runs. For the assigned path the gateway re-resolves by name
   // at dispatch with no defined ordering, so when duplicate rows share the
@@ -520,46 +528,8 @@ async function dispatchTool({
     schema: targetSchema,
   });
 
-  // Reuse the set computed above so the policy gate does not re-query it.
-  // A dynamically resolved tool is appended so the evaluator does not
-  // refuse it as "disabled" — invocation policies still evaluate it.
-  const policyBlock = context.connectionSetupBypass
-    ? null
-    : await evaluateSingleMcpToolInvocationPolicy({
-        agentId: context.agentId,
-        toolName: resolvedName,
-        toolInput,
-        organizationId: context.organizationId,
-        contextIsTrusted: context.contextIsTrusted ?? true,
-        sensitiveContextOrigin: context.sensitiveContextOrigin,
-        enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
-        enabledToolNames: availableTool
-          ? new Set([...assignedToolNames, resolvedName])
-          : assignedToolNames,
-        // The dynamically-resolved All-mode row that will execute. The assigned case
-        // is resolved centrally via the execution resolver, so only the dynamic id
-        // is passed here. The id rides along on a block for the "Edit policy" modal
-        // (All-mode tools have no agent_tools row for the modal's lookup to find).
-        resolvedToolId: availableTool?.id,
-      });
-  if (policyBlock) {
-    // Attach the structured policy_denied error (in _meta + structuredContent)
-    // so clients parse the block without scraping the prose. A caller who can
-    // edit guardrails also gets a deep link to this tool's policy editor.
-    const { error, text } = await buildPolicyBlockedToolResult({
-      policyBlock,
-      userId: context.userId,
-      organizationId: context.organizationId,
-      textPrefix: "Error: ",
-    });
-    return appendEnvelopeRepairNote(
-      structuredToolErrorResult({ error, text }),
-      repairedParams,
-    );
-  }
-
   // Cheap structural pre-check against the target's stored schema. Runs only
-  // after access + invocation policy passed, and never dispatches a call we
+  // after the access checks passed, and never dispatches a call we
   // can prove malformed (a "send"/"create" tool would still act on partial
   // args). On failure the model gets the full schema — the targeted feedback
   // the compact search_tools signature defers to. Deliberately shallow: only

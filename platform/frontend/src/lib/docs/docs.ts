@@ -4,10 +4,11 @@ import appConfig from "@/lib/config/config";
 
 /**
  * Returns an Archestra docs URL unless full white-labeling is enabled, in
- * which case built-in docs links should be hidden from the frontend.
+ * which case built-in docs links should be hidden from the frontend. `page`
+ * may name a subpage of a registered page, such as one connector's page.
  */
 export function getFrontendDocsUrl(
-  page: DocsPage,
+  page: DocsPage | `${DocsPage}/${string}`,
   anchor?: string,
 ): string | null {
   // SPDX-SnippetBegin

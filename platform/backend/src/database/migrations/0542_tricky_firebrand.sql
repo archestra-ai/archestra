@@ -1,0 +1,1 @@
+ALTER TABLE "guardrails_deployment" ADD COLUMN "superyell_enabled" boolean DEFAULT true NOT NULL;

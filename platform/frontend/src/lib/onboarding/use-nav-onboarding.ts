@@ -13,6 +13,7 @@ import {
   useMarkNavItemsSeen,
   useSeenNavItems,
 } from "@/lib/onboarding/onboarding.query";
+import { useShellReady } from "@/lib/shell-deferral";
 
 /**
  * Single source of truth for the onboarding red dots: which dotted nav items
@@ -26,7 +27,11 @@ import {
  */
 export function useNavOnboarding() {
   const pathname = usePathname();
-  const { data: seenData, isSuccess: seenLoaded } = useSeenNavItems();
+  // The dots wait for the page's first data (see useShellReady).
+  const shellReady = useShellReady();
+  const { data: seenData, isSuccess: seenLoaded } = useSeenNavItems({
+    enabled: shellReady,
+  });
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   // Connect is gated the same way as the sidebar: either half is enough.
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
@@ -56,6 +61,12 @@ export function useNavOnboarding() {
           return permissionMap["/llm/model-providers"] ?? true;
         case "nav:mcp-registry":
           return permissionMap["/mcp/registry"] ?? true;
+        case "nav:guardrails":
+          // Same gate as the sidebar row: either page is enough.
+          return (
+            permissionMap["/openappa"] === true ||
+            permissionMap["/openappa/yells"] === true
+          );
       }
     };
     return new Set(

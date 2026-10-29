@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { SuggestedPromptInput } from "@/types";
+import { idArrayCondition } from "./id-array-condition";
 
 class AgentSuggestedPromptModel {
   /**
@@ -78,7 +79,9 @@ class AgentSuggestedPromptModel {
         prompt: schema.agentSuggestedPromptsTable.prompt,
       })
       .from(schema.agentSuggestedPromptsTable)
-      .where(inArray(schema.agentSuggestedPromptsTable.agentId, agentIds))
+      .where(
+        idArrayCondition(schema.agentSuggestedPromptsTable.agentId, agentIds),
+      )
       .orderBy(asc(schema.agentSuggestedPromptsTable.sortOrder));
 
     const map = new Map<string, SuggestedPromptInput[]>();

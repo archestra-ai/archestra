@@ -1,5 +1,9 @@
 import { archestraApiClient } from "@archestra/shared";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -21,6 +25,7 @@ import {
 } from "@/lib/query-persistence";
 import {
   runtimeCredentialsQueryKey,
+  useCreateRuntimeCredential,
   useRuntimeCredentials,
 } from "./runtime-credentials.query";
 
@@ -119,5 +124,43 @@ describe("useRuntimeCredentials persistence", () => {
     await waitFor(() =>
       expect(result.current.data?.[0].personalConfigured).toBe(false),
     );
+  });
+});
+
+describe("useCreateRuntimeCredential", () => {
+  it("re-reads the reader's grants, so the author's Edit appears on the new row", async () => {
+    server.use(
+      http.post(`${API_ORIGIN}/api/credentials`, () =>
+        HttpResponse.json({ ...definition, id: "definition-new" }),
+      ),
+    );
+    let grantReads = 0;
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(
+      () => ({
+        create: useCreateRuntimeCredential(),
+        grants: useQuery({
+          queryKey: ["auth", "scopedCapabilities"],
+          queryFn: () => ++grantReads,
+        }),
+      }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.grants.data).toBe(1));
+
+    await result.current.create.mutateAsync({
+      key: "my-token",
+      name: "My token",
+      allowPersonal: true,
+      allowOrganization: false,
+      initialGrants: [],
+    });
+
+    await waitFor(() => expect(result.current.grants.data).toBe(2));
   });
 });

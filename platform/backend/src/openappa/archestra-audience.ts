@@ -65,7 +65,7 @@ export const archestraAudience = {
 
 const SERVED_TEMPLATES = ["members", "team/<team>", "user/<user>"];
 const MEMBER_PREFIX = "archestra:";
-const MAX_MEMBERS = 5000;
+const MAX_MEMBERS = 100_000;
 
 const ConsultSchema = z.object({
   version: z.literal(1),

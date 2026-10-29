@@ -218,7 +218,11 @@ class KnowledgeSourceAccessControlService {
       params.lookups,
       { userId: params.userId, organizationId: params.organizationId },
     );
-    const grants = await ResourcePermissions.resolveAll(principal);
+    // Only knowledge base and connector checks read these grants.
+    const grants = await ResourcePermissions.resolveAll({
+      ...principal,
+      resources: ["knowledgeBase", "knowledgeConnector"],
+    });
     const canReadAll = hasScopedPermission({
       grants,
       required: {
@@ -268,6 +272,30 @@ class KnowledgeSourceAccessControlService {
       resource: "knowledgeConnector",
       id: connector.id,
       action: "read",
+    });
+  }
+
+  canUpdateConnector(
+    accessControl: KnowledgeSourceAccessControlContext,
+    connector: Pick<KnowledgeBaseConnector, "id" | "syncPermissionsFromSource">,
+  ) {
+    return this.hasScopedAccess({
+      accessControl,
+      resource: "knowledgeConnector",
+      id: connector.id,
+      action: "update",
+    });
+  }
+
+  canDeleteConnector(
+    accessControl: KnowledgeSourceAccessControlContext,
+    connector: Pick<KnowledgeBaseConnector, "id" | "syncPermissionsFromSource">,
+  ) {
+    return this.hasScopedAccess({
+      accessControl,
+      resource: "knowledgeConnector",
+      id: connector.id,
+      action: "delete",
     });
   }
 
@@ -406,7 +434,7 @@ class KnowledgeSourceAccessControlService {
     accessControl: KnowledgeSourceAccessControlContext;
     resource: "knowledgeBase" | "knowledgeConnector";
     id: string;
-    action: "read" | "use";
+    action: "read" | "use" | "update" | "delete";
   }) {
     const { accessControl } = params;
     if (!accessControl.organizationId) return false;

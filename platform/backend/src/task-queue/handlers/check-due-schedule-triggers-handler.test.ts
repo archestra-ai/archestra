@@ -1,10 +1,4 @@
 import { vi } from "vitest";
-
-const mockEnqueue = vi.hoisted(() => vi.fn().mockResolvedValue("task-id"));
-vi.mock("@/task-queue", () => ({
-  taskQueueService: { enqueue: mockEnqueue },
-}));
-
 import {
   A2AContextModel,
   A2ATaskModel,
@@ -12,120 +6,120 @@ import {
   ScheduleTriggerRunModel,
   TaskModel,
 } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, expect, test } from "@/test";
 import { handleCheckDueScheduleTriggers } from "./check-due-schedule-triggers-handler";
 
-// A trigger whose last execution is in the past is due on the next minute tick.
-const TWO_MIN_AGO = () => new Date(Date.now() - 120_000);
+afterEach(() => vi.restoreAllMocks());
+const due = () => new Date(Date.now() - 120_000);
 
-describe("handleCheckDueScheduleTriggers", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+test("does nothing when no triggers are due", async ({
+  makeScheduleTrigger,
+}) => {
+  const trigger = await makeScheduleTrigger({
+    lastExecutedAt: new Date(Date.now() + 3_600_000),
   });
-
-  test("does nothing when no triggers are due", async ({
-    makeScheduleTrigger,
-  }) => {
-    // Keep the next run beyond the test's execution window, even if the
-    // wall clock crosses a minute boundary while creating the trigger.
-    const trigger = await makeScheduleTrigger({
-      lastExecutedAt: new Date(Date.now() + 60 * 60 * 1000),
-    });
-
-    await handleCheckDueScheduleTriggers();
-
-    expect(mockEnqueue).not.toHaveBeenCalled();
-    expect(
-      await ScheduleTriggerRunModel.countByTrigger({
-        organizationId: trigger.organizationId,
-        triggerId: trigger.id,
-      }),
-    ).toBe(0);
-  });
-
-  test("creates run, marks executed, and enqueues task for due trigger", async ({
-    makeScheduleTrigger,
-  }) => {
-    const trigger = await makeScheduleTrigger({
-      lastExecutedAt: TWO_MIN_AGO(),
-    });
-
-    await handleCheckDueScheduleTriggers();
-
-    const runs = await ScheduleTriggerRunModel.listByTrigger({
+  await handleCheckDueScheduleTriggers();
+  expect(
+    await TaskModel.hasPendingOrProcessingByType(
+      "schedule_trigger_run_execute",
+    ),
+  ).toBe(false);
+  expect(
+    await ScheduleTriggerRunModel.countByTrigger({
       organizationId: trigger.organizationId,
       triggerId: trigger.id,
-    });
-    expect(runs).toHaveLength(1);
-    expect(runs[0].runKind).toBe("due");
+    }),
+  ).toBe(0);
+});
 
-    expect(mockEnqueue).toHaveBeenCalledWith({
-      taskType: "schedule_trigger_run_execute",
-      payload: { runId: runs[0].id, triggerId: trigger.id },
-    });
-
-    const reloaded = await ScheduleTriggerModel.findById(trigger.id);
-    expect(reloaded?.lastExecutedAt?.getTime()).toBeGreaterThan(
-      TWO_MIN_AGO().getTime(),
-    );
+test("atomically records and queues one run across competing checks and retries", async ({
+  makeScheduleTrigger,
+}) => {
+  const trigger = await makeScheduleTrigger({ lastExecutedAt: due() });
+  await Promise.all([
+    handleCheckDueScheduleTriggers(),
+    handleCheckDueScheduleTriggers(),
+  ]);
+  await handleCheckDueScheduleTriggers();
+  const runs = await ScheduleTriggerRunModel.listByTrigger({
+    organizationId: trigger.organizationId,
+    triggerId: trigger.id,
   });
+  expect(runs).toHaveLength(1);
+  const queued = await TaskModel.dequeue(["schedule_trigger_run_execute"]);
+  expect(queued?.payload).toEqual({ runId: runs[0].id, triggerId: trigger.id });
+  expect(await TaskModel.dequeue(["schedule_trigger_run_execute"])).toBeNull();
+});
 
-  test("creates failed run and skips enqueue when task already in flight", async ({
-    makeScheduleTrigger,
-  }) => {
-    const trigger = await makeScheduleTrigger({
-      lastExecutedAt: TWO_MIN_AGO(),
-    });
-    await TaskModel.create({
-      taskType: "schedule_trigger_run_execute",
-      payload: { triggerId: trigger.id },
-      status: "pending",
-    });
+test("a queued delivery names its blocking run without inventing a deadline", async ({
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const trigger = await makeScheduleTrigger({ lastExecutedAt: due() });
+  const earlier = await makeScheduleTriggerRun(trigger.id);
+  await TaskModel.create({
+    taskType: "schedule_trigger_run_execute",
+    payload: { triggerId: trigger.id, runId: earlier.id },
+  });
+  await handleCheckDueScheduleTriggers();
+  const runs = await ScheduleTriggerRunModel.listByTrigger({
+    organizationId: trigger.organizationId,
+    triggerId: trigger.id,
+  });
+  expect(runs.find((run) => run.id !== earlier.id)).toMatchObject({
+    status: "failed",
+    error: expect.stringContaining(
+      `Skipped: run ${earlier.id} was queued or starting`,
+    ),
+    blockedBy: {
+      phase: "starting",
+      runId: earlier.id,
+      deadline: null,
+      runtimeTaskId: null,
+    },
+  });
+  await TaskModel.dequeue(["schedule_trigger_run_execute"]);
+  expect(await TaskModel.dequeue(["schedule_trigger_run_execute"])).toBeNull();
+});
 
-    await handleCheckDueScheduleTriggers();
-
-    const runs = await ScheduleTriggerRunModel.listByTrigger({
+test("a queue write failure rolls back the tick and run so a retry can recover", async ({
+  makeScheduleTrigger,
+}) => {
+  const trigger = await makeScheduleTrigger({ lastExecutedAt: due() });
+  // Inject a failed storage call while retaining the real transaction/model graph.
+  const failure = vi
+    .spyOn(TaskModel, "create")
+    .mockRejectedValueOnce(new Error("Temporary queue write failure"));
+  await handleCheckDueScheduleTriggers();
+  expect(await ScheduleTriggerModel.findById(trigger.id)).toMatchObject({
+    lastExecutedAt: trigger.lastExecutedAt,
+  });
+  expect(
+    await ScheduleTriggerRunModel.countByTrigger({
       organizationId: trigger.organizationId,
       triggerId: trigger.id,
-    });
-    expect(runs).toHaveLength(1);
-    expect(runs[0].status).toBe("failed");
-    expect(runs[0].error).toBe("Skipped: previous run was still in progress");
+    }),
+  ).toBe(0);
+  failure.mockRestore();
+  await handleCheckDueScheduleTriggers();
+  expect(
+    await TaskModel.dequeue(["schedule_trigger_run_execute"]),
+  ).not.toBeNull();
+  expect(await TaskModel.dequeue(["schedule_trigger_run_execute"])).toBeNull();
+});
 
-    expect(mockEnqueue).not.toHaveBeenCalled();
-
-    const reloaded = await ScheduleTriggerModel.findById(trigger.id);
-    expect(reloaded?.lastExecutedAt?.getTime()).toBeGreaterThan(
-      TWO_MIN_AGO().getTime(),
-    );
-  });
-
-  test("continues processing when one trigger fails", async ({
-    makeOrganization,
-    makeScheduleTrigger,
-  }) => {
-    const org = await makeOrganization();
-    await makeScheduleTrigger({
-      organizationId: org.id,
-      lastExecutedAt: TWO_MIN_AGO(),
-    });
-    await makeScheduleTrigger({
-      organizationId: org.id,
-      lastExecutedAt: TWO_MIN_AGO(),
-    });
-
-    // First run-creation throws; the spy falls back to the real impl afterward.
-    const createSpy = vi.spyOn(ScheduleTriggerRunModel, "create");
-    createSpy.mockRejectedValueOnce(new Error("DB error"));
-
-    await handleCheckDueScheduleTriggers();
-
-    // One trigger failed, the other still produced an enqueued run.
-    expect(mockEnqueue).toHaveBeenCalledTimes(1);
-    const enqueuedRunId = mockEnqueue.mock.calls[0][0].payload.runId;
-    const run = await ScheduleTriggerRunModel.findById(enqueuedRunId);
-    expect(run).not.toBeNull();
-  });
+test("one failed trigger does not prevent other due triggers from running", async ({
+  makeScheduleTrigger,
+}) => {
+  const first = await makeScheduleTrigger({ lastExecutedAt: due() });
+  const second = await makeScheduleTrigger({ lastExecutedAt: due() });
+  vi.spyOn(TaskModel, "create").mockRejectedValueOnce(
+    new Error("Temporary queue write failure"),
+  );
+  await handleCheckDueScheduleTriggers();
+  const queued = await TaskModel.dequeue(["schedule_trigger_run_execute"]);
+  expect([first.id, second.id]).toContain(queued?.payload.triggerId);
+  expect(await TaskModel.dequeue(["schedule_trigger_run_execute"])).toBeNull();
 });
 
 test.for([

@@ -27,6 +27,7 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
+import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -40,6 +41,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
@@ -196,9 +202,6 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           setPermission({});
           toast.success("Role created successfully");
         },
-        onError: (error: Error) => {
-          toast.error(error.message || "Failed to create role");
-        },
       },
     );
   }, [roleDescription, roleName, permission, createMutation]);
@@ -233,9 +236,6 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           setRoleDescription("");
           setPermission({});
           toast.success("Role updated successfully");
-        },
-        onError: (error: Error) => {
-          toast.error(error.message || "Failed to update role");
         },
       },
     );
@@ -648,6 +648,18 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         }}
         title={
           <span className="capitalize">{viewPermissionsRole?.name ?? ""}</span>
+        }
+        titleAdornment={
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="secondary" className="cursor-default font-normal">
+                Read-only
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              Predefined roles can't be changed. Duplicate it to edit.
+            </TooltipContent>
+          </Tooltip>
         }
         description={
           viewPermissionsRole

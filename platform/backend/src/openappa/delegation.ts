@@ -17,6 +17,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import config from "@/config";
+import { withoutTrajectoryStamp } from "./trajectory-stamp";
 import { type AppaWireFamily, chatMessages, responsesItems } from "./wire";
 
 /** A marker read from a child's opening message, not yet verified. */
@@ -236,6 +237,59 @@ export function stripDelegationMarkers(params: {
   }
 }
 
+/**
+ * Returns the spawn calls APPA released, as the markers on the spawn prompts
+ * in a request's history name them. Read before `stripDelegationMarkers`. A
+ * marker names the call by the provider id APPA saw when it released it, so
+ * the ids match the request's tool results on a translated wire too. Markers
+ * are not verified here: the ids only tell a released spawn from one APPA
+ * never saw, and the runtime still rules on every result of them.
+ */
+export function collectReleasedSpawnCalls(params: {
+  family: AppaWireFamily;
+  body: unknown;
+}): string[] {
+  const released: string[] = [];
+  const read = (name: unknown, args: unknown) => {
+    let parsed = args;
+    if (typeof args === "string") {
+      try {
+        parsed = JSON.parse(args);
+      } catch {
+        return;
+      }
+    }
+    const record = asRecord(parsed);
+    for (const field of spawnFields(name)) {
+      const prompt = record?.[field];
+      const marked =
+        typeof prompt === "string"
+          ? trailingMarker(prompt)?.spawnCallId
+          : undefined;
+      if (marked) released.push(withoutTrajectoryStamp(marked));
+    }
+  };
+  if (params.family === "openai:responses") {
+    for (const item of responsesItems(params.body)) {
+      if (item.type === "function_call") read(item.name, item.arguments);
+    }
+    return released;
+  }
+  for (const message of chatMessages(params.body)) {
+    if (message.role !== "assistant") continue;
+    for (const block of asArray(message.content) ?? []) {
+      const record = asRecord(block);
+      if (record?.type === "tool_use") read(record.name, record.input);
+    }
+    for (const call of asArray(message.tool_calls) ?? []) {
+      const record = asRecord(call);
+      const fn = asRecord(record?.function);
+      if (fn) read(fn.name, fn.arguments);
+    }
+  }
+  return released;
+}
+
 // === Internal helpers ===
 
 const MARKER_PREFIX = "[appa] delegated trajectory ";
@@ -314,13 +368,33 @@ function trailingMarker(text: string): AppaDelegationMarker | undefined {
   return {
     token: match[1],
     parentId: match[2],
-    promptDigest: digestOf(trimmed.slice(0, lineStart)),
+    promptDigest: digestOf(withoutClientPreamble(trimmed.slice(0, lineStart))),
     ...(token.spawnCallId ? { spawnCallId: token.spawnCallId } : {}),
     ...(token.runtimeSessionId
       ? { runtimeSessionId: token.runtimeSessionId }
       : {}),
   };
 }
+
+/**
+ * The spawn prompt without the repository summary Kimi Code puts in front of
+ * it when it starts a subagent: a `<git-context>` block and a blank line. Kimi
+ * Code builds the block from the working directory, remote, branch, changed
+ * files and recent commits, as Claude Code puts its git status in the system
+ * prompt; the model did not write it, so the marker does not sign it.
+ */
+function withoutClientPreamble(text: string): string {
+  const unavailable = KIMI_GIT_CONTEXT_UNAVAILABLE.exec(text);
+  if (unavailable) return text.slice(unavailable[0].length);
+  if (!text.startsWith(KIMI_GIT_CONTEXT_OPEN)) return text;
+  const end = text.indexOf(KIMI_GIT_CONTEXT_CLOSE);
+  return end === -1 ? text : text.slice(end + KIMI_GIT_CONTEXT_CLOSE.length);
+}
+
+const KIMI_GIT_CONTEXT_OPEN = "<git-context>\nWorking directory: ";
+const KIMI_GIT_CONTEXT_CLOSE = "\n</git-context>\n\n";
+const KIMI_GIT_CONTEXT_UNAVAILABLE =
+  /^<git-context status="unavailable" reason="[a-z-]+"\/>\n\n/;
 
 /**
  * The text a marker may end: the text itself, or the body of the teammate

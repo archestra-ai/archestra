@@ -52,9 +52,10 @@ jobs:
   build-dockerhub-image:
     name: Build Docker Hub image
     permissions:
+      packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to checkout the repository and build the image.
       id-token: write # Required for Workload Identity Federation when pushing images.
-    uses: ./.github/workflows/build-native-multi-arch-image.yml
+    uses: $/.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ${{ inputs.image_directory }}
       image_name: ${{ inputs.image_name }}
@@ -70,8 +71,7 @@ jobs:
       # The published image retains its existing gzip output format.
       cache_compression: zstd
       checkout_ref: ${{ inputs.checkout_ref }}
-      # This reusable workflow currently publishes the compile-bound Platform
-      # image; keep release builds on the same measured native runners as dev.
+      # Match the 16-CPU Blacksmith E2E builder; use native Blacksmith ARM.
       amd64_runner: blacksmith-16vcpu-ubuntu-2404
       arm64_runner: blacksmith-32vcpu-ubuntu-2404-arm
       previous_image: ${{ inputs.previous_version && format('docker.io/archestra/{0}:{1}', inputs.image_name, inputs.previous_version) || '' }}

@@ -600,13 +600,168 @@ describe("approval flow", () => {
     };
   }
 
-  test("posts approve/decline buttons whose callback_data fits Telegram's 64-byte cap", async () => {
+  test("posts approve/deny buttons whose callback_data fits Telegram's 64-byte cap", async () => {
     const provider = makeProvider(makeEventHandler());
     const { approve, decline } = await postApprovalForm(provider);
 
     expect(approve.callback_data).toMatch(/^apr\|[0-9a-f-]{36}\|a$/);
     expect(decline.callback_data).toMatch(/^apr\|[0-9a-f-]{36}\|d$/);
     expect(Buffer.byteLength(approve.callback_data)).toBeLessThanOrEqual(64);
+  });
+
+  test("renders the tool and its arguments as HTML with styled Approve/Deny buttons", async () => {
+    const provider = makeProvider(makeEventHandler());
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 1 },
+    }));
+    stubTelegramApi({ sendMessage });
+
+    await provider.addApprovalRequestForm({
+      channelId: "555",
+      approvalId: "approval-1",
+      taskId: "task-1",
+      toolName: "context7__query-docs",
+      toolArgs: { query: "<script> & co", limit: 5, filter: { lang: "ts" } },
+      originalMessage,
+    });
+
+    const body = sendMessage.mock.calls[0][0] as {
+      text: string;
+      parse_mode: string;
+      reply_markup: {
+        inline_keyboard: { text: string; style: string }[][];
+      };
+    };
+    expect(body.parse_mode).toBe("HTML");
+    expect(body.text).toBe(
+      [
+        "<b>Approval required</b>",
+        "<code>context7__query-docs</code>",
+        "Review this tool call before it can continue.",
+        "<blockquote expandable><b>query</b> <code>&lt;script&gt; &amp; co</code>",
+        "<b>limit</b> <code>5</code>",
+        "<b>filter</b> <code>{&quot;lang&quot;:&quot;ts&quot;}</code></blockquote>",
+      ].join("\n"),
+    );
+    expect(
+      body.reply_markup.inline_keyboard[0].map(({ text, style }) => ({
+        text,
+        style,
+      })),
+    ).toEqual([
+      { text: "Approve", style: "success" },
+      { text: "Deny", style: "danger" },
+    ]);
+  });
+
+  test("omits the argument quote when the call has no arguments", async () => {
+    const provider = makeProvider(makeEventHandler());
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 1 },
+    }));
+    stubTelegramApi({ sendMessage });
+
+    await provider.addApprovalRequestForm({
+      channelId: "555",
+      approvalId: "approval-1",
+      taskId: "task-1",
+      toolName: "github__list_repos",
+      toolArgs: {},
+      originalMessage,
+    });
+
+    expect(sendMessage.mock.calls[0][0].text).toBe(
+      "<b>Approval required</b>\n<code>github__list_repos</code>\nReview this tool call before it can continue.",
+    );
+  });
+
+  test("keeps a prompt with huge arguments under Telegram's 4096-char cap", async () => {
+    const provider = makeProvider(makeEventHandler());
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 1 },
+    }));
+    stubTelegramApi({ sendMessage });
+
+    const toolArgs = Object.fromEntries(
+      Array.from({ length: 20 }, (_, i) => [`arg${i}`, "<&>".repeat(1000)]),
+    );
+    await provider.addApprovalRequestForm({
+      channelId: "555",
+      approvalId: "approval-1",
+      taskId: "task-1",
+      toolName: "fs__write_file",
+      toolArgs,
+      originalMessage,
+    });
+
+    const text = String(sendMessage.mock.calls[0][0].text);
+    expect(text.length).toBeLessThanOrEqual(4096);
+    expect(text).toContain("<b>arg0</b> <code>&lt;&amp;&gt;");
+    expect(text).toContain("…</code>");
+    // Cut values never end inside an escaped entity
+    expect(text).not.toMatch(/&[a-z]*…/);
+    expect(text.endsWith("\n…</blockquote>")).toBe(true);
+  });
+
+  test("falls back to OpenAPPA's review text in a code block", async () => {
+    const provider = makeProvider(makeEventHandler());
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 1 },
+    }));
+    stubTelegramApi({ sendMessage });
+
+    await provider.addApprovalRequestForm({
+      channelId: "555",
+      approvalId: "approval-1",
+      taskId: "task-1",
+      toolName: "execute_remedy_plan",
+      reviewText: "Send <mail> to the team",
+      originalMessage,
+    });
+
+    expect(sendMessage.mock.calls[0][0].text).toBe(
+      "<pre>Send &lt;mail&gt; to the team</pre>",
+    );
+  });
+
+  test("edits the prompt to the decision and who made it, removing the buttons", async () => {
+    const provider = makeProvider(makeEventHandler());
+    const editMessageText = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: true,
+    }));
+    stubTelegramApi({ editMessageText });
+
+    await provider.updateApprovalRequest({
+      channelId: "555",
+      messageKey: "33",
+      toolName: "context7__query-docs",
+      approved: true,
+      decidedByName: "Alice <A>",
+    });
+    await provider.updateApprovalRequest({
+      channelId: "555",
+      messageKey: "34",
+      toolName: "context7__query-docs",
+      approved: false,
+    });
+
+    expect(editMessageText.mock.calls[0][0]).toEqual({
+      chat_id: "555",
+      message_id: 33,
+      text: "<b>Approved</b> · <code>context7__query-docs</code> · by Alice &lt;A&gt;",
+      parse_mode: "HTML",
+    });
+    expect(editMessageText.mock.calls[1][0]).toEqual({
+      chat_id: "555",
+      message_id: 34,
+      text: "<b>Denied</b> · <code>context7__query-docs</code>",
+      parse_mode: "HTML",
+    });
   });
 
   test("dispatches the requester's decision and consumes the payload", async ({

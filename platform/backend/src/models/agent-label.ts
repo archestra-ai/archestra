@@ -1,35 +1,20 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import type { LabelGetResponse, LabelWithDetails } from "@/types";
 import {
   getOrCreateLabelKey,
   getOrCreateLabelValue,
   pruneLabelKeysAndValues,
 } from "./entity-label";
+import { idArrayCondition } from "./id-array-condition";
 
 class AgentLabelModel {
   /**
    * Get all labels for a specific agent with key and value details
    */
   static async getLabelsForAgent(agentId: string): Promise<LabelGetResponse[]> {
-    const rows = await db
-      .select({
-        keyId: schema.agentLabelsTable.keyId,
-        valueId: schema.agentLabelsTable.valueId,
-        key: schema.labelKeysTable.key,
-        value: schema.labelValuesTable.value,
-      })
-      .from(schema.agentLabelsTable)
-      .leftJoin(
-        schema.labelKeysTable,
-        eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
-      )
-      .leftJoin(
-        schema.labelValuesTable,
-        eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
-      )
-      .where(eq(schema.agentLabelsTable.agentId, agentId))
-      .orderBy(asc(schema.labelKeysTable.key));
+    const rows = await AgentLabelModel.byAgent.get().execute({ agentId });
 
     return rows.map((row) => ({
       keyId: row.keyId,
@@ -75,11 +60,11 @@ class AgentLabelModel {
 
       // Get or create keys/values and insert new labels within the same transaction
       if (labels.length > 0) {
-        const labelInserts: {
-          agentId: string;
-          keyId: string;
-          valueId: string;
-        }[] = [];
+        // One value per key: a repeated key keeps its last value.
+        const labelInserts = new Map<
+          string,
+          { agentId: string; keyId: string; valueId: string }
+        >();
 
         for (const label of labels) {
           const keyId = await AgentLabelModel.getOrCreateKey(label.key, tx);
@@ -87,10 +72,12 @@ class AgentLabelModel {
             label.value,
             tx,
           );
-          labelInserts.push({ agentId, keyId, valueId });
+          labelInserts.set(keyId, { agentId, keyId, valueId });
         }
 
-        await tx.insert(schema.agentLabelsTable).values(labelInserts);
+        await tx
+          .insert(schema.agentLabelsTable)
+          .values([...labelInserts.values()]);
       }
     });
 
@@ -154,7 +141,7 @@ class AgentLabelModel {
         schema.labelValuesTable,
         eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
       )
-      .where(inArray(schema.agentLabelsTable.agentId, agentIds))
+      .where(idArrayCondition(schema.agentLabelsTable.agentId, agentIds))
       .orderBy(asc(schema.labelKeysTable.key));
 
     const labelsMap = new Map<string, LabelWithDetails[]>();
@@ -210,6 +197,28 @@ class AgentLabelModel {
 
     return values.map((v) => v.value);
   }
+
+  private static readonly byAgent = new PreparedQuery((database) => {
+    return database
+      .select({
+        keyId: schema.agentLabelsTable.keyId,
+        valueId: schema.agentLabelsTable.valueId,
+        key: schema.labelKeysTable.key,
+        value: schema.labelValuesTable.value,
+      })
+      .from(schema.agentLabelsTable)
+      .leftJoin(
+        schema.labelKeysTable,
+        eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
+      )
+      .leftJoin(
+        schema.labelValuesTable,
+        eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
+      )
+      .where(eq(schema.agentLabelsTable.agentId, sql.placeholder("agentId")))
+      .orderBy(asc(schema.labelKeysTable.key))
+      .prepare("archestra_agent_labels");
+  });
 }
 
 export default AgentLabelModel;

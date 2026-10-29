@@ -2,14 +2,24 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { KeyRound, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import { AdvancedSection } from "@/components/advanced-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { formatExpiration } from "@/components/create-virtual-key-dialog";
-import { CreatedByCell } from "@/components/created-by-cell";
+import {
+  BudgetFields,
+  type SpendCapValue,
+} from "@/components/credential-billing/budget-fields";
+import { CreatedByHeader } from "@/components/credential-billing/created-by-header";
+import {
+  ModelPoolsField,
+  useCanSetModelPools,
+} from "@/components/credential-billing/model-pools-field";
+import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
+import { ProviderAccessField } from "@/components/provider-access-field";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
-import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
@@ -19,7 +29,12 @@ import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useConnectionBaseUrl } from "@/components/virtual-key-connection-base-url";
 import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-guide";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useModelPools } from "@/lib/model-pools.query";
 import { useUpdateVirtualApiKey } from "@/lib/virtual-api-keys.query";
 
 export type EditableVirtualKey =
@@ -32,14 +47,48 @@ export function EditVirtualKeyDialog({
   virtualKey: EditableVirtualKey | null;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { data: capabilities } = useScopedCapabilities();
+  const canIncludeFutureProviders =
+    capabilities?.some(
+      (grant) =>
+        grant.resource === "llmProviderApiKey" &&
+        grant.action === "use" &&
+        grant.scope === "*",
+    ) ?? false;
   const updateMutation = useUpdateVirtualApiKey();
   const connectionBaseUrl = useConnectionBaseUrl();
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   const [name, setName] = useState("");
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const [includeFutureProviders, setIncludeFutureProviders] = useState(false);
   const [providerApiKeyIds, setProviderApiKeyIds] =
     useState<ProviderApiKeyMappings>([]);
+  const [billingTeamId, setBillingTeamId] = useState<string | null>(null);
+  const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
+  // Undefined until edited, so the pools this key already reaches show
+  // through once they load.
+  const [modelPoolIds, setModelPoolIds] = useState<string[]>();
+  const canSetModelPools = useCanSetModelPools();
+  const { data: pools } = useModelPools({ enabled: canSetModelPools });
+  const grantedPoolIds = useMemo(
+    () =>
+      (pools ?? [])
+        .filter((pool) =>
+          virtualKey ? pool.virtualApiKeyIds.includes(virtualKey.id) : false,
+        )
+        .map((pool) => pool.id),
+    [pools, virtualKey],
+  );
+  const modelPoolsChanged =
+    modelPoolIds !== undefined &&
+    hasUnsavedChanges(
+      { ids: [...grantedPoolIds].sort() },
+      { ids: [...modelPoolIds].sort() },
+    );
+  const { data: canManageLimits } = useHasPermissions({
+    llmLimit: ["update", "delete"],
+  });
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   // The permissions section keeps its edits in its own form. This dialog's
@@ -54,9 +103,7 @@ export function EditVirtualKeyDialog({
   // Permission edits live outside this dialog's own snapshot, so the unsaved
   // guard and the Save button need to hear about them separately.
   const [permissionsDirty, setPermissionsDirty] = useState(false);
-  const [activeSection, setActiveSection] = useState<
-    "general" | "permissions" | "connect"
-  >("general");
+  const [activeSection, setActiveSection] = useState<EditSection>("general");
 
   useEffect(() => {
     if (!virtualKey) return;
@@ -68,14 +115,22 @@ export function EditVirtualKeyDialog({
       ({ provider, providerApiKeyId }) => ({ provider, providerApiKeyId }),
     );
     setName(virtualKey.name);
+    setIncludeFutureProviders(virtualKey.includeFutureProviders);
     setLabels(virtualKey.labels);
     setExpiresAt(initialExpiresAt);
     setProviderApiKeyIds(initialProviderApiKeyIds);
+    const initialSpendCap = toSpendCapValue(virtualKey.spendCap);
+    setBillingTeamId(virtualKey.billingTeamId);
+    setSpendCap(initialSpendCap);
+    setModelPoolIds(undefined);
     initialSnapshotRef.current = {
       name: virtualKey.name,
+      includeFutureProviders: virtualKey.includeFutureProviders,
       expiresAt: initialExpiresAt,
       providerApiKeyIds: initialProviderApiKeyIds,
       labels: virtualKey.labels,
+      billingTeamId: virtualKey.billingTeamId,
+      spendCap: initialSpendCap,
     };
   }, [virtualKey]);
 
@@ -84,6 +139,16 @@ export function EditVirtualKeyDialog({
     if (!virtualKey || !name.trim()) return;
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     await permissionsSave.current?.();
+    // Unchanged billing is left out, so saving other edits never needs the
+    // permission to manage limits.
+    const initial = initialSnapshotRef.current;
+    const billing = {
+      ...(billingTeamId !== initial?.billingTeamId && { billingTeamId }),
+      ...(hasUnsavedChanges(
+        { spendCap: initial?.spendCap ?? null },
+        { spendCap },
+      ) && { spendCap }),
+    };
     const result = await updateMutation.mutateAsync({
       id: virtualKey.id,
       data: isPassthrough
@@ -92,13 +157,17 @@ export function EditVirtualKeyDialog({
             keyType: "passthrough",
             expiresAt: expiresAt ?? undefined,
             labels: finalLabels,
+            ...billing,
           }
         : {
             name: name.trim(),
             keyType: "standard",
             expiresAt: expiresAt ?? undefined,
+            includeFutureProviders,
             providerApiKeys: providerApiKeyIds,
             labels: finalLabels,
+            ...billing,
+            ...(modelPoolsChanged && { modelPoolIds }),
           },
     });
     if (result) onOpenChange(false);
@@ -108,67 +177,80 @@ export function EditVirtualKeyDialog({
     labels,
     name,
     onOpenChange,
+    includeFutureProviders,
     providerApiKeyIds,
     updateMutation,
     virtualKey,
+    billingTeamId,
+    spendCap,
+    modelPoolIds,
+    modelPoolsChanged,
   ]);
 
   if (!virtualKey) return null;
-  const standardReady = providerApiKeyIds.length > 0;
+  const standardReady = includeFutureProviders || providerApiKeyIds.length > 0;
   const canSubmit =
     name.trim().length > 0 &&
     (isPassthrough || standardReady) &&
     !updateMutation.isPending;
   const isDirty =
     permissionsDirty ||
+    modelPoolsChanged ||
     (initialSnapshotRef.current !== null &&
       hasUnsavedChanges(initialSnapshotRef.current, {
         name,
         expiresAt,
+        includeFutureProviders,
         providerApiKeyIds,
         labels,
+        billingTeamId,
+        spendCap,
       }));
+  const providerCount = providerApiKeyIds.length;
 
   return (
     <TabbedDialogShell
       open
       onOpenChange={onOpenChange}
-      title={
-        isPassthrough
-          ? "Edit Passthrough Virtual Key"
-          : "Edit Standard Virtual Key"
-      }
+      title={virtualKey.name}
       description={
         isPassthrough
-          ? "Update the passthrough virtual key name and expiration."
-          : "Update the standard virtual key name, expiration, and who can reach it."
+          ? "Update the passthrough virtual key name, budget, and expiration."
+          : "Update the standard virtual key's provider keys, budget, and who can reach it."
       }
       sidebarLabel={name || "Virtual key"}
-      sidebarDescription="Virtual key"
+      sidebarDescription={
+        isPassthrough ? "Passthrough virtual key" : "Virtual key"
+      }
       sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
       isDirty={isDirty}
       activeSection={activeSection}
-      navItems={
-        isPassthrough
-          ? [
-              { id: "general", label: "General" },
-              { id: "connect", label: "Connect" },
-            ]
+      navItems={[
+        {
+          id: "general",
+          label: "General",
+          status: expiresAt
+            ? `Expires ${formatExpiration(expiresAt)}`
+            : "Never expires",
+        },
+        ...(isPassthrough
+          ? []
           : [
-              { id: "general", label: "General" },
-              { id: "connect", label: "Connect" },
-              { id: "permissions", label: "Permissions" },
-            ]
-      }
+              {
+                id: "keys" as const,
+                label: "Provider keys",
+                status: `${providerCount} ${providerCount === 1 ? "provider" : "providers"}`,
+              },
+            ]),
+        { id: "connect", label: "Connect", status: "Code samples" },
+      ]}
       onActiveSectionChange={setActiveSection}
       onSubmit={() => void handleUpdate()}
       headerExtra={
-        virtualKey.createdBy && (
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>Created by</span>
-            <CreatedByCell createdBy={virtualKey.createdBy} />
-          </span>
-        )
+        <CreatedByHeader
+          createdBy={virtualKey.createdBy}
+          createdAt={virtualKey.createdAt}
+        />
       }
       footer={
         activeSection === "connect" && !isDirty ? (
@@ -195,49 +277,81 @@ export function EditVirtualKeyDialog({
             onChange={(event) => setName(event.target.value)}
           />
         </div>
-        {isPassthrough ? (
-          <ExpirationDateTimeField
-            value={expiresAt}
-            onChange={setExpiresAt}
-            noExpirationText="Key will never expire"
-            formatExpiration={formatExpiration}
-          />
-        ) : (
-          <>
-            <ExpirationDateTimeField
-              value={expiresAt}
-              onChange={setExpiresAt}
-              noExpirationText="Key will never expire"
-              formatExpiration={formatExpiration}
-            />
-            <ProviderKeyAccessFields
-              providerApiKeyIds={providerApiKeyIds}
-              onProviderApiKeyIdsChange={setProviderApiKeyIds}
-              providerApiKeys={providerApiKeys}
-            />
-          </>
-        )}
-        <AdvancedLabelsSection
-          ref={labelsRef}
-          labels={labels}
-          onLabelsChange={setLabels}
+        <ExpirationDateTimeField
+          value={expiresAt}
+          onChange={setExpiresAt}
+          noExpirationText="Key will never expire"
+          formatExpiration={formatExpiration}
         />
-      </div>
-      {!isPassthrough && (
-        <div hidden={activeSection !== "permissions"}>
+        {!isPassthrough && (
           <ResourceAccessSection
             resource="llmVirtualKey"
             id={virtualKey.id}
             registerSave={registerPermissionsSave}
             onDirtyChange={setPermissionsDirty}
-            standalone
           />
+        )}
+        <AdvancedSection key={virtualKey.id} keepMounted>
+          <BudgetFields
+            subject="key"
+            idPrefix="edit-virtual-key"
+            billingTeamId={billingTeamId}
+            onBillingTeamIdChange={setBillingTeamId}
+            spendCap={spendCap}
+            onSpendCapChange={setSpendCap}
+            capLocked={!!virtualKey.spendCap && !canManageLimits}
+            currentUsage={virtualKey.spendCap?.currentUsage ?? null}
+          />
+          <AdvancedLabelsSection
+            attributionSource="credential"
+            ref={labelsRef}
+            labels={labels}
+            onLabelsChange={setLabels}
+          />
+        </AdvancedSection>
+      </div>
+      {!isPassthrough && (
+        <div hidden={activeSection !== "keys"} className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            <span>Choose which providers this virtual key can use.</span>
+          </p>
+          <ProviderAccessField
+            surface="edit"
+            canIncludeFutureProviders={
+              includeFutureProviders || canIncludeFutureProviders
+            }
+            includeFutureProviders={includeFutureProviders}
+            onIncludeFutureProvidersChange={(value) => {
+              setIncludeFutureProviders(value);
+              if (value) setProviderApiKeyIds([]);
+            }}
+            current={
+              <ProviderKeyList
+                alwaysOpen
+                emptyLabel={
+                  includeFutureProviders
+                    ? "Uses primary API keys — add a provider to choose a different key"
+                    : "No providers selected — add one below"
+                }
+                value={providerApiKeyIds}
+                onChange={setProviderApiKeyIds}
+                providerApiKeys={providerApiKeys}
+              />
+            }
+          />
+          {canSetModelPools && (
+            <ModelPoolsField
+              value={modelPoolIds ?? grantedPoolIds}
+              onChange={setModelPoolIds}
+            />
+          )}
         </div>
       )}
       {activeSection === "connect" && (
         <VirtualKeyConnectionGuide
           keyType={virtualKey.keyType}
           mappedProviderKeys={virtualKey.providerApiKeys}
+          includeFutureProviders={virtualKey.includeFutureProviders}
           connectionBaseUrl={connectionBaseUrl}
           name={virtualKey.name}
           expiration={formatExpiration(virtualKey.expiresAt)}
@@ -246,4 +360,12 @@ export function EditVirtualKeyDialog({
       )}
     </TabbedDialogShell>
   );
+}
+
+type EditSection = "general" | "keys" | "connect";
+
+function toSpendCapValue(cap: EditableVirtualKey["spendCap"]): SpendCapValue {
+  return cap
+    ? { limitValue: cap.limitValue, cleanupInterval: cap.cleanupInterval }
+    : null;
 }

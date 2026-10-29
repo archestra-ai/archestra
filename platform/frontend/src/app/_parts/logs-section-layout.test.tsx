@@ -39,7 +39,7 @@ describe("LogsSectionLayout", () => {
     // about. Wrapping them here too gave the page two headers stacked on each
     // other, with the record's own title and back link stranded in the body
     // below the tab bar.
-    vi.mocked(usePathname).mockReturnValue("/llm/logs/session/abc");
+    vi.mocked(usePathname).mockReturnValue("/llm/logs/abc");
 
     render(
       <LogsSectionLayout listPath="/llm/logs">
@@ -68,10 +68,14 @@ describe("LogsSectionLayout", () => {
     expect(screen.getByRole("heading", { name: "Logs" })).toBeVisible();
   });
 
-  it("shows the Guardrail consults tab when OpenAPPA is enabled and permitted", () => {
+  it("orders the tabs by the request's path: proxy, gateway, guardrails, connections, then audit", () => {
     vi.mocked(usePathname).mockReturnValue("/llm/logs");
     vi.mocked(useFeature).mockReturnValue(true);
-    vi.mocked(usePermissionMap).mockReturnValue({ "/consults/logs": true });
+    vi.mocked(usePermissionMap).mockReturnValue({
+      "/consults/logs": true,
+      "/connections/logs": true,
+      "/audit/logs": true,
+    });
 
     render(
       <LogsSectionLayout listPath="/llm/logs">
@@ -79,8 +83,24 @@ describe("LogsSectionLayout", () => {
       </LogsSectionLayout>,
     );
 
-    expect(
-      screen.getAllByRole("link", { name: "Guardrail consults" }).length,
-    ).toBeGreaterThan(0);
+    const tabs = screen
+      .getAllByRole("link")
+      .map((link) => link.textContent)
+      .filter((name) =>
+        [
+          "LLM Proxy",
+          "MCP Gateway",
+          "Guardrail consults",
+          "Agent connections",
+          "Audit",
+        ].includes(name ?? ""),
+      );
+    expect([...new Set(tabs)]).toEqual([
+      "LLM Proxy",
+      "MCP Gateway",
+      "Guardrail consults",
+      "Agent connections",
+      "Audit",
+    ]);
   });
 });

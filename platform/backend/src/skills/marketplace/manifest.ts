@@ -296,6 +296,7 @@ export function resolvePluginName(pluginSlug: string): string {
 export function pluginManifestPath(clientType: ClientType): string {
   switch (clientType) {
     case "claude-code":
+    case "claude-desktop":
       return ".claude-plugin/plugin.json";
     case "copilot-cli":
       return "plugin.json";

@@ -265,6 +265,34 @@ describe("auth route handler", () => {
       expect(setCookie).toContain("archestra.session_token=restored");
       expect(setCookie).toContain("archestra.session_data=data");
     });
+
+    it("should split fallback set-cookie headers quickly on dotted values without '='", async () => {
+      const headers = new Headers({
+        "Set-Cookie": `a=1; Path=/, ${"x.".repeat(5_000)}x; Path=/, b=2; Path=/`,
+      });
+      Object.defineProperty(headers, "getSetCookie", { value: undefined });
+      vi.mocked(global.fetch).mockResolvedValue(
+        createMockResponse('{"ok": true}', { headers }),
+      );
+
+      const request = createMockRequest(LINKED_IDP_AUTH_COMPLETE_ENDPOINT, {
+        method: "POST",
+        body: '{"intentId":"intent-123"}',
+      });
+      const params = {
+        params: Promise.resolve({
+          path: LINKED_IDP_AUTH_COMPLETE_ENDPOINT.replace(
+            /^\/api\/auth\//,
+            "",
+          ).split("/"),
+        }),
+      };
+
+      const started = performance.now();
+      const response = await POST(request, params);
+      expect(performance.now() - started).toBeLessThan(1000);
+      expect(response.headers.get("set-cookie")).toContain("b=2");
+    });
   });
 
   describe("SAML origin handling", () => {

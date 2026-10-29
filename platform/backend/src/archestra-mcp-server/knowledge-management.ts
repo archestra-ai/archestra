@@ -34,7 +34,12 @@ import {
 } from "@/knowledge-base";
 import { supersedePermissionSyncAfterSettingsChange } from "@/knowledge-base/connector-settings-change";
 import { reconcileP4ShimForConnector } from "@/knowledge-base/connectors/perforce/p4-shim-service";
+import { getConnector } from "@/knowledge-base/connectors/registry";
 import { toKnowledgeBaseUserMessage } from "@/knowledge-base/errors";
+import {
+  githubRepositorySettingsWriteError,
+  githubSyncConfigurationChanged,
+} from "@/knowledge-base/github-settings-compatibility";
 import {
   deleteConnector,
   deleteKnowledgeBase,
@@ -43,6 +48,7 @@ import {
   mfilesAuthMethodGateViolation,
   mfilesConnectorGateViolation,
 } from "@/knowledge-base/mfiles-gates";
+import { salesforceAuthPolicyViolation } from "@/knowledge-base/salesforce-auth-policy";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -83,6 +89,12 @@ import {
   structuredToolErrorResult,
   successResult,
 } from "./helpers";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -279,6 +291,14 @@ const QueryKnowledgeSourcesToolArgsSchema = z
   })
   .strict();
 
+const GetKnowledgeBasesToolArgsSchema = z
+  .object({
+    access: resourceAccessToolArg({ examplePlural: "knowledge bases" }),
+    shared_with: resourceSharedWithToolArg,
+    owner_ids: resourceOwnerIdsToolArg,
+  })
+  .strict();
+
 const GetKnowledgeBaseToolArgsSchema = z
   .object({
     id: UuidIdSchema.describe("Knowledge base ID."),
@@ -311,6 +331,9 @@ type KnowledgeBaseCreateToolArgs = z.infer<
 >;
 type KnowledgeBaseUpdateToolArgs = z.infer<
   typeof KnowledgeBaseUpdateToolArgsSchema
+>;
+type GetKnowledgeBasesToolArgs = z.infer<
+  typeof GetKnowledgeBasesToolArgsSchema
 >;
 type GetKnowledgeBaseToolArgs = z.infer<typeof GetKnowledgeBaseToolArgsSchema>;
 type DeleteKnowledgeBaseToolArgs = z.infer<
@@ -362,10 +385,10 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
     title: "Get Knowledge Bases",
     description: "List all knowledge bases in the organization.",
-    schema: EmptyToolArgsSchema,
+    schema: GetKnowledgeBasesToolArgsSchema,
     outputSchema: KnowledgeBasesOutputSchema,
-    async handler({ context }) {
-      return handleGetKnowledgeBases({ context });
+    async handler({ args, context }) {
+      return handleGetKnowledgeBases({ args, context });
     },
   }),
   defineArchestraTool({
@@ -877,8 +900,11 @@ async function handleCreateKnowledgeBase(params: {
   }
 }
 
-async function handleGetKnowledgeBases(params: { context: ArchestraContext }) {
-  const { context } = params;
+async function handleGetKnowledgeBases(params: {
+  args: GetKnowledgeBasesToolArgs;
+  context: ArchestraContext;
+}) {
+  const { args, context } = params;
 
   try {
     if (!context.organizationId) {
@@ -896,6 +922,7 @@ async function handleGetKnowledgeBases(params: { context: ArchestraContext }) {
       viewerTeamIds: access?.teamIds ?? [],
       viewerUserId: context.userId,
       organizationId: context.organizationId,
+      access: toolAccessSelection(args),
     });
     if (kbs.length === 0) {
       return structuredSuccessResult(
@@ -1064,6 +1091,22 @@ async function handleCreateKnowledgeConnector(params: {
     });
     if (hiddenTypeViolation) {
       return errorResult(hiddenTypeViolation);
+    }
+
+    const salesforceViolation = salesforceAuthPolicyViolation({
+      connectorType: args.connector_type,
+      nextConfig: { type: args.connector_type, ...args.config },
+    });
+    if (salesforceViolation) return errorResult(salesforceViolation);
+    if (args.connector_type === "salesforce") {
+      const validation = await getConnector("salesforce").validateConfig({
+        type: args.connector_type,
+        ...args.config,
+      });
+      if (!validation.valid)
+        return errorResult(
+          `Invalid connector configuration: ${validation.error}`,
+        );
     }
 
     // Environment isolation: a connector created through a gateway belongs to the
@@ -1248,12 +1291,22 @@ async function handleUpdateKnowledgeConnector(params: {
       // Environment isolation: cannot mutate a connector in another environment.
       existingConnector.environmentId !== agentEnvironmentId ||
       (access &&
-        !knowledgeSourceAccessControlService.canAccessConnector(
+        !knowledgeSourceAccessControlService.canUpdateConnector(
           access,
           existingConnector,
         ))
     ) {
       return knowledgeConnectorNotFound(args.id);
+    }
+    if (
+      existingConnector.config.type === "github" &&
+      updates.config?.type === "github"
+    ) {
+      const compatibilityError = githubRepositorySettingsWriteError(
+        existingConnector.config,
+        updates.config,
+      );
+      if (compatibilityError) return errorResult(compatibilityError);
     }
     const nextVisibility = updates.visibility ?? existingConnector.visibility;
     // The permission-sync switch after this update. The request still names it
@@ -1301,10 +1354,30 @@ async function handleUpdateKnowledgeConnector(params: {
       return errorResult(mfilesAuthViolation);
     }
 
-    const connector = await KnowledgeBaseConnectorModel.update(
-      args.id,
-      updates,
-    );
+    const salesforceViolation = salesforceAuthPolicyViolation({
+      connectorType: existingConnector.connectorType,
+      nextConfig: updates.config,
+      existingConfig: existingConnector.config,
+    });
+    if (salesforceViolation) return errorResult(salesforceViolation);
+    if (existingConnector.connectorType === "salesforce" && updates.config) {
+      const validation = await getConnector("salesforce").validateConfig(
+        updates.config,
+      );
+      if (!validation.valid)
+        return errorResult(
+          `Invalid connector configuration: ${validation.error}`,
+        );
+    }
+
+    const githubConfigAffectsSync =
+      existingConnector.config.type === "github" &&
+      updates.config?.type === "github" &&
+      githubSyncConfigurationChanged(existingConnector.config, updates.config);
+    const connector = await KnowledgeBaseConnectorModel.update(args.id, {
+      ...updates,
+      ...(githubConfigAffectsSync ? { checkpoint: null } : {}),
+    });
     if (!connector) {
       return knowledgeConnectorNotFound(args.id);
     }
@@ -1377,7 +1450,7 @@ async function handleDeleteKnowledgeConnector(params: {
       // Environment isolation: cannot delete a connector in another environment.
       existing.environmentId !== agentEnvironmentId ||
       (access &&
-        !knowledgeSourceAccessControlService.canAccessConnector(
+        !knowledgeSourceAccessControlService.canDeleteConnector(
           access,
           existing,
         ))

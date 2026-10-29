@@ -116,6 +116,12 @@ const EXTENSION_MIMES: Record<string, string> = {
   html: "text/html",
   xml: "application/xml",
   zip: "application/zip",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 };
 
 function hasMagic(buffer: Buffer, offset: number, magic: number[]): boolean {

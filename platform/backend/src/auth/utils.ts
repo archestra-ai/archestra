@@ -9,6 +9,7 @@ import {
 } from "@archestra/shared";
 import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import { auth as betterAuth } from "@/auth/better-auth";
+import { requestScope } from "@/auth/request-scope";
 import {
   isServiceAccountUserId,
   SERVICE_ACCOUNT_USER_ID_PREFIX,
@@ -177,14 +178,17 @@ export const isGlobalAdmin = async (
 export const getPermissionsForUserContext = async (params: {
   userId: string;
   organizationId: string;
-}): Promise<Permissions> => {
-  const serviceAccount = await getServiceAccountFromSyntheticUserId(params);
-  if (serviceAccount) {
-    return ServiceAccountModel.getPermissions(serviceAccount);
-  }
-
-  return UserModel.getUserPermissions(params.userId, params.organizationId);
-};
+}): Promise<Permissions> =>
+  requestScope.memo(
+    `permissions\0${params.organizationId}\0${params.userId}`,
+    async () => {
+      const serviceAccount = await getServiceAccountFromSyntheticUserId(params);
+      if (serviceAccount) {
+        return ServiceAccountModel.getPermissions(serviceAccount);
+      }
+      return UserModel.getUserPermissions(params.userId, params.organizationId);
+    },
+  );
 
 // === Internal helpers
 
@@ -236,10 +240,8 @@ async function checkUserPermissions(params: {
   organizationId: string;
   permissions: Permissions;
 }): Promise<PermissionCheckResult> {
-  const userPermissions = await UserModel.getUserPermissions(
-    params.userId,
-    params.organizationId,
-  );
+  // The read the route makes too, so a read request resolves it once.
+  const userPermissions = await getPermissionsForUserContext(params);
   return buildPermissionCheckResult(userPermissions, params.permissions);
 }
 
@@ -327,9 +329,13 @@ async function getServiceAccountFromSyntheticUserId(params: {
   const serviceAccountId = params.userId.slice(
     SERVICE_ACCOUNT_USER_ID_PREFIX.length,
   );
-  const serviceAccount = await ServiceAccountModel.findById(
-    serviceAccountId,
-    params.organizationId,
+  const serviceAccount = await requestScope.memo(
+    `service-account-auth-context:${serviceAccountId}:${params.organizationId}`,
+    () =>
+      ServiceAccountModel.findAuthContext(
+        serviceAccountId,
+        params.organizationId,
+      ),
   );
 
   if (serviceAccount?.disabled) return null;

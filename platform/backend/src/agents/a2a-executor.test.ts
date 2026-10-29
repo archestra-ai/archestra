@@ -9,6 +9,7 @@ import type { StageResult } from "./a2a/stage-attachments";
 import {
   type A2AAttachment,
   buildUserContent,
+  createLiveSubagentToolCallEmitter,
   emitSubagentToolCalls,
   executeA2AMessage,
 } from "./a2a-executor";
@@ -18,14 +19,14 @@ const {
   mockStreamText,
   mockGetChatMcpTools,
   mockCreateLLMModelForAgent,
-  mockResolveConversationLlmSelectionForAgent,
+  mockResolveForkParentSelection,
   mockBuildSkillCatalogPrompt,
   mockListAccessibleCatalogSkills,
 } = vi.hoisted(() => ({
   mockStreamText: vi.fn(),
   mockGetChatMcpTools: vi.fn(),
   mockCreateLLMModelForAgent: vi.fn(),
-  mockResolveConversationLlmSelectionForAgent: vi.fn(),
+  mockResolveForkParentSelection: vi.fn(),
   mockBuildSkillCatalogPrompt: vi.fn(),
   mockListAccessibleCatalogSkills: vi.fn(),
 }));
@@ -55,8 +56,8 @@ vi.mock("@/utils/llm-resolution", async () => {
   );
   return {
     ...actual,
-    resolveConversationLlmSelectionForAgent: (...args: unknown[]) =>
-      mockResolveConversationLlmSelectionForAgent(...args),
+    resolveForkParentSelection: (...args: unknown[]) =>
+      mockResolveForkParentSelection(...args),
   };
 });
 
@@ -641,7 +642,7 @@ describe("buildUserContent", () => {
 describe("executeA2AMessage current turn assembly", () => {
   function primeStreamMocks() {
     mockGetChatMcpTools.mockResolvedValue({});
-    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+    mockResolveForkParentSelection.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "claude-sonnet-4-6",
       selectedProvider: "anthropic",
@@ -882,7 +883,7 @@ describe("executeA2AMessage current turn assembly", () => {
 });
 
 describe("executeA2AMessage model selection", () => {
-  test("uses the shared conversation selection so delegated agents inherit the organization default model", async ({
+  test("uses the shared conversation selection so delegated agents inherit the organization default model and key", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -897,7 +898,7 @@ describe("executeA2AMessage model selection", () => {
       systemPrompt: "Handle the task.",
     });
 
-    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+    mockResolveForkParentSelection.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "gemini-2.5-pro",
       selectedProvider: "gemini",
@@ -945,15 +946,13 @@ describe("executeA2AMessage model selection", () => {
       parentDelegationChain: "agent-parent",
     });
 
-    expect(mockResolveConversationLlmSelectionForAgent).toHaveBeenCalledWith({
+    expect(mockResolveForkParentSelection).toHaveBeenCalledWith({
       agent: {
         llmApiKeyId: null,
         modelId: null,
       },
       organizationId: org.id,
       userId: user.id,
-      // A2A runs never adopt the acting member's /chat default.
-      includeMemberChatDefault: false,
     });
     expect(mockCreateLLMModelForAgent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -963,6 +962,9 @@ describe("executeA2AMessage model selection", () => {
         model: "gemini-2.5-pro",
         provider: "gemini",
         externalAgentId: `agent-parent:${agent.id}`,
+        // The key selected with the model, not a fresh lookup that would
+        // prefer the caller's personal key.
+        agentLlmApiKeyId: "org-key",
       }),
     );
   });
@@ -971,7 +973,7 @@ describe("executeA2AMessage model selection", () => {
 describe("executeA2AMessage isolation scope", () => {
   function primeExecutionMocks() {
     mockGetChatMcpTools.mockClear();
-    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+    mockResolveForkParentSelection.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "gemini-2.5-pro",
       selectedProvider: "gemini",
@@ -1118,7 +1120,7 @@ describe("executeA2AMessage unavailable tool errors", () => {
       systemPrompt: "Handle the task.",
     });
 
-    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+    mockResolveForkParentSelection.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "claude-sonnet-4-6",
       selectedProvider: "anthropic",
@@ -1199,7 +1201,7 @@ describe("executeA2AMessage skill catalog", () => {
     mockBuildSkillCatalogPrompt.mockClear();
     mockListAccessibleCatalogSkills.mockReset();
     mockListAccessibleCatalogSkills.mockResolvedValue([]);
-    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+    mockResolveForkParentSelection.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "gemini-2.5-pro",
       selectedProvider: "gemini",
@@ -1500,5 +1502,63 @@ describe("emitSubagentToolCalls", () => {
       message: { id: "m", role: "assistant" } as unknown as UIMessage,
     });
     expect(emitted).toHaveLength(0);
+  });
+
+  test("live emitter surfaces a call when its input is ready and again when it settles", () => {
+    const { bridge, emitted } = fakeBridge();
+    const emit = createLiveSubagentToolCallEmitter({
+      bridge,
+      parentToolCallId: "P1",
+    });
+
+    emit({
+      type: "tool-input-available",
+      toolCallId: "C1",
+      toolName: "web_search",
+      input: { q: "nitpicker" },
+    });
+    emit({ type: "text-delta", id: "t", delta: "thinking" });
+    emit({ type: "tool-output-error", toolCallId: "C2", errorText: "lost" });
+    emit({
+      type: "tool-input-available",
+      toolCallId: "C2",
+      toolName: "fetch",
+      input: {},
+    });
+    emit({ type: "tool-output-available", toolCallId: "C1", output: "1.2.3" });
+    emit({ type: "tool-output-error", toolCallId: "C2", errorText: "404" });
+
+    expect(emitted).toEqual([
+      {
+        parentToolCallId: "P1",
+        toolCallId: "C1",
+        toolName: "web_search",
+        input: { q: "nitpicker" },
+        state: "input-available",
+      },
+      {
+        parentToolCallId: "P1",
+        toolCallId: "C2",
+        toolName: "fetch",
+        input: {},
+        state: "input-available",
+      },
+      {
+        parentToolCallId: "P1",
+        toolCallId: "C1",
+        toolName: "web_search",
+        input: { q: "nitpicker" },
+        state: "output-available",
+        output: "1.2.3",
+      },
+      {
+        parentToolCallId: "P1",
+        toolCallId: "C2",
+        toolName: "fetch",
+        input: {},
+        state: "output-error",
+        errorText: "404",
+      },
+    ]);
   });
 });

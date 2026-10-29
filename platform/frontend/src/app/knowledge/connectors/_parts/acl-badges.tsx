@@ -11,7 +11,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useOrganizationMembers } from "@/lib/organization.query";
+import { useMemberOptionsReferences } from "@/lib/member-options.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { CollapsedBadgeList } from "./collapsed-badge-list";
 import {
@@ -45,8 +45,12 @@ export function AclBadges({
   groupNamesByToken?: Map<string, string>;
   noun?: RosterNoun;
 }) {
-  const { data: teams } = useTeams();
-  const { data: orgMembers } = useOrganizationMembers();
+  const { data: teams } = useTeams({ includeRelations: false });
+  const { data: orgMembers } = useMemberOptionsReferences({
+    emails: acl
+      .filter((entry) => entry.startsWith("user_email:"))
+      .map((entry) => entry.slice("user_email:".length)),
+  });
 
   if (acl.length === 0) {
     return (

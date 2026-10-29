@@ -1,18 +1,18 @@
 import { describe, expect, test } from "vitest";
 import {
-  ARCHESTRA_MARK,
-  archestraMarkWithText,
-} from "@/services/archestra-mark";
-import {
   renderSetupScript,
   type SetupScriptContext,
-} from "@/services/connection-setup-script";
+} from "@/services/agent-connection-setup";
+import { CLAUDE_CODE_GUARD_CLIENT } from "@/services/agent-connection-setup/guard/clients";
 import {
   buildStartupGuardContext,
   renderStartupGuardScript,
-} from "@/services/startup-guard";
-import { CLAUDE_CODE_GUARD_CLIENT } from "@/services/startup-guard.clients";
-import { renderStartupGuardPowerShell } from "@/services/startup-guard.windows";
+} from "@/services/agent-connection-setup/guard/startup-guard";
+import { renderStartupGuardPowerShell } from "@/services/agent-connection-setup/guard/startup-guard.windows";
+import {
+  ARCHESTRA_MARK,
+  archestraMarkWithText,
+} from "@/services/archestra-mark";
 
 function setupCtx(
   platform: SetupScriptContext["platform"],

@@ -24,6 +24,10 @@ export default defineConfig({
         __dirname,
         "../shared/api-error.ts",
       ),
+      "@archestra/shared/built-in-agents": path.resolve(
+        __dirname,
+        "../shared/built-in-agents.ts",
+      ),
       "@archestra/shared/consts": path.resolve(
         __dirname,
         "../shared/consts.ts",
@@ -31,6 +35,22 @@ export default defineConfig({
       "@archestra/shared/connection-setup": path.resolve(
         __dirname,
         "../shared/connection-setup.ts",
+      ),
+      "@archestra/shared/interactions/client": path.resolve(
+        __dirname,
+        "../shared/interactions/client.ts",
+      ),
+      "@archestra/shared/model-price": path.resolve(
+        __dirname,
+        "../shared/model-price.ts",
+      ),
+      "@archestra/shared/time-zone": path.resolve(
+        __dirname,
+        "../shared/time-zone.ts",
+      ),
+      "@archestra/shared/version": path.resolve(
+        __dirname,
+        "../shared/version.ts",
       ),
       "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
     },

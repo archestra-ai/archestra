@@ -94,7 +94,7 @@ describe("NewSkillPage catalog gating", () => {
     expect(
       screen.getByPlaceholderText(/Search skills by name/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("Custom GitHub URL")).toBeInTheDocument();
+    expect(screen.getByText("Git repository")).toBeInTheDocument();
     expect(screen.getByText("Blank template")).toBeInTheDocument();
     // The source step comes first; the editor waits for a choice.
     expect(screen.getByText("Source")).toBeInTheDocument();
@@ -109,7 +109,7 @@ describe("NewSkillPage catalog gating", () => {
     expect(
       screen.queryByPlaceholderText(/Search skills by name/i),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Custom GitHub URL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Git repository")).not.toBeInTheDocument();
     expect(screen.queryByText("Blank template")).not.toBeInTheDocument();
     // The blank-template editor opens directly, with no source step to go
     // back to.
@@ -126,7 +126,7 @@ describe("NewSkillPage catalog gating", () => {
     renderPage();
 
     expect(screen.queryByText("Popular repositories")).not.toBeInTheDocument();
-    expect(screen.queryByText("Custom GitHub URL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Git repository")).not.toBeInTheDocument();
     // No flash of the editor before the setting resolves.
     expect(contentEditor()).not.toBeInTheDocument();
   });
@@ -139,7 +139,7 @@ describe("NewSkillPage catalog gating", () => {
     renderPage();
 
     expect(screen.queryByText("Popular repositories")).not.toBeInTheDocument();
-    expect(screen.queryByText("Custom GitHub URL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Git repository")).not.toBeInTheDocument();
     expect(contentEditor()).toBeInTheDocument();
   });
 });

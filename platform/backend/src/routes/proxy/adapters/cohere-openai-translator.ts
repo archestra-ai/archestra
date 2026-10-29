@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Cohere, OpenAi } from "@/types";
+import { assertModelRouterCacheControls } from "../model-router-cache-controls";
 import {
   normalizeOpenAiContentParts,
   stringifyTextContent,
@@ -34,6 +35,7 @@ export function openaiToCohere(req: OpenAiRequest): {
   cohereBody: CohereRequest;
   openaiContext: CohereOpenaiContext;
 } {
+  assertModelRouterCacheControls("cohere", req);
   const loose = req as OpenAiRequest & {
     frequency_penalty?: number | null;
     presence_penalty?: number | null;

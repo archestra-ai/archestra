@@ -3,7 +3,6 @@ import {
   AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_CATALOG_ID,
   slugify,
-  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_LIST_AGENTS_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
@@ -80,7 +79,9 @@ describe("run_tool", () => {
         tokenAuth: {
           tokenId: "token-1",
           teamId: null,
-          isOrganizationToken: true,
+          isOrganizationToken: false,
+          isUserToken: true,
+          userId: user.id,
           organizationId: org.id,
         },
       };
@@ -225,6 +226,7 @@ describe("run_tool", () => {
     // Fresh agent with no Archestra tools assigned.
     const unassignedAgent = await makeAgent({
       name: "Unassigned Agent",
+      agentType: "agent",
       organizationId: mockContext.organizationId,
     });
 
@@ -240,12 +242,44 @@ describe("run_tool", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "is not assigned to this agent",
+      'is not available through the "Unassigned Agent" agent',
     );
     expect((result._meta?.archestraError as any)?.code).toBe(
       "tool_not_assigned",
     );
     expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+  });
+
+  // A model took a tool name from another agent's tool list and called it
+  // through its gateway; the refusal said "this agent" and nothing more.
+  test("names the gateway and says whose tools a refused name belongs to", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      name: "My Gateway",
+      agentType: "mcp_gateway",
+      organizationId: mockContext.organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      { tool_name: "create_agent", tool_args: { name: "some-agent" } },
+      {
+        ...mockContext,
+        agent: { id: gateway.id, name: gateway.name },
+        agentId: gateway.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain(
+      'is not available through the "My Gateway" MCP gateway',
+    );
+    expect(text).toContain("Tools listed for other agents");
+    expect(text).toContain(
+      'it can be added to the tools of the "My Gateway" MCP gateway',
+    );
   });
 
   test("routes agent delegation tool names through the built-in dispatcher", async ({
@@ -306,7 +340,9 @@ describe("run_tool", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
     const tool = await makeTool({
       name: "github__search_repositories",
       catalogId: catalog.id,
@@ -354,7 +390,9 @@ describe("run_tool", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
     const tool = await makeTool({
       name: "github__search_repositories",
       catalogId: catalog.id,
@@ -400,7 +438,9 @@ describe("run_tool", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
     const tool = await makeTool({
       name: "github__search_repositories",
       catalogId: catalog.id,
@@ -458,7 +498,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -496,8 +538,12 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const githubCatalog = await makeInternalMcpCatalog();
-      const gitlabCatalog = await makeInternalMcpCatalog();
+      const githubCatalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      const gitlabCatalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const githubTool = await makeTool({
         name: "github__search_repositories",
         catalogId: githubCatalog.id,
@@ -531,8 +577,12 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const githubCatalog = await makeInternalMcpCatalog();
-      const gitlabCatalog = await makeInternalMcpCatalog();
+      const githubCatalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      const gitlabCatalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const githubTool = await makeTool({
         name: "github__search_repositories",
         catalogId: githubCatalog.id,
@@ -579,7 +629,9 @@ describe("run_tool", () => {
       seedAndAssignArchestraTools,
     }) => {
       await seedAndAssignArchestraTools(testAgent.id);
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const colliding = await makeTool({
         name: "someserver__whoami",
         catalogId: catalog.id,
@@ -793,7 +845,7 @@ describe("run_tool", () => {
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
-    test("does not run for sessions without a user (org/team tokens)", async ({
+    test("does not run for sessions without a user (service-account tokens)", async ({
       makeInternalMcpCatalog,
       makeTool,
     }) => {
@@ -849,72 +901,6 @@ describe("run_tool", () => {
       expect((result.content[0] as any).text).toContain(
         'No tool named "giphy__image_search"',
       );
-      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
-    });
-
-    test("evaluates invocation policies for dynamically resolved tools", async ({
-      makeAgent,
-      makeInternalMcpCatalog,
-      makeMcpServer,
-      makeMember,
-      makeOrganization,
-      makeTool,
-      makeToolPolicy,
-      makeUser,
-    }) => {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      await makeMember(user.id, org.id, { role: "admin" });
-      const agent = await makeAgent({
-        name: "Dynamic Policy Agent",
-        organizationId: org.id,
-        accessAllTools: true,
-      });
-      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-      const tool = await makeTool({
-        name: "workspace__export_data",
-        catalogId: catalog.id,
-      });
-      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
-      await makeToolPolicy(tool.id, {
-        action: "block_always",
-        reason: "External export blocked",
-        conditions: [
-          { key: "destination", operator: "equal", value: "external" },
-        ],
-      });
-
-      const result = await executeArchestraTool(
-        TOOL_RUN_TOOL_FULL_NAME,
-        {
-          tool_name: "workspace__export_data",
-          tool_args: { destination: "external" },
-        },
-        {
-          ...mockContext,
-          agent: { id: agent.id, name: agent.name },
-          agentId: agent.id,
-          organizationId: org.id,
-          userId: user.id,
-        },
-      );
-
-      expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        "External export blocked",
-      );
-      // The block carries a machine-readable policy_denied error so clients can
-      // render it structurally instead of scraping the prose.
-      const archestraError = (result.structuredContent as any)?.archestraError;
-      expect(archestraError).toMatchObject({
-        type: "policy_denied",
-        toolName: "workspace__export_data",
-        input: { destination: "external" },
-        // The resolved row id rides along so the "Edit policy" modal can open
-        // this All-mode tool, which has no agent_tools assignment to look up.
-        toolId: tool.id,
-      });
-      expect((result._meta as any)?.archestraError).toEqual(archestraError);
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
   });
@@ -1051,7 +1037,7 @@ describe("run_tool", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "not assigned to this agent",
+        "is not available through",
       );
       expect(runSpy).not.toHaveBeenCalled();
     });
@@ -1153,7 +1139,7 @@ describe("run_tool", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "not assigned to this agent",
+        "is not available through",
       );
     });
 
@@ -1214,7 +1200,7 @@ describe("run_tool", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "not assigned to this agent",
+        "is not available through",
       );
       const assignedNames = await ToolModel.getAssignedToolNames(
         dynamicAgent.id,
@@ -1228,7 +1214,9 @@ describe("run_tool", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
     const tool = await makeTool({
       name: "github__search_repositories",
       catalogId: catalog.id,
@@ -1266,7 +1254,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const enabled = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1301,7 +1291,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1355,7 +1347,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const assigned = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1394,7 +1388,9 @@ describe("run_tool", () => {
         targetAgent.id,
       );
       await makeAgentTool(testAgent.id, delegationTool.id);
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const other = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1449,16 +1445,16 @@ describe("run_tool", () => {
     });
   });
 
-  test("recovery message wins over the policy refusal when the agent has other tools", async ({
+  test("recovery message wins over the conversation-filter refusal when the agent has other tools", async ({
     makeAgentTool,
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    // Reproduces the staging case: the agent HAS an assigned tool, so the
-    // policy gate's disabled-tool filter is active (non-empty enabled set) and
-    // would otherwise emit "not enabled for this conversation" for a
-    // hallucinated name. The pre-check must intercept first.
-    const catalog = await makeInternalMcpCatalog();
+    // The agent HAS an assigned tool, so a hallucinated name must get the
+    // unavailable-tool recovery, never "not enabled for this conversation".
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
     const assigned = await makeTool({
       name: "github__search_repositories",
       catalogId: catalog.id,
@@ -1478,180 +1474,14 @@ describe("run_tool", () => {
     expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
-  test("blocks third-party MCP tools when target invocation policy denies the call", async ({
-    makeAgent,
-    makeAgentTool,
-    makeInternalMcpCatalog,
-    makeMember,
-    makeOrganization,
-    makeTool,
-    makeToolPolicy,
-    makeUser,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      name: "Run Tool Policy Agent",
-      organizationId: org.id,
-    });
-    const catalog = await makeInternalMcpCatalog();
-    const tool = await makeTool({
-      name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
-      catalogId: catalog.id,
-    });
-    await makeAgentTool(agent.id, tool.id);
-    await makeToolPolicy(tool.id, {
-      action: "block_always",
-      reason: "External export blocked",
-      conditions: [
-        { key: "destination", operator: "equal", value: "external" },
-      ],
-    });
-
-    const result = await executeArchestraTool(
-      TOOL_RUN_TOOL_FULL_NAME,
-      {
-        tool_name: tool.name,
-        tool_args: { destination: "external" },
-      },
-      {
-        ...mockContext,
-        agent: { id: agent.id, name: agent.name },
-        agentId: agent.id,
-        organizationId: org.id,
-        userId: user.id,
-      },
-    );
-
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(tool.name);
-    expect((result.content[0] as any).text).toContain(
-      "External export blocked",
-    );
-    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
-  });
-
-  test("blocks third-party MCP tools that require approval when approval was not handled", async ({
-    makeAgent,
-    makeAgentTool,
-    makeInternalMcpCatalog,
-    makeMember,
-    makeOrganization,
-    makeTool,
-    makeToolPolicy,
-    makeUser,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      name: "Run Tool Approval Agent",
-      organizationId: org.id,
-    });
-    const catalog = await makeInternalMcpCatalog();
-    const tool = await makeTool({
-      name: `workspace__approve_${crypto.randomUUID().slice(0, 8)}`,
-      catalogId: catalog.id,
-    });
-    await makeAgentTool(agent.id, tool.id);
-    await makeToolPolicy(tool.id, {
-      action: "require_approval",
-      conditions: [],
-    });
-
-    const result = await executeArchestraTool(
-      TOOL_RUN_TOOL_FULL_NAME,
-      {
-        tool_name: tool.name,
-        tool_args: { destination: "external" },
-      },
-      {
-        ...mockContext,
-        agent: { id: agent.id, name: agent.name },
-        agentId: agent.id,
-        organizationId: org.id,
-        userId: user.id,
-      },
-    );
-
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(tool.name);
-    expect((result.content[0] as any).text).toContain(
-      TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
-    );
-    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
-  });
-
-  test("dispatches approval-required third-party MCP tools after chat approval was handled", async ({
-    makeAgent,
-    makeAgentTool,
-    makeInternalMcpCatalog,
-    makeMember,
-    makeOrganization,
-    makeTool,
-    makeToolPolicy,
-    makeUser,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      name: "Run Tool Approved Agent",
-      organizationId: org.id,
-    });
-    const catalog = await makeInternalMcpCatalog();
-    const tool = await makeTool({
-      name: `workspace__approved_${crypto.randomUUID().slice(0, 8)}`,
-      catalogId: catalog.id,
-    });
-    await makeAgentTool(agent.id, tool.id);
-    await makeToolPolicy(tool.id, {
-      action: "require_approval",
-      conditions: [],
-    });
-    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
-      content: [{ type: "text", text: "Approved response" }],
-      isError: false,
-    } as any);
-
-    const result = await executeArchestraTool(
-      TOOL_RUN_TOOL_FULL_NAME,
-      {
-        tool_name: tool.name,
-        tool_args: { destination: "external" },
-      },
-      {
-        ...mockContext,
-        agent: { id: agent.id, name: agent.name },
-        agentId: agent.id,
-        organizationId: org.id,
-        userId: user.id,
-        approvalRequiredPoliciesHandled: true,
-      },
-    );
-
-    expect(result.isError).toBe(false);
-    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: tool.name,
-        arguments: { destination: "external" },
-      }),
-      agentOwner(agent.id),
-      mockContext.tokenAuth,
-      { conversationId: testConversationId },
-    );
-    expect(result.content).toEqual([
-      { type: "text", text: "Approved response" },
-    ]);
-  });
-
   test("normalizes non-array third-party content to a text result", async ({
     makeAgentTool,
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
     const tool = await makeTool({
       name: "github__get_repository",
       catalogId: catalog.id,
@@ -1690,7 +1520,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "final_answer__submit_result",
         catalogId: catalog.id,
@@ -1726,7 +1558,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "search__query",
         catalogId: catalog.id,
@@ -1766,7 +1600,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "tickets__bulk_update",
         catalogId: catalog.id,
@@ -1807,7 +1643,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1845,7 +1683,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1879,7 +1719,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1911,7 +1753,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -2073,7 +1917,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -2119,7 +1965,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -2161,7 +2009,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "workspace__get_app",
         catalogId: catalog.id,
@@ -2236,7 +2086,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "final_answer__submit_result",
         catalogId: catalog.id,
@@ -2280,7 +2132,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "loose__ingest",
         catalogId: catalog.id,
@@ -2320,7 +2174,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -2366,7 +2222,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -2399,71 +2257,6 @@ describe("run_tool", () => {
         { conversationId: testConversationId },
       );
       expect(result.content).toEqual([{ type: "text", text: "ok" }]);
-    });
-
-    test("invocation policy evaluates the repaired args and the note rides on the refusal", async ({
-      makeAgent,
-      makeAgentTool,
-      makeInternalMcpCatalog,
-      makeMember,
-      makeOrganization,
-      makeTool,
-      makeToolPolicy,
-      makeUser,
-    }) => {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      await makeMember(user.id, org.id, { role: "admin" });
-      const agent = await makeAgent({
-        name: "Repair Policy Agent",
-        organizationId: org.id,
-      });
-      const catalog = await makeInternalMcpCatalog();
-      const tool = await makeTool({
-        name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
-        catalogId: catalog.id,
-        parameters: {
-          type: "object",
-          properties: { destination: { type: "string" } },
-          required: ["destination"],
-        },
-      });
-      await makeAgentTool(agent.id, tool.id);
-      await makeToolPolicy(tool.id, {
-        action: "block_always",
-        reason: "External export blocked",
-        conditions: [
-          { key: "destination", operator: "equal", value: "external" },
-        ],
-      });
-
-      const result = await executeArchestraTool(
-        TOOL_RUN_TOOL_FULL_NAME,
-        {
-          tool_name: tool.name,
-          tool_args: { destination: { value: "external" } },
-        },
-        {
-          ...mockContext,
-          agent: { id: agent.id, name: agent.name },
-          agentId: agent.id,
-          organizationId: org.id,
-          userId: user.id,
-        },
-      );
-
-      expect(result.isError).toBe(true);
-      // The condition matches only the unwrapped string, so the block firing
-      // proves the policy evaluated the repaired args — visible in the
-      // structured error's input too.
-      expect((result.structuredContent as any)?.archestraError).toMatchObject({
-        type: "policy_denied",
-        input: { destination: "external" },
-      });
-      const text = result.content.map((item) => (item as any).text).join("\n");
-      expect(text).toContain("External export blocked");
-      expect(text).toContain('"destination"');
-      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
     test("leaves a string-carried scalar wrapped — the repair never retypes a value", () => {

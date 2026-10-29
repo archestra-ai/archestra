@@ -6,7 +6,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
-import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
+import { InternalMcpCatalogModel } from "@/models";
 import {
   accessGrants,
   afterEach,
@@ -119,27 +119,41 @@ describe("member catalog update is limited to own personal items", () => {
     expect(response.statusCode).toBe(404);
   });
 
-  test("a member swapping their own image to an untrusted one holds it for approval", async () => {
-    await OrganizationModel.patch(organizationId, {
-      defaultEnvironmentTrustedImageRegistries: ["ghcr.io/acme"],
-    });
+  test("a member cannot change what their own entry runs, only describe it", async () => {
     const catalog = await InternalMcpCatalogModel.create(
       {
         name: `local-${crypto.randomUUID().slice(0, 8)}`,
         serverType: "local",
-        localConfig: { dockerImage: "ghcr.io/acme/ok:1" },
+        localConfig: { dockerImage: "ghcr.io/acme/ok:1", command: "node" },
       },
       { organizationId, authorId: member.id },
     );
 
-    const response = await app.inject({
+    const swapped = await app.inject({
       method: "PUT",
       url: `/api/internal_mcp_catalog/${catalog.id}`,
       payload: { localConfig: { dockerImage: "ghcr.io/evil/x:1" } },
     });
+    expect(swapped.statusCode).toBe(403);
+    expect(swapped.json().error.message).toBe(
+      "Changing what this MCP server runs or connects to needs permission to add MCP servers to the registry.",
+    );
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+        ?.dockerImage,
+    ).toBe("ghcr.io/acme/ok:1");
 
-    expect(response.statusCode).toBe(200);
-    const after = await InternalMcpCatalogModel.findById(catalog.id);
-    expect(after?.catalogItemApprovalStatus).toBe("pending");
+    // Its stored config sent back unchanged is no change.
+    const described = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        description: "Notes for me",
+        serverType: "local",
+        localConfig: { dockerImage: "ghcr.io/acme/ok:1", command: "node" },
+      },
+    });
+    expect(described.statusCode, described.body).toBe(200);
+    expect(described.json().description).toBe("Notes for me");
   });
 });

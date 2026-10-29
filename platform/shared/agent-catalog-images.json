@@ -3,5 +3,8 @@
   "codex": "agent-codex",
   "opencode": "agent-opencode",
   "hermes": "agent-hermes",
-  "openclaw": "agent-openclaw"
+  "openclaw": "agent-openclaw",
+  "grok": "agent-grok",
+  "kimi": "agent-kimi",
+  "copilot": "agent-copilot"
 }

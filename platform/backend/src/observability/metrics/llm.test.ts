@@ -27,7 +27,9 @@ vi.mock("prom-client", () => {
     },
   };
 });
+vi.mock("@/logging");
 
+import logger from "@/logging";
 import {
   getObservableFetch,
   getObservableGenAI,
@@ -52,25 +54,23 @@ describe("getObservableFetch", () => {
   });
 
   test("records duration and tokens on successful request", async () => {
-    const mockResponse = {
-      ok: true,
-      status: 200,
-      headers: new Headers({ "content-type": "application/json" }),
-      clone: () => ({
-        json: async () => ({
-          usage: { prompt_tokens: 100, completion_tokens: 50 },
-          model: "gpt-4",
-        }),
-      }),
-    } as Response;
+    const mockResponse = jsonResponse({
+      usage: { prompt_tokens: 100, completion_tokens: 50 },
+      model: "gpt-4",
+    });
 
     globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
 
     const observableFetch = getObservableFetch("openai", testAgent, "api");
 
-    await observableFetch("https://api.openai.com/v1/chat", {
+    const response = await observableFetch("https://api.openai.com/v1/chat", {
       method: "POST",
       body: JSON.stringify({ model: "gpt-4" }),
+    });
+    // Token extraction consumes the body once; the SDK still reads all of it.
+    expect(await response.json()).toEqual({
+      usage: { prompt_tokens: 100, completion_tokens: 50 },
+      model: "gpt-4",
     });
 
     expect(histogramObserve).toHaveBeenCalledWith({
@@ -120,21 +120,14 @@ describe("getObservableFetch", () => {
   });
 
   test("records cache tokens on a non-streaming response with cached prompt", async () => {
-    const mockResponse = {
-      ok: true,
-      status: 200,
-      headers: new Headers({ "content-type": "application/json" }),
-      clone: () => ({
-        json: async () => ({
-          usage: {
-            prompt_tokens: 100,
-            completion_tokens: 50,
-            prompt_tokens_details: { cached_tokens: 30 },
-          },
-          model: "gpt-4",
-        }),
-      }),
-    } as Response;
+    const mockResponse = jsonResponse({
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 50,
+        prompt_tokens_details: { cached_tokens: 30 },
+      },
+      model: "gpt-4",
+    });
 
     globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
 
@@ -181,23 +174,16 @@ describe("getObservableFetch", () => {
   // only missing. So every provider that serves both shapes must sniff.
   for (const provider of ["openai", "azure", "perplexity"] as const) {
     test(`${provider}: counts tokens on a Responses-shaped body`, async () => {
-      const mockResponse = {
-        ok: true,
-        status: 200,
-        headers: new Headers({ "content-type": "application/json" }),
-        clone: () => ({
-          json: async () => ({
-            usage: {
-              input_tokens: 4321,
-              input_tokens_details: { cached_tokens: 4000 },
-              output_tokens: 77,
-              output_tokens_details: { reasoning_tokens: 11 },
-              total_tokens: 4398,
-            },
-            model: "gpt-4o",
-          }),
-        }),
-      } as Response;
+      const mockResponse = jsonResponse({
+        usage: {
+          input_tokens: 4321,
+          input_tokens_details: { cached_tokens: 4000 },
+          output_tokens: 77,
+          output_tokens_details: { reasoning_tokens: 11 },
+          total_tokens: 4398,
+        },
+        model: "gpt-4o",
+      });
 
       globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
 
@@ -321,17 +307,32 @@ describe("getObservableFetch", () => {
     });
   });
 
+  test("handler-owned token reporting retains HTTP duration without duplicating tokens", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ usage: { input_tokens: 200, output_tokens: 75 } }),
+            { headers: { "content-type": "application/json" } },
+          ),
+        ),
+    );
+    const observableFetch = getObservableFetch("anthropic", testAgent, "api", {
+      reportTokens: false,
+    });
+    await observableFetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+    });
+    expect(histogramObserve).toHaveBeenCalledTimes(1);
+    expect(counterInc).not.toHaveBeenCalled();
+  });
+
   test("records tokens for Anthropic response format", async () => {
-    const mockResponse = {
-      ok: true,
-      status: 200,
-      headers: new Headers({ "content-type": "application/json" }),
-      clone: () => ({
-        json: async () => ({
-          usage: { input_tokens: 200, output_tokens: 75 },
-        }),
-      }),
-    } as Response;
+    const mockResponse = jsonResponse({
+      usage: { input_tokens: 200, output_tokens: 75 },
+    });
 
     globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
 
@@ -785,6 +786,29 @@ describe("reportLLMCost", () => {
     vi.clearAllMocks();
     testAgent = await makeAgent();
     initializeMetrics([]);
+  });
+
+  test("zero settled cost is quiet while missing cost warns once per model", () => {
+    const params = {
+      provider: "openai" as const,
+      profile: testAgent,
+      model: "gpt-4",
+      source: "api" as const,
+      billingMode: "metered" as const,
+    };
+    reportLLMCost({ ...params, cost: 0 });
+    expect(counterInc).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+    reportLLMCost({ ...params, cost: undefined });
+    reportLLMCost({ ...params, cost: undefined });
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      { provider: "openai", model: "gpt-4" },
+      "Cost not specified when reporting",
+    );
+    reportLLMCost({ ...params, model: "gpt-5", cost: undefined });
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+    expect(counterInc).not.toHaveBeenCalled();
   });
 
   test("records cost with model and metered billing mode", () => {
@@ -1306,3 +1330,10 @@ describe("reportLLMCacheCost", () => {
     });
   });
 });
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}

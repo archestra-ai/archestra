@@ -5,8 +5,8 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import QuickLRU from "quick-lru";
 import { z } from "zod";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
+import type { GatedCaller } from "@/auth/permission-gated";
 import { McpServerModel, ToolModel } from "@/models";
-import { enforceAppRuntimeInvocationPolicy } from "@/services/apps/app-tool-runtime-gate";
 import { ApiError, type McpServer, UuidIdSchema } from "@/types";
 import {
   createStatelessTransport,
@@ -75,12 +75,11 @@ const mcpServerProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Gate tools/call on _meta.ui.visibility: model-only tools are not
       // app-callable. Fail-closed on unknown tools. Mirrors the agent proxy.
       if (body.method === "tools/call") {
-        const denied = await rejectDisallowedToolCall(
-          catalogId,
-          body,
-          reply,
+        const denied = await rejectDisallowedToolCall(catalogId, body, reply, {
+          kind: "caller",
           userId,
-        );
+          organizationId,
+        });
         if (denied) return denied;
       }
 
@@ -90,6 +89,7 @@ const mcpServerProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ({ server: mcp } = createServerScopedServer({
           mcpServerId,
           catalogId,
+          caller: { kind: "caller", userId, organizationId },
         }));
         const transport = createStatelessTransport(mcpServerId);
         await mcp.connect(transport);
@@ -152,7 +152,7 @@ async function rejectDisallowedToolCall(
   catalogId: string,
   body: Record<string, unknown>,
   reply: StatusReply,
-  userId: string,
+  caller: GatedCaller,
 ): Promise<object | null> {
   const callParams =
     body.params && typeof body.params === "object"
@@ -168,7 +168,7 @@ async function rejectDisallowedToolCall(
       "Invalid params: tools/call requires a string 'name' parameter",
     );
   }
-  const tools = await ToolModel.findByCatalogIdWithMeta(catalogId);
+  const tools = await ToolModel.findByCatalogIdWithMeta(catalogId, caller);
   // The app calls by the upstream's raw tool name; the DB stores the slugified
   // (prefixed) name. Match on the unslugified name (fall back to exact).
   const tool = tools.find(
@@ -194,28 +194,6 @@ async function rejectDisallowedToolCall(
       -32601,
       `Tool "${toolName}" is not accessible from MCP Apps (visibility: [${visibility.join(", ")}])`,
     );
-  }
-
-  // This runtime dispatches to the upstream with the install's own credentials
-  // and otherwise never touches the policy engine, so tool-invocation policies
-  // must be enforced here — mirroring the owned-app runtime (gateAppToolCall).
-  // The app sandbox is a trusted, no-approval-UI context, so
-  // block_always/require_approval gate the call while a no-policy tool stays
-  // callable. Policy is keyed by the stored (slugified) name.
-  const refusal = await enforceAppRuntimeInvocationPolicy({
-    resolvedToolName: tool.name,
-    resolvedToolId: tool.id,
-    displayName: toolName,
-    toolInput:
-      callParams?.arguments && typeof callParams.arguments === "object"
-        ? (callParams.arguments as Record<string, unknown>)
-        : {},
-    userId,
-    isContextTrusted: true,
-    treatRequireApprovalAsBlock: true,
-  });
-  if (refusal) {
-    return jsonRpcError(reply, body.id, refusal.code, refusal.reason);
   }
 
   return null;

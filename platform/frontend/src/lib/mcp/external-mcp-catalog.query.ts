@@ -3,7 +3,7 @@ import {
   type archestraCatalogTypes,
 } from "@archestra/shared";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import type { SelectedCategory } from "@/app/mcp/registry/_parts/CatalogFilters";
+import type { SelectedCategory } from "@/app/mcp/registry/_parts/catalog-filters";
 import { throwOnApiError } from "@/lib/utils/api";
 
 type SearchResponse =

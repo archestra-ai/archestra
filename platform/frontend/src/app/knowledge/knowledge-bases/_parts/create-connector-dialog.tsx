@@ -72,6 +72,7 @@ import {
   NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { hasOnlyGithubRepositorySettingsErrors } from "./github-repository-settings-errors";
 import { PerforcePermissionSyncFields } from "./perforce-config-fields";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
@@ -115,9 +116,9 @@ export function CreateConnectorDialog({
   );
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const [activeSection, setActiveSection] = useState<
-    "general" | "permissions" | "advanced"
-  >("general");
+  const [activeSection, setActiveSection] = useState<"general" | "advanced">(
+    "general",
+  );
   const [search, setSearch] = useState("");
 
   // M-Files is in beta: deployments that haven't opted in never see the type.
@@ -426,12 +427,16 @@ export function CreateConnectorDialog({
       activeSection={activeSection}
       navItems={[
         { id: "general", label: "General" },
-        { id: "permissions", label: "Permissions" },
         { id: "advanced", label: "Advanced" },
       ]}
       onActiveSectionChange={setActiveSection}
-      onSubmit={form.handleSubmit(handleSubmit, () =>
-        setActiveSection("general"),
+      onSubmit={form.handleSubmit(handleSubmit, (errors) =>
+        setActiveSection(
+          connectorType === "github" &&
+            hasOnlyGithubRepositorySettingsErrors(errors)
+            ? "advanced"
+            : "general",
+        ),
       )}
       wrapForm={(children) => <Form {...form}>{children}</Form>}
       headerExtra={
@@ -618,13 +623,10 @@ export function CreateConnectorDialog({
             )}
           />
         )}
-      </div>
-      <div hidden={activeSection !== "permissions"}>
         <InitialResourcePermissions
           resource="knowledgeConnector"
           grants={initialGrants}
           onChange={setInitialGrants}
-          standalone
         />
       </div>
       <div hidden={activeSection !== "advanced"} className="space-y-4">

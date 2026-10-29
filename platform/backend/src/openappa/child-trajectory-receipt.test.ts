@@ -26,7 +26,7 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
   test("round-trips a complete signed binding beside the display marker", () => {
     const footer = mintChildTrajectoryReceipt(BINDING);
     expect(footer).toMatch(
-      /^▄█▄▄▄█▄\n██▄█▄██ {2}started subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}\n\[appa\] child trajectory appact2-[A-Za-z0-9_-]+\.[0-9a-f]{64}\.$/,
+      /^▄█▄▄▄█▄ {2}started subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}\n\[appa\] child trajectory appact2-[A-Za-z0-9_-]+\.[0-9a-f]{64}\.$/,
     );
     const stripped = stripChildTrajectoryReceipts(
       appendChildTrajectoryReceipt("compacted history", footer ?? ""),
@@ -45,6 +45,22 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
         childNativeId: BINDING.childNativeId,
       }),
     ).toBe(true);
+  });
+
+  test("strips legacy two-line and space-collapsed child trajectory display headers", () => {
+    const footer = mintChildTrajectoryReceipt(BINDING);
+    if (!footer) throw new Error("expected a child trajectory receipt");
+    const legacyTwoLine = footer.replace(/^▄█▄▄▄█▄/, "▄█▄▄▄█▄\n██▄█▄██");
+    const legacyCollapsed = footer.replace(/^▄█▄▄▄█▄/, "▄█▄▄▄█▄ ██▄█▄██");
+
+    for (const candidate of [legacyTwoLine, legacyCollapsed]) {
+      const stripped = stripChildTrajectoryReceipts(
+        appendChildTrajectoryReceipt("compacted history", candidate),
+      );
+      expect(stripped.text).toBe("compacted history");
+      expect(stripped.receipts).toHaveLength(1);
+      expect(stripped.receipts[0]).toMatchObject(BINDING);
+    }
   });
 
   test("signs a runtime workspace anchor without changing a v2 receipt", () => {
@@ -89,6 +105,53 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
     expect(stripChildTrajectoryReceipts(`${footer}\r\n\r\nhello`).text).toBe(
       "hello",
     );
+  });
+
+  test("binds a mapped teammate receipt to its original native conversation", () => {
+    const footer = mintChildTrajectoryReceipt({
+      ...BINDING,
+      nativeConversationId: "native-child-session",
+    });
+    const [receipt] = stripChildTrajectoryReceipts(footer ?? "").receipts;
+    const checks = {
+      receipt,
+      organizationId: BINDING.organizationId,
+      callerId: BINDING.callerId,
+      spawnerNativeId: BINDING.spawnerNativeId,
+      childNativeId: BINDING.childNativeId,
+    };
+    expect(receipt.nativeConversationId).toBe("native-child-session");
+    expect(
+      verifyChildTrajectoryReceipt({
+        ...checks,
+        nativeConversationId: "native-child-session",
+      }),
+    ).toBe(true);
+    expect(
+      verifyChildTrajectoryReceipt({
+        ...checks,
+        nativeConversationId: "another-child-session",
+      }),
+    ).toBe(false);
+    expect(
+      verifyChildTrajectoryReceipt({
+        ...checks,
+        receipt: { ...receipt, nativeConversationId: "another-child-session" },
+      }),
+    ).toBe(false);
+    const [old] = stripChildTrajectoryReceipts(
+      mintChildTrajectoryReceipt(BINDING) ?? "",
+    ).receipts;
+    expect(verifyChildTrajectoryReceipt({ ...checks, receipt: old })).toBe(
+      true,
+    );
+    expect(
+      verifyChildTrajectoryReceipt({
+        ...checks,
+        receipt: old,
+        nativeConversationId: "native-child-session",
+      }),
+    ).toBe(false);
   });
 
   test("treats the pretty code as display-only", () => {
@@ -169,7 +232,63 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
     expect(stripChildTrajectoryReceipts(inline ?? "").receipts).toHaveLength(1);
   });
 
-  test("signs marker-only bindings without inventing a native child id", () => {
+  test.each([
+    {},
+    { nativeConversationId: "native-conversation" },
+    { runtimeSessionId: "user:alice|workspace" },
+    {
+      runtimeSessionId: "user:alice|workspace",
+      nativeConversationId: "native-conversation",
+    },
+  ])("requires an explicitly expected native identity to be sealed: %j", (anchor) => {
+    const [bound] = stripChildTrajectoryReceipts(
+      mintChildTrajectoryReceipt({ ...BINDING, ...anchor }) ?? "",
+    ).receipts;
+    const [early] = stripChildTrajectoryReceipts(
+      mintChildTrajectoryReceipt({
+        ...BINDING,
+        ...anchor,
+        childNativeId: undefined,
+      }) ?? "",
+    ).receipts;
+    const scope = {
+      organizationId: BINDING.organizationId,
+      callerId: BINDING.callerId,
+      spawnerNativeId: BINDING.spawnerNativeId,
+    };
+    // Ownership verification does not claim an unknown native identity.
+    expect(verifyChildTrajectoryReceipt({ ...scope, receipt: early })).toBe(
+      true,
+    );
+    expect(verifyChildTrajectoryReceipt({ ...scope, receipt: bound })).toBe(
+      true,
+    );
+    expect(
+      verifyChildTrajectoryReceipt({
+        ...scope,
+        receipt: bound,
+        childNativeId: BINDING.childNativeId,
+      }),
+    ).toBe(true);
+    for (const receipt of [bound, early]) {
+      expect(
+        verifyChildTrajectoryReceipt({
+          ...scope,
+          receipt,
+          childNativeId: "different-native-id",
+        }),
+      ).toBe(false);
+    }
+    expect(
+      verifyChildTrajectoryReceipt({
+        ...scope,
+        receipt: early,
+        childNativeId: BINDING.childNativeId,
+      }),
+    ).toBe(false);
+  });
+
+  test("signs marker-only bindings without attesting to a later native child id", () => {
     const footer = mintChildTrajectoryReceipt({
       ...BINDING,
       childNativeId: undefined,
@@ -183,9 +302,17 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
         organizationId: BINDING.organizationId,
         callerId: BINDING.callerId,
         spawnerNativeId: BINDING.spawnerNativeId,
-        childNativeId: "later-native-id",
       }),
     ).toBe(true);
+    expect(
+      verifyChildTrajectoryReceipt({
+        receipt,
+        organizationId: BINDING.organizationId,
+        callerId: BINDING.callerId,
+        spawnerNativeId: BINDING.spawnerNativeId,
+        childNativeId: "later-native-id",
+      }),
+    ).toBe(false);
   });
 
   test("does not mint a binding without its stable child id", () => {
@@ -197,6 +324,24 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
   test("does not mint without the signing secret", () => {
     config.openappa.offerSigningSecret = "";
     expect(mintChildTrajectoryReceipt(BINDING)).toBeUndefined();
+  });
+
+  test("treats a whitespace-only signing secret as no secret", () => {
+    const footer = mintChildTrajectoryReceipt(BINDING);
+    if (!footer) throw new Error("expected a child trajectory receipt");
+    const [receipt] = stripChildTrajectoryReceipts(footer).receipts;
+
+    config.openappa.offerSigningSecret = " \t\n ";
+    expect(mintChildTrajectoryReceipt(BINDING)).toBeUndefined();
+    expect(
+      verifyChildTrajectoryReceipt({
+        receipt,
+        organizationId: BINDING.organizationId,
+        callerId: BINDING.callerId,
+        spawnerNativeId: BINDING.spawnerNativeId,
+        childNativeId: BINDING.childNativeId,
+      }),
+    ).toBe(false);
   });
 
   test("passes benign oversized text through unchanged", () => {

@@ -47,6 +47,7 @@ import db, { schema } from "@/database";
 import {
   ConnectorRunModel,
   KbChunkModel,
+  KbConnectorDocumentCountModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
 } from "@/models";
@@ -122,10 +123,15 @@ describe("ConnectorSyncService", () => {
       { id: "ext-2", title: "Doc 2", content: "Content of doc 2" },
     ]);
     mockGetConnector.mockReturnValue(mockImpl);
+    // Stores 0 before the run, so only the run's own write can show 2.
+    await KbConnectorDocumentCountModel.findByConnectorIds([connector.id]);
 
     const result = await connectorSyncService.executeSync(connector.id);
 
     expect(result.status).toBe("success");
+    expect(
+      await KbConnectorDocumentCountModel.findByConnectorIds([connector.id]),
+    ).toEqual(new Map([[connector.id, 2]]));
 
     // Run stays "running" until batch_embedding tasks finalize it
     const run = await ConnectorRunModel.findById(result.runId);
@@ -1058,6 +1064,7 @@ describe("ConnectorSyncService", () => {
         metadata: { mfilesObjectKey: "0:999" },
       }),
     ]);
+    await KbConnectorDocumentCountModel.findByConnectorIds([connector.id]);
 
     setupSecret();
     mockGetConnector.mockReturnValue({
@@ -1080,6 +1087,10 @@ describe("ConnectorSyncService", () => {
     });
 
     await connectorSyncService.executeSync(connector.id);
+
+    expect(
+      await KbConnectorDocumentCountModel.findByConnectorIds([connector.id]),
+    ).toEqual(new Map([[connector.id, 2]]));
 
     await expect(
       KbDocumentModel.findBySourceId({
@@ -1423,6 +1434,43 @@ describe("ConnectorSyncService", () => {
     const updated = await KnowledgeBaseConnectorModel.findById(connector.id);
     expect(updated?.lastSyncStatus).toBe("failed");
     expect(updated?.lastSyncError).toContain("Connection failed");
+  });
+
+  test("a run that fails after ingesting a batch still stores the connector's total", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+    await KbConnectorDocumentCountModel.findByConnectorIds([connector.id]);
+
+    setupSecret();
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(0),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [
+              { id: "ext-1", title: "Doc 1", content: "Content of doc 1" },
+            ],
+            checkpoint: { cursor: "1" },
+            hasMore: true,
+          };
+          throw new Error("Connection failed");
+        })(),
+      ),
+    });
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    expect(result.status).toBe("failed");
+    expect(
+      await KbConnectorDocumentCountModel.findByConnectorIds([connector.id]),
+    ).toEqual(new Map([[connector.id, 1]]));
   });
 
   test("executeSync enqueues embedding tasks for ingested documents", async ({

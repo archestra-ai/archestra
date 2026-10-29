@@ -1,4 +1,12 @@
-import { Clock, Fingerprint, Github, Sparkles, Star, User } from "lucide-react";
+import {
+  Clock,
+  Fingerprint,
+  Github,
+  Layers,
+  Sparkles,
+  Star,
+  User,
+} from "lucide-react";
 import { InlineTag } from "@/components/ui/inline-tag";
 
 /**
@@ -37,6 +45,15 @@ export function FreeModelBadge() {
       className="text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-950"
     >
       free
+    </InlineTag>
+  );
+}
+
+/** Marks a model a model pool serves, so requests for it fail over. */
+export function PooledModelBadge() {
+  return (
+    <InlineTag icon={<Layers />} className="text-muted-foreground bg-muted">
+      pooled
     </InlineTag>
   );
 }

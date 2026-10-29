@@ -1,4 +1,5 @@
 import { ChatPageContent } from "../page.client";
+import { ConversationParts } from "./conversation-parts";
 
 export default async function ConversationPage({
   params,
@@ -8,9 +9,12 @@ export default async function ConversationPage({
   const { conversationId } = await params;
 
   return (
-    <ChatPageContent
-      key={conversationId}
-      routeConversationId={conversationId}
-    />
+    <>
+      <ConversationParts />
+      <ChatPageContent
+        key={conversationId}
+        routeConversationId={conversationId}
+      />
+    </>
   );
 }

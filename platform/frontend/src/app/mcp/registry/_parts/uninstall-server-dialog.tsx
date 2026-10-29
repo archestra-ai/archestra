@@ -1,5 +1,7 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,18 +13,25 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { useDeleteMcpServer } from "@/lib/mcp/mcp-server.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useDeleteMcpServer,
+  useMcpServersAssignedAgents,
+} from "@/lib/mcp/mcp-server.query";
 import { agentOwnerLabel } from "./mcp-server-agent-usage";
+import {
+  agentsLosingAccessOnUninstall,
+  uninstallConsequence,
+} from "./uninstall-scope";
+import { useSeesAllAgents } from "./use-sees-all-agents";
 
 export interface UninstallServerInstall {
-  server: { id: string; name: string };
-  /** Agents with tools explicitly assigned from this install. */
-  assignedAgents?: Array<{
+  server: {
     id: string;
     name: string;
-    scope: string;
-    ownerEmail: string | null;
-  }>;
+    scope?: "personal" | "team" | "org";
+    teamId?: string | null;
+  };
 }
 
 interface UninstallServerDialogProps {
@@ -37,26 +46,62 @@ interface UninstallServerDialogProps {
 export function UninstallServerDialog({
   open,
   onClose,
-  installs,
+  installs: liveInstalls,
   isCancelingInstallation = false,
   onCancelInstallation,
   onUninstalled,
 }: UninstallServerDialogProps) {
   const uninstallMutation = useDeleteMcpServer();
+  // Someone who sees only their own installations and agents needs neither
+  // the reassurance about shared connections nor an owner on each agent.
+  const { data: seesSharedInstalls } = useHasPermissions({
+    mcpServerInstallation: ["update"],
+  });
+  const seesAllAgents = useSeesAllAgents();
+
+  // Callers derive installs from the server list, which drops a server as
+  // soon as its uninstall lands. Hold what the user confirmed so the dialog
+  // doesn't go blank while it finishes and closes.
+  const [installs, setInstalls] = useState(liveInstalls);
+  if (
+    liveInstalls !== installs &&
+    liveInstalls.length > 0 &&
+    !uninstallMutation.isPending
+  ) {
+    setInstalls(liveInstalls);
+  }
 
   const server = installs[0]?.server ?? null;
   const servers = installs.map((install) => install.server);
+  // Server lists leave out each install's agents, so the confirmation reads
+  // them for just the installs it removes. Confirm waits for them: the user
+  // should see which agents lose access before removing a connection. Once
+  // the uninstall runs they are settled, and rereading an install it just
+  // removed would only answer "not found".
+  const agentUsage = useMcpServersAssignedAgents({
+    serverIds: servers.map(({ id }) => id),
+    enabled: open && !isCancelingInstallation && !uninstallMutation.isPending,
+  });
+  const isLoadingAgents = !isCancelingInstallation && agentUsage.isPending;
+  // Only the agents that route through the installs being removed: nobody
+  // but its owner resolves to a personal connection, so the catalog's other
+  // agents keep resolving to their own connections.
   const assignedAgents = Array.from(
     new Map(
       installs
-        .flatMap((install) => install.assignedAgents ?? [])
+        .flatMap((install) =>
+          agentsLosingAccessOnUninstall({
+            server: install.server,
+            assignedAgents: agentUsage.agentsByServerId.get(install.server.id),
+          }),
+        )
         .map((agent) => [agent.id, agent]),
     ).values(),
   );
   const isBulk = installs.length > 1;
 
   const handleConfirm = async () => {
-    if (!server) return;
+    if (!server || isLoadingAgents) return;
 
     if (isCancelingInstallation && onCancelInstallation) {
       onCancelInstallation(server.id);
@@ -81,7 +126,12 @@ export function UninstallServerDialog({
     ? `Are you sure you want to cancel the installation of "${server?.name || ""}"?`
     : isBulk
       ? `Are you sure you want to uninstall ${installs.length} selected MCP server connections?`
-      : `Are you sure you want to uninstall "${server?.name || ""}"?`;
+      : [
+          `Are you sure you want to uninstall "${server?.name || ""}"?`,
+          server ? uninstallConsequence(server, !!seesSharedInstalls) : null,
+        ]
+          .filter(Boolean)
+          .join(" ");
   const confirmButtonText = isCancelingInstallation
     ? "Cancel Installation"
     : isBulk
@@ -127,6 +177,21 @@ export function UninstallServerDialog({
                 ))}
               </ul>
             )}
+            {isLoadingAgents && (
+              <InlineNotice variant="neutral">
+                <Loader2 className="animate-spin" />
+                <span>Searching agents using this connection...</span>
+              </InlineNotice>
+            )}
+            {!isCancelingInstallation && agentUsage.isError && (
+              <InlineNotice variant="error">
+                <span className="font-medium">Agents could not be loaded</span>
+                <InlineNoticeText>
+                  Agents with tools assigned from this connection may lose
+                  access to them.
+                </InlineNoticeText>
+              </InlineNotice>
+            )}
             {!isCancelingInstallation && assignedAgents.length > 0 && (
               <InlineNotice>
                 <span className="font-medium">
@@ -135,18 +200,21 @@ export function UninstallServerDialog({
                 </span>
                 <InlineNoticeText>
                   {/*
-                    Personal agents share a name across members, so an
-                    unqualified list reads as a repeated "My Assistant" — name
-                    the owner to make each one identifiable.
+                    Personal agents share a name across members, so for someone
+                    who sees everyone's an unqualified list reads as a repeated
+                    "My Assistant" — name the owner to make each one
+                    identifiable. Anyone else sees only agents they can open.
                   */}
                   {assignedAgents
                     .map((agent) => {
-                      const owner = agentOwnerLabel(agent);
+                      const owner = seesAllAgents
+                        ? agentOwnerLabel(agent)
+                        : null;
                       return owner ? `${agent.name} (${owner})` : agent.name;
                     })
                     .join(", ")}{" "}
                   {assignedAgents.length === 1 ? "has" : "have"} tools assigned
-                  from this server and may lose access to them.
+                  from this connection and may lose access to them.
                 </InlineNoticeText>
               </InlineNotice>
             )}
@@ -158,7 +226,7 @@ export function UninstallServerDialog({
             <Button
               type="submit"
               variant="destructive"
-              disabled={uninstallMutation.isPending}
+              disabled={uninstallMutation.isPending || isLoadingAgents}
             >
               {uninstallMutation.isPending
                 ? confirmingButtonText

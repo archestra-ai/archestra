@@ -1,5 +1,6 @@
 /**
- * Count the SQL statements a piece of code sends to the test database.
+ * Count the SQL statements a piece of code sends to the test database, and
+ * the rows each returns (`rowCounts[i]` for `statements[i]`).
  *
  * Observes the real PGlite boundary without replacing it: every statement
  * still executes. Statements inside a transaction run on the transaction
@@ -13,10 +14,17 @@ import { drainBackgroundWork } from "@/utils/background-work";
 
 export async function recordQueries<T>(
   run: () => Promise<T>,
-): Promise<{ result: T; statements: string[] }> {
+): Promise<{ result: T; statements: string[]; rowCounts: number[] }> {
   const statements: string[] = [];
-  const record = (sql: unknown) => {
-    statements.push(typeof sql === "string" ? sql : String(sql));
+  const rowCounts: number[] = [];
+  const record = (sql: unknown, result: Promise<unknown>) => {
+    const index =
+      statements.push(typeof sql === "string" ? sql : String(sql)) - 1;
+    rowCounts[index] = 0;
+    return result.then((value) => {
+      rowCounts[index] = returnedRows(value);
+      return value;
+    });
   };
   const prototype = PGlite.prototype as unknown as Record<
     "query" | "exec" | "transaction",
@@ -30,15 +38,13 @@ export async function recordQueries<T>(
       this: unknown,
       ...args: unknown[]
     ) {
-      record(args[0]);
-      return Reflect.apply(query, this, args);
+      return record(args[0], Reflect.apply(query, this, args));
     }),
     vi.spyOn(prototype, "exec").mockImplementation(function (
       this: unknown,
       ...args: unknown[]
     ) {
-      record(args[0]);
-      return Reflect.apply(exec, this, args);
+      return record(args[0], Reflect.apply(exec, this, args));
     }),
     vi.spyOn(prototype, "transaction").mockImplementation(function (
       this: unknown,
@@ -53,7 +59,7 @@ export async function recordQueries<T>(
   try {
     const result = await run();
     await drainBackgroundWork();
-    return { result, statements };
+    return { result, statements, rowCounts };
   } finally {
     for (const spy of spies) spy.mockRestore();
   }
@@ -70,7 +76,7 @@ type TransactionLike = {
 
 function countingTransaction(
   tx: TransactionLike,
-  record: (sql: unknown) => void,
+  record: (sql: unknown, result: Promise<unknown>) => Promise<unknown>,
 ): TransactionLike {
   return new Proxy(tx, {
     get(target, prop, receiver) {
@@ -79,12 +85,23 @@ function countingTransaction(
         (prop === "query" || prop === "exec") &&
         typeof value === "function"
       ) {
-        return (...args: unknown[]) => {
-          record(args[0]);
-          return Reflect.apply(value, target, args);
-        };
+        return (...args: unknown[]) =>
+          record(args[0], Reflect.apply(value, target, args));
       }
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
+}
+
+/** Rows a PGlite `query` result (or each of an `exec`'s results) returned. */
+function returnedRows(result: unknown): number {
+  const results = Array.isArray(result) ? result : [result];
+  return results.reduce(
+    (total: number, entry) =>
+      total +
+      (entry && typeof entry === "object" && "rows" in entry
+        ? ((entry as { rows: unknown[] }).rows?.length ?? 0)
+        : 0),
+    0,
+  );
 }

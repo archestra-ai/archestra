@@ -17,6 +17,7 @@ import {
   getOAuthReturnUrl,
   getOAuthScope,
   getOAuthServerType,
+  getOAuthState,
   getOAuthTeamId,
   getOAuthUserConfigValues,
   isCallbackProcessed,
@@ -59,6 +60,7 @@ function OAuthCallbackContent() {
         error,
         errorDescription,
         state,
+        expectedState: getOAuthState(),
       });
 
       if (initialError) {

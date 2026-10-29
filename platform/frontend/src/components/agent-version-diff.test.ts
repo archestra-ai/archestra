@@ -20,7 +20,6 @@ function makeSnapshot(
     description: null,
     icon: null,
     systemPrompt: "Be careful.",
-    considerContextUntrusted: false,
     toolExposureMode: "all",
     missingCredentialBehavior: "allow",
     accessAllTools: true,
@@ -34,6 +33,8 @@ function makeSnapshot(
     incomingEmailAllowedDomain: null,
     builtInAgentConfig: null,
     model: { id: "m1", externalId: "claude-sonnet-5" },
+    fastModel: null,
+    smartModel: null,
     llmApiKey: null,
     identityProviderId: null,
     environmentId: null,
@@ -419,7 +420,7 @@ describe("compareAgentSnapshots", () => {
     expect(labels).not.toContain("Passthrough headers");
     // ...but one every snapshot carries does, whatever the agent type is.
     expect(labels).toContain("Tool exposure");
-    expect(labels).toContain("Treat context as untrusted");
+    expect(labels).toContain("Access all tools");
   });
 
   it("reports a change in a setting the agent's own editor never shows", () => {
@@ -448,7 +449,6 @@ describe("compareAgentSnapshots", () => {
         "suggested prompts",
         { suggestedPrompts: [{ summaryTitle: "Ideas", prompt: "Go" }] },
       ],
-      ["untrusted context", { considerContextUntrusted: true }],
     ];
     for (const [label, overrides] of moved) {
       const changed = changedSections(
@@ -642,6 +642,8 @@ const SNAPSHOT_KEY_HOMES: Record<
   icon: { field: "Icon" },
   agentType: { field: "Type" },
   model: { field: "Model" },
+  fastModel: { field: "Fast model" },
+  smartModel: { field: "Smart model" },
   llmApiKey: { field: "LLM API key" },
   toolExposureMode: { field: "Tool exposure" },
   missingCredentialBehavior: { field: "Missing tool connection" },
@@ -650,7 +652,6 @@ const SNAPSHOT_KEY_HOMES: Record<
   activationSkillMode: { field: "Skill access" },
   activationSkillRuleCounts: { field: "Skill rules" },
   activationSkillRuleDigest: { field: "Skill rules" },
-  considerContextUntrusted: { field: "Treat context as untrusted" },
   passthroughHeaders: { field: "Passthrough headers" },
   incomingEmailEnabled: { field: "Incoming email" },
   incomingEmailSecurityMode: { field: "Email security mode" },
@@ -680,6 +681,8 @@ describe("snapshot coverage", () => {
     passthroughHeaders: ["x-request-id"],
     builtInAgentConfig: { kind: "support" },
     llmApiKey: { id: "k1", name: "prod", provider: "anthropic" },
+    fastModel: { id: "m3", externalId: "claude-haiku-5-5" },
+    smartModel: { id: "m4", externalId: "claude-opus-5-5" },
     identityProviderId: "idp1",
     environmentId: "env1",
     excludedTools: [{ toolId: "t9", name: "danger__wipe" }],

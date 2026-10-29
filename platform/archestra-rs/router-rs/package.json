@@ -1,0 +1,30 @@
+{
+  "name": "@archestra/router-rs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "scripts": {
+    "build": "napi build --release --platform",
+    "build:dev": "napi build --profile release-fast --platform",
+    "check:ci": "pnpm build && pnpm smoke && pnpm smoke:esm",
+    "check:musl": "cargo test -p router_core --locked && pnpm build && pnpm smoke && pnpm smoke:esm",
+    "lint": "cargo fmt --check --all",
+    "smoke": "node smoke.test.cjs",
+    "smoke:esm": "node smoke.esm.test.mjs",
+    "test": "cargo test -p router_core --locked",
+    "type-check": "cargo check -p router_core -p router_rs --locked"
+  },
+  "dependencies": {
+    "@archestra/napi-loader": "workspace:*"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.4.0"
+  },
+  "files": [
+    "index.cjs",
+    "index.d.ts",
+    "*.node"
+  ]
+}

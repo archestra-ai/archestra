@@ -102,6 +102,10 @@ function getSourceIcon({
     "opencode:subagent": <Sparkles className="h-3 w-3 shrink-0" />,
     "opencode:title": <Type className="h-3 w-3 shrink-0" />,
     "opencode:compaction": <Minimize2 className="h-3 w-3 shrink-0" />,
+    "kilo:main": <Route className="h-3 w-3 shrink-0" />,
+    "kilo:subagent": <Sparkles className="h-3 w-3 shrink-0" />,
+    "kilo:title": <Type className="h-3 w-3 shrink-0" />,
+    "kilo:compaction": <Minimize2 className="h-3 w-3 shrink-0" />,
     "chat:compaction": <Minimize2 className="h-3 w-3 shrink-0" />,
     "a2a:compaction": <Minimize2 className="h-3 w-3 shrink-0" />,
     "chat:title_generation": <Type className="h-3 w-3 shrink-0" />,
@@ -110,6 +114,7 @@ function getSourceIcon({
     "skill:description_generation": <Sparkles className="h-3 w-3 shrink-0" />,
     "guardrail:dual_llm": <ShieldCheck className="h-3 w-3 shrink-0" />,
     "guardrail:annotator": <ShieldCheck className="h-3 w-3 shrink-0" />,
+    "guardrail:hitl_summary": <ShieldCheck className="h-3 w-3 shrink-0" />,
     "chatops:slack": (
       <Image
         src="/icons/slack.png"
@@ -132,6 +137,15 @@ function getSourceIcon({
       <Image
         src="/icons/telegram.png"
         alt="Telegram"
+        width={12}
+        height={12}
+        className="shrink-0 rounded-sm"
+      />
+    ),
+    "chatops:jira": (
+      <Image
+        src="/icons/jira.png"
+        alt="Jira"
         width={12}
         height={12}
         className="shrink-0 rounded-sm"

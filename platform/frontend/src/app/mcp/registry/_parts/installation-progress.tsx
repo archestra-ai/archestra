@@ -18,12 +18,14 @@ interface InstallationProgressProps {
   serverId?: string;
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   onMoreDetails?: () => void;
+  /** A remote server has no deployment; its first phase is connecting. */
+  serverType?: "local" | "remote" | "builtin" | "app";
 }
 
 const PHASES = {
   pending: {
     progress: 33,
-    description: "Starting the Deployment",
+    description: "Starting the deployment",
   },
   "discovering-tools": {
     progress: 66,
@@ -96,11 +98,16 @@ export function InstallationProgress({
   serverId,
   deploymentStatuses = {},
   onMoreDetails,
+  serverType,
 }: InstallationProgressProps) {
   const phaseInfo = useMemo(() => {
     if (!status || status === "idle") return null;
-    return PHASES[status as keyof typeof PHASES] ?? null;
-  }, [status]);
+    const phase = PHASES[status as keyof typeof PHASES] ?? null;
+    if (phase && status === "pending" && serverType === "remote") {
+      return { ...phase, description: "Connecting" };
+    }
+    return phase;
+  }, [status, serverType]);
 
   // Check if the K8s deployment has failed while installation is still "pending"
   const deploymentState = serverId ? deploymentStatuses[serverId] : null;

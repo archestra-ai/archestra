@@ -16,6 +16,11 @@ import logger from "@/logging";
 import { LlmProviderApiKeyModel, ModelModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { LlmProviderApiKey } from "@/types";
+import { ApiError } from "@/types/api";
+import {
+  type ProviderKeySelection,
+  selectMappedProviderKey,
+} from "./provider-key-mappings";
 
 interface ResolvedProviderApiKey {
   apiKey: string | undefined;
@@ -59,6 +64,7 @@ export async function resolveProviderApiKey(params: {
   agentLlmApiKeyId?: string | null;
   /** Model the caller is about to run, when known at resolution time. */
   modelName?: string | null;
+  selection?: ProviderKeySelection;
 }): Promise<ResolvedProviderApiKey> {
   const {
     organizationId,
@@ -79,7 +85,30 @@ export async function resolveProviderApiKey(params: {
   } | null = null;
   let userTeamIds: string[] = [];
 
-  if (userId) {
+  if (params.selection) {
+    if (!userId)
+      throw new ApiError(
+        403,
+        "Resource account selection requires an authenticated user.",
+      );
+    const candidates = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+      organizationId,
+      userId,
+      [],
+      provider,
+    );
+    const selected = await selectMappedProviderKey({
+      mappings: candidates.map((key) => ({ ...key, providerApiKeyId: key.id })),
+      provider,
+      selection: params.selection,
+    });
+    if (!selected)
+      throw new ApiError(
+        403,
+        "No permitted configured provider account is available.",
+      );
+    resolvedApiKey = selected;
+  } else if (userId) {
     userTeamIds = await TeamModel.getUserTeamIds(userId);
     resolvedApiKey = await LlmProviderApiKeyModel.getCurrentApiKey({
       organizationId,
@@ -92,21 +121,35 @@ export async function resolveProviderApiKey(params: {
   } else if (!providerRequiresPerUserCredential(provider)) {
     // Per-user providers have no org-scope key to fall back to, and there's no
     // acting user to resolve a personal key — leave it unresolved.
-    resolvedApiKey = await LlmProviderApiKeyModel.findOrganizationWideKey(
+    resolvedApiKey = await LlmProviderApiKeyModel.getOrganizationApiKey({
       organizationId,
       provider,
-    );
+      agentLlmApiKeyId,
+    });
+  } else if (
+    provider === "github-copilot" &&
+    (await LlmProviderApiKeyModel.isGithubAppKey(agentLlmApiKeyId))
+  ) {
+    // No acting user (scheduled, email): only a GitHub App key the agent or
+    // organization default names explicitly. Never an unnamed fallback.
+    resolvedApiKey = await LlmProviderApiKeyModel.getOrganizationApiKey({
+      organizationId,
+      provider,
+      agentLlmApiKeyId,
+    });
   }
 
-  resolvedApiKey = await preferKeyServingModel({
-    organizationId,
-    userId,
-    userTeamIds,
-    provider,
-    modelName,
-    agentLlmApiKeyId,
-    resolved: resolvedApiKey,
-  });
+  resolvedApiKey = params.selection
+    ? resolvedApiKey
+    : await preferKeyServingModel({
+        organizationId,
+        userId,
+        userTeamIds,
+        provider,
+        modelName,
+        agentLlmApiKeyId,
+        resolved: resolvedApiKey,
+      });
 
   if (resolvedApiKey) {
     if (resolvedApiKey.secretId) {
@@ -126,7 +169,6 @@ export async function resolveProviderApiKey(params: {
         );
         // A marker belonging to another provider's subscription means the
         // stored value was corrupted or swapped (e.g. rotated out of band —
-        // nothing re-validates a BYOS vault value). No adapter can use it:
         // this provider's adapter would send the encoded refresh token
         // upstream as a raw bearer. Refuse resolution outright — even for the
         // owner's own key.
@@ -196,7 +238,7 @@ export async function resolveProviderApiKey(params: {
   // sharing we're preventing. Leave apiKey undefined so the caller prompts the
   // user to link their own account. A subscription credential in the env var is
   // the same per-user token shared deployment-wide, so it is refused too.
-  if (!providerRequiresPerUserCredential(provider)) {
+  if (!params.selection && !providerRequiresPerUserCredential(provider)) {
     const envApiKey = getProviderEnvApiKey(provider);
     if (envApiKey && !isSubscriptionCredential(envApiKey)) {
       return {

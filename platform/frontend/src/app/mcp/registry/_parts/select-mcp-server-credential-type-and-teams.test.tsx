@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
@@ -25,7 +25,7 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useMcpServers: () => ({ data: installedServers }),
 }));
 
-vi.mock("@/lib/mcp/internal-mcp-catalog.query");
+vi.mock("@/lib/mcp/mcp-registry.query");
 
 vi.mock("@/lib/auth/auth.query");
 
@@ -53,9 +53,9 @@ describe("SelectMcpServerCredentialTypeAndTeams", () => {
       data: [],
       isLoading: false,
     } as unknown as ReturnType<typeof useAssignableTeams>);
-    vi.mocked(useInternalMcpCatalog).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    vi.mocked(useInternalMcpCatalogItem).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useInternalMcpCatalogItem>);
     vi.mocked(useCanModifyCatalogItem).mockReturnValue({
       canModify: true,
       isLoading: false,
@@ -121,10 +121,10 @@ describe("SelectMcpServerCredentialTypeAndTeams", () => {
         data: [{ id: "t1", name: "Team One" }],
         isLoading: false,
       } as unknown as ReturnType<typeof useAssignableTeams>);
-      // The gate resolves the item from the catalog list by the id it is given.
-      vi.mocked(useInternalMcpCatalog).mockReturnValue({
-        data: [TEAM_CATALOG],
-      } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+      // The gate loads the item by the id it is given.
+      vi.mocked(useInternalMcpCatalogItem).mockReturnValue({
+        data: TEAM_CATALOG,
+      } as unknown as ReturnType<typeof useInternalMcpCatalogItem>);
     });
 
     async function expandAndGetTeamOption() {

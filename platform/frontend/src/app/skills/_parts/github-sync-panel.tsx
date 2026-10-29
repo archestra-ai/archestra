@@ -1,51 +1,53 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
-import { AlertTriangle, Github, RefreshCw } from "lucide-react";
-import Link from "next/link";
+import {
+  type archestraApiTypes,
+  GIT_PROVIDER_LABELS,
+  gitHostFromUrl,
+  gitWebUrls,
+} from "@archestra/shared";
 import { useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { Button } from "@/components/ui/button";
+import { GitProviderLogo } from "@/components/git/git-setup-chrome";
+import { gitRepositoryUrlWithRef } from "@/components/git/git-source";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useGithubAppConfigs } from "@/lib/github-app-config.query";
-import { useGithubPats } from "@/lib/github-pat.query";
+  GitSourceBranch,
+  GitSourceCard,
+  GitSourceError,
+} from "@/components/git/git-source-card";
+import {
+  GIT_SYNC_INTERVAL_LABELS,
+  GitSourceEditDialog,
+} from "@/components/git/git-source-edit-dialog";
+import { Button } from "@/components/ui/button";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useUpdateSkillGithubSync } from "@/lib/skills/skill.query";
+import { skillSourcePath } from "@/lib/skills/skill-source";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 export type SkillDetail = archestraApiTypes.GetSkillResponses["200"];
 
-// lowercase: these render mid-sentence ("Synced from <repo> every hour …")
-const SYNC_INTERVAL_LABELS: Record<string, string> = {
-  "15m": "every 15 minutes",
-  "1h": "every hour",
-  "1d": "once a day",
-};
-
-/**
- * Controls for a GitHub-synced skill: source + tracked ref, pull frequency,
- * last-sync status, an immediate pull, and disconnecting from the source
- * (which makes the skill editable and stops updates).
- */
-/** A GitHub skill imported once and never pulled again. */
-export function GithubSnapshotNotice({ repo }: { repo: string | null }) {
+/** A Git skill imported once and never pulled again. */
+export function GithubSnapshotNotice({
+  repo,
+  provider = "github",
+}: {
+  repo: string | null;
+  provider?: SkillDetail["sourceProvider"];
+}) {
   const appName = useAppName();
   return (
     <div className="flex gap-2.5 rounded-md border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
-      <Github className="mt-0.5 size-4 shrink-0" />
+      <GitProviderLogo
+        provider={provider ?? "github"}
+        className="mt-0.5 shrink-0"
+      />
       <p>
         Imported from{" "}
         {repo ? (
           <code className="font-mono text-foreground">{repo}</code>
         ) : (
-          <span>GitHub</span>
+          <span>{GIT_PROVIDER_LABELS[provider ?? "github"]}</span>
         )}{" "}
         as a one-time copy. Saving changes here won’t update the repo, and{" "}
         {appName} won’t pull later changes from it.
@@ -54,6 +56,11 @@ export function GithubSnapshotNotice({ repo }: { repo: string | null }) {
   );
 }
 
+/**
+ * A Git-synced skill's source at a glance, with an immediate pull, the sync
+ * settings in a dialog, and disconnecting from the source (which makes the
+ * skill editable and stops updates).
+ */
 export function GithubSyncPanel({
   skill,
   sourceRepo,
@@ -63,134 +70,128 @@ export function GithubSyncPanel({
 }) {
   const updateGithubSync = useUpdateSkillGithubSync();
   const appName = useAppName();
+  const [editing, setEditing] = useState(false);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
-  // Resolve the saved credential used by scheduled pulls. Its value is never
-  // returned by the shared credential query.
-  const { data: githubPats = [] } = useGithubPats();
-  const { data: githubAppConfigs = [] } = useGithubAppConfigs();
-  const patName = skill.githubPatId
-    ? githubPats.find((pat) => pat.id === skill.githubPatId)?.name
+  const provider = skill.sourceProvider ?? "github";
+  const providerLabel = GIT_PROVIDER_LABELS[provider];
+  const repoPath = sourceRepo?.replace(/^https?:\/\/[^/]+\//, "") ?? null;
+  const folder = skillSourcePath(skill.sourceRef);
+  const href = repoPath
+    ? gitWebUrls({
+        host: gitHostFromUrl({ provider, url: skill.sourceOrigin }),
+        path: repoPath,
+      }).tree(skill.githubSyncRef ?? "HEAD", folder)
     : undefined;
-  const appConfigName = skill.githubAppConfigId
-    ? githubAppConfigs.find((config) => config.id === skill.githubAppConfigId)
-        ?.name
-    : undefined;
-  const authLabel = skill.githubPatId ? (
-    <Link
-      href="/settings/credentials"
-      className="max-w-44 min-w-0 truncate underline underline-offset-4 hover:text-primary"
-      title="Manage saved tokens in Settings → Credentials"
-    >
-      {patName ? `saved token “${patName}”` : "a saved token"}
-    </Link>
-  ) : skill.githubAppConfigId ? (
-    appConfigName ? (
-      `GitHub App “${appConfigName}”`
-    ) : (
-      "a GitHub App"
-    )
-  ) : (
-    "no authentication (public repo)"
-  );
+  const lastSynced = skill.lastSyncedAt
+    ? `Synced ${formatRelativeTimeFromNow(skill.lastSyncedAt).toLowerCase()}`
+    : "Not synced yet";
+  const syncing =
+    updateGithubSync.isPending && !!updateGithubSync.variables?.body.syncNow;
 
   return (
-    <div className="rounded-md border bg-muted/40 px-3 pt-2 pb-3">
-      {/* the sentence: synced from <repo>, <cadence>, using <credential> */}
-      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5 text-sm">
-        <Github className="size-4 shrink-0 text-muted-foreground" />
-        <span className="text-muted-foreground">Synced from</span>
-        {sourceRepo ? (
-          <a
-            href={`${/^https?:\/\//.test(sourceRepo) ? sourceRepo : `https://github.com/${sourceRepo}`}${skill.githubSyncRef ? `/tree/${skill.githubSyncRef}` : ""}`}
-            target="_blank"
-            rel="noreferrer"
-            className="min-w-0 truncate font-mono underline underline-offset-4 hover:text-primary"
-            title="Open on GitHub"
-          >
-            {sourceRepo}
-            <span className="text-muted-foreground">
-              {skill.githubSyncRef ? ` @ ${skill.githubSyncRef}` : ""}
-            </span>
-          </a>
-        ) : (
-          <span className="min-w-0 truncate font-mono">GitHub</span>
-        )}
-        <Select
-          value={skill.githubSyncInterval ?? "1d"}
-          onValueChange={(value) =>
-            updateGithubSync.mutate({
-              id: skill.id,
-              body: { interval: value as "15m" | "1h" | "1d" },
-            })
-          }
-          disabled={updateGithubSync.isPending}
-        >
-          <SelectTrigger
-            size="sm"
-            className="h-7 gap-1 px-2"
-            aria-label="Sync frequency"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(SYNC_INTERVAL_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span className="text-muted-foreground">using</span>
-        {authLabel}
-        <div className="ml-auto shrink-0">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              updateGithubSync.mutate({ id: skill.id, body: { syncNow: true } })
-            }
-            disabled={updateGithubSync.isPending}
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Sync now
-          </Button>
-        </div>
-      </div>
-      {/* the consequence: read-only here until the sync is stopped */}
-      <p className="mt-1.5 truncate pl-6 text-xs text-muted-foreground">
-        {skill.lastSyncError ? (
-          <span className="text-destructive">
-            <AlertTriangle className="mr-1 inline size-3 align-[-2px]" />
-            Last sync failed{" "}
-            {formatRelativeTimeFromNow(skill.lastSyncedAt).toLowerCase()}:{" "}
-            {skill.lastSyncError}
-          </span>
-        ) : (
+    <>
+      <GitSourceCard
+        sticky
+        provider={provider}
+        repo={repoPath ?? providerLabel}
+        href={href}
+        details={
           <>
-            Last synced{" "}
-            {formatRelativeTimeFromNow(skill.lastSyncedAt, {
-              neverLabel: "never",
-            }).toLowerCase()}
+            <GitSourceBranch branch={skill.githubSyncRef} />
+            {folder && (
+              <span className="max-w-full truncate font-mono" title={folder}>
+                {folder}
+              </span>
+            )}
+            <span>{lastSynced}</span>
           </>
+        }
+        sync={{
+          onClick: () =>
+            updateGithubSync.mutate({ id: skill.id, body: { syncNow: true } }),
+          pending: syncing,
+          tooltip: `Syncs ${GIT_SYNC_INTERVAL_LABELS[skill.githubSyncInterval ?? "1d"].toLowerCase()}. ${lastSynced}.`,
+        }}
+        footer={`Content is read-only here. Stop syncing to edit it in ${appName}.`}
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={() => setEditing(true)}
+            >
+              Edit source
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={() => setConfirmingDisconnect(true)}
+            >
+              Stop syncing
+            </Button>
+          </>
+        }
+      >
+        {skill.lastSyncError && (
+          <GitSourceError
+            title="Could not sync skill"
+            message={skill.lastSyncError}
+          />
         )}
-        {" · "}Content is read-only here —{" "}
-        <UnstyledButton
-          type="button"
-          className="cursor-pointer font-medium text-foreground underline underline-offset-2 hover:text-primary"
-          onClick={() => setConfirmingDisconnect(true)}
-          disabled={updateGithubSync.isPending}
-        >
-          stop syncing
-        </UnstyledButton>{" "}
-        to edit it in {appName}.
-      </p>
+      </GitSourceCard>
+      {editing && (
+        <GitSourceEditDialog
+          name={skill.name}
+          current={{
+            provider,
+            origin: skill.sourceOrigin,
+            repo: repoPath ?? "",
+            ref: skill.githubSyncRef,
+            subpath: folder,
+            credentialId:
+              skill.gitlabTokenId ??
+              skill.githubAppConfigId ??
+              skill.githubPatId,
+            interval: skill.githubSyncInterval,
+          }}
+          withSubpath
+          subpathPlaceholder="skills/my-skill"
+          syncDescription="New commits replace the skill’s content when they’re pulled."
+          saving={updateGithubSync.isPending}
+          onSave={async ({ auth, repository, interval }) => {
+            // Only a moved source is fetched again; a new schedule alone is not.
+            const moved =
+              repository.path !== repoPath ||
+              (repository.ref ?? null) !== (skill.githubSyncRef ?? null) ||
+              repository.subpath !== folder ||
+              (auth.gitlabTokenId ?? auth.githubAppConfigId ?? null) !==
+                (skill.gitlabTokenId ?? skill.githubAppConfigId ?? null);
+            const saved = await updateGithubSync.mutateAsync({
+              id: skill.id,
+              body: {
+                interval: interval ?? "1d",
+                ...(moved && {
+                  source: {
+                    ...auth,
+                    repoUrl: gitRepositoryUrlWithRef(repository),
+                    skillPath: repository.subpath,
+                  },
+                }),
+              },
+            });
+            return !!saved;
+          }}
+          onOpenChange={setEditing}
+        />
+      )}
       <DeleteConfirmDialog
         open={confirmingDisconnect}
         onOpenChange={setConfirmingDisconnect}
-        title="Stop syncing from GitHub"
-        description={`Stop syncing "${skill.name}" from ${sourceRepo ?? "its GitHub source"}? It keeps its current content, becomes editable in ${appName}, and no longer receives updates from the repository.`}
+        title={`Stop syncing from ${providerLabel}`}
+        description={`Stop syncing "${skill.name}" from ${repoPath ?? `its ${providerLabel} source`}? It keeps its current content, becomes editable in ${appName}, and no longer receives updates from the repository.`}
         isPending={updateGithubSync.isPending}
         onConfirm={async () => {
           const result = await updateGithubSync.mutateAsync({
@@ -202,7 +203,7 @@ export function GithubSyncPanel({
         confirmLabel="Stop syncing"
         pendingLabel="Stopping..."
       />
-    </div>
+    </>
   );
 }
 

@@ -37,6 +37,7 @@
  * itself and restores afterwards.
  */
 import { randomUUID } from "node:crypto";
+import type { Page } from "@playwright/test";
 import { WIREMOCK_BASE_URL } from "../../consts";
 import { goToPage } from "../../fixtures";
 import { ensureWireMockAnthropicChatProvider } from "../../utils";
@@ -189,6 +190,9 @@ test("denies a tool call, rules on it, and releases it after the model executes 
     const agentResponse = await createAgent(
       request,
       `OpenAPPA root flow ${suffix}`,
+      // This scenario exercises Chat's directly declared skill tool. The API
+      // defaults to an MCP gateway, whose progressive surface defers it.
+      "agent",
     );
     agentId = ((await agentResponse.json()) as { id: string }).id;
 
@@ -345,6 +349,8 @@ test("denies a tool call, rules on it, and releases it after the model executes 
     await expect(
       page.getByRole("button", { name: "OpenAPPA status" }),
     ).toHaveCount(0);
+
+    await expectOnePeelForGuardedCall(page);
   } finally {
     for (const mappingId of wireMockMappingIds) {
       await request
@@ -394,6 +400,7 @@ test("denies a tool call, rules on it, and releases it after the model executes 
  * released retry is still the wrapper Chat can execute.
  */
 test("rules a run_tool dispatch by its target: notice names it, remedy clears it, wrapper retries", async ({
+  page,
   request,
   makeApiRequest,
   createAgent,
@@ -452,6 +459,7 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
     const agentResponse = await createAgent(
       request,
       `OpenAPPA dispatch flow ${suffix}`,
+      "mcp_gateway",
     );
     agentId = ((await agentResponse.json()) as { id: string }).id;
     await makeApiRequest({
@@ -497,6 +505,7 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
     expect(advertised).toEqual(
       expect.arrayContaining([NOTICE_TOOL, CONTROL_TOOL, DISPATCH_TOOL]),
     );
+    expect(advertised).not.toContain(BLOCKED_TOOL);
 
     for (const mapping of [
       proposeBlockedCallMapping({
@@ -580,6 +589,9 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
     expect(released).not.toContain("The tool did not run. If the ruling");
 
     expect(assistantText(events)).toContain(finalAnswer);
+
+    await goToPage(page, `/chat/${conversationId}`);
+    await expectOnePeelForGuardedCall(page);
   } finally {
     for (const mappingId of wireMockMappingIds) {
       await request
@@ -616,6 +628,30 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
     }
   }
 });
+
+// === Chat UI ================================================================
+
+/**
+ * Chat folds the negotiation into the guarded call: one circle named after
+ * the target, and the notice and remedy appear only inside its expanded card,
+ * in order.
+ */
+async function expectOnePeelForGuardedCall(page: Page): Promise<void> {
+  const peel = page.getByRole("button", { name: "list skills", exact: true });
+  await expect(peel).toHaveCount(1);
+  await expect(
+    page.getByRole("button", {
+      name: /^(get remedy plans|execute remedy plan)/,
+    }),
+  ).toHaveCount(0);
+
+  await peel.click();
+  await expect(page.getByText("Guardrails", { exact: true })).toBeVisible();
+  const steps = page.getByText(
+    new RegExp(`^(${NOTICE_TOOL}|${CONTROL_TOOL})$`),
+  );
+  await expect(steps).toHaveText([NOTICE_TOOL, CONTROL_TOOL]);
+}
 
 // === The scripted provider turns =============================================
 //

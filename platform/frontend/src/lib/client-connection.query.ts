@@ -1,10 +1,11 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { clientConnectionQueryKey } from "@/lib/connection-approval-query-keys";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export function useClientConnection(id: string) {
   return useQuery({
-    queryKey: ["client-connection", id],
+    queryKey: clientConnectionQueryKey(id),
     enabled: Boolean(id),
     retry: false,
     refetchOnWindowFocus: false,

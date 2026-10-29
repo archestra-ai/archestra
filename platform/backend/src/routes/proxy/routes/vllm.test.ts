@@ -1,12 +1,8 @@
-import Fastify from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
+import { createFastifyInstance } from "@/fastify-instance";
 import { describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { useMswServer } from "@/test/msw";
 import vllmProxyRoutes from "./vllm";
 
@@ -26,13 +22,21 @@ describe("vLLM proxy response serialization", () => {
     { name: "omitted", toolCalls: undefined },
     { name: "empty", toolCalls: [] },
     { name: "populated", toolCalls: [toolCall] },
-  ])("round-trips $name tool calls", async ({ toolCalls }, { makeAgent }) => {
+  ])("round-trips $name tool calls", async ({ toolCalls }, {
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
     config.llm.vllm.enabled = true;
     config.llm.vllm.baseUrl = upstreamUrl;
     const agent = await makeAgent({ agentType: "llm_proxy" });
-    const app = Fastify().withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    const app = createFastifyInstance();
     await app.register(vllmProxyRoutes);
 
     const message = {
@@ -70,7 +74,10 @@ describe("vLLM proxy response serialization", () => {
       const request = {
         method: "POST",
         url: `/v1/vllm/${agent.id}/chat/completions`,
-        headers: { authorization: "Bearer synthetic-test-key" },
+        headers: {
+          authorization: "Bearer synthetic-test-key",
+          "x-archestra-virtual-key": passthroughToken,
+        },
         payload: {
           model: "synthetic-model",
           messages,

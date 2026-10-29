@@ -12,6 +12,7 @@ import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import { McpToolCallModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import routes from "./openappa-external-consults.routes";
@@ -111,7 +112,43 @@ describe("GET /api/openappa/external-consults", () => {
     expect((await list("?outcome=timeout")).json().data).toHaveLength(1);
   });
 
-  test("a openappaDiagnostics:read caller sees only their own consults, in json and jsonl", async ({
+  test("search matches part of the external's name or the session ID", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const byName = await seedConsult({
+      organizationId,
+      externalName: "PII-Annotator",
+      sessionId: "sess-one",
+    });
+    const bySession = await seedConsult({
+      organizationId,
+      externalName: "egress-policy",
+      sessionId: "sess-annotate-7",
+    });
+    await seedConsult({
+      organizationId,
+      externalName: "secrets-scanner",
+      sessionId: "sess-two",
+    });
+
+    const ids = async (query: string) =>
+      (await list(query))
+        .json()
+        .data.map((row: { id: string }) => row.id)
+        .sort();
+
+    expect(await ids("?search=annotat")).toEqual([byName, bySession].sort());
+    expect(await ids("?search=sess-one")).toEqual([byName]);
+    // The search combines with the other filters rather than replacing them.
+    expect(await ids("?search=annotat&externalName=egress-policy")).toEqual([
+      bySession,
+    ]);
+  });
+
+  test("a log:read caller sees only their own consults, in json and jsonl", async ({
     makeUser,
     makeMember,
   }) => {
@@ -163,7 +200,7 @@ describe("GET /api/openappa/external-consults", () => {
     makeCustomRole,
   }) => {
     const role = await makeCustomRole(organizationId, {
-      permission: { openappaDiagnostics: ["read", "admin"] },
+      permission: { log: ["read", "admin"] },
     });
     caller = await makeUser();
     await makeMember(caller.id, organizationId, { role: role.role });
@@ -177,26 +214,13 @@ describe("GET /api/openappa/external-consults", () => {
     expect((await list("?format=jsonl")).body).toContain(other);
   });
 
-  test("legacy log access alone no longer grants consult access", async ({
-    makeUser,
-    makeMember,
-    makeCustomRole,
-  }) => {
-    const role = await makeCustomRole(organizationId, {
-      permission: { log: ["read"] },
-    });
-    caller = await makeUser();
-    await makeMember(caller.id, organizationId, { role: role.role });
-    expect((await list()).statusCode).toBe(403);
-  });
-
   test("an audience source's consult is withheld from a caller who cannot read members", async ({
     makeUser,
     makeMember,
     makeCustomRole,
   }) => {
     const logReader = await makeCustomRole(organizationId, {
-      permission: { openappaDiagnostics: ["read"] },
+      permission: { log: ["read"] },
     });
     const bytes = {
       rawResponse: Buffer.from('{"version":1}'),
@@ -265,7 +289,7 @@ describe("GET /api/openappa/external-consults", () => {
     );
   });
 
-  test("a caller without openappaDiagnostics:read is refused", async ({
+  test("a caller without log:read is refused", async ({
     makeUser,
     makeMember,
   }) => {
@@ -299,22 +323,135 @@ describe("GET /api/openappa/external-consults", () => {
   });
 });
 
+describe("GET /api/openappa/external-consults/:id", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let caller: User;
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    organizationId = (await makeOrganization()).id;
+    caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role: ADMIN_ROLE_NAME });
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      Object.assign(request, { user: caller, organizationId });
+    });
+    await app.register(routes);
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const get = (id: string) =>
+    app.inject({ method: "GET", url: `/api/openappa/external-consults/${id}` });
+
+  test("leads a sub-agent's consult to the session its root opened and the tool call it was raised for", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    await makeInteraction(agent.id, { sessionId: "chat-1" });
+    const call = await McpToolCallModel.create({
+      agentId: agent.id,
+      mcpServerName: "github",
+      method: "tools/call",
+      toolCall: null,
+      toolResult: null,
+      sessionId: "chat-1",
+      llmToolCallId: "toolu_abc",
+    });
+    await db.insert(schema.openappaSessionsTable).values([
+      openappaSession({
+        organizationId,
+        sessionId: "user:a|chat-1",
+        root: "root-1",
+      }),
+      openappaSession({
+        organizationId,
+        sessionId: "user:a|chat-1/sub",
+        root: "root-1",
+        parentId: "user:a|chat-1",
+      }),
+    ]);
+    const id = await seedConsult({
+      organizationId,
+      sessionId: "user:a|chat-1/sub",
+      root: "root-1",
+      callId: "call:toolu_abc",
+    });
+
+    const response = await get(id);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      consult: { id },
+      llmSessionId: "chat-1",
+      mcpToolCallId: call.id,
+    });
+  });
+
+  test("says when a consult's session or tool call was never logged", async () => {
+    const id = await seedConsult({
+      organizationId,
+      sessionId: "user:a|elsewhere",
+      callId: "toolu_none",
+    });
+
+    const response = await get(id);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      consult: { id },
+      llmSessionId: null,
+      mcpToolCallId: null,
+    });
+  });
+
+  test("another organization's consult is not found", async ({
+    makeOrganization,
+  }) => {
+    const id = await seedConsult({
+      organizationId: (await makeOrganization()).id,
+    });
+
+    expect((await get(id)).statusCode).toBe(404);
+  });
+});
+
+function openappaSession(params: {
+  organizationId: string;
+  sessionId: string;
+  root: string;
+  parentId?: string;
+}) {
+  return {
+    organizationId: params.organizationId,
+    actor: params.sessionId,
+    sessionId: params.sessionId,
+    root: params.root,
+    parentId: params.parentId ?? null,
+    startDecision: {},
+  };
+}
+
 async function seedConsult(params: {
   organizationId: string;
   secondsAgo?: number;
   externalName?: string;
+  sessionId?: string;
   outcome?: "answered" | "timeout";
   rawResponse?: Buffer;
   diagnostics?: Buffer;
   callerId?: string;
   role?: "annotator" | "audience_source";
+  root?: string;
+  callId?: string;
 }): Promise<string> {
   const id = randomUUID();
   const createdAt = new Date(Date.now() - (params.secondsAgo ?? 0) * 1000);
   await db.insert(schema.openappaExternalConsultsTable).values({
     id,
     organizationId: params.organizationId,
-    sessionId: "session",
+    sessionId: params.sessionId ?? "session",
     callerId: params.callerId ?? "user:caller",
     createdAt,
     startedAt: createdAt,
@@ -328,8 +465,9 @@ async function seedConsult(params: {
     rawResponse: params.rawResponse ?? null,
     httpStatus: 200,
     diagnostics: params.diagnostics ?? null,
-    root: "root",
-    trajectory: "root",
+    root: params.root ?? "root",
+    trajectory: params.root ?? "root",
+    callId: params.callId ?? null,
   });
   return id;
 }

@@ -5,6 +5,7 @@ export function mapThemeFontValue(value: string): string {
 
 const FONT_VARIABLE_BY_PRIMARY_FAMILY: Record<string, string> = {
   "DM Sans": "var(--font-dm-sans)",
+  Geist: "var(--font-geist)",
   Inter: "var(--font-inter)",
   "JetBrains Mono": "var(--font-jetbrains-mono)",
   Lato: "var(--font-lato)",

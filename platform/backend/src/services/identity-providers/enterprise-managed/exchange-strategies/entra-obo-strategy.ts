@@ -88,9 +88,18 @@ class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
         },
         "Enterprise-managed Entra OBO exchange failed",
       );
-      throw new Error(
-        buildExchangeErrorMessage(extractProviderErrorMessage(responseBody)),
+      const message = buildExchangeErrorMessage(
+        extractProviderErrorMessage(responseBody),
       );
+      // A rejected assertion or client credential needs configuration/account
+      // repair, rather than being reported as an internal server failure.
+      if (
+        (response.status === 400 || response.status === 401) &&
+        typeof responseBody?.error === "string"
+      ) {
+        throw new ApiError(400, message);
+      }
+      throw new Error(message);
     }
 
     const accessToken = responseBody.access_token;

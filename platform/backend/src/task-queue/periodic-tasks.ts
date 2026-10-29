@@ -8,6 +8,12 @@ type PeriodicTaskDefinition = {
 };
 
 const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
+  { taskType: "jira_chatops_poll", intervalSeconds: 60, payload: {} },
+  {
+    taskType: "interaction_user_activity_rebuild",
+    intervalSeconds: 30,
+    payload: {},
+  },
   // Runs every 30s (not 60): besides enqueuing due syncs, this task drives
   // connector-run recovery — reaping expired leases, reconciling statuses, and
   // sweeping stalled embeddings — so its cadence is the quantization on how fast
@@ -52,7 +58,17 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
   // claims is worth removing promptly, not urgently, and the work is one list
   // call plus a couple per Perforce connector.
   { taskType: "p4_shim_reconcile", intervalSeconds: 300, payload: {} },
+  // Re-syncs provider models for API keys whose TTL has passed (5 minutes for
+  // Ollama and vLLM, so a freshly pulled model shows up within about that) and
+  // refreshes models.dev metadata once a day. The model listing routes only
+  // read, so this tick is what keeps the catalog current.
+  { taskType: "llm_model_sync", intervalSeconds: 60, payload: {} },
   { taskType: "audit_log_cleanup", intervalSeconds: 86400, payload: {} },
+  // Enqueues an auto-routing plan fit per organization whose settings changed
+  // since its last fit, or whose last fit is a day old, and purges routing
+  // history past retention once a day. The minute tick bounds how long a
+  // settings change or a lost publication race waits for its re-plan.
+  { taskType: "auto_routing_dispatch", intervalSeconds: 60, payload: {} },
   // Rebuilds the portable BM25 corpus statistics (document frequency, chunk
   // count, mean chunk length) the keyword ranker scores from. A read-only
   // scan of kb_chunks, and a long interval is safe: stale statistics shift
@@ -105,6 +121,33 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
   {
     taskType: "skill_publication_backfill",
     intervalSeconds: 600,
+    payload: {},
+  },
+  // Fills session_preview on interactions written before migration 0562, so
+  // the session list stops rebuilding full requests to show a preview. Runs
+  // are time-bounded, and a short interval keeps a long history moving. Once
+  // every row is done, a run is one empty partial-index read.
+  {
+    taskType: "interaction_session_preview_backfill",
+    intervalSeconds: 60,
+    payload: {},
+  },
+  // Resumes model cost backfills (recomputing recorded costs after a price
+  // change) whose run ran out of time or whose worker died. One read of a
+  // tiny table when none are active.
+  {
+    taskType: "check_due_model_cost_backfills",
+    intervalSeconds: 30,
+    payload: {},
+  },
+  // Records each MCP installation's own tool descriptions for installations
+  // that predate them (or never synced since), so callers stop being served
+  // another installation's text. A tick rather than a boot-only run, so an
+  // installation that was unreachable or asleep is retried later. One empty
+  // read once complete.
+  {
+    taskType: "mcp_tool_description_backfill",
+    intervalSeconds: 1800,
     payload: {},
   },
 ];

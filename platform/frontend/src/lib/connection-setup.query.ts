@@ -1,18 +1,12 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import type { NativeSessionClientId } from "@archestra/shared/connection-setup";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { organizationKeys } from "@/lib/organization.query";
-import {
-  getApiErrorMessage,
-  handleApiError,
-  throwOnApiError,
-} from "@/lib/utils/api";
+import { getApiErrorMessage, handleApiError } from "@/lib/utils/api";
 
 const {
   createConnectionSetup,
   createConnectionVirtualKey,
   createConnectionPassthroughKey,
-  beginConnectionPromptSession,
 } = archestraApiSdk;
 
 export type CreateConnectionSetupBody =
@@ -24,30 +18,16 @@ type CreateConnectionVirtualKeyBody =
 type CreateConnectionPassthroughKeyBody =
   archestraApiTypes.CreateConnectionPassthroughKeyData["body"];
 
-export function useConnectionPromptSession(
-  clientId: NativeSessionClientId | undefined,
-  origin: string,
-) {
-  return useQuery({
-    queryKey: ["connection-prompt-session", clientId, origin],
-    enabled: false,
-    queryFn: async () => {
-      if (!clientId) return null;
-      const { data, error } = await beginConnectionPromptSession({
-        body: { clientId, origin },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data;
-    },
-  });
-}
-
-export function useCreateConnectionSetup() {
+export function useCreateConnectionSetup(options?: {
+  /** Receives the user-facing reason when the backend refuses the setup. */
+  onRefused?: (message: string) => void;
+}) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreateConnectionSetupBody) => {
       const { data, error } = await createConnectionSetup({ body });
       if (error) {
+        options?.onRefused?.(getApiErrorMessage(error));
         await handleConnectionSetupError(queryClient, error);
         return null;
       }

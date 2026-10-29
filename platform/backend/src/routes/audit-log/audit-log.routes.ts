@@ -110,6 +110,70 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/audit-logs/resources",
+    {
+      schema: {
+        operationId: RouteId.GetAuditLogResources,
+        description:
+          "Get the resources that have audit events, for the log's resource filter. Covers agents, apps, environments, MCP servers, roles, skills and teams. Each resource has the name from its latest named event. Requires auditLog:read. Without auditLog:admin, only resources from the caller's own events are listed.",
+        tags: ["Audit Log"],
+        querystring: z.object({
+          search: z
+            .string()
+            .trim()
+            .max(200)
+            .optional()
+            .describe("Case-insensitive substring of the resource name"),
+          resourceId: z
+            .string()
+            .optional()
+            .describe(
+              "Return only this resource, e.g. to label a preselected filter",
+            ),
+          limit: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .default(50)
+            .describe("Maximum number of resources to return"),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            data: z.array(
+              z.object({
+                resourceType: z.string(),
+                resourceId: z.string(),
+                name: z.string(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async (
+      { query: { search, resourceId, limit }, user, organizationId },
+      reply,
+    ) => {
+      const canSeeAllAuditLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "auditLog",
+        "admin",
+      );
+      const data = await AuditLogModel.findResourceOptions({
+        organizationId,
+        resourceTypes: RESOURCE_FILTER_TYPES,
+        actorId: canSeeAllAuditLogs ? undefined : user.id,
+        search: search || undefined,
+        resourceId,
+        limit,
+      });
+      return reply.send({ data });
+    },
+  );
+
+  fastify.get(
     "/api/audit-logs/:id",
     {
       schema: {
@@ -154,3 +218,16 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default auditLogRoutes;
+
+// === Internal helpers
+
+/** Resource types that the log's resource filter lists by name. */
+const RESOURCE_FILTER_TYPES = [
+  "agent",
+  "app",
+  "environment",
+  "mcpServer",
+  "role",
+  "skill",
+  "team",
+] as const;

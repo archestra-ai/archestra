@@ -1,9 +1,12 @@
+import { randomBytes, randomUUID } from "node:crypto";
 import { vi } from "vitest";
 import config from "@/config";
+import { encryptedChatDekFingerprint } from "@/content-encryption/encrypted-chat";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import ConversationModel from "@/models/conversation";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import { openappaEncryptedChat } from "@/openappa/encrypted-chat";
 import { afterEach, beforeEach, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -58,17 +61,35 @@ const statusUrl = () =>
   `/api/chat/conversations/${conversationId}/openappa-status`;
 
 test("reads the current status of an accessible protected conversation", async () => {
-  statusRead.mockResolvedValue({ trust: "suspicious", audience: "internal" });
+  statusRead.mockResolvedValue({
+    trust: "suspicious",
+    audience: "internal",
+    policyRevision: 3,
+  });
   const response = await app.inject({ method: "GET", url: statusUrl() });
   expect(response.statusCode).toBe(200);
   expect(response.json()).toEqual({
     trust: "suspicious",
     audience: "internal",
+    policyRevision: 3,
   });
   expect(statusRead).toHaveBeenCalledWith({
     organizationId,
     sessionId: conversationId,
   });
+});
+
+test("reads the status without loading the transcript", async () => {
+  statusRead.mockResolvedValue({
+    trust: "trusted",
+    audience: "public",
+    policyRevision: 1,
+  });
+  // findAccessibleById reads every message; the status needs only access.
+  const transcriptRead = vi.spyOn(ConversationModel, "findAccessibleById");
+  const response = await app.inject({ method: "GET", url: statusUrl() });
+  expect(response.statusCode).toBe(200);
+  expect(transcriptRead).not.toHaveBeenCalled();
 });
 
 test("returns null before a session has opened", async () => {
@@ -98,29 +119,60 @@ test.each([
 });
 
 test.each([
-  false,
-  true,
-])("returns null for an encrypted chat whether a browser key is supplied: %s", async (withKey) => {
-  conversationId = (
-    await ConversationModel.create({
-      organizationId,
-      userId: user.id,
-      agentId,
-      encryptedChat: true,
-      encryptedChatDekFingerprint: "fingerprint",
-    })
-  ).id;
-  statusRead.mockResolvedValue({ trust: "suspicious", audience: "internal" });
+  "missing",
+  "wrong",
+  "valid",
+])("encrypted status requires the matching browser key: %s", async (keyState) => {
+  const dek = randomBytes(32);
+  conversationId = randomUUID();
+  await ConversationModel.create({
+    id: conversationId,
+    organizationId,
+    userId: user.id,
+    agentId,
+    encryptedChat: true,
+    encryptedChatDekFingerprint: encryptedChatDekFingerprint(
+      conversationId,
+      dek,
+    ),
+    encryptedChatEscrow: {
+      v: 1,
+      alg: "RSA-OAEP-256",
+      escrowKeyFingerprint: "test",
+      wrappedDek: "test",
+    },
+  });
+  statusRead.mockImplementation(async () => {
+    expect(
+      openappaEncryptedChat(organizationId, conversationId)?.audit.dek,
+    ).toEqual(dek);
+    return { trust: "suspicious", audience: "internal", policyRevision: 1 };
+  });
   const response = await app.inject({
     method: "GET",
     url: statusUrl(),
-    headers: withKey
-      ? { "x-archestra-encrypted-chat-key": "YnJvd3Nlci1rZXk" }
-      : undefined,
+    headers:
+      keyState === "missing"
+        ? {}
+        : {
+            "x-archestra-encrypted-chat-key": (keyState === "valid"
+              ? dek
+              : randomBytes(32)
+            ).toString("base64url"),
+          },
   });
-  expect(response.statusCode).toBe(200);
-  expect(response.json()).toBeNull();
-  expect(statusRead).not.toHaveBeenCalled();
+  expect(response.statusCode).toBe(keyState === "wrong" ? 409 : 200);
+  if (keyState === "valid") {
+    expect(response.json()).toEqual({
+      trust: "suspicious",
+      audience: "internal",
+      policyRevision: 1,
+    });
+    expect(statusRead).toHaveBeenCalledOnce();
+  } else {
+    if (keyState === "missing") expect(response.json()).toBeNull();
+    expect(statusRead).not.toHaveBeenCalled();
+  }
 });
 
 test("does not read status across organization boundaries", async ({

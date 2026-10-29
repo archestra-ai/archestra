@@ -1,6 +1,6 @@
 // https://testing-library.com/docs/svelte-testing-library/setup/#vitest
 import "@testing-library/jest-dom/vitest";
-import { vi } from "vitest";
+import { afterAll, vi } from "vitest";
 
 // JSDOM has no layout engine or ResizeObserver. Components can subscribe to
 // size changes; tests that exercise resizing supply their own observer callback.
@@ -9,6 +9,15 @@ globalThis.ResizeObserver = class {
   unobserve() {}
   disconnect() {}
 };
+
+// Radix focus scopes dispatch an event on a zero-delay timer after a dialog
+// unmounts. When a file's last test closes one, that timer can fire after the
+// jsdom environment is torn down and fail the run with an unhandled
+// "dispatchEvent ... not of type 'Event'". One real tick after the file's
+// tests lets those timers run while jsdom is still alive; the reference is
+// captured here so a test's fake timers cannot stall it.
+const realSetTimeout = globalThis.setTimeout;
+afterAll(() => new Promise<void>((resolve) => realSetTimeout(resolve, 0)));
 
 // Disable Sentry for tests - prevent sending test data to Sentry
 process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN = "";

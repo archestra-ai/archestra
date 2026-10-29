@@ -336,4 +336,74 @@ describe("PUT /api/internal_mcp_catalog/:id — reinstall reason", () => {
     expect(serverRow.reinstallRequired).toBe(true);
     expect(serverRow.reinstallReason).toBe("new-input");
   });
+
+  describe("a later edit that drops the owed value", () => {
+    const apiToken = (required: boolean) => ({
+      key: "API_TOKEN",
+      type: "secret",
+      sensitive: true,
+      required,
+      promptOnInstallation: true,
+    });
+
+    async function putEnv(
+      catalogId: string,
+      name: string,
+      environment: unknown[],
+    ) {
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${catalogId}`,
+        payload: {
+          name,
+          serverType: "local",
+          localConfig: { ...baseLocalConfig, environment },
+          userConfig: { authorization: promptedAuthField },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    test("clears the 'new-input' flag once the install holds every required value", async ({
+      makeMcpServer,
+      makeSecret,
+    }) => {
+      const { catalogId, serverId } = await createCatalogWithInstall(
+        makeMcpServer,
+        "reason-demoted-env",
+      );
+      const secret = await makeSecret({
+        secret: { authorization: "Bearer token" },
+      });
+      await db
+        .update(schema.mcpServersTable)
+        .set({ secretId: secret.id })
+        .where(eq(schema.mcpServersTable.id, serverId));
+
+      await putEnv(catalogId, "reason-demoted-env", [apiToken(true)]);
+      expect((await getServerRow(serverId)).reinstallReason).toBe("new-input");
+
+      await putEnv(catalogId, "reason-demoted-env", [apiToken(false)]);
+      const serverRow = await getServerRow(serverId);
+      expect(serverRow.reinstallRequired).toBe(false);
+      expect(serverRow.reinstallReason).toBeNull();
+    });
+
+    test("keeps the flag while a required value is still missing", async ({
+      makeMcpServer,
+    }) => {
+      const { catalogId, serverId } = await createCatalogWithInstall(
+        makeMcpServer,
+        "reason-still-owed",
+      );
+
+      await putEnv(catalogId, "reason-still-owed", [apiToken(true)]);
+      await putEnv(catalogId, "reason-still-owed", [apiToken(false)]);
+
+      // The install never stored its required Authorization header.
+      const serverRow = await getServerRow(serverId);
+      expect(serverRow.reinstallRequired).toBe(true);
+      expect(serverRow.reinstallReason).toBe("new-input");
+    });
+  });
 });

@@ -7,6 +7,12 @@ import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "./consts";
  */
 export const AGENT_TOOL_PREFIX = `agent${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 
+/**
+ * The delegation tool that runs a task in a fresh-context copy of the calling
+ * agent: same tools and instructions, none of the conversation.
+ */
+export const SELF_FORK_TOOL_NAME = `${AGENT_TOOL_PREFIX}self`;
+
 /** Maximum number of suggested prompts per agent */
 export const MAX_SUGGESTED_PROMPTS = 10;
 

@@ -1,4 +1,3 @@
-import posthog from "posthog-js";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 // biome-ignore lint/style/noRestrictedImports: asserts the dual-licensed RUM dual-emit; inert without the feature
 import { rumClient } from "@/lib/rum.ee";
@@ -8,11 +7,10 @@ const { mockCapture } = vi.hoisted(() => ({
   mockCapture: vi.fn(),
 }));
 
-vi.mock("posthog-js", () => ({
-  default: {
-    __loaded: false,
-    capture: mockCapture,
-  },
+// The PostHog queue: it replays into PostHog once initialized, or drops the
+// call when analytics is off (see posthog-client.test).
+vi.mock("./posthog-client", () => ({
+  posthogClient: { capture: mockCapture },
 }));
 
 // Stubbed so no RUM batching/network runs; trackEvent's contract here is only
@@ -32,36 +30,18 @@ const MESSAGE_SENT_PROPERTIES = {
 describe("trackEvent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    posthog.__loaded = false;
-  });
-
-  test("mirrors product events to the RUM sink even when PostHog never initialized", () => {
-    // A RUM-only deployment (analytics disabled) never loads PostHog; the RUM
-    // mirror must fire before the __loaded early-return, not behind it.
-    trackEvent("message_sent", MESSAGE_SENT_PROPERTIES);
-
-    expect(trackProductEventSpy).toHaveBeenCalledTimes(1);
-    expect(trackProductEventSpy).toHaveBeenCalledWith(
-      "archestra.message_sent",
-      MESSAGE_SENT_PROPERTIES,
-    );
-    expect(mockCapture).not.toHaveBeenCalled();
   });
 
   test("does not mirror user_authenticated to the RUM sink", () => {
     // The RUM client detects sign-ins itself (rumClient.setUser); mirroring
     // this event would double-count on deployments running both sinks.
-    posthog.__loaded = true;
-
     trackEvent("user_authenticated", {});
 
     expect(trackProductEventSpy).not.toHaveBeenCalled();
     expect(mockCapture).toHaveBeenCalledWith("user_authenticated", {});
   });
 
-  test("feeds both sinks when PostHog is loaded", () => {
-    posthog.__loaded = true;
-
+  test("feeds both sinks", () => {
     trackEvent("message_sent", MESSAGE_SENT_PROPERTIES);
 
     expect(mockCapture).toHaveBeenCalledTimes(1);

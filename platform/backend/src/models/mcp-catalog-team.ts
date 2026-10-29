@@ -6,6 +6,7 @@ import {
   type ResourcePermissionAction,
 } from "@archestra/shared";
 import { and, eq, inArray, isNull, or, type SQL, sql } from "drizzle-orm";
+import { dropHiddenCatalogIds } from "@/auth/permission-gated";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -17,6 +18,7 @@ import {
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
+  type PrincipalSource,
 } from "./resource-permission-subject";
 
 interface CatalogTeamDetail {
@@ -36,10 +38,28 @@ class McpCatalogTeamModel {
     isAdmin: boolean,
     organizationId: string,
   ): Promise<string[]> {
+    return McpCatalogTeamModel.getAccessibleCatalogIds({
+      userId,
+      isAdmin,
+      organizationId,
+    });
+  }
+
+  /**
+   * {@link McpCatalogTeamModel.getUserAccessibleCatalogIds}, resolving the
+   * caller through a request's memoized principal when one is given.
+   */
+  static async getAccessibleCatalogIds(params: {
+    userId: string;
+    isAdmin: boolean;
+    organizationId: string;
+    lookups?: PrincipalSource;
+  }): Promise<string[]> {
+    const { userId, isAdmin, organizationId, lookups } = params;
     const catalog = schema.internalMcpCatalogTable;
     const principal = isAdmin
       ? null
-      : await ResourcePermissionSubjectModel.resolvePrincipal({
+      : await ResourcePermissionSubjectModel.resolvePrincipalFrom(lookups, {
           organizationId,
           userId,
         });
@@ -55,7 +75,10 @@ class McpCatalogTeamModel {
           principal ? McpCatalogTeamModel.readCondition(principal) : undefined,
         ),
       );
-    return rows.map((row) => row.id);
+    return dropHiddenCatalogIds(
+      rows.map((row) => row.id),
+      { userId, organizationId },
+    );
   }
 
   /**

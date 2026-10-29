@@ -42,7 +42,7 @@ param(
     [switch]$BuildFromSource,
     # Git ref of archestra-ai/archestra to fetch the add-on source from.
     [string]$Ref = "main",
-    # Local add-on source directory (integrations/m-files-vaf-add-on);
+    # Local add-on source directory (backend/src/knowledge-base/connectors/mfiles/vaf-add-on);
     # when set, nothing is downloaded.
     [string]$SourceDirectory,
     # M-Files installation directory, e.g. "C:\Program Files\M-Files\26.6.16115.13".
@@ -58,7 +58,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $addOnAppGuid = "c26bb1e2-62ca-4a75-8751-bcf0787b6f36"
-$rawBase = "https://raw.githubusercontent.com/archestra-ai/archestra/$Ref/integrations/m-files-vaf-add-on"
+$rawBase = "https://raw.githubusercontent.com/archestra-ai/archestra/$Ref/platform/backend/src/knowledge-base/connectors/mfiles/vaf-add-on"
 $sourceFiles = @(
     "build-package.ps1",
     "appdef.xml",

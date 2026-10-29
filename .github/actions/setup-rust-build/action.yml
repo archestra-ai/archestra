@@ -10,7 +10,7 @@ inputs:
     required: false
     default: ""
   save-if:
-    description: Whether this job may save an updated cache
+    description: Whether a trusted default-branch run may save an updated cache
     required: false
     default: "true"
   targets:
@@ -26,6 +26,11 @@ inputs:
     required: false
     default: "false"
 
+outputs:
+  cache-hit:
+    description: Whether the exact Cargo dependency cache was restored
+    value: ${{ steps.cache.outputs.cache-hit }}
+
 runs:
   using: composite
   steps:
@@ -38,11 +43,14 @@ runs:
         RUST_TARGETS: ${{ inputs.targets }}
 
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      id: cache
       if: inputs.cache == 'true'
       with:
         workspaces: ${{ inputs.workspaces }}
         shared-key: ${{ inputs.shared-key }}
-        save-if: ${{ inputs.save-if }}
+        # Queue refs cannot warm later groups. Their large, throwaway copies
+        # evict the default-branch caches that every queue entry can restore.
+        save-if: ${{ inputs.save-if == 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
 
     # The cache key includes installed Rust versions. Shared backend caches
     # restore before syncing; Rust check jobs use their existing after-sync key.

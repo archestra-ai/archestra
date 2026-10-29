@@ -13,10 +13,13 @@ export function buildTeamsManifest(params: {
   version: string;
 }) {
   const { botAppId, nameShort, nameFull, version } = params;
+  // Every Teams conversation that can install the bot must also discover its
+  // commands, including group chats. Copilot is a separate installation scope.
+  const conversationScopes = ["team", "groupChat", "personal"];
   return {
     $schema:
-      "https://developer.microsoft.com/json-schemas/teams/v1.21/MicrosoftTeams.schema.json",
-    manifestVersion: "1.21",
+      "https://developer.microsoft.com/json-schemas/teams/v1.30/MicrosoftTeams.schema.json",
+    manifestVersion: "1.30",
     version: version || "1.0.0",
     id: botAppId || "{{BOT_MS_APP_ID}}",
     developer: {
@@ -35,7 +38,7 @@ export function buildTeamsManifest(params: {
     bots: [
       {
         botId: botAppId || "{{BOT_MS_APP_ID}}",
-        scopes: ["team", "groupChat", "personal", "copilot"],
+        scopes: [...conversationScopes, "copilot"],
         // Enables the bot to receive file/image attachments in 1:1 personal
         // chats. Channel and group-chat attachments already arrive regardless
         // of this flag; it specifically unlocks the personal-chat file flow.
@@ -43,7 +46,7 @@ export function buildTeamsManifest(params: {
         isNotificationOnly: false,
         commandLists: [
           {
-            scopes: ["team", "groupChat", "personal"],
+            scopes: conversationScopes,
             commands: [
               {
                 title: "/select-agent",
@@ -54,6 +57,10 @@ export function buildTeamsManifest(params: {
                 description: "Show current agent for this conversation",
               },
               { title: "/help", description: "Show available commands" },
+              {
+                title: "/sign-out",
+                description: "Stop the bot reading your group-chat files",
+              },
             ],
           },
         ],

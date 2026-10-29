@@ -86,3 +86,108 @@ export function OpenAppaAlertIcon({
     </svg>
   );
 }
+
+// Guardrail moods for the chat composer. All three share one box, so the mark
+// keeps its size when the mood changes.
+
+// Trusted: outline, open square eyes.
+export function OpenAppaCalmIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="-1 -1 26 24" fill="none" aria-hidden="true" {...props}>
+      <path d={MOOD_OUTLINE} stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M6 6h3v3h-3zM15 6h3v3h-3zM10 10.5h4v1.2h-4z"
+        fill="currentColor"
+        shapeRendering="crispEdges"
+      />
+    </svg>
+  );
+}
+
+// Anything but trusted: solid, eyes narrowed to slits under flat lids.
+export function OpenAppaSuspiciousIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="-1 -1 26 24" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M5 0h2v2h-2zM17 0h2v2h-2zM4 2h16v1h-16zM3 3h18v4h-18zM3 7h18v1h-18zM3 8h2v1h-2zM9 8h6v1h-6zM19 8h2v1h-2zM3 9h18v2h-18zM3 11h8v1h-8zM14 11h7v1h-7zM3 12h18v1h-18zM4 13h16v1h-16zM1 14h22v1h-22zM0 15h24v5h-24zM0 20h5v1h-5zM7 20h4v1h-4zM13 20h4v1h-4zM19 20h5v1h-5z"
+        fill="currentColor"
+        shapeRendering="crispEdges"
+      />
+      <path
+        d="M0 21h5v1h-5zM7 21h4v1h-4zM13 21h4v1h-4zM19 21h5v1h-5z"
+        fill="currentColor"
+        opacity="0.6"
+        shapeRendering="crispEdges"
+      />
+    </svg>
+  );
+}
+
+// Enforcement off: dashed outline.
+export function OpenAppaOffIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="-1 -1 26 24" fill="none" aria-hidden="true" {...props}>
+      <path
+        d={MOOD_OUTLINE}
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeDasharray="2 1.5"
+      />
+      <path
+        d="M6 6h3v3h-3zM15 6h3v3h-3z"
+        stroke="currentColor"
+        strokeWidth="1"
+        strokeDasharray="1.5 1.5"
+      />
+    </svg>
+  );
+}
+
+// Guardrails don't check this chat: outline, eyes shut.
+export function OpenAppaAsleepIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="-1 -1 26 24" fill="none" aria-hidden="true" {...props}>
+      <path d={MOOD_OUTLINE} stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M6 8h3v1h-3zM15 8h3v1h-3z"
+        fill="currentColor"
+        shapeRendering="crispEdges"
+      />
+    </svg>
+  );
+}
+
+// The z's that float over the sleeping mark, small to big.
+export function OpenAppaZzzIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 12" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M0 9h3v1h-3zM1 10h1v1h-1zM0 11h3v1h-3zM4 4h4v1h-4zM6 5h1v1h-1zM5 6h1v1h-1zM4 7h4v1h-4zM10 0h5v1h-5zM13 1h1v1h-1zM12 2h1v1h-1zM11 3h1v1h-1zM10 4h5v1h-5z"
+        fill="currentColor"
+        shapeRendering="crispEdges"
+      />
+    </svg>
+  );
+}
+
+// The glass was broken in this chat: outline in sunglasses, with a grin.
+export function OpenAppaShadesIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="-1 -1 26 24" fill="none" aria-hidden="true" {...props}>
+      <path d={MOOD_OUTLINE} stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M4 6h17v1h-17zM5 7h5v3h-5zM14 7h5v3h-5zM10 7h4v1h-4zM9 11h6v1h-6zM8 10h1v1h-1zM15 10h1v1h-1z"
+        fill="currentColor"
+        shapeRendering="crispEdges"
+      />
+      <path
+        d="M6 7h1v1h-1zM15 7h1v1h-1z"
+        className="fill-background"
+        shapeRendering="crispEdges"
+      />
+    </svg>
+  );
+}
+
+const MOOD_OUTLINE =
+  "M5 0H7V2H17V0H19V2H20V3H21V13H20V14H23V15H24V21H19V20H17V21H13V20H11V21H7V20H5V21H0V15H1V14H4V13H3V3H4V2H5Z";

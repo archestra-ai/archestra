@@ -1,6 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
 import config from "@/config";
+import {
+  type EncryptedChatAuditContext,
+  encryptEncryptedChatBytes,
+} from "@/content-encryption/encrypted-chat";
 import logger from "@/logging";
 import OpenAppaYellModel from "@/models/openappa-yell";
 
@@ -12,6 +16,7 @@ import OpenAppaYellModel from "@/models/openappa-yell";
 export async function captureYellReport<T>(params: {
   id: string;
   organizationId: string;
+  encryptedChat?: EncryptedChatAuditContext;
   send: (receiver: { port: number; token: string }) => Promise<T>;
 }): Promise<T> {
   const token = randomBytes(32).toString("hex");
@@ -26,8 +31,17 @@ export async function captureYellReport<T>(params: {
         return;
       }
       const archive = await readArchive(request);
-      await OpenAppaYellModel.storeArchive({ ...params, archive });
-      if (!config.analytics.enabled) {
+      await OpenAppaYellModel.storeArchive({
+        id: params.id,
+        organizationId: params.organizationId,
+        archive: params.encryptedChat
+          ? encryptEncryptedChatBytes(archive, {
+              ...params.encryptedChat,
+              context: "openappa_yells.archive",
+            })
+          : archive,
+      });
+      if (params.encryptedChat || !config.openappa.yellForwardingEnabled) {
         response
           .writeHead(200, { "content-type": "application/json" })
           .end(JSON.stringify({ receipt_id: params.id, duplicate: false }));
@@ -53,7 +67,7 @@ export async function captureYellReport<T>(params: {
     })().catch((err: unknown) => {
       logger.warn(
         { err, yellId: params.id },
-        "Could not deliver OpenAPPA report",
+        "OpenAPPA could not deliver the report",
       );
       if (!response.headersSent) response.writeHead(500);
       response.end();

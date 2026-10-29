@@ -1,5 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { type ResourcePermissionGrant, urlSlugify } from "@archestra/shared";
+import {
+  type GitProvider,
+  type ResourcePermissionGrant,
+  urlSlugify,
+} from "@archestra/shared";
 import {
   and,
   asc,
@@ -32,6 +36,7 @@ import { PluginLabelModel } from "./entity-labels";
 import PluginTeamModel from "./plugin-team";
 import PluginUserModel from "./plugin-user";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import type { ResourceAccessFilter } from "./resource-permission-subject";
 
 class PluginModel {
   static async transferOwnership(params: {
@@ -67,6 +72,8 @@ class PluginModel {
     organizationId: string;
     accessiblePluginIds?: string[];
     labels?: Record<string, string[]>;
+    /** The list's "Show" filter; omit when not filtering. */
+    access?: ResourceAccessFilter;
   }): Promise<PluginListItem[]> {
     if (params.accessiblePluginIds?.length === 0) return [];
 
@@ -87,6 +94,19 @@ class PluginModel {
           labelFilteredIds
             ? inArray(schema.pluginsTable.id, labelFilteredIds)
             : undefined,
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          params.access
+            ? ResourcePermissionPolicyModel.accessRelationCondition({
+                ...params.access,
+                organizationId: schema.pluginsTable.organizationId,
+                resource: "plugin",
+                scopeColumn: schema.pluginsTable.id,
+                ownerColumn: schema.pluginsTable.authorId,
+              })
+            : undefined,
+          // SPDX-SnippetEnd
           notDeleted(schema.pluginsTable),
         ),
       )
@@ -371,6 +391,11 @@ class PluginModel {
       syncRef?: string | null;
       githubAppConfigId?: string | null;
       githubPatId?: string | null;
+      gitlabTokenId?: string | null;
+      /** Git host; null or omitted means GitHub. */
+      sourceProvider?: GitProvider | null;
+      /** Web address of a self-hosted source; null means the provider's cloud. */
+      sourceOrigin?: string | null;
     };
   }): Promise<PluginWithFiles | null> {
     const created = await withDbTransaction(async (tx) => {
@@ -395,6 +420,7 @@ class PluginModel {
               pluginSlug,
               displayName: params.input.displayName,
               description: params.input.description,
+              icon: params.input.icon ?? null,
               contentHash,
               sourceKind: params.source ? "github" : "manual",
               sourceRepo: params.source?.repo,
@@ -409,6 +435,9 @@ class PluginModel {
               githubSyncRef: params.source?.syncRef,
               githubAppConfigId: params.source?.githubAppConfigId,
               githubPatId: params.source?.githubPatId,
+              gitlabTokenId: params.source?.gitlabTokenId,
+              sourceProvider: params.source?.sourceProvider,
+              sourceOrigin: params.source?.sourceOrigin,
               lastSyncedAt: params.source?.syncInterval ? now : null,
               sourceId: params.sourceId,
               approvedContentHash: contentHash,
@@ -526,7 +555,9 @@ class PluginModel {
       const githubAuthenticationChanged = githubAuthentication
         ? githubAuthentication.githubAppConfigId !==
             existing.githubAppConfigId ||
-          githubAuthentication.githubPatId !== existing.githubPatId
+          githubAuthentication.githubPatId !== existing.githubPatId ||
+          (githubAuthentication.gitlabTokenId ?? null) !==
+            existing.gitlabTokenId
         : false;
       const clearGithubCandidate =
         githubTrackingChanged || githubSource?.syncInterval === null;
@@ -540,6 +571,7 @@ class PluginModel {
               ? {
                   githubAppConfigId: githubAuthentication.githubAppConfigId,
                   githubPatId: githubAuthentication.githubPatId,
+                  gitlabTokenId: githubAuthentication.gitlabTokenId ?? null,
                 }
               : {}),
             ...(githubTrackingChanged || githubAuthenticationChanged
@@ -561,6 +593,7 @@ class PluginModel {
         .set({
           displayName: params.input.displayName,
           description: params.input.description,
+          icon: params.input.icon,
           enabled: params.input.enabled,
           supportedPlatforms: params.input.supportedPlatforms,
           syncGeneration: sql`${schema.pluginsTable.syncGeneration} + 1`,
@@ -625,6 +658,7 @@ class PluginModel {
         githubSyncInterval: null,
         githubAppConfigId: null,
         githubPatId: null,
+        gitlabTokenId: null,
         pendingSourceSha: null,
         pendingContentHash: null,
         pendingDetectedAt: null,

@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { E2eTestId, GIT_PROVIDER_LABELS } from "@archestra/shared";
 import { History, Info, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -13,6 +13,7 @@ import {
 } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
+import { GitSourceTooltip } from "@/components/git/git-source-card";
 import { PageLayout } from "@/components/page-layout";
 import { ResourcePermissions } from "@/components/resource-permissions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -32,15 +33,16 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { WizardFooter } from "@/components/wizard-footer";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
   backToListLabel,
   notYoursToChange,
 } from "@/lib/design/resource-lexicon";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import { useSkill, useUpdateSkill } from "@/lib/skills/skill.query";
+import { repositoryLabel } from "@/lib/skills/skill-source";
 import { useSkillAccess } from "@/lib/skills/use-skill-access";
 import { ChatWithSkillButton } from "../_parts/chat-with-skill-button";
 import { DeleteSkillDialog } from "../_parts/delete-skill-dialog";
@@ -75,6 +77,7 @@ import {
   SkillNotFound,
   SkillPageLoading,
 } from "../_parts/skill-page-shell";
+import { SkillSourceGlyph } from "../_parts/skill-source-glyph";
 import { SkillUsagePanel } from "../_parts/skill-usage-panel";
 import { SkillVersionHistoryDialog } from "../_parts/skill-version-history-dialog";
 
@@ -206,12 +209,6 @@ function SkillDetailView({
   const visibleSections = SKILL_DETAIL_SECTIONS;
   const [permissionsDirty, setPermissionsDirty] = useState(false);
   const isDirty = isSkillDraftDirty(draft, base.draft) || permissionsDirty;
-  const ownership = useResourceOwnershipTransfer({
-    kind: "skill",
-    resource: skill,
-    disabledReason: isDirty ? "Save or discard your changes first" : undefined,
-    onTransferred: () => router.push("/skills"),
-  });
 
   // Adopt a read only when there is nothing to lose and it is not older than
   // what this page has already written. Both guards earn their keep:
@@ -240,6 +237,7 @@ function SkillDetailView({
 
   const isSynced = isSyncedGithubSkill(skill);
   const isGithubSkill = skill.sourceType === "github";
+  const appIconLogo = useAppIconLogo();
   const githubSourceRepo = skillGithubSourceRepo(skill);
 
   const parsed = useMemo(
@@ -307,17 +305,24 @@ function SkillDetailView({
 
   return (
     <PageLayout
+      icon={
+        isGithubSkill ? (
+          <GitSourceTooltip
+            label={`${isSynced ? "Synced from" : "Imported from"} ${GIT_PROVIDER_LABELS[skill.sourceProvider ?? "github"]}`}
+            detail={githubSourceRepo && repositoryLabel(githubSourceRepo)}
+          >
+            <SkillSourceGlyph skill={skill} appIconLogo={appIconLogo} />
+          </GitSourceTooltip>
+        ) : (
+          <SkillSourceGlyph skill={skill} appIconLogo={appIconLogo} />
+        )
+      }
       title={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate">{skill.name}</span>
           <Badge variant="outline" className="font-normal">
             v{skill.latestVersion}
           </Badge>
-          {isGithubSkill && (
-            <Badge variant="secondary" className="font-normal">
-              {isSynced ? "Synced from GitHub" : "Imported from GitHub"}
-            </Badge>
-          )}
           {skill.sourceType === "built_in" && (
             <Badge variant="secondary" className="font-normal">
               Built-in
@@ -376,7 +381,6 @@ function SkillDetailView({
                 <History className="h-4 w-4" />
                 {historyAction.label}
               </DropdownMenuItem>
-              {ownership.menuItem}
               <DropdownMenuSeparator />
               {/* `aria-disabled` rather than Radix's `disabled`, so the item
                   keeps its place in the menu's roving focus and the reason
@@ -418,7 +422,6 @@ function SkillDetailView({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {ownership.dialog}
         </div>
       }
     >
@@ -432,6 +435,16 @@ function SkillDetailView({
         <SkillUsagePanel skillRef={{ kind: "standalone", skillId: skill.id }} />
       ) : (
         <div className="flex flex-col gap-4">
+          {/* Where the content comes from comes first: it is why the fields
+              below are locked. */}
+          {isSynced ? (
+            <GithubSyncPanel skill={skill} sourceRepo={githubSourceRepo} />
+          ) : isGithubSkill ? (
+            <GithubSnapshotNotice
+              repo={githubSourceRepo}
+              provider={skill.sourceProvider}
+            />
+          ) : null}
           {isGone ? (
             <Alert variant="destructive">
               <AlertDescription>
@@ -463,13 +476,6 @@ function SkillDetailView({
             // A synced skill's manifest and files belong to the repository;
             // who may use it is still this organization's to decide.
             contentReadOnly={isSynced}
-            contentNotice={
-              isSynced ? (
-                <GithubSyncPanel skill={skill} sourceRepo={githubSourceRepo} />
-              ) : isGithubSkill ? (
-                <GithubSnapshotNotice repo={githubSourceRepo} />
-              ) : null
-            }
           />
 
           {!isReadOnly && (

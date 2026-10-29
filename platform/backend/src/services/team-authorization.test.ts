@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, test } from "@/test";
+import { vi } from "vitest";
+import TeamModel from "@/models/team";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   canManageTeamMembers,
   canReadTeam,
@@ -10,6 +12,8 @@ import {
 describe("team-authorization service", () => {
   let organizationId: string;
   let creatorId: string;
+
+  afterEach(() => vi.restoreAllMocks());
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const org = await makeOrganization();
@@ -26,6 +30,23 @@ describe("team-authorization service", () => {
       const team = await makeTeam(organizationId, creatorId, { name: "T" });
       const result = await getTeamForOrg({ teamId: team.id, organizationId });
       expect(result?.id).toBe(team.id);
+    });
+
+    test("returns the team without its members unless asked", async ({
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const team = await makeTeam(organizationId, creatorId);
+      await makeTeamMember(team.id, creatorId);
+
+      const row = await getTeamForOrg({ teamId: team.id, organizationId });
+      expect(row).not.toHaveProperty("members");
+      const withMembers = await getTeamForOrg({
+        teamId: team.id,
+        organizationId,
+        includeMembers: true,
+      });
+      expect(withMembers?.members).toHaveLength(1);
     });
 
     test("returns null for a team in another org", async ({
@@ -227,6 +248,40 @@ describe("team-authorization service", () => {
         nextRole: "admin",
       });
       expect(result).toEqual({ ok: true });
+    });
+
+    test("counts admins without loading the member list", async ({
+      makeTeam,
+      makeUser,
+      makeMember,
+      makeTeamMember,
+    }) => {
+      const soloTeam = await makeTeam(organizationId, creatorId);
+      const pairTeam = await makeTeam(organizationId, creatorId);
+      const adminA = await makeUser();
+      const adminB = await makeUser();
+      await makeMember(adminA.id, organizationId, { role: "member" });
+      await makeMember(adminB.id, organizationId, { role: "member" });
+      await makeTeamMember(soloTeam.id, adminA.id, { role: "admin" });
+      await makeTeamMember(pairTeam.id, adminA.id, { role: "admin" });
+      await makeTeamMember(pairTeam.id, adminB.id, { role: "admin" });
+      const loadMembers = vi.spyOn(TeamModel, "getTeamMembers");
+
+      expect(
+        await checkLastAdminInvariant({
+          teamId: soloTeam.id,
+          userId: adminA.id,
+          nextRole: "member",
+        }),
+      ).toEqual({ ok: false, reason: "last_admin" });
+      expect(
+        await checkLastAdminInvariant({
+          teamId: pairTeam.id,
+          userId: adminA.id,
+          nextRole: null,
+        }),
+      ).toEqual({ ok: true });
+      expect(loadMembers).not.toHaveBeenCalled();
     });
   });
 

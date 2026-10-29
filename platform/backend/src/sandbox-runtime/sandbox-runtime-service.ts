@@ -47,7 +47,8 @@ type NativeSandboxErrorCode =
   | "ARCHESTRA_ENGINE_UNREACHABLE"
   | "ARCHESTRA_INTERNAL"
   | "ARCHESTRA_INVALID_INPUT"
-  | "ARCHESTRA_SANDBOX_HISTORY_LIMIT";
+  | "ARCHESTRA_SANDBOX_HISTORY_LIMIT"
+  | "ARCHESTRA_SANDBOX_IMAGE_PULL_FAILED";
 
 interface SandboxLimits {
   outputBytesLimit: number;
@@ -131,6 +132,9 @@ class SandboxRuntimeService {
   private status: SandboxRuntimeStatus = "disabled";
   private initPromise: Promise<void> | null = null;
   private lastInitAttemptAt = 0;
+  // the shared engine answered but could not pull its base image. kept so calls
+  // during the init cooldown name the blocked image instead of an outage.
+  private initImagePullFailure: SandboxRuntimeError | null = null;
   private activeRuns = 0;
   private readonly waiters: Waiter[] = [];
   // consumers attached to the shared service. shutdown only fires when the
@@ -294,9 +298,12 @@ class SandboxRuntimeService {
       case "ready":
         return;
       default:
-        throw new SandboxRuntimeError(
-          "the sandbox runtime is not available (engine unreachable)",
-          "ARCHESTRA_ENGINE_UNREACHABLE",
+        throw (
+          this.initImagePullFailure ??
+          new SandboxRuntimeError(
+            "the sandbox runtime is not available (engine unreachable)",
+            "ARCHESTRA_ENGINE_UNREACHABLE",
+          )
         );
     }
   }
@@ -342,6 +349,7 @@ class SandboxRuntimeService {
       // shutdown() may have fired while we were awaiting; don't revive it.
       // re-read status as the union type since TS narrows past the await.
       if ((this.status as SandboxRuntimeStatus) === "stopped") return;
+      this.initImagePullFailure = null;
       this.setStatus("ready");
       logger.debug(
         "[SandboxRuntime] ready — shared session + warm base online",
@@ -354,7 +362,12 @@ class SandboxRuntimeService {
         { err: error },
         "[SandboxRuntime] failed to initialize — sandbox execution unavailable",
       );
-      throw error;
+      const native = getNativeSandboxError(error);
+      this.initImagePullFailure =
+        native.code === "ARCHESTRA_SANDBOX_IMAGE_PULL_FAILED"
+          ? new SandboxRuntimeError(native.message, native.code)
+          : null;
+      throw this.initImagePullFailure ?? error;
     }
   }
 
@@ -457,6 +470,9 @@ class SandboxRuntimeService {
       // a per-session replay limit, not an engine outage — surface the actionable
       // message and leave runtime status untouched (no cooldown gate).
       case "ARCHESTRA_SANDBOX_HISTORY_LIMIT":
+      // the engine answered but could not pull the base image (typically a
+      // blocked registry): name it, and leave runtime status untouched.
+      case "ARCHESTRA_SANDBOX_IMAGE_PULL_FAILED":
         return new SandboxRuntimeError(native.message, native.code);
       case "ARCHESTRA_ENGINE_UNREACHABLE":
         // genuine engine outage — flip status so the cooldown gate kicks in.
@@ -524,6 +540,7 @@ function getNativeSandboxError(error: unknown): {
     case "ARCHESTRA_INTERNAL":
     case "ARCHESTRA_INVALID_INPUT":
     case "ARCHESTRA_SANDBOX_HISTORY_LIMIT":
+    case "ARCHESTRA_SANDBOX_IMAGE_PULL_FAILED":
       return { code, message: error.message };
     default:
       return { code: null, message: error.message };

@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { TeamTokenModel } from "@/models";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -109,22 +108,15 @@ describe("MCP Gateway DELETE session termination", () => {
   test("refuses DELETE when the session is unknown or bound to another gateway or principal", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const { app } = ctx;
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
     const otherAgent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
+    const token = await makeServiceAccountToken({ organizationId: org.id });
+    const otherToken = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Gateway token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
-    const otherToken = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Other token",
-      teamId: null,
-      isOrganizationToken: true,
     });
 
     const initialize = await app.inject({

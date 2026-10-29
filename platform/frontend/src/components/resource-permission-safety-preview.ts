@@ -2,9 +2,9 @@
 import type { ResourcePermissions } from "@/lib/resource-permissions.query";
 
 /**
- * Evaluates synthetic MSW policies for the UI preview. Real policies need a
- * server assessment of effective access and active managers before enforcement.
- * Without the mock actor subjects this adds no permission restrictions.
+ * What an unsaved edit would do to the caller and to the policy. The server
+ * refuses a save that leaves nobody managing; this lets the editor say so
+ * before the save, and warn the caller before they give up their own access.
  */
 export function getPermissionSafetyPreview({
   policy,
@@ -13,10 +13,10 @@ export function getPermissionSafetyPreview({
   policy: ResourcePermissions;
   grants: ResourcePermissions["grants"];
 }) {
-  if (!policy.previewActorSubjects) return null;
+  if (!policy.actorSubjects.length) return null;
   const applicable = [...grants, ...policy.inheritedGrants];
   const ownGrants = applicable.filter((grant) =>
-    policy.previewActorSubjects?.some(
+    policy.actorSubjects.some(
       (subject) =>
         subject.type === grant.subject.type && subject.id === grant.subject.id,
     ),
@@ -24,8 +24,12 @@ export function getPermissionSafetyPreview({
   const managers = applicable.filter((grant) =>
     grant.actions.includes("manage-permissions"),
   );
+  // Mirrors the server: only a save that removes the last manager is refused.
+  const managedBefore = [...policy.grants, ...policy.inheritedGrants].some(
+    (grant) => grant.actions.includes("manage-permissions"),
+  );
   return {
-    blocked: managers.length === 0,
+    blocked: managedBefore && managers.length === 0,
     losesAccess: !ownGrants.some((grant) => grant.actions.includes("read")),
     losesManagement: !ownGrants.some((grant) =>
       grant.actions.includes("manage-permissions"),

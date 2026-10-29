@@ -42,6 +42,7 @@ vi.mock("@/lib/clients/auth/auth-client");
 // The streaming chat session is the transport boundary.
 vi.mock("@/lib/chat/global-chat.context", () => ({
   useChatSession: vi.fn(),
+  useChatSessionSnapshot: () => null,
   useGlobalChat: vi.fn(),
 }));
 // Capture what the page hands the thread so the test can click regenerate.
@@ -94,8 +95,12 @@ const server = setupServer(
     HttpResponse.json(null),
   ),
   http.get("/health", () => HttpResponse.json({ status: "ok" })),
+  http.get("/api/guardrails-deployment", () =>
+    HttpResponse.json({ enabled: false, featureEnabled: false, active: false }),
+  ),
   http.get("/api/llm-provider-api-keys/available", () => HttpResponse.json([])),
   http.get("/api/agents/:id/tools", () => HttpResponse.json([])),
+  http.get("/api/agents/:id/delegations", () => HttpResponse.json([])),
   http.get("/api/internal_mcp_catalog", () => HttpResponse.json([])),
   http.get("/api/mcp_server", () => HttpResponse.json([])),
   http.get("/api/resource-permissions/conversation/:id", () =>
@@ -132,7 +137,7 @@ const server = setupServer(
     HttpResponse.json({ defaultAgentId: null }),
   ),
   http.get("/api/members/default-model", () => HttpResponse.json(null)),
-  http.get("/api/agents/all", () => HttpResponse.json([agent])),
+  http.get("/api/agents/chat-roster", () => HttpResponse.json([agent])),
   http.get(`/api/agents/${agent.id}`, () => HttpResponse.json(agent)),
   http.get("/api/agents/credential-readiness", () => HttpResponse.json([])),
   http.get("/api/chat/conversations", () => HttpResponse.json([])),
@@ -165,7 +170,6 @@ beforeEach(() => {
   } as Awaited<ReturnType<typeof authClient.getSession>>);
   vi.mocked(useGlobalChat).mockReturnValue({
     animatingTitleIds: new Set<string>(),
-    getSession: () => null,
   } as unknown as ReturnType<typeof useGlobalChat>);
   // A session whose last turn failed: the SDK sits in "error" with the user
   // message still under its client id. Its regenerate resolves that id
@@ -205,13 +209,17 @@ test("regenerating a message whose turn failed re-runs it from the saved message
   renderChat();
 
   // The thread shows the saved message under the live id.
-  await waitFor(() =>
-    expect(chatMessagesProps.current?.messages).toEqual([
-      expect.objectContaining({
-        id: "live-user",
-        metadata: expect.objectContaining({ persistedMessageId: "saved-user" }),
-      }),
-    ]),
+  await waitFor(
+    () =>
+      expect(chatMessagesProps.current?.messages).toEqual([
+        expect.objectContaining({
+          id: "live-user",
+          metadata: expect.objectContaining({
+            persistedMessageId: "saved-user",
+          }),
+        }),
+      ]),
+    { timeout: 5000 },
   );
 
   await act(async () => {

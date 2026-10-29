@@ -1,9 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { DEFAULT_APP_NAME, toPlaceholderTitle } from "@archestra/shared";
+import {
+  DEFAULT_APP_NAME,
+  followAgentCatalogImage,
+  toPlaceholderTitle,
+} from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
+import { settleFailedA2ATask } from "@/agents/a2a/a2a-task-settlement";
 import type { A2AExecuteResult } from "@/agents/a2a-executor";
 import config from "@/config";
-import { describeK8sApiError, isK8sNotFoundError } from "@/k8s/shared";
+import {
+  describeK8sApiError,
+  isK8sNotFoundError,
+  isTransientK8sApiError,
+} from "@/k8s/shared";
 import logger from "@/logging";
 import {
   A2ATaskModel,
@@ -12,6 +21,7 @@ import {
   AgentRunModel,
   AgentWorkspaceModel,
   EnvironmentModel,
+  LimitModel,
   OrganizationModel,
 } from "@/models";
 import {
@@ -28,9 +38,17 @@ import type {
 } from "@/types";
 import { ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
-import { resolveAgentRuntimeBackendDriver } from "./backends";
+import {
+  prepareAgentRuntimeBackendDriver,
+  resolveAgentRuntimeBackendDriver,
+} from "./backends";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 import { AgentRuntimeOutputCapture } from "./output-capture";
+import {
+  agentRunFailure,
+  classifyAgentRunFailure,
+  tagAgentRunFailure,
+} from "./run-failure";
 import { constructStableRunName } from "./runtime-contract";
 import {
   admitRuntimeSteer,
@@ -65,7 +83,9 @@ async function startAgentRunSession(params: {
   organizationId: string;
   projectId?: string | null;
   completionTarget?: AgentRunCompletionTarget;
+  onRuntimeSessionCreated?: RuntimeSessionCreatedCallback;
   task?: string | null;
+  title?: string;
   runMode: "interactive" | "one_shot";
   modelId: string | null;
   llmApiKeyId: string | null;
@@ -73,7 +93,9 @@ async function startAgentRunSession(params: {
   resumeFromTaskId?: string;
   runtimeCrossing?: RuntimeCrossing;
 }): Promise<AgentRunRecord> {
-  const backend = resolveAgentRuntimeBackendDriver(params.runtime.backend);
+  const backend = await prepareAgentRuntimeBackendDriver(
+    params.runtime.backend,
+  );
 
   const environment = params.runtime.environmentId
     ? await EnvironmentModel.findByIdForOrganization(
@@ -111,9 +133,12 @@ async function startAgentRunSession(params: {
       workspace.agentId !== params.agentId ||
       workspace.runtimeScope !== runtimeScope)
   )
-    throw new ApiError(
-      409,
-      "The prior workspace is unavailable for this actor, Agent, or environment",
+    throw tagAgentRunFailure(
+      new ApiError(
+        409,
+        "The prior run is unavailable for this actor, Agent, or environment",
+      ),
+      "run.resume_refused",
     );
 
   let task = params.task;
@@ -131,32 +156,33 @@ async function startAgentRunSession(params: {
     task = promptWithContract(task, contract);
   }
 
-  const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
-    runtime: params.runtime,
-    taskId: params.taskId,
-    runId,
-    agentId: params.agentId,
-    actor: params.actor,
-    organizationId: params.organizationId,
-    runtimeScope,
-    effectiveNetworkPolicy,
-    appName: organization?.appName ?? DEFAULT_APP_NAME,
-    task,
-    runMode: params.runMode,
-    inputFiles,
-    ...(workspace
-      ? {
-          workspaceId: workspace.id,
-          runtimeSession: runtimeOpenAppaSession({
-            organizationId: params.organizationId,
+  const { spec, virtualApiKeyId, gatewayTokenId } =
+    await buildAgentRunLaunchSpec({
+      runtime: params.runtime,
+      taskId: params.taskId,
+      runId,
+      agentId: params.agentId,
+      actor: params.actor,
+      organizationId: params.organizationId,
+      runtimeScope,
+      effectiveNetworkPolicy,
+      appName: organization?.appName ?? DEFAULT_APP_NAME,
+      task,
+      runMode: params.runMode,
+      inputFiles,
+      ...(workspace
+        ? {
             workspaceId: workspace.id,
-            workloadName: workspace.workloadName,
-            actorKind: workspace.actorKind,
-            actorId: workspace.actorId,
-          }),
-        }
-      : {}),
-  });
+            runtimeSession: runtimeOpenAppaSession({
+              organizationId: params.organizationId,
+              workspaceId: workspace.id,
+              workloadName: workspace.workloadName,
+              actorKind: workspace.actorKind,
+              actorId: workspace.actorId,
+            }),
+          }
+        : {}),
+    });
 
   if (workspace) {
     spec.frozenName = workspace.workloadName;
@@ -173,9 +199,10 @@ async function startAgentRunSession(params: {
   // objects, so a crash between the two must leave a record, not an orphan.
   const resumeWithoutPrompt = Boolean(priorRun && !params.task?.trim());
   const placeholderTitle =
-    resumeWithoutPrompt && priorRun
+    params.title ??
+    (resumeWithoutPrompt && priorRun
       ? priorRun.title
-      : toPlaceholderTitle(params.task ?? "Run");
+      : toPlaceholderTitle(params.task ?? "Run"));
   const session = await AgentRunModel.create({
     id: runId,
     organizationId: params.organizationId,
@@ -191,10 +218,11 @@ async function startAgentRunSession(params: {
     runtimeScope,
     activeDeadlineSeconds: spec.activeDeadlineSeconds,
     virtualApiKeyId,
+    gatewayTokenId,
     completionTarget: params.completionTarget,
   });
 
-  if (!resumeWithoutPrompt) {
+  if (params.title === undefined && !resumeWithoutPrompt) {
     trackBackgroundWork(
       generateAgentRunTitle({
         taskId: params.taskId,
@@ -235,11 +263,18 @@ async function startAgentRunSession(params: {
         taskId: params.taskId,
       });
       if (!claimed)
-        throw new ApiError(
-          409,
-          "This workspace is already in use or its retention deadline has passed",
+        // The route checked retention before starting, so a lost claim is
+        // almost always a concurrent turn; an expired workspace is refused
+        // synchronously on the next attempt.
+        throw tagAgentRunFailure(
+          new ApiError(
+            409,
+            "This Agent is already in use or its saved files have reached their retention deadline",
+          ),
+          "run.workspace_busy",
         );
       claimedWorkspace = true;
+      await notifyRuntimeSessionCreated(params, workspace.id);
       const previous = await AgentRunModel.findByTaskId(workspace.lastTaskId);
       if (previous?.virtualApiKeyId)
         await cleanupAgentRun(previous, { requireTranscript: true });
@@ -277,6 +312,7 @@ async function startAgentRunSession(params: {
               1000,
         ),
       });
+      await notifyRuntimeSessionCreated(params, createdWorkspace.id);
       await stampRuntimeBinding({
         spec,
         organizationId: params.organizationId,
@@ -287,6 +323,14 @@ async function startAgentRunSession(params: {
       await backend.stageInputs({ session, inputs: inputFiles });
     }
   } catch (error) {
+    const launchFailure = describeLaunchFailure(error);
+    // Settle the task before cleanup is visible: the reconciler cancels any
+    // unfinished task whose workspace is being deleted, which would otherwise
+    // replace this launch error with a generic reason.
+    await recordLaunchFailure({
+      taskId: params.taskId,
+      failure: launchFailure,
+    });
     // A publication can succeed before its exec connection fails. Keep the
     // claim until stopping that possibly-running turn has been acknowledged.
     try {
@@ -325,7 +369,7 @@ async function startAgentRunSession(params: {
         "Cleanup after a failed Agent Runtime launch will retry",
       );
     }
-    throw describeLaunchFailure(error);
+    throw launchFailure;
   }
 
   return session;
@@ -338,11 +382,15 @@ export function resolveAgentRuntime(
     "id" | "organizationId" | "environmentId" | "runtime" | "runtimeSecretId"
   >,
 ): ResolvedAgentRuntime | null {
-  if (!config.agentRuntime.enabled || !agent.runtime) {
+  if (!agent.runtime) {
     return null;
   }
   return {
     ...agent.runtime,
+    image: followAgentCatalogImage({
+      image: agent.runtime.image,
+      catalogImages: config.agentRuntime.catalogImages,
+    }),
     agentId: agent.id,
     organizationId: agent.organizationId,
     environmentId: agent.environmentId,
@@ -368,7 +416,9 @@ export async function runTaskInAgentRuntime(params: {
   organizationId: string;
   projectId?: string | null;
   completionTarget?: AgentRunCompletionTarget;
+  onRuntimeSessionCreated?: RuntimeSessionCreatedCallback;
   task?: string | null;
+  title?: string;
   runMode: "interactive" | "one_shot";
   modelId: string | null;
   llmApiKeyId: string | null;
@@ -379,13 +429,22 @@ export async function runTaskInAgentRuntime(params: {
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
   const launchedAt = Date.now();
-  const session = await startAgentRunSession(params);
-  return await followAgentRun({
-    session,
-    launchedAt,
-    onTextDelta: params.onTextDelta,
-    abortSignal: params.abortSignal,
-  });
+  try {
+    const session = await startAgentRunSession(params);
+    return await followAgentRun({
+      session,
+      launchedAt,
+      onTextDelta: params.onTextDelta,
+      abortSignal: params.abortSignal,
+    });
+  } catch (error) {
+    await recordRunFailure({
+      taskId: params.taskId,
+      failure: error,
+      abortSignal: params.abortSignal,
+    });
+    throw error;
+  }
 }
 
 /**
@@ -398,11 +457,20 @@ export async function resumeAgentRun(params: {
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
-  return await followAgentRun({
-    session: params.session,
-    onTextDelta: params.onTextDelta,
-    abortSignal: params.abortSignal,
-  });
+  try {
+    return await followAgentRun({
+      session: params.session,
+      onTextDelta: params.onTextDelta,
+      abortSignal: params.abortSignal,
+    });
+  } catch (error) {
+    await recordRunFailure({
+      taskId: params.session.taskId,
+      failure: error,
+      abortSignal: params.abortSignal,
+    });
+    throw error;
+  }
 }
 
 /** Clean up a session whose task settled while no backend owned its run. */
@@ -532,9 +600,17 @@ async function followAgentRun(params: {
     const text = extractFinalAnswer(output.transcript);
 
     if (completion.outcome === "failed") {
-      throw new ApiError(
-        502,
-        completion.reason ?? "The Agent Runtime run exited without completing",
+      // Read the spend cap before teardown revokes the run's virtual key: a
+      // client exits with its own provider error when the proxy refuses it.
+      throw tagAgentRunFailure(
+        new ApiError(
+          502,
+          completion.reason ??
+            "The Agent Runtime run exited without completing",
+        ),
+        (await hasExhaustedRunBudget(session))
+          ? agentRunFailure("budget.exceeded")
+          : (completion.failure ?? agentRunFailure("turn.exit_status")),
       );
     }
 
@@ -648,9 +724,76 @@ async function persistTranscript(params: {
 function describeLaunchFailure(error: unknown): unknown {
   const summary = describeK8sApiError(error);
   if (!summary) return error;
-  return new Error(`Agent Runtime could not start the run. ${summary}.`, {
-    cause: error,
-  });
+  const transient = isTransientK8sApiError(error);
+  const message = transient
+    ? `Agent Runtime could not start the run because the Kubernetes API was overloaded or unavailable (${summary}). Start the run again in a minute.`
+    : `Agent Runtime could not start the run. ${summary}.`;
+  return tagAgentRunFailure(
+    new Error(message, { cause: error }),
+    transient ? "launch.kubernetes_unavailable" : "launch.kubernetes_rejected",
+  );
+}
+
+async function recordLaunchFailure(params: {
+  taskId: string;
+  failure: unknown;
+}): Promise<void> {
+  try {
+    const task = await A2ATaskModel.findById(params.taskId);
+    if (!task) return;
+    await settleFailedA2ATask({
+      taskId: task.id,
+      contextId: task.contextId,
+      statusReason:
+        params.failure instanceof Error
+          ? params.failure.message
+          : String(params.failure),
+      failure: classifyAgentRunFailure(params.failure),
+    });
+  } catch (error) {
+    // The run lifecycle settles the task from the rethrown error as well.
+    logger.warn(
+      { error, taskId: params.taskId },
+      "Could not record an Agent Runtime run failure",
+    );
+  }
+}
+
+/**
+ * Settle a runtime task with its classified failure before the generic A2A
+ * lifecycle records the same reason without one. A no-op when the task is
+ * already terminal (an earlier launch settlement or a cancellation won), and
+ * skipped on abort: the lifecycle records that as a cancellation.
+ */
+async function recordRunFailure(params: {
+  taskId: string;
+  failure: unknown;
+  abortSignal?: AbortSignal;
+}): Promise<void> {
+  if (params.abortSignal?.aborted) return;
+  await recordLaunchFailure({ taskId: params.taskId, failure: params.failure });
+}
+
+/** Whether the run's virtual key spent its whole `maxCostUsd` cap. */
+async function hasExhaustedRunBudget(
+  session: AgentRunRecord,
+): Promise<boolean> {
+  if (!session.virtualApiKeyId) return false;
+  try {
+    const cap = (
+      await LimitModel.findSpendCaps({
+        entityType: "virtual_key",
+        entityIds: [session.virtualApiKeyId],
+      })
+    ).get(session.virtualApiKeyId);
+    return cap !== undefined && cap.currentUsage >= cap.limitValue;
+  } catch (error) {
+    logger.warn(
+      { error, taskId: session.taskId },
+      "Could not read the Agent run spend cap",
+    );
+    return false;
+  }
 }
 
 function delayMs(ms: number, signal?: AbortSignal): Promise<void> {
@@ -699,3 +842,28 @@ export function extractFinalAnswer(transcript: string): string {
 const LOG_DRAIN_GRACE_MS = 2_000;
 // A retained PVC may need attachment to a temporary recovery Pod first.
 const OUTPUT_SNAPSHOT_TIMEOUT_MS = 120_000;
+
+type RuntimeSessionCreatedCallback = (session: {
+  taskId: string;
+  workspaceId: string;
+}) => Promise<void>;
+
+async function notifyRuntimeSessionCreated(
+  params: {
+    taskId: string;
+    onRuntimeSessionCreated?: RuntimeSessionCreatedCallback;
+  },
+  workspaceId: string,
+): Promise<void> {
+  try {
+    await params.onRuntimeSessionCreated?.({
+      taskId: params.taskId,
+      workspaceId,
+    });
+  } catch (error) {
+    logger.warn(
+      { error, taskId: params.taskId },
+      "Could not announce the Agent Runtime session",
+    );
+  }
+}

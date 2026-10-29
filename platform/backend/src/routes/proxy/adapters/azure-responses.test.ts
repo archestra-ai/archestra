@@ -61,8 +61,8 @@ describe("azureResponsesAdapterFactory", () => {
   test("reads messages that omit `type` (the AI SDK's easy input message shape)", () => {
     // The Responses API defaults an input item's `type` to "message", and the AI
     // SDK relies on that, sending bare `{role, content}`. Dropping those left
-    // getMessages() empty, so trusted-data / Dual LLM policy evaluation ran
-    // against an empty conversation instead of the user's actual prompt.
+    // getMessages() empty, an empty conversation instead of the user's actual
+    // prompt.
     const adapter = azureResponsesAdapterFactory.createRequestAdapter({
       model: "gpt-4.1",
       input: [
@@ -127,14 +127,15 @@ describe("azureResponsesAdapterFactory", () => {
       content: '{"value":1}',
       isError: false,
     };
-    // The output is paired with the call behind it: that is the shape
-    // trusted-data / Dual LLM policy evaluation reads, and without it the
-    // conversation looks tool-free to the evaluator.
+    // The output is paired with the call behind it: without that the
+    // conversation looks tool-free to common-format readers.
     expect(adapter.getMessages()).toEqual([
       { role: "user", content: "hello from responses" },
       { role: "tool", content: '{"value":1}', toolCalls: [result] },
     ]);
-    expect(adapter.getToolResults()).toEqual([result]);
+    expect(adapter.getToolResults()).toEqual([
+      { ...result, structured: false },
+    ]);
     expect(adapter.getTools()).toEqual([
       {
         name: "read_file",
@@ -166,10 +167,11 @@ describe("azureResponsesAdapterFactory", () => {
         id: "call_missing",
         name: "unknown",
         content: '{"value":1}',
+        structured: false,
         isError: false,
       },
     ]);
-    // Still untrusted data: the default trusted-data policies apply to it.
+    // Still a tool result, surfaced under the "unknown" name.
     expect(adapter.getMessages()).toEqual([
       {
         role: "tool",
@@ -187,8 +189,7 @@ describe("azureResponsesAdapterFactory", () => {
   });
 
   // Codex calls a namespaced tool by its bare name and names the namespace
-  // beside it; the pair is the tool's identity, so trusted-data evaluation
-  // must see both.
+  // beside it; the pair is the tool's identity, so the plugins must see both.
   test("carries the namespace a paired history call named", () => {
     const adapter = azureResponsesAdapterFactory.createRequestAdapter({
       model: "gpt-4.1",
@@ -216,7 +217,9 @@ describe("azureResponsesAdapterFactory", () => {
       isError: false,
     };
 
-    expect(adapter.getToolResults()).toEqual([expected]);
+    expect(adapter.getToolResults()).toEqual([
+      { ...expected, structured: false },
+    ]);
     expect(adapter.getMessages()).toEqual([
       { role: "tool", content: "matching tools", toolCalls: [expected] },
     ]);
@@ -598,5 +601,30 @@ describe("azureResponsesAdapterFactory", () => {
 
     expect(JSON.stringify(completion.response.output)).toContain(prefix);
     expect(completion.response.output).toHaveLength(2);
+  });
+});
+
+describe("Azure Responses replayed tool-call ids", () => {
+  test("fits a Gemini call id on the upstream request", () => {
+    const geminiCallId = `gemsig-${"s".repeat(450)}.gemini-call-read-1`;
+    const adapter = azureResponsesAdapterFactory.createRequestAdapter({
+      model: "gpt-5.2-chat",
+      input: [
+        {
+          type: "function_call",
+          call_id: geminiCallId,
+          name: "read",
+          arguments: "{}",
+        },
+        { type: "function_call_output", call_id: geminiCallId, output: "a" },
+      ],
+    } as never);
+
+    const [call, output] = adapter.toProviderRequest().input as Array<{
+      call_id: string;
+    }>;
+
+    expect(call.call_id).toMatch(/^call_[0-9a-f]{32}$/);
+    expect(output.call_id).toBe(call.call_id);
   });
 });

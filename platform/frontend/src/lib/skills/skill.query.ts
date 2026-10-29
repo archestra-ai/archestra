@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
+import { skillNamesQueryKey } from "@/lib/connection-approval-query-keys";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
@@ -30,6 +31,7 @@ const {
   getPluginSkill,
   getPluginSkills,
   getPluginSkillUsageStatistics,
+  getSkillNames,
   getSkillSourceRepos,
   getSkillUsageStatistics,
   getSkillVersion,
@@ -86,9 +88,11 @@ type SkillsQuery = NonNullable<archestraApiTypes.GetSkillsData["query"]>;
 type SkillsPaginatedParams = Pick<
   SkillsQuery,
   | "limit"
+  | "includeContent"
   | "offset"
   | "search"
   | "sourceRepo"
+  | "skillIds"
   | "forAgentId"
   | "mcpGatewayEnvironment"
   | "agentSkillView"
@@ -97,6 +101,9 @@ type SkillsPaginatedParams = Pick<
   | "authorIds"
   | "excludeAuthorIds"
   | "excludeOtherPersonalSkills"
+  | "access"
+  | "sharedWith"
+  | "owner"
   | "status"
   | "sortBy"
   | "sortDirection"
@@ -720,7 +727,9 @@ export function useUpdateSkillGithubSync() {
       } else if (variables.body.disconnect) {
         toast.success("Sync stopped — the skill is now editable");
       } else {
-        toast.success("Sync frequency updated");
+        toast.success(
+          variables.body.source ? "Source updated" : "Sync frequency updated",
+        );
       }
     },
   });
@@ -750,6 +759,8 @@ export function usePreviewGithubSkill(
       body?.repoUrl,
       body?.path ?? null,
       body?.skillPath,
+      // The same repository can read differently through another credential.
+      body?.githubAppConfigId ?? body?.gitlabTokenId ?? null,
     ],
     enabled: !!body,
     staleTime: 5 * 60 * 1000,
@@ -862,4 +873,89 @@ const BULK_FAILURE_NAMES_SHOWN = 3;
  */
 function isSkillVersionConflict(error: unknown): boolean {
   return getApiErrorInternalCode(error) === "skill_version_conflict";
+}
+
+// === The whole skill set, for the Connect page and its setup
+
+/**
+ * The slice of a skill the connection flow needs to list, attribute, and share
+ * it. Derived from the API response so the fields can't drift from it.
+ */
+export type ConnectSkill = Pick<
+  archestraApiTypes.GetSkillsResponses["200"]["data"][number],
+  | "id"
+  | "name"
+  | "description"
+  | "scope"
+  | "usageCount"
+  | "authorId"
+  | "authorName"
+  | "teams"
+  | "users"
+>;
+
+/** The id and name of a skill the caller can read. */
+export type SkillName =
+  archestraApiTypes.GetSkillNamesResponses["200"]["data"][number];
+
+/**
+ * Every skill the caller can read, named, with the total: one request in
+ * place of paging the full list, for the connection setup that names and
+ * sends them. The names stop at the setup cap; the total does not, so a
+ * caller can tell when there are more than one setup can carry.
+ */
+export function useSkillNames(params: { enabled: boolean }) {
+  return useQuery({
+    queryKey: skillNamesQueryKey,
+    queryFn: async () => {
+      const { data, error } = await getSkillNames();
+      if (error) throwOnApiError(error);
+      return data ?? { data: [], total: 0 };
+    },
+    enabled: params.enabled,
+  });
+}
+
+/** Fetch every skill page by page. */
+export async function fetchAllSkills(
+  forAgentId: string | null = null,
+  throwOnError = false,
+): Promise<ConnectSkill[]> {
+  const skills: ConnectSkill[] = [];
+  const limit = 100;
+  let offset = 0;
+  while (true) {
+    const { data, error } = await getSkills({
+      query: {
+        limit,
+        offset,
+        forAgentId: forAgentId ?? undefined,
+        includeContent: false,
+      },
+    });
+    if (error) {
+      if (throwOnError) {
+        throwOnApiError(error, { toastOnError: false });
+      }
+      handleApiError(error);
+      return [];
+    }
+    if (!data) break;
+    for (const skill of data.data) {
+      skills.push({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        scope: skill.scope,
+        usageCount: skill.usageCount,
+        authorId: skill.authorId,
+        authorName: skill.authorName,
+        teams: skill.teams,
+        users: skill.users,
+      });
+    }
+    if (data.data.length < limit) break;
+    offset += limit;
+  }
+  return skills;
 }

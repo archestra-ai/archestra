@@ -3,7 +3,7 @@ import path from "node:path";
 
 const IMAGE_BIN = path.resolve(
   import.meta.dirname,
-  "../../../agent_images/bin",
+  "../../../docker_images/agent/bin",
 );
 
 /** Keep real subprocess behavior while shortening frame retention and polling. */
@@ -48,6 +48,8 @@ os.execvp(sys.argv[1], sys.argv[1:] + ([task] if task else []))
   for (const script of [
     name,
     "archestra-agent-failure",
+    "archestra-agent-instructions",
+    "archestra-claude-background",
     "archestra-codex-failure-watch",
   ]) {
     await symlink(path.join(IMAGE_BIN, script), path.join(bin, script));

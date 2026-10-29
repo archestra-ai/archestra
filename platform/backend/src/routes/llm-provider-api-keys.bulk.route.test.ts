@@ -103,7 +103,10 @@ describe("DELETE /api/llm-provider-api-keys/bulk", () => {
 
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toEqual({
-      succeeded: [{ id: deleted.id, name: "bulk-delete" }],
+      succeeded: [
+        { id: deleted.id, name: "bulk-delete" },
+        { id: inUse.id, name: "bulk-in-use" },
+      ],
       failed: [
         {
           id: missing,
@@ -120,19 +123,40 @@ describe("DELETE /api/llm-provider-api-keys/bulk", () => {
           name: "bulk-system",
           error: "System API keys cannot be deleted",
         },
-        {
-          id: inUse.id,
-          name: "bulk-in-use",
-          error:
-            "This API key is used for knowledge base OCR. Remove it from Settings > Knowledge before deleting.",
-        },
       ],
     });
     expect(await LlmProviderApiKeyModel.findById(deleted.id)).toBeNull();
     expect(await LlmProviderApiKeyModel.findById(foreign.id)).not.toBeNull();
     expect(await LlmProviderApiKeyModel.findById(system.id)).not.toBeNull();
-    expect(await LlmProviderApiKeyModel.findById(inUse.id)).not.toBeNull();
+    expect(await LlmProviderApiKeyModel.findById(inUse.id)).toBeNull();
+    expect(
+      (await OrganizationModel.getById(organizationId))?.ocrChatApiKeyId,
+    ).toBeNull();
     expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  // The keys are deleted and audited before the model sweep runs, so a sweep
+  // failure (a statement timeout on a large deployment) must not turn the
+  // completed batch into an error response.
+  test("reports the deleted keys when the model cleanup after them fails", async ({
+    makeSecret,
+  }) => {
+    const key = await createKey("bulk-cleanup-fails", makeSecret);
+    const cleanup = vi
+      .spyOn(ModelModel, "deleteOrphanedModels")
+      .mockRejectedValue(
+        new Error("canceling statement due to statement timeout"),
+      );
+
+    const response = await bulkDelete([key.id]);
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toEqual({
+      succeeded: [{ id: key.id, name: "bulk-cleanup-fails" }],
+      failed: [],
+    });
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(await LlmProviderApiKeyModel.findById(key.id)).toBeNull();
   });
 
   test("rejects a batch over the cap", async () => {

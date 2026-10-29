@@ -49,6 +49,7 @@ const externalMcpSkillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           isMcpServerAdmin,
           environmentId: query.environmentId,
+          includeUsage: true,
         }),
       );
     },

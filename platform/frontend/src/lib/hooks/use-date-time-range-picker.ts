@@ -1,7 +1,11 @@
 "use client";
 
-import { format } from "date-fns";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  describeTimeRange,
+  resolveTimeRange,
+  type TimeRange,
+} from "@/components/time-range-picker/time-range";
 
 export interface UseDateTimeRangePickerOptions {
   startDateFromUrl: string | null;
@@ -13,113 +17,125 @@ export interface UseDateTimeRangePickerOptions {
 }
 
 export interface UseDateTimeRangePickerReturn {
+  /** The range as written, or null while the page is not filtering by time. */
+  range: TimeRange | null;
+  setRange: (range: TimeRange) => void;
+  /** Where the range starts, or undefined while there is none. */
   startDate: Date | undefined;
+  /** Where the range ends, or undefined when it runs up to now. */
   endDate: Date | undefined;
-  isDateDialogOpen: boolean;
-  tempStartDate: Date | undefined;
-  tempEndDate: Date | undefined;
-  setIsDateDialogOpen: (open: boolean) => void;
-  setTempStartDate: (date: Date | undefined) => void;
-  setTempEndDate: (date: Date | undefined) => void;
-  openDateDialog: () => void;
-  handleApplyDateRange: () => void;
   clearDateRange: () => void;
   getDateRangeDisplay: () => string | null;
   startDateParam: string | undefined;
   endDateParam: string | undefined;
 }
 
+/**
+ * A page's time filter, kept in its URL as written ("now-6h" to "now", or two
+ * exact times) so a relative range keeps rolling forward on reload and in a
+ * shared link. A relative range resolves against the moment it was loaded or
+ * picked and then holds still: the list never refreshes under the reader, and
+ * picking the range again or reloading brings it up to date.
+ */
 export function useDateTimeRangePicker({
   startDateFromUrl,
   endDateFromUrl,
   onDateRangeChange,
 }: UseDateTimeRangePickerOptions): UseDateTimeRangePickerReturn {
-  const [startDate, setStartDate] = useState<Date | undefined>(() =>
-    parseUrlDate(startDateFromUrl),
+  const [range, setRangeState] = useState<TimeRange | null>(() =>
+    validRange(startDateFromUrl, endDateFromUrl),
   );
-  const [endDate, setEndDate] = useState<Date | undefined>(() =>
-    parseUrlDate(endDateFromUrl),
-  );
-  const [isDateDialogOpen, setIsDateDialogOpen] = useState(false);
-  const [tempStartDate, setTempStartDate] = useState<Date | undefined>(
-    startDate,
-  );
-  const [tempEndDate, setTempEndDate] = useState<Date | undefined>(endDate);
-
-  const openDateDialog = useCallback(() => {
-    setTempStartDate(startDate);
-    setTempEndDate(endDate);
-    setIsDateDialogOpen(true);
-  }, [startDate, endDate]);
-
-  const handleApplyDateRange = useCallback(() => {
-    if (!tempStartDate || !tempEndDate) {
-      return;
+  // The URL wins, so a shared link shows its own range; without one the page
+  // takes the range last picked on any log page, so switching tabs keeps it.
+  // Read after mount: the server render has no storage to agree with.
+  const hasUrlRange = startDateFromUrl !== null;
+  useEffect(() => {
+    if (hasUrlRange) return;
+    const stored = readStoredRange();
+    if (stored) {
+      setRangeState(stored);
+      setAnchor(startOfMinute());
     }
+  }, [hasUrlRange]);
+  // Resolved to the start of the minute, so queries keep a stable key.
+  const [anchor, setAnchor] = useState(startOfMinute);
+  const resolved = useMemo(
+    () => (range ? resolveTimeRange(range, new Date(anchor)) : undefined),
+    [range, anchor],
+  );
+  // A range that runs up to now leaves its end open, so rows written since
+  // it was resolved still show on the next fetch.
+  const endsNow = range?.to.trim() === "now";
 
-    const nextStartDate = new Date(tempStartDate);
-    const nextEndDate = new Date(tempEndDate);
-    nextEndDate.setSeconds(59, 999);
-
-    setStartDate(nextStartDate);
-    setEndDate(nextEndDate);
-    onDateRangeChange({
-      startDate: nextStartDate.toISOString(),
-      endDate: nextEndDate.toISOString(),
-    });
-    setIsDateDialogOpen(false);
-  }, [tempStartDate, tempEndDate, onDateRangeChange]);
+  const setRange = useCallback(
+    (next: TimeRange) => {
+      setRangeState(next);
+      setAnchor(startOfMinute());
+      storeRange(next);
+      onDateRangeChange({ startDate: next.from, endDate: next.to });
+    },
+    [onDateRangeChange],
+  );
 
   const clearDateRange = useCallback(() => {
-    setStartDate(undefined);
-    setEndDate(undefined);
-    setTempStartDate(undefined);
-    setTempEndDate(undefined);
-    onDateRangeChange({
-      startDate: null,
-      endDate: null,
-    });
+    setRangeState(null);
+    storeRange(null);
+    onDateRangeChange({ startDate: null, endDate: null });
   }, [onDateRangeChange]);
 
-  const getDateRangeDisplay = useCallback(() => {
-    if (!startDate || !endDate) {
-      return null;
-    }
-
-    const hasCustomTime =
-      startDate.getHours() !== 0 ||
-      startDate.getMinutes() !== 0 ||
-      endDate.getHours() !== 23 ||
-      endDate.getMinutes() !== 59;
-
-    if (hasCustomTime) {
-      return `${format(startDate, "MMM d, yyyy HH:mm")} - ${format(endDate, "MMM d, yyyy HH:mm")}`;
-    }
-
-    return `${format(startDate, "MMM d, yyyy")} - ${format(endDate, "MMM d, yyyy")}`;
-  }, [startDate, endDate]);
+  const getDateRangeDisplay = useCallback(
+    () => (range ? describeTimeRange(range, new Date(anchor)) : null),
+    [range, anchor],
+  );
 
   return {
-    startDate,
-    endDate,
-    isDateDialogOpen,
-    tempStartDate,
-    tempEndDate,
-    setIsDateDialogOpen,
-    setTempStartDate,
-    setTempEndDate,
-    openDateDialog,
-    handleApplyDateRange,
+    range,
+    setRange,
+    startDate: resolved?.start,
+    endDate: endsNow ? undefined : resolved?.end,
     clearDateRange,
     getDateRangeDisplay,
-    startDateParam: startDate?.toISOString(),
-    endDateParam: endDate?.toISOString(),
+    startDateParam: resolved?.start.toISOString(),
+    endDateParam: endsNow ? undefined : resolved?.end.toISOString(),
   };
 }
 
-// A malformed URL value would make toISOString() throw during render.
-function parseUrlDate(value: string | null): Date | undefined {
-  if (!value) return undefined;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : date;
+// ===
+
+// A hand-edited or stale value whose ends name no moment is no filter at all,
+// rather than a broken one that the button would show as gibberish.
+function validRange(
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+): TimeRange | null {
+  if (!startDate) return null;
+  const range = { from: startDate, to: endDate ?? "now" };
+  return resolveTimeRange(range, new Date()) ? range : null;
+}
+
+function readStoredRange(): TimeRange | null {
+  try {
+    const stored = JSON.parse(
+      window.localStorage.getItem(STORAGE_KEY) ?? "null",
+    );
+    return validRange(stored?.from, stored?.to);
+  } catch {
+    return null;
+  }
+}
+
+function storeRange(range: TimeRange | null) {
+  try {
+    if (range) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(range));
+    else window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage can be unavailable (private mode); the URL still holds it.
+  }
+}
+
+/** One range for every log page in this browser. */
+const STORAGE_KEY = "archestra-logs-time-range";
+
+function startOfMinute(): number {
+  return Math.floor(Date.now() / 60_000) * 60_000;
 }

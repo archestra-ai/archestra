@@ -39,6 +39,10 @@ const apikey = pgTable(
   (table) => ({
     referenceIdIdx: index("idx_apikey_reference_id").on(table.referenceId),
     configIdIdx: index("idx_apikey_config_id").on(table.configId),
+    // Better Auth verifies a key with `WHERE key = <hash>`; without this the
+    // lookup is a sequential scan of every API key, and it runs on every
+    // bearer request that is not a session.
+    keyIdx: index("idx_apikey_key").on(table.key),
   }),
 );
 

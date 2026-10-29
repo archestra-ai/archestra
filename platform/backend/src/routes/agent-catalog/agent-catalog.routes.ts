@@ -2,12 +2,16 @@ import {
   calculatePaginationMeta,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAgentTypePermissionChecker, userHasPermission } from "@/auth";
+import { getAgentTypePermissionChecker } from "@/auth";
 import { AgentModel } from "@/models";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { listA2aRemoteAgents } from "@/services/a2a-outbound-registry";
 import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
 import {
@@ -31,6 +35,16 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             name: z.string().optional(),
             scope: AgentScopeFilterSchema.optional(),
+            includeBuiltIn: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value === "true" : value,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Also list the built-in agents. Applies to agent admins only, and the access filter does not apply to these agents.",
+              ),
             teamIds: z
               .preprocess(
                 (value) =>
@@ -59,6 +73,29 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 z.boolean(),
               )
               .optional(),
+            ids: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value.split(",") : value,
+                z.array(z.string().uuid()).max(20),
+              )
+              .optional()
+              .describe(
+                "Only these agents (comma-separated IDs), such as the viewer's automatic pins.",
+              ),
+            excludeIds: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value.split(",") : value,
+                z.array(z.string().uuid()).max(20),
+              )
+              .optional()
+              .describe(
+                "Leave these agents out (comma-separated IDs), such as the ones the list already shows as automatic pins.",
+              ),
+            access: ResourceAccessQuerySchema,
+            sharedWith: ResourceSharedWithQuerySchema,
+            owner: ResourceOwnerQuerySchema,
             selectableOnly: z
               .preprocess(
                 (value) =>
@@ -84,10 +121,26 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.",
               ),
+            includeTools: z
+              .preprocess(
+                (value) => value !== "false" && value !== false,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Attach each internal agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
-            createSortingQuerySchema(["name", "createdAt", "team"] as const),
+            createSortingQuerySchema([
+              "name",
+              "createdAt",
+              "team",
+              "toolsCount",
+              "subagentsCount",
+              "lastUsedAt",
+            ] as const),
           ),
         response: constructResponseSchema(AgentCatalogResponseSchema),
       },
@@ -99,22 +152,20 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       checker.require("agent", query.status === "deleted" ? "delete" : "read");
       const isAgentAdmin = checker.isAdmin("agent");
-      const canManageExternalAgents = await userHasPermission(
-        user.id,
-        organizationId,
-        "organizationSettings",
-        "update",
-      );
       const filters = {
         organizationId,
         name: query.name,
         scope: query.scope,
+        includeBuiltIn: query.includeBuiltIn,
         teamIds: query.teamIds,
         authorIds: isAgentAdmin ? query.authorIds : undefined,
         excludeAuthorIds: isAgentAdmin ? query.excludeAuthorIds : undefined,
+        ids: query.ids,
+        excludeIds: query.excludeIds,
         excludeOtherPersonalAgents: isAgentAdmin
           ? query.excludeOtherPersonalAgents
           : undefined,
+        access: resourceAccessSelection(query),
         labels: parseLabelsParam(query.labels),
         status: query.status,
         providerApiKeyId: query.providerApiKeyId,
@@ -130,8 +181,7 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         filters,
         userId: user.id,
         isAgentAdmin,
-        canManageExternalAgents,
-        includeExternalAgents: !query.selectableOnly || canManageExternalAgents,
+        externalAgentAction: query.selectableOnly ? "delete" : "read",
         excludeOtherPersonalExternalAgents: query.excludeOtherPersonalAgents,
       });
       const agentIds = candidates.rows.flatMap((row) =>
@@ -145,7 +195,12 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? AgentModel.findAllPaginated(
               { limit: agentIds.length, offset: 0 },
               sorting,
-              { ...filters, ids: agentIds, agentTypes: ["agent"] },
+              {
+                ...filters,
+                ids: agentIds,
+                agentTypes: ["agent"],
+                includeTools: query.includeTools,
+              },
               user.id,
               isAgentAdmin,
             ).then((result) => result.data)
@@ -153,7 +208,6 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         listA2aRemoteAgents({
           organizationId,
           userId: user.id,
-          canManage: canManageExternalAgents,
           ids: externalAgentIds,
         }),
       ]);

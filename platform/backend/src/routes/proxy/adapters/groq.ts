@@ -28,6 +28,7 @@ import type {
   LLMStreamAdapter,
   StreamAccumulatorState,
 } from "@/types";
+import { streamChatCompletionChunks } from "./chat-completions-stream";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -270,15 +271,9 @@ export const groqAdapterFactory: LLMProvider<
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
 
-    const stream = await groqClient.chat.completions.create(groqRequest);
-
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        for await (const chunk of stream) {
-          yield chunk as GroqStreamChunk;
-        }
-      },
-    };
+    return streamChatCompletionChunks<GroqStreamChunk>(
+      groqClient.chat.completions.create(groqRequest),
+    );
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

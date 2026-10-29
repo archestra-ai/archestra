@@ -37,6 +37,8 @@
  *   archestra.tools.call(name,args) — call an assigned tool with the viewer's credentials;
  *                                     resolves with the tool's data unwrapped from the MCP
  *                                     envelope (structuredContent when the tool provides it,
+ *                                     else { text, resources: [{ uri, mimeType, text | dataUrl }] }
+ *                                     when it carries embedded resources (file contents),
  *                                     else JSON parsed from its text output, else the raw
  *                                     text, else { media: [{ type, mimeType, dataUrl }] }
  *                                     for image/audio-only results, else null); throws
@@ -369,8 +371,53 @@
     return result;
   };
 
+  // Tool results are untrusted: only a strict type/subtype mimeType and
+  // base64-alphabet data may enter a data URL, so a malicious block can never
+  // smuggle quotes/markup into an attribute an app interpolates.
+  const SAFE_MIME_TYPE = /^[\w.+-]+\/[\w.+-]+$/;
+  const SAFE_BASE64 = /^[A-Za-z0-9+/=]+$/;
+
+  // Embedded resources (MCP `resource` blocks) carry content the text blocks
+  // only announce — a file-read tool returns "downloaded file" as text and the
+  // file body here. Text contents pass through as data; a blob becomes a
+  // dataUrl (null when its base64 is unsafe) typed by the mimeType's
+  // type/subtype essence, or application/octet-stream when that is unsafe.
+  const resourcesOf = (result) =>
+    (result.content || [])
+      .filter(
+        (c) =>
+          c &&
+          c.type === "resource" &&
+          c.resource &&
+          typeof c.resource === "object",
+      )
+      .map((c) => {
+        const r = c.resource;
+        const mimeType = typeof r.mimeType === "string" ? r.mimeType : null;
+        const entry = {
+          uri: typeof r.uri === "string" ? r.uri : null,
+          mimeType,
+        };
+        if (typeof r.text === "string") {
+          entry.text = r.text;
+        } else {
+          const essence = mimeType ? mimeType.split(";")[0].trim() : "";
+          entry.dataUrl =
+            typeof r.blob === "string" && SAFE_BASE64.test(r.blob)
+              ? "data:" +
+                (SAFE_MIME_TYPE.test(essence)
+                  ? essence
+                  : "application/octet-stream") +
+                ";base64," +
+                r.blob
+              : null;
+        }
+        return entry;
+      });
+
   // Unwrap a successful envelope into the data an app actually wants:
-  // structuredContent when it is a non-null object, else JSON parsed from the
+  // structuredContent when it is a non-null object, else { text, resources }
+  // when the result carries embedded resources, else JSON parsed from the
   // joined text blocks, else the raw text, else { media } for image/audio-only
   // results (dataUrl drops straight into an <img>/<audio> src), else null.
   // Mirrored server-side by unwrapToolResultForPreview in
@@ -380,6 +427,8 @@
     const sc = result.structuredContent;
     if (sc && typeof sc === "object") return sc;
     const text = textOf(result);
+    const resources = resourcesOf(result);
+    if (resources.length) return { text, resources };
     if (text.trim()) {
       try {
         return JSON.parse(text.trim());
@@ -387,18 +436,15 @@
         return text;
       }
     }
-    // Tool results are untrusted: only a strict type/subtype mimeType and
-    // base64-alphabet data may enter the data URL, so a malicious block can
-    // never smuggle quotes/markup into an attribute an app interpolates.
     const media = (result.content || [])
       .filter(
         (c) =>
           c &&
           (c.type === "image" || c.type === "audio") &&
           typeof c.data === "string" &&
-          /^[A-Za-z0-9+/=]+$/.test(c.data) &&
+          SAFE_BASE64.test(c.data) &&
           typeof c.mimeType === "string" &&
-          /^[\w.+-]+\/[\w.+-]+$/.test(c.mimeType),
+          SAFE_MIME_TYPE.test(c.mimeType),
       )
       .map((c) => ({
         type: c.type,

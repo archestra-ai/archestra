@@ -32,6 +32,8 @@ import logger from "@/logging";
 import sentryClient from "@/observability/sentry";
 import { isNoiseRoute } from "@/observability/utils";
 import { ATTR_ROUTE_CATEGORY } from "./attributes";
+import { getHttpInstrumentationConfig } from "./http-instrumentation";
+import { infrastructureSpansEnabled } from "./infrastructure-spans";
 
 const {
   api: { name, version },
@@ -56,7 +58,7 @@ const {
  * When Sentry is not configured, auto-instrumentations are only enabled if
  * ARCHESTRA_OTEL_VERBOSE_TRACING=true.
  */
-const enableAutoInstrumentations = sentryEnabled || verboseTracing;
+const enableAutoInstrumentations = infrastructureSpansEnabled();
 
 // Configure the OTLP exporter to send traces to the OpenTelemetry Collector
 const traceExporter = new OTLPTraceExporter(traceExporterConfig);
@@ -153,9 +155,10 @@ const sdk = new NodeSDK({
         ]
       : []),
     getNodeAutoInstrumentations({
-      "@opentelemetry/instrumentation-http": {
+      "@opentelemetry/instrumentation-http": getHttpInstrumentationConfig({
         enabled: enableAutoInstrumentations,
-      },
+        errorTrackingEnabled: sentryEnabled,
+      }),
       "@opentelemetry/instrumentation-undici": {
         enabled: enableAutoInstrumentations,
       },
@@ -190,7 +193,7 @@ const sdk = new NodeSDK({
   // Use multiple span processors to send traces to both Sentry and OTLP endpoints
   spanProcessors,
   // Export pino logs (with trace context) to the OTLP endpoint
-  logRecordProcessors: [new BatchLogRecordProcessor(logExporter)],
+  logRecordProcessors: [new BatchLogRecordProcessor({ exporter: logExporter })],
 });
 
 // Start the SDK

@@ -14,6 +14,7 @@ import ToolModel from "@/models/tool";
 import UserModel from "@/models/user";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaDeclarations } from "@/openappa/declarations";
+import { withDraftHelperSources } from "@/openappa/draft-helper-sources";
 import { openappaHelperBridge } from "@/openappa/helper-bridge";
 import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
@@ -350,6 +351,47 @@ describe("battery helper bridge", () => {
     expect(JSON.stringify(rest)).not.toContain(CREDENTIAL_VALUE);
   });
 
+  test("a draft battery's helper answers with the credential its draft binds, only while the replay that registered it runs", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    // The bound install only stores the organization credential; the draft
+    // names no install row.
+    const install = await installBoundGithub(makeInternalMcpCatalog);
+    await OpenAppaBatteryInstallModel.replaceAll({ organizationId, rows: [] });
+    const run = stubSandbox({
+      exitCode: 0,
+      stdout: JSON.stringify({ version: 1, answer: {} }),
+      stderr: "",
+    });
+
+    const draftId = await withDraftHelperSources(async (register) => {
+      const id = register({
+        organizationId,
+        batteryName: "github",
+        packageHash: null,
+        target: "multi-user",
+        credentialBindings: { APPA_PROVIDER_GITHUB_TOKEN: "github-token" },
+      });
+      expect(
+        (await consult({ installId: id, authorization: bridgeBearer() }))
+          .statusCode,
+      ).toBe(200);
+      return id;
+    });
+
+    expect(run.mock.calls[0]?.[0]?.secretEnv).toEqual([
+      { name: "APPA_PROVIDER_GITHUB_TOKEN", value: CREDENTIAL_VALUE },
+    ]);
+    expect(
+      (await consult({ installId: draftId, authorization: bridgeBearer() }))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      (await consult({ installId: install.id, authorization: bridgeBearer() }))
+        .statusCode,
+    ).toBe(404);
+  });
+
   test("the archestra audience is answered from the organization's own membership, never a sandbox", async ({
     makeUser,
     makeMember,
@@ -408,6 +450,19 @@ describe("battery helper bridge", () => {
       return typeof answer === "number" ? answer : answer.members.sort();
     };
 
+    const pool = config.daggerRuntime.maxConcurrent;
+    config.daggerRuntime.maxConcurrent = 1;
+    try {
+      expect(
+        await Promise.all([members("members"), members("members")]),
+      ).toEqual([
+        [admin, "alice@example.com", "bob@example.com"].sort(),
+        [admin, "alice@example.com", "bob@example.com"].sort(),
+      ]);
+    } finally {
+      config.daggerRuntime.maxConcurrent = pool;
+    }
+
     expect(await members("members")).toEqual(
       [admin, "alice@example.com", "bob@example.com"].sort(),
     );
@@ -439,7 +494,7 @@ describe("battery helper bridge", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
-  test("consults beyond half the sandbox pool are refused as busy", async ({
+  test("consults that never reach the sandbox do not consume sandbox capacity", async ({
     makeInternalMcpCatalog,
   }) => {
     const unbound = await installGithub(
@@ -463,9 +518,55 @@ describe("battery helper bridge", () => {
     } finally {
       config.daggerRuntime.maxConcurrent = pool;
     }
-    expect(outcomes.sort()).toEqual(["busy", "failed"]);
-    // The share is released once the first consult settled.
+    expect(outcomes.sort()).toEqual(["failed", "failed"]);
+    // A later validation failure is still reported as its actual cause.
     expect((await openappaHelperBridge.consult(params)).kind).toBe("failed");
+  });
+
+  test("sandbox executions retain their concurrency cap and release capacity on completion", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const install = await installBoundGithub(makeInternalMcpCatalog);
+    const result = {
+      exitCode: 0,
+      stdout: '{"version":1,"answer":{"ok":true}}',
+      stderr: "",
+      durationMs: 1,
+      timedOut: false,
+      truncated: false,
+    };
+    let release!: (value: typeof result) => void;
+    const pending = new Promise<typeof result>((resolve) => {
+      release = resolve;
+    });
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const run = stubSandbox(result);
+    run.mockImplementationOnce(() => {
+      started();
+      return pending;
+    });
+    const params = {
+      installId: install.id,
+      externalName: "github.repository-visibility",
+      request: JSON.stringify(envelope),
+    };
+    const pool = config.daggerRuntime.maxConcurrent;
+    config.daggerRuntime.maxConcurrent = 1;
+    const first = openappaHelperBridge.consult(params);
+    try {
+      await entered;
+      expect((await openappaHelperBridge.consult(params)).kind).toBe("busy");
+      expect(run).toHaveBeenCalledTimes(1);
+    } finally {
+      release(result);
+      await first;
+      config.daggerRuntime.maxConcurrent = pool;
+    }
+    expect((await openappaHelperBridge.consult(params)).kind).toBe("answered");
+    expect(run).toHaveBeenCalledTimes(2);
   });
 
   test.skipIf(!config.daggerRuntime.enabled)(
@@ -571,11 +672,18 @@ async function attach(params: {
         batteryName: install.batteryName,
         catalogId: install.catalogId,
         status: install.status,
+        target: install.target,
         packageHash: install.packageHash,
         lastError: install.lastError,
         credentialBindings: install.credentialBindings,
       })),
-      { ...row, status: "active" as const, packageHash: null, lastError: null },
+      {
+        ...row,
+        status: "active" as const,
+        target: "multi-user" as const,
+        packageHash: null,
+        lastError: null,
+      },
     ],
   });
   const install = rows.at(-1);

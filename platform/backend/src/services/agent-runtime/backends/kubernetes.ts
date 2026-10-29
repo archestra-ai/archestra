@@ -2,6 +2,7 @@ import type { Readable, Writable } from "node:stream";
 import type WebSocket from "ws";
 import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
+import { hasAgentRuntimeImagePullFailure } from "@/k8s/agent-runtime/startup-phase";
 import type {
   AgentRunInput,
   AgentRunRecord,
@@ -10,6 +11,7 @@ import type {
 } from "@/types";
 import { ApiError } from "@/types";
 import type { AgentWorkspaceFileRequest } from "@/types/agent-workspace-file";
+import { tagAgentRunFailure } from "../run-failure";
 import type {
   AgentRunAttachment,
   AgentRunAttachProgress,
@@ -155,9 +157,15 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
       // including one that has already finished.
       if (pod && pod.phase !== "Pending") return;
       if (Date.now() > deadline) {
-        throw new ApiError(
-          504,
-          "The Agent Runtime run did not start in time. The image may be unavailable, or the cluster may have no room to schedule it.",
+        const imagePullFailed = hasAgentRuntimeImagePullFailure(
+          await agentRuntimeManager.findPod(params.session).catch(() => null),
+        );
+        throw tagAgentRunFailure(
+          new ApiError(
+            504,
+            "The Agent Runtime run did not start in time. The image may be unavailable, or the cluster may have no room to schedule it.",
+          ),
+          imagePullFailed ? "pod.image_pull" : "launch.capacity_timeout",
         );
       }
       await delay(POD_START_POLL_MS, params.abortSignal);

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import type { ConnectSetupPart } from "@archestra/shared/connection-setup";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import ConnectionSetupModel from "@/models/connection-setup";
 import { ApiError } from "@/types";
@@ -11,6 +12,10 @@ class ClientConnectionService {
   async start(params: {
     clientId: ConnectionSetupClientId;
     platform: ConnectionSetupPlatform;
+    exclude?: ConnectSetupPart[];
+    gateway?: string;
+    plugins?: string[];
+    deviceName?: string;
   }) {
     const id = randomBytes(24).toString("hex");
     const deviceCode = randomBytes(32).toString("base64url");
@@ -55,6 +60,10 @@ class ClientConnectionService {
     return {
       clientId: pending.clientId,
       platform: pending.platform,
+      exclude: pending.exclude ?? [],
+      gateway: pending.gateway ?? null,
+      plugins: pending.plugins ?? null,
+      deviceName: pending.deviceName ?? null,
       userCode: userCode(id),
       expiresAt: new Date(pending.expiresAt).toISOString(),
     };
@@ -87,6 +96,7 @@ class ClientConnectionService {
           tokenHash: pending.tokenHash,
           tokenStart: pending.tokenStart,
           expiresAt: new Date(pending.expiresAt),
+          deviceName: pending.deviceName,
         });
       } catch (error) {
         await restorePending(pending);
@@ -149,6 +159,12 @@ interface Pending {
   id: string;
   clientId: ConnectionSetupClientId;
   platform: ConnectionSetupPlatform;
+  exclude?: ConnectSetupPart[];
+  /** Gateway slug or id picked on the Connect page; the approval preselects it. */
+  gateway?: string;
+  /** Plugin slugs picked on the Connect page; the approval preselects them. */
+  plugins?: string[];
+  deviceName?: string;
   expiresAt: number;
   pollHash: string;
   tokenHash: string;

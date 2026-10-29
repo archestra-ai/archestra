@@ -30,7 +30,15 @@ const agentToolsTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (table) => [unique().on(table.agentId, table.toolId)],
+  (table) => [
+    unique().on(table.agentId, table.toolId),
+    // The full agent_tools_tool_id_all_agent_id_idx and the partial indexes
+    // agent_tools_mcp_server_id_agent_id_idx (pinned rows)
+    // and agent_tools_tool_id_agent_id_idx (unpinned rows) are built
+    // concurrently from worker startup (database/index-maintenance.ts). Keep
+    // them out of Drizzle's transactional migrations, which can only take the
+    // write-blocking CREATE INDEX.
+  ],
 );
 
 export default agentToolsTable;

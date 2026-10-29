@@ -8,37 +8,9 @@ export type BlockedToolPart = {
   fullRefusal?: string;
 };
 
-export type PolicyDeniedPart = {
-  type: string;
-  toolCallId: string;
-  state: "output-denied";
-  input: Record<string, unknown>;
-  errorText: string;
-  unsafeContextActiveAtRequestStart?: boolean;
-  // The tool row the policy was evaluated against, when the backend knew it.
-  // Lets the "Edit policy" modal resolve the tool directly by id (All-mode
-  // tools have no agent_tools row for the assignment lookup to find).
-  toolId?: string;
-};
-
-export type DualLlmPart = {
-  type: "dual-llm-analysis";
-  toolCallId: string;
-  safeResult: string;
-  conversations: Array<{
-    role: "user" | "assistant";
-    content: string | unknown;
-  }>;
-};
-
 export type PartialUIMessage = Partial<UIMessage> & {
   role: UIMessage["role"];
-  parts: (
-    | UIMessage["parts"][number]
-    | BlockedToolPart
-    | DualLlmPart
-    | PolicyDeniedPart
-  )[];
+  parts: (UIMessage["parts"][number] | BlockedToolPart)[];
   metadata?: {
     trusted?: boolean;
     blocked?: boolean;

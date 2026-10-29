@@ -1,11 +1,24 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { FileUIPart } from "ai";
+import { useMemo } from "react";
 import { toast } from "sonner";
 import {
   hasRecentlyEnded,
   hasRetainedSessionActivity,
 } from "@/lib/agent-run-activity";
+import {
+  agentRunQueryKey,
+  MY_AGENT_RUNS_PAGE_SIZE,
+  type MyAgentRunsOptions,
+  myAgentRunsPageQuery,
+  myAgentRunsQueryKey,
+} from "@/lib/agent-runs-query-keys";
 import { useFeature } from "@/lib/config/config.query";
 import { validateUploadFile } from "@/lib/files/file-upload";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
@@ -15,8 +28,6 @@ const {
   continueAgentRun,
   deleteAgentRun,
   deleteAgentWorkspace,
-  decideAgentRunOpenappaReview,
-  getAgentRunOpenappaReview,
   getAgentRuntimePreflight,
   getAgentRuns,
   getMyAgentRun,
@@ -51,6 +62,25 @@ export function useAgentRuntimePreflight(agentId: string, enabled = true) {
   });
 }
 
+/** Why a runtime agent's Send is blocked by its preflight, if it is. */
+export function runtimePreflightDisabledReason(preflight: {
+  isPending: boolean;
+  isError?: boolean;
+  data?: {
+    ready: boolean;
+    missing?: Array<{ adminOnly?: boolean }>;
+  } | null;
+}): string | undefined {
+  if (preflight.isPending) return "Checking the agent's credentials…";
+  if (preflight.isError) return "Can't check this agent's setup";
+  if (preflight.data?.ready !== true) {
+    return preflight.data?.missing?.some((entry) => entry.adminOnly)
+      ? "Only admins can run this agent"
+      : "Connect the credentials this agent needs";
+  }
+  return undefined;
+}
+
 export function useAgentRuns(agentId: string, enabled = true) {
   return useQuery({
     queryKey: ["agents", agentId, "runs"],
@@ -66,14 +96,30 @@ export function useAgentRuns(agentId: string, enabled = true) {
   });
 }
 
-export function useMyAgentRuns(enabled = true) {
-  return useQuery({
-    queryKey: ["agent-runs", "mine"],
-    queryFn: loadMyAgentRuns,
+export function useMyAgentRuns(
+  enabled = true,
+  options: MyAgentRunsOptions = {},
+) {
+  const query = useInfiniteQuery({
+    queryKey: myAgentRunsQueryKey(options),
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await getMyAgentRuns({
+        query: myAgentRunsPageQuery(options, pageParam),
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    getNextPageParam: (lastPage, pages) =>
+      lastPage?.pagination.hasNext
+        ? pages.length * MY_AGENT_RUNS_PAGE_SIZE
+        : undefined,
     enabled,
     refetchInterval: (query) => {
       if (!enabled) return false;
-      const runs = query.state.data ?? [];
+      // Only pages explicitly loaded into the visible list are refreshed.
+      const runs =
+        query.state.data?.pages.flatMap((page) => page?.data ?? []) ?? [];
       const now = Date.now();
       if (
         runs.some((run) => !run.endedAt || hasRetainedSessionActivity(run, now))
@@ -83,23 +129,36 @@ export function useMyAgentRuns(enabled = true) {
       return runs.some((run) => hasRecentlyEnded(run, now)) ? 10_000 : false;
     },
   });
+  const data = useMemo(() => {
+    if (!query.data) return undefined;
+    const runs = new Map<string, AgentRunSession>();
+    for (const page of query.data.pages) {
+      for (const run of page?.data ?? []) {
+        if (!runs.has(run.taskId)) runs.set(run.taskId, run);
+      }
+    }
+    return [...runs.values()];
+  }, [query.data]);
+  return { ...query, data };
 }
 
 export function useMyAgentRun(taskId: string, enabled = true) {
   const queryClient = useQueryClient();
   return useQuery({
-    queryKey: ["agent-runs", taskId],
+    queryKey: agentRunQueryKey(taskId),
     queryFn: async () => {
       const { data, error } = await getMyAgentRun({ path: { taskId } });
       throwOnApiError(error, { toastOnError: false });
-      const previous = queryClient.getQueryData<typeof data>([
-        "agent-runs",
-        taskId,
-      ]);
+      const previous = queryClient.getQueryData<typeof data>(
+        agentRunQueryKey(taskId),
+      );
+      // Refresh the sidebar lists when a run's state changes. The first read
+      // of a run is not a change: it used to invalidate the lists too, which
+      // cancelled and restarted their in-flight page loads on every run page.
       if (
         data &&
-        (!previous ||
-          previous.taskId !== data.taskId ||
+        previous &&
+        (previous.taskId !== data.taskId ||
           previous.state !== data.state ||
           previous.endedAt !== data.endedAt)
       ) {
@@ -122,66 +181,6 @@ export function useMyAgentRun(taskId: string, enabled = true) {
     },
     retry: (failureCount) => failureCount < 8,
     retryDelay: 500,
-  });
-}
-
-export type AgentRunOpenappaReview =
-  archestraApiTypes.GetAgentRunOpenappaReviewResponses["200"];
-
-export function useAgentRunOpenappaReview(taskId: string, enabled = true) {
-  const queryClient = useQueryClient();
-  return useQuery({
-    queryKey: ["agent-runs", taskId, "openappa-review"],
-    queryFn: async () => {
-      const { data, error } = await getAgentRunOpenappaReview({
-        path: { taskId },
-      });
-      throwOnApiError(error);
-      return (
-        data ?? {
-          status: "none" as const,
-          canDecide: false,
-          offerId: null,
-          text: null,
-          tool: null,
-          arguments: null,
-        }
-      );
-    },
-    enabled: enabled && !!taskId,
-    refetchInterval: (query) => {
-      const run = queryClient.getQueryData<
-        archestraApiTypes.GetMyAgentRunResponses["200"]
-      >(["agent-runs", taskId]);
-      // Live/retained runs can acquire their first offer after the panel opens.
-      return !run ||
-        !run.endedAt ||
-        hasRetainedSessionActivity(run) ||
-        query.state.data?.status === "pending"
-        ? 3_000
-        : false;
-    },
-  });
-}
-
-export function useDecideAgentRunOpenappaReview(taskId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      body: archestraApiTypes.DecideAgentRunOpenappaReviewData["body"],
-    ) => {
-      const { data, error } = await decideAgentRunOpenappaReview({
-        path: { taskId },
-        body,
-      });
-      if (error) throw reportApiError(error);
-      return data;
-    },
-    onSettled: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["agent-runs", taskId, "openappa-review"],
-      });
-    },
   });
 }
 
@@ -248,6 +247,10 @@ export function useCancelAgentRun() {
     },
     onSuccess: async ({ taskId }) => {
       await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["agents"],
+          predicate: ({ queryKey }) => queryKey[2] === "runs",
+        }),
         queryClient.invalidateQueries({
           queryKey: ["agent-runs", taskId],
         }),
@@ -451,23 +454,3 @@ export function useSetMissingAgentRuntimeCredentials(agentId: string) {
     },
   });
 }
-
-async function loadMyAgentRuns(): Promise<AgentRunSession[]> {
-  const runs: AgentRunSession[] = [];
-  let offset = 0;
-
-  while (true) {
-    const { data, error } = await getMyAgentRuns({
-      query: { limit: MY_RUNS_PAGE_SIZE, offset },
-    });
-    throwOnApiError(error, { toastOnError: false });
-    runs.push(...(data?.data ?? []));
-
-    if (!data?.pagination.hasNext) {
-      return runs;
-    }
-    offset += MY_RUNS_PAGE_SIZE;
-  }
-}
-
-const MY_RUNS_PAGE_SIZE = 100;

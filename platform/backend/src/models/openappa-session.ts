@@ -14,6 +14,7 @@ import {
   openappaActor,
   scopedSessionId,
 } from "@/openappa/actor";
+import { openPlainJson, openPlainText } from "@/openappa/plaintext-envelope";
 import { mintReceiptCode } from "@/openappa/session-token";
 import { ApiError } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -69,6 +70,31 @@ class OpenAppaSessionModel {
     return row?.parentId ?? null;
   }
 
+  /**
+   * The session row a runtime trajectory belongs to: a child's trajectory is
+   * its actor, a root session's trajectory is the root itself. Null when no
+   * row, or more than one, matches.
+   */
+  static async findByTrajectory(params: { root: string; trajectory: string }) {
+    const rows = await db
+      .select({
+        organizationId: table.organizationId,
+        sessionId: table.sessionId,
+        callerId: table.callerId,
+      })
+      .from(table)
+      .where(
+        and(
+          eq(table.root, params.root),
+          params.trajectory === params.root
+            ? isNull(table.parentId)
+            : eq(table.actor, params.trajectory),
+        ),
+      )
+      .limit(2);
+    return rows.length === 1 ? rows[0] : null;
+  }
+
   /** Returns a caller-scoped session record, or null before its first event. */
   static async find(params: { organizationId: string; sessionId: string }) {
     const [row] = await db
@@ -90,18 +116,12 @@ class OpenAppaSessionModel {
 
   static async ensureReceiptToken(params: {
     organizationId: string;
-    callerId: string;
     sessionId: string;
-    secret: string;
+    mint?: () => string;
   }): Promise<{ token: string; receiptIssuedAt: Date | null } | null> {
+    const mint = params.mint ?? mintReceiptCode;
     for (let attempt = 0; attempt < MAX_RECEIPT_MINT_ATTEMPTS; attempt++) {
-      const token = mintReceiptCode({
-        secret: params.secret,
-        organizationId: params.organizationId,
-        callerId: params.callerId,
-        sessionId: params.sessionId,
-        collision: attempt,
-      });
+      const token = mint();
       try {
         const [assigned] = await db
           .update(table)
@@ -263,6 +283,124 @@ class OpenAppaSessionModel {
     return row ?? null;
   }
 
+  /** Call rulings recorded by this exact session, never inherited fork history. */
+  static async recordedToolCallDecisions(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId?: string;
+    parentId?: string;
+    toolCallIds: readonly string[];
+  }): Promise<Map<string, unknown>> {
+    if (params.toolCallIds.length === 0) return new Map();
+    const operations = schema.openappaOperationsTable;
+    const rows = await db
+      .select({
+        operationId: operations.operationId,
+        decision: operations.decision,
+      })
+      .from(operations)
+      .innerJoin(
+        table,
+        and(
+          eq(table.organizationId, operations.organizationId),
+          eq(table.sessionId, operations.sessionId),
+          eq(table.root, operations.root),
+        ),
+      )
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          eq(operations.sessionId, params.sessionId),
+          params.callerId
+            ? and(
+                eq(operations.callerId, params.callerId),
+                eq(table.callerId, params.callerId),
+              )
+            : and(isNull(operations.callerId), isNull(table.callerId)),
+          params.parentId
+            ? eq(table.parentId, params.parentId)
+            : isNull(table.parentId),
+          inArray(
+            operations.operationId,
+            params.toolCallIds.flatMap((id) => [
+              `call:${id}`,
+              `peer-read-call:${id}`,
+            ]),
+          ),
+          eq(operations.status, "complete"),
+          sql`COALESCE(${operations.input}->'semantic'->>'event', ${operations.input}->>'event') = 'tool_call'`,
+        ),
+      );
+    return new Map(
+      rows.map((row) => [
+        row.operationId.replace(/^(?:peer-read-)?call:/, ""),
+        openPlainJson(row.decision),
+      ]),
+    );
+  }
+
+  /**
+   * Maps each requested offer id to the operation id of the denied call that
+   * issued it in this session. Sibling offers of one denied call share the
+   * same operation id.
+   */
+  static async deniedCallOperationsByOfferId(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId?: string;
+    parentId?: string;
+    offerIds: readonly string[];
+  }): Promise<Map<string, string>> {
+    if (params.offerIds.length === 0) return new Map();
+    const wanted = new Set(params.offerIds);
+    const operations = schema.openappaOperationsTable;
+    const rows = await db
+      .select({
+        operationId: operations.operationId,
+        decision: operations.decision,
+      })
+      .from(operations)
+      .innerJoin(
+        table,
+        and(
+          eq(table.organizationId, operations.organizationId),
+          eq(table.sessionId, operations.sessionId),
+          eq(table.root, operations.root),
+        ),
+      )
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          eq(operations.sessionId, params.sessionId),
+          params.callerId
+            ? and(
+                eq(operations.callerId, params.callerId),
+                eq(table.callerId, params.callerId),
+              )
+            : and(isNull(operations.callerId), isNull(table.callerId)),
+          params.parentId
+            ? eq(table.parentId, params.parentId)
+            : isNull(table.parentId),
+          eq(operations.status, "complete"),
+        ),
+      );
+    const result = new Map<string, string>();
+    for (const row of rows) {
+      const decision = openPlainJson(row.decision);
+      if (!decision || typeof decision !== "object") continue;
+      const offers = (decision as { offers?: unknown }).offers;
+      if (!Array.isArray(offers)) continue;
+      for (const offer of offers) {
+        if (!offer || typeof offer !== "object") continue;
+        const offerId = (offer as { offer_id?: unknown }).offer_id;
+        if (typeof offerId === "string" && wanted.has(offerId)) {
+          result.set(offerId, row.operationId);
+        }
+      }
+    }
+    return result;
+  }
+
   /**
    * The journaled output of a tool result the runtime already recorded.
    * A client echo is delivered only when it matches this text.
@@ -289,7 +427,7 @@ class OpenAppaSessionModel {
         ),
       )
       .limit(1);
-    return row?.approvedOutput ?? null;
+    return openPlainText(row?.approvedOutput ?? null);
   }
 
   /**
@@ -322,7 +460,10 @@ class OpenAppaSessionModel {
         ),
       )
       .limit(1);
-    return peerReadReceipt(row?.decision, row?.approvedOutput ?? null);
+    return peerReadReceipt(
+      openPlainJson(row?.decision),
+      openPlainText(row?.approvedOutput ?? null),
+    );
   }
 
   /**
@@ -390,6 +531,28 @@ class OpenAppaSessionModel {
   }
 
   /**
+   * The client session id that opened a root: the session at the top of the
+   * family, which sub-agents' trajectories share the root of.
+   */
+  static async rootClientSessionId(params: {
+    organizationId: string;
+    root: string;
+  }): Promise<string | null> {
+    const [row] = await db
+      .select({ sessionId: table.sessionId })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.root, params.root),
+          isNull(table.parentId),
+        ),
+      )
+      .limit(1);
+    return row ? clientSessionId(row.sessionId) : null;
+  }
+
+  /**
    * Returns fork lineage for a client session ID.
    * If callerId is provided, queries only sessions for that caller.
    * When callerId is omitted, the client session ID must resolve to exactly one caller.
@@ -423,7 +586,7 @@ class OpenAppaSessionModel {
     if (!scoped && ownRows.length > 1) {
       throw new ApiError(
         409,
-        `Session lineage is ambiguous because multiple authenticated callers used session ID "${params.clientSessionId}"`,
+        `OpenAPPA session lineage is ambiguous because multiple authenticated callers used session ID "${params.clientSessionId}"`,
       );
     }
     const [own] = ownRows;

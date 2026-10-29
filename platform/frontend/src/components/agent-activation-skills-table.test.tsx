@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { act } from "react";
@@ -68,8 +68,8 @@ describe("AgentActivationSkillsTable", () => {
         pagination: {
           currentPage: 1,
           limit: 10,
-          total: 12,
-          totalPages: 2,
+          total: 42,
+          totalPages: 3,
           hasNext: true,
           hasPrev: false,
         },
@@ -86,34 +86,68 @@ describe("AgentActivationSkillsTable", () => {
       />,
     );
 
-    expect(screen.getByRole("columnheader", { name: "Skill" })).toBeVisible();
-    expect(screen.queryByRole("columnheader", { name: "Source" })).toBeNull();
+    // Names and sources in the list; the first skill read in full beside it.
+    const list = screen.getByRole("list", { name: "Skills" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(list).getByText("Skill library")).toBeVisible();
+    expect(within(list).getByText("Research Server · MCP")).toBeVisible();
+    expect(within(list).getByText("Writing Plugin · Plugin")).toBeVisible();
     expect(
-      screen.queryByRole("columnheader", { name: "Visibility" }),
-    ).toBeNull();
-    expect(screen.getAllByRole("row")).toHaveLength(4);
-    expect(screen.getByText("Skill library")).toBeVisible();
-    expect(screen.getByText("Research Server")).toBeVisible();
-    expect(screen.getByText("MCP")).toBeVisible();
-    expect(screen.getByText("Writing Plugin")).toBeVisible();
+      screen.getByRole("heading", { name: "incident-response" }),
+    ).toBeVisible();
+    expect(screen.getByText("Respond to incidents")).toBeVisible();
+    await userEvent.click(within(list).getByText("research"));
+    expect(screen.getByRole("heading", { name: "research" })).toBeVisible();
+    expect(screen.getByText("Research a topic")).toBeVisible();
     expect(mockUseAgentActivationSkills).toHaveBeenCalledWith({
       agentId: "agent-1",
       environmentId: "environment-1",
-      limit: 10,
+      limit: 20,
       offset: 0,
       search: undefined,
     });
 
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Go to next page" })[0],
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Next page" }));
     expect(mockUseAgentActivationSkills).toHaveBeenLastCalledWith({
       agentId: "agent-1",
       environmentId: "environment-1",
-      limit: 10,
-      offset: 10,
+      limit: 20,
+      offset: 20,
       search: undefined,
     });
+  });
+
+  it("shows no pager when one page holds every skill", () => {
+    mockUseAgentActivationSkills.mockReturnValue({
+      data: {
+        enabled: true,
+        data: [
+          {
+            reference: { source: "native", skillId: "skill-1" },
+            name: "incident-response",
+            activationName: "incident-response",
+            description: "Respond to incidents",
+            scope: "org",
+            providerName: null,
+          },
+        ],
+        pagination: {
+          currentPage: 1,
+          limit: 20,
+          total: 1,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useAgentActivationSkills>);
+
+    render(<AgentActivationSkillsTable agentId="agent-1" />);
+    expect(screen.getByText("1 skill")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Next page" })).toBeNull();
   });
 
   it("searches the full catalog and resets pagination", async () => {
@@ -137,12 +171,9 @@ describe("AgentActivationSkillsTable", () => {
     } as unknown as ReturnType<typeof useAgentActivationSkills>);
 
     render(<AgentActivationSkillsTable agentId="agent-1" />);
-    fireEvent.change(
-      screen.getByPlaceholderText(
-        "Search skills by name, description, and provider",
-      ),
-      { target: { value: "writing" } },
-    );
+    fireEvent.change(screen.getByPlaceholderText("Search skills"), {
+      target: { value: "writing" },
+    });
     await act(async () => {
       vi.advanceTimersByTime(400);
     });
@@ -150,17 +181,14 @@ describe("AgentActivationSkillsTable", () => {
     expect(mockUseAgentActivationSkills).toHaveBeenLastCalledWith({
       agentId: "agent-1",
       environmentId: undefined,
-      limit: 10,
+      limit: 20,
       offset: 0,
       search: "writing",
     });
 
-    fireEvent.change(
-      screen.getByPlaceholderText(
-        "Search skills by name, description, and provider",
-      ),
-      { target: { value: "   " } },
-    );
+    fireEvent.change(screen.getByPlaceholderText("Search skills"), {
+      target: { value: "   " },
+    });
     await act(async () => {
       vi.advanceTimersByTime(400);
     });
@@ -168,7 +196,7 @@ describe("AgentActivationSkillsTable", () => {
     expect(mockUseAgentActivationSkills).toHaveBeenLastCalledWith({
       agentId: "agent-1",
       environmentId: undefined,
-      limit: 10,
+      limit: 20,
       offset: 0,
       search: undefined,
     });
@@ -177,7 +205,7 @@ describe("AgentActivationSkillsTable", () => {
     ).toBeVisible();
   });
 
-  it("keeps the disabled state inside the table", () => {
+  it("keeps the disabled state inside the list frame", () => {
     mockUseAgentActivationSkills.mockReturnValue({
       data: {
         enabled: false,
@@ -198,7 +226,6 @@ describe("AgentActivationSkillsTable", () => {
 
     render(<AgentActivationSkillsTable environmentId={null} />);
 
-    expect(screen.getByRole("table")).toBeVisible();
     expect(
       screen.getByText("Skills are not enabled for this agent."),
     ).toBeVisible();

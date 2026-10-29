@@ -1,5 +1,6 @@
+import { lookup } from "node:dns/promises";
 import { OAUTH_SCOPES } from "@archestra/shared";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { OAuthClientModel } from "@/models";
 import {
   CimdError,
@@ -9,7 +10,17 @@ import {
   validateCimdDocument,
 } from "./cimd";
 
+// DNS is a network boundary. Every test host resolves to a public address
+// unless a test says otherwise.
+vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
+
+const PUBLIC_ANSWER = [{ address: "93.184.216.34", family: 4 }];
+
 describe("CIMD", () => {
+  beforeEach(() => {
+    vi.mocked(lookup).mockResolvedValue(PUBLIC_ANSWER as never);
+  });
+
   describe("isCimdClientId", () => {
     test("returns true for HTTPS URL with path", () => {
       expect(isCimdClientId("https://example.com/client-metadata.json")).toBe(
@@ -102,6 +113,56 @@ describe("CIMD", () => {
       await expect(
         fetchAndValidateCimdDocument("https://localhost/client.json"),
       ).rejects.toBeInstanceOf(CimdError);
+    });
+
+    describe("hostnames that resolve to private addresses", () => {
+      const originalFetch = globalThis.fetch;
+      let fetchSpy: ReturnType<typeof vi.fn>;
+
+      beforeEach(() => {
+        fetchSpy = vi.fn();
+        globalThis.fetch = fetchSpy as typeof fetch;
+      });
+
+      afterEach(() => {
+        globalThis.fetch = originalFetch;
+      });
+
+      test("rejects a public-looking name that resolves to an RFC1918 address", async () => {
+        vi.mocked(lookup).mockResolvedValue([
+          { address: "10.0.0.5", family: 4 },
+        ] as never);
+
+        await expect(
+          fetchAndValidateCimdDocument(
+            "https://metadata.example.com/client.json",
+          ),
+        ).rejects.toThrow(/must not resolve to a private or loopback address/);
+        expect(fetchSpy).not.toHaveBeenCalled();
+      });
+
+      test("rejects a name when any one of its answers is loopback", async () => {
+        vi.mocked(lookup).mockResolvedValue([
+          { address: "93.184.216.34", family: 4 },
+          { address: "127.0.0.1", family: 4 },
+        ] as never);
+
+        await expect(
+          fetchAndValidateCimdDocument("https://split.example.com/client.json"),
+        ).rejects.toThrow(/must not resolve to a private or loopback address/);
+        expect(fetchSpy).not.toHaveBeenCalled();
+      });
+
+      test("rejects a name that does not resolve", async () => {
+        vi.mocked(lookup).mockRejectedValue(new Error("ENOTFOUND"));
+
+        await expect(
+          fetchAndValidateCimdDocument(
+            "https://missing.example.com/client.json",
+          ),
+        ).rejects.toThrow(/did not resolve/);
+        expect(fetchSpy).not.toHaveBeenCalled();
+      });
     });
   });
 

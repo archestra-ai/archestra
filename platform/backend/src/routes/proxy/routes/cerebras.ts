@@ -16,6 +16,7 @@ import logger from "@/logging";
 import { Cerebras, constructResponseSchema, UuidIdSchema } from "@/types";
 import { cerebrasAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -34,6 +35,7 @@ const cerebrasProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
       upstream: config.llm.cerebras.baseUrl,
       providerName: "Cerebras",
+      authenticate: createPassthroughAuthenticator("cerebras"),
     }),
   });
 

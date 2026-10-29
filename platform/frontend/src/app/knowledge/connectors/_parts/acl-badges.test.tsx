@@ -1,15 +1,26 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useOrganizationMembers } from "@/lib/organization.query";
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render as rtlRender, screen } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { useTeams } from "@/lib/teams/team.query";
 import { AclBadges } from "./acl-badges";
 import { WORKSPACE_ROSTER_NOUN } from "./roster-noun";
 
 vi.mock("@/lib/teams/team.query");
-vi.mock("@/lib/organization.query");
 
 vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => (
@@ -28,9 +39,6 @@ describe("AclBadges", () => {
     vi.mocked(useTeams).mockReturnValue({
       data: [{ id: "team-1", name: "Platform Team" }],
     } as unknown as ReturnType<typeof useTeams>);
-    vi.mocked(useOrganizationMembers).mockReturnValue({
-      data: [{ id: "user-1", name: "Alice", email: "a@example.com" }],
-    } as unknown as ReturnType<typeof useOrganizationMembers>);
   });
 
   it("renders an empty ACL as a locked warning", () => {
@@ -48,7 +56,7 @@ describe("AclBadges", () => {
     expect(screen.getByText("Team: team-unknown")).toBeInTheDocument();
   });
 
-  it("shows only the first two entries and collapses the rest behind +N more", () => {
+  it("shows only the first two entries and collapses the rest behind +N more", async () => {
     render(
       <AclBadges
         acl={[
@@ -64,7 +72,9 @@ describe("AclBadges", () => {
     // A user grant that matches an org member reads as that user (a manual
     // member mapping materializes the mapped user's email here, so it
     // resolves identically).
-    expect(screen.getByText("a@example.com · Alice")).toBeInTheDocument();
+    expect(
+      await screen.findByText("a@example.com · Alice"),
+    ).toBeInTheDocument();
     expect(screen.getByText("+3 more")).toBeInTheDocument();
     // Hidden entries stay discoverable in the overflow tooltip; an email
     // matching no org member degrades to the raw address.
@@ -106,3 +116,42 @@ describe("AclBadges", () => {
     expect(screen.getByText("user999@example.com")).toBeInTheDocument();
   });
 });
+
+const memberServer = setupServer(
+  http.get(
+    "http://localhost:9000/api/organization/member-options",
+    ({ request }) => {
+      const emails = new URL(request.url).searchParams
+        .get("emails")
+        ?.split(",");
+      expect(emails).toBeDefined();
+      expect(emails?.length).toBeLessThanOrEqual(100);
+      return HttpResponse.json({
+        data: emails?.includes("a@example.com")
+          ? [{ id: "user-1", name: "Alice", email: "a@example.com" }]
+          : [],
+        pagination: { limit: 100, hasNext: false, nextCursor: null },
+      });
+    },
+  ),
+);
+const clients: QueryClient[] = [];
+beforeAll(() => {
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+  memberServer.listen({ onUnhandledRequest: "error" });
+});
+afterEach(() => {
+  for (const client of clients) client.clear();
+  clients.length = 0;
+  memberServer.resetHandlers();
+});
+afterAll(() => memberServer.close());
+function render(element: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  clients.push(client);
+  return rtlRender(
+    <QueryClientProvider client={client}>{element}</QueryClientProvider>,
+  );
+}

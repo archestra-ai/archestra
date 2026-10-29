@@ -7,7 +7,7 @@ import {
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { ssoClient } from "@better-auth/sso/client";
 import {
-  adminClient,
+  inferAdditionalFields,
   inferOrgAdditionalFields,
   organizationClient,
   twoFactorClient,
@@ -17,6 +17,20 @@ import { createAuthClient } from "better-auth/react";
 import config from "@/lib/config/config";
 
 const ac = createAccessControl(allAvailableActions);
+
+/**
+ * The session and user fields the server's admin plugin adds. The browser
+ * uses only impersonation from that plugin and calls its two endpoints by
+ * path, so the plugin's client (access-control setup and error strings)
+ * stays out of the bundle.
+ */
+const adminFields = inferAdditionalFields({
+  user: {
+    role: { type: "string", required: false },
+    banned: { type: "boolean", required: false },
+  },
+  session: { impersonatedBy: { type: "string", required: false } },
+});
 
 const adminRole = ac.newRole(allAvailableActions);
 const platformAdminRole = ac.newRole(platformAdminPermissions);
@@ -61,7 +75,7 @@ export const authClient = createAuthClient({
         },
       }),
     }),
-    adminClient(),
+    adminFields,
     twoFactorClient(),
     ssoClient(),
     oauthProviderClient(),

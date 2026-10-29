@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+export const CacheControlSchema = z.object({
+  type: z.literal("ephemeral"),
+  ttl: z.enum(["5m", "1h"]).optional(),
+});
+
+const PromptCacheBreakpointSchema = z.object({ mode: z.literal("explicit") });
+
 const FunctionToolCallSchema = z
   .object({
     id: z.string(),
@@ -40,8 +47,9 @@ export const ToolCallSchema = z
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197`,
   );
 
-const ContentPartRefusalSchema = z
+export const ContentPartRefusalSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     type: z.enum(["refusal"]),
     refusal: z.string(),
   })
@@ -49,18 +57,22 @@ const ContentPartRefusalSchema = z
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L805`,
   );
 
-const ContentPartTextSchema = z
+export const ContentPartTextSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     type: z.enum(["text"]),
     text: z.string(),
+    prompt_cache_breakpoint: PromptCacheBreakpointSchema.optional(),
   })
   .describe(
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821`,
   );
 
-const ContentPartImageSchema = z
+export const ContentPartImageSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     type: z.enum(["image_url"]),
+    prompt_cache_breakpoint: PromptCacheBreakpointSchema.optional(),
     image_url: z
       .object({
         url: z.string(),
@@ -74,9 +86,11 @@ const ContentPartImageSchema = z
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755`,
   );
 
-const ContentPartInputAudioSchema = z
+export const ContentPartInputAudioSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     type: z.enum(["input_audio"]),
+    prompt_cache_breakpoint: PromptCacheBreakpointSchema.optional(),
     input_audio: z
       .object({
         data: z.string(),
@@ -90,9 +104,11 @@ const ContentPartInputAudioSchema = z
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L782`,
   );
 
-const ContentPartFileSchema = z
+export const ContentPartFileSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     type: z.enum(["file"]),
+    prompt_cache_breakpoint: PromptCacheBreakpointSchema.optional(),
     file: z
       .object({
         file_data: z.string().optional(),
@@ -118,8 +134,9 @@ const ContentPartSchema = z
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L711`,
   );
 
-const DeveloperMessageParamSchema = z
+export const DeveloperMessageParamSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     content: z.union([z.string(), z.array(ContentPartTextSchema)]),
     role: z.enum(["developer"]),
     name: z.string().optional(),
@@ -128,8 +145,9 @@ const DeveloperMessageParamSchema = z
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L936`,
   );
 
-const SystemMessageParamSchema = z
+export const SystemMessageParamSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     content: z.union([z.string(), z.array(ContentPartTextSchema)]),
     role: z.enum(["system"]),
     name: z.string().optional(),
@@ -138,8 +156,9 @@ const SystemMessageParamSchema = z
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1318`,
   );
 
-const UserMessageParamSchema = z
+export const UserMessageParamSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     content: z.union([z.string(), z.array(ContentPartSchema)]),
     role: z.enum(["user"]),
     name: z.string().optional(),
@@ -150,6 +169,7 @@ const UserMessageParamSchema = z
 
 export const AssistantMessageParamSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     role: z.enum(["assistant"]),
     audio: z
       .object({
@@ -189,8 +209,9 @@ export const AssistantMessageParamSchema = z
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L374`,
   );
 
-const ToolMessageParamSchema = z
+export const ToolMessageParamSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     role: z.enum(["tool"]),
     content: z.union([
       z.string(),
@@ -202,8 +223,9 @@ const ToolMessageParamSchema = z
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1413`,
   );
 
-const FunctionMessageParamSchema = z
+export const FunctionMessageParamSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     role: z.enum(["function"]),
     content: z.string().nullable(),
     name: z.string(),

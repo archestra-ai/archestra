@@ -18,7 +18,10 @@ import {
 import { makeSession } from "@/mocks/data/auth";
 import { makeConfig } from "@/mocks/data/config";
 import { AgentRuntimeCredentialPrompt } from "./agent-run-credential-prompt";
-import { AgentRuntimeCredentialsDeepLink } from "./agent-runtime-credentials-dialog";
+import {
+  AgentRuntimeCredentialsDeepLink,
+  AgentRuntimeCredentialsDialog,
+} from "./agent-runtime-credentials-dialog";
 
 vi.mock("next/navigation");
 vi.mock("sonner");
@@ -162,10 +165,7 @@ function show(
 }
 
 describe("credential setup deep links", () => {
-  it.each([
-    false,
-    true,
-  ])("authorizes GitHub user connections instead of requesting a secret (Vault: %s)", async (byosEnabled) => {
+  it("authorizes GitHub user connections instead of requesting a secret", async () => {
     configured = ["SERVICE_TOKEN"];
     const authorizationUrl =
       "https://github.com/login/oauth/authorize?state=test-flow";
@@ -173,7 +173,7 @@ describe("credential setup deep links", () => {
     let starts = 0;
     server.use(
       http.get(`${origin}/api/config`, () =>
-        HttpResponse.json(makeConfig({ features: { byosEnabled } })),
+        HttpResponse.json(makeConfig({ features: {} })),
       ),
       http.get(`${origin}/api/credentials`, () =>
         HttpResponse.json([
@@ -202,7 +202,6 @@ describe("credential setup deep links", () => {
     expect(
       screen.queryByPlaceholderText("Paste secret"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Select Vault secret")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Save credentials" }),
     ).not.toBeInTheDocument();
@@ -326,6 +325,33 @@ describe("credential setup deep links", () => {
     expect(writes.filter(({ key }) => key === "SERVICE_TOKEN")).toHaveLength(2);
   });
 
+  it("asks for one credential alone when its own Set up opened it", async () => {
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AgentRuntimeCredentialsDialog
+          agentId="agent-1"
+          declarations={declarations}
+          canEditAgent={false}
+          onlyKeys={["SERVICE_TOKEN"]}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "Set up Service token" }),
+    ).toBeVisible();
+    expect(screen.queryByLabelText("GitHub token")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Service token"), "example-secret");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(writes).toEqual([
+        { key: "SERVICE_TOKEN", value: "example-secret" },
+      ]),
+    );
+  });
+
   it("does not request already configured or optional credentials", async () => {
     configured = ["GITHUB_TOKEN"];
     show();
@@ -418,24 +444,6 @@ describe("credential setup deep links", () => {
       2,
     );
     expect(writes).toEqual([]);
-  });
-
-  it("uses Vault selection for every credential when external secrets are enabled", async () => {
-    server.use(
-      http.get(`${origin}/api/config`, () =>
-        HttpResponse.json(makeConfig({ features: { byosEnabled: true } })),
-      ),
-    );
-    show();
-    expect(
-      await screen.findByRole("button", { name: "GitHub token" }),
-    ).toHaveTextContent("Select Vault secret");
-    expect(
-      screen.getByRole("button", { name: "Service token" }),
-    ).toHaveTextContent("Select Vault secret");
-    expect(
-      screen.queryByPlaceholderText("Paste secret"),
-    ).not.toBeInTheDocument();
   });
 
   it("lets an administrator configure a missing organization connection", async () => {
@@ -544,13 +552,20 @@ describe("credential setup deep links", () => {
         description: instructions,
       })),
     });
+    const user = userEvent.setup();
     await screen.findByLabelText("GitHub token");
-    expect(
-      screen.getByText(githubDescription, { normalizer: (text) => text }),
-    ).toBeVisible();
-    expect(
-      screen.getByText(claudeDescription, { normalizer: (text) => text }),
-    ).toBeVisible();
+    // Each field keeps its instructions one focus away.
+    for (const [label, description] of [
+      ["GitHub token", githubDescription],
+      ["Service token", claudeDescription],
+    ]) {
+      const hint = screen.getByRole("button", { name: `About ${label}` });
+      for (let step = 0; step < 30 && document.activeElement !== hint; step++)
+        await user.tab();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        description.replace(/\n/g, " "),
+      );
+    }
     expect(screen.queryByText(instructions)).not.toBeInTheDocument();
   });
 

@@ -13,6 +13,8 @@ test.describe.configure({ retries: 2 });
 
 const MOCK_RESPONSE = "This is a mocked response for the chat UI e2e test.";
 const COMPACT_ROUTE = "**/api/chat/conversations/*/compact";
+const ONE_PIXEL_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
 
 test.describe("Chat message queue", () => {
   test.setTimeout(120_000);
@@ -129,6 +131,85 @@ test.describe("Chat message queue", () => {
     });
   }
 
+  test("queues a message with an attachment and sends the attachment with it", async ({
+    page,
+    request,
+    makeApiRequest,
+    syncModels,
+  }) => {
+    await expectWireMockReady();
+
+    const { apiKeyId, runtimeModel } =
+      await ensureWireMockAnthropicChatProvider({
+        request,
+        makeApiRequest,
+        syncModels,
+      });
+
+    await goToChat(page);
+    await expectChatReady(page);
+    await selectApiKeyById(page, apiKeyId);
+
+    const modelSelectorTrigger = page
+      .getByTestId(E2eTestId.ChatModelSelectorTrigger)
+      .or(page.getByRole("button", { name: /select model/i }))
+      .first();
+    await modelSelectorTrigger.click();
+    await selectRuntimeModelFromDialog(page, runtimeModel);
+
+    const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
+    const sentUserMessages: { parts: { type: string; text?: string }[] }[] = [];
+    page.on("request", (request) => {
+      if (request.method() !== "POST") return;
+      if (new URL(request.url()).pathname === "/api/chat") {
+        const messages = request.postDataJSON().messages;
+        sentUserMessages.push(
+          messages.findLast(
+            (message: { role: string }) => message.role === "user",
+          ),
+        );
+      }
+    });
+    await textarea.fill("Start a slow response chat-queue-e2e-test");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByText(/Reconnect stream part one/).first(),
+    ).toBeVisible({ timeout: 30_000 });
+
+    const queuedText = `check this screenshot ${Math.random().toString(36).slice(2, 10)}`;
+    await page.getByLabel("Upload files").setInputFiles({
+      name: "screenshot.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(ONE_PIXEL_PNG_BASE64, "base64"),
+    });
+    await textarea.fill(queuedText);
+    await textarea.press("Enter");
+
+    const queuedItem = page
+      .getByTestId(E2eTestId.ChatMessageQueueItem)
+      .filter({ hasText: queuedText });
+    await expect(queuedItem).toBeVisible();
+    await expect(
+      queuedItem.getByRole("img", { name: "1 attachment" }),
+    ).toBeVisible();
+
+    await textarea.press("Escape");
+
+    await expect(queuedItem).toHaveCount(0, { timeout: 30_000 });
+    await expect
+      .poll(() => sentUserMessages.length, { timeout: 30_000 })
+      .toBe(2);
+    expect(sentUserMessages[1].parts).toEqual([
+      { type: "text", text: queuedText },
+      expect.objectContaining({
+        type: "file",
+        mediaType: "image/png",
+        filename: "screenshot.png",
+        url: expect.stringMatching(/^data:image\/png;base64,/),
+      }),
+    ]);
+  });
+
   // A manual /compact rewrites the thread over REST while the chat stream sits
   // idle, so nothing about it is "in flight" from the composer's point of view.
   // The composer still has to stay usable, park the message in the queue rather
@@ -159,9 +240,9 @@ test.describe("Chat message queue", () => {
       .first();
     await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
     await modelSelectorTrigger.click();
-    await expect(
-      page.getByRole("dialog", { name: "Select Model" }),
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId(E2eTestId.ChatSetupMenu)).toBeVisible({
+      timeout: 5_000,
+    });
     await selectRuntimeModelFromDialog(page, runtimeModel);
 
     // Hold the compaction response open so the in-flight window is wide enough
@@ -175,7 +256,9 @@ test.describe("Chat message queue", () => {
       await route.continue();
     });
 
-    const marker = `queue-compact-e2e-${Math.random().toString(36).slice(2, 10)}`;
+    // Each test has a fresh browser conversation. A human-readable marker
+    // avoids the secret scan that a random, hyphenated token can trigger.
+    const marker = "queue compaction scenario";
     const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
     await expect(textarea).toBeVisible({ timeout: 15_000 });
     await textarea.fill(

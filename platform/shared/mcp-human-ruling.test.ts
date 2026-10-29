@@ -17,6 +17,11 @@ describe("extractMcpHumanRuling", () => {
         _meta: { [MCP_HUMAN_RULING_META_KEY]: "approve" },
       }),
     ).toBe("approve");
+    expect(
+      extractMcpHumanRuling({
+        _meta: { [MCP_HUMAN_RULING_META_KEY]: "superseded" },
+      }),
+    ).toBe("superseded");
   });
 
   test("returns null for anything but a known ruling in _meta", () => {

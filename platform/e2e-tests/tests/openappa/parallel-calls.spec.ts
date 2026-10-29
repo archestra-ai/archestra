@@ -23,10 +23,10 @@
  *    releases only once.
  *
  * Policy settling:
- * The runtime recomposes policy rules asynchronously after updates. A conversation
- * uses the policy version active at creation time. Each test uses
- * `openSettledConversation` to verify that the runtime enforces the new policy
- * before running test assertions.
+ * The runtime recomposes policy rules asynchronously after updates, and every
+ * conversation decides its next call under the policy in force then. Each test
+ * uses `openSettledConversation` to verify that the runtime enforces the new
+ * policy before running test assertions.
  *
  * Requirements:
  * The test stack must run with `ARCHESTRA_BETA=true`.
@@ -910,8 +910,8 @@ async function openConversation(params: {
 /**
  * Opens a conversation and confirms that the runtime enforces the new policy.
  *
- * The runtime updates policy rules asynchronously after a policy update.
- * A conversation uses the policy version active at conversation creation.
+ * The runtime updates policy rules asynchronously after a policy update, and
+ * a turn decides under the policy in force when it runs.
  * This helper tests the initial turn and verifies that observed tool calls
  * match the expected policy. If the policy has not settled yet, it deletes
  * the conversation and retries until the runtime applies the new policy.

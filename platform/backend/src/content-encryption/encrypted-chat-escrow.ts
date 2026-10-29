@@ -16,8 +16,7 @@ import type { EncryptedChatEscrowBlob } from "@/types";
  * break-glass procedure, not something the platform can do alone.
  *
  * Escrow is what ENABLES encrypted chats: without it, a conversation's audit
- * trail (LLM interactions, MCP tool calls, chat errors, tool-execution claims,
- * replay payloads) would be encrypted under a key no one but that one browser
+ * trail (LLM interactions, MCP tool calls, chat errors, replay payloads) would be encrypted under a key no one but that one browser
  * holds, which is unrecoverable rather than merely private — the opposite of
  * what an auditable deployment needs. So encrypted-chat is unavailable until an
  * escrow key is configured.

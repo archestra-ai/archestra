@@ -1,21 +1,13 @@
 import { createHash } from "node:crypto";
-import { lookup } from "node:dns/promises";
 import type { AgentCard } from "@a2a-js/sdk";
 import { DefaultAgentCardResolver } from "@a2a-js/sdk/client";
 import { and, eq } from "drizzle-orm";
-import { Agent as UndiciAgent } from "undici";
+import type { Agent as UndiciAgent } from "undici";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
-import {
-  A2aConnectionModel,
-  A2aRemoteAgentModel,
-  A2aRemoteAgentTeamModel,
-  A2aRemoteAgentUserModel,
-  MemberModel,
-  TeamModel,
-  ToolModel,
-} from "@/models";
+import { A2aConnectionModel, A2aRemoteAgentModel, ToolModel } from "@/models";
 import CreatedByModel, { lookupCreator } from "@/models/created-by";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { secretManager } from "@/secrets-manager";
 import type {
@@ -32,7 +24,10 @@ import type {
   UpdateA2aRemoteAgentRequest,
 } from "@/types";
 import { ApiError, CreateA2aRemoteAgentRequestSchema } from "@/types";
-import { isAllowedA2aAddress, validateOutboundUrl } from "@/utils/outbound-url";
+import {
+  createPinnedOutboundDispatcher,
+  validateOutboundUrl,
+} from "@/utils/outbound-url";
 
 const MAX_A2A_RESPONSE_BYTES = 5 * 1024 * 1024;
 const A2A_REQUEST_TIMEOUT_MS = 30_000;
@@ -46,6 +41,7 @@ export async function inspectA2aRemoteAgent(params: {
   const card = await resolveAgentCard(params.input.source, auth);
   return inspectResolvedCard({
     card,
+    source: params.input.source,
     authType: params.input.auth?.type,
     apiKeyHeader:
       params.input.auth?.type === "api_key"
@@ -57,8 +53,6 @@ export async function inspectA2aRemoteAgent(params: {
 export async function listA2aRemoteAgents(params: {
   organizationId: string;
   userId: string;
-  canManage: boolean;
-  accessibleOnly?: boolean;
   scope?: ResourceVisibilityScope;
   teamId?: string;
   authorId?: string;
@@ -72,7 +66,6 @@ export async function getA2aRemoteAgent(params: {
   id: string;
   organizationId: string;
   userId: string;
-  canManage: boolean;
 }): Promise<PublicA2aRemoteAgent> {
   const row = await A2aRemoteAgentModel.findByIdVisible(params);
   if (!row) throw new ApiError(404, "Outbound A2A agent not found");
@@ -90,14 +83,6 @@ export async function createA2aRemoteAgent(params: {
     input,
     organizationId: params.organizationId,
   });
-  const visibility = await resolveVisibility({
-    organizationId: params.organizationId,
-    scope:
-      params.input.scope ??
-      (params.authorId === undefined ? "org" : input.scope),
-    teams: input.teams,
-    users: input.users,
-  });
   let secretId: string | null = null;
   let remoteAgentId: string | null = null;
 
@@ -111,20 +96,26 @@ export async function createA2aRemoteAgent(params: {
     }
 
     const remoteAgent = await A2aRemoteAgentModel.create({
-      organizationId: params.organizationId,
-      authorId: params.authorId ?? null,
-      scope: visibility.scope,
-      name: input.name ?? inspection.name,
-      description:
-        input.description === undefined
-          ? inspection.description
-          : input.description,
-      discoveryMode: input.source.type,
-      discoveryUrl:
-        input.source.type === "inline_card" ? null : input.source.url,
-      agentCard: inspection.agentCard,
-      cardHash: inspection.cardHash,
-      lastDiscoveredAt: new Date(),
+      data: {
+        organizationId: params.organizationId,
+        authorId: params.authorId ?? null,
+        // Retired mirror of the audience; the permission policy decides.
+        scope: params.authorId === undefined ? "org" : "personal",
+        name: input.name ?? inspection.name,
+        description:
+          input.description === undefined
+            ? inspection.description
+            : input.description,
+        discoveryMode: input.source.type,
+        discoveryUrl:
+          input.source.type === "inline_card" ? null : input.source.url,
+        agentCard: inspection.agentCard,
+        cardHash: inspection.cardHash,
+        lastDiscoveredAt: new Date(),
+      },
+      initialPermissionGrants: input.initialGrants,
+      // A system caller speaks for the organization, not for a person.
+      publishToOrganization: params.authorId === undefined,
     });
     remoteAgentId = remoteAgent.id;
 
@@ -140,13 +131,7 @@ export async function createA2aRemoteAgent(params: {
       // not prove that an authenticated message can execute successfully.
       lastVerifiedAt: null,
     });
-    const tool = await ToolModel.createA2aDelegationTool(
-      connection.id,
-      params.organizationId,
-    );
-
-    await A2aRemoteAgentTeamModel.sync(remoteAgent.id, visibility.teamIds);
-    await A2aRemoteAgentUserModel.sync(remoteAgent.id, visibility.userIds);
+    const tool = await ToolModel.createA2aDelegationTool(connection.id);
 
     const [result] = await hydratePublicRemoteAgents([
       { remoteAgent, connection, toolId: tool.id },
@@ -168,17 +153,9 @@ export async function createA2aRemoteAgent(params: {
 export async function updateA2aRemoteAgent(params: {
   id: string;
   organizationId: string;
-  actorUserId: string;
   input: UpdateA2aRemoteAgentRequest;
 }): Promise<PublicA2aRemoteAgent> {
   const existing = await requireRemoteAgent(params);
-  const existingVisibility = await getVisibility(existing.remoteAgent.id);
-  const visibility = await resolveVisibility({
-    organizationId: params.organizationId,
-    scope: params.input.scope ?? existing.remoteAgent.scope,
-    teams: params.input.teams ?? existingVisibility.teamIds,
-    users: params.input.users ?? existingVisibility.userIds,
-  });
   const source = params.input.source ?? sourceFromStored(existing.remoteAgent);
   const changesAuthenticatedDiscoverySource =
     params.input.source !== undefined &&
@@ -204,7 +181,12 @@ export async function updateA2aRemoteAgent(params: {
           (await authenticatedDiscoveryFromStored(existing.connection)),
       )
     : (existing.remoteAgent.agentCard as unknown as AgentCard);
-  const inspection = inspectResolvedCard({ card, authType, apiKeyHeader });
+  const inspection = inspectResolvedCard({
+    card,
+    source,
+    authType,
+    apiKeyHeader,
+  });
   const nextName = params.input.name ?? existing.remoteAgent.name;
 
   // Never mutate a live credential in place. A delegation must observe either
@@ -261,11 +243,6 @@ export async function updateA2aRemoteAgent(params: {
         .update(schema.a2aRemoteAgentsTable)
         .set({
           name: nextName,
-          scope: visibility.scope,
-          authorId:
-            visibility.scope === "personal" && !existing.remoteAgent.authorId
-              ? params.actorUserId
-              : existing.remoteAgent.authorId,
           description:
             params.input.description === undefined
               ? existing.remoteAgent.description
@@ -308,16 +285,6 @@ export async function updateA2aRemoteAgent(params: {
       if (!connection) {
         throw new ApiError(404, "Outbound A2A connection not found");
       }
-      await A2aRemoteAgentTeamModel.sync(
-        remoteAgent.id,
-        visibility.teamIds,
-        tx,
-      );
-      await A2aRemoteAgentUserModel.sync(
-        remoteAgent.id,
-        visibility.userIds,
-        tx,
-      );
       return { remoteAgent, connection };
     });
   } catch (error) {
@@ -380,6 +347,15 @@ export async function deleteA2aRemoteAgent(params: {
     await tx
       .delete(schema.a2aRemoteAgentsTable)
       .where(eq(schema.a2aRemoteAgentsTable.id, existing.remoteAgent.id));
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await ResourcePermissionPolicyModel.deleteForTarget({
+      tx,
+      resources: ["externalAgent"],
+      scope: existing.remoteAgent.id,
+    });
+    // SPDX-SnippetEnd
     return assignments.map(({ agentId }) => agentId);
   });
   if (existing.connection.secretId) {
@@ -405,10 +381,14 @@ async function resolveAgentCard(
   source: A2aRemoteAgentSource,
   auth?: AuthenticatedA2aDiscovery,
 ) {
-  const resolver = new DefaultAgentCardResolver({
-    fetchImpl: buildDiscoveryFetch(auth),
-  });
   try {
+    const resolver = new DefaultAgentCardResolver({
+      fetchImpl: buildDiscoveryFetch({
+        auth,
+        trustedOrigin:
+          source.type === "inline_card" ? null : new URL(source.url).origin,
+      }),
+    });
     if (source.type === "inline_card") {
       return resolver.normalizeAgentCard(source.agentCard);
     }
@@ -514,8 +494,13 @@ function assertStoredAuthReuseCompatible(
   }
 }
 
-function buildDiscoveryFetch(auth?: AuthenticatedA2aDiscovery): typeof fetch {
-  if (!auth || auth.type === "none") return safeA2aFetch;
+function buildDiscoveryFetch(params: {
+  auth?: AuthenticatedA2aDiscovery;
+  trustedOrigin: string | null;
+}): typeof fetch {
+  const { auth } = params;
+  const a2aFetch = createA2aFetch(params.trustedOrigin);
+  if (!auth || auth.type === "none") return a2aFetch;
   const headerName = auth.type === "bearer" ? "authorization" : auth.headerName;
   const headerValue =
     auth.type === "bearer" ? `Bearer ${auth.credential}` : auth.credential;
@@ -533,7 +518,7 @@ function buildDiscoveryFetch(auth?: AuthenticatedA2aDiscovery): typeof fetch {
     } catch {
       throw new Error("A2A authentication header is invalid");
     }
-    return safeA2aFetch(input, { ...init, headers });
+    return a2aFetch(input, { ...init, headers });
   };
 }
 
@@ -566,7 +551,9 @@ function canonicalDiscoverySource(source: A2aRemoteAgentSource): string | null {
       cardUrl.hash = "";
       return `card_url:${cardUrl.href}`;
     }
-    const resolver = new DefaultAgentCardResolver({ fetchImpl: safeA2aFetch });
+    const resolver = new DefaultAgentCardResolver({
+      fetchImpl: createA2aFetch(null),
+    });
     const normalized = resolver.normalizeAgentCard(source.agentCard);
     return `inline_card:${stableStringify(normalized)}`;
   } catch {
@@ -596,6 +583,7 @@ function stableStringify(value: unknown): string {
 
 function inspectResolvedCard(params: {
   card: AgentCard;
+  source: A2aRemoteAgentSource;
   authType?: A2aConnectionAuthType;
   apiKeyHeader?: string;
 }): A2aRemoteAgentInspection {
@@ -624,7 +612,14 @@ function inspectResolvedCard(params: {
       "Agent Card must advertise an A2A 1.x JSONRPC or HTTP+JSON interface",
     );
   }
-  assertSafeOutboundUrl(selectedInterface.url);
+  const trustedOrigin = trustedA2aOrigin({
+    discoveryUrl:
+      params.source.type === "inline_card" ? null : params.source.url,
+    interfaceUrl: selectedInterface.url,
+  });
+  if (!isTrustedA2aUrl(selectedInterface.url, trustedOrigin)) {
+    assertSafeOutboundUrl(selectedInterface.url);
+  }
   assertCompatibleMediaModes(card);
   assertNoRequiredExtensions(card);
 
@@ -823,24 +818,19 @@ async function hydratePublicRemoteAgents(
   const authorIds = rows.map((row) =>
     CreatedByModel.id(row.remoteAgent, row.remoteAgent.authorId),
   );
-  const [
-    teamsByAgent,
-    usersByAgent,
-    authorNames,
-    assignmentsByTool,
-    lastUsedAtByAgent,
-  ] = await Promise.all([
-    A2aRemoteAgentTeamModel.getDetailsForRemoteAgents(remoteAgentIds),
-    A2aRemoteAgentUserModel.getDetailsForRemoteAgents(remoteAgentIds),
-    CreatedByModel.resolve(authorIds),
-    A2aRemoteAgentModel.countAssignmentsByToolIds(toolIds),
-    A2aRemoteAgentModel.getLastUsedAtByRemoteAgentIds(remoteAgentIds),
-  ]);
+  const [authorNames, assignmentsByTool, lastUsedAtByAgent] = await Promise.all(
+    [
+      CreatedByModel.resolve(authorIds),
+      A2aRemoteAgentModel.countAssignmentsByToolIds(toolIds),
+      A2aRemoteAgentModel.getLastUsedAtByRemoteAgentIds(remoteAgentIds),
+    ],
+  );
 
   return rows.map((row) => {
     const { secretId, ...connection } = row.connection;
+    const { scope: _retiredScope, ...remoteAgent } = row.remoteAgent;
     return {
-      ...row.remoteAgent,
+      ...remoteAgent,
       connection: { ...connection, hasCredential: Boolean(secretId) },
       toolId: row.toolId,
       assignmentCount: assignmentsByTool.get(row.toolId) ?? 0,
@@ -854,86 +844,51 @@ async function hydratePublicRemoteAgents(
         authorNames,
         CreatedByModel.id(row.remoteAgent, row.remoteAgent.authorId),
       ),
-      teams: teamsByAgent.get(row.remoteAgent.id) ?? [],
-      users: usersByAgent.get(row.remoteAgent.id) ?? [],
     };
   });
 }
 
-async function getVisibility(remoteAgentId: string): Promise<{
-  teamIds: string[];
-  userIds: string[];
-}> {
-  const [teamsByAgent, usersByAgent] = await Promise.all([
-    A2aRemoteAgentTeamModel.getDetailsForRemoteAgents([remoteAgentId]),
-    A2aRemoteAgentUserModel.getDetailsForRemoteAgents([remoteAgentId]),
-  ]);
-  return {
-    teamIds: (teamsByAgent.get(remoteAgentId) ?? []).map((team) => team.id),
-    userIds: (usersByAgent.get(remoteAgentId) ?? []).map((user) => user.id),
-  };
+/**
+ * The origin chosen by whoever connected an outbound agent: the URL they
+ * entered, or the interface of a card they pasted. Calls to it may use http
+ * and private addresses.
+ */
+export function trustedA2aOrigin(params: {
+  discoveryUrl: string | null;
+  interfaceUrl: string;
+}): string | null {
+  try {
+    return new URL(params.discoveryUrl ?? params.interfaceUrl).origin;
+  } catch {
+    return null;
+  }
 }
 
-async function resolveVisibility(params: {
-  organizationId: string;
-  scope: ResourceVisibilityScope;
-  teams: string[];
-  users: string[];
-}): Promise<{
-  scope: ResourceVisibilityScope;
-  teamIds: string[];
-  userIds: string[];
-}> {
-  const teamIds = params.scope === "team" ? [...new Set(params.teams)] : [];
-  const userIds = params.scope === "personal" ? [...new Set(params.users)] : [];
-
-  if (params.scope === "team" && teamIds.length === 0) {
-    throw new ApiError(
-      400,
-      "Team-scoped outbound A2A agents must be assigned to at least one team",
-    );
-  }
-
-  if (teamIds.length > 0) {
-    const teams = await TeamModel.findByIds(teamIds);
-    if (
-      teams.length !== teamIds.length ||
-      teams.some((team) => team.organizationId !== params.organizationId)
-    ) {
-      throw new ApiError(
-        400,
-        "One or more teams do not belong to this organization",
-      );
-    }
-  }
-
-  if (userIds.length > 0) {
-    const members = await MemberModel.findUserIdsInOrganization({
-      organizationId: params.organizationId,
-      userIds,
-    });
-    if (new Set(members).size !== userIds.length) {
-      throw new ApiError(
-        400,
-        "One or more users do not belong to this organization",
-      );
-    }
-  }
-
-  return { scope: params.scope, teamIds, userIds };
+/**
+ * Fetch for one outbound agent. Only `trustedOrigin` skips the SSRF guard: the
+ * remote Agent Card is not the creator's input, so it must not steer calls
+ * (and the stored credential) to some other internal address.
+ */
+export function createA2aFetch(trustedOrigin: string | null): typeof fetch {
+  return (input, init) => fetchA2a({ input, init, trustedOrigin });
 }
 
-export async function safeA2aFetch(
-  input: string | URL | globalThis.Request,
-  init?: RequestInit,
-): Promise<Response> {
+async function fetchA2a(params: {
+  input: string | URL | globalThis.Request;
+  init?: RequestInit;
+  trustedOrigin: string | null;
+}): Promise<Response> {
+  const { input, init } = params;
   const rawUrl =
     typeof input === "string" || input instanceof URL
       ? input.toString()
       : input.url;
-  assertSafeOutboundUrl(rawUrl);
+  const trusted = isTrustedA2aUrl(rawUrl, params.trustedOrigin);
+  if (!trusted) assertSafeOutboundUrl(rawUrl);
   const url = new URL(rawUrl);
-  const dispatcher = await createPinnedA2aDispatcher(url.hostname);
+  const dispatcher = trusted
+    ? undefined
+    : await createPinnedA2aDispatcher(url.hostname);
   const timeoutSignal = AbortSignal.timeout(A2A_REQUEST_TIMEOUT_MS);
   const signal = init?.signal
     ? AbortSignal.any([init.signal, timeoutSignal])
@@ -961,41 +916,38 @@ export async function safeA2aFetch(
       headers: response.headers,
     });
   } finally {
-    await dispatcher.close();
+    await dispatcher?.close();
   }
 }
 
 async function createPinnedA2aDispatcher(
   hostname: string,
 ): Promise<UndiciAgent> {
-  const normalizedHostname = hostname.replace(/^\[(.*)\]$/, "$1");
-  const addresses = await lookup(normalizedHostname, {
-    all: true,
-    verbatim: true,
-  });
-  if (addresses.length === 0) {
-    throw new Error("A2A hostname did not resolve to an address");
-  }
-  for (const { address } of addresses) {
-    if (!isAllowedA2aAddress(address)) {
-      throw new ApiError(
-        400,
-        "A2A hostname resolved to a private or reserved address",
-      );
+  const pinned = await createPinnedOutboundDispatcher({ hostname });
+  if (!pinned.ok) {
+    if (pinned.reason === "unresolved_host") {
+      throw new Error("A2A hostname did not resolve to an address");
     }
+    throw new ApiError(
+      400,
+      "A2A hostname resolved to a private or reserved address",
+    );
   }
-  const pinned = addresses[0];
-  return new UndiciAgent({
-    connect: {
-      lookup: (_hostname, options, callback) => {
-        if (options.all) {
-          callback(null, [pinned]);
-          return;
-        }
-        callback(null, pinned.address, pinned.family);
-      },
-    },
-  });
+  return pinned.dispatcher;
+}
+
+function isTrustedA2aUrl(
+  rawUrl: string,
+  trustedOrigin: string | null,
+): boolean {
+  if (trustedOrigin === null || !URL.canParse(rawUrl)) return false;
+  const url = new URL(rawUrl);
+  return (
+    url.origin === trustedOrigin &&
+    (url.protocol === "http:" || url.protocol === "https:") &&
+    !url.username &&
+    !url.password
+  );
 }
 
 function assertSafeOutboundUrl(rawUrl: string): void {

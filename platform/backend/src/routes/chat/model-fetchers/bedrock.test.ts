@@ -589,6 +589,47 @@ describe("fetchBedrockModels", () => {
       );
     });
 
+    test("skips rerank models, which ListFoundationModels reports as text output", async () => {
+      mockProfiles([]);
+      // Rerankers return relevance scores, yet AWS lists them with a TEXT
+      // output modality and ON_DEMAND inference, exactly like a chat model.
+      mockFoundationModels([
+        {
+          modelId: "cohere.rerank-v3-5:0",
+          modelName: "Rerank 3.5",
+          providerName: "Cohere",
+          inputModalities: ["TEXT"],
+          outputModalities: ["TEXT"],
+          inferenceTypesSupported: ["ON_DEMAND"],
+          modelLifecycle: { status: "ACTIVE" },
+        },
+        {
+          modelId: "amazon.rerank-v1:0",
+          modelName: "Rerank 1.0",
+          providerName: "Amazon",
+          inputModalities: ["TEXT"],
+          outputModalities: ["TEXT"],
+          inferenceTypesSupported: ["ON_DEMAND"],
+          modelLifecycle: { status: "ACTIVE" },
+        },
+        {
+          modelId: "openai.gpt-oss-120b-1:0",
+          modelName: "gpt-oss-120b",
+          providerName: "OpenAI",
+          inputModalities: ["TEXT"],
+          outputModalities: ["TEXT"],
+          inferenceTypesSupported: ["ON_DEMAND"],
+          modelLifecycle: { status: "ACTIVE" },
+        },
+      ]);
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      expect(chatOnly(models).map((m) => m.id)).toEqual([
+        "openai.gpt-oss-120b-1:0",
+      ]);
+    });
+
     test("does not duplicate a model the inference-profile listing already returned", async () => {
       mockProfiles([
         {

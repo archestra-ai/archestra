@@ -8,6 +8,7 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
   PluginModel,
+  SkillMarketplaceCredentialModel,
   SkillMarketplaceRepoModel,
   SkillModel,
   SkillShareLinkModel,
@@ -26,7 +27,7 @@ import {
 } from "@/test";
 
 beforeEach(() => {
-  config.plugins.enabled = true;
+  config.beta = false;
 });
 
 async function seedSkill(params: {
@@ -518,6 +519,93 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
       expect(scriptStat.mode & 0o111).not.toBe(0);
     }, 30_000);
 
+    test("a Claude Desktop link serves its plugins in the Claude marketplace, and not Claude Code's", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const seed = async (clientType: "claude-code" | "claude-desktop") => {
+        const plugin = await PluginModel.create({
+          organizationId: org.id,
+          userId: user.id,
+          input: {
+            displayName: `${clientType} only`,
+            description: `For ${clientType}`,
+            clientType,
+            supportedPlatforms: ["posix"],
+            files: [
+              {
+                path: "skills/brief/SKILL.md",
+                content: "---\nname: brief\ndescription: Brief.\n---\nBrief.\n",
+                encoding: "utf8",
+                mode: "100644",
+              },
+            ],
+          },
+        });
+        if (!plugin) throw new Error("failed to seed plugin");
+        return plugin;
+      };
+      const desktopPlugin = await seed("claude-desktop");
+      const codePlugin = await seed("claude-code");
+
+      const { rawToken } = await SkillShareLinkModel.create({
+        organizationId: org.id,
+        createdByUserId: user.id,
+        skillIds: [],
+        pluginIds: [desktopPlugin.id],
+        pluginClientType: "claude-desktop",
+        pluginPlatform: "posix",
+        marketplaceName: "org-desktop-plugins",
+        expiresAt: new Date(Date.now() + 86_400_000),
+      });
+
+      const target = path.join(cloneDir, "desktop-plugin-out");
+      const result = await runGitClone(
+        `${baseUrl}/skills/m/${rawToken}/repo.git`,
+        target,
+      );
+      if (result.code !== 0) throw new Error(result.stderr);
+
+      const marketplace = JSON.parse(
+        await fs.readFile(
+          path.join(target, ".claude-plugin/marketplace.json"),
+          "utf8",
+        ),
+      );
+      const listed = marketplace.plugins.map(
+        (plugin: { name: string }) => plugin.name,
+      );
+      expect(listed).toContain(desktopPlugin.pluginSlug);
+      expect(listed).not.toContain(codePlugin.pluginSlug);
+      const manifest = JSON.parse(
+        await fs.readFile(
+          path.join(
+            target,
+            "plugins",
+            desktopPlugin.pluginSlug,
+            ".claude-plugin/plugin.json",
+          ),
+          "utf8",
+        ),
+      );
+      expect(manifest.name).toBe(desktopPlugin.pluginSlug);
+      expect(
+        await fs.readFile(
+          path.join(
+            target,
+            "plugins",
+            desktopPlugin.pluginSlug,
+            "skills/brief/SKILL.md",
+          ),
+          "utf8",
+        ),
+      ).toContain("name: brief");
+    }, 30_000);
+
     test("public materialization rejects a plugin outside the link platform", async ({
       makeOrganization,
       makeUser,
@@ -562,6 +650,40 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
         path.join(cloneDir, "platform-mismatch"),
       );
       expect(result.code).not.toBe(0);
+    }, 30_000);
+
+    test("the static URL clones with the token as the URL password", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      await seedSkill({ organizationId: org.id, name: "Team Wide" });
+      const { rawToken } = await SkillMarketplaceCredentialModel.create({
+        organizationId: org.id,
+        userId: user.id,
+      });
+
+      // The form the installer gets: username `token`, marketplace token as
+      // password.
+      const cloneUrl = `http://token:${encodeURIComponent(rawToken)}@127.0.0.1:${new URL(baseUrl).port}/skills/marketplace.git`;
+      const target = path.join(cloneDir, "static-setup-credential");
+      const result = await runGitClone(cloneUrl, target);
+      if (result.code !== 0) {
+        throw new Error(`git clone failed (${result.code}): ${result.stderr}`);
+      }
+      const manifest = JSON.parse(
+        await fs.readFile(
+          path.join(target, ".claude-plugin/marketplace.json"),
+          "utf8",
+        ),
+      );
+      const pluginRoot = path.join(target, manifest.plugins[0].source);
+      expect(await fs.readdir(path.join(pluginRoot, "skills"))).toEqual([
+        "team-wide",
+      ]);
     }, 30_000);
 
     test("the static URL clones what the caller may read, and updates in place", async ({

@@ -6,11 +6,14 @@ import {
   type archestraApiTypes,
   isPermissionActionGranted,
   ManagedResourceSchema,
+  ORGANIZATION_WIDE_RESOURCES,
   type Permissions,
   type Resource,
   resourceCategories,
   resourceDescriptions,
   resourceLabels,
+  resourcePermissionPresetsFor,
+  type ScopedResource,
 } from "@archestra/shared";
 import {
   allAvailableActions,
@@ -18,6 +21,7 @@ import {
   roleActionResourceFor,
 } from "@archestra/shared/access-control";
 import { Check, Info } from "lucide-react";
+import Link from "next/link";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,6 +31,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getListPermissionsHref } from "@/lib/resource-permissions-links";
 import { formatRoleName } from "@/lib/utils/role";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -117,10 +122,10 @@ export function PermissionExplorer({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {groups.length ? (
-        <div className="grid min-h-0 flex-1 gap-4 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-0">
+        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[10rem_minmax(0,1fr)] lg:gap-0">
           <nav
             aria-label="Permission categories"
-            className="flex flex-wrap content-start gap-1 sm:flex-col sm:gap-0.5 sm:border-r sm:pr-3"
+            className="flex flex-wrap content-start gap-1 lg:flex-col lg:gap-0.5 lg:border-r lg:pr-3"
           >
             {groups.map((group) => {
               const selected = group.resources.reduce(
@@ -140,7 +145,7 @@ export function PermissionExplorer({
                     setCategory(group.name);
                   }}
                   className={cn(
-                    "h-8 justify-between gap-3 px-2.5 text-xs font-normal sm:h-7 sm:w-full",
+                    "h-8 justify-between gap-3 px-2.5 text-xs font-normal lg:h-7 lg:w-full",
                     active?.name === group.name &&
                       "bg-muted font-medium text-foreground",
                   )}
@@ -153,11 +158,11 @@ export function PermissionExplorer({
               );
             })}
           </nav>
-          <div className="min-w-0 space-y-5 sm:pl-5">
+          <div className="min-w-0 space-y-5 lg:pl-5">
             {visible.map((group) => (
               <section key={group.name} aria-label={`${group.name} resources`}>
                 <div
-                  className="hidden grid-cols-[minmax(8rem,1fr)_repeat(4,3rem)_minmax(4rem,0.8fr)] items-center gap-1 border-b pb-2 text-[11px] text-muted-foreground sm:grid"
+                  className="hidden grid-cols-[minmax(8rem,1fr)_repeat(5,5rem)_minmax(4rem,0.8fr)] items-center gap-1 border-b pb-2 text-[11px] text-muted-foreground lg:grid"
                   aria-hidden="true"
                 >
                   <span>Resource</span>
@@ -166,6 +171,7 @@ export function PermissionExplorer({
                       {actionLabels[action]}
                     </span>
                   ))}
+                  <span className="text-center">Manage access</span>
                   <span className="pl-2">Other</span>
                 </div>
                 <div className="divide-y divide-border/50">
@@ -178,7 +184,7 @@ export function PermissionExplorer({
                     return (
                       <fieldset
                         key={resource}
-                        className="grid min-w-0 gap-y-2 py-3 sm:grid-cols-[minmax(8rem,1fr)_repeat(4,3rem)_minmax(4rem,0.8fr)] sm:items-center sm:gap-x-1 sm:py-1"
+                        className="grid min-w-0 gap-y-2 py-3 lg:grid-cols-[minmax(8rem,1fr)_repeat(5,5rem)_minmax(4rem,0.8fr)] lg:items-center lg:gap-x-1 lg:py-1"
                         aria-label={`${label} actions`}
                       >
                         <div className="flex min-w-0 items-center gap-2">
@@ -209,15 +215,12 @@ export function PermissionExplorer({
                                 <Info className="size-3" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
-                              <p>{resourceDescriptions[resource]}</p>
-                              <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                                {resource}
-                              </p>
+                            <TooltipContent className="w-max max-w-72 text-wrap">
+                              {resourceDescriptions[resource]}
                             </TooltipContent>
                           </Tooltip>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 sm:contents">
+                        <div className="flex flex-wrap items-center gap-2 lg:contents">
                           {standardActions.map((action) =>
                             actions.includes(action) ? (
                               <PermissionAction
@@ -236,18 +239,18 @@ export function PermissionExplorer({
                                 sources={sources}
                               />
                             ) : (
-                              <span
+                              <ObjectPermissionAction
                                 key={action}
-                                className="hidden text-center text-xs text-muted-foreground/50 sm:block"
-                              >
-                                <span aria-hidden="true">·</span>
-                                <span className="sr-only">
-                                  {label} {actionLabels[action]} unavailable
-                                </span>
-                              </span>
+                                resource={resource}
+                                action={action}
+                              />
                             ),
                           )}
-                          <div className="flex flex-wrap items-center gap-1 sm:pl-2">
+                          <ObjectPermissionAction
+                            resource={resource}
+                            action="manage-permissions"
+                          />
+                          <div className="flex flex-wrap items-center gap-1 lg:pl-2">
                             {extra
                               .filter(
                                 (action) =>
@@ -283,13 +286,7 @@ export function PermissionExplorer({
                 </div>
                 {group.resources.some((resource) =>
                   PER_ITEM_RESOURCES.has(resource),
-                ) && (
-                  <p className="pt-3 text-xs text-muted-foreground">
-                    Who can see, edit, delete or share these items isn't set
-                    here. Use Permissions on a single item, or Permissions in a
-                    list page's ⋯ menu for all of them.
-                  </p>
-                )}
+                ) && <ObjectPermissionsNote resources={group.resources} />}
               </section>
             ))}
           </div>
@@ -300,6 +297,101 @@ export function PermissionExplorer({
         </output>
       )}
     </div>
+  );
+}
+
+function ObjectPermissionsNote({ resources }: { resources: Resource[] }) {
+  const links = resources.flatMap((roleResource) => {
+    if (!PER_ITEM_RESOURCES.has(roleResource)) return [];
+    return ManagedResourceSchema.options.flatMap((resource) => {
+      if (roleActionResourceFor(resource) !== roleResource) return [];
+      const href = getListPermissionsHref(resource);
+      const label =
+        resource === roleResource
+          ? resourceLabels[roleResource]
+          : (scopedResourceLabels[resource] ?? resourceLabels[roleResource]);
+      return href ? [{ resource, href, label }] : [];
+    });
+  });
+  return (
+    <div className="space-y-1 pt-3 text-xs text-muted-foreground">
+      <p>Per object actions are set in the item's Permissions dialog.</p>
+      {links.length > 0 && (
+        <p>
+          For access to all current and future items, open Permissions for:{" "}
+          {links.map(({ resource, href, label }, index) => (
+            <span key={resource} className="inline-block">
+              {index > 0 && (
+                <span aria-hidden="true" className="px-1">
+                  ·
+                </span>
+              )}
+              <Link
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Permissions for all ${label} (opens in a new tab)`}
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                {label}
+              </Link>
+            </span>
+          ))}
+          .
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Distinguish an object-controlled action from a missing role grant. */
+function ObjectPermissionAction({
+  resource,
+  action,
+}: {
+  resource: Resource;
+  action: Action | "manage-permissions";
+}) {
+  const scoped = ManagedResourceSchema.options.filter(
+    (entry) => roleActionResourceFor(entry) === resource,
+  );
+  const allItems =
+    action === "manage-permissions" &&
+    scoped.some((entry) => ORGANIZATION_WIDE_RESOURCES.has(entry));
+  const perObject =
+    !allItems &&
+    scoped.some((entry) =>
+      Object.values(resourcePermissionPresetsFor(entry)).some((preset) =>
+        preset.actions.some((entry) => entry === action),
+      ),
+    );
+  const label = `${resourceLabels[resource]} ${actionLabels[action]}`;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          size="xs"
+          variant="ghost"
+          className="text-muted-foreground"
+          aria-label={`${label}: ${allItems ? "set for all items" : perObject ? "set in object permissions" : "not applicable"}`}
+        >
+          <span className="lg:sr-only">{actionLabels[action]}:</span>
+          <span>
+            {allItems ? "All items" : perObject ? "Per object" : "N/A"}
+          </span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent className="w-max max-w-72 text-wrap">
+        {allItems
+          ? `Set Manage access for all ${resourceLabels[resource]} in their organization-wide Permissions policy.`
+          : perObject
+            ? action === "manage-permissions"
+              ? "Change who can access the item and their permission levels. Set this in the item's Permissions dialog."
+              : `Set ${actionLabels[action]} in the item's Permissions dialog.`
+            : `No separate ${actionLabels[action]} permission.`}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -335,7 +427,7 @@ function PermissionAction({
   );
   if (!editable && !selected)
     return (
-      <span className="hidden text-center text-xs text-muted-foreground/50 sm:block">
+      <span className="hidden text-center text-xs text-muted-foreground/50 lg:block">
         <span aria-hidden="true">·</span>
         <span className="sr-only">{name} not granted</span>
       </span>
@@ -347,8 +439,8 @@ function PermissionAction({
           <Label
             htmlFor={controlId}
             className={cn(
-              "flex min-h-8 items-center gap-1.5 rounded px-1.5 text-xs transition-colors sm:min-h-7 sm:justify-center",
-              named && "sm:justify-start",
+              "flex min-h-8 items-center gap-1.5 rounded px-1.5 text-xs transition-colors lg:min-h-7 lg:justify-center",
+              named && "lg:justify-start",
               disabled
                 ? "cursor-not-allowed text-muted-foreground"
                 : "cursor-pointer hover:bg-muted/60",
@@ -361,7 +453,7 @@ function PermissionAction({
               disabled={disabled}
               onCheckedChange={onToggle}
             />
-            <span className={cn(!named && "sm:sr-only")}>{label}</span>
+            <span className={cn(!named && "lg:sr-only")}>{label}</span>
           </Label>
         ) : (
           <Button
@@ -370,22 +462,19 @@ function PermissionAction({
             variant="ghost"
             aria-label={`${name} granted`}
             className={cn(
-              "h-8 gap-1.5 px-1.5 text-xs font-normal sm:h-7 sm:w-full",
-              named && "sm:w-auto",
+              "h-8 gap-1.5 px-1.5 text-xs font-normal lg:h-7 lg:w-full",
+              named && "lg:w-auto",
             )}
           >
             <Check className="size-3.5 text-primary" />
-            <span className={cn(!named && "sm:sr-only")}>{label}</span>
+            <span className={cn(!named && "lg:sr-only")}>{label}</span>
           </Button>
         )}
       </TooltipTrigger>
-      <TooltipContent className="max-w-xs space-y-1">
+      <TooltipContent className="w-max max-w-72 space-y-1 text-wrap">
         {permissionDescriptions[`${resource}:${action}`] && (
           <p>{permissionDescriptions[`${resource}:${action}`]}</p>
         )}
-        <p className="font-mono text-[11px] opacity-70">
-          {resource}:{action}
-        </p>
         {editable && disabled ? <p>{UNGRANTABLE_PERMISSION_TOOLTIP}</p> : null}
         {grantingSources?.length ? (
           <>
@@ -405,19 +494,22 @@ function PermissionAction({
   );
 }
 
-const standardActions: Action[] = ["read", "create", "update", "delete"];
-// Role resources whose individual items carry their own grants. Environments
-// and scheduled tasks are governed organization-wide instead.
+const standardActions: Action[] = ["create", "read", "update", "delete"];
+// Role resources whose individual items carry their own grants.
 const PER_ITEM_RESOURCES = new Set<Resource>(
   ManagedResourceSchema.options
-    .filter(
-      (resource) => resource !== "environment" && resource !== "scheduledTask",
-    )
+    .filter((resource) => !ORGANIZATION_WIDE_RESOURCES.has(resource))
     .map(roleActionResourceFor),
 );
 const UNGRANTABLE_PERMISSION_TOOLTIP =
   "You can only grant permissions that you currently have yourself.";
-const actionLabels: Record<Action, string> = {
+const scopedResourceLabels: Partial<Record<ScopedResource, string>> = {
+  knowledgeBase: "Knowledge Bases",
+  knowledgeConnector: "Connectors",
+  knowledgeFile: "Files",
+};
+const actionLabels: Record<Action | "manage-permissions", string> = {
+  "manage-permissions": "Manage access",
   create: "Create",
   read: "Read",
   update: "Update",

@@ -151,6 +151,10 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
   const providerApiKeyId = params?.providerApiKeyId;
   const keyType = params?.keyType;
   const scope = params?.scope;
+  const labels = params?.labels;
+  const access = params?.access;
+  const sharedWith = params?.sharedWith;
+  const owner = params?.owner;
   const toastOnError = params?.toastOnError;
   return useQuery({
     queryKey: [
@@ -161,6 +165,7 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
       providerApiKeyId,
       keyType,
       scope,
+      { labels, access, sharedWith, owner },
     ],
     queryFn: async () => {
       const { data, error } = await getAllVirtualApiKeys({
@@ -171,6 +176,10 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
           providerApiKeyId: providerApiKeyId || undefined,
           keyType: keyType || undefined,
           scope: scope || undefined,
+          labels: labels || undefined,
+          access,
+          sharedWith,
+          owner,
         },
       });
       throwOnApiError(error, { toastOnError });

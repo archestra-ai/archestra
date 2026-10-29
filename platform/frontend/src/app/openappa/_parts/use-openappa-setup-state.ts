@@ -11,7 +11,7 @@ export function useOpenAppaSetupState() {
   const { data: canReadSettings } = useHasPermissions({
     organizationSettings: ["read"],
   });
-  const deployment = useGuardrailsDeployment();
+  const deployment = useGuardrailsDeployment({ poll: true });
   const policy = useGuardrailsPolicy();
   const enabled = deployment.data?.enabled;
   // Revision 0 is the unsaved starter policy the API answers with.

@@ -50,7 +50,7 @@ describe("Reasoning trigger label", () => {
   });
 });
 
-describe("Reasoning auto-collapse", () => {
+describe("Reasoning open state", () => {
   it("mounts a persisted block collapsed and never auto-collapses it", () => {
     vi.useFakeTimers();
     try {
@@ -96,7 +96,7 @@ describe("Reasoning auto-collapse", () => {
     }
   });
 
-  it("mounts a live block open and collapses it shortly after streaming ends", () => {
+  it("keeps a live block collapsed while it streams and after it ends", () => {
     vi.useFakeTimers();
     try {
       const { rerender } = render(
@@ -107,6 +107,35 @@ describe("Reasoning auto-collapse", () => {
       );
 
       const trigger = screen.getByRole("button");
+      expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+      rerender(
+        <Reasoning isStreaming={false}>
+          <ReasoningTrigger />
+          <ReasoningContent>live thinking</ReasoningContent>
+        </Reasoning>,
+      );
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(trigger).toHaveAttribute("aria-expanded", "false");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves a block the user opened mid-stream open once streaming ends", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(
+        <Reasoning isStreaming>
+          <ReasoningTrigger />
+          <ReasoningContent>live thinking</ReasoningContent>
+        </Reasoning>,
+      );
+
+      const trigger = screen.getByRole("button");
+      fireEvent.click(trigger);
       expect(trigger).toHaveAttribute("aria-expanded", "true");
 
       rerender(
@@ -115,12 +144,10 @@ describe("Reasoning auto-collapse", () => {
           <ReasoningContent>live thinking</ReasoningContent>
         </Reasoning>,
       );
-      expect(trigger).toHaveAttribute("aria-expanded", "true");
-
       act(() => {
-        vi.advanceTimersByTime(1000);
+        vi.advanceTimersByTime(5000);
       });
-      expect(trigger).toHaveAttribute("aria-expanded", "false");
+      expect(trigger).toHaveAttribute("aria-expanded", "true");
     } finally {
       vi.useRealTimers();
     }
@@ -172,48 +199,6 @@ describe("Reasoning across a merged run", () => {
       );
 
       expect(screen.getByText(/Thought for 7 seconds/)).toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("stays open until the run stops growing, then collapses once", () => {
-    vi.useFakeTimers();
-    try {
-      const { rerender } = render(
-        <Reasoning isStreaming keepOpen>
-          <ReasoningTrigger />
-          <ReasoningContent>first pass</ReasoningContent>
-        </Reasoning>,
-      );
-
-      const trigger = screen.getByRole("button");
-      expect(trigger).toHaveAttribute("aria-expanded", "true");
-
-      // Between blocks: this one has stopped streaming, but more may still join.
-      rerender(
-        <Reasoning isStreaming={false} keepOpen>
-          <ReasoningTrigger />
-          <ReasoningContent>first pass</ReasoningContent>
-        </Reasoning>,
-      );
-      act(() => {
-        vi.advanceTimersByTime(5000);
-      });
-      expect(trigger).toHaveAttribute("aria-expanded", "true");
-
-      // Something rendered below the run, so it can no longer grow.
-      rerender(
-        <Reasoning isStreaming={false} keepOpen={false}>
-          <ReasoningTrigger />
-          <ReasoningContent>first pass and second pass</ReasoningContent>
-        </Reasoning>,
-      );
-      act(() => {
-        vi.advanceTimersByTime(1000);
-      });
-
-      expect(trigger).toHaveAttribute("aria-expanded", "false");
     } finally {
       vi.useRealTimers();
     }

@@ -222,6 +222,21 @@ describe("cutover idempotency", () => {
     await db
       .insert(schema.virtualApiKeyTeamsTable)
       .values({ virtualApiKeyId: virtualKey.id, teamId: team.id });
+    const [externalAgent] = await db
+      .insert(schema.a2aRemoteAgentsTable)
+      .values({
+        organizationId: org.id,
+        authorId: owner.id,
+        scope: "team",
+        name: "Replay external agent",
+        discoveryMode: "inline_card",
+        agentCard: { name: "Replay external agent" },
+        cardHash: crypto.randomUUID(),
+      })
+      .returning();
+    await db
+      .insert(schema.a2aRemoteAgentTeamsTable)
+      .values({ remoteAgentId: externalAgent.id, teamId: team.id });
     const secret = await makeSecret();
     await makeLlmProviderApiKey(org.id, secret.id, {
       userId: owner.id,
@@ -272,11 +287,13 @@ describe("cutover idempotency", () => {
     });
 
     // OAuth clients keep their audience in the provider's metadata column.
+    const oauthClientIds: string[] = [];
     for (const [type, scope] of [
       ["mcp_oauth_client", "personal"],
       ["llm_oauth_client", "team"],
     ] as const) {
       const id = crypto.randomUUID();
+      oauthClientIds.push(id);
       await db.insert(schema.oauthClientsTable).values({
         id,
         clientId: `replay_${id}`,
@@ -304,6 +321,7 @@ describe("cutover idempotency", () => {
         "plugin",
         "llmVirtualKey",
         "llmProviderApiKey",
+        "externalAgent",
         "knowledgeBase",
         "knowledgeConnector",
         "knowledgeFile",
@@ -311,11 +329,22 @@ describe("cutover idempotency", () => {
         "agentRun",
         "environment",
         "serviceAccount",
-        "mcpOauthClient",
-        "llmOauthClient",
-        "scheduledTask",
+        "credential",
+        "oauthClient",
       ]),
     );
+
+    // The kinds merge; each client keeps its own scoped policy.
+    expect(
+      converted
+        .filter(
+          (policy) =>
+            policy.resource === "oauthClient" &&
+            oauthClientIds.includes(policy.scope),
+        )
+        .map((policy) => policy.scope)
+        .sort(),
+    ).toEqual([...oauthClientIds].sort());
 
     for (let restart = 0; restart < 2; restart++) {
       await runScopedResourcePermissionCutover();

@@ -1,6 +1,12 @@
-import { TOOL_TRANSFER_CREDENTIAL_SHORT_NAME } from "@archestra/shared";
+import {
+  type BatteryCredentialRequest,
+  BatteryCredentialRequestSchema,
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
+  TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
+} from "@archestra/shared";
 import { z } from "zod";
 import { AgentModel } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   declarePersonalRuntimeCredential,
   transferPersonalRuntimeCredential,
@@ -13,11 +19,14 @@ import {
   listRuntimeCredentialDefinitions,
   updateRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
+import { CredentialAccess } from "@/services/credential-access";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
+  ApiError,
   InsertRuntimeCredentialDefinitionSchema,
   UpdateRuntimeCredentialDefinitionSchema,
 } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   agentCredentialSetupUrl,
   catchError,
@@ -76,6 +85,12 @@ const TransferCredentialOutputSchema = z.object({
   availability: z
     .string()
     .describe("When a run can read the value, in plain words."),
+  next_step: z
+    .string()
+    .optional()
+    .describe(
+      "What to do with `url`: hand it over in the reply text, never inside a question form. Only set while a value is still missing.",
+    ),
 });
 
 const registry = defineArchestraTools([
@@ -157,6 +172,12 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const actor = requireActor(context);
       try {
+        await CredentialAccess.requireByKey({
+          organizationId: actor.organizationId,
+          userId: actor.id,
+          key: args.key,
+          action: "update",
+        });
         const updated = await updateRuntimeCredentialDefinition({
           organizationId: actor.organizationId,
           key: args.key,
@@ -168,7 +189,7 @@ const registry = defineArchestraTools([
           name: updated.name,
         });
       } catch (error) {
-        return catchError(error, "updating the credential");
+        return credentialError(error, "updating the credential");
       }
     },
   }),
@@ -181,13 +202,19 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const actor = requireActor(context);
       try {
+        await CredentialAccess.requireByKey({
+          organizationId: actor.organizationId,
+          userId: actor.id,
+          key: args.key,
+          action: "delete",
+        });
         await deleteRuntimeCredentialDefinition({
           organizationId: actor.organizationId,
           key: args.key,
         });
         return structuredSuccessResult({ deleted: args.key });
       } catch (error) {
-        return catchError(error, "deleting the credential");
+        return credentialError(error, "deleting the credential");
       }
     },
   }),
@@ -205,10 +232,44 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
+    title: "Open battery credentials",
+    description: `Show the person one card in ${archestraMcpBranding.appName} chat for the tokens these batteries need: what each battery adds, how to make its token, and a picker of the organization's credentials with an option to add a new one or skip. Pass every battery that needs a step in one call, by the names list_guardrails_battery_fits returns. This returns at once. The person answers with a message that starts with "Battery credentials:" and names the credential key for each variable, or says it was skipped. Secrets stay outside the conversation.`,
+    schema: z.strictObject({
+      batteries: z
+        .array(z.string().min(1))
+        .min(1)
+        .describe("The battery names, e.g. slack or github."),
+    }),
+    outputSchema: BatteryCredentialRequestSchema,
+    async handler({ args, context }) {
+      const actor = requireActor(context);
+      const setups = await openappaBatteriesService.batterySetups(
+        actor.organizationId,
+      );
+      const request: BatteryCredentialRequest = { batteries: [] };
+      const unknown: string[] = [];
+      for (const name of new Set(args.batteries)) {
+        const setup = setups.get(name);
+        if (setup)
+          request.batteries.push({ name, title: batteryTitle(name), ...setup });
+        else unknown.push(name);
+      }
+      if (unknown.length > 0)
+        return errorResult(
+          `No battery is named ${unknown.join(", ")}. Use the names list_guardrails_battery_fits returns.`,
+        );
+      return structuredSuccessResult(
+        request,
+        `Opened the credential card for ${request.batteries.map((battery) => battery.title).join(", ")}. Wait for the person's "Battery credentials: ..." reply.`,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
     title: "Transfer Credential",
     description:
-      "Give an Agent Runtime Agent a credential, so a handed-over task can use the CLI authentication the local session was using. " +
+      "Give a Remote Agent a credential, so a handed-over task can use the CLI authentication the local session was using. " +
       "PREFER THE SAFE MODE: omit `value` to declare the credential and get back a link. The person opens it and pastes the value themselves, so the secret never enters your context or this transcript. Use it whenever you would otherwise have to read a secret to pass it on. " +
       "Send a `value` only when the person deliberately handed you one to move. That mode writes the secret into your context and this client's transcript, and some clients show tool arguments in their approval prompt. It is redacted from this platform's tool-call log, not from anything before it. " +
       "Either way the credential is personal to you: it applies to every run YOU start on that Agent, and never to anyone else's runs. " +
@@ -301,6 +362,11 @@ const registry = defineArchestraTools([
           const url = agentCredentialSetupUrl(agent.id, [entry.key]);
           const availability =
             "Nothing is stored yet. A run can read it once the person saves a value, from that Agent's next turn onward.";
+          // Question forms show a link as plain text, so the model must hand
+          // it over in its reply. Said in both the text and the structured
+          // result, since a client may show the model only one of them.
+          const nextStep =
+            "Put the url in your reply text, never inside a question form, so the person can paste the value there.";
 
           return structuredSuccessResult(
             {
@@ -310,10 +376,11 @@ const registry = defineArchestraTools([
               valueStored: false,
               url,
               availability,
+              next_step: nextStep,
             },
             [
               `Declared ${entry.key} on "${agent.name}". No value is stored.`,
-              `Ask the person to paste it here: ${url}`,
+              `Put this link in your reply text, never inside a question form, so the person can paste it: ${url}`,
               "Scope: personal — whatever they save applies to every run they start on this Agent, and to no one else's runs.",
               availability,
             ].join("\n"),
@@ -364,4 +431,19 @@ function credentialSummary(
 ) {
   const { icon: _icon, ...summary } = definition;
   return summary;
+}
+
+function batteryTitle(name: string): string {
+  if (name === "github") return "GitHub";
+  return name
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+/** A refusal names its reason; anything else stays a generic failure. */
+function credentialError(error: unknown, action: string) {
+  if (error instanceof ApiError && error.statusCode < 500)
+    return errorResult(error.message);
+  return catchError(error, action);
 }

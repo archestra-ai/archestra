@@ -58,13 +58,13 @@ describe("POST /api/agents/:id/transfer-ownership", () => {
       scope: "personal",
       systemPrompt: "Help with reports",
     });
+    // The previous owner keeps their grant, so both can still reach it.
     expect(
       await AgentModel.findById(agent.id, originalOwner.id, false),
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       await AgentModel.findById(agent.id, recipient.id, false),
     ).not.toBeNull();
-    expect((await transfer(agent.id, originalOwner.id)).statusCode).toBe(403);
     const rows = await AuditLogModel.findPaginated({
       organizationId,
       resourceId: agent.id,
@@ -220,7 +220,8 @@ describe("POST /api/agents/:id/transfer-ownership", () => {
         },
       ]),
     );
-    expect(policy?.grants).not.toEqual(
+    // The previous owner keeps their grant.
+    expect(policy?.grants).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ subject: { type: "user", id: user.id } }),
       ]),

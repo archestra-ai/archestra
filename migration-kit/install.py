@@ -4,8 +4,8 @@
     curl -fsSL https://raw.githubusercontent.com/archestra-ai/archestra/main/migration-kit/install.py | python3
 
 it downloads only the files needed to RUN the skill (SKILL.md + scripts/ + references/) via the
-GitHub contents API -- a few hundred KB, not the whole repo -- and writes them into your Claude Code
-skills directory. the skill can migrate a broader agentic pilot: Claude-style files, MCP config,
+GitHub contents API -- a few hundred KB, not the whole repo -- and writes them into the skills
+directory of every coding agent it finds (Claude Code, Cursor, OpenCode), or into --dest. the skill can migrate a broader agentic pilot: Claude-style files, MCP config,
 local tools, hooks, and similar hand-rolled setup artifacts. like the skill's own scripts, this
 installer is zero-dependency: stock python>=3.10, no uv/pip, stdlib only.
 """
@@ -29,7 +29,13 @@ KIT_SUBDIR = "migration-kit"
 # tests/, pyproject.toml, this installer, and the README are contributor/meta artifacts.
 MANAGED = ("SKILL.md", "scripts", "references")
 SKILL_NAME = "migrate-to-archestra"
-DEFAULT_DEST = Path.home() / ".claude" / "skills" / SKILL_NAME
+# (agent, its config dir, its skills dir). an agent counts as installed when its config dir exists.
+_XDG_CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+AGENT_SKILL_DIRS = (
+    ("Claude Code", Path.home() / ".claude", Path.home() / ".claude" / "skills"),
+    ("Cursor", Path.home() / ".cursor", Path.home() / ".cursor" / "skills"),
+    ("OpenCode", _XDG_CONFIG / "opencode", _XDG_CONFIG / "opencode" / "skills"),
+)
 CONTENTS_API = "https://api.github.com/repos/" + REPO + "/contents/{path}"
 # requests must target these hosts (api for listings, raw for file bodies); nothing else.
 GITHUB_HOSTS = ("https://api.github.com/", "https://raw.githubusercontent.com/")
@@ -195,27 +201,44 @@ def write_kit(files: list[tuple[str, bytes]], dest: Path, force: bool) -> list[P
     return written
 
 
-def install(ref: str, dest: Path, force: bool) -> list[Path]:
-    return write_kit(fetch_kit_files(ref), dest, force)
+def detected_destinations(agents: tuple[tuple[str, Path, Path], ...] = AGENT_SKILL_DIRS) -> list[tuple[str, Path]]:
+    """the skill folder of every agent whose config dir exists; Claude Code's when none does."""
+    found = [(name, skills / SKILL_NAME) for name, home, skills in agents if home.is_dir()]
+    return found or [(agents[0][0], agents[0][2] / SKILL_NAME)]
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Install the migrate-to-archestra skill.")
     parser.add_argument("--ref", default=DEFAULT_REF, help=f"git ref to install from (default: {DEFAULT_REF})")
-    parser.add_argument("--dest", type=Path, default=DEFAULT_DEST, help=f"install directory (default: {DEFAULT_DEST})")
+    parser.add_argument(
+        "--dest",
+        type=Path,
+        help="install directory (default: the skills folder of each coding agent found: Claude Code, Cursor, OpenCode)",
+    )
     parser.add_argument("--force", action="store_true", help="overwrite an existing non-empty destination")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str]) -> int:
     args = _parse_args(argv)
+    targets = [("--dest", args.dest)] if args.dest else detected_destinations()
     try:
-        written = install(args.ref, args.dest, args.force)
+        files = fetch_kit_files(args.ref)
     except InstallError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    print(_style(f"✅ installed {len(written)} files into {args.dest}", "32;1"))
-    print(_style("➡️  next: open Claude Code in the source project and ask:", "36;1"))
+    failed = False
+    for agent, dest in targets:
+        try:
+            written = write_kit(files, dest, args.force)
+        except InstallError as exc:
+            print(f"error ({agent}): {exc}", file=sys.stderr)
+            failed = True
+            continue
+        print(_style(f"✅ installed {len(written)} files into {dest}", "32;1"))
+    if failed:
+        return 1
+    print(_style("➡️  next: open your coding agent in the source project and ask:", "36;1"))
     print("      Use the migrate-to-archestra skill to migrate this pilot into my Archestra instance.")
     print("      If needed, include the source path and Archestra URL explicitly.")
     return 0

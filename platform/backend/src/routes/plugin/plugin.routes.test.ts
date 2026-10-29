@@ -7,7 +7,15 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AuditLogModel, PluginModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createGithubPat } from "@/services/github-pat";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 import { STUB_COMMIT_SHA, stubGithub } from "@/test/github-skills-stub";
 import { useRouteTestApp } from "@/test/route-test-app";
 import { grantEverywhere } from "@/test/wildcard-grants";
@@ -15,7 +23,7 @@ import type { CreatePlugin, User } from "@/types";
 import pluginRoutes from "./plugin.routes";
 
 beforeEach(() => {
-  config.plugins.enabled = true;
+  config.beta = false;
   grantEverywhere(["plugin"]);
 });
 
@@ -108,6 +116,32 @@ describe("plugin routes", () => {
           (file: { path: string }) => file.path === "hooks/hooks.json",
         ).content,
     ).toBe(HOOKS_BYTES);
+  });
+
+  test("keeps an icon across edits that leave it out, and clears it on null", async () => {
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/plugins",
+      payload: { ...createPayload(), icon: "🧩" },
+    });
+    expect(created.json().icon).toBe("🧩");
+    const id = created.json().id;
+
+    const renamed = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/plugins/${id}`,
+      payload: { displayName: "Renamed" },
+    });
+    expect(renamed.json()).toMatchObject({
+      displayName: "Renamed",
+      icon: "🧩",
+    });
+    const cleared = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/plugins/${id}`,
+      payload: { icon: null },
+    });
+    expect(cleared.json().icon).toBeNull();
   });
 
   test("atomically replaces files and records a new approved content hash", async () => {
@@ -490,6 +524,73 @@ describe("plugin routes", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("access filter splits rows by how the caller reaches them, ignoring wildcard grants", async ({
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, ctx.organizationId, { role: "member" });
+    const myTeam = await makeTeam(ctx.organizationId, ctx.user.id);
+    await makeTeamMember(myTeam.id, ctx.user.id);
+    const otherTeam = await makeTeam(ctx.organizationId, otherUser.id);
+
+    const seed = async (
+      displayName: string,
+      access: TestAccess,
+      userId = otherUser.id,
+    ) => {
+      const plugin = await PluginModel.create({
+        organizationId: ctx.organizationId,
+        userId,
+        input: { ...createPayload(), displayName },
+        ...accessGrants(access),
+      });
+      if (!plugin) throw new Error("failed to seed plugin");
+    };
+    await seed("Mine", "personal", ctx.user.id);
+    await seed("Other Personal", "personal");
+    await seed("Org", "org");
+    await seed("My Team", { teams: [myTeam.id] });
+    await seed("Other Team", { teams: [otherTeam.id] });
+    await seed("Shared With Me", { users: [ctx.user.id] });
+
+    const list = async (access?: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/plugins${access ? `?access=${access}` : ""}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response
+        .json()
+        .map((plugin: { displayName: string }) => plugin.displayName)
+        .sort();
+    };
+
+    // The caller reads every plugin through a `*` grant, which the filter
+    // must not count as "shared".
+    expect(await list()).toEqual([
+      "Mine",
+      "My Team",
+      "Org",
+      "Other Personal",
+      "Other Team",
+      "Shared With Me",
+    ]);
+    expect(await list("mine,shared,org")).toEqual([
+      "Mine",
+      "My Team",
+      "Org",
+      "Shared With Me",
+    ]);
+    expect(await list("others")).toEqual(["Other Personal", "Other Team"]);
+    expect(await list("mine")).toEqual(["Mine"]);
+    expect(await list("shared")).toEqual(["My Team", "Shared With Me"]);
+    expect(await list("org")).toEqual(["Org"]);
+  });
+
   test("soft-deletes the plugin and removes it from reads", async () => {
     const created = await ctx.app.inject({
       method: "POST",
@@ -766,9 +867,53 @@ describe("plugin routes", () => {
       expect.objectContaining({ name: "first-plugin" }),
       expect.objectContaining({ name: "second-plugin" }),
     ]);
+
+    // Claude Desktop reads the Claude Code plugin format, so the same entries
+    // import again as Desktop copies. Another client's format does not.
+    const desktop = await ctx.app.inject({
+      method: "POST",
+      url: "/api/plugins/github/marketplace/import",
+      payload: {
+        ...importPayload,
+        selected: selected.map((entry: { displayName: string }) => ({
+          ...entry,
+          clientType: "claude-desktop",
+        })),
+      },
+    });
+    expect(desktop.statusCode).toBe(200);
+    expect(desktop.json().failed).toEqual([]);
+    expect(
+      desktop
+        .json()
+        .created.map(
+          (plugin: {
+            clientType: string;
+            sourceMarketplacePluginName: string;
+          }) => [plugin.sourceMarketplacePluginName, plugin.clientType],
+        ),
+    ).toEqual([
+      ["first-plugin", "claude-desktop"],
+      ["second-plugin", "claude-desktop"],
+    ]);
+
+    const codex = await ctx.app.inject({
+      method: "POST",
+      url: "/api/plugins/github/marketplace/import",
+      payload: {
+        ...importPayload,
+        selected: selected.map((entry: { displayName: string }) => ({
+          ...entry,
+          clientType: "codex",
+        })),
+      },
+    });
+    expect(codex.statusCode).toBe(200);
+    expect(codex.json().created).toEqual([]);
+    expect(codex.json().failed).toHaveLength(2);
   });
 
-  test("rejects marketplace imports above the beta batch limit", async () => {
+  test("rejects marketplace imports above the batch limit", async () => {
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/plugins/github/marketplace/import",

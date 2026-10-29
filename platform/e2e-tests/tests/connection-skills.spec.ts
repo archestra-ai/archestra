@@ -18,6 +18,14 @@ test("connection loads skills without treating the proxy as a skill agent", asyn
   const skill = await skillResponse.json();
   const agentIds: string[] = [];
   const failedSkillRequests: string[] = [];
+  const setupRequests: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/api/connection-setups"
+    )
+      setupRequests.push(request.url());
+  });
   const trackSkillResponse = (response: Response) => {
     if (
       response.url().includes("/api/") &&
@@ -54,11 +62,20 @@ test("connection loads skills without treating the proxy as a skill agent", asyn
     expect((await catalog.json()).data).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: skill.id })]),
     );
-    await page.getByRole("button", { name: "Customize setup" }).click();
+    await page.getByRole("button", { name: "Choose what to include" }).click();
+    await expect(page.getByRole("switch", { name: /^Skills/ })).toBeChecked();
+    await page.keyboard.press("Escape");
+    const prepare = page.getByRole("button", { name: "Download installer" });
+    await expect(prepare).toBeVisible();
+    expect(setupRequests).toEqual([]);
+    const download = page.waitForEvent("download");
+    await prepare.click();
+    expect((await download).suggestedFilename()).toBe(
+      "Connect-Claude-Desktop.mcpb",
+    );
     await expect(
-      page.getByRole("checkbox", { name: "Install shared skills" }),
-    ).toBeChecked();
-    await expect(page.getByText("Setup command ready")).toBeVisible();
+      page.getByRole("link", { name: "Download installer" }),
+    ).toBeVisible();
     await expect(
       page.getByText("This agent type does not expose skills"),
     ).toHaveCount(0);

@@ -11,11 +11,11 @@ import { runScopedResourcePermissionCutover } from "./resource-permissions-cutov
  * OAuth client registrations keep their owner and audience in the OAuth
  * provider's metadata column, not in columns of their own: `scope`, `authorId`
  * and a `oauth_client_team` junction. The conversion turns that into grants on
- * `mcpOauthClient` / `llmOauthClient`, and the team-admin and admin role
+ * `oauthClient`, and the team-admin and admin role
  * actions that used to widen who could manage them into grants too.
  */
 describe("OAuth client conversion", () => {
-  test("converts every visibility to grants that keep exactly the old reach", async ({
+  test("converts visibility grants and unions management of both former kinds", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -85,7 +85,7 @@ describe("OAuth client conversion", () => {
     await runScopedResourcePermissionCutover();
 
     const grantsOf = async (
-      resource: "mcpOauthClient" | "llmOauthClient",
+      resource: "oauthClient",
       scope: string,
       organizationId = org.id,
     ) =>
@@ -98,14 +98,14 @@ describe("OAuth client conversion", () => {
       )?.grants;
     const full = ["delete", "manage-permissions", "read", "update"];
 
-    expect(await grantsOf("mcpOauthClient", personal)).toEqual([
+    expect(await grantsOf("oauthClient", personal)).toEqual([
       { subject: { type: "user", id: author.id }, actions: full },
     ]);
     // Team members saw the client; the editor in the team could also manage
     // it through the team-admin action the built-in editor held. Its author
     // is in none of its teams, and authorship alone never reached a shared
     // client, so the author gains nothing here.
-    expect(await grantsOf("llmOauthClient", teamScoped)).toEqual([
+    expect(await grantsOf("oauthClient", teamScoped)).toEqual([
       { subject: { type: "team", id: team.id }, actions: ["read"] },
       { subject: { type: "user", id: editorInTeam.id }, actions: full },
     ]);
@@ -123,31 +123,29 @@ describe("OAuth client conversion", () => {
         a.subject.id.localeCompare(b.subject.id),
       );
     // Every role that held the kind's read action, custom roles included.
-    expect(byId(await grantsOf("mcpOauthClient", orgScoped))).toEqual(
+    expect(byId(await grantsOf("oauthClient", orgScoped))).toEqual(
       byId([
         ...readers,
         { subject: { type: "role", id: manager.id }, actions: ["read"] },
       ]),
     );
-    expect(byId(await grantsOf("llmOauthClient", unscoped))).toEqual(
+    expect(byId(await grantsOf("oauthClient", unscoped))).toEqual(
       byId(readers),
     );
     expect(
-      (await grantsOf("mcpOauthClient", orgScoped))?.some(
+      (await grantsOf("oauthClient", orgScoped))?.some(
         (grant) => grant.subject.id === blind.id,
       ),
     ).toBe(false);
-    expect(await grantsOf("mcpOauthClient", selfRegistered)).toBeUndefined();
-    expect(await grantsOf("llmOauthClient", selfRegistered)).toBeUndefined();
+    expect(await grantsOf("oauthClient", selfRegistered)).toBeUndefined();
+    expect(await grantsOf("oauthClient", selfRegistered)).toBeUndefined();
     // Converted in its own organization, and only there.
-    expect(await grantsOf("mcpOauthClient", elsewhere)).toBeUndefined();
-    expect(
-      await grantsOf("mcpOauthClient", elsewhere, foreign.id),
-    ).toBeDefined();
+    expect(await grantsOf("oauthClient", elsewhere)).toBeUndefined();
+    expect(await grantsOf("oauthClient", elsewhere, foreign.id)).toBeDefined();
 
     // The admin tiers reach every client of both kinds, and a custom role
     // that held `admin` keeps the actions its role actually carried.
-    expect(byId(await grantsOf("mcpOauthClient", "*"))).toEqual(
+    expect(byId(await grantsOf("oauthClient", "*"))).toEqual(
       byId([
         { subject: { type: "role", id: "admin" }, actions: full },
         { subject: { type: "role", id: "platform_admin" }, actions: full },
@@ -156,10 +154,11 @@ describe("OAuth client conversion", () => {
         { subject: { type: "role", id: manager.id }, actions: full },
       ]),
     );
-    expect(byId(await grantsOf("llmOauthClient", "*"))).toEqual(
+    expect(byId(await grantsOf("oauthClient", "*"))).toEqual(
       byId([
         { subject: { type: "role", id: "admin" }, actions: full },
         { subject: { type: "role", id: "platform_admin" }, actions: full },
+        { subject: { type: "role", id: manager.id }, actions: full },
       ]),
     );
     // The role actions are gone once they are grants.
@@ -167,15 +166,12 @@ describe("OAuth client conversion", () => {
       .select({ permission: schema.organizationRolesTable.permission })
       .from(schema.organizationRolesTable)
       .where(eq(schema.organizationRolesTable.id, manager.id));
-    expect(JSON.parse(storedManager.permission).mcpOauthClient).toEqual([
-      "read",
-      "update",
-    ]);
+    expect(JSON.parse(storedManager.permission).oauthClient).toEqual(["read"]);
 
     // No access lost, asked the way the routes ask.
     const allows = (
       userId: string,
-      resource: "mcpOauthClient" | "llmOauthClient",
+      resource: "oauthClient",
       scope: string,
       action: ResourcePermissionAction,
     ) =>
@@ -186,31 +182,31 @@ describe("OAuth client conversion", () => {
         scope,
         action,
       });
-    expect(await allows(author.id, "mcpOauthClient", personal, "delete")).toBe(
+    expect(await allows(author.id, "oauthClient", personal, "delete")).toBe(
       true,
     );
     expect(
-      await allows(outsideMember.id, "mcpOauthClient", personal, "read"),
+      await allows(outsideMember.id, "oauthClient", personal, "read"),
     ).toBe(false);
     expect(
-      await allows(memberInTeam.id, "llmOauthClient", teamScoped, "read"),
+      await allows(memberInTeam.id, "oauthClient", teamScoped, "read"),
     ).toBe(true);
     expect(
-      await allows(memberInTeam.id, "llmOauthClient", teamScoped, "update"),
+      await allows(memberInTeam.id, "oauthClient", teamScoped, "update"),
     ).toBe(false);
     expect(
-      await allows(editorInTeam.id, "llmOauthClient", teamScoped, "delete"),
+      await allows(editorInTeam.id, "oauthClient", teamScoped, "delete"),
     ).toBe(true);
     expect(
-      await allows(outsideMember.id, "llmOauthClient", teamScoped, "read"),
+      await allows(outsideMember.id, "oauthClient", teamScoped, "read"),
     ).toBe(false);
     expect(
-      await allows(outsideMember.id, "mcpOauthClient", orgScoped, "read"),
+      await allows(outsideMember.id, "oauthClient", orgScoped, "read"),
     ).toBe(true);
     expect(
-      await allows(outsideMember.id, "mcpOauthClient", orgScoped, "update"),
+      await allows(outsideMember.id, "oauthClient", orgScoped, "update"),
     ).toBe(false);
-    expect(await allows(admin.id, "mcpOauthClient", personal, "delete")).toBe(
+    expect(await allows(admin.id, "oauthClient", personal, "delete")).toBe(
       true,
     );
   });
@@ -249,8 +245,7 @@ describe("OAuth client conversion", () => {
           and(
             eq(schema.resourcePermissionPoliciesTable.organizationId, org.id),
             inArray(schema.resourcePermissionPoliciesTable.resource, [
-              "mcpOauthClient",
-              "llmOauthClient",
+              "oauthClient",
             ]),
           ),
         )
@@ -265,7 +260,7 @@ describe("OAuth client conversion", () => {
     // Revoke the team in the editor; the old junction row must not restore it.
     const key = {
       organizationId: org.id,
-      resource: "mcpOauthClient" as const,
+      resource: "oauthClient" as const,
       scope: shared,
     };
     const policy = await ResourcePermissionPolicyModel.find(key);
@@ -289,7 +284,7 @@ describe("OAuth client conversion", () => {
     makeOrganization,
   }) => {
     const org = await makeOrganization();
-    for (const resource of ["mcpOauthClient", "llmOauthClient"] as const) {
+    for (const resource of ["oauthClient"] as const) {
       const policy = await ResourcePermissionPolicyModel.find({
         organizationId: org.id,
         resource,

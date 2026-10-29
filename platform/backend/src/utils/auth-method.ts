@@ -11,6 +11,7 @@ interface TokenAuthLike {
   isExternalIdp?: boolean;
   isUserToken?: boolean;
   isSessionAuth?: boolean;
+  serviceAccountId?: string;
 }
 
 /**
@@ -25,6 +26,7 @@ export function deriveAuthMethod(
   if (tokenAuth.isExternalIdp) return "external_idp";
   if (tokenAuth.tokenId.startsWith(OAUTH_TOKEN_ID_PREFIX)) return "oauth";
   if (tokenAuth.isUserToken) return "user_token";
+  if (tokenAuth.serviceAccountId) return "service_account_token";
   if (tokenAuth.isOrganizationToken) return "org_token";
   return "team_token";
 }

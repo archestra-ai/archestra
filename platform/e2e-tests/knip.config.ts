@@ -2,7 +2,7 @@ import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
   entry: ["tests/**/*.ts", "auth.*.setup.ts", "consts.ts"],
-  project: ["**/*.ts"],
+  project: ["**/*.{ts,mts}"],
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
     "@archestra/shared",

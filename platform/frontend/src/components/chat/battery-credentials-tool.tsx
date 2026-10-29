@@ -1,0 +1,386 @@
+"use client";
+
+import {
+  type BatteryCredentialRequest,
+  BatteryCredentialRequestSchema,
+  DEFAULT_CREDENTIAL_GRANTS,
+} from "@archestra/shared";
+import {
+  BatteryCharging,
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRight,
+  ChevronRightIcon,
+  PlusIcon,
+} from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
+import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
+import { slugifyCredentialKey } from "@/components/settings/runtime-credential-definition-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  type RuntimeCredentialDefinition,
+  useCreateRuntimeCredential,
+  useRuntimeCredentials,
+} from "@/lib/runtime-credentials.query";
+import { cn } from "@/lib/utils/tailwind";
+
+type Battery = BatteryCredentialRequest["batteries"][number];
+type Choice = { key: string };
+/** A token "Add new token" will make once its value is submitted. */
+type Adding = { battery: Battery; variable: string; name: string };
+
+/**
+ * One step per battery the configuration agent asked credentials for: each
+ * variable is bound to an organization credential, a new one made through the
+ * Settings dialogs, or skipped by leaving it unpicked. Done sends one message
+ * naming only keys.
+ */
+export function BatteryCredentialsTool({
+  request,
+  toolCallId,
+  onSendMessage,
+}: {
+  request: BatteryCredentialRequest;
+  toolCallId: string;
+  onSendMessage?: (text: string) => void;
+}) {
+  const sentKey = `battery-credentials:${toolCallId}`;
+  const [sent, setSent] = useState<string | null>(null);
+  const [index, setIndex] = useState(0);
+  const [choices, setChoices] = useState<Record<string, Choice>>({});
+  const [adding, setAdding] = useState<Adding | null>(null);
+  const credentials = useRuntimeCredentials();
+  // The dropdown shows the new token, so no toast repeats it.
+  const create = useCreateRuntimeCredential({ silent: true });
+
+  useEffect(() => setSent(sessionStorage.getItem(sentKey)), [sentKey]);
+  const all = credentials.data ?? [];
+  const options = all.filter(
+    (entry) => entry.allowOrganization && entry.organizationConfigured,
+  );
+  // A new token is an organization secret named for its variable, shared as
+  // the Settings form would share it, and made only once its value is given.
+  const createToken = ({ battery, name }: Adding) =>
+    create.mutateAsync({
+      key: slugifyCredentialKey(name),
+      kind: "secret",
+      githubUrl: null,
+      appId: null,
+      installationId: null,
+      githubClientId: null,
+      githubAppCredentialKey: null,
+      name,
+      description: tokenDescription(battery),
+      icon: null,
+      allowPersonal: false,
+      allowOrganization: true,
+      initialGrants: DEFAULT_CREDENTIAL_GRANTS.map(({ subject, actions }) => ({
+        subject,
+        actions,
+      })),
+    });
+  const battery = request.batteries[index] ?? request.batteries[0];
+  const total = request.batteries.length;
+  const isLast = index === total - 1;
+  const variables = request.batteries.flatMap((entry) =>
+    entry.credentials.map((variable) => ({ battery: entry, variable })),
+  );
+  const answered = battery.credentials.every(
+    (variable) => choices[choiceId(battery, variable)],
+  );
+  const choose = (battery: Battery, variable: string, choice: Choice) =>
+    setChoices((current) => ({
+      ...current,
+      [choiceId(battery, variable)]: choice,
+    }));
+
+  const done = () => {
+    const message = `Battery credentials: ${
+      variables
+        .map(({ battery, variable }) => {
+          const choice = choices[choiceId(battery, variable)];
+          return `${battery.title} ${variable} → ${choice?.key ?? "skipped"}`;
+        })
+        .join("; ") || "nothing to bind"
+    }.`;
+    sessionStorage.setItem(sentKey, message);
+    setSent(message);
+    onSendMessage?.(message);
+  };
+
+  return (
+    <div
+      data-testid="battery-credentials-card"
+      className="not-prose relative mb-4 w-full overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm"
+    >
+      <div className="flex items-center gap-3 px-4 pt-3">
+        {total > 1 ? (
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            <span className="sr-only">Battery </span>
+            {index + 1} of {total}
+          </span>
+        ) : null}
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <BatteryCharging className="size-3.5 shrink-0" aria-hidden />
+          <span>Battery credentials</span>
+        </span>
+      </div>
+      <section
+        key={battery.name}
+        aria-label={battery.title}
+        className="flex min-w-0 flex-col gap-3 p-4"
+      >
+        <div>
+          <p className="text-sm font-medium">{battery.title}</p>
+          {battery.benefit ? (
+            <p className="text-sm leading-6 text-muted-foreground">
+              {battery.benefit}
+            </p>
+          ) : null}
+        </div>
+        {battery.setup.length > 0 ? <SetupSteps steps={battery.setup} /> : null}
+        {battery.credentials.map((variable) => {
+          const choice = choices[choiceId(battery, variable)];
+          const id = `battery-credential-${toolCallId}-${choiceId(battery, variable)}`;
+          return (
+            <div key={variable} className="space-y-1">
+              <Label htmlFor={id} className="font-mono text-xs">
+                {variable}
+              </Label>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={choice?.key ?? ""}
+                  disabled={sent !== null}
+                  onValueChange={(key) =>
+                    key === ADD_TOKEN
+                      ? setAdding({
+                          battery,
+                          variable,
+                          name: freeTokenName({
+                            battery,
+                            variable,
+                            credentials: all,
+                          }),
+                        })
+                      : choose(battery, variable, { key })
+                  }
+                >
+                  <SelectTrigger id={id} size="sm" className="min-w-48 flex-1">
+                    <SelectValue placeholder="Pick existing credential" />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    {options.map((entry) => (
+                      <SelectItem key={entry.key} value={entry.key}>
+                        {entry.name}
+                      </SelectItem>
+                    ))}
+                    {options.length > 0 ? <SelectSeparator /> : null}
+                    <SelectItem
+                      value={ADD_TOKEN}
+                      icon={<PlusIcon className="size-4" aria-hidden />}
+                    >
+                      <span>Add new token</span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          );
+        })}
+      </section>
+      <div
+        className={cn(
+          "flex items-center justify-end gap-1 px-3 pb-3",
+          total > 1 && "border-t border-border/60 py-2",
+        )}
+      >
+        {total > 1 && index > 0 ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setIndex(index - 1)}
+          >
+            <ChevronLeftIcon aria-hidden />
+            <span>Back</span>
+          </Button>
+        ) : null}
+        {isLast ? (
+          <Button
+            key="done"
+            type="button"
+            size="sm"
+            disabled={sent !== null}
+            onClick={done}
+          >
+            <CheckIcon aria-hidden />
+            <span>{sent === null ? "Done" : "Sent"}</span>
+          </Button>
+        ) : (
+          <Button
+            key="next"
+            type="button"
+            // Leaving a variable unpicked skips it.
+            variant={answered ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setIndex(index + 1)}
+          >
+            <span>{answered ? "Next" : "Skip"}</span>
+            <ChevronRightIcon aria-hidden />
+          </Button>
+        )}
+      </div>
+      {adding ? (
+        <RuntimeCredentialConnectionDialog
+          definition={{
+            key: slugifyCredentialKey(adding.name),
+            name: adding.name,
+            kind: "secret",
+            icon: null,
+            description: tokenDescription(adding.battery),
+            githubClientId: null,
+          }}
+          scope="organization"
+          // The dropdown shows the connected token instead of a toast.
+          silent
+          create={() => createToken(adding)}
+          onClose={() => setAdding(null)}
+          onConnected={() =>
+            choose(adding.battery, adding.variable, {
+              key: slugifyCredentialKey(adding.name),
+            })
+          }
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** The card's batteries from the tool result, or null when it holds none. */
+export function parseBatteryCredentialRequest(
+  output: unknown,
+): BatteryCredentialRequest | null {
+  const structured =
+    typeof output === "object" &&
+    output !== null &&
+    "structuredContent" in output
+      ? output.structuredContent
+      : undefined;
+  const parsed = BatteryCredentialRequestSchema.safeParse(structured);
+  return parsed.success ? parsed.data : null;
+}
+
+// === Internal helpers ===
+
+function SetupSteps({ steps }: { steps: string[] }) {
+  return (
+    <Collapsible>
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="link"
+          size="xs"
+          className="group h-auto p-0 text-muted-foreground"
+        >
+          <ChevronRight className="size-3.5 transition-transform group-data-[state=open]:rotate-90" />
+          <span>How to get the token</span>
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
+          {steps.map((step) => (
+            <li key={step}>
+              <StepText text={step} />
+            </li>
+          ))}
+        </ol>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/** A setup line with its URLs as links and its backticked names as code. */
+function StepText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(STEP_TOKEN).map((part, index) => {
+        const key = `${index}-${part}`;
+        if (part.startsWith("`") && part.endsWith("`") && part.length > 1)
+          return (
+            <code key={key} className="rounded bg-muted px-1 text-xs">
+              {part.slice(1, -1)}
+            </code>
+          );
+        if (/^https?:\/\//.test(part))
+          return (
+            <a
+              key={key}
+              href={part}
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-2"
+            >
+              {part}
+            </a>
+          );
+        return <Fragment key={key}>{part}</Fragment>;
+      })}
+    </>
+  );
+}
+
+/**
+ * The name for another token: the variable's token name, numbered from 2 once
+ * a credential holds it, so each "Add new token" makes a new one.
+ */
+function freeTokenName(params: {
+  battery: Battery;
+  variable: string;
+  credentials: RuntimeCredentialDefinition[];
+}) {
+  const base = tokenName(params.battery, params.variable);
+  for (let n = 1; ; n++) {
+    const name = n === 1 ? base : `${base} ${n}`;
+    const key = slugifyCredentialKey(name);
+    if (
+      !params.credentials.some(
+        (entry) => entry.name === name || entry.key === key,
+      )
+    )
+      return name;
+  }
+}
+
+function tokenDescription(battery: Battery) {
+  return `Read by the ${battery.title} battery's helpers.`;
+}
+
+/** A variable's token name: a battery reading two variables names two tokens. */
+function tokenName(battery: Battery, variable: string) {
+  return battery.credentials.length > 1
+    ? `${battery.title} ${variable} token`
+    : `${battery.title} token`;
+}
+
+function choiceId(battery: Battery, variable: string) {
+  return `${battery.name}:${variable}`;
+}
+
+// The Select item that opens the add-token dialogs instead of picking a key.
+const ADD_TOKEN = "__add-token__";
+
+// A URL stops before trailing sentence punctuation.
+const STEP_TOKEN = /(`[^`]+`|https?:\/\/[^\s`]*[^\s`.,:;)])/;

@@ -1,3 +1,4 @@
+import { openCodeFamilyRecord } from "./opencode-family";
 /**
  * Loopback host every self-directed dial names — the frontend server reaching
  * the backend in the same container, and the backend reaching its own LLM
@@ -35,6 +36,22 @@ export const LOOPBACK_HOST = "127.0.0.1";
  * reach it.
  */
 export const DEFAULT_INTERNAL_API_BASE_URL = `http://${LOOPBACK_HOST}:9000`;
+
+/**
+ * Prefix of the Better Auth cookie names when `ARCHESTRA_AUTH_COOKIE_PREFIX`
+ * is not set. The backend names its cookies with it, and the frontend server
+ * reads the same variable to recognise a session cookie on a document request.
+ */
+export const DEFAULT_AUTH_COOKIE_PREFIX = "archestra";
+
+/**
+ * Names the Better Auth session cookie can carry for `prefix`: the plain name,
+ * and the `__Secure-` variant Better Auth uses when the cookie is Secure.
+ */
+export function getAuthSessionCookieNames(prefix: string): string[] {
+  const name = `${prefix}.session_token`;
+  return [name, `__Secure-${name}`];
+}
 
 /** Default app name used as fallback when organization.appName is not configured */
 export const DEFAULT_APP_NAME = "Archestra";
@@ -194,8 +211,6 @@ export const WEBSITE_URL = "https://archestra.ai";
 export const GITHUB_REPO_URL = "https://github.com/archestra-ai/archestra";
 export const GITHUB_REPO_NEW_ISSUE_URL = `${GITHUB_REPO_URL}/issues/new`;
 export const COMMUNITY_SLACK_URL = `${WEBSITE_URL}/join-slack`;
-/** Typeform behind the "Share feedback" pop-up. */
-export const FEEDBACK_TYPEFORM_URL = "https://form.typeform.com/to/qVvzSmEn";
 
 export const MCP_CATALOG_API_BASE_URL =
   process.env.ARCHESTRA_MCP_CATALOG_API_BASE_URL ||
@@ -263,6 +278,13 @@ export const COPILOT_PROVIDER_ENV_KEYS = {
  * guard entry — its connect is reversed from the Disconnect panel instead.
  */
 export const STARTUP_GUARD_INSTALL = {
+  pi: {
+    scriptRelpath: ".archestra/pi/startup.sh",
+    psScriptRelpath: ".archestra/pi/startup.ps1",
+    skipRelpath: ".archestra/pi/startup.skip",
+    markerStart: "# >>> archestra pi guard >>>",
+    markerEnd: "# <<< archestra pi guard <<<",
+  },
   "claude-code": {
     scriptRelpath: ".archestra/claude-startup-guard.sh",
     // Windows (PowerShell) guard; forward slashes — PowerShell accepts them.
@@ -278,6 +300,13 @@ export const STARTUP_GUARD_INSTALL = {
     markerStart: "# >>> archestra codex guard >>>",
     markerEnd: "# <<< archestra codex guard <<<",
   },
+  "kimi-code": {
+    scriptRelpath: ".archestra/kimi-code-startup-guard.sh",
+    psScriptRelpath: ".archestra/kimi-code-startup-guard.ps1",
+    skipRelpath: ".archestra/kimi-code-startup-guard.skip",
+    markerStart: "# >>> archestra kimi-code guard >>>",
+    markerEnd: "# <<< archestra kimi-code guard <<<",
+  },
   "copilot-cli": {
     scriptRelpath: ".archestra/copilot-startup-guard.sh",
     psScriptRelpath: ".archestra/copilot-startup-guard.ps1",
@@ -285,13 +314,13 @@ export const STARTUP_GUARD_INSTALL = {
     markerStart: "# >>> archestra copilot guard >>>",
     markerEnd: "# <<< archestra copilot guard <<<",
   },
-  opencode: {
-    scriptRelpath: ".archestra/opencode-startup-guard.sh",
-    psScriptRelpath: ".archestra/opencode-startup-guard.ps1",
-    skipRelpath: ".archestra/opencode-startup-guard.skip",
-    markerStart: "# >>> archestra opencode guard >>>",
-    markerEnd: "# <<< archestra opencode guard <<<",
-  },
+  ...openCodeFamilyRecord((client) => ({
+    scriptRelpath: `.archestra/${client.stateName}-startup-guard.sh`,
+    psScriptRelpath: `.archestra/${client.stateName}-startup-guard.ps1`,
+    skipRelpath: `.archestra/${client.stateName}-startup-guard.skip`,
+    markerStart: `# >>> archestra ${client.stateName} guard >>>`,
+    markerEnd: `# <<< archestra ${client.stateName} guard <<<`,
+  })),
 } as const;
 
 /** Client ids that get a startup guard (keys of {@link STARTUP_GUARD_INSTALL}). */
@@ -301,23 +330,48 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  * Monotonic format version of the installed startup guard. It is NOT the
  * platform release version — it is a plain counter that increments by one
  * whenever the generated guard's behavior or install layout changes in a way
- * that warrants asking users to re-run connect.
+ * that warrants refreshing the installed startup check.
  *
  * The connect setup stamps this number into the guard it installs; the public
  * `/v1/health` endpoint reports the running instance's current value. On every
- * launch the guard flags an update ONLY when the instance reports a STRICTLY
+ * launch the guard refreshes ONLY when the instance reports a STRICTLY
  * GREATER number than the one it was stamped with. Comparing a monotonic
  * counter — rather than release strings — is what keeps a rollback or an older
  * instance silent: a guard from a newer deploy simply sees an equal-or-lower
- * number and says nothing. Bump this by exactly one when, and only when, a
- * guard change should prompt a re-connect.
+ * number and says nothing. Bump this by exactly one when a guard change
+ * should refresh installed generated checks. User settings and permissions
+ * are never replayed by this update.
  *
  * Preview installs already used version 2. Version 3 repairs their PowerShell
  * permission cleanup; reusing version 2 would not prompt those users to reconnect.
  */
-export const STARTUP_GUARD_FORMAT_VERSION = 3;
+export const STARTUP_GUARD_FORMAT_VERSION = 9;
 
-export const DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS = `In your first reply, briefly answer the user, then add: "By the way, say 'move this to Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
+/**
+ * The managed instructions a deployment uses until an admin edits them. It
+ * names the deployment's own Remote Agents, so users of Claude Code or Codex
+ * don't mistake them for their client vendor's.
+ */
+export function defaultRuntimeHandoffInstructions(appName: string): string {
+  return `In your first reply, briefly answer the user, then add: "By the way, say 'move this to ${appName} Remote Agents' to continue this session in the cloud." Say this only once per session. When asked, use the Remote Agents Handoff skill and create a remote agent if needed.`;
+}
+
+/**
+ * The managed instructions in effect. Unedited ones (stored as null, or the
+ * earlier default's exact text) follow the current default, so a deployment
+ * that never changed them picks up new wording.
+ */
+export function resolveRuntimeHandoffInstructions(params: {
+  stored: string | null | undefined;
+  appName: string;
+}): string {
+  const { stored, appName } = params;
+  return stored == null || stored === LEGACY_RUNTIME_HANDOFF_INSTRUCTIONS
+    ? defaultRuntimeHandoffInstructions(appName)
+    : stored;
+}
+
+const LEGACY_RUNTIME_HANDOFF_INSTRUCTIONS = `In your first reply, briefly answer the user, then add: "By the way, say 'move this to Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
 
 /**
  * Header name for external agent ID.
@@ -337,18 +391,6 @@ export const OPENCODE_AGENT_HEADER = "X-Archestra-OpenCode-Agent";
  */
 export const APPA_SESSION_HEADER = "X-Appa-Session-ID";
 export const APPA_PARENT_HEADER = "X-Appa-Parent-ID";
-
-/**
- * Environment the delegating caller runs in, set by the in-process A2A
- * executor on advisor consultations so the proxy bills the spend to the
- * caller's environment (the advisor's own row is org-wide and env-less).
- * Honored only over the loopback socket, only when the executing agent is
- * the advisor built-in, and only for an environment of the agent's own
- * organization — external clients cannot use it to shift spend between
- * environment budgets.
- */
-export const DELEGATION_BILLING_ENVIRONMENT_HEADER =
-  "X-Archestra-Delegation-Environment-Id";
 
 /**
  * MCP App whose runtime is making this LLM call (`archestra.llm.complete()`),
@@ -386,27 +428,11 @@ export const VIRTUAL_KEY_HEADER = "X-Archestra-Virtual-Key";
 export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
 
 /**
- * Header set on the available-models response while a lazy provider model sync
- * is in flight. Clients refetch until it clears so freshly synced models appear.
- */
-export const LAZY_MODEL_SYNC_STATUS_HEADER = "x-archestra-lazy-model-sync";
-
-/** Sole value of {@link LAZY_MODEL_SYNC_STATUS_HEADER}: a sync is pending. */
-export type LazyModelSyncStatus = "pending";
-export const LAZY_MODEL_SYNC_STATUS_PENDING: LazyModelSyncStatus = "pending";
-
-/**
  * Header name for interaction source.
  * Indicates where the request originated from (e.g., "chat", "chatops:slack", "email").
  * Internal-only header — external API requests default to "api".
  */
 export const SOURCE_HEADER = "X-Archestra-Source";
-
-/**
- * Header used by internal delegated agent calls to indicate that the parent
- * execution context was already untrusted/sensitive.
- */
-export const UNTRUSTED_CONTEXT_HEADER = "X-Archestra-Context-Untrusted";
 
 /**
  * Header name for a run ID.
@@ -440,30 +466,11 @@ export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
 export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
 
 /**
- * Requests the strongest thinking-off configuration the Anthropic model
- * supports: `thinking: {type: "disabled"}` where accepted (Opus 5, Sonnet 5),
- * or an `output_config.effort` floor on the Fable/Mythos class, which thinks
- * unconditionally. Set per call (dual LLM interrogation); consumed and
- * removed by the backend's Anthropic fetch wrapper before the request is
- * sent. A header rather than a providerOptions value because the installed
- * @ai-sdk/anthropic serializes `thinking` only for the enabled/adaptive
- * variants, so no providerOptions value can carry a disable to the wire.
+ * Header used to pass the model pool a chat was set to from chat → LLM proxy.
+ * In-process calls are pooled only when they carry it; like
+ * CHAT_API_KEY_ID_HEADER, it is only honored with the in-process proof.
  */
-export const ANTHROPIC_THINKING_OFF_HEADER =
-  "x-archestra-anthropic-thinking-off";
-
-/**
- * Header used to pass a per-turn dual LLM progress channel id from chat → LLM
- * proxy (loopback). When present, the proxy publishes structured dual LLM
- * analysis events (start / Q&A / complete / failure) on the in-process
- * progress bus under this channel instead of injecting narration text into
- * the response stream — injected narration is indistinguishable from model
- * output on chat-completions streams and fuses into the assistant's answer.
- * Clients without the header receive protocol-level SSE keep-alive comments
- * while an analysis holds the stream idle.
- */
-export const DUAL_LLM_PROGRESS_CHANNEL_HEADER =
-  "X-Archestra-Dual-Llm-Progress-Channel";
+export const MODEL_POOL_ID_HEADER = "X-Archestra-Model-Pool-Id";
 
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 
@@ -507,3 +514,16 @@ export function isEditableTextFile(params: {
     mime === "text/plain"
   );
 }
+
+/**
+ * Bounds of `GET /api/agents/options`. IDs travel in the query string, and
+ * Node refuses a request line + headers over 16 KB with a 431, so the ID
+ * filter stays at the same cap as `/api/agents/credential-readiness`.
+ */
+export const AGENT_OPTIONS_MAX_IDS = 200;
+export const AGENT_OPTIONS_MAX_PAGE_SIZE = 1000;
+
+/** Highest spending limit one auto-routing backfill may be given, in USD. */
+export const AUTO_ROUTING_BACKFILL_MAX_COST_USD = 1000;
+/** Scorer calls a backfill has in flight: how many per-call costs it may overshoot its spending limit by. */
+export const AUTO_ROUTING_BACKFILL_SCORER_CALLS = 4;

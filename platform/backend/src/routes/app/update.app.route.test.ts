@@ -228,6 +228,70 @@ describe("PATCH /api/apps/:appId", () => {
     expect(response.json().latestVersion).toBe(created.latestVersion + 1);
   });
 
+  test("a stale baseVersion rejects content and metadata changes without losing the accepted version", async ({
+    makeApp,
+  }) => {
+    const created = await makeApp({ organizationId });
+    const html = "<h1>Reviewed update</h1>";
+    const accepted = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: {
+        baseVersion: created.latestVersion,
+        html,
+        name: "Reviewed app",
+      },
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(accepted.json().latestVersion).toBe(created.latestVersion + 1);
+
+    const audits = await db
+      .select({
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "app.updated"),
+          eq(schema.auditLogsTable.organizationId, organizationId),
+        ),
+      );
+    expect(audits).toHaveLength(1);
+    expect(audits[0].before).toMatchObject({
+      latestVersion: created.latestVersion,
+    });
+    expect(audits[0].after).toMatchObject({
+      latestVersion: created.latestVersion + 1,
+      name: "Reviewed app",
+    });
+
+    const stale = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: {
+        baseVersion: created.latestVersion,
+        html: "<h1>Stale replacement</h1>",
+        name: "Stale name",
+      },
+    });
+    expect(stale.statusCode).toBe(409);
+    const current = mustExist(await AppModel.findById(created.id));
+    expect(current).toMatchObject({
+      name: "Reviewed app",
+      latestVersion: created.latestVersion + 1,
+    });
+    expect(
+      (
+        await AppVersionModel.findByAppAndVersion(
+          created.id,
+          current.latestVersion,
+        )
+      )?.html,
+    ).toBe(html);
+    expect(await AppVersionModel.listForApp(created.id)).toHaveLength(2);
+  });
+
   test("a retired visibility write is ignored and leaves the app alone", async ({
     makeUser,
     makeMember,

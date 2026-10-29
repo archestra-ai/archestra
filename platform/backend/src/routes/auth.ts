@@ -1,20 +1,13 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
-import { randomBytes } from "node:crypto";
 import {
   DEFAULT_ADMIN_EMAIL,
   IDENTITY_PROVIDER_ID,
-  LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
-  LLM_PROXY_OAUTH_SCOPE,
-  MCP_GATEWAY_OAUTH_SCOPE,
-  MCP_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS,
-  MCP_OAUTH_CLIENT_ID_PREFIX,
-  MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   OAUTH_GRANT_TYPE,
   OFFLINE_ACCESS_OAUTH_SCOPE,
   RouteId,
 } from "@archestra/shared";
-import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { RateLimiterRes } from "rate-limiter-flexible";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
 import { ensureCimdClientRegistered, isCimdClientId } from "@/auth/cimd";
@@ -25,8 +18,6 @@ import {
   AccountModel,
   AgentModel,
   AppModel,
-  LlmOauthClientModel,
-  McpOauthClientModel,
   MemberModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
@@ -44,15 +35,20 @@ import {
   isConnectorTargetedResource,
   resolveAppConnectorResource,
 } from "@/services/apps/app-connector-resource";
+import { defaultAdminPasswordCheck } from "@/services/default-admin-password";
 import {
   buildOAuthIssuer,
   exchangeIdentityAssertionForAccessToken,
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
+import { issueManagedOauthClientAccessToken } from "@/services/oauth-client-credentials";
+import { revokeManagedOauthClientAccessToken } from "@/services/oauth-client-revocation";
 import {
   shieldRefreshTokenGrant,
   shieldRevocationRequest,
 } from "@/services/oauth-refresh-replay";
+import { oauthRevocationRateLimiter } from "@/services/oauth-revocation-rate-limit";
+import { oauthTokenRateLimiter } from "@/services/oauth-token-rate-limit";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   isLoopbackRedirectUri,
@@ -167,8 +163,9 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.send({ enabled: false });
         }
 
-        // Compare the stored password hash with the default password
-        const isDefaultPassword = await verifyPassword({
+        // Compare the stored password hash with the default password (once
+        // per hash: the verify is slow and every page asks)
+        const isDefaultPassword = await defaultAdminPasswordCheck.matches({
           password: adminDefaultPassword,
           hash: account.password,
         });
@@ -441,6 +438,34 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       tags: ["Auth"],
     },
+    async onRequest(request, reply) {
+      if (config.authRateLimitDisabled) return;
+      // Use Fastify's trustProxy policy, never an unchecked forwarding header.
+      // All grants share an IP budget so rotating client IDs cannot bypass it.
+      try {
+        const limit = await oauthTokenRateLimiter.consume(request.ip);
+        if (limit.allowed) return;
+        return reply
+          .header("Retry-After", limit.retryAfter)
+          .header("Cache-Control", "no-store")
+          .code(429)
+          .send({
+            error: "temporarily_unavailable",
+            error_description:
+              "Too many token requests. Retry after the indicated delay.",
+          });
+      } catch (error) {
+        logger.error(
+          { err: error },
+          "OAuth token rate-limit storage unavailable",
+        );
+        return reply.header("Cache-Control", "no-store").code(503).send({
+          error: "temporarily_unavailable",
+          error_description: "Token issuance is temporarily unavailable.",
+        });
+      }
+    },
+    // codeql[js/missing-rate-limiting] The onRequest hook enforces a distributed, atomic IP budget before this handler; CodeQL only models package-based middleware.
     async handler(request, reply) {
       const body = request.body as Record<string, unknown> | undefined;
       const resource = body?.resource;
@@ -512,15 +537,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorizationHeader: request.headers.authorization,
             body,
           });
-        // Route to the right issuer by clientId prefix. MCP gateway clients and
-        // LLM proxy clients are both stored in the oauth_client table but issue
-        // tokens scoped to different resources.
-        const issueAccessToken = authenticatedClientId?.startsWith(
-          MCP_OAUTH_CLIENT_ID_PREFIX,
-        )
-          ? issueMcpOauthClientAccessToken
-          : issueLlmOauthClientAccessToken;
-        const result = await issueAccessToken({
+        const result = await issueManagedOauthClientAccessToken({
           clientId: authenticatedClientId,
           clientSecret,
           scope: body.scope as string | undefined,
@@ -728,14 +745,50 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // invalidation (see services/oauth-refresh-replay.ts). Refresh-token
   // revocations are handled here in full: idempotent 200s per RFC 7009 §2.2,
   // where better-auth 400s and — for an already-rotated token — deletes the
-  // whole (client, user) token family. Access-token revocations forward to
-  // better-auth, which deletes just that row. Without this explicit route the
+  // whole (client, user) token family. Managed application access tokens use
+  // the issuance verifier; user/public-client tokens forward to better-auth.
+  // Without this explicit route the
   // request reaches better-auth through the /api/auth/* catch-all.
   fastify.route({
     method: "POST",
     url: "/api/auth/oauth2/revoke",
     schema: {
       tags: ["Auth"],
+    },
+    onRequest(request, reply, done) {
+      if (config.authRateLimitDisabled) {
+        done();
+        return;
+      }
+      // Use Fastify's trustProxy policy, never an unchecked forwarding header.
+      // All grants share an IP budget so rotating client IDs cannot bypass it.
+      void oauthRevocationRateLimiter.consume(request.ip).then(
+        () => done(),
+        (error: unknown) => {
+          if (error instanceof RateLimiterRes) {
+            return reply
+              .header(
+                "Retry-After",
+                Math.max(1, Math.ceil(error.msBeforeNext / 1000)),
+              )
+              .header("Cache-Control", "no-store")
+              .code(429)
+              .send({
+                error: "temporarily_unavailable",
+                error_description:
+                  "Too many OAuth requests. Retry after the indicated delay.",
+              });
+          }
+          logger.error(
+            { err: error },
+            "OAuth revocation rate-limit storage unavailable",
+          );
+          return reply.header("Cache-Control", "no-store").code(503).send({
+            error: "temporarily_unavailable",
+            error_description: "Token revocation is temporarily unavailable.",
+          });
+        },
+      );
     },
     async handler(request, reply) {
       const body = request.body as Record<string, unknown> | undefined;
@@ -763,6 +816,18 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (interception.action === "respond") {
         return reply.status(interception.statusCode).send(interception.body);
+      }
+
+      const managedRevocation = await revokeManagedOauthClientAccessToken({
+        clientId: body?.client_id,
+        clientSecret: body?.client_secret,
+        token: body?.token,
+        tokenTypeHint: body?.token_type_hint,
+      });
+      if (managedRevocation) {
+        return reply
+          .status(managedRevocation.statusCode)
+          .send(managedRevocation.body);
       }
 
       const url = new URL(request.url, getPublicRequestOrigin(request));
@@ -858,11 +923,17 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (!response.ok) {
+        const errorBody = response.body ? await response.text() : "";
+        // better-auth signs the consent page query with a short expiry and
+        // rejects it as `invalid_signature` once that passes (or if the query
+        // was altered). Resubmitting the same query can never succeed, so say
+        // so instead of relaying the raw error code.
+        if (isInvalidOAuthQuerySignatureError(errorBody)) {
+          throw new ApiError(400, OAUTH_CONSENT_REQUEST_EXPIRED_MESSAGE);
+        }
         throw new ApiError(
           response.status,
-          response.body
-            ? await response.text()
-            : "OAuth consent request failed",
+          errorBody || "OAuth consent request failed",
         );
       }
 
@@ -1035,6 +1106,21 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       const url = new URL(request.url, `http://${request.headers.host}`);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (
+        request.method === "POST" &&
+        [
+          "/api/auth/sso/register",
+          "/api/auth/sso/verify-domain",
+          "/api/auth/sso/update-provider",
+          "/api/auth/sso/delete-provider",
+        ].includes(url.pathname)
+      ) {
+        throw new ApiError(404, "Not found");
+      }
+      // SPDX-SnippetEnd
       const headers = buildBetterAuthForwardedHeaders(request);
 
       // Handle body based on content type
@@ -1060,6 +1146,20 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const response = await betterAuth.handler(req);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (
+        response.status >= 400 &&
+        [
+          "/api/auth/sso/callback/",
+          "/api/auth/sso/saml2/callback/",
+          "/api/auth/sso/saml2/sp/acs/",
+        ].some((prefix) => url.pathname.startsWith(prefix))
+      ) {
+        response.headers.delete("set-cookie");
+      }
+      // SPDX-SnippetEnd
 
       // Check for "Invalid origin" errors and enhance with helpful guidance
       if (response.status === 403 && response.body) {
@@ -1213,140 +1313,6 @@ function extractOAuthClientCredentials(params: {
   };
 }
 
-async function issueLlmOauthClientAccessToken(params: {
-  clientId: string | undefined;
-  clientSecret: string | undefined;
-  scope: string | undefined;
-}): Promise<{
-  ok: boolean;
-  statusCode: number;
-  body: Record<string, unknown>;
-}> {
-  if (!params.clientId || !params.clientSecret) {
-    return {
-      ok: false,
-      statusCode: 401,
-      body: { error: "invalid_client" },
-    };
-  }
-
-  const requestedScopes = params.scope?.split(/\s+/).filter(Boolean) ?? [
-    LLM_PROXY_OAUTH_SCOPE,
-  ];
-  if (!requestedScopes.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE)) {
-    return {
-      ok: false,
-      statusCode: 400,
-      body: {
-        error: "invalid_scope",
-        error_description: `${LLM_PROXY_OAUTH_SCOPE} scope is required`,
-      },
-    };
-  }
-
-  const oauthClient = await LlmOauthClientModel.findClientForCredentials({
-    clientId: params.clientId,
-    clientSecret: params.clientSecret,
-  });
-  if (!oauthClient) {
-    return {
-      ok: false,
-      statusCode: 401,
-      body: { error: "invalid_client" },
-    };
-  }
-
-  const accessToken = `llm_at_${randomBytes(32).toString("base64url")}`;
-  const expiresIn = LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS;
-  await OAuthAccessTokenModel.createClientCredentialsToken({
-    tokenHash: hashOAuthAccessTokenForLookup(accessToken),
-    clientId: oauthClient.clientId,
-    expiresAt: new Date(Date.now() + expiresIn * 1000),
-    scopes: [LLM_PROXY_OAUTH_SCOPE],
-    referenceId: `llm-proxy:${oauthClient.id}`,
-  });
-
-  return {
-    ok: true,
-    statusCode: 200,
-    body: {
-      access_token: accessToken,
-      token_type: "Bearer",
-      expires_in: expiresIn,
-      scope: LLM_PROXY_OAUTH_SCOPE,
-    },
-  };
-}
-
-async function issueMcpOauthClientAccessToken(params: {
-  clientId: string | undefined;
-  clientSecret: string | undefined;
-  scope: string | undefined;
-}): Promise<{
-  ok: boolean;
-  statusCode: number;
-  body: Record<string, unknown>;
-}> {
-  if (!params.clientId || !params.clientSecret) {
-    return {
-      ok: false,
-      statusCode: 401,
-      body: { error: "invalid_client" },
-    };
-  }
-
-  const requestedScopes = params.scope?.split(/\s+/).filter(Boolean) ?? [
-    MCP_GATEWAY_OAUTH_SCOPE,
-  ];
-  if (!requestedScopes.some((scope) => scope === MCP_GATEWAY_OAUTH_SCOPE)) {
-    return {
-      ok: false,
-      statusCode: 400,
-      body: {
-        error: "invalid_scope",
-        error_description: `${MCP_GATEWAY_OAUTH_SCOPE} scope is required`,
-      },
-    };
-  }
-
-  const oauthClient = await McpOauthClientModel.findClientForCredentials({
-    clientId: params.clientId,
-    clientSecret: params.clientSecret,
-  });
-  if (!oauthClient) {
-    return {
-      ok: false,
-      statusCode: 401,
-      body: { error: "invalid_client" },
-    };
-  }
-
-  // Same storage invariant as the LLM issuer: a high-entropy token returned
-  // once to the caller, persisted only as a lookup hash, with a finite
-  // client-credentials lifetime. Keep this in sync with
-  // issueLlmOauthClientAccessToken if either is refactored.
-  const accessToken = `mcp_at_${randomBytes(32).toString("base64url")}`;
-  const expiresIn = MCP_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS;
-  await OAuthAccessTokenModel.createClientCredentialsToken({
-    tokenHash: hashOAuthAccessTokenForLookup(accessToken),
-    clientId: oauthClient.clientId,
-    expiresAt: new Date(Date.now() + expiresIn * 1000),
-    scopes: [MCP_GATEWAY_OAUTH_SCOPE],
-    referenceId: `${MCP_OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`,
-  });
-
-  return {
-    ok: true,
-    statusCode: 200,
-    body: {
-      access_token: accessToken,
-      token_type: "Bearer",
-      expires_in: expiresIn,
-      scope: MCP_GATEWAY_OAUTH_SCOPE,
-    },
-  };
-}
-
 /**
  * Minimal shape of the Fastify reply used by `relayBetterAuthResponse`, kept
  * structural so the helper works with every route's zod-typed reply.
@@ -1450,6 +1416,17 @@ function oauthTokenErrorForBodylessResponse(betterAuthStatus: number): {
           },
     ),
   };
+}
+
+const OAUTH_CONSENT_REQUEST_EXPIRED_MESSAGE =
+  "This authorization request has expired. Go back to the application and connect again to start a new request.";
+
+function isInvalidOAuthQuerySignatureError(body: string): boolean {
+  try {
+    return JSON.parse(body)?.error === "invalid_signature";
+  } catch {
+    return false;
+  }
 }
 
 function shouldSkipForwardedAuthHeader(headerName: string): boolean {

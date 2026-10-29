@@ -35,9 +35,7 @@ const DEFAULTS: LlmProviderApiKeyFormValues = {
   inferenceBaseUrl: null,
   extraHeaders: [],
   shared: false,
-  teamId: null,
-  vaultSecretPath: null,
-  vaultSecretKey: null,
+
   isPrimary: false,
   bedrockAuthMethod: "api-key",
   authMethod: "api-key",
@@ -71,8 +69,9 @@ function Harness({
   credentialMode,
   progressive,
   allowPersonalSubscriptions,
-  requiresExactSubscriptionCredential,
   withLabels,
+  geminiVertexAiEnabled,
+  bedrockIamAuthEnabled,
 }: {
   existingKeys?: LlmProviderApiKeyResponse[];
   existingKey?: LlmProviderApiKeyResponse;
@@ -80,8 +79,9 @@ function Harness({
   credentialMode?: "api-key" | "subscription";
   progressive?: boolean;
   allowPersonalSubscriptions?: boolean;
-  requiresExactSubscriptionCredential?: boolean;
   withLabels?: boolean;
+  geminiVertexAiEnabled?: boolean;
+  bedrockIamAuthEnabled?: boolean;
 }) {
   form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: { ...DEFAULTS, ...defaults },
@@ -89,6 +89,8 @@ function Harness({
   return (
     <LlmProviderApiKeyForm
       form={form}
+      geminiVertexAiEnabled={geminiVertexAiEnabled}
+      bedrockIamAuthEnabled={bedrockIamAuthEnabled}
       mode="full"
       showConsoleLink={false}
       existingKeys={existingKeys}
@@ -96,7 +98,6 @@ function Harness({
       credentialMode={credentialMode}
       progressive={progressive}
       allowPersonalSubscriptions={allowPersonalSubscriptions}
-      requiresExactSubscriptionCredential={requiresExactSubscriptionCredential}
       labels={withLabels ? [] : undefined}
       onLabelsChange={withLabels ? () => {} : undefined}
     />
@@ -110,8 +111,9 @@ function renderForm(options?: {
   credentialMode?: "api-key" | "subscription";
   progressive?: boolean;
   allowPersonalSubscriptions?: boolean;
-  requiresExactSubscriptionCredential?: boolean;
   withLabels?: boolean;
+  geminiVertexAiEnabled?: boolean;
+  bedrockIamAuthEnabled?: boolean;
 }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -125,10 +127,9 @@ function renderForm(options?: {
         credentialMode={options?.credentialMode}
         progressive={options?.progressive}
         withLabels={options?.withLabels}
+        geminiVertexAiEnabled={options?.geminiVertexAiEnabled}
+        bedrockIamAuthEnabled={options?.bedrockIamAuthEnabled}
         allowPersonalSubscriptions={options?.allowPersonalSubscriptions}
-        requiresExactSubscriptionCredential={
-          options?.requiresExactSubscriptionCredential
-        }
       />
     </QueryClientProvider>,
   );
@@ -198,70 +199,6 @@ describe("LlmProviderApiKeyForm", () => {
     expect(screen.queryByText("Extra HTTP headers")).not.toBeInTheDocument();
   });
 
-  it("explains why subscription sign-in is unavailable with BYOS", () => {
-    vi.mocked(useFeature).mockImplementation(
-      (feature) => feature === "byosEnabled",
-    );
-    renderForm({
-      credentialMode: "subscription",
-      defaults: {
-        provider: "xai",
-        authMethod: "subscription",
-      },
-    });
-
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Subscription sign-in is unavailable with Bring Your Own Secrets",
-    );
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Store a provider API key in Vault instead",
-    );
-    expect(
-      screen.queryByRole("button", { name: /Sign in with Grok/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("does not offer an impossible Vault API-key fallback for subscription-only providers", () => {
-    vi.mocked(useFeature).mockImplementation(
-      (feature) => feature === "byosEnabled",
-    );
-    renderForm({
-      credentialMode: "subscription",
-      defaults: { provider: "github-copilot" },
-    });
-
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "This provider has no API-key alternative",
-    );
-    expect(screen.getByRole("alert")).not.toHaveTextContent(
-      "Store a provider API key in Vault instead",
-    );
-  });
-
-  it("does not offer an ordinary Vault key for an exact-subscription agent pin", () => {
-    vi.mocked(useFeature).mockImplementation(
-      (feature) => feature === "byosEnabled",
-    );
-    renderForm({
-      credentialMode: "subscription",
-      requiresExactSubscriptionCredential: true,
-      defaults: {
-        provider: "xai",
-        authMethod: "subscription",
-      },
-    });
-
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "This agent requires the same personal subscription",
-    );
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "choose a different agent or model",
-    );
-    expect(screen.getByRole("alert")).not.toHaveTextContent(
-      "Store a provider API key in Vault instead",
-    );
-  });
-
   it("reveals optional API key settings progressively", async () => {
     const user = userEvent.setup();
     renderForm({ credentialMode: "api-key", progressive: true });
@@ -290,9 +227,9 @@ describe("LlmProviderApiKeyForm", () => {
     expect(
       screen.queryByRole("tab", { name: "Shared" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Permissions")).toBeInTheDocument();
+    expect(screen.getByText("Who can use it")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Add access" }),
+      screen.getByRole("combobox", { name: "Add access" }),
     ).toBeInTheDocument();
   });
 
@@ -345,6 +282,91 @@ describe("LlmProviderApiKeyForm", () => {
     expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
   });
 
+  it("explains Vertex AI Gemini inline and skips it for pointer and keyboard selection", async () => {
+    const user = userEvent.setup();
+    renderForm({
+      geminiVertexAiEnabled: true,
+      allowPersonalSubscriptions: false,
+      defaults: { provider: "deepseek" },
+    });
+
+    await user.click(screen.getByLabelText("Provider"));
+    const gemini = screen.getByRole("option", { name: /^Gemini/ });
+    expect(gemini).toBeDisabled();
+    expect(gemini).toHaveTextContent(/Vertex AI.*No API key needed/);
+
+    await user.hover(gemini);
+    await user.click(gemini);
+    expect(form.getValues("provider")).toBe("deepseek");
+
+    const search = screen.getByPlaceholderText("Search providers...");
+    await user.type(search, "gemini");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(form.getValues("provider")).toBe("deepseek");
+
+    await user.clear(search);
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(form.getValues("provider")).toBe("groq");
+  });
+
+  it("allows Gemini API-key selection when Vertex AI is disabled", async () => {
+    const user = userEvent.setup();
+    renderForm({ geminiVertexAiEnabled: false });
+
+    await user.click(screen.getByLabelText("Provider"));
+    await user.type(
+      screen.getByPlaceholderText("Search providers..."),
+      "gemini",
+    );
+    const gemini = screen.getByRole("option", { name: "Gemini" });
+    expect(gemini).toBeEnabled();
+    expect(gemini).not.toHaveTextContent(/No API key needed/);
+    await user.click(gemini);
+    expect(form.getValues("provider")).toBe("gemini");
+  });
+
+  it("explains IAM-managed Bedrock inline and skips it for pointer and keyboard selection", async () => {
+    const user = userEvent.setup();
+    renderForm({
+      bedrockIamAuthEnabled: true,
+      allowPersonalSubscriptions: false,
+      defaults: { provider: "archestra" },
+    });
+
+    await user.click(screen.getByLabelText("Provider"));
+    const bedrock = screen.getByRole("option", { name: /^AWS Bedrock/ });
+    expect(bedrock).toBeDisabled();
+    expect(bedrock).toHaveTextContent(/AWS IAM.*No API key needed/);
+    await user.hover(bedrock);
+    await user.click(bedrock);
+    expect(form.getValues("provider")).toBe("archestra");
+
+    const search = screen.getByPlaceholderText("Search providers...");
+    await user.type(search, "bedrock");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(form.getValues("provider")).toBe("archestra");
+
+    await user.clear(search);
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(form.getValues("provider")).toBe("azure");
+  });
+
+  it("allows Bedrock API-key selection when deployment IAM authentication is disabled", async () => {
+    const user = userEvent.setup();
+    renderForm({ bedrockIamAuthEnabled: false });
+
+    await user.click(screen.getByLabelText("Provider"));
+    await user.type(
+      screen.getByPlaceholderText("Search providers..."),
+      "bedrock",
+    );
+    const bedrock = screen.getByRole("option", { name: "AWS Bedrock" });
+    expect(bedrock).toBeEnabled();
+    expect(bedrock).not.toHaveTextContent(/No API key needed/);
+    await user.click(bedrock);
+    expect(form.getValues("provider")).toBe("bedrock");
+  });
+
   it("finds the OpenAI-compatible entry by the server the operator runs", async () => {
     // Self-hosted servers (llama.cpp, LM Studio, SGLang, TGI, LocalAI) all
     // route through the `vllm` provider. Searching for the one you run has to
@@ -378,8 +400,6 @@ describe("LlmProviderApiKeyForm", () => {
       form.setValue("apiKey", "sk-openai-secret");
       form.setValue("baseUrl", "https://openai.example");
       form.setValue("inferenceBaseUrl", "https://openai.example/infer");
-      form.setValue("vaultSecretPath", "secret/openai");
-      form.setValue("vaultSecretKey", "api_key");
       form.setValue("awsAccessKeyId", "AKIA-openai");
       form.setValue("awsSecretAccessKey", "aws-secret");
       form.setValue("awsSessionToken", "aws-session");
@@ -393,12 +413,10 @@ describe("LlmProviderApiKeyForm", () => {
 
     await waitFor(() => {
       // Every provider-specific credential field must be cleared, not just the
-      // API key — the AWS/vault fields are the most sensitive to leak across.
+      // API key — the AWS fields are the most sensitive to leak across.
       expect(form.getValues("apiKey")).toBeNull();
       expect(form.getValues("baseUrl")).toBeNull();
       expect(form.getValues("inferenceBaseUrl")).toBeNull();
-      expect(form.getValues("vaultSecretPath")).toBeNull();
-      expect(form.getValues("vaultSecretKey")).toBeNull();
       expect(form.getValues("awsAccessKeyId")).toBeNull();
       expect(form.getValues("awsSecretAccessKey")).toBeNull();
       expect(form.getValues("awsSessionToken")).toBeNull();

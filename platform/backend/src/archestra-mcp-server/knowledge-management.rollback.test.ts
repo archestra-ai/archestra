@@ -18,10 +18,11 @@ import {
   AgentKnowledgeBaseModel,
   KbChunkModel,
   KbDocumentModel,
+  KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 import { archestraMcpBranding } from "./branding";
@@ -1116,6 +1117,90 @@ describe("knowledge-management tool execution", () => {
       expect((result.content[0] as any).text).toContain("config:");
     });
 
+    test.each([
+      {},
+      { authMethod: "soap_legacy" },
+    ])("rejects creating Salesforce password connectors through MCP: %j", async (config) => {
+      const result = await executeArchestraTool(
+        t("create_knowledge_connector"),
+        { name: "Salesforce", connector_type: "salesforce", config },
+        mockContext,
+      );
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "New Salesforce connectors require OAuth client credentials",
+      );
+    });
+    test("validates Salesforce OAuth configuration through MCP", async () => {
+      const result = await executeArchestraTool(
+        t("create_knowledge_connector"),
+        {
+          name: "Salesforce",
+          connector_type: "salesforce",
+          config: {
+            authMethod: "oauth_client_credentials",
+            clientId: "consumer-key",
+            loginUrl: "https://login.salesforce.com",
+          },
+        },
+        mockContext,
+      );
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("My Domain");
+    });
+    test("preserves legacy MCP edits, requires a new secret for migration, and blocks OAuth downgrade", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = mockContext.organizationId!;
+      const kb = await makeKnowledgeBase(org);
+      const legacyConfig = {
+        type: "salesforce" as const,
+        loginUrl: "https://login.salesforce.com",
+      };
+      const connector = await makeKnowledgeBaseConnector(kb.id, org, {
+        connectorType: "salesforce",
+        config: legacyConfig,
+      });
+      const legacyEdit = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        {
+          id: connector.id,
+          config: { ...legacyConfig, authMethod: "soap_legacy" },
+        },
+        mockContext,
+      );
+      expect(legacyEdit.isError).toBe(false);
+      const oauthConfig = {
+        type: "salesforce" as const,
+        authMethod: "oauth_client_credentials" as const,
+        clientId: "consumer-key",
+        loginUrl: "https://example.my.salesforce.com",
+      };
+      const migration = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        { id: connector.id, config: oauthConfig },
+        mockContext,
+      );
+      expect(migration.isError).toBe(true);
+      expect((migration.content[0] as any).text).toContain(
+        "new consumer secret",
+      );
+      const oauthConnector = await makeKnowledgeBaseConnector(kb.id, org, {
+        connectorType: "salesforce",
+        config: oauthConfig,
+      });
+      const downgrade = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        { id: oauthConnector.id, config: legacyConfig },
+        mockContext,
+      );
+      expect(downgrade.isError).toBe(true);
+      expect((downgrade.content[0] as any).text).toContain(
+        "cannot switch back",
+      );
+    });
+
     test("create_knowledge_connector succeeds", async () => {
       const result = await executeArchestraTool(
         t("create_knowledge_connector"),
@@ -1388,6 +1473,83 @@ describe("knowledge-management tool execution", () => {
       );
       expect(verifyResult.isError).toBe(true);
       expect((verifyResult.content[0] as any).text).toContain("not found");
+    });
+
+    test("GitHub MCP edits protect repository settings and preserve no-op checkpoints", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const organizationId = mockContext.organizationId!;
+      const kb = await makeKnowledgeBase(organizationId);
+      const defaults = {
+        type: "github" as const,
+        githubUrl: "https://api.github.com",
+        owner: "example-org",
+        repos: ["legacy-bare-repo"],
+        includeIssues: true,
+      };
+      const config = {
+        ...defaults,
+        repositoryOverrides: [
+          {
+            repository: "example-org/legacy-bare-repo",
+            includePullRequests: false,
+          },
+        ],
+      };
+      const checkpoint = {
+        type: "github" as const,
+        lastSyncedAt: "2026-01-15T12:00:00.000Z",
+      };
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "github",
+          config,
+          enabled: false,
+        },
+      );
+      await KnowledgeBaseConnectorModel.update(connector.id, { checkpoint });
+      const legacyWriter = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        { id: connector.id, config: defaults },
+        mockContext,
+      );
+      expect(legacyWriter.isError).toBe(true);
+      expect((legacyWriter.content[0] as any).text).toContain(
+        "repository overrides",
+      );
+      const unchanged = await KnowledgeBaseConnectorModel.findById(
+        connector.id,
+      );
+      expect(unchanged?.config).toEqual(config);
+      expect(unchanged?.checkpoint).toEqual(checkpoint);
+
+      const noOp = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        {
+          id: connector.id,
+          config: { ...config, fileTypes: [], excludePaths: [] },
+        },
+        mockContext,
+      );
+      expect(noOp.isError).toBe(false);
+      const retained = await KnowledgeBaseConnectorModel.findById(connector.id);
+      expect(retained?.checkpoint).toEqual(checkpoint);
+      expect(retained?.secretId).toBe(connector.secretId);
+      expect(retained?.id).toBe(connector.id);
+
+      const changed = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        { id: connector.id, config: { ...config, includeIssues: false } },
+        mockContext,
+      );
+      expect(changed.isError).toBe(false);
+      const resync = await KnowledgeBaseConnectorModel.findById(connector.id);
+      expect(resync?.config).toMatchObject({ includeIssues: false });
+      expect(resync?.checkpoint).toBeNull();
+      expect(resync?.secretId).toBe(connector.secretId);
     });
 
     test("update_knowledge_connector refreshes document ACL when visibility changes", async ({
@@ -1821,6 +1983,48 @@ describe("knowledge-management tool execution", () => {
       expect((deleteResult.content[0] as any).text).toContain(
         "Knowledge connector not found",
       );
+    });
+
+    test("a connector reader cannot update or delete it through MCP tools", async ({
+      makeKnowledgeBaseConnector,
+    }) => {
+      const sharedConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        connectorType: "github",
+        access: { users: [memberContext.userId ?? ""], preset: "view" },
+      });
+
+      const readResult = await executeArchestraTool(
+        t("get_knowledge_connector"),
+        { id: sharedConnector.id },
+        memberContext,
+      );
+      expect(readResult.isError).toBe(false);
+
+      const updateResult = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        { id: sharedConnector.id, name: "Changed Connector" },
+        memberContext,
+      );
+      expect(updateResult.isError).toBe(true);
+      expect((updateResult.content[0] as any).text).toContain(
+        "Knowledge connector not found",
+      );
+      expect(
+        (await KnowledgeBaseConnectorModel.findById(sharedConnector.id))?.name,
+      ).toBe(sharedConnector.name);
+
+      const deleteResult = await executeArchestraTool(
+        t("delete_knowledge_connector"),
+        { id: sharedConnector.id },
+        memberContext,
+      );
+      expect(deleteResult.isError).toBe(true);
+      expect((deleteResult.content[0] as any).text).toContain(
+        "Knowledge connector not found",
+      );
+      expect(
+        await KnowledgeBaseConnectorModel.findById(sharedConnector.id),
+      ).not.toBeNull();
     });
 
     test("connector creators and editors can enable permission sync", async ({

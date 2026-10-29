@@ -18,6 +18,7 @@ import {
 } from "@archestra/shared";
 import logger from "@/logging";
 import type { ChatMessage, ChatMessagePart } from "@/types";
+import { readCappedToolResult } from "@/utils/tool-result-cap";
 import {
   estimateToolResultContentLength,
   previewToolResultContent,
@@ -129,7 +130,11 @@ function createBrowserToolPlaceholder(
   const shortName =
     toolName.split(MCP_SERVER_TOOL_NAME_SEPARATOR).pop() || toolName;
   const url = extractPageUrl(content);
-  return `[Page ${url} ${shortName} was here]`;
+  // A capped result was saved to the sandbox; keep that pointer reachable.
+  const savedPath = readCappedToolResult(content)?.path;
+  return savedPath
+    ? `[Page ${url} ${shortName} was here; full result saved in the sandbox at ${savedPath}]`
+    : `[Page ${url} ${shortName} was here]`;
 }
 
 function getBrowserResultSize(content: unknown): {

@@ -137,41 +137,6 @@ describe("InteractionModel", () => {
       expect(refetchedFirst?.environmentId).toBe(envA.id);
     });
 
-    test("environmentIdOverride wins over the agent's own environment", async ({
-      makeAgent,
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-      const callerEnv = await EnvironmentModel.create({
-        organizationId: org.id,
-        name: "caller-env",
-      });
-      // An env-less agent row, like the org-wide advisor.
-      const agent = await makeAgent({ organizationId: org.id });
-
-      const interaction = await InteractionModel.create(
-        {
-          profileId: agent.id,
-          request: {
-            model: "gpt-4o",
-            messages: [{ role: "user" as const, content: "Hello" }],
-          },
-          response: {
-            id: "r",
-            object: "chat.completion",
-            created: 1,
-            model: "gpt-4o",
-            choices: [],
-          },
-          type: "openai:chatCompletions" as const,
-        },
-        null,
-        { environmentIdOverride: callerEnv.id },
-      );
-
-      expect(interaction.environmentId).toBe(callerEnv.id);
-    });
-
     test("returns chat errors for chat conversation sessions", async ({
       makeUser,
       makeOrganization,
@@ -304,6 +269,63 @@ describe("InteractionModel", () => {
 
       const parsed = SelectInteractionSchema.safeParse(found);
       expect(parsed.success).toBe(true);
+    });
+  });
+
+  describe("record", () => {
+    test("stores the same row create would, for users and non-users", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
+      const request = {
+        model: "gpt-4",
+        messages: [{ role: "user" as const, content: "Hello \u0000 there" }],
+      };
+      const ids = [crypto.randomUUID(), crypto.randomUUID()];
+      await InteractionModel.record({
+        id: ids[0],
+        profileId,
+        userId: user.id,
+        request,
+        response: {
+          id: "r",
+          object: "chat.completion",
+          created: 0,
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+        model: "gpt-4",
+        inputTokens: 3,
+        outputTokens: 5,
+      });
+      await InteractionModel.record({
+        id: ids[1],
+        profileId,
+        request,
+        response: {
+          id: "r",
+          object: "chat.completion",
+          created: 0,
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const [withUser, withoutUser] = await Promise.all(
+        ids.map((id) => InteractionModel.findById(id)),
+      );
+      expect(withUser).toMatchObject({
+        userId: user.id,
+        profileId,
+        inputTokens: 3,
+        outputTokens: 5,
+        request: { messages: [{ content: "Hello  there" }] },
+      });
+      expect(withoutUser).toMatchObject({ userId: null, profileId });
+      // Sanitizing copies only what it changes; the caller's payload is intact.
+      expect(request.messages[0].content).toBe("Hello \u0000 there");
     });
   });
 
@@ -1453,6 +1475,98 @@ describe("InteractionModel", () => {
       expect(session.lastUserMessagePreview).toBe(longMessage.slice(0, 200));
       expect(session).not.toHaveProperty("lastInteractionRequest");
     });
+
+    test("previews a guardrail's call only when the session has nothing else", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "Agent" });
+      const baseTime = Date.now();
+      // A consult quotes the call it judges, here a title-generation request.
+      const judged =
+        '{"tool":"Task","prompt":"Please write a 5-10 word title"}';
+      const turn = (params: {
+        sessionId: string;
+        content: string;
+        source: "api" | "guardrail:annotator";
+        seconds: number;
+      }) =>
+        InteractionModel.create({
+          profileId: agent.id,
+          sessionId: params.sessionId,
+          source: params.source,
+          createdAt: new Date(baseTime + params.seconds * 1000),
+          request: {
+            model: "gpt-4",
+            messages: [{ role: "user", content: params.content }],
+          },
+          response: {
+            id: "r1",
+            object: "chat.completion",
+            created: Date.now(),
+            model: "gpt-4",
+            choices: [],
+          },
+          type: "openai:chatCompletions",
+        });
+      // Four turns, then more guardrail calls than even the deep re-read holds.
+      for (const n of [1, 2, 3, 4])
+        await turn({
+          sessionId: "mixed",
+          content: `turn ${n}`,
+          source: "api",
+          seconds: n,
+        });
+      for (let n = 5; n < 30; n++)
+        await turn({
+          sessionId: "mixed",
+          content: `annotate call ${n}`,
+          source: "guardrail:annotator",
+          seconds: n,
+        });
+      await turn({
+        sessionId: "guardrail-only",
+        content: judged,
+        source: "guardrail:annotator",
+        seconds: 8,
+      });
+
+      const preview = async (sessionId: string) => {
+        const sessions = await InteractionModel.getSessions(
+          { limit: 100, offset: 0 },
+          admin.id,
+          true,
+          { sessionId },
+        );
+        return sessions.data.map((s) => s.lastUserMessagePreview);
+      };
+
+      expect(await preview("mixed")).toEqual(["turn 4"]);
+      expect(await preview("guardrail-only")).toEqual([judged]);
+      const detail = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId: "mixed" },
+      );
+      expect(
+        new Set(
+          detail.data.map(
+            (i) =>
+              `${i.source} ${(i as unknown as { requestType: string }).requestType}`,
+          ),
+        ),
+      ).toEqual(new Set(["guardrail:annotator subagent", "api main"]));
+      const summaries = await InteractionModel.findSummariesPaginated({
+        pagination: { limit: 100, offset: 0 },
+        filters: { sessionId: "mixed" },
+      });
+      expect(
+        new Set(summaries.data.map((i) => `${i.source} ${i.requestType}`)),
+      ).toEqual(new Set(["guardrail:annotator subagent", "api main"]));
+    });
   });
 
   describe("getSessions delta-encoded previews across many sessions", () => {
@@ -1797,6 +1911,52 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("getSessions model pool attempts", () => {
+    test("counts the attempts a pool failed over", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "Agent" });
+      const base = {
+        profileId: agent.id,
+        sessionId: "failed-over-session",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions" as const,
+      };
+      await InteractionModel.create({
+        ...base,
+        attempt: 1,
+        attemptOutcome: "failed_over",
+        failureReason: "429",
+      });
+      await InteractionModel.create({
+        ...base,
+        attempt: 2,
+        attemptOutcome: "answered",
+      });
+      await InteractionModel.create(base);
+
+      const sessions = await InteractionModel.getSessionsCursor(
+        { limit: 100 },
+        admin.id,
+        true,
+      );
+      const session = sessions.data.find(
+        (s) => s.sessionId === "failed-over-session",
+      );
+      expect(session?.requestCount).toBe(3);
+      expect(session?.failedOverCount).toBe(1);
+    });
+  });
+
   describe("getSessions Archestra Chat session identity (T-894)", () => {
     // A new Archestra Chat fires two LLM calls that share one session_id (the
     // conversation id): the user's turn under their agent (source "chat") and
@@ -1873,6 +2033,9 @@ describe("InteractionModel", () => {
       // same agent, never the built-in title subagent.
       expect(sessions.data[0].profileId).toBe(chatAgent.id);
       expect(sessions.data[0].profileName).toBe("My Assistant");
+      // The type comes from the same agent, so the header can tell a proxy or
+      // gateway session from an agent's.
+      expect(sessions.data[0].profileAgentType).toBe(chatAgent.agentType);
     });
 
     test("badges the auxiliary chat call as a subagent and the user turn as main in the session detail list", async ({
@@ -2004,6 +2167,45 @@ describe("InteractionModel", () => {
           ["opencode:main", "main"],
           ["opencode:compaction", "subagent"],
           ["opencode:subagent", "subagent"],
+        ]),
+      );
+
+      // Kilo Code frames its turns as OpenCode does, under its own sources.
+      const kiloSessionId = `${sessionId}-kilo`;
+      for (const source of ["kilo:main", "kilo:title"] as const) {
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId: kiloSessionId,
+          sessionSource: "kilo_session",
+          source,
+          type: "openai:responses",
+          request: {
+            model: "responses-model",
+            instructions: "You are a coding agent.",
+            input: [{ role: "user", content: "Do the work" }],
+            tools: [{ type: "function", name: "task" }],
+          } as unknown as InsertInteraction["request"],
+          response: responsesResponse,
+        });
+      }
+      const kiloResult = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId: kiloSessionId },
+      );
+      expect(
+        new Map(
+          kiloResult.data.map((interaction) => [
+            interaction.source,
+            (interaction as unknown as { requestType: string }).requestType,
+          ]),
+        ),
+      ).toEqual(
+        new Map([
+          ["kilo:main", "main"],
+          ["kilo:title", "subagent"],
         ]),
       );
 
@@ -3952,7 +4154,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(100);
@@ -3995,7 +4200,10 @@ describe("InteractionModel", () => {
       await drainBackgroundWork();
 
       // Subscription usage costs the org $0 and must not burn down the limit
-      let usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      let usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].tokensIn).toBe(0);
       expect(usage[0].tokensOut).toBe(0);
@@ -4021,7 +4229,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].tokensIn).toBe(10);
       expect(usage[0].tokensOut).toBe(20);
@@ -4063,7 +4274,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([vkLimit.id])).get(
+          vkLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(50);
@@ -4119,12 +4333,18 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const userUsage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      const userUsage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(userUsage).toHaveLength(1);
       expect(userUsage[0].tokensIn).toBe(75);
       expect(userUsage[0].tokensOut).toBe(150);
 
-      const vkUsage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
+      const vkUsage =
+        (await LimitModel.getModelUsageBreakdowns([vkLimit.id])).get(
+          vkLimit.id,
+        ) ?? [];
       expect(vkUsage).toHaveLength(1);
       expect(vkUsage[0].tokensIn).toBe(75);
       expect(vkUsage[0].tokensOut).toBe(150);
@@ -4187,16 +4407,25 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const agentUsage = await LimitModel.getModelUsageBreakdown(agentLimit.id);
+      const agentUsage =
+        (await LimitModel.getModelUsageBreakdowns([agentLimit.id])).get(
+          agentLimit.id,
+        ) ?? [];
       expect(agentUsage).toHaveLength(1);
       expect(agentUsage[0].tokensIn).toBe(80);
       expect(agentUsage[0].tokensOut).toBe(160);
 
-      const teamUsage = await LimitModel.getModelUsageBreakdown(teamLimit.id);
+      const teamUsage =
+        (await LimitModel.getModelUsageBreakdowns([teamLimit.id])).get(
+          teamLimit.id,
+        ) ?? [];
       expect(teamUsage).toHaveLength(1);
       expect(teamUsage[0].tokensIn).toBe(80);
 
-      const orgUsage = await LimitModel.getModelUsageBreakdown(orgLimit.id);
+      const orgUsage =
+        (await LimitModel.getModelUsageBreakdowns([orgLimit.id])).get(
+          orgLimit.id,
+        ) ?? [];
       expect(orgUsage).toHaveLength(1);
       expect(orgUsage[0].tokensIn).toBe(80);
     });
@@ -4243,7 +4472,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const teamUsage = await LimitModel.getModelUsageBreakdown(teamLimit.id);
+      const teamUsage =
+        (await LimitModel.getModelUsageBreakdowns([teamLimit.id])).get(
+          teamLimit.id,
+        ) ?? [];
       expect(teamUsage).toHaveLength(1);
       expect(teamUsage[0].tokensIn).toBe(80);
       expect(teamUsage[0].tokensOut).toBe(160);
@@ -4305,13 +4537,19 @@ describe("InteractionModel", () => {
       await drainBackgroundWork();
 
       // team1 all-models limit should be updated
-      const team1Usage = await LimitModel.getModelUsageBreakdown(team1Limit.id);
+      const team1Usage =
+        (await LimitModel.getModelUsageBreakdowns([team1Limit.id])).get(
+          team1Limit.id,
+        ) ?? [];
       expect(team1Usage).toHaveLength(1);
       expect(team1Usage[0].tokensIn).toBe(100);
       expect(team1Usage[0].tokensOut).toBe(200);
 
       // team2 specific-model limit should also be updated
-      const team2Usage = await LimitModel.getModelUsageBreakdown(team2Limit.id);
+      const team2Usage =
+        (await LimitModel.getModelUsageBreakdowns([team2Limit.id])).get(
+          team2Limit.id,
+        ) ?? [];
       expect(team2Usage).toHaveLength(1);
       expect(team2Usage[0].tokensIn).toBe(100);
       expect(team2Usage[0].tokensOut).toBe(200);
@@ -4375,7 +4613,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].tokensIn).toBe(0);
       expect(usage[0].tokensOut).toBe(0);
@@ -4415,7 +4656,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(60);
@@ -4458,7 +4702,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([vkLimit.id])).get(
+          vkLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(40);
@@ -4509,7 +4756,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(orgLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([orgLimit.id])).get(
+          orgLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(90);
@@ -5045,6 +5295,221 @@ describe("InteractionModel", () => {
 
       expect(requestTypeOf(sub.id)).toBe("subagent");
       expect(requestTypeOf(main.id)).toBe("main");
+    });
+
+    test("classifies Claude subagent turns carrying metadata.agent_id as subagent and links parallel Claude Desktop title generation to the main session", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({
+        name: "Claude Desktop Agent",
+      });
+      const mainSessionId = "desktop-main-session-123";
+      const openingPrompt =
+        "Read https://example.com/welcome.md and summarize capabilities.";
+
+      // 1. Parallel completeOneShot title generation arrives FIRST without a sessionId
+      //    (or with a separate 1-request fallback CLI sessionId) and includes a
+      //    thinking block before the <title>...</title> text block.
+      const titleGenBefore = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "fallback-cli-title-session",
+        sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+        externalAgentId: CLAUDE_DESKTOP_CLIENT_ID,
+        type: "anthropic:messages",
+        request: {
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 200,
+          system: [
+            {
+              type: "text",
+              text: "You write short session titles. Reply with only the tagged fields the prompt asks for.",
+            },
+          ],
+          messages: [
+            {
+              role: "user",
+              content: `You are coming up with a succinct title for an agent chat session based on the initial task description. The user's task description is wrapped in <description> tags below.\n<description>${openingPrompt}</description>`,
+            },
+          ],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          ...ANTHROPIC_RESPONSE,
+          content: [
+            {
+              type: "thinking",
+              thinking: "Let me pick a short title.",
+            },
+            {
+              type: "text",
+              text: "<title>Capabilities summary</title>",
+            },
+          ],
+        } as unknown as InsertInteraction["response"],
+      });
+
+      // 2. Main session Turn 1 arrives with the same openingPrompt.
+      const mainTurn = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: mainSessionId,
+        sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+        externalAgentId: CLAUDE_DESKTOP_CLIENT_ID,
+        type: "anthropic:messages",
+        request: {
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          system: [
+            {
+              type: "text",
+              text: "x-anthropic-billing-header: cc_version=2.1.109.786; cc_entrypoint=local-agent; cch=00000;",
+            },
+            {
+              type: "text",
+              text: "You are Claude, an AI assistant created by Anthropic.",
+            },
+          ],
+          tools: [{ name: "Agent", description: "spawn", input_schema: {} }],
+          messages: [{ role: "user", content: openingPrompt }],
+        } as unknown as InsertInteraction["request"],
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      // 3. In-process Agent subagent turn shares mainSessionId and carries metadata.agent_id
+      //    plus multiple turns (tool_use + tool_result).
+      const subagentTurn = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: mainSessionId,
+        sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+        externalAgentId: CLAUDE_DESKTOP_CLIENT_ID,
+        type: "anthropic:messages",
+        request: {
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          metadata: {
+            agent_id: "subagent-uuid-1",
+          },
+          system: [
+            {
+              type: "text",
+              text: "x-anthropic-billing-header: cc_version=2.1.109.786; cc_entrypoint=local-agent; cch=00000;",
+            },
+          ],
+          tools: [{ name: "Read", description: "read", input_schema: {} }],
+          messages: [
+            { role: "user", content: "Inspect repository files" },
+            { role: "assistant", content: "Reading..." },
+            { role: "user", content: "Done reading" },
+          ],
+        } as unknown as InsertInteraction["request"],
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      // 4. Built-in Claude Code security monitor sidecar turn shares mainSessionId
+      const securityMonitorTurn = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: mainSessionId,
+        sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+        externalAgentId: CLAUDE_DESKTOP_CLIENT_ID,
+        type: "anthropic:messages",
+        request: {
+          model: "claude-sonnet-5",
+          max_tokens: 1024,
+          system: [
+            {
+              type: "text",
+              text: "x-anthropic-billing-header: cc_version=2.1.308.96b; cc_entrypoint=claude-desktop-3p;",
+            },
+            {
+              type: "text",
+              text: "You are a security monitor for autonomous AI coding agents.",
+            },
+          ],
+          messages: [{ role: "user", content: "<transcript>\n..." }],
+        } as unknown as InsertInteraction["request"],
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      // 5. Forked session carrying prior assistant turns must NOT steal mainSessionId's title row
+      const forkSessionId = "88888888-9999-4aaa-8bbb-cccccccccccc";
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: forkSessionId,
+        sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+        externalAgentId: CLAUDE_DESKTOP_CLIENT_ID,
+        type: "anthropic:messages",
+        request: {
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          system: [
+            {
+              type: "text",
+              text: "x-anthropic-billing-header: cc_version=2.1.308.369; cc_entrypoint=claude-desktop-3p;",
+            },
+          ],
+          messages: [
+            { role: "user", content: openingPrompt },
+            { role: "assistant", content: "Prior parent response" },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "<system-reminder>\n[SYSTEM NOTIFICATION - NOT USER INPUT]\n</system-reminder>\n",
+                },
+                {
+                  type: "text",
+                  text: "This is a forked branch. Run echo hello",
+                },
+              ],
+            },
+          ],
+        } as unknown as InsertInteraction["request"],
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      const paginated = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId: mainSessionId },
+      );
+
+      const byId = new Map(
+        paginated.data.map((row) => [
+          row.id,
+          row as { sessionId?: string | null; requestType?: string },
+        ]),
+      );
+      expect(byId.get(titleGenBefore.id)?.sessionId).toBe(mainSessionId);
+      expect(byId.get(titleGenBefore.id)?.requestType).toBe("subagent");
+      expect(byId.get(mainTurn.id)?.requestType).toBe("main");
+      expect(byId.get(subagentTurn.id)?.requestType).toBe("subagent");
+      expect(byId.get(securityMonitorTurn.id)?.requestType).toBe("subagent");
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { profileId: agent.id },
+      );
+      expect(sessions.data).toHaveLength(2);
+      const bySessionId = new Map(sessions.data.map((s) => [s.sessionId, s]));
+      expect(bySessionId.get(mainSessionId)?.claudeCodeTitle).toBe(
+        "Capabilities summary",
+      );
+      expect(bySessionId.get(mainSessionId)?.lastUserMessagePreview).toBe(
+        openingPrompt,
+      );
+      expect(bySessionId.get(forkSessionId)?.claudeCodeTitle).toBeNull();
+      expect(bySessionId.get(forkSessionId)?.lastUserMessagePreview).toBe(
+        "This is a forked branch. Run echo hello",
+      );
     });
 
     test("getSessions derives the preview from the fully reconstructed chain, even when ancestors are outside the 20-row window", async ({

@@ -134,8 +134,7 @@ export function DeploymentConsoleTabList({
     <TabsList
       className={cn(
         "w-fit flex-shrink-0",
-        variant === "segmented" &&
-          "h-9 border bg-slate-100 p-1 dark:bg-slate-800",
+        variant === "segmented" && "h-9 border bg-muted p-1",
         variant === "underline" &&
           "h-9 gap-1 rounded-none border-0 bg-transparent p-0",
         variant === "compact" && "h-7 rounded-md bg-muted/60 p-0.5",

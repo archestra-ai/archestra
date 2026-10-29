@@ -1,0 +1,1 @@
+ALTER TABLE "agent_run_transcript_chunks" ADD COLUMN "last_size_marker" text;

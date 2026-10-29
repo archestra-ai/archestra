@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
-import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -9,7 +8,6 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { MemberModel } from "@/models";
 import McpServerModel from "@/models/mcp-server";
 import McpServerAlertMuteModel from "@/models/mcp-server-alert-mute";
-import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { grantEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
@@ -47,7 +45,6 @@ describe("MCP server alert mute routes", () => {
       // A plain member: no installation-admin capability anywhere, so every
       // visibility decision below is the ordinary scope rule, not an admin
       // bypass.
-      config.mcpServer.alertingEnabled = true;
       vi.spyOn(betterAuth.api, "getSession").mockImplementation(
         async () => ({ user: { id: user.id } }) as never,
       );
@@ -397,14 +394,10 @@ describe("MCP server alert mute routes", () => {
     // and installation administration (`update` on every registry entry).
     await MemberModel.updateRole(user.id, organizationId, "admin");
     grantEverywhere(["mcpRegistry"]);
-    const newSecret = await secretManager().createSecret(
-      { access_token: "fresh", refresh_token: "fresh-refresh" },
-      "alert-mute-reauth-secret",
-    );
     const reauth = await app.inject({
       method: "PATCH",
       url: `/api/mcp_server/${server.id}/reauthenticate`,
-      payload: { secretId: newSecret.id },
+      payload: { accessToken: "fresh" },
     });
     expect(reauth.statusCode).toBe(200);
 

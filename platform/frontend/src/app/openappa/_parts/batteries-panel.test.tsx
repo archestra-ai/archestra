@@ -23,8 +23,9 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { BatteriesPanel, BatteriesUploadAction } from "./batteries-panel";
+import { BatteriesPanel } from "./batteries-panel";
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("next/navigation");
 vi.mock("sonner");
@@ -37,6 +38,15 @@ type Install = Battery["installs"][number];
 type Declarations =
   archestraApiTypes.GetOpenappaPolicyDeclarationsResponses["200"];
 type PolicyBattery = Declarations["batteries"][number];
+/** The latest revision composed. */
+const CURRENT: Declarations["composition"] = {
+  served: {
+    kind: "current",
+    rootRevision: 3,
+    composedAt: "2026-09-18T12:00:00Z",
+  },
+  refusal: null,
+};
 
 const baseUrl = "http://localhost:9000";
 const catalogId = "5b6d2f1e-3c4a-4d5e-8f6a-7b8c9d0e1f2a";
@@ -57,6 +67,7 @@ const install = (fields: Partial<Install> = {}): Install => ({
   catalogId,
   batteryName: "github",
   enabled: true,
+  target: null,
   packageHash: null,
   lastError: null,
   credentialBindings: {},
@@ -78,27 +89,39 @@ const githubBattery = (installs: Install[] = []): Battery => ({
   setup: null,
   installs,
 });
-const declaredGithub = (
-  fields: Partial<PolicyBattery> = {},
+const declaredGithub = (fields: Partial<PolicyBattery> = {}): PolicyBattery =>
+  servedAsDeclared({
+    entry: "github",
+    name: "github",
+    source: "bundled",
+    packageHash: null,
+    status: "missing_credentials",
+    scope: "catalogs",
+    composed: false,
+    line: 4,
+    servers: [{ target: "code", catalogId }],
+    credentials: [
+      {
+        variable: "APPA_PROVIDER_GITHUB_TOKEN",
+        key: null,
+        source: null,
+        readers: ["github"],
+      },
+    ],
+    helpers: ["github_read_repo"],
+    ...fields,
+  });
+/** A declared battery the enforced composition holds as it is declared, unless `served` says otherwise. */
+const servedAsDeclared = (
+  battery: Omit<PolicyBattery, "served"> & {
+    served?: PolicyBattery["served"];
+  },
 ): PolicyBattery => ({
-  entry: "github",
-  name: "github",
-  source: "bundled",
-  packageHash: null,
-  status: "missing_credentials",
-  scope: "catalogs",
-  composed: false,
-  line: 4,
-  servers: [{ target: "code", catalogId }],
-  credentials: [
-    {
-      variable: "APPA_PROVIDER_GITHUB_TOKEN",
-      key: null,
-      readers: ["github"],
-    },
-  ],
-  helpers: ["github_read_repo"],
-  ...fields,
+  ...battery,
+  served:
+    battery.served === undefined
+      ? { status: battery.status, composed: battery.composed }
+      : battery.served,
 });
 const emptyDeclarations = (
   fields: Partial<Declarations> = {},
@@ -107,8 +130,9 @@ const emptyDeclarations = (
   unusedAliases: [],
   rootRevision: 3,
   lastError: null,
+  composition: CURRENT,
   managedInGithub: false,
-  heldPull: null,
+  credentialBindings: [],
   ...fields,
 });
 const credential = {
@@ -211,6 +235,26 @@ beforeEach(() => {
         matches: [],
       });
     }),
+    // Which entries are installed comes from the registry's issue index.
+    http.get(`${baseUrl}/api/internal_mcp_catalog/registry/issue-index`, () =>
+      HttpResponse.json({
+        catalogItems: [],
+        servers: [
+          { id: freshServerId, catalogId: freshCatalogId },
+          { id: "8a7b6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d", catalogId },
+          {
+            id: "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a",
+            catalogId: otherCatalogId,
+          },
+        ].map((install) => ({
+          ...install,
+          scope: "org",
+          localInstallationStatus: "success",
+          updatedAt: "2026-09-22T12:00:00Z",
+          canUseCredential: true,
+        })),
+      }),
+    ),
     // Bare is in the catalog but nobody installed it.
     http.get(`${baseUrl}/api/mcp_server`, () =>
       HttpResponse.json(
@@ -262,7 +306,6 @@ function show() {
   });
   render(
     <QueryClientProvider client={client}>
-      <BatteriesUploadAction />
       <BatteriesPanel />
     </QueryClientProvider>,
   );
@@ -274,13 +317,15 @@ function show() {
  */
 const dialogName = (name: string) => new RegExp(`^${name}(?![a-z0-9-])`);
 
-/** Open the battery's dialog from its row, Edit or View as the reader may. */
+/** Open the battery's dialog by clicking its row, as any reader may. */
 const entry = async (name: string) => {
   if (!screen.queryByRole("dialog", { name: dialogName(name) })) {
-    const open = await screen.findByRole("button", {
-      name: new RegExp(`^(Edit|View) ${name}$`),
-    });
-    fireEvent.click(open);
+    const rows = await screen.findAllByRole("row");
+    const row = rows.find((candidate) =>
+      within(candidate).queryByText(name, { exact: true }),
+    );
+    if (!row) throw new Error(`No row for ${name}`);
+    fireEvent.click(row);
   }
   return screen.findByRole("dialog", { name: dialogName(name) });
 };
@@ -293,6 +338,29 @@ async function attach(battery: string, serverName: string) {
   await user.click(screen.getByRole("option", { name: serverName }));
   await user.click(await screen.findByRole("button", { name: "Attach" }));
 }
+
+/** A GitHub source that owns the policy, as the sync settings report it. */
+const githubSyncSource = () =>
+  http.get(`${baseUrl}/api/openappa/github-sync`, () =>
+    HttpResponse.json({
+      enabled: true,
+      hasPolicy: true,
+      githubWebUrl: "https://github.com",
+      source: {
+        organizationId: "org-1",
+        repo: "acme/policy",
+        ref: "main",
+        path: "org.appa.toml",
+        interval: "1h",
+        githubPatId: null,
+        githubAppConfigId: null,
+        revision: "2d1c0b9a-8f7e-4d6c-9b5a-4f3e2d1c0b9a",
+        sourceCommit: "abc123",
+        lastSyncedAt: "2026-10-06T12:00:00Z",
+        lastSyncError: null,
+      },
+    }),
+  );
 
 /** Pick an item from the row's "More actions" menu. */
 async function rowMenu(battery: string) {
@@ -307,6 +375,9 @@ test("with no installed server to attach to, the attach form leads to MCP Regist
   declarations = emptyDeclarations();
   server.use(
     http.get(`${baseUrl}/api/mcp_server`, () => HttpResponse.json([])),
+    http.get(`${baseUrl}/api/internal_mcp_catalog/registry/issue-index`, () =>
+      HttpResponse.json({ catalogItems: [], servers: [] }),
+    ),
   );
   show();
   expect(
@@ -332,27 +403,12 @@ test("an empty policy offers the installed servers to attach to", async () => {
   ).not.toBeInTheDocument();
 });
 
-test("asks before discarding a battery upload draft", async () => {
-  show();
-  fireEvent.click(
-    await screen.findByRole("button", { name: /upload package/i }),
-  );
-  fireEvent.change(screen.getByLabelText("Name"), {
-    target: { value: "acme" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-  expect(await screen.findByText("Discard unsaved changes?")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
-  expect(screen.getByLabelText("Name")).toHaveValue("acme");
-});
-
 test("an included entry shows the status the declaration gives it", async () => {
   declarations = emptyDeclarations({
     batteries: [declaredGithub({ status: "active" })],
   });
   show();
-  expect(await entry("github")).toHaveTextContent("Active");
-  expect(await entry("github")).toHaveTextContent("Bundled");
+  expect(await entry("github")).toHaveTextContent("Enforced");
 });
 
 test("clicking a battery's row opens its dialog", async () => {
@@ -363,83 +419,78 @@ test("clicking a battery's row opens its dialog", async () => {
   ).toBeVisible();
 });
 
-test("a failed composition degrades every status and says what broke", async () => {
+test("a refused revision is a policy fact: the table shows no notice and each row keeps its own status", async () => {
   declarations = emptyDeclarations({
-    batteries: [declaredGithub({ status: "active" })],
+    rootRevision: 4,
+    batteries: [
+      declaredGithub({
+        status: "missing_credentials",
+        served: { status: "active", composed: true },
+      }),
+    ],
     lastError: "line 4: unknown battery",
-  });
-  show();
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    "line 4: unknown battery",
-  );
-  const row = await entry("github");
-  expect(row).toHaveTextContent("Not enforced");
-  expect(row).not.toHaveTextContent("Active");
-});
-
-test("an uploaded entry names the package bytes it is pinned to", async () => {
-  declarations = emptyDeclarations({
-    batteries: [declaredGithub({ source: "upload", packageHash: uploadHash })],
-  });
-  show();
-  expect(await entry("github")).toHaveTextContent(
-    `Upload ${uploadHash.slice(0, 12)}`,
-  );
-});
-
-test("a held pull naming only dropped batteries is accepted with policy permissions", async () => {
-  let accepted = false;
-  declarations = emptyDeclarations({
-    heldPull: {
-      contentHash: "b".repeat(64),
-      sourceCommit: "c".repeat(40),
-      reasons: ["drops_batteries"],
+    composition: {
+      served: {
+        kind: "previous",
+        rootRevision: 3,
+        composedAt: "2026-09-18T12:00:00Z",
+        batteries: [
+          { name: "github", status: "active", composed: true },
+          { name: "jev", status: "active", composed: true },
+        ],
+      },
+      refusal: {
+        message: "line 4: unknown battery",
+        at: "2026-09-18T13:00:00Z",
+        rootRevision: 4,
+      },
     },
   });
-  grantOnly("openappaPolicy");
-  server.use(
-    http.post(`${baseUrl}/api/openappa/github-sync/accept-held`, () => {
-      accepted = true;
-      declarations = emptyDeclarations();
-      return HttpResponse.json({
-        contentHash: "b".repeat(64),
-        sourceCommit: "c".repeat(40),
-        reasons: ["drops_batteries"],
-        droppedBatteries: ["github"],
-        changedVariables: [],
-        status: { enabled: true, hasPolicy: true, source: null },
-      });
-    }),
-  );
   show();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Accept repository text" }),
-  );
-  await waitFor(() => expect(accepted).toBe(true));
+  const github = await tableRow("github");
+  expect(github).toHaveTextContent("Credential not configured");
+  expect(github).not.toHaveTextContent("revision");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  // A battery the text no longer declares and no package carries has no row.
+  expect(screen.queryByText("jev", { exact: true })).not.toBeInTheDocument();
 });
 
-test("a held pull that moves credentials needs the credential permission", async () => {
+/** The table row of a battery, found by its name cell. */
+async function tableRow(name: string) {
+  const rows = await screen.findAllByRole("row");
+  const row = rows.find((candidate) =>
+    within(candidate).queryByText(name, { exact: true }),
+  );
+  if (!row) throw new Error(`No row for ${name}`);
+  return row;
+}
+
+test("a refusal with no earlier composition reads as configured in the table", async () => {
   declarations = emptyDeclarations({
-    batteries: [declaredGithub()],
-    heldPull: {
-      contentHash: "b".repeat(64),
-      sourceCommit: "c".repeat(40),
-      reasons: ["drops_batteries", "changes_credentials"],
+    batteries: [declaredGithub({ status: "active", served: null })],
+    lastError: "line 4: unknown battery",
+    composition: {
+      served: { kind: "root_only" },
+      refusal: {
+        message: "line 4: unknown battery",
+        at: "2026-09-18T13:00:00Z",
+        rootRevision: 3,
+      },
     },
   });
-  grantOnly("openappaPolicy");
   show();
-  await entry("github");
-  expect(
-    screen.queryByRole("button", { name: "Accept repository text" }),
-  ).not.toBeInTheDocument();
+  const row = await tableRow("github");
+  expect(row).toHaveTextContent("Configured");
+  expect(row).not.toHaveTextContent("Refused by policy");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
-test("binding a credential sends the entry's whole binding table", async () => {
-  let body: unknown;
+test("binding a credential writes that variable alone", async () => {
+  let written: { variable: unknown; body: unknown } | undefined;
   const retained = {
     variable: "APPA_SECOND_TOKEN",
     key: "retained-token",
+    source: "binding" as const,
     readers: ["github"],
   };
   declarations = emptyDeclarations({
@@ -450,10 +501,10 @@ test("binding a credential sends the entry's whole binding table", async () => {
     ],
   });
   server.use(
-    http.patch(
-      `${baseUrl}/api/openappa/battery-installs/install-1`,
-      async ({ request }) => {
-        body = await request.json();
+    http.put(
+      `${baseUrl}/api/openappa/credential-bindings/:variable`,
+      async ({ request, params }) => {
+        written = { variable: params.variable, body: await request.json() };
         declarations = emptyDeclarations({
           batteries: [
             declaredGithub({
@@ -463,13 +514,14 @@ test("binding a credential sends the entry's whole binding table", async () => {
                 {
                   variable: "APPA_PROVIDER_GITHUB_TOKEN",
                   key: "github-token",
+                  source: "binding",
                   readers: ["github"],
                 },
               ],
             }),
           ],
         });
-        return HttpResponse.json(declarations.batteries[0]);
+        return HttpResponse.json(declarations);
       },
     ),
   );
@@ -481,11 +533,9 @@ test("binding a credential sends the entry's whole binding table", async () => {
   );
   await user.click(screen.getByRole("option", { name: "GitHub token" }));
   await waitFor(() =>
-    expect(body).toEqual({
-      credentialBindings: {
-        APPA_PROVIDER_GITHUB_TOKEN: "github-token",
-        APPA_SECOND_TOKEN: "retained-token",
-      },
+    expect(written).toEqual({
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      body: { key: "github-token" },
     }),
   );
   await waitFor(() =>
@@ -499,7 +549,7 @@ test("binding a credential sends the entry's whole binding table", async () => {
 });
 
 test("a variable another entry reads is never unset, and the row says so", async () => {
-  let patched = false;
+  let written = false;
   declarations = emptyDeclarations({
     batteries: [
       declaredGithub({
@@ -507,6 +557,7 @@ test("a variable another entry reads is never unset, and the row says so", async
           {
             variable: "APPA_PROVIDER_GITHUB_TOKEN",
             key: "github-token",
+            source: "binding",
             readers: ["github", "acme"],
           },
         ],
@@ -514,9 +565,9 @@ test("a variable another entry reads is never unset, and the row says so", async
     ],
   });
   server.use(
-    http.patch(`${baseUrl}/api/openappa/battery-installs/install-1`, () => {
-      patched = true;
-      return HttpResponse.json(declarations.batteries[0]);
+    http.put(`${baseUrl}/api/openappa/credential-bindings/:variable`, () => {
+      written = true;
+      return HttpResponse.json(declarations);
     }),
   );
   show();
@@ -525,12 +576,12 @@ test("a variable another entry reads is never unset, and the row says so", async
   await user.click(
     await screen.findByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
   );
-  await user.click(screen.getByRole("option", { name: "Not bound" }));
+  await user.click(screen.getByRole("option", { name: "Not set" }));
   const row = await entry("github");
   await waitFor(() =>
     expect(within(row).getByRole("alert")).toBeInTheDocument(),
   );
-  expect(patched).toBe(false);
+  expect(written).toBe(false);
   expect(
     within(row).getByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
   ).toHaveTextContent("GitHub token");
@@ -588,38 +639,21 @@ test("attaching a bundled battery that is not included yet names no package", as
   );
 });
 
-test("attaching a server enables credential binding and keeps saved changes visible", async () => {
-  const writes: string[] = [];
-  let binding: unknown;
+test("a battery not yet included binds its credential without attaching a server", async () => {
+  let written: unknown;
   declarations = emptyDeclarations();
   batteries = [githubBattery()];
   server.use(
-    http.post(`${baseUrl}/api/openappa/battery-installs`, () => {
-      writes.push("attach");
-      batteries = [githubBattery([install()])];
-      declarations = emptyDeclarations({ batteries: [declaredGithub()] });
-      return HttpResponse.json(declarations.batteries[0]);
-    }),
-    http.patch(
-      `${baseUrl}/api/openappa/battery-installs/install-1`,
+    http.put(
+      `${baseUrl}/api/openappa/credential-bindings/APPA_PROVIDER_GITHUB_TOKEN`,
       async ({ request }) => {
-        writes.push("bind");
-        binding = await request.json();
+        written = await request.json();
         declarations = emptyDeclarations({
-          batteries: [
-            declaredGithub({
-              status: "active",
-              credentials: [
-                {
-                  variable: "APPA_PROVIDER_GITHUB_TOKEN",
-                  key: "github-token",
-                  readers: ["github"],
-                },
-              ],
-            }),
+          credentialBindings: [
+            { variable: "APPA_PROVIDER_GITHUB_TOKEN", key: "github-token" },
           ],
         });
-        return HttpResponse.json(declarations.batteries[0]);
+        return HttpResponse.json(declarations);
       },
     ),
   );
@@ -628,25 +662,13 @@ test("attaching a server enables credential binding and keeps saved changes visi
   const select = within(row).getByRole("combobox", {
     name: "APPA_PROVIDER_GITHUB_TOKEN",
   });
-  expect(select).toBeDisabled();
-  await attach("github", "Code");
   await waitFor(() => expect(select).toBeEnabled());
-  expect(row).toHaveTextContent("code__*");
-  expect(writes).toEqual(["attach"]);
   const user = userEvent.setup();
   await user.click(select);
   await user.click(screen.getByRole("option", { name: "GitHub token" }));
-  await waitFor(() => expect(writes).toEqual(["attach", "bind"]));
-  expect(binding).toEqual({
-    credentialBindings: { APPA_PROVIDER_GITHUB_TOKEN: "github-token" },
-  });
-  await waitFor(() => expect(row).toHaveTextContent("Active"));
-  expect(select).toHaveTextContent("GitHub token");
-  await user.click(within(row).getAllByRole("button", { name: "Close" })[0]);
-  expect(
-    screen.queryByText("Discard unsaved changes?"),
-  ).not.toBeInTheDocument();
-  expect(await entry("github")).toHaveTextContent("Active");
+  await waitFor(() => expect(written).toEqual({ key: "github-token" }));
+  await waitFor(() => expect(select).toHaveTextContent("GitHub token"));
+  expect(row).toHaveTextContent("Not attached to a server yet.");
 });
 
 test("the credentials section links to where credentials are set up", async () => {
@@ -671,22 +693,28 @@ const jevBattery = (installs: Install[] = []): Battery => ({
   setup: null,
   installs,
 });
-const declaredJev = (fields: Partial<PolicyBattery> = {}): PolicyBattery => ({
-  entry: "batteries/jev/appa.toml",
-  name: "jev",
-  source: "bundled",
-  packageHash: null,
-  status: "missing_credentials",
-  scope: "organization",
-  composed: true,
-  line: 2,
-  servers: [],
-  credentials: [
-    { variable: "APPA_PROVIDER_JEV_API_KEY", key: null, readers: ["jev"] },
-  ],
-  helpers: ["jev-annotator.py"],
-  ...fields,
-});
+const declaredJev = (fields: Partial<PolicyBattery> = {}): PolicyBattery =>
+  servedAsDeclared({
+    entry: "batteries/jev/appa.toml",
+    name: "jev",
+    source: "bundled",
+    packageHash: null,
+    status: "missing_credentials",
+    scope: "organization",
+    composed: true,
+    line: 2,
+    servers: [],
+    credentials: [
+      {
+        variable: "APPA_PROVIDER_JEV_API_KEY",
+        key: null,
+        source: null,
+        readers: ["jev"],
+      },
+    ],
+    helpers: ["jev-annotator.py"],
+    ...fields,
+  });
 
 test("an organization battery can be included and removed without an installed server", async () => {
   let body: unknown;
@@ -695,6 +723,9 @@ test("an organization battery can be included and removed without an installed s
   batteries = [githubBattery(), jevBattery()];
   server.use(
     http.get(`${baseUrl}/api/mcp_server`, () => HttpResponse.json([])),
+    http.get(`${baseUrl}/api/internal_mcp_catalog/registry/issue-index`, () =>
+      HttpResponse.json({ catalogItems: [], servers: [] }),
+    ),
     http.post(
       `${baseUrl}/api/openappa/battery-installs`,
       async ({ request }) => {
@@ -730,12 +761,9 @@ test("an organization battery can be included and removed without an installed s
   await user.click(toggle);
   await waitFor(() => expect(removed).toBe(true));
   await waitFor(() => expect(toggle).not.toBeChecked());
-  expect(
-    screen.getByRole("combobox", { name: "APPA_PROVIDER_JEV_API_KEY" }),
-  ).toBeDisabled();
 });
 
-test("an included battery governing the organization says so and binds its credential on its one row", async () => {
+test("an included battery governing the organization says so and binds its credential", async () => {
   let body: unknown;
   batteries = [
     jevBattery([
@@ -744,11 +772,11 @@ test("an included battery governing the organization says so and binds its crede
   ];
   declarations = emptyDeclarations({ batteries: [declaredJev()] });
   server.use(
-    http.patch(
-      `${baseUrl}/api/openappa/battery-installs/jev-row`,
+    http.put(
+      `${baseUrl}/api/openappa/credential-bindings/APPA_PROVIDER_JEV_API_KEY`,
       async ({ request }) => {
         body = await request.json();
-        return HttpResponse.json(declaredJev({ status: "active" }));
+        return HttpResponse.json(declarations);
       },
     ),
   );
@@ -762,11 +790,7 @@ test("an included battery governing the organization says so and binds its crede
     within(row).getByRole("combobox", { name: "APPA_PROVIDER_JEV_API_KEY" }),
   );
   await user.click(screen.getByRole("option", { name: "GitHub token" }));
-  await waitFor(() =>
-    expect(body).toEqual({
-      credentialBindings: { APPA_PROVIDER_JEV_API_KEY: "github-token" },
-    }),
-  );
+  await waitFor(() => expect(body).toEqual({ key: "github-token" }));
 });
 
 test("a battery governing the organization that no rule routes to says how to route it", async () => {
@@ -781,7 +805,7 @@ test("a battery governing the organization that no rule routes to says how to ro
   show();
   const row = await entry("jev");
   expect(row).toHaveTextContent("Not used by any rule");
-  expect(row).not.toHaveTextContent("Active");
+  expect(row).not.toHaveTextContent("Enforced");
   expect(within(row).getByRole("code")).toHaveTextContent(
     'annotator = "jev.tool-call"',
   );
@@ -960,44 +984,6 @@ test("an entry bound to no server this deployment carries is removed the same wa
   await waitFor(() => expect(removed).toEqual(["github"]));
 });
 
-test("a package the policy includes cannot be deleted", async () => {
-  batteries = [
-    {
-      ...githubBattery([install({ packageHash: uploadHash })]),
-      source: "upload",
-      contentHash: uploadHash,
-    },
-  ];
-  declarations = emptyDeclarations({
-    batteries: [declaredGithub({ source: "upload", packageHash: uploadHash })],
-  });
-  show();
-  expect(
-    within(await rowMenu("github")).getByRole("menuitem", {
-      name: "Delete package",
-    }),
-  ).toHaveAttribute("aria-disabled", "true");
-});
-
-test("a package no entry names can be deleted", async () => {
-  batteries = [
-    {
-      ...githubBattery(),
-      name: "acme",
-      source: "upload",
-      contentHash: uploadHash,
-      credentials: [],
-    },
-  ];
-  declarations = emptyDeclarations();
-  show();
-  expect(
-    within(await rowMenu("acme")).getByRole("menuitem", {
-      name: "Delete package",
-    }),
-  ).not.toHaveAttribute("aria-disabled", "true");
-});
-
 test("a personal-only credential is listed but cannot be bound", async () => {
   server.use(
     http.get(`${baseUrl}/api/credentials`, () =>
@@ -1022,15 +1008,17 @@ test("a personal-only credential is listed but cannot be bound", async () => {
   await user.click(
     within(row).getByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
   );
-  expect(
-    await screen.findByRole("option", { name: "GH real (personal only)" }),
-  ).toHaveAttribute("aria-disabled", "true");
+  const personal = await screen.findByRole("option", { name: "GH real" });
+  expect(personal).toHaveAttribute("aria-disabled", "true");
+  expect(personal).toHaveTextContent(
+    "batteries need an organization credential",
+  );
   expect(
     screen.getByRole("option", { name: "GitHub token" }),
   ).not.toHaveAttribute("aria-disabled", "true");
 });
 
-test("a binding to a key the credential list no longer offers still reads as that key", async () => {
+test("a binding to a key the loaded credential list does not hold reads as missing", async () => {
   declarations = emptyDeclarations({
     batteries: [
       declaredGithub({
@@ -1038,6 +1026,7 @@ test("a binding to a key the credential list no longer offers still reads as tha
           {
             variable: "APPA_PROVIDER_GITHUB_TOKEN",
             key: "retired-token",
+            source: "binding",
             readers: ["github"],
           },
         ],
@@ -1050,9 +1039,13 @@ test("a binding to a key the credential list no longer offers still reads as tha
     name: "APPA_PROVIDER_GITHUB_TOKEN",
   });
   await waitFor(() => expect(select).toHaveTextContent("retired-token"));
+  await userEvent.setup().click(select);
+  expect(
+    await screen.findByRole("option", { name: "retired-token" }),
+  ).toHaveTextContent("No credential has this key");
 });
 
-test("a reader who cannot bind still sees which key a variable is bound to", async () => {
+test("a reader who cannot load credentials sees the bound key without a verdict on it", async () => {
   grantOnly();
   declarations = emptyDeclarations({
     batteries: [
@@ -1061,6 +1054,7 @@ test("a reader who cannot bind still sees which key a variable is bound to", asy
           {
             variable: "APPA_PROVIDER_GITHUB_TOKEN",
             key: "github-token",
+            source: "binding",
             readers: ["github"],
           },
         ],
@@ -1074,6 +1068,39 @@ test("a reader who cannot bind still sees which key a variable is bound to", asy
   });
   expect(select).toBeDisabled();
   await waitFor(() => expect(select).toHaveTextContent("github-token"));
+  expect(select).not.toHaveTextContent(
+    /No credential has this key|not available/,
+  );
+});
+
+test("a reader who can read credentials but not bind sees the bound credential by name", async () => {
+  grantOnly("credential");
+  declarations = emptyDeclarations({
+    batteries: [
+      declaredGithub({
+        credentials: [
+          {
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "github-token",
+            source: "binding",
+            readers: ["github"],
+          },
+        ],
+      }),
+    ],
+  });
+  show();
+  const row = await entry("github");
+  const select = within(row).getByRole("combobox", {
+    name: "APPA_PROVIDER_GITHUB_TOKEN",
+  });
+  expect(select).toBeDisabled();
+  await waitFor(() => expect(select).toHaveTextContent("GitHub token"));
+  expect(
+    within(row).getByText(
+      "Changing a key takes permission to update guardrails and credentials.",
+    ),
+  ).toBeVisible();
 });
 
 test("a policy the repository owns is read-only", async () => {
@@ -1081,36 +1108,140 @@ test("a policy the repository owns is read-only", async () => {
     batteries: [declaredGithub()],
     managedInGithub: true,
   });
+  server.use(githubSyncSource());
   show();
+  expect(await screen.findByText("GitHub rules")).toBeVisible();
   expect(
-    await screen.findByRole("button", { name: "View github" }),
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: "More actions github" }),
+    screen.queryByRole("columnheader", { name: "Actions" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: /upload package/i }),
+    screen.queryByRole("button", { name: /^(Edit|View) github$/ }),
   ).not.toBeInTheDocument();
   const row = await entry("github");
   expect(
-    within(row).getByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
-  ).toBeDisabled();
-  expect(
     within(row).queryByRole("button", { name: /Detach|Attach/ }),
   ).not.toBeInTheDocument();
+});
+
+test("a battery not yet included under GitHub sync can bind its credential", async () => {
+  let written: unknown;
+  declarations = emptyDeclarations({ managedInGithub: true });
+  batteries = [jevBattery()];
+  server.use(
+    githubSyncSource(),
+    http.put(
+      `${baseUrl}/api/openappa/credential-bindings/APPA_PROVIDER_JEV_API_KEY`,
+      async ({ request }) => {
+        written = await request.json();
+        return HttpResponse.json(declarations);
+      },
+    ),
+  );
+  show();
+  const row = await entry("jev");
+  // The repository decides what is included, and the dialog says where.
+  expect(
+    within(row).getByRole("switch", { name: "Include in policy" }),
+  ).toBeDisabled();
+  expect(row).toHaveTextContent(
+    "The policy repository decides which batteries are included.",
+  );
+  expect(
+    await within(row).findByRole("link", { name: /Open the policy file/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/acme/policy/blob/main/org.appa.toml",
+  );
+  const select = within(row).getByRole("combobox", {
+    name: "APPA_PROVIDER_JEV_API_KEY",
+  });
+  await waitFor(() => expect(select).toBeEnabled());
+  const user = userEvent.setup();
+  await user.click(select);
+  await user.click(await screen.findByRole("option", { name: "GitHub token" }));
+  await waitFor(() => expect(written).toEqual({ key: "github-token" }));
+});
+
+test("a key the policy text sets is locked to the repository line", async () => {
+  let written = false;
+  declarations = emptyDeclarations({
+    batteries: [
+      declaredGithub({
+        credentials: [
+          {
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "github-token",
+            source: "policy",
+            readers: ["github"],
+          },
+        ],
+      }),
+    ],
+    managedInGithub: true,
+  });
+  server.use(
+    githubSyncSource(),
+    http.put(`${baseUrl}/api/openappa/credential-bindings/:variable`, () => {
+      written = true;
+      return HttpResponse.json(declarations);
+    }),
+  );
+  show();
+  const row = await entry("github");
+  const select = within(row).getByRole("combobox", {
+    name: "APPA_PROVIDER_GITHUB_TOKEN",
+  });
+  await waitFor(() => expect(select).toHaveTextContent("GitHub token"));
+  expect(select).toBeDisabled();
+  expect(row).toHaveTextContent(
+    "Set in the policy repository. Remove its line there to manage it here.",
+  );
+  expect(
+    await within(row).findByRole("link", { name: /Open the policy file/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/acme/policy/blob/main/org.appa.toml",
+  );
+  expect(written).toBe(false);
+});
+
+test("a key the policy text sets outside GitHub sync points at the configuration agent", async () => {
+  declarations = emptyDeclarations({
+    batteries: [
+      declaredGithub({
+        credentials: [
+          {
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "github-token",
+            source: "policy",
+            readers: ["github"],
+          },
+        ],
+      }),
+    ],
+  });
+  show();
+  const row = await entry("github");
+  const select = within(row).getByRole("combobox", {
+    name: "APPA_PROVIDER_GITHUB_TOKEN",
+  });
+  await waitFor(() => expect(select).toHaveTextContent("GitHub token"));
+  expect(select).toBeDisabled();
+  expect(row).toHaveTextContent(
+    "Set by a [credentials] line in the policy text. Ask the configuration agent to remove it to manage it here.",
+  );
+  expect(row).not.toHaveTextContent("policy repository");
 });
 
 test("without the permission to manage guardrails the controls are read-only", async () => {
   grantOnly();
   show();
+  expect(await screen.findByText("GitHub rules")).toBeVisible();
   expect(
-    await screen.findByRole("button", { name: "View github" }),
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: "More actions github" }),
+    screen.queryByRole("columnheader", { name: "Actions" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: /upload package/i }),
+    screen.queryByRole("button", { name: /^(Edit|View) github$/ }),
   ).not.toBeInTheDocument();
   const row = await entry("github");
   expect(
@@ -1119,71 +1250,6 @@ test("without the permission to manage guardrails the controls are read-only", a
   expect(
     within(row).queryByRole("button", { name: /Detach|Attach/ }),
   ).not.toBeInTheDocument();
-});
-
-test("uploading a package sends the picked files by their path inside the folder", async () => {
-  let body: unknown;
-  declarations = emptyDeclarations();
-  batteries = [githubBattery()];
-  server.use(
-    http.put(
-      `${baseUrl}/api/openappa/battery-packages/acme`,
-      async ({ request }) => {
-        body = await request.json();
-        batteries = [
-          githubBattery(),
-          {
-            ...githubBattery(),
-            name: "acme",
-            description: "Acme rules",
-            source: "upload",
-            contentHash: uploadHash,
-            credentials: [],
-          },
-        ];
-        return HttpResponse.json({
-          name: "acme",
-          description: "Acme rules",
-          contentHash: uploadHash,
-          entry: "acme",
-          namespaces: [],
-          helpers: [],
-          credentials: [],
-          setup: null,
-        });
-      },
-    ),
-  );
-  show();
-  fireEvent.click(
-    await screen.findByRole("button", { name: /upload package/i }),
-  );
-  fireEvent.change(await screen.findByLabelText("Name"), {
-    target: { value: "acme" },
-  });
-  const folderInput = screen.getByLabelText("Package folder");
-  const openFolderPicker = vi.spyOn(folderInput, "click");
-  expect(screen.getByRole("button", { name: "Choose folder" })).toBeVisible();
-  fireEvent.click(screen.getByText("Select the whole package directory."));
-  expect(openFolderPicker).toHaveBeenCalledOnce();
-  const file = new File(["schema = 1"], "battery.toml", {
-    type: "application/toml",
-  });
-  Object.defineProperty(file, "webkitRelativePath", {
-    value: "acme/battery.toml",
-  });
-  fireEvent.change(folderInput, {
-    target: { files: [file] },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Upload" }));
-  await waitFor(() =>
-    expect(body).toEqual({
-      files: [{ path: "battery.toml", text: "schema = 1" }],
-    }),
-  );
-  expect(
-    await screen.findByRole("button", { name: "More actions acme" }),
-  ).toBeVisible();
 });
 
 test("an alias no entry declares is listed without a control to remove it", async () => {
@@ -1225,30 +1291,15 @@ test("search matches battery descriptions and clears the result set", async () =
   ).toBeVisible();
 });
 
-test("source and status filters narrow the battery table", async () => {
-  declarations = emptyDeclarations({ batteries: [declaredGithub()] });
-  batteries = [
-    githubBattery([install()]),
-    {
-      ...githubBattery(),
-      name: "custom",
-      source: "upload",
-      contentHash: uploadHash,
-    },
-  ];
+test("the status filter narrows the battery table", async () => {
+  declarations = emptyDeclarations({
+    batteries: [declaredGithub({ status: "active" })],
+  });
   show();
   const user = userEvent.setup();
-  await screen.findByRole("row", { name: /custom GitHub rules/ });
-  await user.click(screen.getByRole("combobox", { name: "Filter by source" }));
-  await user.click(screen.getByRole("option", { name: "Uploaded" }));
-  expect(
-    screen.getByRole("row", { name: /custom GitHub rules/ }),
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("row", { name: /github GitHub rules/ }),
-  ).not.toBeInTheDocument();
+  await screen.findByRole("row", { name: /github GitHub rules/ });
   await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
-  await user.click(screen.getByRole("option", { name: "Broken" }));
+  await user.click(screen.getByRole("option", { name: "Needs attention" }));
   expect(screen.getByText("No batteries match your filters")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Clear filters" }));
   expect(
@@ -1256,16 +1307,20 @@ test("source and status filters narrow the battery table", async () => {
   ).toBeVisible();
 });
 
-test("the status filter groups statuses and keeps the group in the URL", async () => {
+test("Needs attention covers every problem status and keeps the group in the URL", async () => {
   declarations = emptyDeclarations({
     batteries: [
       declaredGithub(),
+      { ...declaredGithub({ status: "server_missing" }), name: "bare" },
+      { ...declaredGithub({ status: "naming_conflict" }), name: "twin" },
       { ...declaredGithub({ status: "active" }), name: "live" },
       { ...declaredGithub({ status: "unrouted" }), name: "idle" },
     ],
   });
   batteries = [
     githubBattery([install()]),
+    { ...githubBattery(), name: "bare", description: "Bare rules" },
+    { ...githubBattery(), name: "twin", description: "Twin rules" },
     { ...githubBattery(), name: "live", description: "Live rules" },
     { ...githubBattery(), name: "idle", description: "Idle rules" },
     { ...githubBattery(), name: "docs", description: "Knowledge rules" },
@@ -1273,51 +1328,37 @@ test("the status filter groups statuses and keeps the group in the URL", async (
   show();
   const user = userEvent.setup();
   await screen.findByRole("row", { name: /docs Knowledge rules/ });
+  expect(await tableRow("github")).toHaveTextContent(
+    "Credential not configured",
+  );
+  expect(await tableRow("bare")).toHaveTextContent("Server not configured");
+  expect(await tableRow("twin")).toHaveTextContent("Server conflict");
+  // An organization battery no rule routes to is still configured.
+  expect(await tableRow("idle")).toHaveTextContent("Configured");
+  expect(await tableRow("docs")).toHaveTextContent("Not configured");
   await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
-  await user.click(screen.getByRole("option", { name: "Broken" }));
-  expect(url.get("status")).toBe("broken");
-  // A missing credential and an unused battery are both broken.
-  expect(
-    screen.getByRole("row", { name: /github GitHub rules/ }),
-  ).toBeVisible();
-  expect(screen.getByRole("row", { name: /idle Idle rules/ })).toBeVisible();
-  expect(
-    screen.queryByRole("row", { name: /live Live rules/ }),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("row", { name: /docs Knowledge rules/ }),
-  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("option", { name: "Needs attention" }));
+  expect(url.get("status")).toBe("attention");
+  for (const name of [/github GitHub rules/, /bare Bare rules/, /twin Twin/])
+    expect(screen.getByRole("row", { name })).toBeVisible();
+  for (const name of [/live Live rules/, /idle Idle rules/, /docs Knowledge/])
+    expect(screen.queryByRole("row", { name })).not.toBeInTheDocument();
 });
 
-test("the available batteries split into the ones that fit a server and the rest", async () => {
-  url = new URLSearchParams("status=fits");
-  declarations = emptyDeclarations();
-  fitting = [{ name: "docs", servers: ["Docs"], tools: 3 }];
-  batteries = [
-    githubBattery(),
-    { ...githubBattery(), name: "docs", description: "Knowledge rules" },
-  ];
+test("a problem status says on hover what it means", async () => {
+  declarations = emptyDeclarations({ batteries: [declaredGithub()] });
   show();
-  const docs = await screen.findByRole("row", { name: /docs Knowledge rules/ });
-  expect(docs).toHaveTextContent("Fits your servers");
-  expect(
-    screen.queryByRole("row", { name: /github GitHub rules/ }),
-  ).not.toBeInTheDocument();
-
   const user = userEvent.setup();
-  await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
-  await user.click(screen.getByRole("option", { name: "Other available" }));
-  expect(url.get("status")).toBe("other");
-  expect(
-    await screen.findByRole("row", { name: /github GitHub rules/ }),
-  ).toHaveTextContent("Available");
-  expect(
-    screen.queryByRole("row", { name: /docs Knowledge rules/ }),
-  ).not.toBeInTheDocument();
+  await user.hover(
+    within(await tableRow("github")).getByText("Credential not configured"),
+  );
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(
+    "Choose a credential for this battery.",
+  );
 });
 
 test("filters in the URL apply on load, so a reload or a link keeps them", async () => {
-  url = new URLSearchParams("status=active&search=github");
+  url = new URLSearchParams("status=configured&search=github");
   declarations = emptyDeclarations({
     batteries: [declaredGithub({ status: "active" })],
   });
@@ -1334,7 +1375,7 @@ test("filters in the URL apply on load, so a reload or a link keeps them", async
   ).not.toBeInTheDocument();
   expect(
     screen.getByRole("combobox", { name: "Filter by status" }),
-  ).toHaveTextContent("Active");
+  ).toHaveTextContent("Configured");
   expect(screen.getByPlaceholderText(/Search batteries by name/)).toHaveValue(
     "github",
   );

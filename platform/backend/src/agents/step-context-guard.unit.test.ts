@@ -1,5 +1,6 @@
 import type { ModelMessage } from "ai";
 import { describe, expect, test, vi } from "vitest";
+import { MAX_TOOL_RESULT_CONTEXT_BYTES } from "@/utils/tool-result-cap";
 import { createStepContextGuard } from "./step-context-guard";
 
 type SummarizeParams = { transcript: string; previousSummary: string | null };
@@ -59,6 +60,18 @@ describe("createStepContextGuard — tool result capping", () => {
     expect(output.value).toContain("[tool result truncated");
   });
 
+  test("leaves a text result at the cap intact, keeping its tail", async () => {
+    const atCap = `${'"q"\n'.repeat(25_000)}[hook feedback] stop`.slice(
+      -MAX_TOOL_RESULT_CONTEXT_BYTES,
+    );
+    const messages: ModelMessage[] = [
+      { role: "user", content: "list the workflow runs" },
+      toolResultMessage(atCap),
+    ];
+    const guard = createStepContextGuard({ contextLength: null });
+    expect((await guard({ messages })).messages).toBe(messages);
+  });
+
   test("returns the same array when nothing is oversized", async () => {
     const messages: ModelMessage[] = [
       { role: "user", content: "hello" },
@@ -95,7 +108,6 @@ describe("createStepContextGuard — summarization compaction", () => {
     expect(call.transcript).toContain("a".repeat(300));
 
     expect(result[0].role).toBe("user");
-    expect(result[0].content).toContain("untrusted conversation history");
     expect(result[0].content).toContain("the compact summary");
     expect(result[result.length - 1].content).toBe("c".repeat(300));
     // the summarized turns are gone from the step payload
@@ -355,6 +367,53 @@ describe("createStepContextGuard — prompt cache breakpoint", () => {
 
     expect(result[0].content).toContain("trimmed");
     expect(result.map(anthropicCacheControl).filter(Boolean)).toEqual([]);
+  });
+});
+
+describe("createStepContextGuard — parallel tool results", () => {
+  test("results finished out of order reach the model in call order, the breakpoint on the last", async () => {
+    const guard = createStepContextGuard({
+      contextLength: null,
+      promptCache: {
+        provider: "openrouter",
+        model: "anthropic/claude-haiku-4.5",
+        anthropicNativeEndpoint: false,
+      },
+    });
+    const call = (toolCallId: string) => ({
+      type: "tool-call" as const,
+      toolCallId,
+      toolName: "agent__self",
+      input: {},
+    });
+    const result = (toolCallId: string) => ({
+      type: "tool-result" as const,
+      toolCallId,
+      toolName: "agent__self",
+      output: { type: "text" as const, value: toolCallId },
+    });
+
+    const { messages } = await guard({
+      messages: [
+        { role: "user", content: "review all three" },
+        { role: "assistant", content: [call("a"), call("b"), call("c")] },
+        { role: "tool", content: [result("c"), result("a"), result("b")] },
+      ],
+    });
+
+    const results = messages[2]?.content;
+    if (!Array.isArray(results)) throw new Error("expected tool parts");
+    expect(
+      results.map((part) =>
+        part.type === "tool-result"
+          ? [part.toolCallId, part.providerOptions !== undefined]
+          : null,
+      ),
+    ).toEqual([
+      ["a", false],
+      ["b", false],
+      ["c", true],
+    ]);
   });
 });
 

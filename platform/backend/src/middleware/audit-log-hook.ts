@@ -110,7 +110,7 @@ async function recordResponseAudit(
   if (cfg?.onlyWhenChanged && (outcome !== "success" || request.auditSkip)) {
     return;
   }
-  const action = resolveActionName(cfg, request.method);
+  const action = request.auditAction ?? resolveActionName(cfg, request.method);
 
   const id =
     (cfg ? await getAuditedResourceId(request, cfg) : null) ??
@@ -305,11 +305,6 @@ type AuditDenylistEntry = {
   value: string;
 };
 
-/** Exact route patterns audited despite a prefix denylist entry. */
-const AUDIT_DENYLIST_EXEMPT_ROUTES = new Set([
-  "/api/connection-setups/prompt-session",
-]);
-
 const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/auth/" },
   { kind: "prefix", value: "/api/health" },
@@ -323,11 +318,14 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/chat/" },
   { kind: "prefix", value: "/api/browser-stream/" },
   { kind: "prefix", value: "/api/secrets/check-connectivity" },
-  { kind: "prefix", value: "/api/members/default-model" },
   // GitHub skill read-only POSTs: discover/preview fetch remote repo data but
   // do not mutate org state — exclude them to avoid false-positive audit noise.
   { kind: "exact", value: "/api/skills/github/discover" },
   { kind: "exact", value: "/api/skills/github/preview" },
+  // The MCP registry list is a read sent as a POST body (its ranked ids can
+  // outgrow a URL); it changes nothing.
+  { kind: "exact", value: "/api/internal_mcp_catalog/registry/search" },
+  { kind: "exact", value: "/api/internal_mcp_catalog/registry/search/ids" },
   // Read-only embedding/reranker connection tests: probe the provider but mutate
   // no org state. Auditing them recorded a misleading "Success" outcome on failed
   // probes (they return HTTP 200 with `{ success: false }`).
@@ -356,7 +354,6 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // Deliberately-unaudited resource families (audited:false in AUDIT_DECISIONS):
   // ephemeral connection-setup render tickets (installer secrets), incoming-email
   // subscription config, oauth grant runtime (tokens are runtime state).
-  // POST /api/connection-setups/prompt-session is the sole exemption.
   { kind: "prefix", value: "/api/connection-setups" },
   { kind: "prefix", value: "/api/incoming-email" },
   { kind: "exact", value: "/api/oauth/initiate" },
@@ -368,9 +365,8 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/openai-codex-auth/" },
   // Ephemeral Telegram link code (the account-binding /link IS audited).
   { kind: "exact", value: "/api/chatops/telegram/link-code" },
-  // High-volume / best-effort artifact + recording surfaces.
+  // High-volume / best-effort artifact surfaces.
   { kind: "prefix", value: "/api/skill-sandbox/artifacts" },
-  { kind: "prefix", value: "/api/app-recordings" },
   // Read-only probes / navigational / suggestion routes — mutate no org state.
   {
     kind: "exact",
@@ -387,15 +383,11 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "route", value: "/api/projects/:id/pin" },
   { kind: "route", value: "/api/projects/:id/instructions" },
   { kind: "route", value: "/api/apps/:appId/diagnostics" },
+  // Read-only: prices a recompute without changing anything.
+  { kind: "route", value: "/api/llm-models/:id/cost-backfill/preview" },
   { kind: "route", value: "/api/apps/:appId/screenshot" },
   { kind: "route", value: "/api/apps/:appId/open-in-chat" },
   { kind: "route", value: "/api/apps/external/:mcpServerId/open-in-chat" },
-  {
-    kind: "route",
-    value: "/api/teams/:teamId/vault-folder/check-connectivity",
-  },
-  // Read-only: returns the key names of a secret in the team's vault folder.
-  { kind: "route", value: "/api/teams/:teamId/vault-folder/secrets/keys" },
   {
     kind: "route",
     value: "/api/schedule-triggers/:id/runs/:runId/conversation",
@@ -403,9 +395,6 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
 ];
 
 function isDenylisted(url: string, routePattern: string | undefined): boolean {
-  if (routePattern && AUDIT_DENYLIST_EXEMPT_ROUTES.has(routePattern)) {
-    return false;
-  }
   return AUDIT_DENYLIST.some((entry) => {
     switch (entry.kind) {
       case "exact":
@@ -556,7 +545,7 @@ const AUDIT_RESOURCE_NAME_MAX_LENGTH = 512;
  * (deletes), then to the snapshot's `email` for entities addressed by email
  * rather than name (invitations). Keep the key/snapshot precedence in sync
  * with the frontend's legacy-row fallback `resourceDisplayName`
- * (frontend/src/app/audit/logs/_components/audit-log-action-labels.ts).
+ * (frontend/src/app/audit/logs/_parts/audit-log-action-labels.ts).
  * @public — shared with the Archestra MCP tool dispatch's audit writer so
  * names resolve identically on both surfaces.
  */

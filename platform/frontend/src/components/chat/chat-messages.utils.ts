@@ -2,16 +2,17 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
   type ChatOpenedAppMetadata,
-  DUAL_LLM_ANALYSIS_PART_TYPE,
   getArchestraAppResourceUri,
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseArchestraAppResourceUri,
   parseFullToolName,
+  SELF_FORK_TOOL_NAME,
   SUBAGENT_TOOL_CALL_PART_TYPE,
   type SubagentToolCallPartData,
   TOOL_COPY_FILE_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
@@ -24,6 +25,11 @@ import type { PanelApp } from "./apps-context";
 import type { FileAttachment } from "./editable-user-message";
 import type { HookRunChipData } from "./hook-run-chip";
 import type { McpToolOutput } from "./mcp-app-container";
+import {
+  identifyRemedyChains,
+  type RemedyChain,
+  remedyChainPartIndices,
+} from "./openappa-remedy-chains";
 
 export type OptimisticToolCall = {
   toolCallId: string;
@@ -47,6 +53,8 @@ export type CompactToolGroupEntry =
       part: DynamicToolUIPart | ToolUIPart;
       toolResultPart: DynamicToolUIPart | ToolUIPart | null;
       errorText: string | undefined;
+      /** Set when this entry stands for a whole guarded call (see `RemedyChain`). */
+      remedyChain?: RemedyChain;
     }
   | {
       /**
@@ -60,6 +68,8 @@ export type CompactToolGroupEntry =
       part: DynamicToolUIPart | ToolUIPart;
       toolResultPart: DynamicToolUIPart | ToolUIPart | null;
       errorText: string | undefined;
+      /** Set when the app call is the released attempt of a guarded call. */
+      remedyChain?: RemedyChain;
     }
   | {
       /** An inline `data-hook-run` debug entry rendered as a circle in the row. */
@@ -511,6 +521,11 @@ export function resolveAppEntryRender(params: {
   return null;
 }
 
+/** A human title for tool cards whose raw name means nothing to the reader. */
+export function getToolCardTitle(toolName: string): string | undefined {
+  return toolName === SELF_FORK_TOOL_NAME ? "Subagent" : undefined;
+}
+
 /** Unwrap a run_tool dispatch to the target tool name (no-op for other tools). */
 export function resolveRunToolTargetName(
   part: DynamicToolUIPart | ToolUIPart,
@@ -608,14 +623,14 @@ export type SubagentChildEntry = {
  * `toolCallId` is itself a key has descendants (a nested delegation), so the
  * renderer recurses to build an arbitrary-depth tree. Collected across all
  * messages — not per-message — so where the backend stored a part never affects
- * how it nests. Deduped by `toolCallId` so a part present both live (streamed)
- * and persisted (after reload) renders once.
+ * how it nests. Deduped by `toolCallId`, last-wins in place, so a call streamed
+ * while running and again once settled renders once, in its latest state.
  */
 export function collectSubagentToolCalls(
   messages: UIMessage[],
 ): Map<string, SubagentChildEntry[]> {
   const byParent = new Map<string, SubagentChildEntry[]>();
-  const seen = new Set<string>();
+  const seen = new Map<string, SubagentChildEntry>();
   for (const message of messages) {
     for (const part of message.parts ?? []) {
       const candidate = part as { type?: string; data?: unknown };
@@ -626,12 +641,10 @@ export function collectSubagentToolCalls(
       if (
         !data ||
         typeof data.parentToolCallId !== "string" ||
-        typeof data.toolCallId !== "string" ||
-        seen.has(data.toolCallId)
+        typeof data.toolCallId !== "string"
       ) {
         continue;
       }
-      seen.add(data.toolCallId);
       const entry: SubagentChildEntry = {
         toolCallId: data.toolCallId,
         toolName: data.toolName,
@@ -640,6 +653,12 @@ export function collectSubagentToolCalls(
         state: data.state,
         errorText: data.errorText,
       };
+      const existing = seen.get(data.toolCallId);
+      if (existing) {
+        Object.assign(existing, entry);
+        continue;
+      }
+      seen.set(data.toolCallId, entry);
       const list = byParent.get(data.parentToolCallId);
       if (list) {
         list.push(entry);
@@ -658,11 +677,29 @@ export function identifyCompactToolGroups(
     getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
     mcpAppToolCallIds?: Set<string>;
   },
-): { groupMap: Map<number, CompactToolGroup>; consumedIndices: Set<number> } {
+): {
+  groupMap: Map<number, CompactToolGroup>;
+  consumedIndices: Set<number>;
+  /** Guarded calls that render as one full tool card at their anchor index. */
+  remedyChainCards: Map<number, RemedyChain>;
+} {
   const groupMap = new Map<number, CompactToolGroup>();
   const consumedIndices = new Set<number>();
+  const remedyChainCards = new Map<number, RemedyChain>();
 
-  if (!parts) return { groupMap, consumedIndices };
+  if (!parts) return { groupMap, consumedIndices, remedyChainCards };
+
+  // A guarded call's notices, remedies, and retries render as one entry at its
+  // first notice; every other member renders nothing on its own.
+  const remedyChainByAnchor = new Map<number, RemedyChain>();
+  for (const chain of identifyRemedyChains(parts, {
+    getToolShortName: options?.getToolShortName,
+  })) {
+    remedyChainByAnchor.set(chain.anchorIndex, chain);
+    for (const index of remedyChainPartIndices(chain)) {
+      if (index !== chain.anchorIndex) consumedIndices.add(index);
+    }
+  }
 
   // Collect toolCallIds from data-tool-ui-start parts (MCP Apps known before output arrives)
   const mcpAppCallIds = new Set(options?.mcpAppToolCallIds);
@@ -731,6 +768,44 @@ export function identifyCompactToolGroups(
     if (!toolName) {
       finalizeCurrentGroup({ currentGroup, groupMap });
       currentGroup = null;
+      continue;
+    }
+
+    // Chain members render inside their chain's entry, so they neither join
+    // nor break the row.
+    if (consumedIndices.has(idx)) continue;
+
+    // A denial notice whose input has not named its target yet renders
+    // nothing, so the row never flashes a separate notice circle before the
+    // notice joins its chain.
+    if (
+      rawPart.state === "input-streaming" &&
+      options?.getToolShortName?.(toolName) ===
+        TOOL_GET_REMEDY_PLANS_SHORT_NAME &&
+      !remedyChainByAnchor.has(idx)
+    ) {
+      consumedIndices.add(idx);
+      continue;
+    }
+
+    const remedyChain = remedyChainByAnchor.get(idx);
+    if (remedyChain) {
+      const entry = remedyChainEntry({
+        chain: remedyChain,
+        mcpAppCallIds,
+        options,
+      });
+      if (entry) {
+        if (!currentGroup) {
+          currentGroup = { startIndex: idx, entries: [] };
+        }
+        currentGroup.entries.push(entry);
+        consumedIndices.add(idx);
+      } else {
+        remedyChainCards.set(idx, remedyChain);
+        finalizeCurrentGroup({ currentGroup, groupMap });
+        currentGroup = null;
+      }
       continue;
     }
 
@@ -817,7 +892,7 @@ export function identifyCompactToolGroups(
   }
 
   finalizeCurrentGroup({ currentGroup, groupMap });
-  return { groupMap, consumedIndices };
+  return { groupMap, consumedIndices, remedyChainCards };
 }
 
 /**
@@ -881,7 +956,6 @@ export function identifyReasoningRuns(params: {
         if (isToolPart(part)) return false;
         if (isHookRunPart(part)) return false;
         if (part.type.startsWith("data-tool-ui-start")) return false;
-        if (part.type.startsWith(DUAL_LLM_ANALYSIS_PART_TYPE)) return false;
         return true;
       }
     }
@@ -1021,6 +1095,74 @@ function parseToolAppRender(
   const mcpServerId = ui?.mcpServerId ?? null;
   const fullToolName = getToolName(part) ?? early?.toolName ?? "";
   return { outputUri, mcpServerId, fullToolName };
+}
+
+/**
+ * The compact entry for a guarded call, or null when any member needs the full
+ * card (an approval, an auth error, a non-compact tool). A released attempt
+ * that renders an MCP App keeps its app pill, with the chain in its details.
+ */
+function remedyChainEntry(params: {
+  chain: RemedyChain;
+  mcpAppCallIds: Set<string>;
+  options:
+    | {
+        nonCompactToolNames?: Set<string>;
+        getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
+      }
+    | undefined;
+}): CompactToolGroupEntry | null {
+  const { chain, mcpAppCallIds, options } = params;
+  const { finalAttempt } = chain;
+  const members = finalAttempt ? [...chain.steps, finalAttempt] : chain.steps;
+  const finalIsApp =
+    finalAttempt !== null &&
+    isAppRenderPart({
+      part: finalAttempt.part,
+      toolResultPart: finalAttempt.toolResultPart,
+      mcpAppCallIds,
+      getToolShortName: options?.getToolShortName,
+    });
+  const eligible = members.every((member) => {
+    if (member === finalAttempt && finalIsApp) {
+      const state = (member.toolResultPart ?? member.part).state;
+      return (
+        !getToolErrorText({
+          part: member.part,
+          toolResultPart: member.toolResultPart,
+        }) &&
+        state !== "approval-requested" &&
+        state !== "output-denied"
+      );
+    }
+    return (
+      !options?.nonCompactToolNames?.has(member.toolName) &&
+      isCompactEligible({
+        part: member.part,
+        toolResultPart: member.toolResultPart,
+        toolName: member.toolName,
+        getToolShortName: options?.getToolShortName,
+      })
+    );
+  });
+  if (!eligible) return null;
+
+  const [anchor] = chain.steps;
+  const shown = finalIsApp && finalAttempt ? finalAttempt : anchor;
+  return {
+    kind: finalIsApp ? "app" : "tool",
+    partIndex: chain.anchorIndex,
+    toolName: shown.toolName,
+    part: shown.part,
+    toolResultPart: shown.toolResultPart,
+    errorText: finalAttempt
+      ? getToolErrorText({
+          part: finalAttempt.part,
+          toolResultPart: finalAttempt.toolResultPart,
+        })
+      : undefined,
+    remedyChain: chain,
+  };
 }
 
 function finalizeCurrentGroup(params: {

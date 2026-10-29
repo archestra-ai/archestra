@@ -27,7 +27,7 @@ import {
 } from "./constants";
 import {
   errorMessage,
-  formatApprovalToolArgs,
+  formatApprovalReviewText,
   stripDuplicateAgentFooter,
 } from "./utils";
 
@@ -277,15 +277,18 @@ class TelegramProvider implements ChatOpsProvider {
       APPROVAL_CALLBACK_TTL_MS,
     );
 
-    const argsText = formatApprovalToolArgs(options.toolArgs);
-    const text = argsText
-      ? `\`${options.toolName}\`\n\`\`\`\n${argsText}\n\`\`\``
-      : `\`${options.toolName}\``;
+    // A review with no structured tool falls back to OpenAPPA's own text,
+    // which names the reviewed call itself.
+    const text = options.reviewText
+      ? markdownToTelegramHtml(
+          `\`\`\`\n${formatApprovalReviewText(options.reviewText)}\n\`\`\``,
+        )
+      : approvalRequestHtml(options.toolName, options.toolArgs);
 
     const metadata = options.originalMessage.metadata ?? {};
     await this.callApi("sendMessage", {
       chat_id: options.channelId,
-      text: markdownToTelegramHtml(text),
+      text,
       parse_mode: "HTML",
       ...(typeof metadata.messageThreadId === "number" && {
         message_thread_id: metadata.messageThreadId,
@@ -293,8 +296,12 @@ class TelegramProvider implements ChatOpsProvider {
       reply_markup: {
         inline_keyboard: [
           [
-            { text: "✅ Approve", callback_data: `apr|${key}|a` },
-            { text: "❌ Decline", callback_data: `apr|${key}|d` },
+            {
+              text: "Approve",
+              callback_data: `apr|${key}|a`,
+              style: "success",
+            },
+            { text: "Deny", callback_data: `apr|${key}|d`, style: "danger" },
           ],
         ],
       },
@@ -304,12 +311,20 @@ class TelegramProvider implements ChatOpsProvider {
   async updateApprovalRequest(
     options: UpdateApprovalRequestOptions,
   ): Promise<void> {
-    const status = options.approved ? "✅ Approved" : "❌ Declined";
+    const status = options.approved ? "Approved" : "Denied";
+    const parts = [
+      `<b>${status}</b>`,
+      `<code>${escapeHtml(options.toolName)}</code>`,
+      ...(options.decidedByName
+        ? [`by ${escapeHtml(options.decidedByName)}`]
+        : []),
+    ];
     // editMessageText without reply_markup also removes the buttons.
     await this.callApi("editMessageText", {
       chat_id: options.channelId,
       message_id: Number(options.messageKey),
-      text: `${options.toolName}: ${status}`,
+      text: parts.join(" · "),
+      parse_mode: "HTML",
     });
   }
 
@@ -1098,6 +1113,75 @@ export function markdownToTelegramHtml(markdown: string): string {
   return text;
 }
 
+/**
+ * The approval prompt for a tool call: the tool, then its arguments one per
+ * line in a collapsed quote. Values are cut so the message stays under
+ * Telegram's 4096-char cap.
+ */
+function approvalRequestHtml(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+): string {
+  const header = `<b>Approval required</b>\n<code>${escapeHtml(toolName)}</code>\nReview this tool call before it can continue.`;
+  const entries = Object.entries(args ?? {});
+  if (entries.length === 0) return header;
+
+  const open = "\n<blockquote expandable>";
+  const close = "</blockquote>";
+  const omitted = "\n…";
+  let budget =
+    TELEGRAM_MESSAGE_LIMIT -
+    header.length -
+    open.length -
+    close.length -
+    omitted.length;
+  const lines: string[] = [];
+  let complete = true;
+  for (const [name, raw] of entries) {
+    const prefix = `<b>${escapeHtml(name)}</b> <code>`;
+    const suffix = "</code>";
+    const separator = lines.length > 0 ? 1 : 0;
+    const room = Math.min(
+      APPROVAL_ARG_VALUE_MAX_LENGTH,
+      budget - separator - prefix.length - suffix.length,
+    );
+    if (room < APPROVAL_ARG_VALUE_MIN_LENGTH) {
+      complete = false;
+      break;
+    }
+    const line = `${prefix}${escapeHtmlWithin(argValueText(raw), room)}${suffix}`;
+    lines.push(line);
+    budget -= separator + line.length;
+  }
+  return `${header}${open}${lines.join("\n")}${complete ? "" : omitted}${close}`;
+}
+
+function argValueText(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/** Escape text for HTML, cutting it with "…" so the result fits `maxLength`. */
+function escapeHtmlWithin(text: string, maxLength: number): string {
+  const escaped = escapeHtml(text);
+  if (escaped.length <= maxLength) return escaped;
+  // Longest prefix whose escaped form leaves room for the "…".
+  let low = 0;
+  let high = Math.min(text.length, maxLength - 1);
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (escapeHtml(text.slice(0, mid)).length <= maxLength - 1) low = mid;
+    else high = mid - 1;
+  }
+  // Never split a surrogate pair: Telegram rejects malformed UTF-16.
+  const end = /[\uD800-\uDBFF]/.test(text[low - 1] ?? "") ? low - 1 : low;
+  return `${escapeHtml(text.slice(0, end))}…`;
+}
+
 function escapeHtml(text: string): string {
   return text
     .replaceAll("&", "&amp;")
@@ -1151,6 +1235,12 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 const TELEGRAM_API_BASE = "https://api.telegram.org";
+/** Telegram's cap on a message's text. */
+const TELEGRAM_MESSAGE_LIMIT = 4096;
+/** Longest argument value an approval prompt shows before cutting it. */
+const APPROVAL_ARG_VALUE_MAX_LENGTH = 600;
+/** Below this much room for a value, the remaining arguments are left out. */
+const APPROVAL_ARG_VALUE_MIN_LENGTH = 16;
 /** Raw-markdown budget per message, leaving room for HTML tags under the 4096 cap. */
 const TELEGRAM_MESSAGE_CHUNK_SIZE = 3500;
 const POLL_TIMEOUT_SECONDS = 25;
@@ -1169,6 +1259,7 @@ const HELP_TEXT = [
   "",
   "• Send me a message and I'll pass it to your assigned agent.",
   "• /select-agent — choose which agent answers in this chat.",
+  "• /reset — start a new conversation (outside topics).",
   "• AgentName > message — route one message to a different agent.",
   "• /start — link your Telegram account (DM only).",
 ].join("\n");

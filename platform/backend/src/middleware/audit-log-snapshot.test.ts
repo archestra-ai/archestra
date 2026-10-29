@@ -14,8 +14,6 @@ import OrganizationModel from "@/models/organization";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
-import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import { describe, expect, test } from "@/test";
 import { AuditEventNameSchema } from "@/types/audit-log";
 import { AUDIT_DECISIONS, type AuditableModel } from "./audit-decisions";
@@ -553,14 +551,12 @@ describe("audit snapshot shape — non-redacted models", () => {
       teams: [],
       knowledgeBaseIds: [],
       icon: "🤖",
-      considerContextUntrusted: true,
       passthroughHeaders: ["X-Trace-Id", "Authorization"],
     });
 
     const snapshot = await AgentModel.findByIdForAudit(agent.id, org.id);
 
     expect(snapshot).toHaveProperty("icon", "🤖");
-    expect(snapshot).toHaveProperty("considerContextUntrusted", true);
     // Header names only (text[]), sorted.
     expect(snapshot?.passthroughHeaders).toEqual([
       "Authorization",
@@ -593,8 +589,6 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(snapshot).toHaveProperty("defaultModel", "google/gemini-2.5-pro");
     expect(snapshot).not.toHaveProperty("defaultLlmModel");
     // Security-posture toggles must be captured so a change diffs.
-    expect(snapshot).toHaveProperty("defaultDiscoveredToolInvocationPolicy");
-    expect(snapshot).toHaveProperty("defaultDiscoveredToolResultPolicy");
   });
 
   test("AgentModel.findByIdForAudit returns null for wrong org", async ({
@@ -660,75 +654,6 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(snapshot).toHaveProperty("name", "My KB");
     expect(snapshot).toHaveProperty("organizationId", org.id);
     expect(typeof snapshot?.createdAt).toBe("string");
-  });
-
-  test("ToolInvocationPolicyModel.findByIdForAudit includes toolId and action", async ({
-    makeOrganization,
-    makeTool,
-    makeToolPolicy,
-    makeAgent,
-    makeAgentTool,
-  }) => {
-    const org = await makeOrganization();
-    const tool = await makeTool();
-    const agent = await makeAgent({ organizationId: org.id });
-    await makeAgentTool(agent.id, tool.id);
-    const policy = await makeToolPolicy(tool.id, { action: "block_always" });
-
-    const snapshot = await ToolInvocationPolicyModel.findByIdForAudit(
-      policy.id,
-      org.id,
-    );
-
-    expect(snapshot).not.toBeNull();
-    expect(snapshot).toHaveProperty("id", policy.id);
-    expect(snapshot).toHaveProperty("toolId", policy.toolId);
-    expect(snapshot).toHaveProperty("action", "block_always");
-    expect(typeof snapshot?.createdAt).toBe("string");
-  });
-
-  test("TrustedDataPolicyModel.findByIdForAudit includes toolId and action", async ({
-    makeOrganization,
-    makeTool,
-    makeTrustedDataPolicy,
-    makeAgent,
-    makeAgentTool,
-  }) => {
-    const org = await makeOrganization();
-    const tool = await makeTool();
-    const agent = await makeAgent({ organizationId: org.id });
-    await makeAgentTool(agent.id, tool.id);
-    const policy = await makeTrustedDataPolicy(tool.id, {});
-
-    const snapshot = await TrustedDataPolicyModel.findByIdForAudit(
-      policy.id,
-      org.id,
-    );
-
-    expect(snapshot).not.toBeNull();
-    expect(snapshot).toHaveProperty("id", policy.id);
-    expect(snapshot).toHaveProperty("toolId", policy.toolId);
-    expect(snapshot).toHaveProperty("action");
-    expect(typeof snapshot?.createdAt).toBe("string");
-  });
-
-  test("TrustedDataPolicyModel.findByIdForAudit ignores soft-deleted agent assignments", async ({
-    makeOrganization,
-    makeTool,
-    makeTrustedDataPolicy,
-    makeAgent,
-    makeAgentTool,
-  }) => {
-    const org = await makeOrganization();
-    const tool = await makeTool();
-    const agent = await makeAgent({ organizationId: org.id });
-    await makeAgentTool(agent.id, tool.id);
-    const policy = await makeTrustedDataPolicy(tool.id, {});
-    await AgentModel.delete(agent.id);
-
-    await expect(
-      TrustedDataPolicyModel.findByIdForAudit(policy.id, org.id),
-    ).resolves.toBeNull();
   });
 
   test("findByIdForAudit returns null for non-existent id", async ({
@@ -994,8 +919,6 @@ describe("AUDITABLE_ROUTES registry", () => {
       "/api/teams",
       "/api/api-keys",
       "/api/llm-provider-api-keys",
-      "/api/autonomy-policies/tool-invocation",
-      "/api/trusted-data-policies",
       "/api/knowledge-bases",
       "/api/connectors",
       "/api/limits",

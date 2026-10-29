@@ -9,6 +9,36 @@ import SecretModel from "./secret";
 import SkillModel from "./skill";
 import UserModel from "./user";
 
+describe("UserModel.getProxyIdentity", () => {
+  test("reads current user metadata only for an existing membership in the requested organization", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    await expect(UserModel.getProxyIdentity(user.id, org.id)).resolves.toEqual({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+    });
+    await expect(
+      UserModel.getProxyIdentity(user.id, other.id),
+    ).resolves.toBeNull();
+
+    await UserModel.patch(user.id, { name: "Updated proxy owner" });
+    expect((await UserModel.getProxyIdentity(user.id, org.id))?.name).toBe(
+      "Updated proxy owner",
+    );
+    await MemberModel.deleteAllByUserId(user.id);
+    await expect(
+      UserModel.getProxyIdentity(user.id, org.id),
+    ).resolves.toBeNull();
+  });
+});
+
 describe("User.getUserPermissions", () => {
   let testOrgId: string;
   let testUserId: string;

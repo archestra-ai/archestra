@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { runBulkAction, toBulkOutcome } from "@/lib/bulk-action";
+import { parseRoleAssignmentBlocked } from "./role-assignment-blocked";
 import { handleApiError, throwOnApiError, toApiError } from "./utils";
 
 export type ServiceAccount =
@@ -72,6 +73,9 @@ export function useCreateServiceAccount() {
     ) => {
       const { data, error } = await createServiceAccount({ body });
       if (error) {
+        // A refused role is explained in the dialog, not a toast.
+        const blocked = parseRoleAssignmentBlocked(error);
+        if (blocked) throw blocked;
         handleApiError(error);
         throw toApiError(error);
       }
@@ -104,6 +108,9 @@ export function useUpdateServiceAccount() {
         body,
       });
       if (error) {
+        // A refused role is explained in the dialog, not a toast.
+        const blocked = parseRoleAssignmentBlocked(error);
+        if (blocked) throw blocked;
         handleApiError(error);
         throw toApiError(error);
       }

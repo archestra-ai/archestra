@@ -6,20 +6,15 @@
  * POST /v1/gemini/embeddings) that mirror the OpenAI provider-specific route.
  */
 
-import Fastify from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { createFastifyInstance } from "@/fastify-instance";
 import { InteractionModel, ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createGeminiTestClient,
   createOpenAiTestClient,
 } from "@/test/llm-provider-stubs";
-import { ApiError } from "@/types";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import {
   geminiEmbeddingsAdapterFactory,
   openaiAdapterFactory,
@@ -27,22 +22,21 @@ import {
 import geminiProxyRoutes from "./gemini";
 import mistralProxyRoutes from "./mistral";
 
+/** A passthrough virtual key owned by a fresh member of `organizationId`. */
+async function makePassthroughFor(
+  organizationId: string,
+  fixtures: {
+    makeUser: () => Promise<{ id: string }>;
+    makeMember: (userId: string, organizationId: string) => Promise<unknown>;
+  },
+): Promise<string> {
+  const owner = await fixtures.makeUser();
+  await fixtures.makeMember(owner.id, organizationId);
+  return await makePassthroughCredential({ organizationId, ownerId: owner.id });
+}
+
 function createRouteTestApp() {
-  const app = Fastify().withTypeProvider<ZodTypeProvider>();
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
-  app.setErrorHandler((error, _request, reply) => {
-    if (error instanceof ApiError) {
-      return reply.status(error.statusCode).send({
-        error: { message: error.message, type: error.type },
-      });
-    }
-    const message = error instanceof Error ? error.message : String(error);
-    return reply
-      .status(500)
-      .send({ error: { message, type: "api_internal_server_error" } });
-  });
-  return app;
+  return createFastifyInstance();
 }
 
 async function upsertEmbeddingModel(params: {
@@ -76,6 +70,8 @@ describe("provider-specific embeddings routes", () => {
 
   test("creates embeddings through the Mistral provider route", async ({
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const app = createRouteTestApp();
     await app.register(mistralProxyRoutes);
@@ -89,6 +85,10 @@ describe("provider-specific embeddings routes", () => {
       agentType: "llm_proxy",
       isDefault: true,
     });
+    const passthroughToken = await makePassthroughFor(agent.organizationId, {
+      makeUser,
+      makeMember,
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -96,6 +96,7 @@ describe("provider-specific embeddings routes", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-mistral-key",
+        "x-archestra-virtual-key": passthroughToken,
         "user-agent": "test-client",
       },
       payload: { model: "mistral-embed", input: ["first", "second"] },
@@ -125,6 +126,8 @@ describe("provider-specific embeddings routes", () => {
 
   test("creates embeddings through the Gemini provider route", async ({
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const app = createRouteTestApp();
     await app.register(geminiProxyRoutes);
@@ -138,6 +141,10 @@ describe("provider-specific embeddings routes", () => {
       agentType: "llm_proxy",
       isDefault: true,
     });
+    const passthroughToken = await makePassthroughFor(agent.organizationId, {
+      makeUser,
+      makeMember,
+    });
 
     vi.spyOn(geminiEmbeddingsAdapterFactory, "createClient").mockImplementation(
       () => createGeminiTestClient() as never,
@@ -149,6 +156,7 @@ describe("provider-specific embeddings routes", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-gemini-key",
+        "x-archestra-virtual-key": passthroughToken,
         "user-agent": "test-client",
       },
       payload: { model: "gemini-embedding-001", input: ["first", "second"] },

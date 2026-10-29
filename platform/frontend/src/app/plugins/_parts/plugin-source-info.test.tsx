@@ -40,6 +40,20 @@ describe("PluginSourceInfo", () => {
     expect(tooltip).toHaveTextContent("example/policy-plugin");
   });
 
+  it("names GitLab and its host for a plugin synced from gitlab.com", async () => {
+    const user = userEvent.setup();
+    renderInfo({ sourceProvider: "gitlab", githubSyncInterval: "1d" });
+
+    await user.hover(
+      screen.getByRole("button", { name: "GitLab source details" }),
+    );
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("gitlab.com/example/policy-plugin");
+    expect(tooltip).toHaveTextContent("Synced once a day from GitLab");
+    expect(tooltip).not.toHaveTextContent("GitHub");
+  });
+
   it("keeps file metadata available for manually authored plugins", async () => {
     const user = userEvent.setup();
     renderInfo({ sourceKind: "manual", fileCount: 1 });
@@ -65,6 +79,8 @@ function renderInfo(
         sourceKind: "github",
         sourceRepo: "example/policy-plugin",
         sourceMarketplaceRepo: null,
+        sourceProvider: "github",
+        sourceOrigin: null,
         githubSyncInterval: null,
         lastSyncedAt: null,
         pendingSourceSha: null,

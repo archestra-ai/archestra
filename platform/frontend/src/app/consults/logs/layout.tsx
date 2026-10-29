@@ -8,6 +8,11 @@ export default function ConsultLogsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <LogsSectionLayout listPath="/consults/logs">{children}</LogsSectionLayout>
+    <LogsSectionLayout
+      listPath="/consults/logs"
+      description="Logs Guardrails requests to external services, such as labeling models or audience lookups, before a tool call is allowed or blocked."
+    >
+      {children}
+    </LogsSectionLayout>
   );
 }

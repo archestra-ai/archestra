@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DateTimePicker } from "./date-time-picker";
 
 // Mock ResizeObserver as a proper class (required by floating-ui/Radix Popover)
@@ -12,163 +12,189 @@ class MockResizeObserver {
 global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
 
 describe("DateTimePicker", () => {
+  afterEach(() => vi.useRealTimers());
+
   describe("rendering", () => {
-    it("renders the default placeholder when no value is provided", () => {
-      render(<DateTimePicker value={undefined} onChange={vi.fn()} />);
-
-      expect(
-        screen.getByRole("button", { name: /Pick date and time/i }),
-      ).toBeInTheDocument();
-    });
-
-    it("renders a formatted date when value is provided", () => {
+    it("names the field by its placeholder and shows the value as text", () => {
       const date = new Date(2025, 5, 15, 14, 30); // June 15, 2025 14:30
-      render(<DateTimePicker value={date} onChange={vi.fn()} />);
-
-      expect(
-        screen.getByRole("button", { name: /06\/15\/2025 14:30/ }),
-      ).toBeInTheDocument();
-    });
-
-    it("renders custom placeholder text", () => {
       render(
         <DateTimePicker
-          value={undefined}
+          value={date}
           onChange={vi.fn()}
           placeholder="Select a date"
         />,
       );
 
       expect(
-        screen.getByRole("button", { name: /Select a date/i }),
-      ).toBeInTheDocument();
+        screen.getByRole("textbox", { name: "Select a date" }),
+      ).toHaveValue("2025-06-15 14:30");
+    });
+
+    it("leaves the field empty without a value", () => {
+      render(<DateTimePicker value={undefined} onChange={vi.fn()} />);
+
+      expect(
+        screen.getByRole("textbox", { name: "Pick date and time" }),
+      ).toHaveValue("");
     });
   });
 
-  describe("time selection", () => {
-    it("calls onChange with updated hours when clicking an hour button", () => {
-      const onChange = vi.fn();
-      const date = new Date(2025, 5, 15, 10, 30); // June 15, 2025 10:30
-
-      render(<DateTimePicker value={date} onChange={onChange} />);
-
-      // Open the popover
-      fireEvent.click(screen.getByRole("button", { name: /06\/15\/2025/ }));
-
-      // Click the "14" hour button
-      const hourButton = screen.getByRole("button", { name: "14" });
-      fireEvent.click(hourButton);
-
-      expect(onChange).toHaveBeenCalledTimes(1);
-      const newDate = onChange.mock.calls[0][0] as Date;
-      expect(newDate.getHours()).toBe(14);
-      // Minutes should be preserved from the original value
-      expect(newDate.getMinutes()).toBe(30);
-    });
-
-    it("calls onChange with updated minutes when clicking a minute button", () => {
-      const onChange = vi.fn();
-      const date = new Date(2025, 5, 15, 10, 30); // June 15, 2025 10:30
-
-      render(<DateTimePicker value={date} onChange={onChange} />);
-
-      // Open the popover
-      fireEvent.click(screen.getByRole("button", { name: /06\/15\/2025/ }));
-
-      // Click the "45" minute button
-      const minuteButton = screen.getByRole("button", { name: "45" });
-      fireEvent.click(minuteButton);
-
-      expect(onChange).toHaveBeenCalledTimes(1);
-      const newDate = onChange.mock.calls[0][0] as Date;
-      expect(newDate.getMinutes()).toBe(45);
-      // Hours should be preserved from the original value
-      expect(newDate.getHours()).toBe(10);
-    });
-
-    it("uses current date with zeroed minutes as base when no value and an hour is clicked", async () => {
+  describe("typing", () => {
+    it("applies a typed date and time on Enter", async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
-
       render(<DateTimePicker value={undefined} onChange={onChange} />);
 
-      // Open the popover
-      await user.click(
-        screen.getByRole("button", { name: /Pick date and time/i }),
-      );
+      const field = screen.getByRole("textbox", { name: "Pick date and time" });
+      await user.type(field, "2026-10-13 14:05{Enter}");
 
-      // Click the "08" hour button
-      const hourButton = screen.getByRole("button", { name: "08" });
-      await user.click(hourButton);
-
-      expect(onChange).toHaveBeenCalledTimes(1);
-      const newDate = onChange.mock.calls[0][0] as Date;
-      expect(newDate.getHours()).toBe(8);
-      // Minutes should default to 0 when no existing value
-      expect(newDate.getMinutes()).toBe(0);
+      expect(onChange).toHaveBeenCalledWith(new Date(2026, 9, 13, 14, 5));
     });
-  });
 
-  describe("date selection", () => {
-    it("preserves existing time when selecting a new date", async () => {
+    it("applies a typed date when the field loses focus, at midnight without a time", async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
-      // Jan 15, 2025 at 14:30
-      const date = new Date(2025, 0, 15, 14, 30);
+      render(<DateTimePicker value={undefined} onChange={onChange} />);
 
-      render(<DateTimePicker value={date} onChange={onChange} />);
+      await user.type(
+        screen.getByRole("textbox", { name: "Pick date and time" }),
+        "2026-02-28",
+      );
+      await user.tab();
 
-      // Open the popover
-      await user.click(screen.getByRole("button", { name: /01\/15\/2025/ }));
+      expect(onChange).toHaveBeenCalledWith(new Date(2026, 1, 28, 0, 0));
+    });
 
-      // Click a different day in the calendar (day 20)
-      const dayButton = screen.getByRole("gridcell", { name: "20" }).firstChild;
-      if (dayButton) {
-        await user.click(dayButton as Element);
-      }
+    it("reads now and now minus an amount", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 9, 13, 12, 0));
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<DateTimePicker value={undefined} onChange={onChange} />);
+      const field = screen.getByRole("textbox", { name: "Pick date and time" });
 
-      expect(onChange).toHaveBeenCalledTimes(1);
-      const newDate = onChange.mock.calls[0][0] as Date;
-      expect(newDate.getDate()).toBe(20);
-      // Time should be preserved
-      expect(newDate.getHours()).toBe(14);
-      expect(newDate.getMinutes()).toBe(30);
+      await user.type(field, "now-6h{Enter}");
+      expect(onChange).toHaveBeenLastCalledWith(new Date(2026, 9, 13, 6, 0));
+
+      await user.clear(field);
+      await user.type(field, "now-7d{Enter}");
+      expect(onChange).toHaveBeenLastCalledWith(new Date(2026, 9, 6, 12, 0));
+    });
+
+    it.each([
+      ["text that names no date", "next tuesday"],
+      ["a day the month does not have", "2026-02-31"],
+    ])("marks %s invalid and keeps it for fixing", async (_case, text) => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<DateTimePicker value={undefined} onChange={onChange} />);
+      const field = screen.getByRole("textbox", { name: "Pick date and time" });
+
+      await user.type(field, `${text}{Enter}`);
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(field).toHaveAttribute("aria-invalid", "true");
+      expect(field).toHaveValue(text);
+    });
+
+    it("rejects a typed date the calendar would disable", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <DateTimePicker
+          value={undefined}
+          onChange={onChange}
+          disabledDate={(date) => date < new Date(2026, 0, 1)}
+        />,
+      );
+      const field = screen.getByRole("textbox", { name: "Pick date and time" });
+
+      await user.type(field, "2025-12-31 10:00{Enter}");
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(field).toHaveAttribute("aria-invalid", "true");
+    });
+
+    it("clears the value when the text is erased", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <DateTimePicker
+          value={new Date(2026, 0, 1, 9, 0)}
+          onChange={onChange}
+        />,
+      );
+      const field = screen.getByRole("textbox", { name: "Pick date and time" });
+
+      await user.clear(field);
+      await user.tab();
+
+      expect(onChange).toHaveBeenCalledWith(undefined);
     });
   });
 
-  describe("handleContainerScroll", () => {
-    it("adjusts scrollTop based on wheel deltaY", async () => {
-      const user = userEvent.setup();
-      const date = new Date(2025, 0, 15, 10, 0);
-
-      const { container } = render(
-        <DateTimePicker value={date} onChange={vi.fn()} />,
+  describe("calendar", () => {
+    it("sets the time from the time field and keeps the day", () => {
+      const onChange = vi.fn();
+      render(
+        <DateTimePicker
+          value={new Date(2025, 5, 15, 10, 30)}
+          onChange={onChange}
+        />,
       );
 
-      // Open the popover
-      await user.click(screen.getByRole("button", { name: /01\/15\/2025/ }));
-
-      // Find the scrollable containers (hours and minutes) rendered in the popover portal
-      const scrollContainers =
-        container.ownerDocument.querySelectorAll<HTMLDivElement>(
-          "[class*='overflow-y-auto']",
-        );
-
-      // There should be the hour and minute containers
-      expect(scrollContainers.length).toBeGreaterThanOrEqual(2);
-
-      const hourContainer = scrollContainers[0];
-
-      // Define a writable scrollTop so we can observe changes
-      Object.defineProperty(hourContainer, "scrollTop", {
-        value: 0,
-        writable: true,
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Open calendar: Pick date and time",
+        }),
+      );
+      fireEvent.change(screen.getByLabelText("Time"), {
+        target: { value: "14:05" },
       });
 
-      // Fire a wheel event - the onWheel handler sets scrollTop += deltaY
-      fireEvent.wheel(hourContainer, { deltaY: 50 });
+      expect(onChange).toHaveBeenCalledWith(new Date(2025, 5, 15, 14, 5));
+    });
 
-      expect(hourContainer.scrollTop).toBe(50);
+    it("gives a first picked day the current hour", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2025, 0, 10, 8, 42));
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<DateTimePicker value={undefined} onChange={onChange} />);
+
+      await user.click(
+        screen.getByRole("button", {
+          name: "Open calendar: Pick date and time",
+        }),
+      );
+      const dayButton = screen.getByRole("gridcell", { name: "20" }).firstChild;
+      if (dayButton) await user.click(dayButton as Element);
+
+      expect(onChange).toHaveBeenCalledWith(new Date(2025, 0, 20, 8, 0));
+    });
+
+    it("keeps the time when picking another day, and stays open until Done", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <DateTimePicker
+          value={new Date(2025, 0, 15, 14, 30)}
+          onChange={onChange}
+        />,
+      );
+
+      await user.click(
+        screen.getByRole("button", {
+          name: "Open calendar: Pick date and time",
+        }),
+      );
+      const dayButton = screen.getByRole("gridcell", { name: "20" }).firstChild;
+      if (dayButton) await user.click(dayButton as Element);
+
+      expect(onChange).toHaveBeenCalledWith(new Date(2025, 0, 20, 14, 30));
+      expect(screen.getByLabelText("Time")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Done" }));
+      expect(screen.queryByLabelText("Time")).not.toBeInTheDocument();
     });
   });
 });

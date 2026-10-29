@@ -62,8 +62,8 @@ export function PluginGithubUpdatesDialog({
     <StandardDialog
       open={open}
       onOpenChange={close}
-      title="GitHub updates"
-      description="Review GitHub changes before they install."
+      title="Source updates"
+      description="Review repository changes before they install."
       size="large"
       bodyClassName="space-y-5 overflow-y-auto"
       footer={

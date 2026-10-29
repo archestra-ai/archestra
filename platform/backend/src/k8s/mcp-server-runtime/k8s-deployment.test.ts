@@ -956,6 +956,29 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
         "Never",
       );
     });
+
+    // `:latest` moves, so a restart must ask the registry what it points at
+    // now instead of reusing the node's copy.
+    test("a :latest registry image pulls on every rollout", () => {
+      const k8sDeployment = makeDeployment();
+
+      expect(
+        pullPolicyOf(k8sDeployment, "ghcr.io/my-org/custom-mcp-server:latest"),
+      ).toBe("Always");
+    });
+
+    test("the catalog's pull policy setting overrides the image default", () => {
+      const k8sDeployment = makeDeployment();
+
+      const policy = k8sDeployment.generateDeploymentSpec(
+        "ghcr.io/my-org/custom-mcp-server:latest",
+        { command: "node", imagePullPolicy: "IfNotPresent" },
+        false,
+        8080,
+      ).spec?.template.spec?.containers[0]?.imagePullPolicy;
+
+      expect(policy).toBe("IfNotPresent");
+    });
   });
 
   test("generates deploymentSpec with resource governance (memory limit + ephemeral-storage request/limit)", () => {
@@ -3239,6 +3262,25 @@ ${imagePullPolicy ? `          imagePullPolicy: ${imagePullPolicy}\n` : ""}     
       deployment.requestFreshImagePull();
       expect(pullPolicyOf(deployment)).toBe("Always");
       expect(pullPolicyOf(deployment)).toBe("IfNotPresent");
+    });
+
+    // A saved YAML always spells out a policy because it starts from the
+    // generated template; the catalog setting is the deliberate choice.
+    test("the catalog's pull policy setting wins over the YAML", () => {
+      const deployment = createK8sDeploymentWithYaml(yamlWith("IfNotPresent"));
+
+      const policy = deployment.generateDeploymentSpec(
+        registryImage,
+        {
+          command: "node",
+          arguments: ["server.js"],
+          imagePullPolicy: "Always",
+        },
+        false,
+        8080,
+      ).spec?.template.spec?.containers[0]?.imagePullPolicy;
+
+      expect(policy).toBe("Always");
     });
   });
 });

@@ -51,6 +51,9 @@ on:
 
 permissions: {}
 
+env:
+  CI_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
+
 jobs:
   deploy:
     name: Deploy ${{ inputs.environment }}
@@ -66,22 +69,26 @@ jobs:
           fetch-depth: 1
 
       - name: Authenticate to Google Cloud
-        uses: ./.github/actions/google-auth
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+          setup_gcloud: "true"
 
       - name: Install gke-gcloud-auth-plugin
         run: gcloud components install gke-gcloud-auth-plugin
 
       - name: Configure kubectl
+        env:
+          GKE_USE_DNS_ENDPOINT: ${{ vars.GKE_USE_DNS_ENDPOINT }}
         run: |
+          endpoint_args=()
+          if [[ "$GKE_USE_DNS_ENDPOINT" == "true" ]]; then
+            endpoint_args+=(--dns-endpoint)
+          fi
           gcloud container clusters get-credentials archestra-staging \
             --zone us-central1-a \
-            --project friendly-path-465518-r6
+            --project friendly-path-465518-r6 "${endpoint_args[@]}"
 
       - name: Deploy platform
         env:
@@ -121,10 +128,15 @@ jobs:
               ;;
           esac
 
+          # Development deployments select the platform and runtime companions
+          # from one CI registry; chart defaults remain for released installs.
           helm_args=(
             upgrade "$release" ./platform/helm/archestra
             --install --namespace "$namespace"
-            --set "archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PLATFORM_IMAGE_TAG}"
+            --set "archestra.image=${CI_IMAGE_REGISTRY}/platform:${PLATFORM_IMAGE_TAG}"
+            --set "archestra.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE=${CI_IMAGE_REGISTRY}/p4-shim:${PLATFORM_IMAGE_TAG}"
+            --set "archestra.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY=${CI_IMAGE_REGISTRY}"
+            --set "archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${CI_IMAGE_REGISTRY}/mcp-server-base:${PLATFORM_IMAGE_TAG}"
             --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_EMAIL=${AUTH_ADMIN_EMAIL}"
             --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_PASSWORD=${AUTH_ADMIN_PASSWORD}"
             --set "archestra.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN=${MFILES_VAF_ADD_ON_GITHUB_TOKEN}"
@@ -167,5 +179,32 @@ jobs:
             echo "::endgroup::"
           }
           trap show_profile EXIT
+
+          # Deploy jobs run with cancel-in-progress: false in a per-environment
+          # concurrency group, so no other Helm operation can be legitimately
+          # running when this step starts. If a previous runner lost heartbeat
+          # mid-upgrade, clear the orphaned pending-* state before upgrading.
+          release_status=$(
+            helm status "$release" --namespace "$namespace" --output json 2>/dev/null \
+              | jq -r '.info.status // empty' || true
+          )
+          case "$release_status" in
+            pending-upgrade|pending-rollback)
+              echo "Release $release in $namespace is stuck in $release_status; rolling back to clear lock..."
+              rollback_revision=$(
+                helm history "$release" --namespace "$namespace" --output json 2>/dev/null \
+                  | jq -r '[.[] | select(.status == "deployed" or .status == "superseded") | .revision] | last // empty' || true
+              )
+              if [[ -n "$rollback_revision" ]]; then
+                helm rollback "$release" "$rollback_revision" --namespace "$namespace" --cleanup-on-fail --timeout 5m
+              else
+                helm rollback "$release" --namespace "$namespace" --cleanup-on-fail --timeout 5m
+              fi
+              ;;
+            pending-install)
+              echo "Release $release in $namespace is stuck in pending-install; uninstalling to clear lock..."
+              helm uninstall "$release" --namespace "$namespace" --wait --timeout 5m
+              ;;
+          esac
 
           helm "${helm_args[@]}"

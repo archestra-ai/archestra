@@ -72,8 +72,11 @@ export function useToolbarCollapse({
       }
     };
 
-    evaluate();
-
+    // No synchronous evaluate() here: reading widths in a layout effect forces
+    // a layout of the whole page mid-commit — with a long transcript mounting
+    // in the same commit that alone cost tens of milliseconds. A
+    // ResizeObserver reports every observed element once after layout and
+    // before paint, so the first decision still lands before anything shows.
     const observer = new ResizeObserver(evaluate);
     observer.observe(available);
     if (contentRef.current) {

@@ -7,7 +7,7 @@ import {
   type InteractionSource,
   isUuid,
 } from "@archestra/shared";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
@@ -210,12 +210,10 @@ export function useInteractionSummaries({
 
 export function useInteraction({
   interactionId,
-  initialData,
   refetchInterval = 3_000,
   enabled = true,
 }: {
   interactionId?: string;
-  initialData?: archestraApiTypes.GetInteractionResponses["200"];
   refetchInterval?: number | null;
   enabled?: boolean;
 }) {
@@ -228,7 +226,6 @@ export function useInteraction({
       throwOnApiError(response.error, { allowNotFound: true });
       return response.data ?? null;
     },
-    initialData,
     enabled: enabled && !!interactionId,
     ...(refetchInterval ? { refetchInterval } : {}), // later we might want to switch to websockets or sse, polling for now
   });
@@ -245,14 +242,48 @@ export function useUniqueExternalAgentIds() {
   });
 }
 
-export function useUniqueUserIds() {
+/**
+ * Users for the logs user filter: the most active users, or the users whose
+ * name matches `search`. The server caps the list, so search finds the rest.
+ */
+export function useInteractionUserOptions({
+  search,
+  enabled,
+}: {
+  search: string;
+  enabled: boolean;
+}) {
   return useQuery({
-    queryKey: ["interactions", "userIds"],
-    queryFn: async () => {
-      const response = await getUniqueUserIds();
-      throwOnApiError(response.error);
+    queryKey: ["interactions", "userIds", "options", search],
+    queryFn: async ({ signal }) => {
+      const response = await getUniqueUserIds({
+        signal,
+        query: { search: search || undefined, limit: LOG_USER_OPTIONS_LIMIT },
+      });
+      throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? [];
     },
+    enabled,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchInterval: search ? false : 20_000,
+  });
+}
+
+/** Resolve the logs users the filter refers to, such as one saved in the URL. */
+export function useInteractionUserReferences({ ids }: { ids: string[] }) {
+  const uniqueIds = [...new Set(ids)].sort();
+  return useQuery({
+    queryKey: ["interactions", "userIds", "references", uniqueIds],
+    queryFn: async ({ signal }) => {
+      const response = await getUniqueUserIds({
+        signal,
+        query: { ids: uniqueIds, limit: 100 },
+      });
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data ?? [];
+    },
+    enabled: uniqueIds.length > 0,
   });
 }
 
@@ -273,14 +304,12 @@ export function useSessionLineage({
       const response = await getInteractionSessionLineage({
         path: { sessionId },
       });
-      throwOnApiError(response.error);
-      return (
-        response.data ?? {
-          forkedFrom: null,
-          forks: [],
-          forksTruncated: false,
-        }
-      );
+      const none = { forkedFrom: null, forks: [], forksTruncated: false };
+      // A session several people share (a Slack thread, say) has no single
+      // lineage to show; that is not an error worth interrupting anyone for.
+      if (response.response?.status === 409) return none;
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data ?? none;
     },
     enabled,
   });
@@ -298,6 +327,7 @@ export function useInteractionSessions({
   cursor,
   initialData,
   toastOnError,
+  enabled = true,
 }: {
   profileId?: string;
   userId?: string;
@@ -310,6 +340,7 @@ export function useInteractionSessions({
   cursor?: string;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
   toastOnError?: boolean;
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: [
@@ -325,6 +356,9 @@ export function useInteractionSessions({
       limit,
       cursor,
     ],
+    // A new page or a minute tick keeps the rows on screen until the
+    // answer lands, so the table never blanks and loses its scroll.
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const response = await getInteractionSessions({
         query: {
@@ -363,6 +397,7 @@ export function useInteractionSessions({
       !endDate
         ? initialData
         : undefined,
+    enabled,
   });
 }
 
@@ -441,3 +476,5 @@ function downloadSessionInteractionsFile(
     URL.revokeObjectURL(url);
   }, 10_000);
 }
+
+const LOG_USER_OPTIONS_LIMIT = 50;

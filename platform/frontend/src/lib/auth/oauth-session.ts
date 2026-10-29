@@ -38,6 +38,10 @@ export function setOAuthState(state: string) {
   sessionStorage.setItem(OAUTH_STATE, state);
 }
 
+export function getOAuthState() {
+  return sessionStorage.getItem(OAUTH_STATE);
+}
+
 /** Store the catalog ID that initiated the OAuth flow. */
 export function setOAuthCatalogId(catalogId: string) {
   sessionStorage.setItem(OAUTH_CATALOG_ID, catalogId);
@@ -108,18 +112,9 @@ type OAuthUserConfigField = {
   sensitive?: boolean;
 };
 
-/**
- * Store promptable user-config values collected before OAuth redirect.
- *
- * In non-BYOS mode we only persist non-sensitive values across the redirect.
- * Sensitive values must not be written into sessionStorage; they are handled
- * server-side or re-prompted after the callback. In BYOS mode, values are
- * vault references rather than raw secrets, so they are safe to persist.
- */
 export function setOAuthUserConfigValues(params: {
   values: Record<string, string>;
   userConfig: Record<string, OAuthUserConfigField> | null | undefined;
-  isByosVault?: boolean;
 }) {
   if (!params.userConfig) {
     sessionStorage.removeItem(OAUTH_USER_CONFIG_VALUES);
@@ -133,7 +128,7 @@ export function setOAuthUserConfigValues(params: {
         return false;
       }
 
-      return params.isByosVault ? true : fieldConfig.sensitive !== true;
+      return fieldConfig.sensitive !== true;
     }),
   );
 

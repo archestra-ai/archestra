@@ -1,0 +1,1 @@
+ALTER TABLE "openappa_battery_installs" ADD COLUMN "target" text;

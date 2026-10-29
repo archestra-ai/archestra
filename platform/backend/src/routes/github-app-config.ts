@@ -1,6 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { CredentialAccess } from "@/services/credential-access";
 import {
   createGithubAppConfig,
   deleteGithubAppConfig,
@@ -29,8 +30,14 @@ const githubAppConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(PublicGithubAppConfigSchema)),
       },
     },
-    async ({ organizationId }, reply) => {
-      return reply.send(await listGithubAppConfigs(organizationId));
+    async ({ organizationId, user }, reply) => {
+      return reply.send(
+        await CredentialAccess.filterReadable({
+          organizationId,
+          userId: user.id,
+          items: await listGithubAppConfigs(organizationId),
+        }),
+      );
     },
   );
 
@@ -46,7 +53,13 @@ const githubAppConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(PublicGithubAppConfigSchema),
       },
     },
-    async ({ organizationId, params }, reply) => {
+    async ({ organizationId, params, user }, reply) => {
+      await CredentialAccess.require({
+        organizationId,
+        userId: user.id,
+        id: params.id,
+        action: "read",
+      });
       return reply.send(
         await getGithubAppConfig({ id: params.id, organizationId }),
       );
@@ -65,9 +78,13 @@ const githubAppConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(PublicGithubAppConfigSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
+    async ({ organizationId, body, user }, reply) => {
       return reply.send(
-        await createGithubAppConfig({ organizationId, data: body }),
+        await createGithubAppConfig({
+          organizationId,
+          userId: user.id,
+          data: body,
+        }),
       );
     },
   );
@@ -85,7 +102,13 @@ const githubAppConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(PublicGithubAppConfigSchema),
       },
     },
-    async ({ organizationId, params, body }, reply) => {
+    async ({ organizationId, params, body, user }, reply) => {
+      await CredentialAccess.require({
+        organizationId,
+        userId: user.id,
+        id: params.id,
+        action: "update",
+      });
       return reply.send(
         await updateGithubAppConfig({
           id: params.id,
@@ -108,7 +131,13 @@ const githubAppConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ organizationId, params }, reply) => {
+    async ({ organizationId, params, user }, reply) => {
+      await CredentialAccess.require({
+        organizationId,
+        userId: user.id,
+        id: params.id,
+        action: "delete",
+      });
       await deleteGithubAppConfig({ id: params.id, organizationId });
       return reply.send({ success: true });
     },

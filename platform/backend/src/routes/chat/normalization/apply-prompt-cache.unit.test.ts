@@ -351,6 +351,22 @@ describe("applyPromptCacheBreakpoints", () => {
     });
   });
 
+  it.each([
+    "claude-sonnet-5-5",
+    "claude-opus-5",
+    "claude-fable-5-1",
+  ])("uses a 1h TTL for Anthropic Claude 5 model %s", (model) => {
+    const [result] = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      model,
+      messages: [userMessage("a")],
+    });
+    expect(anthropicCacheControl(result)).toEqual({
+      type: "ephemeral",
+      ttl: "1h",
+    });
+  });
+
   it("keeps the 5m default for older models and when model is absent", () => {
     const [sonnet4] = applyPromptCacheBreakpoints({
       provider: "anthropic",
@@ -388,9 +404,6 @@ describe("applyPromptCacheBreakpoints", () => {
       ["meta.llama3-70b-instruct-v1:0", "Llama"],
       ["mistral.mistral-large-2407-v1:0", "Mistral"],
       ["deepseek.r1-v1:0", "DeepSeek"],
-      ["amazon.nova-micro-v1:0", "Nova Micro v1"],
-      ["amazon.nova-lite-v1:0", "Nova Lite v1"],
-      ["amazon.nova-pro-v1:0", "Nova Pro v1"],
       ["amazon.nova-premier-v1:0", "Nova Premier v1"],
     ])("adds no cachePoint for %s (%s)", (model) => {
       const messages = [userMessage("a"), userMessage("b")];
@@ -408,6 +421,9 @@ describe("applyPromptCacheBreakpoints", () => {
 
     it.each([
       ["us.anthropic.claude-opus-4-6-v1:0", "Claude via inference profile"],
+      ["amazon.nova-micro-v1:0", "Nova Micro v1"],
+      ["amazon.nova-lite-v1:0", "Nova Lite v1"],
+      ["us.amazon.nova-pro-v1:0", "Nova Pro v1 inference profile"],
       ["amazon.nova-2-lite-v1:0", "Nova 2 Lite"],
       ["global.amazon.nova-2-lite-v1:0", "Nova 2 Lite inference profile"],
     ])("still adds a cachePoint for %s (%s)", (model) => {

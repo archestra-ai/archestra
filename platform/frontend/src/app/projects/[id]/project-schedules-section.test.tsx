@@ -1,6 +1,25 @@
-import { render, screen, within } from "@testing-library/react";
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  render as rtlRender,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import type { ReactElement } from "react";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 // Radix Select uses browser pointer-capture and scrolling APIs that jsdom omits.
 Element.prototype.scrollIntoView = vi.fn();
@@ -25,10 +44,6 @@ vi.mock("@/lib/schedule-trigger.query", () => ({
   useRunScheduleTriggerNow: vi.fn(),
 }));
 
-vi.mock("@/lib/agent.query", () => ({
-  useProfiles: vi.fn(() => ({ data: [] })),
-}));
-
 vi.mock("@/lib/hooks/use-dialog-url-param", () => ({
   useDialogUrlParam: vi.fn(() => ({
     entity: null,
@@ -42,7 +57,6 @@ vi.mock("@/components/scheduled-tasks/use-resolve-run-chat", () => ({
 }));
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useProfiles } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -88,7 +102,7 @@ function mockSchedulePermissions(granted: {
   delete?: boolean;
 }) {
   vi.mocked(useHasPermissions).mockImplementation((permissions) => {
-    const actions = permissions.scheduledTask ?? [];
+    const actions = permissions.project ?? [];
     const allGranted = actions.every(
       (action) => granted[action as keyof typeof granted] === true,
     );
@@ -150,7 +164,7 @@ beforeEach(() => {
   } as unknown as ReturnType<typeof useRunScheduleTriggerNow>);
 });
 
-describe("ProjectSchedulesSection without scheduledTask:read", () => {
+describe("ProjectSchedulesSection without project:read", () => {
   beforeEach(() => {
     mockSchedulePermissions({ read: false });
   });
@@ -178,30 +192,9 @@ describe("ProjectSchedulesSection without scheduledTask:read", () => {
 
     expect(useScheduleTrigger).not.toHaveBeenCalled();
   });
-
-  it("still offers permissions for a wildcard grantee without starting the forbidden schedule query", async () => {
-    vi.mocked(useScopedCapabilities).mockReturnValue({
-      data: [
-        {
-          organizationId: "org-1",
-          resource: "scheduledTask",
-          scope: "*",
-          action: "read",
-        },
-      ],
-    } as unknown as ReturnType<typeof useScopedCapabilities>);
-
-    const user = userEvent.setup();
-    render(<ProjectSchedulesSection projectId="project-1" />);
-
-    expect(screen.getByText("Schedules")).toBeInTheDocument();
-    expect(useScheduleTriggers).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    expect(screen.getByRole("menuitem", { name: "Permissions" })).toBeVisible();
-  });
 });
 
-describe("ProjectSchedulesSection with scheduledTask:read only", () => {
+describe("ProjectSchedulesSection with project:read only", () => {
   beforeEach(() => {
     mockSchedulePermissions({ read: true, create: false });
   });
@@ -212,7 +205,7 @@ describe("ProjectSchedulesSection with scheduledTask:read only", () => {
     expect(screen.getByText("Schedules")).toBeInTheDocument();
   });
 
-  it("hides the New schedule button without scheduledTask:create", () => {
+  it("hides the New schedule button without project:create", () => {
     render(<ProjectSchedulesSection projectId="project-1" canCreate />);
 
     expect(
@@ -221,7 +214,7 @@ describe("ProjectSchedulesSection with scheduledTask:read only", () => {
   });
 });
 
-describe("ProjectSchedulesSection with scheduledTask read+create", () => {
+describe("ProjectSchedulesSection with project read+create", () => {
   beforeEach(() => {
     mockSchedulePermissions({
       read: true,
@@ -275,6 +268,66 @@ describe("ProjectSchedulesSection with scheduledTask read+create", () => {
     expect(screen.getAllByText("Reporter")).toHaveLength(2);
     expect(screen.getByText("Active")).toBeInTheDocument();
     expect(screen.getByText("Paused")).toBeInTheDocument();
+  });
+
+  it("keeps another actor's schedule read-only for a project collaborator", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useScheduleTriggers).mockReturnValue({
+      data: {
+        data: [
+          {
+            ...SCHEDULE,
+            actorUserId: "another-user",
+            actor: { id: "another-user", name: "Dana", email: null },
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useScheduleTriggers>);
+    render(<ProjectSchedulesSection projectId="project-1" />);
+    expect(
+      screen.queryByRole("button", { name: "Edit Weekly summary" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Pause Weekly summary" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Permissions" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Weekly summary" }),
+    );
+    // Disabled, and it says why instead of leaving the reader to guess.
+    const runNow = screen.getByRole("menuitem", { name: /run now/i });
+    expect(runNow).toHaveAttribute("data-disabled");
+    expect(runNow).toHaveTextContent(
+      "Set up by Dana. Only they or an admin can run it.",
+    );
+    expect(
+      screen.queryByRole("menuitem", { name: "Delete schedule" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("allows Projects oversight to edit another actor's schedule", () => {
+    vi.mocked(useScheduleTriggers).mockReturnValue({
+      data: { data: [{ ...SCHEDULE, actorUserId: "another-user" }] },
+    } as unknown as ReturnType<typeof useScheduleTriggers>);
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          organizationId: "org-1",
+          resource: "project",
+          scope: "*",
+          action: "update",
+        },
+      ],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    render(<ProjectSchedulesSection projectId="project-1" />);
+    expect(
+      screen.getByRole("button", { name: "Edit Weekly summary" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Pause Weekly summary" }),
+    ).toBeVisible();
   });
 
   it("opens the latest run chat and provides direct edit and pause controls", async () => {
@@ -364,23 +417,6 @@ describe("ProjectSchedulesSection default agent", () => {
     vi.mocked(useUpdateScheduleTrigger).mockReturnValue(
       idleMutation as unknown as ReturnType<typeof useUpdateScheduleTrigger>,
     );
-    vi.mocked(useProfiles).mockReturnValue({
-      data: [
-        {
-          id: "agent-1",
-          name: "Reporter",
-          agentType: "agent",
-          scope: "org",
-          runtime: { credentials: [] },
-        },
-        {
-          id: "agent-2",
-          name: "Test1 Agent",
-          agentType: "agent",
-          scope: "org",
-        },
-      ],
-    } as unknown as ReturnType<typeof useProfiles>);
   });
 
   /** The dialog has several comboboxes (cron, timezone); scope to the agent's. */
@@ -411,14 +447,15 @@ describe("ProjectSchedulesSection default agent", () => {
       screen.getByRole("button", { name: /new schedule/i }),
     );
 
-    expect(agentPicker()).toHaveTextContent("Test1 Agent");
+    await waitFor(() => expect(agentPicker()).toHaveTextContent("Test1 Agent"));
     expect(schedulePicker()).toHaveTextContent("Manual");
     expect(screen.queryByText("Timezone")).not.toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText("Name"), "On-demand report");
-    await userEvent.type(
-      screen.getByLabelText("Task prompt"),
-      "Write a report",
-    );
+    const nameInput = screen.getByRole("textbox", { name: "Name" });
+    const promptInput = screen.getByRole("textbox", { name: "Task prompt" });
+    expect(nameInput).toBeRequired();
+    expect(promptInput).toBeRequired();
+    await userEvent.type(nameInput, "On-demand report");
+    await userEvent.type(promptInput, "Write a report");
     await userEvent.click(screen.getByRole("button", { name: "Create" }));
     expect(useCreateScheduleTrigger().mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false, projectId: "project-1" }),
@@ -466,7 +503,7 @@ describe("ProjectSchedulesSection default agent", () => {
       />,
     );
 
-    expect(agentPicker()).toHaveTextContent("Reporter");
+    await waitFor(() => expect(agentPicker()).toHaveTextContent("Reporter"));
     expect(
       within(agentPicker()).getByLabelText("Dedicated runtime"),
     ).toBeInTheDocument();
@@ -497,3 +534,50 @@ describe("ProjectSchedulesSection default agent", () => {
     });
   });
 });
+
+const roster = [
+  {
+    id: "agent-1",
+    name: "Reporter",
+    agentType: "agent",
+    scope: "org",
+    runtime: { credentials: [] },
+  },
+  { id: "agent-2", name: "Test1 Agent", agentType: "agent", scope: "org" },
+];
+const agentServer = setupServer(
+  http.get("http://localhost:9000/api/agents/options", ({ request }) =>
+    HttpResponse.json({
+      data: roster.filter((agent) =>
+        new URL(request.url).searchParams
+          .get("ids")
+          ?.split(",")
+          .includes(agent.id),
+      ),
+      pagination: { limit: 1000, hasNext: false, nextCursor: null },
+    }),
+  ),
+  http.get("http://localhost:9000/api/agents/options/page", () =>
+    HttpResponse.json({
+      data: roster,
+      pagination: { limit: 20, hasNext: false, nextCursor: null },
+    }),
+  ),
+);
+beforeAll(() => {
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+  agentServer.listen({ onUnhandledRequest: "error" });
+});
+afterEach(() => agentServer.resetHandlers());
+afterAll(() => {
+  agentServer.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
+function render(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return rtlRender(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
+}

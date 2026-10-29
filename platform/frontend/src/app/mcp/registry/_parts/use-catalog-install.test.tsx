@@ -15,8 +15,21 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/mcp/registry",
 }));
 
-vi.mock("@/lib/mcp/internal-mcp-catalog.query");
 vi.mock("@/lib/mcp/mcp-server.query");
+
+// The registry state the hook reads: the issue index (names, install
+// statuses) and, when a flow opens an item, its full configuration by id.
+const registry = vi.hoisted(() => ({
+  items: [] as Array<{ id: string; name: string; multitenant?: boolean }>,
+  servers: [] as unknown[],
+}));
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  useMcpRegistryIssueIndex: () => ({
+    data: { catalogItems: registry.items, servers: registry.servers },
+  }),
+  fetchInternalMcpCatalogItem: async (_queryClient: unknown, id: string) =>
+    registry.items.find((item) => item.id === id) ?? null,
+}));
 vi.mock("@/lib/auth/oauth.query");
 vi.mock("@/lib/mcp/enterprise-managed-install-auth", () => ({
   useEnterpriseManagedInstallConnectUrl: () => async () => null,
@@ -29,11 +42,8 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-// Feature flags the hook reads. byosEnabled keeps the OAuth confirmation
 // dialog alive (it carries the credential-storage warning), so tests flip it.
-const features = vi.hoisted(
-  () => ({ byosEnabled: false }) as Record<string, boolean>,
-);
+const features = vi.hoisted(() => ({}) as Record<string, boolean>);
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: (key: string) => features[key] ?? false,
 }));
@@ -113,8 +123,7 @@ vi.mock("./local-server-install-dialog", () => ({
 }));
 
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useInstallMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { useInstallMcpServer } from "@/lib/mcp/mcp-server.query";
 import {
   clearPendingInstall,
   setPendingInstall,
@@ -177,12 +186,8 @@ describe("useCatalogInstall — deep-link install", () => {
   beforeEach(() => {
     sessionStorage.clear();
     nav.search = new URLSearchParams();
-    vi.mocked(useInternalMcpCatalog).mockReturnValue({
-      data: [remoteConnectItem],
-    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
-    vi.mocked(useMcpServers).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useMcpServers>);
+    registry.items = [remoteConnectItem];
+    registry.servers = [];
     vi.mocked(useInstallMcpServer).mockReturnValue({
       mutateAsync: vi.fn(),
       isPending: false,
@@ -244,9 +249,7 @@ describe("useCatalogInstall — deep-link install", () => {
   it("does not re-open when the caller already has a connection", async () => {
     // The deep link ran earlier (intent stashed), but a connection now exists.
     setPendingInstall({ catalogId: CATALOG_ID });
-    vi.mocked(useMcpServers).mockReturnValue({
-      data: [{ catalogId: CATALOG_ID }],
-    } as unknown as ReturnType<typeof useMcpServers>);
+    registry.servers = [{ catalogId: CATALOG_ID }];
     nav.search = new URLSearchParams();
 
     renderHarness();
@@ -260,19 +263,15 @@ describe("useCatalogInstall — deep-link install", () => {
 describe("useCatalogInstall — local install completion", () => {
   beforeEach(() => {
     nav.search = new URLSearchParams();
-    vi.mocked(useInternalMcpCatalog).mockReturnValue({
-      data: [localItem],
-    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
-    vi.mocked(useMcpServers).mockReturnValue({
-      data: [
-        {
-          id: "installed-local-1",
-          name: "Playwright Browser-internal-owner-suffix",
-          catalogId: localItem.id,
-          localInstallationStatus: "success",
-        },
-      ],
-    } as unknown as ReturnType<typeof useMcpServers>);
+    registry.items = [localItem];
+    registry.servers = [
+      {
+        id: "installed-local-1",
+        name: "Playwright Browser-internal-owner-suffix",
+        catalogId: localItem.id,
+        localInstallationStatus: "success",
+      },
+    ];
     vi.mocked(useInstallMcpServer).mockReturnValue({
       mutateAsync: vi.fn().mockResolvedValue({
         installedServer: { id: "installed-local-1" },
@@ -353,17 +352,12 @@ describe("useCatalogInstall — fixed-target OAuth skips the confirmation dialog
   beforeEach(() => {
     sessionStorage.clear();
     nav.search = new URLSearchParams();
-    features.byosEnabled = false;
     Object.defineProperty(window, "location", {
       value: { href: "http://localhost/mcp/registry" },
       writable: true,
     });
-    vi.mocked(useInternalMcpCatalog).mockReturnValue({
-      data: [remoteConnectItem, localItemWithPromptedEnv],
-    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
-    vi.mocked(useMcpServers).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useMcpServers>);
+    registry.items = [remoteConnectItem, localItemWithPromptedEnv];
+    registry.servers = [];
     vi.mocked(useInstallMcpServer).mockReturnValue({
       mutateAsync: vi.fn(),
       isPending: false,
@@ -410,15 +404,5 @@ describe("useCatalogInstall — fixed-target OAuth skips the confirmation dialog
       expect(window.location.href).toBe(AUTHORIZATION_URL);
     });
     expect(screen.queryByTestId("install-dialog")).not.toBeInTheDocument();
-  });
-
-  it("keeps the dialog when BYOS is enabled (storage warning has content)", async () => {
-    features.byosEnabled = true;
-
-    renderAddPersonal(remoteConnectItem);
-
-    expect(await screen.findByTestId("install-dialog")).toBeInTheDocument();
-    expect(initiateOAuth).not.toHaveBeenCalled();
-    expect(window.location.href).toBe("http://localhost/mcp/registry");
   });
 });

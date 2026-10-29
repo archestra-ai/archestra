@@ -3,6 +3,7 @@ import { generateObject, generateText, type ModelMessage } from "ai";
 import { z } from "zod";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import logger from "@/logging";
+import { supportsBedrockCachePoint } from "@/routes/chat/normalization/apply-prompt-cache";
 import {
   getProviderChatInteractionType,
   withKbObservability,
@@ -276,11 +277,11 @@ function promptCacheProviderOptions(
     return { anthropic: { cacheControl: { type: "ephemeral" } } };
   }
 
-  // Bedrock rejects cache points for unsupported model families. Match the
-  // same conservative set as the chat path so caching can never break ingest.
+  // Bedrock rejects cache points for unsupported model families. Use the
+  // chat path's model set so caching can never break ingest.
   if (
     config.provider === "bedrock" &&
-    BEDROCK_PROMPT_CACHE_MODEL.test(config.modelName)
+    supportsBedrockCachePoint(config.modelName)
   ) {
     return { bedrock: { cachePoint: { type: "default" } } };
   }
@@ -405,8 +406,6 @@ const MAX_PROMPT_CHARS = 12_000;
 
 /** Stored context is indexed repeatedly, so keep it from diluting chunk terms. */
 const MAX_CONTEXT_CHARS = 600;
-
-const BEDROCK_PROMPT_CACHE_MODEL = /claude|nova-(?:micro|lite|pro|premier)/;
 
 // ===== Prompts =====
 

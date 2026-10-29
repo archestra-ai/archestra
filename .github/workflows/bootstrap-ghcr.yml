@@ -1,0 +1,63 @@
+name: Bootstrap GHCR Packages
+
+# One-time registry provisioning for the migration. A maintainer explicitly
+# labels a same-repository PR; fork/Dependabot code cannot publish packages.
+on:
+  pull_request:
+    types: [labeled, synchronize]
+    paths:
+      - .github/workflows/bootstrap-ghcr.yml
+
+permissions: {}
+
+concurrency:
+  group: bootstrap-ghcr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    name: Provision ${{ matrix.image }}
+    if: ${{ github.repository == 'archestra-ai/archestra' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' && contains(github.event.pull_request.labels.*.name, 'bootstrap-ghcr') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Create only the migration's CI packages.
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [platform, mcp-server-base, sandbox-base, p4-shim, agent-claude-code, agent-codex, agent-opencode, agent-hermes, agent-openclaw, agent-grok, agent-kimi, agent-copilot, bench-runner]
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Provision package with an unused marker tag
+        env:
+          IMAGE: ghcr.io/archestra-ai/ci/${{ matrix.image }}
+          BOOTSTRAP_TAG: registry-bootstrap-${{ github.run_id }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/ghcr-bootstrap"
+          printf 'Registry provisioning marker; never a runnable application image.\n' > "$RUNNER_TEMP/ghcr-bootstrap/marker"
+          cat > "$RUNNER_TEMP/ghcr-bootstrap/Dockerfile" <<'DOCKERFILE'
+          FROM scratch
+          LABEL org.opencontainers.image.source="https://github.com/archestra-ai/archestra"
+          LABEL org.opencontainers.image.description="CI image and build cache; release artifacts use a separate package"
+          COPY marker /registry-bootstrap-marker
+          DOCKERFILE
+          docker build --tag "$IMAGE:$BOOTSTRAP_TAG" "$RUNNER_TEMP/ghcr-bootstrap"
+          docker push "$IMAGE:$BOOTSTRAP_TAG"
+
+      - name: Verify anonymous registry access
+        env:
+          IMAGE: ghcr.io/archestra-ai/ci/${{ matrix.image }}
+          BOOTSTRAP_TAG: registry-bootstrap-${{ github.run_id }}
+        run: |
+          # Fresh config must not inherit the writer's logged-in credentials.
+          mkdir -p "$RUNNER_TEMP/anonymous-docker"
+          if ! DOCKER_CONFIG="$RUNNER_TEMP/anonymous-docker" docker manifest inspect "$IMAGE:$BOOTSTRAP_TAG" >/dev/null; then
+            echo "::error::Make $IMAGE public in its GitHub package settings, then rerun this job. Do not switch anonymous consumers before this check passes."
+            exit 1
+          fi

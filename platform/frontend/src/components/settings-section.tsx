@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { createContext, type ReactNode, useContext } from "react";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -11,14 +13,27 @@ import { cn } from "@/lib/utils/tailwind";
 export function SettingsSectionGroup({
   children,
   className,
+  stacked,
 }: {
   children: ReactNode;
   className?: string;
+  /**
+   * One column: each section's title sits above its fields, not beside them.
+   * Applies to every section inside, nested groups included.
+   */
+  stacked?: boolean;
 }) {
-  return (
+  const group = (
     <div className={cn("divide-y divide-border", className)}>{children}</div>
   );
+  return stacked ? (
+    <StackedContext.Provider value={true}>{group}</StackedContext.Provider>
+  ) : (
+    group
+  );
 }
+
+const StackedContext = createContext(false);
 
 /**
  * One labelled section of a settings surface: what the section is about on the
@@ -58,6 +73,7 @@ export function SettingsSection({
   // elsewhere — so the controls take the whole width rather than sitting
   // beside an empty gutter.
   const hasLabel = !!title || !!description || !!headerExtra;
+  const stacked = useContext(StackedContext);
 
   return (
     <section
@@ -65,7 +81,7 @@ export function SettingsSection({
         // No `last:pb-0`: the save row that follows a panel draws its own top
         // border, and zeroing the padding left the last field sitting on it.
         "grid gap-x-8 gap-y-4 py-8 first:pt-0",
-        hasLabel && "md:grid-cols-[12rem_minmax(0,1fr)]",
+        hasLabel && !stacked && "md:grid-cols-[12rem_minmax(0,1fr)]",
         className,
       )}
       {...rest}

@@ -4,6 +4,7 @@ import {
   APPA_PARENT_HEADER,
   APPA_SESSION_HEADER,
   extractMcpToolError,
+  isAgentTool,
   isSeededAppRenderToolResult,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -14,22 +15,44 @@ import {
   type CallToolResult,
   CallToolResultSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { stringify as stringifyToml } from "smol-toml";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
+import { encryptEncryptedChatValue } from "@/content-encryption/encrypted-chat";
 import { getDatabaseConnectionString } from "@/database";
+import { enterpriseTier } from "@/enterprise-tier";
+import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import {
-  expandCommandExecutionPolicyRules,
-  normalizeCommandExecutionArguments,
-} from "@/openappa/command-normalization";
+import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
+import { compositionView } from "@/openappa/composition-view";
+import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
-import { declareExistingInstalls } from "@/openappa/declare-installs";
-import { openappaFailure } from "@/openappa/failure";
+import {
+  declareExistingInstalls,
+  seedCredentialBindings,
+} from "@/openappa/declare-installs";
+import {
+  openappaEncryptedChat,
+  withOpenappaContentEncryption,
+} from "@/openappa/encrypted-chat";
+import {
+  OpenappaRootOnlyError,
+  openappaFailure,
+  type RuntimeFailureCode,
+  runtimeFailureCode,
+  unansweredAnnotationNotice,
+  undeclaredToolNotice,
+} from "@/openappa/failure";
+import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
+import { asRecord, parsePolicyToml, toolEntries } from "@/openappa/policy-text";
+import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
+import { readYellResult } from "@/openappa/yell-session";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import {
@@ -37,6 +60,7 @@ import {
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
+import { policyView } from "./result-view";
 import type { DeclaredToolSpelling } from "./wire";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
@@ -46,6 +70,8 @@ export const APPA_CHAT_SOURCES = [
   "chat:compaction",
 ] as const;
 export type AppaChatSource = (typeof APPA_CHAT_SOURCES)[number];
+/** The runtime's built-in sanitizer of a schema-attested subagent return. */
+const ATTEST_SCHEMA_SANITIZER = "attest-schema";
 type ExecutionOutcome = "success" | "failure" | "unknown";
 type OutputSource = "tool" | "runtime";
 type RuntimeReason = string;
@@ -108,6 +134,9 @@ const NativeDecisionSchema = z
     z.object({
       decision: z.literal("block"),
       feedback: z.string().optional(),
+      // Set by the binding on a child return held only because the child
+      // has a call open: retryable, not a ruling.
+      busy: z.literal(true).optional(),
       ...ResultDecisionFields,
     }),
     z.object({
@@ -183,6 +212,11 @@ type ProcessedToolResult = {
   outputSource: OutputSource;
   reason?: RuntimeReason;
   code?: string;
+  /** The runtime denied this call, so `content` is its ruling, not an output. */
+  denied?: true;
+  /** Current denial metadata; omitted offers are unknown, not an empty list. */
+  offers?: string[];
+  review?: Array<{ offer_id: string; text: string }>;
 };
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
@@ -190,6 +224,8 @@ type ChildEndOutcome =
       decision: "replace";
       content: string;
       crossed: boolean;
+      /** Held only because the child has a tool call open. */
+      busy?: true;
     };
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
@@ -210,11 +246,11 @@ export function enterCapturedGuardrailsActivation(
   capturedActivation.enterWith(activation);
 }
 export function openappaYellEnabled(): boolean {
-  return config.openappa.enabled && config.openappa.yellEnabled;
+  return enterpriseTier.isOpenappaActive() && config.openappa.yellEnabled;
 }
 
 export function openappaEnabled(): boolean {
-  return config.openappa.enabled;
+  return enterpriseTier.isOpenappaActive();
 }
 
 /** Read the persisted label of a started session without dispatching a hook. */
@@ -225,10 +261,24 @@ export async function getOpenappaStatus(params: {
   if (!openappaEnabled()) return null;
   try {
     const module = await binding();
-    return await module.getOpenappaStatus(
-      params.organizationId,
-      params.sessionId,
-    );
+    // Read on the organization's policy line, as a dispatch would decide.
+    const status = await retryWhilePolicyMoved({
+      run: async () => {
+        const policy = await effectivePolicy(params.organizationId);
+        return withOpenappaContentEncryption(
+          params.organizationId,
+          params.sessionId,
+          (encryption) =>
+            module.getOpenappaStatus(
+              params.organizationId,
+              params.sessionId,
+              policy,
+              encryption,
+            ),
+        );
+      },
+    });
+    return status ?? null;
   } catch (error) {
     throw openappaFailure(error);
   }
@@ -236,7 +286,8 @@ export async function getOpenappaStatus(params: {
 
 /**
  * Carry the legacy `openappa_battery_installs` rows into the policy text every
- * composition now reads from. Runs before the runtime opens and before the
+ * composition now reads from, and seed the credential binding table from the
+ * text's `[credentials]` lines. Runs before the runtime opens and before the
  * periodic recompile is registered, because a recompose rewrites the rows from
  * the text and deletes every row the text does not declare.
  *
@@ -249,34 +300,168 @@ export async function declareOpenappaInstalls(): Promise<void> {
   if (!openappaEnabled()) return;
   try {
     const summary = await declareExistingInstalls();
-    logger.info(summary, "Declared the legacy OpenAPPA battery installs");
+    logger.info(summary, "OpenAPPA declared the legacy battery installs");
   } catch (error) {
     logger.error(
       { err: error },
-      "Declaring the legacy OpenAPPA battery installs failed; the periodic recompile will delete every install row the policy text does not declare",
+      "OpenAPPA could not declare the legacy battery installs; the periodic recompile will delete every install row the policy text does not declare",
+    );
+  }
+  try {
+    await seedCredentialBindings();
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "OpenAPPA could not seed the credential bindings from the policy text; the text still binds its own variables",
     );
   }
 }
+
+/**
+ * Recompose every organization once the declarations are carried over, so a
+ * composition an earlier build stored takes in what this build composes, such
+ * as the member roster. Never rejects: a server starts whatever it finds.
+ */
+export async function recompileAllOnStart(): Promise<void> {
+  if (!openappaEnabled()) return;
+  try {
+    await openappaBatteriesService.recompileAll();
+  } catch (error) {
+    logger.error({ err: error }, "OpenAPPA could not recompose the policies");
+  }
+}
+
+/**
+ * Open the native runtime at boot, so a database URL, TLS or packaging failure
+ * is logged with its cause before the first governed request. Never rejects.
+ */
+export async function startOpenappaRuntime(): Promise<void> {
+  if (!openappaEnabled()) return;
+  await binding().catch(openappaFailure);
+}
+
+type OpenappaReadiness =
+  | { state: "disabled" | "ready" | "starting" }
+  | { state: "unavailable"; code: RuntimeFailureCode | "unknown" };
+
+/**
+ * Whether the runtime can decide governed requests. Opens it when it is not
+ * open yet, because a pod that is not ready receives no request that would.
+ * Waits at most `waitMs`; a slower opening reports `starting`.
+ */
+export async function openappaReadiness(
+  waitMs = READINESS_WAIT_MS,
+): Promise<OpenappaReadiness> {
+  if (!openappaEnabled()) return { state: "disabled" };
+  let timer: NodeJS.Timeout | undefined;
+  const elapsed = new Promise<"starting">((resolve) => {
+    timer = setTimeout(() => resolve("starting"), waitMs);
+  });
+  try {
+    const state = await Promise.race([
+      binding().then(() => "ready" as const),
+      elapsed,
+    ]);
+    return { state };
+  } catch (error) {
+    return {
+      state: "unavailable",
+      code: runtimeFailureCode(error) ?? "unknown",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const READINESS_WAIT_MS = 3000;
 
 export async function executeYell(params: {
   session: OpenAppaSession;
   toolCallId: string;
   args: { message: string; with_trajectory: boolean };
+  /** Break the glass is on, so this yell also turns OpenAPPA off for the session. */
+  brokeTheGlass?: boolean;
+  /** The authenticated host saw this call without a proxy reporting receipt. */
+  needsAdmission?: boolean;
 }): Promise<CallToolResult> {
-  if (!openappaYellEnabled())
-    throw new ApiError(404, "OpenAPPA reporting is disabled");
+  if (!openappaYellEnabled()) {
+    return {
+      isError: true,
+      content: [{ type: "text", text: "OpenAPPA reporting is disabled" }],
+    };
+  }
+  const encryptedChat = openappaEncryptedChat(
+    params.session.organization_id,
+    params.session.session_id,
+  );
   const record = await OpenAppaYellModel.record({
     organizationId: params.session.organization_id,
     callerId: params.session.caller_id ?? "unknown",
     sessionId: params.session.session_id,
     toolCallId: params.toolCallId,
-    message: params.args.message,
+    message: encryptedChat
+      ? JSON.stringify(
+          encryptEncryptedChatValue(params.args.message, {
+            ...encryptedChat.audit,
+            context: "openappa_yells.message",
+          }),
+        )
+      : params.args.message,
     withTrajectory: params.args.with_trajectory,
+    superyell: params.brokeTheGlass ?? false,
   });
   try {
+    // Opening a native session just to report would enroll a session that
+    // started outside enforcement. Keep its feedback locally without doing so.
+    // No archive is sent, so there is no delivery attempt to record.
+    if (await startedUnenforced(params.session)) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Report recorded for review in Guardrails → Yells. No diagnostic archive was captured because Guardrails was not enforcing this session.",
+          },
+        ],
+      };
+    }
+    if (params.needsAdmission) {
+      // The native reporter requires a released yell, even when the host can
+      // authenticate its session. Admit this report under its own operation id.
+      const [decision] = await evaluateToolCalls(
+        params.session,
+        [
+          {
+            id: params.toolCallId,
+            name: archestraMcpBranding.getToolName("yell"),
+            arguments: params.args,
+          },
+        ],
+        { canonicalize: (name) => name },
+      );
+      if (decision.kind !== "allow") {
+        await OpenAppaYellModel.recordDelivery({
+          id: record.id,
+          organizationId: record.organizationId,
+          failed: true,
+        });
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text:
+                decision.kind === "deny"
+                  ? decision.feedback
+                  : "OpenAPPA did not release the reporting call",
+            },
+          ],
+        };
+      }
+    }
     const result = await captureYellReport({
       id: record.id,
       organizationId: record.organizationId,
+      encryptedChat: encryptedChat?.audit,
       send: async (receiver) =>
         runtimeToolResult(
           await dispatch(params.session, {
@@ -287,7 +472,7 @@ export async function executeYell(params: {
           }),
         ),
     });
-    if (config.analytics.enabled) {
+    if (config.openappa.yellForwardingEnabled && !encryptedChat) {
       await OpenAppaYellModel.recordDelivery({
         id: record.id,
         organizationId: record.organizationId,
@@ -300,7 +485,7 @@ export async function executeYell(params: {
         content: [
           {
             type: "text",
-            text: "Report saved. You can download it or investigate it in chat from Guardrails → Yells.",
+            text: "Report recorded for review in Guardrails → Yells.",
           },
         ],
       };
@@ -376,16 +561,77 @@ async function dispatch(
   /** A policy the caller already read, shared across a batch of dispatches. */
   policy?: DispatchPolicy,
 ) {
-  const principal = await sessionPrincipal(session);
+  return dispatchWithPrincipal({
+    session,
+    event,
+    policy,
+    principal: await sessionPrincipal(session),
+  });
+}
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+async function dispatchWithPrincipal(params: {
+  session: OpenAppaSession;
+  event: Record<string, unknown>;
+  policy?: DispatchPolicy;
+  principal: { principal?: string };
+}) {
+  const { session, event, policy, principal } = params;
   return withRuntime(
     session.organization_id,
     (module, policy) =>
-      module.dispatchHook(
-        JSON.stringify({ ...session, ...event, ...principal }),
-        policy,
+      withOpenappaContentEncryption(
+        session.organization_id,
+        session.session_id,
+        (encryption) =>
+          module.dispatchHook(
+            JSON.stringify({
+              ...session,
+              ...event,
+              ...principal,
+              // Last, so nothing spread above can override the host's reading.
+              withhold_consult_content: withholdConsultContent(),
+            }),
+            policy,
+            encryption,
+          ),
       ),
     policy,
   );
+}
+
+/**
+ * Resolve membership once for a tool-call batch, including its cancellation
+ * events. The promise belongs only to this batch: the next batch must observe
+ * membership revocation and principal changes.
+ */
+function sessionDispatch(session: OpenAppaSession, policy: SharedPolicy) {
+  let principal: ReturnType<typeof sessionPrincipal> | undefined;
+  return async (event: Record<string, unknown>) => {
+    principal ??= sessionPrincipal(session);
+    const [batchPolicy, batchPrincipal] = await Promise.all([
+      policy(),
+      principal,
+    ]);
+    return dispatchWithPrincipal({
+      session,
+      event,
+      policy: batchPolicy,
+      principal: batchPrincipal,
+    });
+  };
+}
+// SPDX-SnippetEnd
+
+/**
+ * Whether the deployment's Log Content mode keeps content out of the consult
+ * rows a dispatch writes. Passed on each dispatch, so the native runtime never
+ * reads host configuration itself.
+ */
+function withholdConsultContent(): boolean {
+  return resolveLogContentMode() === "metadata_only";
 }
 
 /**
@@ -397,9 +643,7 @@ async function dispatch(
 async function sessionPrincipal(
   session: OpenAppaSession,
 ): Promise<{ principal?: string }> {
-  const userId = session.caller_id?.startsWith(USER_CALLER_PREFIX)
-    ? session.caller_id.slice(USER_CALLER_PREFIX.length)
-    : undefined;
+  const userId = callerUserId(session.caller_id);
   if (!userId) return {};
   const member = await MemberModel.findByIdOrEmail(
     userId,
@@ -410,6 +654,15 @@ async function sessionPrincipal(
 
 const USER_CALLER_PREFIX = "user:";
 
+/** The user a caller id names; app and virtual-key callers name none. */
+export function callerUserId(
+  callerId: string | null | undefined,
+): string | undefined {
+  return callerId?.startsWith(USER_CALLER_PREFIX)
+    ? callerId.slice(USER_CALLER_PREFIX.length)
+    : undefined;
+}
+
 /** Executes a callback with the loaded native runtime and organization policy. */
 async function withRuntime(
   organizationId: string,
@@ -419,13 +672,56 @@ async function withRuntime(
   ) => Promise<string>,
   batchPolicy?: DispatchPolicy,
 ) {
-  const policy = batchPolicy ?? (await effectivePolicy(organizationId));
+  let policy = batchPolicy ?? (await effectivePolicy(organizationId));
   try {
     const module = await binding();
-    const rawResult = await call(module, policy);
+    const rawResult = await retryWhilePolicyMoved({
+      run: async (attempt) => {
+        if (attempt > 0) policy = await effectivePolicy(organizationId);
+        return call(module, policy);
+      },
+    });
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw openappaFailure(error);
+    throw await dispatchFailure({ organizationId, error });
+  }
+}
+
+async function dispatchFailure(params: {
+  organizationId: string;
+  error: unknown;
+}): Promise<ApiError> {
+  // Only a refusal of the policy is explained by the policy; a storage, lease
+  // or uncoded failure is reported as itself.
+  switch (runtimeFailureCode(params.error)) {
+    case "policy_refused":
+      return openappaFailure(
+        (await rootOnlyRefusal(params.organizationId)) ?? params.error,
+      );
+    default:
+      return openappaFailure(params.error);
+  }
+}
+
+/**
+ * When the runtime refuses the served document because it is the root text
+ * alone (no composition ever opened), what was refused, said plainly: the
+ * runtime's own words only name the `include` list it cannot open.
+ */
+async function rootOnlyRefusal(
+  organizationId: string,
+): Promise<OpenappaRootOnlyError | null> {
+  try {
+    const stored = await OpenAppaEffectivePolicyModel.find(organizationId);
+    return stored && compositionView(stored).served.kind === "root_only"
+      ? new OpenappaRootOnlyError(stored.lastError ?? "")
+      : null;
+  } catch (error) {
+    logger.warn(
+      { organizationId, err: error },
+      "OpenAPPA could not read the stored composition after a refused dispatch",
+    );
+    return null;
   }
 }
 
@@ -433,7 +729,7 @@ async function withRuntime(
  * The organization's effective policy with the credential values the runtime
  * reads for it, or the refusal every dispatch shares.
  *
- * The deployment switch is not read here. Each entry point reads it once at its
+ * The enforcement switch is not read here. Each entry point reads it once at its
  * request boundary, so a turn that began governed finishes under its policy even
  * when the switch turns off mid-request.
  */
@@ -441,13 +737,18 @@ async function effectivePolicy(
   organizationId: string,
 ): Promise<DispatchPolicy> {
   try {
-    const rawContent = (
-      await openappaBatteriesService.getEffectivePolicy(organizationId)
-    ).content;
-    return await openappaDeclarations.dispatchPolicy({
-      organizationId,
-      content: expandCommandExecutionPolicyRules(rawContent),
-    });
+    const policy =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    const resolved = {
+      ...(await openappaDeclarations.dispatchPolicy({
+        organizationId,
+        content: policy.content,
+      })),
+      compositionHash: policy.contentHash,
+    };
+    return isPeerReadModeActive(organizationId)
+      ? peerReadPolicy(resolved)
+      : resolved;
   } catch (error) {
     throw openappaFailure(error);
   }
@@ -530,45 +831,74 @@ export function sessionFromHeaders(params: {
   };
 }
 
+export const UNDELIVERABLE_RETURN_CONTRACT =
+  "This session requires an OpenAPPA return contract the proxy cannot deliver before inference";
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function startSession(params: {
   session: OpenAppaSession;
   policy?: DispatchPolicy;
   deliverReturnContract?: (text: string) => void;
-}): Promise<void> {
-  const decision = await dispatch(
-    params.session,
-    { event: "session_start" },
-    params.policy,
-  );
+  principal?: { principal?: string };
+  lineage?: { spawnCallId?: string; childNativeId?: string };
+}): Promise<string | undefined> {
+  const event = {
+    event: "session_start",
+    ...(params.lineage?.spawnCallId
+      ? { spawn_call_id: params.lineage.spawnCallId }
+      : {}),
+    ...(params.lineage?.childNativeId
+      ? { child_native_id: params.lineage.childNativeId }
+      : {}),
+  };
+  const decision = params.principal
+    ? await dispatchWithPrincipal({
+        session: params.session,
+        event,
+        policy: params.policy,
+        principal: params.principal,
+      })
+    : await dispatch(params.session, event, params.policy);
   if (decision.decision === "context") {
-    if (decision.text && params.deliverReturnContract) {
-      validateReturnContract(decision.text);
-      params.deliverReturnContract(decision.text);
-      return;
+    const text = decision.text;
+    if (
+      params.session.parent_id &&
+      typeof text === "string" &&
+      text.trim().length > 0
+    ) {
+      validateReturnContract(text);
+      params.deliverReturnContract?.(text);
+      return text;
     }
-    throw new ApiError(
-      409,
-      "This session requires an OpenAPPA return contract the proxy cannot deliver before inference",
-    );
+    throw new ApiError(409, UNDELIVERABLE_RETURN_CONTRACT);
   }
   if (decision.decision !== "ack")
     throw new ApiError(409, decisionMessage(decision));
+  return undefined;
 }
+// SPDX-SnippetEnd
 
 /** Binds the prepared fork before a runtime receives any prompt or file. */
 export async function startRuntimeChild(params: {
   session: OpenAppaSession;
   spawnCallId?: string;
+  childNativeId?: string;
 }): Promise<{ contract?: string }> {
   if (!params.session.parent_id) {
-    throw new ApiError(409, "A protected runtime requires its bound parent");
+    throw new ApiError(
+      409,
+      "OpenAPPA requires the bound parent of a protected runtime",
+    );
   }
   const decision = await dispatch(params.session, {
     event: "session_start",
     ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
+    ...(params.childNativeId ? { child_native_id: params.childNativeId } : {}),
   });
   if (decision.decision === "ack") return {};
-  if (decision.decision === "context" && decision.text) {
+  if (decision.decision === "context" && decision.text?.trim()) {
     validateReturnContract(decision.text);
     return { contract: decision.text };
   }
@@ -626,6 +956,9 @@ function extractApprovedOutput(
   return fallbackOutput;
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function approveToolResult(params: {
   session: OpenAppaSession;
   toolCallId: string;
@@ -633,10 +966,11 @@ async function approveToolResult(params: {
   outcome: ExecutionOutcome;
   controlToolName?: string;
   policy?: DispatchPolicy;
+  principal: { principal?: string };
 }): Promise<ProcessedToolResult> {
-  const decision = await dispatch(
-    params.session,
-    {
+  const decision = await dispatchWithPrincipal({
+    session: params.session,
+    event: {
       event: "tool_result",
       tool_call_id: params.toolCallId,
       output: params.output,
@@ -645,8 +979,9 @@ async function approveToolResult(params: {
         ? { presentation: nativePresentation(params.controlToolName) }
         : {}),
     },
-    params.policy,
-  );
+    policy: params.policy,
+    principal: params.principal,
+  });
   const content = extractApprovedOutput(decision, params.output);
   const outputSource =
     ("output_source" in decision ? decision.output_source : undefined) ??
@@ -659,8 +994,16 @@ async function approveToolResult(params: {
     outputSource,
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
+    ...(decision.decision === "deny_call"
+      ? {
+          denied: true as const,
+          offers: decision.offers?.map((offer) => offer.offer_id),
+          review: decision.review,
+        }
+      : {}),
   };
 }
+// SPDX-SnippetEnd
 
 /**
  * A remedy call whose remedy never ran: the client declined it (a permission
@@ -681,11 +1024,24 @@ function unexecutedControlResult(content: unknown): ProcessedToolResult {
   return {
     content: `[appa] The remedy did not run, so the plan is not applied. The result the client returned:\n\n${truncated(text, MAX_UNEXECUTED_RESULT_CHARS)}\n\n${UNEXECUTED_REMEDY_QUESTION_HINT}`,
     outputSource: "runtime",
+    code: UNRELEASED_CALL_CODE,
   };
 }
 
 const UNEXECUTED_REMEDY_QUESTION_HINT =
   "[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
+
+/**
+ * The body handed to the runtime for a result: a string as it is, anything
+ * else as JSON. The runtime records this body, so the payload of each binary
+ * part the client sent is a marker here, never its bytes.
+ */
+function resultOutput(result: CommonToolResult): string {
+  if (typeof result.content === "string") return result.content;
+  return JSON.stringify(
+    result.structured ? policyView(result.content) : result.content,
+  );
+}
 
 function toolResultText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -735,10 +1091,13 @@ function isOutputDecision(
 /**
  * Submits tool results to the OpenAPPA runtime for evaluation and updates.
  */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export async function processProxyResults(params: {
   session: OpenAppaSession;
   results: CommonToolResult[];
-  canonicalize: (name: string) => string;
+  canonicalize: ToolNameCanonicalizer;
   /** The proxy verifies that this exact result belongs to an issued question. */
   isUserQuestion?: (result: CommonToolResult) => boolean;
   controlToolName?: string;
@@ -748,6 +1107,10 @@ export async function processProxyResults(params: {
    * remedy never ran, and the model reads what the client returned.
    */
   isControlResult?: (result: CommonToolResult) => boolean;
+  /** Canonical status for this session's server-staged, still-pending review. */
+  pendingReviewResult?: (
+    result: CommonToolResult,
+  ) => Promise<string | undefined>;
   trustedChat?: boolean;
   /** The proxy must inject this host-authored contract before its provider call. */
   deliverReturnContract?: (text: string) => void;
@@ -755,16 +1118,39 @@ export async function processProxyResults(params: {
   classifySpawnResult?: (
     result: CommonToolResult,
   ) => "pending" | "failed" | undefined;
+  /** Signed lineage retained with a child session for fork binding at session start. */
+  lineage?: { spawnCallId?: string; childNativeId?: string };
 }) {
-  // The results dispatch one after another; one policy read serves them all.
-  const policy = await effectivePolicy(params.session.organization_id);
-  await startSession({
+  // One policy and membership snapshot serve this ordered result batch.
+  // Nothing persists across batches: the next one sees membership revocation.
+  const [policy, principal] = await Promise.all([
+    effectivePolicy(params.session.organization_id),
+    sessionPrincipal(params.session),
+  ]);
+  const returnContract = await startSession({
     session: params.session,
     policy,
     deliverReturnContract: params.deliverReturnContract,
+    principal,
+    lineage: params.lineage,
   });
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
+    const reportingName = archestraMcpBranding.getToolShortName(
+      params.canonicalize(result.name, result.namespace),
+    );
+    const reportingResult = ["yell", "run_tool"].some(
+      (name) => name === reportingName,
+    )
+      ? await readYellResult(params.session, result.id)
+      : undefined;
+    if (reportingResult !== undefined) {
+      updates[result.id] = {
+        content: reportingResult,
+        outputSource: "runtime",
+      };
+      continue;
+    }
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
     // The runtime released no question call, so it would withhold the answer.
@@ -782,27 +1168,29 @@ export async function processProxyResults(params: {
     const approved = await approveToolResult({
       session: params.session,
       toolCallId: result.id,
-      output:
-        typeof result.content === "string"
-          ? result.content
-          : JSON.stringify(result.content),
+      output: resultOutput(result),
       outcome,
       controlToolName: params.controlToolName,
       policy,
+      principal,
     });
-    updates[result.id] =
-      approved.code === UNRELEASED_CALL_CODE &&
-      params.isControlResult?.(result) === true
+    const pendingReview =
+      approved.code === UNRELEASED_CALL_CODE
+        ? await params.pendingReviewResult?.(result)
+        : undefined;
+    updates[result.id] = pendingReview
+      ? { content: pendingReview, outputSource: "runtime" }
+      : approved.code === UNRELEASED_CALL_CODE &&
+          params.isControlResult?.(result) === true
         ? unexecutedControlResult(result.content)
         : approved;
   }
   return {
     toolResultUpdates: updates,
-    contextIsTrusted: true,
-    dualLlmAnalyses: [],
-    unsafeContextBoundary: undefined,
+    ...(returnContract ? { returnContract } : {}),
   };
 }
+// SPDX-SnippetEnd
 
 /** Decision for a proposed tool call. */
 type AppaCallDecision =
@@ -813,8 +1201,21 @@ type AppaCallDecision =
       feedback: string;
       offers?: string[];
       review?: Array<{ offer_id: string; text: string }>;
+      /**
+       * The runtime recorded this denial under the call's id, so it answers
+       * that id's result with the ruling.
+       */
+      recorded?: true;
+      /**
+       * The call's annotator gave no answer. The runtime has no record of
+       * the call, so its result is answered by the proxy, not the runtime.
+       */
+      unanswered?: true;
     };
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export async function evaluateToolCalls(
   session: OpenAppaSession,
   calls: Array<{
@@ -830,8 +1231,10 @@ export async function evaluateToolCalls(
     looseRunToolDispatch?: boolean;
     /** This session's control tool declaration, as the client spells it. */
     control?: DeclaredToolSpelling;
+    controlAliases?: readonly DeclaredToolSpelling[];
     /** This session's notice tool declaration, as the client spells it. */
     notice?: DeclaredToolSpelling;
+    noticeAliases?: readonly DeclaredToolSpelling[];
     /** True for a call that names a child trajectory (Task, spawn_agent, task). */
     isSpawn?: (name: string, namespace?: string) => boolean;
     /** Runtime launches are resolved per call, including run_tool targets. */
@@ -840,49 +1243,79 @@ export async function evaluateToolCalls(
     supportsDelegation?: boolean;
     /** Signed lineage retained with a child call for later turns. */
     lineage?: { spawnCallId?: string; childNativeId?: string };
+    /**
+     * Declares a held spawn's return on the caller's behalf, so one delegation
+     * call starts its child. Absent for clients that declare returns themselves.
+     */
+    declareSpawnReturn?: (call: {
+      id: string;
+      name: string;
+      namespace?: string;
+    }) => SpawnReturnDeclaration | undefined;
   },
   policy: SharedPolicy = sharedPolicy(session.organization_id),
 ): Promise<AppaCallDecision[]> {
   const ids = new Set<string>();
-  // Validate tool call IDs and arguments before dispatch.
+  const malformedIds = new Set<string>();
   for (const call of calls) {
     if (!call.id || ids.has(call.id)) {
       throw new ApiError(400, "OpenAPPA requires distinct tool-call IDs");
     }
     ids.add(call.id);
-    if (typeof call.arguments === "string") {
-      try {
-        JSON.parse(call.arguments);
-      } catch {
-        throw new ApiError(
-          400,
-          "OpenAPPA cannot release malformed tool arguments",
-        );
-      }
+    if (typeof call.arguments === "string" && !isJson(call.arguments)) {
+      malformedIds.add(call.id);
     }
   }
   const normalized = normalizeToolCallsForPolicy(calls, {
     canonicalize: options.canonicalize,
     looseRunToolDispatch: options.looseRunToolDispatch === true,
   });
+  const hasSpawnCall = calls.some(
+    (call) =>
+      options.spawnCallIds?.has(call.id) === true ||
+      options.isSpawn?.(call.name, call.namespace) === true,
+  );
+  if (hasSpawnCall) {
+    exitPeerReadMode(session.organization_id);
+  } else if (
+    normalized.some((target) => target.toolCallName === "SendMessage")
+  ) {
+    enterPeerReadMode(session.organization_id);
+  }
   const admitted: string[] = [];
+  const dispatchCall = sessionDispatch(session, policy);
   const results = await Promise.allSettled(
     calls.map(async (call, index) => {
+      // Malformed arguments (often a truncated stream) are denied before any
+      // bypass or dispatch, so nothing runs on them and the batch stands.
+      if (malformedIds.has(call.id)) {
+        return {
+          kind: "deny" as const,
+          feedback:
+            "The tool call arguments are not valid JSON, possibly incomplete. Reissue the call with complete arguments.",
+        };
+      }
       const target = normalized[index];
       // Direct remedy control calls bypass evaluation and execute via gateway.
       // Only the declared control tool itself, in its own namespace: a
       // same-named tool elsewhere is someone else's and is evaluated.
       if (
-        options.control &&
-        call.name === options.control.name &&
-        call.namespace === options.control.namespace
+        (
+          options.controlAliases ?? (options.control ? [options.control] : [])
+        ).some(
+          (member) =>
+            call.name === member.name && call.namespace === member.namespace,
+        )
       ) {
         return { kind: "control" as const };
       }
       if (
-        options.notice &&
-        call.name === options.notice.name &&
-        call.namespace === options.notice.namespace
+        (
+          options.noticeAliases ?? (options.notice ? [options.notice] : [])
+        ).some(
+          (member) =>
+            call.name === member.name && call.namespace === member.namespace,
+        )
       ) {
         return { kind: "allow" as const };
       }
@@ -897,26 +1330,42 @@ export async function evaluateToolCalls(
         return { kind: "allow" as const };
       }
       // The target is already canonical, so it is read, not re-canonicalized.
-      const tool = shortName === "yell" ? "yell" : target.toolCallName;
+      const canonicalTool = shortName === "yell" ? "yell" : target.toolCallName;
       const spawn =
         options.spawnCallIds?.has(call.id) === true ||
         options.isSpawn?.(call.name, call.namespace) === true;
-      const spelling = spawnRetrySpelling({
-        call,
-        tool,
-        spawn,
-        canonicalize: options.canonicalize,
-      });
+      // An agent__<slug> spawn starts a subagent like the host's own Agent
+      // tool, so it is ruled as one unless the policy rules it by name. The
+      // model keeps its own spelling.
+      const tool =
+        spawn &&
+        isAgentTool(shortName ?? canonicalTool) &&
+        !declaresTool((await policy()).content, canonicalTool)
+          ? SUBAGENT_TOOL
+          : canonicalTool;
+      const spelling =
+        spawnRetrySpelling({
+          call,
+          tool: canonicalTool,
+          spawn,
+          canonicalize: options.canonicalize,
+        }) ??
+        (tool === canonicalTool
+          ? undefined
+          : target.isRunToolDispatchTarget
+            ? canonicalTool
+            : call.name);
       const event = {
         event: "tool_call",
         operation_id: `call:${call.id}`,
         tool,
         ...(spelling ? { spelling } : {}),
+        ...(target.isRunToolDispatchTarget ? { dispatch: call.name } : {}),
         presentation: nativePresentation(
           options.control?.name,
           options.supportsDelegation,
         ),
-        arguments: normalizeCommandExecutionArguments(
+        arguments: normalizeToolArgumentsForPolicy(
           tool,
           JSON.parse(target.toolCallArgs),
         ),
@@ -928,18 +1377,51 @@ export async function evaluateToolCalls(
           ? { child_native_id: options.lineage.childNativeId }
           : {}),
       };
-      const decision = await dispatch(session, event, await policy());
+      const declaration = spawn
+        ? options.declareSpawnReturn?.(call)
+        : undefined;
+      if (declaration) {
+        const refusal = await declareSpawnReturn({
+          session,
+          callId: call.id,
+          event,
+          declaration,
+          controlToolName: options.control?.name,
+          policy,
+        });
+        if (refusal) return refusal;
+      }
+      let decision: Awaited<ReturnType<typeof dispatchCall>>;
+      try {
+        decision = await dispatchCall(event);
+      } catch (error) {
+        // These unrecorded refusals apply only to this call. Failing the batch
+        // would cancel admitted siblings, including spent approvals.
+        const notice =
+          undeclaredToolNotice(error) ?? unansweredAnnotationNotice(error);
+        if (notice === null) throw error;
+        logger.warn(
+          {
+            err: error,
+            toolCallId: call.id,
+            sessionId: session.session_id,
+            tool,
+          },
+          "OpenAPPA refused a tool call before recording it; the call is returned as a notice",
+        );
+        return {
+          kind: "deny" as const,
+          feedback: notice,
+          unanswered: true as const,
+        };
+      }
       if (
         spawn &&
         (decision.decision === "pass_control" ||
           (decision.decision === "allow_call" && !decision.spawn_binding))
       ) {
         if (decision.decision === "allow_call")
-          await dispatch(
-            session,
-            { event: "cancel_call", tool_call_id: call.id },
-            await policy(),
-          );
+          await dispatchCall({ event: "cancel_call", tool_call_id: call.id });
         return {
           kind: "deny" as const,
           feedback:
@@ -959,8 +1441,8 @@ export async function evaluateToolCalls(
         feedback: decisionMessage(decision),
         offers:
           decision.decision === "deny_call"
-            ? (decision.offers ?? [])
-                .map((offer) => offer.offer_id)
+            ? decision.offers
+                ?.map((offer) => offer.offer_id)
                 .filter((id) => id.length > 0)
             : [],
         review:
@@ -969,6 +1451,9 @@ export async function evaluateToolCalls(
               ? decision.review
               : undefined
             : undefined,
+        ...(decision.decision === "deny_call"
+          ? { recorded: true as const }
+          : {}),
       };
     }),
   );
@@ -980,12 +1465,8 @@ export async function evaluateToolCalls(
     if (admitted.length > 0) {
       // Cancel admitted calls from this batch if evaluation failed mid-batch.
       const cancelResults = await Promise.allSettled(
-        admitted.map(async (id) =>
-          dispatch(
-            session,
-            { event: "cancel_call", tool_call_id: id },
-            await policy(),
-          ),
+        admitted.map((id) =>
+          dispatchCall({ event: "cancel_call", tool_call_id: id }),
         ),
       );
       for (const [index, cancelResult] of cancelResults.entries()) {
@@ -996,7 +1477,7 @@ export async function evaluateToolCalls(
               toolCallId: admitted[index],
               sessionId: session.session_id,
             },
-            "Failed to cancel OpenAPPA admitted call during batch failure cleanup",
+            "OpenAPPA could not cancel an admitted call during batch failure cleanup",
           );
         }
       }
@@ -1009,7 +1490,18 @@ export async function evaluateToolCalls(
   );
 }
 
+function isJson(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Verdict on a call the provider already ran. */
+// SPDX-SnippetEnd
+
 type AppaHostedCallDecision =
   | { kind: "release" }
   | { kind: "hold"; feedback: string };
@@ -1022,6 +1514,9 @@ type AppaHostedCallDecision =
  * `confined_results` stages the result itself, so accepting the offer returns
  * it; any other denial drops it, and the model searches again once allowed.
  */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export async function evaluateHostedToolCalls(
   session: OpenAppaSession,
   calls: ReadonlyArray<{
@@ -1053,6 +1548,7 @@ export async function evaluateHostedToolCalls(
         : { kind: "release" },
     );
   }
+  const principal = await sessionPrincipal(session);
   const verdicts: AppaHostedCallDecision[] = [];
   for (const call of calls) {
     const approved = await approveToolResult({
@@ -1062,6 +1558,7 @@ export async function evaluateHostedToolCalls(
       outcome: "success",
       controlToolName: options.control?.name,
       policy: await policy(),
+      principal,
     });
     verdicts.push(
       approved.outputSource === "tool" && approved.content === call.output
@@ -1071,21 +1568,20 @@ export async function evaluateHostedToolCalls(
   }
   return verdicts;
 }
+// SPDX-SnippetEnd
 
 /** Cancels admitted tool calls when the carrier response is withheld. */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export async function cancelCalls(
   session: OpenAppaSession,
   ids: readonly string[],
   policy: SharedPolicy = sharedPolicy(session.organization_id),
 ): Promise<void> {
+  const dispatchCall = sessionDispatch(session, policy);
   const results = await Promise.allSettled(
-    ids.map(async (id) =>
-      dispatch(
-        session,
-        { event: "cancel_call", tool_call_id: id },
-        await policy(),
-      ),
-    ),
+    ids.map((id) => dispatchCall({ event: "cancel_call", tool_call_id: id })),
   );
   for (const [index, result] of results.entries()) {
     if (result.status === "rejected") {
@@ -1095,11 +1591,13 @@ export async function cancelCalls(
           toolCallId: ids[index],
           sessionId: session.session_id,
         },
-        "Failed to cancel OpenAPPA admitted call",
+        "OpenAPPA could not cancel an admitted call",
       );
     }
   }
 }
+
+// SPDX-SnippetEnd
 
 /** Reports the start of a user turn, before the model is called. */
 export async function notePrompt(
@@ -1148,13 +1646,20 @@ export async function endChild(params: {
   return crossChildValue({ ...params, event: "child_end" });
 }
 
-/** Cross a value without ending the runtime or settling its pending calls. */
+/**
+ * Cross a value without ending the runtime or settling its pending calls.
+ *
+ * `busy` marks the one hold that is not a ruling: the child has a tool call
+ * open, so its label is not settled and nothing can cross until that call
+ * reports. The same value can cross once the child is idle again.
+ */
 export async function returnRuntimeValue(params: {
   session: OpenAppaSession;
   operationId: string;
   value: string;
 }): Promise<
-  { kind: "admitted"; value: string } | { kind: "held"; reason: string }
+  | { kind: "admitted"; value: string }
+  | { kind: "held"; reason: string; busy?: true }
 > {
   const outcome = await crossChildValue({
     session: params.session,
@@ -1165,17 +1670,26 @@ export async function returnRuntimeValue(params: {
   if (outcome.decision === "release") {
     return { kind: "admitted", value: params.value };
   }
-  return outcome.crossed
-    ? { kind: "admitted", value: outcome.content }
+  if (outcome.crossed) return { kind: "admitted", value: outcome.content };
+  return outcome.busy
+    ? { kind: "held", reason: outcome.content, busy: true }
     : { kind: "held", reason: outcome.content };
 }
 
-/** Verifies that a parent carrier contains bytes admitted through ChildEnd. */
+/**
+ * Verifies that a parent carrier contains bytes admitted through ChildEnd.
+ *
+ * The runtime keeps one approved return for each spawn call. A child that
+ * answers a follow-up returns again under the same call, and the runtime then
+ * answers with the return it approved first. `crossedReturns` names every
+ * return of this child that crossed, so that answer is accepted too.
+ */
 export async function approveSpawnReturn(params: {
   session: OpenAppaSession;
   toolCallId: string;
   childId: string;
   value: string;
+  crossedReturns?: ReadonlySet<string>;
 }): Promise<void> {
   const decision = await dispatch(params.session, {
     event: "tool_result",
@@ -1186,7 +1700,9 @@ export async function approveSpawnReturn(params: {
   });
   if (decision.decision === "block") {
     const msg = decisionMessage(decision);
-    if (msg.includes("no open dispatch")) {
+    // UnknownDispatch has this exact engine reason. Other fields and quoted
+    // reason fragments must not convert a denied return into idempotent success.
+    if (decision.reason === "no open dispatch") {
       logger.info(
         { toolCallId: params.toolCallId, childId: params.childId },
         "OpenAPPA spawn dispatch already closed; child return matches the retained crossing",
@@ -1209,7 +1725,7 @@ export async function approveSpawnReturn(params: {
     );
   }
   const approved = extractApprovedOutput(decision, params.value);
-  if (approved !== params.value) {
+  if (approved !== params.value && !params.crossedReturns?.has(approved)) {
     throw openappaFailure(
       new Error("OpenAPPA changed an already crossed child return"),
     );
@@ -1234,6 +1750,221 @@ function runtimeToolResult(decision: NativeDecision): CallToolResult {
   };
 }
 
+/** How a delegation call's child may return, when the platform declares it. */
+export type SpawnReturnDeclaration =
+  | { kind: "as_spoken" }
+  | { kind: "attested"; schema: Record<string, unknown> };
+
+const OfferedReturnSchema = z.union([
+  z.literal("as_spoken"),
+  z.object({ sanitizer: z.string() }),
+]);
+
+/**
+ * Declares the return of a spawn the runtime holds until its return is
+ * declared. A probe of the same call, under its own operation, surfaces the
+ * offers; the call itself is then dispatched once, already declared. Returns
+ * the refusal the caller reports instead of dispatching.
+ */
+async function declareSpawnReturn(params: {
+  session: OpenAppaSession;
+  callId: string;
+  event: Record<string, unknown>;
+  declaration: SpawnReturnDeclaration;
+  controlToolName?: string;
+  policy: SharedPolicy;
+}): Promise<AppaCallDecision | undefined> {
+  exitPeerReadMode(params.session.organization_id);
+  const probeId = `${params.callId}:declare`;
+  const probe = await dispatch(
+    params.session,
+    { ...params.event, operation_id: `call:${probeId}` },
+    await params.policy(),
+  );
+  switch (probe.decision) {
+    case "allow_call":
+      await dispatch(
+        params.session,
+        { event: "cancel_call", tool_call_id: probeId },
+        await params.policy(),
+      );
+      return undefined;
+    case "pass_control":
+      return undefined;
+    case "deny_call":
+      break;
+    default:
+      return { kind: "deny", feedback: decisionMessage(probe) };
+  }
+  const wanted = params.declaration;
+  const offer = (probe.offers ?? []).find((candidate) => {
+    const returns = OfferedReturnSchema.safeParse(
+      (candidate as { returns?: unknown }).returns,
+    );
+    if (!returns.success) return false;
+    return wanted.kind === "as_spoken"
+      ? returns.data === "as_spoken"
+      : typeof returns.data === "object" &&
+          returns.data.sanitizer === ATTEST_SCHEMA_SANITIZER;
+  });
+  if (!offer) {
+    return {
+      kind: "deny",
+      feedback:
+        wanted.kind === "attested"
+          ? `This policy offers no \`${ATTEST_SCHEMA_SANITIZER}\` return for this subagent, so \`return_schema\` cannot be honored. Call it without \`return_schema\`, or ask an administrator to declare the sanitizer.\n\n${probe.feedback}`
+          : probe.feedback,
+      offers: (probe.offers ?? []).map((candidate) => candidate.offer_id),
+    };
+  }
+  const args = {
+    offer_id: offer.offer_id,
+    label: {},
+    ...(wanted.kind === "attested"
+      ? { return_schema: normalizeReturnSchemaNode(wanted.schema) }
+      : {}),
+  };
+  const declared = await executeRemedyByOffer({
+    organizationId: params.session.organization_id,
+    callerId: params.session.caller_id,
+    sessionId: params.session.session_id,
+    ...(params.session.parent_id ? { parentId: params.session.parent_id } : {}),
+    toolCallId: `${params.callId}:return`,
+    controlToolName: params.controlToolName,
+    originalArguments: JSON.stringify(args),
+    args,
+  });
+  if (!declared.result.isError) return undefined;
+  return {
+    kind: "deny",
+    feedback: declared.result.content
+      .flatMap((block) => (block.type === "text" ? [block.text] : []))
+      .join("\n"),
+  };
+}
+
+function normalizeReturnSchemaNode(node: unknown): unknown {
+  if (!node || typeof node !== "object" || Array.isArray(node)) return node;
+  const record = node as Record<string, unknown>;
+  let changed = false;
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (
+      key === "additionalProperties" &&
+      record.type === "object" &&
+      value === false
+    ) {
+      changed = true;
+      continue;
+    }
+    if (
+      key === "properties" &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      let propsChanged = false;
+      const nextProps: Record<string, unknown> = {};
+      for (const [propKey, propSchema] of Object.entries(
+        value as Record<string, unknown>,
+      )) {
+        const normalizedProp = normalizeReturnSchemaNode(propSchema);
+        if (normalizedProp !== propSchema) propsChanged = true;
+        nextProps[propKey] = normalizedProp;
+      }
+      if (propsChanged) {
+        changed = true;
+        next[key] = nextProps;
+        continue;
+      }
+    } else if (key === "items") {
+      const normalizedItems = normalizeReturnSchemaNode(value);
+      if (normalizedItems !== value) {
+        changed = true;
+        next[key] = normalizedItems;
+        continue;
+      }
+    }
+    next[key] = value;
+  }
+  return changed ? next : node;
+}
+
+const PEER_READ_CANONICAL_TOOL = "mcp/archestra/read_peer_message";
+const MAX_PEER_READ_OFFERS = 1024;
+const PEER_READ_MODE_TTL_MS = 5 * 60 * 1000;
+const peerReadOfferIds = new Set<string>();
+const peerReadModeUntilByOrg = new Map<string, number>();
+
+function rememberPeerReadOffer(offerId: string): void {
+  if (peerReadOfferIds.size >= MAX_PEER_READ_OFFERS) {
+    const oldest = peerReadOfferIds.values().next().value;
+    if (oldest !== undefined) peerReadOfferIds.delete(oldest);
+  }
+  peerReadOfferIds.add(offerId);
+}
+
+function enterPeerReadMode(organizationId: string): void {
+  peerReadModeUntilByOrg.set(
+    organizationId,
+    Date.now() + PEER_READ_MODE_TTL_MS,
+  );
+}
+
+function exitPeerReadMode(organizationId: string): void {
+  peerReadModeUntilByOrg.delete(organizationId);
+}
+
+function isPeerReadModeActive(organizationId: string): boolean {
+  const until = peerReadModeUntilByOrg.get(organizationId);
+  if (until === undefined) return false;
+  if (Date.now() > until) {
+    peerReadModeUntilByOrg.delete(organizationId);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * `appa_runtime::read_tool_preserves_source_label` requires `read_peer_message`
+ * to be declared with an empty `delta` and out of any output sanitizer's scope.
+ * Because child-return sanitizers (`attest-schema`, `redact-secrets`) are
+ * required by `appa_engine` to be unscoped (`scope.tags.is_empty()`), strip
+ * sanitizer declarations and ensure `mcp/archestra/read_peer_message` has an
+ * empty rule when dispatching `readPeerMessage` and its remedy offers.
+ */
+function peerReadPolicy(policy: DispatchPolicy): DispatchPolicy {
+  const document = parsePolicyToml(policy.content);
+  const policyTable = asRecord(document?.policy);
+  if (!document || !policyTable) return policy;
+  const tools = Array.isArray(policyTable.tool) ? policyTable.tool : [];
+  const brandedName = archestraMcpBranding.getToolName(
+    TOOL_READ_PEER_MESSAGE_SHORT_NAME,
+  );
+  const hasPeerReadRule = tools.some((entry) => {
+    const record = asRecord(entry);
+    return (
+      record?.name === PEER_READ_CANONICAL_TOOL || record?.name === brandedName
+    );
+  });
+  const hasSanitizers =
+    Array.isArray(policyTable.sanitizer) && policyTable.sanitizer.length > 0;
+  if (hasPeerReadRule && !hasSanitizers) return policy;
+  delete policyTable.sanitizer;
+  const externals = asRecord(document.externals);
+  if (externals) delete externals.sanitizers;
+  if (!hasPeerReadRule) {
+    policyTable.tool = [
+      { name: PEER_READ_CANONICAL_TOOL, delta: {} },
+      ...tools,
+    ];
+  }
+  return {
+    ...policy,
+    content: stringifyToml(document),
+  };
+}
+
 function decisionMessage(decision: NativeDecision): string {
   switch (decision.decision) {
     case "deny_call":
@@ -1253,21 +1984,15 @@ function decisionMessage(decision: NativeDecision): string {
 }
 
 /**
- * Executes a remedy using a verified host routing claim.
+ * Executes a remedy for the current trajectory supplied by the trusted proxy.
  */
 export async function executeRemedyByOffer(params: {
   organizationId: string;
   /** The principal the gateway authenticated, in the proxy's `user:<id>` form. */
   callerId?: string;
-  /** Minted session the signed offer claims name. */
+  /** Current caller-scoped session resolved by the client adapter. */
   sessionId: string;
   parentId?: string;
-  /** Principal that minted the offer, from verified claims. */
-  ownerCallerId?: string;
-  tool?: string;
-  spelling?: string;
-  /** The client's dispatch tool the blocked call went through, from verified claims. */
-  dispatch?: string;
   /** Provider or client-supplied logical execution identity, when available. */
   toolCallId?: string;
   controlToolName?: string;
@@ -1283,33 +2008,42 @@ export async function executeRemedyByOffer(params: {
   precheckRefusal?: string;
 }): Promise<{
   result: CallToolResult;
-  /** Authorized owner lookup, not proof that the offer remains spendable. */
+  /** Existing session route, not proof that the offer remains spendable. */
   known: boolean;
 }> {
+  const offerId = asRecord(params.args)?.offer_id;
+  const isPeerReadOffer =
+    typeof offerId === "string" && peerReadOfferIds.has(offerId);
+  if (isPeerReadOffer) {
+    enterPeerReadMode(params.organizationId);
+  }
   const decision = await withRuntime(params.organizationId, (module, policy) =>
-    module.executeRemedyByOffer(
-      JSON.stringify({
-        organization_id: params.organizationId,
-        session_id: params.sessionId,
-        ...(params.callerId ? { caller_id: params.callerId } : {}),
-        ...(params.parentId ? { parent_id: params.parentId } : {}),
-        ...(params.ownerCallerId
-          ? { owner_caller_id: params.ownerCallerId }
-          : {}),
-        ...(params.tool ? { tool: params.tool } : {}),
-        ...(params.spelling ? { spelling: params.spelling } : {}),
-        ...(params.dispatch ? { dispatch: params.dispatch } : {}),
-        execution_mode: params.toolCallId ? "tracked" : "untracked",
-        ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
-        original_arguments: params.originalArguments,
-        arguments: params.args,
-        presentation: nativePresentation(params.controlToolName),
-        ...(params.ruling ? { ruling: params.ruling } : {}),
-        ...(params.precheckRefusal
-          ? { precheck_refusal: params.precheckRefusal }
-          : {}),
-      }),
-      policy,
+    withOpenappaContentEncryption(
+      params.organizationId,
+      params.sessionId,
+      (encryption) =>
+        module.executeRemedyByOffer(
+          JSON.stringify({
+            organization_id: params.organizationId,
+            trajectory: currentTrajectory({
+              session_id: params.sessionId,
+              ...(params.parentId ? { parent_id: params.parentId } : {}),
+            }),
+            ...(params.callerId ? { caller_id: params.callerId } : {}),
+            execution_mode: params.toolCallId ? "tracked" : "untracked",
+            ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
+            original_arguments: params.originalArguments,
+            arguments: params.args,
+            presentation: nativePresentation(params.controlToolName),
+            ...(params.ruling ? { ruling: params.ruling } : {}),
+            ...(params.precheckRefusal
+              ? { precheck_refusal: params.precheckRefusal }
+              : {}),
+            withhold_consult_content: withholdConsultContent(),
+          }),
+          isPeerReadOffer ? peerReadPolicy(policy) : policy,
+          encryption,
+        ),
     ),
   );
   if (decision.decision !== "mcp_result" || !decision.offer) {
@@ -1359,16 +2093,11 @@ export async function loadChildReturns(params: {
             operationPrefix: params.operationPrefix,
           }
         : undefined;
-    const records = lookup
-      ? await module.loadChildReturns(
-          params.organizationId,
-          params.parentSessionId,
-          lookup,
-        )
-      : await module.loadChildReturns(
-          params.organizationId,
-          params.parentSessionId,
-        );
+    const records = await module.loadChildReturns(
+      params.organizationId,
+      params.parentSessionId,
+      lookup,
+    );
     return records.map((record) => ({
       childSessionId: record.childSessionId,
       ...(record.operationId ? { operationId: record.operationId } : {}),
@@ -1379,7 +2108,7 @@ export async function loadChildReturns(params: {
   } catch (error) {
     logger.warn(
       { err: error, parentSessionId: params.parentSessionId },
-      "Failed to load OpenAPPA child returns",
+      "OpenAPPA could not load child returns",
     );
     throw openappaFailure(error);
   }
@@ -1406,7 +2135,7 @@ export async function loadChildAddresses(params: {
   } catch (error) {
     logger.warn(
       { err: error, childSessionId: params.childSessionId },
-      "Failed to load OpenAPPA child addresses",
+      "OpenAPPA could not load child addresses",
     );
     throw openappaFailure(error);
   }
@@ -1428,6 +2157,7 @@ export async function sendPeerMessage(params: {
 }): Promise<
   { kind: "released"; messageId: string } | { kind: "denied"; feedback: string }
 > {
+  enterPeerReadMode(params.session.organization_id);
   const parsed = await peerResponse(
     params.session,
     (module, policy) =>
@@ -1480,6 +2210,7 @@ export async function admitPeerMessage(params: {
   | { kind: "held"; notices: PeerNotice[] }
   | { kind: "unverified" }
 > {
+  enterPeerReadMode(params.session.organization_id);
   const parsed = await peerResponse(
     params.session,
     (module, policy) =>
@@ -1538,6 +2269,7 @@ export async function listPeerMessages(params: {
   session: OpenAppaSession;
   toolCallId?: string;
 }): Promise<PeerNotice[]> {
+  enterPeerReadMode(params.session.organization_id);
   const parsed = await peerResponse(
     params.session,
     (module, policy) =>
@@ -1565,6 +2297,7 @@ export async function readPeerMessage(params: {
   toolCallId: string;
   args: { message_id: string };
 }): Promise<CallToolResult> {
+  enterPeerReadMode(params.session.organization_id);
   const decision = await withRuntime(
     params.session.organization_id,
     (module, policy) =>
@@ -1577,7 +2310,7 @@ export async function readPeerMessage(params: {
             TOOL_READ_PEER_MESSAGE_SHORT_NAME,
           ),
         }),
-        policy,
+        peerReadPolicy(policy),
       ),
   );
   if (decision.decision === "mcp_result" && decision.result) {
@@ -1589,6 +2322,9 @@ export async function readPeerMessage(params: {
     );
   }
   if (decision.decision === "deny_call") {
+    for (const offer of decision.offers ?? []) {
+      if (offer.offer_id) rememberPeerReadOffer(offer.offer_id);
+    }
     return {
       isError: true,
       content: [{ type: "text", text: decision.feedback }],
@@ -1608,7 +2344,7 @@ export async function readPeerMessage(params: {
 
 /**
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
- * Session routing comes from the verified offer claims.
+ * Session routing comes from the proxy-stamped current trajectory.
  */
 export async function loadOfferReview(params: {
   organizationId: string;
@@ -1630,10 +2366,16 @@ export async function loadOfferReview(params: {
     )
       return null;
     const module = await binding();
-    const result = await module.loadOfferReview(
+    const result = await withOpenappaContentEncryption(
       params.organizationId,
       params.sessionId,
-      params.offerId,
+      (encryption) =>
+        module.loadOfferReview(
+          params.organizationId,
+          params.sessionId,
+          params.offerId,
+          encryption,
+        ),
     );
     if (!result) return null;
     return {
@@ -1646,7 +2388,7 @@ export async function loadOfferReview(params: {
   } catch (error) {
     logger.warn(
       { err: error, offerId: params.offerId },
-      "Failed to load OpenAPPA offer review",
+      "OpenAPPA could not load the offer review",
     );
     throw openappaFailure(error);
   }
@@ -1654,10 +2396,7 @@ export async function loadOfferReview(params: {
 
 function validateReturnContract(text: string): void {
   if (Buffer.byteLength(text, "utf8") > 64 * 1024) {
-    throw new ApiError(
-      413,
-      "The OpenAPPA child return contract exceeds 64 KiB",
-    );
+    throw new ApiError(413, "OpenAPPA child return contract exceeds 64 KiB");
   }
 }
 
@@ -1679,6 +2418,9 @@ async function crossChildValue(params: {
       content:
         "The child value exceeds the supported size. No original bytes were returned.",
     };
+  }
+  if (params.output.length > 0) {
+    exitPeerReadMode(params.session.organization_id);
   }
   const policy = sharedPolicy(params.session.organization_id);
   const correlation = {
@@ -1705,6 +2447,8 @@ async function crossChildValue(params: {
       decision: "replace",
       content: decisionMessage(decision),
       crossed: false,
+      // The binding marks the one retryable hold, an open call in the child.
+      ...(decision.busy ? { busy: true } : {}),
     };
   }
   if (decision.decision === "refuse") {
@@ -1767,19 +2511,47 @@ function spawnRetrySpelling(params: {
     : `${prefix}${params.call.name}`;
 }
 
+/** The host tool a subagent spawn is ruled and recorded under, unless the policy names it. */
+export const SUBAGENT_TOOL = "Agent";
+
+/** Whether the policy has a rule of its own for `tool`, selector rules included. */
+function declaresTool(content: string, tool: string): boolean {
+  return toolEntries(content).some(
+    ({ name }) => name === tool || name.startsWith(`${tool}(`),
+  );
+}
+
 function nativePresentation(
   controlToolName?: string,
   supportsDelegation = false,
 ): {
   control_tool: string;
   supports_delegation: boolean;
+  yell_tool?: string;
 } {
+  const controlTool =
+    controlToolName ??
+    archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
+  const yellTool = openappaYellEnabled()
+    ? yellSpelling(controlTool)
+    : undefined;
   return {
-    control_tool:
-      controlToolName ??
-      archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+    control_tool: controlTool,
     supports_delegation: supportsDelegation,
+    ...(yellTool ? { yell_tool: yellTool } : {}),
   };
+}
+
+/**
+ * yell as the model calls it. The gateway always lists yell beside
+ * execute_remedy_plan, so a client spells both with the same prefix
+ * (`mcp__gateway__archestra__…`); a control tool spelled any other way names
+ * no yell.
+ */
+function yellSpelling(controlTool: string): string | undefined {
+  return controlTool.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME)
+    ? `${controlTool.slice(0, -TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME.length)}yell`
+    : undefined;
 }
 
 /**
@@ -1844,23 +2616,12 @@ async function peerResponse<T>(
   schema: z.ZodType<T>,
 ): Promise<T> {
   try {
-    return schema.parse(await peerJson(session, call));
-  } catch (error) {
-    throw openappaFailure(error);
-  }
-}
-
-async function peerJson(
-  session: OpenAppaSession,
-  call: (
-    module: Awaited<ReturnType<typeof binding>>,
-    policy: DispatchPolicy,
-  ) => Promise<string>,
-): Promise<unknown> {
-  try {
-    const policy = await effectivePolicy(session.organization_id);
     const module = await binding();
-    return JSON.parse(await call(module, policy));
+    const raw = await retryWhilePolicyMoved({
+      run: async () =>
+        call(module, await effectivePolicy(session.organization_id)),
+    });
+    return schema.parse(JSON.parse(raw));
   } catch (error) {
     throw openappaFailure(error);
   }

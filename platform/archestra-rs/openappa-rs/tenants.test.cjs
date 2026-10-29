@@ -31,7 +31,10 @@ async function endpoint(t, body) {
     });
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  t.after(() => new Promise((resolve) => server.close(resolve)));
+  t.after(() => new Promise((resolve) => {
+    server.close(resolve);
+    server.closeAllConnections();
+  }));
   return { url: `http://127.0.0.1:${server.address().port}`, authorizations };
 }
 
@@ -63,25 +66,33 @@ url = "${url}/annotate"
   const orgB = scope(`tenant-b-${randomUUID()}`);
   assert.equal((await hook(orgA, { event: 'session_start' }, policy(a.url))).decision, 'ack');
 
-  // Holding the root's ledger lock parks A's call after it read its policy and
-  // before its hook runs; B then dispatches under its own policy in between.
+  // Holding the family's row parks A's call after it read its policy and at its
+  // first log step, before its hook consults anything; B then dispatches under
+  // its own policy in between.
   const ledger = new Client({ connectionString: databaseUrl });
   await ledger.connect();
   t.after(() => ledger.end());
+  const ledgerPid = (await ledger.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  // Watched from a connection of its own: inside the ledger's open transaction
+  // the activity view would stay as it was at its first read.
+  const monitor = new Client({ connectionString: databaseUrl });
+  await monitor.connect();
+  t.after(() => monitor.end());
   const root = `archestra:${createHash('sha256').update(`${orgA.organization_id}\n${orgA.session_id}`).digest('hex')}`;
-  await ledger.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [root]);
+  await ledger.query('BEGIN');
+  await ledger.query('SELECT 1 FROM openappa_roots WHERE root = $1 FOR UPDATE', [root]);
   const parkedCall = call(orgA, 'a-1', 'annotated_read', policy(a.url));
   for (;;) {
-    const { rows } = await ledger.query(`SELECT EXISTS (
-      SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND objsubid = 1
-        AND classid = ((hashtextextended($1, 0) >> 32) & 4294967295)::oid
-        AND objid = (hashtextextended($1, 0) & 4294967295)::oid) AS parked`, [root]);
-    if (rows[0].parked) break;
+    const { rows } = await monitor.query(
+      'SELECT count(*)::int AS parked FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))',
+      [ledgerPid],
+    );
+    if (rows[0].parked > 0) break;
     await delay(10);
   }
   assert.equal((await call(orgB, 'b-1', 'annotated_read', policy(b.url))).decision, 'allow_call');
   assert.equal(b.authorizations.length, 1);
-  await ledger.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [root]);
+  await ledger.query('ROLLBACK');
   assert.equal((await parkedCall).decision, 'allow_call');
   assert.equal(a.authorizations.length, 1, 'A\'s consult reached A\'s annotator');
   assert.equal(b.authorizations.length, 1, 'and never B\'s');
@@ -118,7 +129,7 @@ name = "fetch"
 description = "Fetches one URL and returns its body."
 annotator = "jev.tool-call"
 `,
-    batteries: [{ entry: 'batteries/jev/appa.toml', name: 'jev', policy: battery.policy }],
+    batteries: [{ entry: 'batteries/jev/appa.toml', name: 'jev', policy: battery.base }],
   });
   assert.deepEqual(composed.errors, []);
   const declarations = await native.parseOpenappaDeclarations(composed.content);
@@ -135,11 +146,20 @@ annotator = "jev.tool-call"
   };
   const orgA = `jev-a-${randomUUID()}`;
   const orgB = `jev-b-${randomUUID()}`;
+  const db = new Client({ connectionString: databaseUrl });
+  await db.connect();
+  t.after(() => db.end());
   assert.deepEqual(await consulted(orgA, 'a-1', 'org-a-key'), ['Bearer org-a-key']);
   assert.deepEqual(await consulted(orgB, 'b-1', 'org-b-key'), ['Bearer org-b-key']);
   assert.deepEqual(await consulted(orgA, 'a-2', 'org-a-key'), ['Bearer org-a-key']);
   assert.deepEqual(await consulted(orgA, 'a-3', 'org-a-rotated'), ['Bearer org-a-rotated']);
   assert.deepEqual(await consulted(orgB, 'b-2', 'org-b-key'), ['Bearer org-b-key']);
+  const revisions = await db.query(
+    'SELECT d.head, (SELECT count(*) FROM openappa_policy_revisions r WHERE r.deployment=d.name) AS revisions FROM openappa_deployments d WHERE d.name=ANY($1)',
+    [[orgA, orgB]],
+  );
+  assert.equal(revisions.rowCount, 2);
+  assert.ok(revisions.rows.every(row => Number(row.head) === 1 && Number(row.revisions) === 1), 'credential rotation rebinds externals without publishing the same policy bytes');
 });
 
 test('a session keeps the root its row records, as one started before roots named their organization does', { skip: !databaseUrl, timeout: 30000 }, async (t) => {

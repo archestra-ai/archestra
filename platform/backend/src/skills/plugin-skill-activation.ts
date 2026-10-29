@@ -1,9 +1,9 @@
-import type { PluginSkillDetail, PluginSkillListItem } from "@/types";
+import type { PluginSkillCatalogItem, PluginSkillDetail } from "@/types";
 import { escapeXmlAttr, neutralizeFrameTags } from "./skill-activation";
 
 export function formatPluginSkillName(
   skill: Pick<
-    PluginSkillListItem,
+    PluginSkillCatalogItem,
     "pluginName" | "scope" | "pluginId" | "skillPath" | "name"
   >,
 ): string {

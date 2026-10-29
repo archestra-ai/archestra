@@ -1,3 +1,4 @@
+import KeyvPostgres from "@keyv/postgres";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import db from "@/database";
@@ -19,6 +20,8 @@ vi.mock("keyv", async (importOriginal) => {
   const codec = new Keyv();
   return {
     default: class MockKeyv {
+      constructor(readonly opts: { store: unknown }) {}
+
       get = mockGet;
       set = mockSet;
       delete = mockDelete;
@@ -31,7 +34,11 @@ vi.mock("keyv", async (importOriginal) => {
 });
 
 vi.mock("@keyv/postgres", () => ({
-  default: vi.fn(),
+  default: class MockKeyvPostgres {
+    async query() {
+      return [];
+    }
+  },
 }));
 
 // Import after mocks are set up
@@ -115,6 +122,76 @@ describe("CacheManager", () => {
 
   afterEach(() => {
     cacheManager.shutdown();
+  });
+
+  describe("withLock", () => {
+    const scope = `${CacheKey.OpenAppaHitlRuling}-transaction` as const;
+    const key = `${CacheKey.OpenAppaHitlReview}-transaction` as const;
+
+    beforeEach(async () => {
+      cacheManager.start();
+      await ensureKeyvCacheTable();
+    });
+
+    test("waits for the PostgreSQL adapter to create its table before locked SQL", async () => {
+      await db.execute(sql`DROP TABLE keyv_cache`);
+      const initialize = vi
+        .spyOn(KeyvPostgres.prototype, "query")
+        .mockImplementationOnce(async () => {
+          await ensureKeyvCacheTable();
+          return [];
+        });
+      try {
+        await cacheManager.withLock(scope, async (cache) => {
+          await cache.set(key, { initialized: true }, 60_000);
+          expect(await cache.getAndDelete(key)).toEqual({ initialized: true });
+        });
+      } finally {
+        initialize.mockRestore();
+      }
+    });
+
+    test("rolls back both removal and a new ruling when the transaction fails", async () => {
+      await insertKeyvEntry(key, { offerId: "offer" }, Date.now() + 60_000);
+      await expect(
+        cacheManager.withLock(scope, async (cache) => {
+          expect(await cache.getAndDelete(key)).toEqual({ offerId: "offer" });
+          await cache.set(scope, { ruling: "approve" }, 60_000);
+          throw new Error("abort ruling");
+        }),
+      ).rejects.toThrow("abort ruling");
+      expect(await keyvEntryExists(key)).toBe(true);
+      expect(await keyvEntryExists(scope)).toBe(false);
+      expect(
+        await cacheManager.withLock(scope, (cache) => cache.get(key)),
+      ).toEqual({ offerId: "offer" });
+    });
+
+    test("uses Keyv serialization and TTL for locked reads, writes, and consume-once", async () => {
+      const value = { body: ":encoded", bytes: Buffer.from("value") };
+      await cacheManager.withLock(scope, (cache) =>
+        cache.set(key, value, 60_000),
+      );
+      expect(
+        await cacheManager.withLock(scope, (cache) => cache.get(key)),
+      ).toEqual(value);
+      expect(await cacheManager.getAndDeleteMany([key])).toEqual([
+        { key, value },
+      ]);
+      expect(
+        await cacheManager.withLock(scope, (cache) => cache.getAndDelete(key)),
+      ).toBeUndefined();
+      await insertKeyvEntry(key, { expired: true }, Date.now() - 1);
+      await cacheManager.withLock(scope, async (cache) => {
+        expect(await cache.get(key)).toBeUndefined();
+        expect(await cache.getAndDeleteMany([key])).toEqual([]);
+      });
+      expect(await keyvEntryExists(key)).toBe(false);
+      await cacheManager.withLock(scope, async (cache) => {
+        await cache.set(key, value, 0);
+        expect(await cache.getAndDelete(key)).toEqual(value);
+      });
+    });
   });
 
   describe("start", () => {

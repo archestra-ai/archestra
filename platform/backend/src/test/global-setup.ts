@@ -14,6 +14,7 @@
  * MUST live out-of-band (a temp file), not in a module variable.
  */
 
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -51,7 +52,7 @@ export default async function setup() {
 
   const snapshotPath = path.join(
     os.tmpdir(),
-    `archestra-pglite-snapshot-${process.pid}.tar.gz`,
+    `archestra-pglite-snapshot-${process.pid}-${randomUUID()}.tar.gz`,
   );
   fs.writeFileSync(snapshotPath, bytes);
   process.env[SNAPSHOT_PATH_ENV] = snapshotPath;

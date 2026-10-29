@@ -218,6 +218,30 @@ export const GithubConfigSchema = z.object({
    * whole repository, which is the pre-existing behaviour.
    */
   includePaths: z.array(z.string()).optional(),
+  excludePaths: z.array(z.string()).optional(),
+  repositoryOverrides: z
+    .array(
+      z.object({
+        repository: z
+          .string()
+          .trim()
+          .regex(/^[^/\\\s]+\/[^/\\\s]+$/),
+        includeIssues: z.boolean().optional(),
+        includePullRequests: z.boolean().optional(),
+        includeRepositoryFiles: z.boolean().optional(),
+        labelsToSkip: z.array(z.string()).optional(),
+        fileTypes: z.array(z.string()).optional(),
+        includePaths: z.array(z.string()).optional(),
+        excludePaths: z.array(z.string()).optional(),
+      }),
+    )
+    .refine(
+      (overrides) =>
+        new Set(overrides.map((override) => override.repository.toLowerCase()))
+          .size === overrides.length,
+      "Repository overrides must be unique",
+    )
+    .optional(),
   labelsToSkip: z.array(z.string()).optional(),
 });
 export type GithubConfig = z.infer<typeof GithubConfigSchema>;
@@ -466,6 +490,10 @@ export type LinearCheckpoint = z.infer<typeof LinearCheckpointSchema>;
 
 export const SalesforceConfigSchema = z.object({
   type: SALESFORCE,
+  // Absence preserves existing password-based connectors. Routes restrict
+  // creation to OAuth and prevent migrated connectors from downgrading.
+  authMethod: z.enum(["oauth_client_credentials", "soap_legacy"]).optional(),
+  clientId: z.string().trim().min(1).optional(),
   loginUrl: connectorUrlSchema
     .optional()
     .default("https://login.salesforce.com"),

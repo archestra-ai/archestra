@@ -36,9 +36,13 @@ export async function fetchGithubCopilotModels(
   apiKey: string,
   baseUrlOverride?: string | null,
   extraHeaders?: Record<string, string> | null,
+  options?: { providerApiKeyId?: string },
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm["github-copilot"].baseUrl;
-  const copilotFetch = createGithubCopilotFetch({ githubToken: apiKey });
+  const copilotFetch = createGithubCopilotFetch({
+    githubToken: apiKey,
+    providerApiKeyId: options?.providerApiKeyId,
+  });
 
   const response = await copilotFetch(joinBaseUrl(baseUrl, "/models"), {
     headers: { ...(extraHeaders ?? {}) },

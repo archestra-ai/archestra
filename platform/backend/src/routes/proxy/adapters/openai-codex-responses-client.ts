@@ -193,7 +193,9 @@ class OpenAiCodexPassthroughResponsesClient {
  * encrypted reasoning to `include`, drop `max_output_tokens` (the Codex backend
  * rejects it with 400 "Unsupported parameter" — the chat⇄responses translator
  * path likewise never forwards an output cap), and supply the Codex persona only
- * when the caller (e.g. a non-Codex client) omitted its own instructions. A
+ * when the caller (e.g. a non-Codex client) sent no instructions of its own.
+ * Codex sends its instructions as a developer message, not as `instructions`.
+ * A persona added to such a request made Codex answer twice. A
  * `promptCacheKey` is used only when the caller sent no `prompt_cache_key`.
  */
 function applyCodexResponsesTransforms(
@@ -202,9 +204,20 @@ function applyCodexResponsesTransforms(
 ): ResponseCreateParamsStreaming {
   const loose = request as {
     include?: unknown;
+    input?: unknown;
     instructions?: string | null;
     prompt_cache_key?: string | null;
   };
+  const callerInstructed =
+    loose.instructions != null ||
+    (Array.isArray(loose.input) &&
+      loose.input.some(
+        (item) =>
+          typeof item === "object" &&
+          item !== null &&
+          "role" in item &&
+          (item.role === "developer" || item.role === "system"),
+      ));
   const existingInclude = Array.isArray(loose.include)
     ? (loose.include as string[])
     : [];
@@ -217,9 +230,13 @@ function applyCodexResponsesTransforms(
     include: Array.from(
       new Set([...existingInclude, "reasoning.encrypted_content"]),
     ),
-    instructions:
-      loose.instructions ??
-      archestraMcpBranding.brandBuiltInText(OPENAI_CODEX_INSTRUCTIONS),
+    ...(callerInstructed
+      ? {}
+      : {
+          instructions: archestraMcpBranding.brandBuiltInText(
+            OPENAI_CODEX_INSTRUCTIONS,
+          ),
+        }),
     ...(promptCacheKey && !loose.prompt_cache_key
       ? { prompt_cache_key: promptCacheKey }
       : {}),

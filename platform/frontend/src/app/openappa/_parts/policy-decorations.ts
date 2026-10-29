@@ -1,14 +1,10 @@
 import type { OnMount } from "@monaco-editor/react";
-import type {
-  PolicyBattery,
-  PolicyDeclarations,
-} from "@/lib/openappa-batteries.query";
-import { BATTERY_STATUS } from "./battery-status";
-
-type BatteryStatus = PolicyBattery["status"];
+import type { PolicyDeclarations } from "@/lib/openappa-batteries.query";
+import { BATTERY_STATUS, type EnforcedStatus } from "./battery-status";
+import { enforcedStatus } from "./composition-view";
 
 /** How a battery's status reads wherever it is shown: a badge, an editor hover. */
-export function batteryStatusBadge(status: BatteryStatus): {
+export function batteryStatusBadge(status: EnforcedStatus): {
   label: string;
   variant: "secondary" | "outline" | "destructive";
 } {
@@ -25,7 +21,7 @@ export function batteryStatusBadge(status: BatteryStatus): {
 }
 
 export type PolicyAnnotation =
-  | { kind: "battery"; line: number; name: string; status: BatteryStatus }
+  | { kind: "battery"; line: number; name: string; status: EnforcedStatus }
   | { kind: "unusedAlias"; line: number; namespace: string };
 
 /**
@@ -36,19 +32,18 @@ export type PolicyAnnotation =
  * The lines come from the revision the declarations were read at, so the
  * caller must only show these while the editor still holds that exact text.
  *
- * A composition that failed enforces no battery, whatever each entry's own
- * status says, so every entry then reads as refused — as the panel shows it.
+ * Each entry reads as the enforced composition holds it, as the panel shows
+ * it: a refused text keeps an earlier composition enforced.
  */
 export function policyAnnotations(
   declarations: PolicyDeclarations,
 ): PolicyAnnotation[] {
-  const enforced = declarations.lastError === null;
   const batteries = declarations.batteries.map(
-    ({ line, name, status }): PolicyAnnotation => ({
+    (battery): PolicyAnnotation => ({
       kind: "battery",
-      line,
-      name,
-      status: enforced ? status : "refused",
+      line: battery.line,
+      name: battery.name,
+      status: enforcedStatus(declarations, battery),
     }),
   );
   const aliases = declarations.unusedAliases.map(

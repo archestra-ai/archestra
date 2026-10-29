@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""Connect Kimi Code to the Agent's MCP gateway as a local stdio server.
+
+Kimi starts its MCP servers before the first prompt and waits for their
+catalogs, but a gateway whose initialize or tools/list fails is only logged:
+the turn runs without the gateway's tools. This bridge relays JSON-RPC to the
+gateway unchanged and records the outcome of Kimi's own catalog request in
+`ARCHESTRA_KIMI_GATEWAY_STATE`, which the launcher's task gate reads.
+
+The gateway URL, bearer token and run headers come from the environment, so no
+credential is written to Kimi's configuration.
+"""
+
+import contextlib
+import json
+import os
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+
+GATEWAY_URL = os.environ["ARCHESTRA_MCP_GATEWAY_URL"]
+SESSION = os.environ.get("ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID") or os.environ["ARCHESTRA_AGENT_RUNTIME_TASK_ID"]
+GATEWAY_TIMEOUT_SECONDS = 600
+HEADERS = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream",
+    "Authorization": "Bearer " + os.environ["ARCHESTRA_MCP_GATEWAY_TOKEN"],
+    "X-Archestra-Run-Id": os.environ["ARCHESTRA_AGENT_RUNTIME_TASK_ID"],
+    "X-Archestra-Session-Id": SESSION,
+    "X-Appa-Session-ID": SESSION,
+    "User-Agent": "archestra-kimi-mcp",
+}
+if os.environ.get("ARCHESTRA_AGENT_RUNTIME_BINDING"):
+    HEADERS["X-Archestra-Runtime-Binding"] = os.environ["ARCHESTRA_AGENT_RUNTIME_BINDING"]
+
+STATE_FILE = os.environ.get("ARCHESTRA_KIMI_GATEWAY_STATE") or os.path.join(
+    os.environ.get("ARCHESTRA_AGENT_RUNTIME_DIR", "/var/run/archestra"), "kimi-gateway-state.json"
+)
+
+output_lock = threading.Lock()
+state_lock = threading.Lock()
+mcp_session: list[str] = []
+listed_tools: list[int] = [0]
+
+
+def main() -> None:
+    # Tool calls can run for a long time (a call can wait on a person's
+    # review); answer each request on its own, but cap their concurrency so a
+    # burst cannot exhaust the runtime. Discovery, pings and notifications use
+    # their own workers, so pending tool calls never hold them up.
+    calls = ThreadPoolExecutor(max_workers=8, thread_name_prefix="call")
+    control = ThreadPoolExecutor(max_workers=2, thread_name_prefix="control")
+    for line in sys.stdin.buffer:
+        try:
+            message = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(message, dict):
+            continue
+        (calls if message.get("method") == "tools/call" else control).submit(relay, message)
+    # Kimi closed the connection: nobody reads an answer any more, and a
+    # pending gateway call must not keep this process alive.
+    for pool in (calls, control):
+        pool.shutdown(wait=False, cancel_futures=True)
+    with output_lock, contextlib.suppress(OSError):
+        sys.stdout.flush()
+    os._exit(0)
+
+
+def relay(message: dict) -> None:
+    request_id = message.get("id")
+    method = message.get("method")
+    try:
+        responses = post(message)
+    except (OSError, ValueError) as error:
+        if request_id is not None:
+            reason = error.reason if isinstance(error, urllib.error.URLError) else str(error)
+            write({"jsonrpc": "2.0", "id": request_id, "error": {"code": -32603, "message": f"MCP gateway request failed: {reason}"}})
+            if method in ("initialize", "tools/list"):
+                record("failed")
+        return
+    # Every message the gateway puts in the response reaches Kimi, including a
+    # notification sent alongside the answer.
+    answer = None
+    for response in responses:
+        if response.get("id") == request_id:
+            answer = response
+        write(response)
+    if method not in ("initialize", "tools/list") or answer is None:
+        return
+    if "error" in answer:
+        record("failed")
+    elif method == "tools/list":
+        tools = (answer.get("result") or {}).get("tools")
+        with state_lock:
+            # A paginated catalog arrives over several calls; a list without a
+            # cursor starts over.
+            if not (message.get("params") or {}).get("cursor"):
+                listed_tools[0] = 0
+            listed_tools[0] += len(tools) if isinstance(tools, list) else 0
+            count = listed_tools[0]
+        # Kimi asks for the next page itself; the catalog is complete when the
+        # gateway sends no cursor.
+        if not (answer.get("result") or {}).get("nextCursor"):
+            record("ready", count)
+
+
+def post(message: dict) -> list[dict]:
+    headers = dict(HEADERS)
+    with state_lock:
+        if mcp_session:
+            headers["Mcp-Session-Id"] = mcp_session[0]
+    request = urllib.request.Request(
+        GATEWAY_URL, data=json.dumps(message).encode(), headers=headers, method="POST"
+    )
+    try:
+        # A gateway tool call can run for minutes, but a silent socket must not
+        # hold one of the relay workers forever.
+        response = urllib.request.urlopen(request, timeout=GATEWAY_TIMEOUT_SECONDS)
+    except urllib.error.HTTPError as error:
+        # JSON-RPC errors can arrive with an HTTP error status.
+        response = error
+    with response:
+        session = response.headers.get("Mcp-Session-Id")
+        if session:
+            with state_lock:
+                mcp_session[:] = [session]
+        body = response.read().decode("utf-8", errors="replace")
+        content_type = response.headers.get("Content-Type", "")
+        status = response.status
+    if "text/event-stream" in content_type:
+        parsed = [json.loads(data) for data in event_data(body)]
+    elif body.strip():
+        parsed = json.loads(body)
+    else:
+        parsed = []
+    messages = [
+        item
+        for item in (parsed if isinstance(parsed, list) else [parsed])
+        if isinstance(item, dict) and item.get("jsonrpc") == "2.0"
+    ]
+    # A request must get its answer. A rejected request (for example a 401
+    # with a plain JSON error body) fails now instead of leaving Kimi waiting.
+    if "id" in message and not any(item.get("id") == message["id"] for item in messages):
+        raise ValueError(f"HTTP {status}")
+    return messages
+
+
+def event_data(body: str) -> list[str]:
+    """The data of each server-sent event; one event may span several lines."""
+    events: list[str] = []
+    lines: list[str] = []
+    for line in body.splitlines() + [""]:
+        if line.startswith("data:"):
+            value = line[5:]
+            lines.append(value[1:] if value.startswith(" ") else value)
+        elif not line and lines:
+            data = "\n".join(lines)
+            if data.strip():
+                events.append(data)
+            lines = []
+    return events
+
+
+def record(state: str, tools: int = 0) -> None:
+    """Publish the catalog outcome after Kimi has the answer it describes."""
+    temporary = f"{STATE_FILE}.{os.getpid()}.tmp"
+    try:
+        with open(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as file:
+            json.dump({"state": state, "tools": tools, "pid": os.getpid(), "at": time.time()}, file)
+        os.replace(temporary, STATE_FILE)
+    except OSError as error:
+        with contextlib.suppress(OSError):
+            os.unlink(temporary)
+        print(f"archestra: could not record the gateway state: {error}", file=sys.stderr, flush=True)
+
+
+def write(message: dict) -> None:
+    with output_lock:
+        sys.stdout.write(json.dumps(message) + "\n")
+        sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    main()

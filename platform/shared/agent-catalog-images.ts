@@ -1,11 +1,11 @@
 /** Maintained runtime image names shared by the catalog and background prefetch. */
 import AGENT_CATALOG_IMAGE_NAMES from "./agent-catalog-images.json";
+import { DEFAULT_CLAUDE_CODE_MODEL } from "./model-constants";
 
 export type AgentCatalogId = keyof typeof AGENT_CATALOG_IMAGE_NAMES;
 
 /** Public registry the maintained catalog images are published to. */
-export const AGENT_CATALOG_IMAGE_REGISTRY =
-  "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public";
+export const AGENT_CATALOG_IMAGE_REGISTRY = "ghcr.io/archestra-ai";
 
 /**
  * The catalog tag that matches a platform version. The approved stable
@@ -30,6 +30,118 @@ export function getAgentCatalogImages(params: {
 }
 
 /**
+ * The image a saved runtime launches with on this deployment.
+ *
+ * An Agent made from a template saves the maintained image tag that was
+ * current when it was created. The wrapper inside that image and the platform
+ * change together, so after an upgrade an older tag can stop working with the
+ * backend it talks to. A maintained image therefore follows the deployment's
+ * current catalog: same template, this deployment's registry and tag. The
+ * public registry counts as maintained too, so Agents created before an
+ * operator mirrored the images move to the mirror.
+ *
+ * A digest reference is a deliberate pin, and any other image is the author's
+ * own; both launch exactly as saved.
+ */
+export function followAgentCatalogImage(params: {
+  image: string;
+  catalogImages: Record<AgentCatalogId, string>;
+}): string {
+  if (params.image.includes("@")) return params.image;
+  const repository = imageRepository(params.image);
+  for (const [id, name] of Object.entries(AGENT_CATALOG_IMAGE_NAMES) as [
+    AgentCatalogId,
+    string,
+  ][]) {
+    const current = params.catalogImages[id];
+    if (
+      repository === imageRepository(current) ||
+      repository === `${AGENT_CATALOG_IMAGE_REGISTRY}/${name}` ||
+      repository ===
+        `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/${name}`
+    ) {
+      return current;
+    }
+  }
+  return params.image;
+}
+
+/** Display name of each maintained CLI template. */
+export const AGENT_CATALOG_NAMES: Record<AgentCatalogId, string> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  opencode: "OpenCode",
+  hermes: "Hermes",
+  openclaw: "OpenClaw",
+  grok: "Grok Build",
+  kimi: "Kimi Code",
+  copilot: "GitHub Copilot CLI",
+};
+
+/** Every maintained CLI template, in catalog order. */
+export const AGENT_CATALOG_IDS = Object.keys(
+  AGENT_CATALOG_IMAGE_NAMES,
+) as AgentCatalogId[];
+
+/**
+ * The runtime a maintained CLI template starts from. The catalog UI and the
+ * create_agent MCP tool both build from this, so an Agent made either way
+ * launches the same image with the same wrapper, protocol, and steering.
+ */
+export function buildAgentCatalogRuntime(params: {
+  id: AgentCatalogId;
+  image: string;
+}) {
+  const { inferenceProtocol } = CATALOG_RUNTIME_PROFILES[params.id];
+  return {
+    image: params.image,
+    command: [`archestra-${params.id}`],
+    inferenceProtocol,
+    backend: "kubernetes" as const,
+    steerMode: "tmux_keys" as const,
+    privileged: false,
+    resources: null,
+    environment: null,
+    credentials: [],
+    ...(params.id === "claude-code" && {
+      claudeCode: {
+        authentication: "subscription" as const,
+        model: DEFAULT_CLAUDE_CODE_MODEL,
+      },
+    }),
+    ttlHours: null,
+    maxCostUsd: null,
+    idleTimeoutMinutes: null,
+  };
+}
+
+/** The runtime a custom-image Agent starts from before its fields are set. */
+export function buildCustomAgentRuntime(params: { image: string }) {
+  return {
+    image: params.image,
+    command: null,
+    inferenceProtocol: "openai_responses" as const,
+    backend: "kubernetes" as const,
+    steerMode: "pipe" as const,
+    privileged: false,
+    resources: null,
+    environment: null,
+    credentials: null,
+    ttlHours: null,
+    maxCostUsd: null,
+    idleTimeoutMinutes: null,
+  };
+}
+
+/** The system prompt a catalog-created Agent starts with. */
+export function buildAgentCatalogSystemPrompt(params: {
+  name: string;
+  platformName: string;
+}): string {
+  return `You are ${params.name}, an autonomous coding agent. Complete delegated tasks carefully, use the tools available through ${params.platformName}, verify your work, and report the concrete result.`;
+}
+
+/**
  * Which maintained CLI template a saved runtime runs, or null for a custom
  * one. A runtime stores no template id, so this reads the `archestra-<id>`
  * wrapper command each template launches with, the same fingerprint the
@@ -51,3 +163,25 @@ const CATALOG_ID_BY_COMMAND: Record<string, AgentCatalogId> =
       id,
     ]),
   );
+
+const CATALOG_RUNTIME_PROFILES: Record<
+  AgentCatalogId,
+  { inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic" }
+> = {
+  "claude-code": { inferenceProtocol: "anthropic" },
+  codex: { inferenceProtocol: "openai_responses" },
+  opencode: { inferenceProtocol: "openai_responses" },
+  hermes: { inferenceProtocol: "openai_chat" },
+  openclaw: { inferenceProtocol: "openai_chat" },
+  grok: { inferenceProtocol: "openai_chat" },
+  kimi: { inferenceProtocol: "openai_chat" },
+  copilot: { inferenceProtocol: "openai_chat" },
+};
+
+/** An image reference without its tag. A registry port is not a tag. */
+function imageRepository(image: string): string {
+  const tagSeparator = image.lastIndexOf(":");
+  return tagSeparator > image.lastIndexOf("/")
+    ? image.slice(0, tagSeparator)
+    : image;
+}

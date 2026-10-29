@@ -977,7 +977,7 @@ describe("LimitModel", () => {
     });
   });
 
-  describe("getModelUsageBreakdown", () => {
+  describe("getModelUsageBreakdowns", () => {
     test("should return empty array for limit with no usage", async ({
       makeAgent,
     }) => {
@@ -991,7 +991,9 @@ describe("LimitModel", () => {
         model: ["gpt-4o"],
       });
 
-      const breakdown = await LimitModel.getModelUsageBreakdown(limit.id);
+      const breakdown =
+        (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id) ??
+        [];
 
       expect(breakdown).toHaveLength(1);
       expect(breakdown[0].model).toBe("gpt-4o");
@@ -1029,7 +1031,9 @@ describe("LimitModel", () => {
         100000,
       );
 
-      const breakdown = await LimitModel.getModelUsageBreakdown(limit.id);
+      const breakdown =
+        (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id) ??
+        [];
 
       expect(breakdown).toHaveLength(2);
 
@@ -1086,10 +1090,67 @@ describe("LimitModel", () => {
       const findByModelIdsOnlySpy = vi.spyOn(ModelModel, "findByModelIdsOnly");
       const findByModelIdOnlySpy = vi.spyOn(ModelModel, "findByModelIdOnly");
 
-      await LimitModel.getModelUsageBreakdown(limit.id);
+      await LimitModel.getModelUsageBreakdowns([limit.id]);
 
       expect(findByModelIdsOnlySpy).toHaveBeenCalledTimes(1);
       expect(findByModelIdOnlySpy).not.toHaveBeenCalled();
+    });
+
+    test("keys each limit's usage by its id, with one pricing lookup for all", async ({
+      makeAgent,
+    }) => {
+      const first = await makeAgent({ name: "First" });
+      const second = await makeAgent({ name: "Second" });
+      const tokenCostLimit = (entityId: string, model: string) =>
+        LimitModel.create({
+          entityType: "agent",
+          entityId,
+          limitType: "token_cost",
+          limitValue: 1000000,
+          model: [model],
+        });
+      const firstLimit = await tokenCostLimit(first.id, "gpt-4o");
+      const secondLimit = await tokenCostLimit(
+        second.id,
+        "claude-3-5-sonnet-20241022",
+      );
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        first.id,
+        "gpt-4o",
+        100,
+        50,
+      );
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        second.id,
+        "claude-3-5-sonnet-20241022",
+        300,
+        150,
+      );
+      const unknownLimitId = crypto.randomUUID();
+      const pricingSpy = vi.spyOn(ModelModel, "findByModelIdsOnly");
+
+      const breakdowns = await LimitModel.getModelUsageBreakdowns([
+        firstLimit.id,
+        secondLimit.id,
+        unknownLimitId,
+      ]);
+
+      expect(pricingSpy).toHaveBeenCalledTimes(1);
+      const tokens = (limitId: string) =>
+        breakdowns.get(limitId)?.map(({ model, tokensIn, tokensOut }) => ({
+          model,
+          tokensIn,
+          tokensOut,
+        }));
+      expect(tokens(firstLimit.id)).toEqual([
+        { model: "gpt-4o", tokensIn: 100, tokensOut: 50 },
+      ]);
+      expect(tokens(secondLimit.id)).toEqual([
+        { model: "claude-3-5-sonnet-20241022", tokensIn: 300, tokensOut: 150 },
+      ]);
+      expect(breakdowns.get(unknownLimitId)).toEqual([]);
     });
   });
 
@@ -2437,7 +2498,13 @@ describe("cleanupLimitsIfNeeded", () => {
       userId: user.id,
     });
     expect(result).not.toBeNull();
-    expect(result?.[1]).toContain("user-level cost limit");
+    expect(result?.[1]).toContain("default user cost limit");
+    expect(result?.[2]).toMatchObject({
+      entityType: "user",
+      limitType: "token_cost",
+      source: "default_user",
+      entityName: user.email,
+    });
   });
 
   test("subscription-billed interactions do not count toward default user limits", async ({
@@ -2498,7 +2565,13 @@ describe("cleanupLimitsIfNeeded", () => {
       userId: user.id,
     });
     expect(blocked).not.toBeNull();
-    expect(blocked?.[1]).toContain("user-level cost limit");
+    expect(blocked?.[1]).toContain("default user cost limit");
+    expect(blocked?.[2]).toMatchObject({
+      entityType: "user",
+      limitType: "token_cost",
+      source: "default_user",
+      entityName: user.email,
+    });
   });
 
   test("custom user limits override the inherited default user limit", async ({
@@ -3423,6 +3496,14 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     expect(refusalMessage).toContain(
       `<archestra-limit-entity-id>${agent.id}</archestra-limit-entity-id>`,
     );
+    expect(result?.[1]).toContain('Affected agent: "Test Agent".');
+    expect(result?.[1]).not.toContain(agent.id);
+    expect(result?.[2]).toMatchObject({
+      entityType: "agent",
+      limitType: "token_cost",
+      entityName: agent.name,
+      source: "explicit",
+    });
   });
 
   test("does not reset limits for entity types not included in entities", async ({

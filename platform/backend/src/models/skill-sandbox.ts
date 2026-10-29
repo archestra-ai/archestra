@@ -1,4 +1,8 @@
 import { and, desc, eq } from "drizzle-orm";
+import {
+  ownerColumnsFromUserId,
+  userIdFromOwnerColumns,
+} from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
 import type {
@@ -6,6 +10,7 @@ import type {
   SkillSandbox,
   SkillSandboxSkillMount,
 } from "@/types";
+import { ownedBy } from "./principal-owner";
 
 /**
  * Thrown when a skill file has a path that would escape the skill root (absolute
@@ -45,11 +50,11 @@ class SkillSandboxModel {
     if (sandbox.conversationId) {
       await assertConversationActive(sandbox.conversationId);
     }
-    let rows: SkillSandbox[];
+    let rows: SkillSandboxRow[];
     try {
       rows = await db
         .insert(schema.skillSandboxesTable)
-        .values(sandbox)
+        .values({ ...sandbox, ...ownerColumnsFromUserId(sandbox.userId) })
         .returning();
     } catch (error) {
       if (sandbox.conversationId && isConversationFkViolation(error)) {
@@ -61,7 +66,7 @@ class SkillSandboxModel {
     if (!row) {
       throw new Error("failed to insert skill sandbox");
     }
-    return row;
+    return toSkillSandbox(row);
   }
 
   /**
@@ -87,7 +92,7 @@ class SkillSandboxModel {
         .insert(schema.skillSandboxesTable)
         .values({
           organizationId,
-          userId,
+          ...ownerColumnsFromUserId(userId),
           conversationId,
           defaultCwd,
           isDefault: true,
@@ -108,7 +113,7 @@ class SkillSandboxModel {
       .where(
         and(
           eq(schema.skillSandboxesTable.organizationId, organizationId),
-          eq(schema.skillSandboxesTable.userId, userId),
+          ownedBy(schema.skillSandboxesTable, userId),
           eq(schema.skillSandboxesTable.conversationId, conversationId),
           eq(schema.skillSandboxesTable.isDefault, true),
         ),
@@ -119,7 +124,7 @@ class SkillSandboxModel {
       // which detaches the default sandbox from the conversation.
       throw new SkillSandboxConversationGoneError(conversationId);
     }
-    return row;
+    return toSkillSandbox(row);
   }
 
   /**
@@ -141,7 +146,7 @@ class SkillSandboxModel {
       .insert(schema.skillSandboxesTable)
       .values({
         organizationId,
-        userId,
+        ...ownerColumnsFromUserId(userId),
         appId,
         defaultCwd,
         isDefault: true,
@@ -154,7 +159,7 @@ class SkillSandboxModel {
       .where(
         and(
           eq(schema.skillSandboxesTable.organizationId, organizationId),
-          eq(schema.skillSandboxesTable.userId, userId),
+          ownedBy(schema.skillSandboxesTable, userId),
           eq(schema.skillSandboxesTable.appId, appId),
           eq(schema.skillSandboxesTable.isDefault, true),
         ),
@@ -164,7 +169,7 @@ class SkillSandboxModel {
       // was deleted between the insert and the re-select.
       throw new Error(`App ${appId} no longer exists`);
     }
-    return row;
+    return toSkillSandbox(row);
   }
 
   /** The conversation's default sandbox, if one has been created. */
@@ -179,12 +184,12 @@ class SkillSandboxModel {
       .where(
         and(
           eq(schema.skillSandboxesTable.organizationId, params.organizationId),
-          eq(schema.skillSandboxesTable.userId, params.userId),
+          ownedBy(schema.skillSandboxesTable, params.userId),
           eq(schema.skillSandboxesTable.conversationId, params.conversationId),
           eq(schema.skillSandboxesTable.isDefault, true),
         ),
       );
-    return row ?? null;
+    return row ? toSkillSandbox(row) : null;
   }
 
   static async findById(id: string): Promise<SkillSandbox | null> {
@@ -193,7 +198,7 @@ class SkillSandboxModel {
       .from(schema.skillSandboxesTable)
       .where(eq(schema.skillSandboxesTable.id, id));
 
-    return result ?? null;
+    return result ? toSkillSandbox(result) : null;
   }
 
   /** All sandboxes attached to a conversation within an org, newest first. */
@@ -201,7 +206,7 @@ class SkillSandboxModel {
     conversationId: string;
     organizationId: string;
   }): Promise<SkillSandbox[]> {
-    return await db
+    const rows = await db
       .select()
       .from(schema.skillSandboxesTable)
       .where(
@@ -214,6 +219,7 @@ class SkillSandboxModel {
         desc(schema.skillSandboxesTable.createdAt),
         desc(schema.skillSandboxesTable.id),
       );
+    return rows.map(toSkillSandbox);
   }
 
   /** Distinct skill ids mounted into the sandbox over its lifetime. */
@@ -246,6 +252,13 @@ class SkillSandboxModel {
 export default SkillSandboxModel;
 
 // === internal helpers ===
+
+type SkillSandboxRow = typeof schema.skillSandboxesTable.$inferSelect;
+
+function toSkillSandbox(row: SkillSandboxRow): SkillSandbox {
+  const { serviceAccountId: _serviceAccountId, ...rest } = row;
+  return { ...rest, userId: userIdFromOwnerColumns(row) };
+}
 
 // Throw the typed "gone" error unless the conversation exists and is active
 // (not soft-deleted). Fail-closed guard for sandbox operations, which must not

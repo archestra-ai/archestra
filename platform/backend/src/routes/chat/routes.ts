@@ -9,6 +9,8 @@ import {
   type ContextWindowBreakdown,
   collapseWhitespace,
   getModelReadableMimeTypes,
+  hasPersistableAssistantContent,
+  isGeminiImageGenerationModel,
   isModelSelectionComplete,
   isThinkingEffortSelfHostedProvider,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
@@ -17,6 +19,7 @@ import {
   requiresPerplexityAgentApi,
   TimeInMs,
   type TokenUsage,
+  TURN_NOTICE_PART_TYPE,
   toPlaceholderTitle,
   truncateChars,
 } from "@archestra/shared";
@@ -30,6 +33,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
@@ -57,10 +61,6 @@ import {
   chatTaskPrincipal,
   createChatTaskBridge,
 } from "@/clients/chat-task-bridge";
-import {
-  applyDualLlmAnalysesToMessages,
-  createDualLlmAnalysisStreamBridge,
-} from "@/clients/dual-llm-analysis-stream";
 import { createLLMModelForAgent, isApiKeyRequired } from "@/clients/llm-client";
 import {
   applySubagentToolCallsToMessages,
@@ -71,11 +71,11 @@ import {
   repeatCeilingStopCondition,
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
+import { orderToolResultsByCall } from "@/clients/tool-result-order";
 import config from "@/config";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import db, { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
-import { dualLlmProgressBus } from "@/guardrails/dual-llm-progress-bus";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import {
   applyHookRunsToMessages,
@@ -94,6 +94,7 @@ import {
   AgentTeamModel,
   ConversationAttachmentModel,
   ConversationChatErrorModel,
+  ConversationCompactionModel,
   ConversationEnabledToolModel,
   ConversationModel,
   LlmProviderApiKeyModel,
@@ -111,7 +112,9 @@ import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
-import { getOpenappaStatus } from "@/openappa/service";
+import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
+import { chatOpenAppaSession, getOpenappaStatus } from "@/openappa/service";
+import { startedUnenforced } from "@/openappa/unenforced";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
@@ -122,8 +125,13 @@ import {
   type OpenedApp,
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
+import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
+import { resolveChatModelPool } from "@/services/chat-model-pools";
 import { conversationFilesService } from "@/services/conversation-files";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  getGuardrailsDeployment,
+  isGuardrailsV2Active,
+} from "@/services/guardrails-deployment";
 import { projectService } from "@/services/project";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { generateConversationTitle } from "@/services/title-generation";
@@ -136,6 +144,8 @@ import type { ConversationContentKey } from "@/types";
 import {
   ApiError,
   type ChatMessage,
+  ContextCompactionReasonSchema,
+  ContextCompactionStatusSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ErrorResponsesSchema,
@@ -155,20 +165,22 @@ import {
   resolveConversationModel,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
+import { projectCappedToolOutputs } from "@/utils/tool-result-cap";
 import { broadcastConversationUpdated } from "@/websocket";
-import { createAbortiveTurnTracker } from "./abortive-turn";
+import {
+  createAbortiveTurnTracker,
+  hasUnfinishedToolInput,
+} from "./abortive-turn";
 import { buildAnthropicProviderOptions } from "./anthropic-provider-options";
 import {
   isSafeInlineMimeType,
   sanitizeAttachmentContentType,
 } from "./attachment-content-type";
 import { buildChatContext } from "./build-chat-context";
-import {
-  compactMessagesForChat,
-  invalidateConversationCompactions,
-} from "./context-compaction";
+import { compactMessagesForChat } from "./compaction/compact-messages";
 import {
   buildContextWindowBreakdown,
+  estimateEachToolTokens,
   refreshBreakdownUsedTokens,
   resolveInputPricePerToken,
 } from "./context-window-breakdown";
@@ -178,11 +190,14 @@ import {
   resolveEncryptedChatAccess,
   resolveEncryptedChatCreation,
 } from "./encrypted-chat";
+import { errorMessage } from "./error-message";
 import {
   buildAbortiveTurnError,
+  buildIncompleteResponseNotice,
   formatUnavailableToolErrorDetails,
   getActiveTraceContext,
   getUnavailableToolErrorDetails,
+  ModelStreamStalledError,
   mapProviderError,
   ProviderError,
   sanitizeChatErrorForFrontend,
@@ -194,7 +209,10 @@ import {
   injectPluginSkillActivation,
   injectSkillActivation,
 } from "./inject-skill-activation";
-import { applyStepPromptCacheBreakpoint } from "./normalization/apply-prompt-cache";
+import {
+  applyStepPromptCacheBreakpoint,
+  usesStepPromptCache,
+} from "./normalization/apply-prompt-cache";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
 import { assertWithinContextWindow } from "./normalization/enforce-context-window-limit";
 import {
@@ -215,6 +233,7 @@ import {
   detectSandboxCommand,
   runSandboxCommandTurn,
 } from "./sandbox-command-turn";
+import { withStreamIdleTimeout } from "./stream-idle-timeout";
 import { createToolCallRepair } from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
 import { sendGatedUiMessageStreamResponse } from "./ui-stream-response";
@@ -350,6 +369,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Optional sampling override; when omitted the provider/model default applies (unchanged
           // behavior). The benchmark harness sets this to pin runs against temperature variance.
           temperature: z.number().min(0).max(2).optional(),
+          // Optional step ceiling that can only lower MAX_AGENT_STEPS. The benchmark harness sets
+          // this so a runaway trajectory stops long before the interactive-chat ceiling.
+          maxSteps: z.number().int().min(1).max(MAX_AGENT_STEPS).optional(),
           // The depth the composer is showing for this turn. Sent with the
           // message so the turn cannot run at a depth the user has replaced but
           // whose PATCH has not landed yet; the stored column is the fallback
@@ -367,6 +389,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           messages,
           trigger,
           temperature,
+          maxSteps,
           thinkingEffort: requestedThinkingEffort,
         },
         user,
@@ -383,7 +406,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         `${CacheKey.ChatActiveStream}-${conversationId}` as const;
       let removeAbortListeners = () => {};
 
-      // Flag to prevent duplicate message persistence if both onError and onFinish fire
+      // Prevents duplicate persistence when a pre-merge error path and the
+      // model stream's onFinish both fire.
       let messagesPersisted = false;
       const claimMessagesPersisted = (): boolean => {
         if (messagesPersisted || !conversationId) {
@@ -392,6 +416,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         messagesPersisted = true;
         return true;
       };
+      // Once the model stream is merged, its onFinish is the sole persistence
+      // point: it fires on every close (including after errors and aborts)
+      // with the assistant message streamed so far.
+      let modelStreamMerged = false;
 
       // Handle broken pipe gracefully when the client navigates away
       // The stream continues running but writing to a closed response should not crash
@@ -418,13 +446,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
-      }
-
-      if ((await isGuardrailsV2Active()) && conversation.encryptedChat) {
-        throw new ApiError(
-          409,
-          "OpenAPPA does not yet support encrypted policy storage for encrypted chats",
-        );
       }
 
       // Check if the agent was deleted
@@ -493,6 +514,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         encryptedChatKey && encryptedChatKeyInfo?.hasEscrow
           ? encryptedChatKey
           : null;
+      if (
+        encryptedChatKey &&
+        !encryptedChatAudit &&
+        (await isGuardrailsV2Active())
+      )
+        throw new ApiError(
+          409,
+          "Encrypted chat escrow is required for policy storage",
+        );
+      enterOpenappaEncryptedChat(
+        encryptedChatAudit
+          ? { organizationId, userId: user.id, audit: encryptedChatAudit }
+          : null,
+      );
       // Gate uploaded attachments before any bytes are persisted: anything
       // within the attachment storage cap is accepted — a file the model can't
       // ingest, or one too big for the sandbox, still lands in the
@@ -546,18 +581,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // splicing into the assistant message in onFinish. One instance is shared
       // down the whole delegation chain.
       const subagentToolStream = createSubagentToolStreamBridge();
-      // Surfaces the proxy's dual LLM sanitization work on this conversation as
-      // structured analysis parts. The proxy publishes events on the in-process
-      // bus under a per-turn channel id that rides the loopback request as a
-      // header; the bridge streams them live and collects them for splicing in
-      // onFinish, buffering anything that fires before the model stream's
-      // `start` chunk (a pre-`start` data part mints a phantom message).
-      const dualLlmAnalysisStream = createDualLlmAnalysisStreamBridge();
-      const dualLlmProgressChannel = randomUUID();
-      const unsubscribeDualLlmProgress = dualLlmProgressBus.subscribe(
-        dualLlmProgressChannel,
-        (event) => dualLlmAnalysisStream.handleEvent(event),
-      );
       // Detaches a tool call that outlives the synchronous threshold into a
       // durable task, so the user sees a live cancellable card instead of the
       // turn simply failing at the timeout.
@@ -654,7 +677,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await activeChatRunService.markTerminal({
           runId: activeRun.id,
           status: "failed",
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage(error),
         });
         throw error;
       }
@@ -796,7 +819,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             onStreamSettled: () => {
               removeAbortListeners();
               stopActiveRunPolling();
-              unsubscribeDualLlmProgress();
             },
             buildErrorPayload: ({ error, mappedError }) =>
               buildStreamErrorPayload({
@@ -950,6 +972,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 organizationId,
                 modelAcceptsImageToolResults:
                   selected.inputModalities?.includes("image") === true,
+                // A per-user provider model has no stored key; the fork then
+                // re-resolves the acting user's own credential for it.
+                parentLlm: conversation.modelId
+                  ? {
+                      modelId: conversation.modelId,
+                      apiKeyId: conversation.chatApiKeyId,
+                    }
+                  : undefined,
                 hookSessionContext,
                 projectInstructions,
                 openedApp,
@@ -1055,22 +1085,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const normalizedMessagesForLLM =
               normalizeChatMessages(messagesForLLM);
 
-            // For Gemini image generation models, enable image output via responseModalities
-            // Known image-capable model patterns:
-            // - gemini-2.0-flash-exp-image-generation
-            // - gemini-2.5-flash-preview-native-audio-dialog (supports image output)
-            // - gemini-2.5-flash-image
-            // - gemini-3-pro-image-preview (and similar Gemini 3 image models)
-            // - Any model with "image" in the name (covers current and future image models)
-            //
-            // TODO: Use output modalities from the models DB table instead of hardcoded
-            // pattern matching. The `models` table has capability info that would be more
-            // reliable, but some models (e.g. gemini-3-pro-image-preview) currently report
-            // "capabilities unknown", so that needs to be fixed first.
+            // Image output needs explicit responseModalities, including named
+            // Nano Banana releases whose ids contain no "image" suffix.
             const modelLower = selectedModel.toLowerCase();
             const isGeminiImageModel =
               provider === "gemini" &&
-              (modelLower.includes("image") ||
+              (isGeminiImageGenerationModel(selectedModel) ||
                 modelLower.includes("native-audio-dialog"));
 
             // Persist user's new messages immediately so they're visible on page reload.
@@ -1101,12 +1121,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // unlike the tool-level stream handler, a NoSuchToolError here
                 // is not a recoverable tool result: it must mark the run failed
                 // and persist, so it falls through to the normal error path.
-                activeRunError =
-                  error instanceof Error ? error.message : String(error);
+                activeRunError = errorMessage(error);
                 // Persist messages on stream-level errors (e.g. errors thrown
                 // in execute before writer.merge() is reached). Without this,
                 // user messages are lost on refresh after an error.
-                const shouldPersist = claimMessagesPersisted();
+                const shouldPersist =
+                  !modelStreamMerged && claimMessagesPersisted();
                 (async () => {
                   if (shouldPersist) {
                     try {
@@ -1144,7 +1164,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 chatMcpElicitation.setWriter(writer);
                 subagentToolStream.setWriter(writer);
                 chatTaskBridge.setWriter(writer);
-                dualLlmAnalysisStream.setWriter(writer);
 
                 // Create the LLM model here, inside execute, so a credential
                 // failure (e.g. a per-user provider like GitHub Copilot the user
@@ -1165,7 +1184,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     sessionId: conversationId,
                     source: "chat",
                     agentLlmApiKeyId: agent.llmApiKeyId,
-                    dualLlmProgressChannel,
+                    modelPoolId: conversation.modelPoolId,
                     // Lets the proxy store this turn's interaction encrypted
                     // rather than redacted. Only sent when an escrow record
                     // exists, since without one the row could never be reopened.
@@ -1283,11 +1302,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // the breakdown would otherwise count only the system prompt and
                 // tools.
                 //
-                // After tool-call steps we re-emit an updated breakdown using the
+                // After each finished step we re-emit an updated breakdown using the
                 // provider's exact inputTokens so the visualizer headline stays
-                // accurate across multi-step turns. The category estimates stay
-                // proportional to the initial build; the ring and totals track
-                // the real prompt size.
+                // accurate across multi-step turns and the final response. The
+                // category estimates stay proportional to the initial build; the
+                // ring and totals track the real prompt size.
                 let latestBreakdown: ContextWindowBreakdown | null = null;
                 let breakdownPricePerToken: number | null = null;
                 try {
@@ -1343,22 +1362,44 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // "retrying may help".
                 let lastFinishReason: string | null = null;
 
+                // Errors thrown by a tool's execute reach toUIMessageStream's
+                // onError like stream errors do; tracking them here lets that
+                // handler render them as tool-level errors instead of failing
+                // the run.
+                const toolExecutionErrors = new Set<unknown>();
+                // Computed in the model stream's onFinish, emitted by the
+                // abortive-turn tracker's flush (which runs after it).
+                let turnNoticeChunk: UIMessageChunk | null = null;
+
                 const streamTextConfig: ChatStreamTextConfig = {
-                  model,
+                  model: withStreamIdleTimeout(
+                    model,
+                    config.chat.modelStreamIdleTimeoutMs,
+                  ),
                   messages: modelMessages,
-                  ...(provider === "anthropic" &&
-                    anthropicNativeEndpoint && {
-                      prepareStep: ({ messages }) => ({
-                        messages: applyStepPromptCacheBreakpoint({
-                          provider,
-                          model: selectedModel,
-                          anthropicNativeEndpoint,
-                          messages,
-                        }),
-                      }),
-                    }),
+                  experimental_onToolCallFinish: (event) => {
+                    if (!event.success) {
+                      toolExecutionErrors.add(event.error);
+                    }
+                  },
+                  prepareStep: ({ messages }) => {
+                    const ordered = orderToolResultsByCall(messages);
+                    return {
+                      messages: usesStepPromptCache({
+                        provider,
+                        anthropicNativeEndpoint,
+                      })
+                        ? applyStepPromptCacheBreakpoint({
+                            provider,
+                            model: selectedModel,
+                            anthropicNativeEndpoint,
+                            messages: ordered,
+                          })
+                        : ordered,
+                    };
+                  },
                   ...(supportsToolCalling && { tools: mcpTools }),
-                  stopWhen: buildChatStopConditions(repeatTracker),
+                  stopWhen: buildChatStopConditions(repeatTracker, maxSteps),
                   abortSignal: chatAbortController.signal,
                   experimental_repairToolCall: createToolCallRepair({
                     toolNames: Object.keys(mcpTools),
@@ -1382,6 +1423,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           sessionId: conversationId,
                           source: "chat:tool_call_repair",
                           agentLlmApiKeyId: agent.llmApiKeyId,
+                          modelPoolId: conversation.modelPoolId,
                           // A repair prompt carries the same conversation
                           // content as the turn it repairs.
                           encryptedChatKey: encryptedChatAudit?.dek ?? null,
@@ -1416,14 +1458,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       } satisfies TokenUsage,
                     });
 
-                    // After a tool-call step the next model call will receive a
-                    // larger prompt (tool results appended). Re-emit the breakdown
-                    // with the provider's exact input-token count so the panel
-                    // headline stays accurate between steps. Category proportions
-                    // are kept from the initial estimate — they are still the best
-                    // available approximation of where tokens went.
+                    // Re-emit the breakdown with the provider's exact input-token
+                    // count on every finished step (both intermediate tool-call
+                    // steps and the final response step) so the panel headline and
+                    // composer ring stay in lockstep with `data-token-usage`.
+                    // Category proportions are kept from the initial estimate —
+                    // they are still the best available approximation of where
+                    // tokens went.
                     if (
-                      finishReason === "tool-calls" &&
                       latestBreakdown !== null &&
                       usage.inputTokens != null &&
                       usage.inputTokens > 0
@@ -1443,7 +1485,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           // panel reads it from onData state, so keeping it out
                           // of the message list is what the client expects. A
                           // non-transient copy would be appended to the
-                          // assistant message once per tool step — persisted,
+                          // assistant message once per step — persisted,
                           // re-appended on every replay, and one more chance for
                           // the SDK to open a message of its own to hold it.
                           transient: true,
@@ -1451,7 +1493,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       } catch (error) {
                         logger.warn(
                           { error, conversationId },
-                          "[ContextWindow] failed to refresh breakdown after tool step",
+                          "[ContextWindow] failed to refresh breakdown after step",
                         );
                       }
                     }
@@ -1801,8 +1843,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   // prompt on reload (#4030).
                   generateMessageId: generateId,
                   onError: (error) => {
-                    const incomingErrorMessage =
-                      error instanceof Error ? error.message : String(error);
+                    const incomingErrorMessage = errorMessage(error);
                     if (returnedChatErrorPayloads.has(incomingErrorMessage)) {
                       return incomingErrorMessage;
                     }
@@ -1823,6 +1864,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       return serializedToolError;
                     }
 
+                    // A tool's execute threw: the SDK already recorded it as a
+                    // tool-error result the model can react to, so render it on
+                    // the tool card and keep the run alive. A ProviderError (a
+                    // subagent's model failed) is rethrown on purpose to fail
+                    // the parent run, so it stays fatal.
+                    if (
+                      toolExecutionErrors.has(error) &&
+                      !(error instanceof ProviderError)
+                    ) {
+                      return incomingErrorMessage;
+                    }
+
                     // Use pre-built error from subagent if available (preserves correct provider),
                     // otherwise map the error with the current provider
                     const serializedChatError = buildStreamErrorPayload({
@@ -1839,80 +1892,99 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     });
                     returnedChatErrorPayloads.add(serializedChatError);
 
-                    activeRunError =
-                      error instanceof Error ? error.message : String(error);
-                    // Claim persistence before the async work below starts,
-                    // otherwise onFinish can race and also persist (duplicates).
-                    const shouldPersist = claimMessagesPersisted();
+                    // Persistence is left to onFinish, which still fires after
+                    // this error with whatever the assistant streamed so far.
+                    activeRunError = incomingErrorMessage;
+                    // The SDK keeps running a tool call completed before the
+                    // stall and would start the next step afterwards; end the
+                    // run so the client's error is the turn's last word.
+                    if (error instanceof ModelStreamStalledError) {
+                      chatAbortController.abort();
+                    }
+                    logger.error(
+                      {
+                        // EncryptedChat: errors routinely echo prompt/tool
+                        // content — keep the app log content-free.
+                        error: conversation.encryptedChat
+                          ? "[redacted: encrypted chat]"
+                          : error,
+                        conversationId,
+                        agentId,
+                        ...getCorrelationLogFields(getActiveTraceContext()),
+                      },
+                      "Chat stream error occurred",
+                    );
 
-                    (async () => {
-                      logger.error(
-                        {
-                          // EncryptedChat: errors routinely echo prompt/tool
-                          // content — keep the app log content-free.
-                          error: conversation.encryptedChat
-                            ? "[redacted: encrypted chat]"
-                            : error,
-                          conversationId,
-                          agentId,
-                          ...getCorrelationLogFields(getActiveTraceContext()),
-                        },
-                        "Chat stream error occurred",
-                      );
+                    return serializedChatError;
+                  },
+                  onFinish: async ({
+                    messages: finalMessages,
+                    finishReason,
+                    isAborted,
+                  }) => {
+                    removeAbortListeners();
+                    stopActiveRunPolling();
 
-                      // Persist messages despite error so they have a valid ID for editing
-                      if (shouldPersist) {
-                        try {
+                    const lastMessage = finalMessages.at(-1);
+                    const reply =
+                      lastMessage?.role === "assistant" &&
+                      hasPersistableAssistantContent(lastMessage)
+                        ? lastMessage
+                        : null;
+
+                    // A reply the model ended early (output limit, provider
+                    // "other"/"error") gets a non-fatal notice, persisted with
+                    // it so it survives reload. Unfinished tool input is the
+                    // abortive-turn tracker's error instead.
+                    const turnNotice =
+                      reply &&
+                      !activeRunError &&
+                      !isAborted &&
+                      !chatAbortController.signal.aborted &&
+                      !hasUnfinishedToolInput(reply)
+                        ? buildIncompleteResponseNotice(finishReason)
+                        : null;
+                    const turnNoticePart = turnNotice
+                      ? { type: TURN_NOTICE_PART_TYPE, data: turnNotice }
+                      : null;
+                    turnNoticeChunk = turnNoticePart;
+                    const turnMessages = turnNoticePart
+                      ? finalMessages.map((message) =>
+                          message === reply
+                            ? {
+                                ...message,
+                                parts: [...message.parts, turnNoticePart],
+                              }
+                            : message,
+                        )
+                      : finalMessages;
+
+                    // Splice the turn's collected hook runs into the assistant
+                    // message(s) as inline `data-hook-run` parts before persisting,
+                    // so they survive refresh and sit at their lifecycle position.
+                    const messagesToPersist = applyMcpTasksToMessages(
+                      applySubagentToolCallsToMessages(
+                        applyHookRunsToMessages(
+                          turnMessages as unknown as ChatMessage[],
+                          hookRunCollector,
+                        ),
+                        subagentToolStream.collected(),
+                      ),
+                      chatTaskBridge.collected(),
+                    );
+
+                    if (!messagesPersisted && conversationId) {
+                      try {
+                        if (activeRunError && !reply) {
+                          // Failed before streaming anything: persist only the
+                          // request so its messages get DB ids for editing.
                           await persistNewMessages(
                             conversationId,
                             messages,
                             "onError",
                             encryptedChatKey,
                           );
-                        } catch (persistError) {
-                          // Log persistence error but don't prevent the error response
-                          logger.error(
-                            { persistError, conversationId },
-                            "Failed to persist messages during error handling",
-                          );
-                        }
-                      }
-                    })().catch((err) => {
-                      // Log any errors from the async IIFE but don't crash
-                      logger.error(
-                        { err },
-                        "Unexpected error in onError async handler",
-                      );
-                    });
-
-                    return serializedChatError;
-                  },
-                  onFinish: async ({ messages: finalMessages }) => {
-                    removeAbortListeners();
-                    stopActiveRunPolling();
-                    unsubscribeDualLlmProgress();
-
-                    // Splice the turn's collected hook runs into the assistant
-                    // message(s) as inline `data-hook-run` parts before persisting,
-                    // so they survive refresh and sit at their lifecycle position.
-                    const messagesToPersist = applyDualLlmAnalysesToMessages(
-                      applyMcpTasksToMessages(
-                        applySubagentToolCallsToMessages(
-                          applyHookRunsToMessages(
-                            finalMessages as unknown as ChatMessage[],
-                            hookRunCollector,
-                          ),
-                          subagentToolStream.collected(),
-                        ),
-                        chatTaskBridge.collected(),
-                      ),
-                      dualLlmAnalysisStream.collected(),
-                    );
-
-                    // Only persist if not already persisted by onError
-                    if (!messagesPersisted && conversationId) {
-                      try {
-                        if (trigger === "regenerate-message") {
+                        } else if (trigger === "regenerate-message") {
                           // Replace the regenerated turn atomically: delete the
                           // stale messages below the anchor and write the new
                           // turn in one transaction (no destructive pre-delete).
@@ -1978,29 +2050,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // content. Emitting from the tracker's flush keeps it in stream
                 // order and avoids an execute-side await on a not-yet-drained
                 // stream.
+                modelStreamMerged = true;
                 writer.merge(
                   modelUiStream
-                    .pipeThrough(
-                      // Releases the dual-LLM bridge's buffered analysis parts
-                      // once the model stream has opened — writing them any
-                      // earlier mints a phantom assistant message client-side.
-                      // Flushed on the second chunk, not the first: the merge
-                      // pump has provably forwarded the `start` chunk to the
-                      // outbound stream before this transform sees chunk two,
-                      // so a side-write can no longer overtake it.
-                      (() => {
-                        let chunksSeen = 0;
-                        return new TransformStream({
-                          transform(chunk, controller) {
-                            controller.enqueue(chunk);
-                            chunksSeen++;
-                            if (chunksSeen >= 2) {
-                              dualLlmAnalysisStream.markStreamStarted();
-                            }
-                          },
-                        });
-                      })(),
-                    )
                     .pipeThrough(
                       createToolUiStartTransform({
                         prefetchedUiResources,
@@ -2039,6 +2091,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             }),
                           };
                         },
+                        onResolvedTurnEnd: () => turnNoticeChunk,
                       }),
                     ),
                 );
@@ -2116,11 +2169,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           chatAbortController.abort();
         }
         stopActiveRunPolling();
-        unsubscribeDualLlmProgress();
         await activeChatRunService.markTerminal({
           runId: activeRun.id,
           status: "failed",
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage(error),
         });
         throw error;
       }
@@ -2273,7 +2325,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       const { user, organizationId } = request;
-      const conversation = await ConversationModel.findAccessibleById({
+      // Authorization only: the replay comes from the run, not the transcript.
+      const conversation = await ConversationModel.findAccessibleMetadataById({
         id,
         userId: user.id,
         organizationId,
@@ -2344,10 +2397,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatConversations,
         description:
-          "List all conversations for current user with agent details. Optionally filter by search query.",
+          "List the current user's conversations with agent details, newest first. Optionally filter by search query. Without a search, `limit` caps the recent conversations returned (pinned ones are always included); search results have their own cap of 50.",
         tags: ["Chat"],
         querystring: z.object({
           search: z.string().optional(),
+          limit: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(250)
+            .default(250)
+            .describe(
+              "Recent conversations to return when not searching. Pinned ones are always added.",
+            ),
+          includeArtifacts: z
+            .preprocess((val) => val !== "false" && val !== false, z.boolean())
+            .optional()
+            .describe(
+              "Include each chat's artifact and todo list (default true). False returns them as null for lightweight lists.",
+            ),
         }),
         response: constructResponseSchema(
           z.array(
@@ -2367,11 +2435,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { search } = request.query;
+      const { search, limit, includeArtifacts } = request.query;
       const conversations = await ConversationModel.findAll(
         request.user.id,
         request.organizationId,
         search,
+        { limit, includeArtifacts },
       );
       const runs = await ScheduleTriggerRunModel.findByChatConversationIds({
         organizationId: request.organizationId,
@@ -2420,77 +2489,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetChatConversation,
-        description: "Get conversation with messages",
+        description:
+          "Get conversation with messages. With `tail`, only the last `tail` messages and the count of the earlier ones (`olderMessageCount`).",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
+        querystring: z.object({
+          tail: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(CONVERSATION_TAIL_MAX)
+            .optional()
+            .describe("Return only the last N messages"),
+        }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (request, reply) => {
       const {
         params: { id },
-        user,
-        organizationId,
+        query: { tail },
       } = request;
-      const conversation = await findReadableConversationById({
-        conversationId: id,
-        userId: user.id,
-        organizationId,
-      });
-
-      if (!conversation) {
-        throw new ApiError(404, "Conversation not found");
-      }
-
-      // EncryptedChat: the model returned no message content (it cannot — the key
-      // only exists on this request). Decrypt here with the presented key, or
-      // return the locked shape for the tombstone. A wrong key is a 409.
-      if (conversation.encryptedChat) {
-        const keyInfo = await ConversationModel.getEncryptedChatKeyInfo(id);
-        const access = resolveEncryptedChatAccess({
-          request,
-          conversation: keyInfo ?? {
-            id,
-            encryptedChat: true,
-            encryptedChatDekFingerprint: null,
-            hasEscrow: false,
-          },
-        });
-        if (access.state === "unlocked") {
-          // Chat errors are loaded locked-safe by the model (it has no key),
-          // so re-read them here now that one is in hand.
-          const [rows, chatErrors] = await Promise.all([
-            MessageModel.findByConversation(id, access.key),
-            ConversationChatErrorModel.findByConversation(id, access.key),
-          ]);
-          conversation.messages = toConversationApiMessages(
-            rows,
-          ) as typeof conversation.messages;
-          conversation.chatErrors = chatErrors;
-        } else {
-          conversation.messages = [];
-          conversation.contentLocked = true;
-          return reply.send(conversation);
-        }
-      }
-
-      // Hook-run debug parts are persisted on every turn but only surfaced to
-      // admins while this conversation has debug mode on. Strip them otherwise
-      // so hook stdout/stderr/payload never reach a non-admin client. (When
-      // debug is off we skip the permission lookup entirely.)
-      const hooksDebugVisible =
-        config.hooks.enabled &&
-        conversation.hooksDebugEnabled &&
-        (await hasAnyAgentTypeAdminPermission({
-          userId: user.id,
-          organizationId,
-        }));
-      conversation.messages = stripHookRunParts(
-        conversation.messages as ChatMessage[],
-        { visible: hooksDebugVisible },
+      return reply.send(
+        await readConversationForRequest({ request, id, tail }),
       );
-
-      return reply.send(conversation);
     },
   );
 
@@ -2504,23 +2526,53 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(
-          z.object({ trust: z.string(), audience: z.string() }).nullable(),
+          z
+            .object({
+              trust: z.string(),
+              audience: z.string(),
+              policyRevision: z.number().int(),
+            })
+            .nullable(),
         ),
       },
     },
     async (request, reply) => {
       const { id } = request.params;
       const { user, organizationId } = request;
-      const conversation = await findReadableConversationById({
+      // The label lives on the session, so only read access is checked here.
+      const conversation = await findReadableConversationMetadataById({
         conversationId: id,
         userId: user.id,
         organizationId,
       });
       if (!conversation) throw new ApiError(404, "Conversation not found");
-      if (conversation.encryptedChat) return reply.send(null);
-      if (!(await isGuardrailsV2Active())) return reply.send(null);
+      const keyInfo = conversation.encryptedChat
+        ? await ConversationModel.getEncryptedChatKeyInfo(id)
+        : null;
+      const access = keyInfo
+        ? resolveEncryptedChatAccess({ request, conversation: keyInfo })
+        : null;
+      if (access?.state === "locked") return reply.send(null);
+      enterOpenappaEncryptedChat(
+        access?.state === "unlocked" && keyInfo?.hasEscrow
+          ? { organizationId, userId: user.id, audit: access.key }
+          : null,
+      );
+      const deployment = await getGuardrailsDeployment();
+      if (!deployment.active) return reply.send(null);
+      // A superyelled conversation is out of OpenAPPA: its label no longer
+      // applies.
+      if (
+        await startedUnenforced(
+          chatOpenAppaSession(organizationId, user.id, id),
+        )
+      )
+        return reply.send(null);
       return reply.send(
-        await getOpenappaStatus({ organizationId, sessionId: id }),
+        await getOpenappaStatus({
+          organizationId,
+          sessionId: id,
+        }),
       );
     },
   );
@@ -2610,7 +2662,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user,
         organizationId,
       } = request;
-      const conversation = await findReadableConversationById({
+      const conversation = await findReadableConversationMetadataById({
         conversationId: id,
         userId: user.id,
         organizationId,
@@ -2624,11 +2676,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // which is the same tombstone posture the transcript takes.
       const access = resolveEncryptedChatAccess({
         request,
-        conversation: (await ConversationModel.getEncryptedChatKeyInfo(id)) ?? {
-          id,
-          encryptedChat: conversation.encryptedChat,
-          encryptedChatDekFingerprint: null,
-        },
+        conversation,
       });
 
       return reply.send(
@@ -2674,7 +2722,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Verify the requester can read the conversation that owns this
       // attachment. Without this check, any org member with chat:read could
       // fetch any attachment in the org regardless of per-conversation ACLs.
-      const conversation = await findReadableConversationById({
+      const conversation = await findReadableConversationMetadataById({
         conversationId: meta.conversationId,
         userId: user.id,
         organizationId,
@@ -2690,13 +2738,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const attachmentKey = meta.encryptedChat
         ? requireEncryptedChatKey({
             request,
-            conversation: (await ConversationModel.getEncryptedChatKeyInfo(
-              meta.conversationId,
-            )) ?? {
-              id: meta.conversationId,
-              encryptedChat: true,
-              encryptedChatDekFingerprint: null,
-            },
+            conversation,
           })
         : null;
 
@@ -2826,6 +2868,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               name: z.string(),
               description: z.string(),
               parameters: z.record(z.string(), z.any()).nullable(),
+              /**
+               * Estimated context cost of this tool's definition, on the same
+               * yardstick as the chat Context Window Visualizer. No model is
+               * in hand here, so the cl100k encoder stands in.
+               */
+              tokens: z.number().int(),
             }),
           ),
         ),
@@ -2857,12 +2905,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Convert AI SDK Tool format to simple array for frontend. Chat keeps the
       // gateway's attestation markers on its model path, where the LLM proxy
       // verifies and strips them; only this UI view drops them.
+      const tokensByTool = estimateEachToolTokens({
+        provider: "openai",
+        tools: mcpTools,
+      });
       const tools = Object.entries(mcpTools).map(([name, tool]) => ({
         name,
         description: removeAttestationTokens(tool.description ?? ""),
         parameters:
           (tool.inputSchema as { jsonSchema?: Record<string, unknown> })
             ?.jsonSchema || null,
+        tokens: tokensByTool[name] ?? 0,
       }));
 
       return reply.send(tools);
@@ -2881,6 +2934,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title: true,
           modelId: true,
           chatApiKeyId: true,
+          modelPoolId: true,
           projectId: true,
           encryptedChat: true,
           thinkingEffort: true,
@@ -2890,6 +2944,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             title: true,
             modelId: true,
             chatApiKeyId: true,
+            modelPoolId: true,
             projectId: true,
             encryptedChat: true,
             thinkingEffort: true,
@@ -2904,6 +2959,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title,
           modelId,
           chatApiKeyId,
+          modelPoolId,
           projectId,
           encryptedChat,
           thinkingEffort,
@@ -2957,21 +3013,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate chatApiKeyId if provided
       // Skip validation if it matches the agent's configured key (permission flows through agent access)
-      if (chatApiKeyId && chatApiKeyId !== agent.llmApiKeyId) {
+      if (!modelPoolId && chatApiKeyId && chatApiKeyId !== agent.llmApiKeyId) {
         await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
       }
 
       // Resolve the model via the priority chain:
-      // explicit pick -> member -> agent -> organization -> best available.
+      // pool -> explicit pick -> member -> agent -> organization -> best available.
       // The explicit pick is a (model, key) pair — both are carried so the
       // chosen key is honored instead of being re-derived.
-      const llmSelection = await resolveConversationLlmSelectionForAgent({
-        agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
-        organizationId,
-        userId: user.id,
-        explicitModelId: modelId,
-        explicitApiKeyId: chatApiKeyId,
-      });
+      const llmSelection = modelPoolId
+        ? {
+            ...(await resolveChatModelPool({
+              organizationId,
+              userId: user.id,
+              modelPoolId,
+            })),
+            selectedModel: null,
+          }
+        : await resolveConversationLlmSelectionForAgent({
+            agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+            organizationId,
+            userId: user.id,
+            explicitModelId: modelId,
+            explicitApiKeyId: chatApiKeyId,
+          });
 
       logger.info(
         {
@@ -3015,6 +3080,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
+          modelPoolId: modelPoolId ?? null,
           projectId: projectId ?? null,
           thinkingEffort,
         }),
@@ -3065,46 +3131,82 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Validate chatApiKeyId if provided
-      // Skip validation if it matches the agent's configured key (permission flows through agent access)
-      if (body.chatApiKeyId) {
-        if (body.chatApiKeyId !== currentConversation.agent?.llmApiKeyId) {
-          await validateChatApiKeyAccess(
-            body.chatApiKeyId,
+      // Validate agentId if provided
+      const nextAgent = body.agentId
+        ? await AgentModel.findById(
+            body.agentId,
             user.id,
-            organizationId,
-          );
-        }
+            await hasAnyAgentTypeAdminPermission({
+              userId: user.id,
+              organizationId,
+            }),
+          )
+        : null;
+      if (body.agentId && !nextAgent) {
+        throw new ApiError(404, "Agent not found");
       }
 
-      // Validate agentId if provided
-      if (body.agentId) {
-        const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-          userId: user.id,
+      // Validate chatApiKeyId if provided. Skip validation when it is the
+      // configured key of the agent the conversation will run on after this
+      // update (permission flows through agent access) — the new agent when
+      // this request switches agents, not the one being left.
+      // Picking a pool stores one of its members as the conversation's key
+      // and model; picking a key or model, or another agent, leaves the pool.
+      if (body.modelPoolId) {
+        const pooled = await resolveChatModelPool({
           organizationId,
+          userId: user.id,
+          modelPoolId: body.modelPoolId,
+        });
+        body.modelId = pooled.modelId;
+        body.chatApiKeyId = pooled.chatApiKeyId;
+      } else if (
+        body.modelPoolId === undefined &&
+        (body.modelId !== undefined ||
+          body.chatApiKeyId !== undefined ||
+          nextAgent)
+      ) {
+        body.modelPoolId = null;
+      }
+
+      const effectiveAgentLlmApiKeyId = nextAgent
+        ? nextAgent.llmApiKeyId
+        : currentConversation.agent?.llmApiKeyId;
+      if (
+        !body.modelPoolId &&
+        body.chatApiKeyId &&
+        body.chatApiKeyId !== effectiveAgentLlmApiKeyId
+      ) {
+        await validateChatApiKeyAccess(
+          body.chatApiKeyId,
+          user.id,
+          organizationId,
+        );
+      }
+
+      if (
+        nextAgent &&
+        !body.modelPoolId &&
+        body.modelId === undefined &&
+        body.chatApiKeyId === undefined
+      ) {
+        const llmSelection = await resolveConversationLlmSelectionForAgent({
+          agent: {
+            llmApiKeyId: nextAgent.llmApiKeyId ?? null,
+            modelId: nextAgent.modelId ?? null,
+          },
+          organizationId,
+          userId: user.id,
         });
 
-        const agent = await AgentModel.findById(
-          body.agentId,
-          user.id,
-          isAgentAdmin,
-        );
-        if (!agent) {
-          throw new ApiError(404, "Agent not found");
-        }
-
-        if (body.modelId === undefined && body.chatApiKeyId === undefined) {
-          const llmSelection = await resolveConversationLlmSelectionForAgent({
-            agent: {
-              llmApiKeyId: agent.llmApiKeyId ?? null,
-              modelId: agent.modelId ?? null,
-            },
-            organizationId,
-            userId: user.id,
-          });
-
-          body.modelId = llmSelection.modelId;
-          body.chatApiKeyId = llmSelection.chatApiKeyId;
+        body.modelId = llmSelection.modelId;
+        body.chatApiKeyId = llmSelection.chatApiKeyId;
+        // The new agent's pool comes with its model.
+        if (
+          nextAgent.modelPoolId &&
+          llmSelection.modelId === nextAgent.modelId
+        ) {
+          body.modelPoolId = nextAgent.modelPoolId;
         }
       }
 
@@ -3355,8 +3457,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(
           z.object({
-            status: z.enum(["created", "existing", "skipped", "failed"]),
-            reason: z.string().optional(),
+            status: ContextCompactionStatusSchema,
+            reason: ContextCompactionReasonSchema.optional(),
             compaction: SelectConversationCompactionSchema.nullable(),
             conversation: SelectConversationSchema,
           }),
@@ -3408,7 +3510,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         selectedModel,
         modelId: conversation.modelId,
         agentLlmApiKeyId: conversation.agent.llmApiKeyId,
-        messages: normalizedMessages,
+        messages: projectCappedToolOutputs(normalizedMessages),
         systemPrompt: conversation.agent.systemPrompt ?? undefined,
         trigger: "manual",
       });
@@ -3527,6 +3629,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const conversationModel = conversation.modelId
         ? await ModelModel.findById(conversation.modelId)
         : null;
+      // Media generation is an explicit user action. Never generate a second
+      // image or speech clip merely to name the conversation.
+      const azureTitleCapabilities =
+        conversationModel?.provider === "azure"
+          ? await resolveAzureModelCapabilities({
+              providerApiKeyId: conversation.agent?.llmApiKeyId ?? undefined,
+              modelId: conversationModel.modelId,
+            })
+          : undefined;
+      if (
+        azureTitleCapabilities &&
+        (azureTitleCapabilities.status !== "known" ||
+          azureTitleCapabilities.kind !== "text")
+      ) {
+        return reply.send(conversation);
+      }
       const titleLlm = await resolveAgentLlmOrDefault({
         agent: titleAgent,
         inheritFrom:
@@ -3734,7 +3852,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           tx,
           editKey,
         );
-        await invalidateConversationCompactions(message.conversationId, tx);
+        await ConversationCompactionModel.deleteByConversation(
+          message.conversationId,
+          tx,
+        );
       });
 
       // Return updated conversation with all messages
@@ -4077,9 +4198,91 @@ export function resolveTitleUserInput(
   );
 }
 
-export function buildChatStopConditions(repeatTracker: ToolCallRepeatTracker) {
+/**
+ * A conversation as `GET /api/chat/conversations/:id` returns it to the
+ * caller: 404 unless they may read it, an encrypted chat decrypted with the
+ * request's key (the full history) or locked without one, and hook-run debug
+ * parts kept only for an admin while debug mode is on. With `tail`, only the
+ * last `tail` messages and the count of the earlier ones.
+ */
+export async function readConversationForRequest(params: {
+  request: FastifyRequest;
+  id: string;
+  tail?: number;
+}): Promise<z.infer<typeof SelectConversationSchema>> {
+  const { request, id, tail } = params;
+  const { user, organizationId } = request;
+  const conversation = await findReadableConversationById({
+    conversationId: id,
+    userId: user.id,
+    organizationId,
+    tail,
+  });
+
+  if (!conversation) {
+    throw new ApiError(404, "Conversation not found");
+  }
+
+  // EncryptedChat: the model returned no message content (it cannot — the key
+  // only exists on this request). Decrypt here with the presented key, or
+  // return the locked shape for the tombstone. A wrong key is a 409.
+  if (conversation.encryptedChat) {
+    const keyInfo = await ConversationModel.getEncryptedChatKeyInfo(id);
+    const access = resolveEncryptedChatAccess({
+      request,
+      conversation: keyInfo ?? {
+        id,
+        encryptedChat: true,
+        encryptedChatDekFingerprint: null,
+        hasEscrow: false,
+      },
+    });
+    if (access.state === "unlocked") {
+      // Chat errors are loaded locked-safe by the model (it has no key),
+      // so re-read them here now that one is in hand.
+      const [rows, chatErrors] = await Promise.all([
+        MessageModel.findByConversation(id, access.key),
+        ConversationChatErrorModel.findByConversation(id, access.key),
+      ]);
+      // The key-holding read is the full history: a tail read does not
+      // apply to an encrypted chat.
+      conversation.messages = toConversationApiMessages(
+        rows,
+      ) as typeof conversation.messages;
+      delete conversation.olderMessageCount;
+      conversation.chatErrors = chatErrors;
+    } else {
+      conversation.messages = [];
+      conversation.contentLocked = true;
+      return conversation;
+    }
+  }
+
+  // Hook-run debug parts are persisted on every turn but only surfaced to
+  // admins while this conversation has debug mode on. Strip them otherwise
+  // so hook stdout/stderr/payload never reach a non-admin client. (When
+  // debug is off we skip the permission lookup entirely.)
+  const hooksDebugVisible =
+    config.hooks.enabled &&
+    conversation.hooksDebugEnabled &&
+    (await hasAnyAgentTypeAdminPermission({
+      userId: user.id,
+      organizationId,
+    }));
+  conversation.messages = stripHookRunParts(
+    conversation.messages as ChatMessage[],
+    { visible: hooksDebugVisible },
+  );
+
+  return conversation;
+}
+
+export function buildChatStopConditions(
+  repeatTracker: ToolCallRepeatTracker,
+  maxSteps: number = MAX_AGENT_STEPS,
+) {
   return [
-    stepCountIs(MAX_AGENT_STEPS),
+    stepCountIs(Math.min(maxSteps, MAX_AGENT_STEPS)),
     repeatCeilingStopCondition(repeatTracker),
   ];
 }
@@ -4716,16 +4919,21 @@ function attachRequestAbortListeners(params: {
   return cleanup;
 }
 
+/** The largest `tail` a conversation read accepts. */
+const CONVERSATION_TAIL_MAX = 200;
+
 async function findReadableConversationById(params: {
   conversationId: string;
   userId: string;
   organizationId: string;
+  tail?: number;
 }): Promise<z.infer<typeof SelectConversationSchema> | null> {
   return (
     (await ConversationModel.findAccessibleById({
       id: params.conversationId,
       userId: params.userId,
       organizationId: params.organizationId,
+      tail: params.tail,
       canReadOthersViaProject: () =>
         ResourcePermissions.allows({
           userId: params.userId,
@@ -4739,42 +4947,81 @@ async function findReadableConversationById(params: {
       conversationId: params.conversationId,
       userId: params.userId,
       organizationId: params.organizationId,
+      tail: params.tail,
     }))
   );
+}
+
+async function findReadableConversationMetadataById(params: {
+  conversationId: string;
+  userId: string;
+  organizationId: string;
+}) {
+  const conversation = await ConversationModel.findAccessibleMetadataById({
+    id: params.conversationId,
+    userId: params.userId,
+    organizationId: params.organizationId,
+    canReadOthersViaProject: () =>
+      ResourcePermissions.allows({
+        userId: params.userId,
+        organizationId: params.organizationId,
+        resource: "conversation",
+        scope: "*",
+        action: "read",
+      }),
+  });
+  if (conversation) return conversation;
+  if (!(await canReadScheduleRunConversation(params))) return null;
+  return ConversationModel.getReadAccessMetadata({
+    id: params.conversationId,
+    organizationId: params.organizationId,
+  });
 }
 
 async function findScheduleRunConversationForAdmin(params: {
   conversationId: string;
   userId: string;
   organizationId: string;
+  tail?: number;
 }): Promise<z.infer<typeof SelectConversationSchema> | null> {
-  const isScheduledTaskAdmin = await ResourcePermissions.allows({
+  if (!(await canReadScheduleRunConversation(params))) return null;
+  return ConversationModel.findByIdInOrganization({
+    id: params.conversationId,
+    organizationId: params.organizationId,
+    tail: params.tail,
+    viewer: { kind: "caller", ...params },
+  });
+}
+
+async function canReadScheduleRunConversation(params: {
+  conversationId: string;
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const hasProjectOversight = await ResourcePermissions.allows({
     userId: params.userId,
     organizationId: params.organizationId,
-    resource: "scheduledTask",
+    resource: "project",
     scope: "*",
     action: "read",
   });
-  if (!isScheduledTaskAdmin) {
-    return null;
+  if (!hasProjectOversight) {
+    return false;
   }
 
   const run = await ScheduleTriggerRunModel.findByChatConversationId(
     params.conversationId,
   );
   if (!run || run.organizationId !== params.organizationId) {
-    return null;
+    return false;
   }
 
   const trigger = await ScheduleTriggerModel.findById(run.triggerId);
   if (!trigger || trigger.organizationId !== params.organizationId) {
-    return null;
+    return false;
   }
 
-  return await ConversationModel.findByIdInOrganization({
-    id: params.conversationId,
-    organizationId: params.organizationId,
-  });
+  return true;
 }
 
 async function forkConversation(params: {

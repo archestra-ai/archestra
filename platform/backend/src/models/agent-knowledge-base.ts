@@ -1,9 +1,10 @@
-import { and, eq, getTableColumns, inArray } from "drizzle-orm";
+import { and, eq, getTableColumns } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentKnowledgeBase } from "@/types";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentVersionModel from "./agent-version";
+import { idArrayCondition } from "./id-array-condition";
 
 class AgentKnowledgeBaseModel {
   static async findByAgent(agentId: string): Promise<AgentKnowledgeBase[]> {
@@ -170,7 +171,7 @@ class AgentKnowledgeBaseModel {
       )
       .where(
         and(
-          inArray(schema.agentKnowledgeBasesTable.agentId, agentIds),
+          idArrayCondition(schema.agentKnowledgeBasesTable.agentId, agentIds),
           notDeleted(schema.knowledgeBasesTable),
         ),
       );
@@ -180,33 +181,6 @@ class AgentKnowledgeBaseModel {
       const list = map.get(row.agentId) ?? [];
       list.push(row.knowledgeBaseId);
       map.set(row.agentId, list);
-    }
-    return map;
-  }
-
-  /**
-   * Batch fetch: for a list of KB IDs, return a map of knowledgeBaseId → agentId[].
-   */
-  static async getAgentIdsForKnowledgeBases(
-    knowledgeBaseIds: string[],
-  ): Promise<Map<string, string[]>> {
-    if (knowledgeBaseIds.length === 0) return new Map();
-
-    const rows = await db
-      .select()
-      .from(schema.agentKnowledgeBasesTable)
-      .where(
-        inArray(
-          schema.agentKnowledgeBasesTable.knowledgeBaseId,
-          knowledgeBaseIds,
-        ),
-      );
-
-    const map = new Map<string, string[]>();
-    for (const row of rows) {
-      const list = map.get(row.knowledgeBaseId) ?? [];
-      list.push(row.agentId);
-      map.set(row.knowledgeBaseId, list);
     }
     return map;
   }

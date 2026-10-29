@@ -1,4 +1,5 @@
 import { TOOL_RUN_COMMAND_FULL_NAME } from "@archestra/shared";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import { ToolModel } from "@/models";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
@@ -219,6 +220,31 @@ describe("isSkillSandboxAvailableForAgent", () => {
         agentId: agent.id,
       }),
     ).toBe(false);
+  });
+
+  test("true for a service account with agent:read and the tools assigned", async ({
+    makeOrganization,
+    makeCustomRole,
+    makeServiceAccount,
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const role = await makeCustomRole(org.id, {
+      permission: { agent: ["read"] },
+    });
+    const account = await makeServiceAccount(org.id, { role: role.role });
+    const userId = serviceAccountUserId(account.id);
+    const agent = await makeAgent({ name: "Sandbox Agent" });
+    await seedAndAssignArchestraTools(agent.id);
+
+    expect(
+      await isSkillSandboxAvailableForAgent({
+        userId,
+        organizationId: org.id,
+        agentId: agent.id,
+      }),
+    ).toBe(true);
   });
 
   test("false when no user context is available", async ({

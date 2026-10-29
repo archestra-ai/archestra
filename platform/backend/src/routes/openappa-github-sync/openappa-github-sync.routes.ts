@@ -1,15 +1,26 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { openappaGithubAppSetup } from "@/services/openappa-github-app-setup";
 import {
-  acceptHeldAppaGithubPull,
   configureAppaGithubSync,
   createAppaGithubRepository,
   getAppaGithubSync,
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
-import { constructResponseSchema } from "@/types";
+import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
 import {
-  AcceptedHeldPullSchema,
+  AppaGithubAppAccountsSchema,
+  AppaGithubAppInstallResultSchema,
+  AppaGithubAppManifestSchema,
+  AppaGithubAppRepositoriesQuerySchema,
+  AppaGithubAppRepositoriesSchema,
+  AppaGithubRepositoryQuerySchema,
+  AppaGithubRepositoryStatusSchema,
+  CompleteAppaGithubAppSchema,
+  PendingAppaGithubAppSchema,
+  StartAppaGithubAppSchema,
+} from "@/types/openappa-github-app-setup";
+import {
   AppaGithubSourceSchema,
   AppaGithubSyncActionSchema,
   AppaGithubSyncStatusSchema,
@@ -67,6 +78,169 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         }),
       ),
   );
+  app.post(
+    "/api/openappa/github-app/manifest",
+    {
+      schema: {
+        operationId: RouteId.StartAppaGithubApp,
+        description:
+          "Start registering the OpenAPPA GitHub App, from a manifest, on the account that owns the policy repository",
+        tags: ["OpenAPPA"],
+        body: StartAppaGithubAppSchema,
+        response: constructResponseSchema(AppaGithubAppManifestSchema),
+      },
+    },
+    async (request, reply) => {
+      request.auditSkip = true;
+      return reply.send(
+        await openappaGithubAppSetup.start({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          ...request.body,
+        }),
+      );
+    },
+  );
+  app.post(
+    "/api/openappa/github-app/manifest/complete",
+    {
+      schema: {
+        operationId: RouteId.CompleteAppaGithubApp,
+        description:
+          "Exchange GitHub's one-time code for the new App; it is stored once installed",
+        tags: ["OpenAPPA"],
+        body: CompleteAppaGithubAppSchema,
+        response: constructResponseSchema(PendingAppaGithubAppSchema),
+      },
+    },
+    async (request, reply) => {
+      request.auditSkip = true;
+      return reply.send(
+        await openappaGithubAppSetup.complete({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          ...request.body,
+        }),
+      );
+    },
+  );
+  app.get(
+    "/api/openappa/github-app/pending",
+    {
+      schema: {
+        operationId: RouteId.GetPendingAppaGithubApp,
+        description:
+          "The GitHub App created during setup that is not installed yet",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(
+          PendingAppaGithubAppSchema.nullable(),
+        ),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await openappaGithubAppSetup.pending({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        }),
+      ),
+  );
+  app.delete(
+    "/api/openappa/github-app/pending",
+    {
+      schema: {
+        operationId: RouteId.DiscardAppaGithubApp,
+        description:
+          "Forget the GitHub App created during setup so setup can start over",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      // Only a short-lived setup record is dropped; nothing durable changes.
+      request.auditSkip = true;
+      await openappaGithubAppSetup.discard({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
+      return reply.send({ success: true });
+    },
+  );
+  app.post(
+    "/api/openappa/github-app/install",
+    {
+      schema: {
+        operationId: RouteId.InstallAppaGithubApp,
+        description:
+          "Store the new GitHub App as an organization credential once it is installed",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(AppaGithubAppInstallResultSchema),
+      },
+    },
+    async (request, reply) => {
+      const result = await openappaGithubAppSetup.install({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
+      if (result.status === "waiting") request.auditSkip = true;
+      else request.auditBefore = null;
+      return reply.send(result);
+    },
+  );
+  app.get(
+    "/api/openappa/github-app/repository",
+    {
+      schema: {
+        operationId: RouteId.GetAppaGithubRepositoryStatus,
+        description:
+          "Whether a policy repository already exists, as far as the organization's GitHub Apps can see",
+        tags: ["OpenAPPA"],
+        querystring: AppaGithubRepositoryQuerySchema,
+        response: constructResponseSchema(AppaGithubRepositoryStatusSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await openappaGithubAppSetup.repository({
+          organizationId: request.organizationId,
+          ...request.query,
+        }),
+      ),
+  );
+  app.get(
+    "/api/openappa/github-app/accounts",
+    {
+      schema: {
+        operationId: RouteId.GetAppaGithubAppAccounts,
+        description:
+          "The GitHub account each organization GitHub App is installed on",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(AppaGithubAppAccountsSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(await openappaGithubAppSetup.accounts(request.organizationId)),
+  );
+  app.get(
+    "/api/openappa/github-app/repositories",
+    {
+      schema: {
+        operationId: RouteId.GetAppaGithubAppRepositories,
+        description:
+          "The repositories an organization GitHub App can reach, recent template copies first",
+        tags: ["OpenAPPA"],
+        querystring: AppaGithubAppRepositoriesQuerySchema,
+        response: constructResponseSchema(AppaGithubAppRepositoriesSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await openappaGithubAppSetup.repositories({
+          organizationId: request.organizationId,
+          credentialId: request.query.credentialId,
+        }),
+      ),
+  );
   app.patch(
     "/api/openappa/github-sync",
     {
@@ -88,33 +262,6 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           ...request.body,
         }),
       );
-    },
-  );
-  app.post(
-    "/api/openappa/github-sync/accept-held",
-    {
-      schema: {
-        operationId: RouteId.AcceptHeldAppaGithubPull,
-        tags: ["OpenAPPA"],
-        response: constructResponseSchema(AcceptedHeldPullSchema),
-      },
-    },
-    async (request, reply) => {
-      const { accepted, status } = await acceptHeldAppaGithubPull({
-        organizationId: request.organizationId,
-        userId: request.user.id,
-      });
-      // What the repository's text changes that it could not authorize itself
-      // belongs in the audit record, named, not only in the sync row.
-      request.auditBefore = { heldPull: accepted.sourceCommit };
-      request.auditAfter = {
-        acceptedPull: accepted.sourceCommit,
-        contentHash: accepted.contentHash,
-        reasons: accepted.reasons,
-        droppedBatteries: accepted.droppedBatteries,
-        changedVariables: accepted.changedVariables,
-      };
-      return reply.send({ ...accepted, status });
     },
   );
 };

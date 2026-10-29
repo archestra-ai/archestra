@@ -6,8 +6,19 @@ import {
   isEncryptedChatSealedContent,
   isEncryptedChatUnavailableContent,
 } from "./encrypted-chat-content";
+import { logContentNotStored } from "./log-content";
 
 describe("redacted content", () => {
+  it("recognizes content the Log Content mode kept out of storage", () => {
+    // Outside any locked chat, but it means the same to a reader: never
+    // stored. Missing it would render the marker as a provider payload.
+    const marker = logContentNotStored({ isError: true });
+
+    expect(isEncryptedChatRedactedContent(marker)).toBe(true);
+    expect(isEncryptedChatUnavailableContent(marker)).toBe(true);
+    expect(isEncryptedChatSealedContent(marker)).toBe(false);
+  });
+
   it("recognizes the marker it writes", () => {
     expect(isEncryptedChatRedactedContent(ENCRYPTED_CHAT_REDACTED_MARKER)).toBe(
       true,

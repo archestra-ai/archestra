@@ -6,6 +6,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { GitProviderSchema } from "./git-host";
 
 /**
  * How a skill entered the system. `built_in` skills are shipped by Archestra
@@ -57,6 +58,7 @@ export const SelectSkillSchema = createSelectSchema(schema.skillsTable, {
   // client generator keeps as `| null` — `nullable: true` on an enum is
   // silently dropped (see connector lastSyncStatus).
   githubSyncInterval: z.union([SkillGithubSyncIntervalSchema, z.null()]),
+  sourceProvider: z.union([GitProviderSchema, z.null()]),
 });
 
 // drizzle-zod uses field overrides verbatim, so `.optional()` is applied here
@@ -69,6 +71,7 @@ export const InsertSkillSchema = createInsertSchema(schema.skillsTable, {
   metadata: SkillMetadataSchema.optional(),
   templated: z.boolean().optional(),
   githubSyncInterval: SkillGithubSyncIntervalSchema.nullable().optional(),
+  sourceProvider: GitProviderSchema.nullable().optional(),
 }).omit({
   id: true,
   latestVersion: true,
@@ -91,6 +94,7 @@ export const UpdateSkillSchema = createUpdateSchema(schema.skillsTable, {
   metadata: SkillMetadataSchema.optional(),
   templated: z.boolean().optional(),
   githubSyncInterval: SkillGithubSyncIntervalSchema.nullable().optional(),
+  sourceProvider: GitProviderSchema.nullable().optional(),
 }).omit({
   id: true,
   organizationId: true,

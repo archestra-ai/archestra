@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/popover";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import type { QueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
+import { parseLabelsParam } from "@/lib/labels-param";
 import { cn } from "@/lib/utils/tailwind";
 
 export interface LabelSelectProps {
@@ -309,26 +310,7 @@ export function useSelectedLabels(): Record<string, string[]> | null {
   return useMemo(() => parseLabelsParam(labelsParam), [labelsParam]);
 }
 
-export function parseLabelsParam(
-  labels: string | null,
-): Record<string, string[]> | null {
-  if (!labels) return null;
-  const result: Record<string, string[]> = {};
-  for (const entry of labels.split(LABELS_ENTRY_DELIMITER)) {
-    const colonIdx = entry.indexOf(":");
-    if (colonIdx === -1) continue;
-    const key = entry.slice(0, colonIdx).trim();
-    const values = entry
-      .slice(colonIdx + 1)
-      .split(LABELS_VALUE_DELIMITER)
-      .map((v) => v.trim())
-      .filter(Boolean);
-    if (key && values.length > 0) {
-      result[key] = values;
-    }
-  }
-  return Object.keys(result).length > 0 ? result : null;
-}
+export { parseLabelsParam };
 
 export function serializeLabels(
   labels: Record<string, string[]>,

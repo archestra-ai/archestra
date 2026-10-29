@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -8,14 +9,15 @@ import {
   AgentWorkspaceModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { openappaActor, scopedSessionId } from "@/openappa/actor";
+import ProxyRequestContextModel from "@/models/proxy-request-context";
 import { describe, expect, test } from "@/test";
+import { recordQueries } from "@/test/query-counter";
+import type { AgentRunActorKind } from "@/types/agent-runtime";
 import {
   issueRuntimeBinding,
   resolveGatewayRuntimeSession,
   resolveRuntimeIdentityByVirtualKeys,
   resolveRuntimeSessionForWorkspace,
-  resolveVerifiedRuntimeAssociation,
   runtimeBindingAuthorizes,
   runtimeOpenAppaSession,
   runtimeSessionConflicts,
@@ -28,7 +30,7 @@ const SECRET = "test-runtime-binding-secret-32chars";
 async function persistWorkspace(params: {
   organizationId: string;
   agentId: string;
-  actorKind: "user" | "team" | "organization" | "system";
+  actorKind: AgentRunActorKind;
   actorId: string;
   actorUserId?: string | null;
   workloadName?: string;
@@ -79,6 +81,271 @@ async function persistWorkspace(params: {
 }
 
 describe("runtime OpenAPPA identity", () => {
+  test("fresh request snapshots preserve user bindings, conflicts and unbound keys without more reads", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const otherAgent = await makeAgent({ organizationId: other.id });
+    const user = await makeUser();
+    const first = await persistWorkspace({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+    });
+    const sibling = await persistWorkspace({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+    });
+    const foreign = await persistWorkspace({
+      organizationId: other.id,
+      agentId: otherAgent.id,
+      actorKind: "organization",
+      actorId: other.id,
+    });
+    const loose = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Unbound test key",
+      scope: "org",
+    });
+    const read = (
+      keys: Array<string | undefined>,
+      organizationId = org.id,
+      includeRuntime = true,
+    ) => {
+      const ids = [...new Set(keys.filter((id): id is string => !!id))];
+      return ProxyRequestContextModel.readForProxy({
+        organizationId,
+        agentId: agent.id,
+        environmentId: null,
+        provider: "openai",
+        modelId: "synthetic-runtime-snapshot",
+        limitVirtualKeyId: ids[0],
+        passthroughVirtualKeyId: ids[1],
+        includeRuntime,
+      });
+    };
+    for (const keys of [
+      [],
+      [first.virtualKeyId],
+      [undefined, first.virtualKeyId, first.virtualKeyId],
+      [sibling.virtualKeyId, first.virtualKeyId],
+      [loose.virtualKey.id],
+      [foreign.virtualKeyId],
+      [first.virtualKeyId, foreign.virtualKeyId],
+      [first.virtualKeyId, loose.virtualKey.id],
+    ]) {
+      const params = { organizationId: org.id, virtualKeyIds: keys };
+      const expected = await resolveRuntimeIdentityByVirtualKeys(params);
+      const state = await read(keys);
+      const measured = await recordQueries(() =>
+        resolveRuntimeIdentityByVirtualKeys({
+          ...params,
+          snapshot: state.runtimeSnapshot,
+        }),
+      );
+      expect(measured.result).toEqual(expected);
+      expect(measured.statements).toHaveLength(0);
+    }
+    const state = await read([first.virtualKeyId]);
+    expect(state.runtimeSnapshot?.candidates[0].run.actorUserId).toBe(user.id);
+    // A snapshot for another credential or organization cannot suppress the
+    // authoritative lookup, including a bound credential and a denied scope.
+    const different = await recordQueries(() =>
+      resolveRuntimeIdentityByVirtualKeys({
+        organizationId: org.id,
+        virtualKeyIds: [sibling.virtualKeyId],
+        snapshot: state.runtimeSnapshot,
+      }),
+    );
+    expect(different.result).toMatchObject({
+      status: "bound",
+      identity: { workspaceId: sibling.workspace.id },
+    });
+    expect(different.statements.length).toBeGreaterThan(0);
+    const crossOrg = await recordQueries(() =>
+      resolveRuntimeIdentityByVirtualKeys({
+        organizationId: other.id,
+        virtualKeyIds: [first.virtualKeyId],
+        snapshot: state.runtimeSnapshot,
+      }),
+    );
+    expect(crossOrg.result).toEqual({ status: "unbound" });
+    expect(crossOrg.statements.length).toBeGreaterThan(0);
+    expect(
+      (await read([first.virtualKeyId], org.id, false)).runtimeSnapshot,
+    ).toBeUndefined();
+  });
+
+  test("snapshots keep ambiguous cross-organization bindings closed and see workspace changes and revocation", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const bound = await persistWorkspace({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: org.id,
+    });
+    const read = async () =>
+      (
+        await ProxyRequestContextModel.readForProxy({
+          organizationId: org.id,
+          agentId: agent.id,
+          environmentId: null,
+          provider: "openai",
+          modelId: "synthetic-runtime-snapshot",
+          passthroughVirtualKeyId: bound.virtualKeyId,
+          includeRuntime: true,
+        })
+      ).runtimeSnapshot;
+    const params = {
+      organizationId: org.id,
+      virtualKeyIds: [bound.virtualKeyId],
+    };
+    const checkUnbound = async () => {
+      expect(await resolveRuntimeIdentityByVirtualKeys(params)).toEqual({
+        status: "unbound",
+      });
+      expect(
+        await resolveRuntimeIdentityByVirtualKeys({
+          ...params,
+          snapshot: await read(),
+        }),
+      ).toEqual({ status: "unbound" });
+    };
+    expect(
+      await resolveRuntimeIdentityByVirtualKeys({
+        ...params,
+        snapshot: await read(),
+      }),
+    ).toMatchObject({ status: "bound" });
+    await db
+      .update(schema.agentWorkspacesTable)
+      .set({ state: "deleting" })
+      .where(eq(schema.agentWorkspacesTable.id, bound.workspace.id));
+    await checkUnbound();
+    await db
+      .update(schema.agentWorkspacesTable)
+      .set({ state: "active", actorId: "another-actor" })
+      .where(eq(schema.agentWorkspacesTable.id, bound.workspace.id));
+    await checkUnbound();
+    await db
+      .update(schema.agentWorkspacesTable)
+      .set({ actorId: org.id, organizationId: other.id })
+      .where(eq(schema.agentWorkspacesTable.id, bound.workspace.id));
+    await checkUnbound();
+    await db
+      .update(schema.agentWorkspacesTable)
+      .set({ organizationId: org.id })
+      .where(eq(schema.agentWorkspacesTable.id, bound.workspace.id));
+    const task = await A2ATaskModel.create({
+      contextId: (
+        await A2AContextModel.create({
+          actorKind: "organization",
+          actorId: other.id,
+        })
+      ).id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const duplicate = await AgentRunModel.create({
+      organizationId: other.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: other.id,
+      workloadName: bound.workspace.workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      virtualApiKeyId: bound.virtualKeyId,
+    });
+    expect((await read())?.candidates).toHaveLength(2);
+    await checkUnbound();
+    await db
+      .delete(schema.agentRunsTable)
+      .where(eq(schema.agentRunsTable.id, duplicate.id));
+    expect(
+      await resolveRuntimeIdentityByVirtualKeys({
+        ...params,
+        snapshot: await read(),
+      }),
+    ).toMatchObject({ status: "bound" });
+    await db
+      .update(schema.agentRunsTable)
+      .set({ virtualApiKeyId: null })
+      .where(eq(schema.agentRunsTable.id, bound.run.id));
+    await checkUnbound();
+    expect((await read())?.candidates).toEqual([]);
+  });
+
+  test("application workspace bindings cannot be used by another application or task", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const current = await persistWorkspace({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "oauthClient",
+      actorId: "mcp_oauth_first",
+    });
+    const binding = issueRuntimeBinding({
+      secret: SECRET,
+      organizationId: org.id,
+      agentId: agent.id,
+      workspaceId: current.workspace.id,
+      workloadName: current.workspace.workloadName,
+      taskId: current.task.id,
+      actorKind: "oauthClient",
+      actorId: "mcp_oauth_first",
+      expiresAt: Date.now() + 60_000,
+    });
+    if (!binding) throw new Error("Expected signed runtime binding");
+    const resolve = (oauthClientId: string, runTaskId = current.task.id) =>
+      resolveGatewayRuntimeSession({
+        organizationId: org.id,
+        agentId: agent.id,
+        token: { isOrganizationToken: false, oauthClientId },
+        secret: SECRET,
+        bindingToken: binding,
+        runTaskId,
+      });
+    expect(await resolve("mcp_oauth_first")).toMatchObject({
+      kind: "session",
+      identity: {
+        actorKind: "oauthClient",
+        actorId: "mcp_oauth_first",
+        workspaceId: current.workspace.id,
+      },
+    });
+    expect(await resolve("mcp_oauth_second")).toMatchObject({ kind: "reject" });
+    expect(await resolve("mcp_oauth_first", randomUUID())).toMatchObject({
+      kind: "reject",
+    });
+    expect(
+      await resolveRuntimeIdentityByVirtualKeys({
+        organizationId: org.id,
+        virtualKeyIds: [current.virtualKeyId],
+      }),
+    ).toMatchObject({
+      status: "bound",
+      identity: { actorKind: "oauthClient", actorId: "mcp_oauth_first" },
+    });
+  });
+
   test("the launcher stamps only secret environment from persisted identity and refuses replay on a sibling", async ({
     makeOrganization,
     makeAgent,
@@ -152,7 +419,7 @@ describe("runtime OpenAPPA identity", () => {
           workspaceId: run.workspace.id,
           taskId: randomUUID(),
         }),
-      ).rejects.toThrow("persisted workspace");
+      ).rejects.toThrow("saved run");
     } finally {
       config.openappa.offerSigningSecret = prior;
     }
@@ -419,146 +686,80 @@ describe("runtime OpenAPPA identity", () => {
     ).toMatchObject({ kind: "reject" });
   });
 
-  test("an offer session resolves only when the caller owns that workspace root", async ({
+  test("a service account acting for a team owns its own run, never the team's", async ({
     makeOrganization,
-    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const teamId = randomUUID();
+    const serviceAccountId = randomUUID();
+    const bindingFor = async (
+      actorKind: "team" | "serviceAccount",
+      actorId: string,
+    ) => {
+      const { workspace, task } = await persistWorkspace({
+        organizationId: org.id,
+        agentId: agent.id,
+        actorKind,
+        actorId,
+      });
+      const binding = issueRuntimeBinding({
+        secret: SECRET,
+        organizationId: org.id,
+        workspaceId: workspace.id,
+        workloadName: workspace.workloadName,
+        taskId: task.id,
+        agentId: agent.id,
+        actorKind,
+        actorId,
+        expiresAt: Date.now() + 60_000,
+      });
+      if (!binding) throw new Error("runtime binding was not issued");
+      return { binding, workspace, task };
+    };
+    const own = await bindingFor("serviceAccount", serviceAccountId);
+    const team = await bindingFor("team", teamId);
+    const token = { serviceAccountId, teamId, isOrganizationToken: false };
+
+    expect(
+      await resolveGatewayRuntimeSession({
+        organizationId: org.id,
+        agentId: agent.id,
+        token,
+        bindingToken: own.binding,
+        secret: SECRET,
+        sessionName: own.workspace.workloadName,
+        runTaskId: own.task.id,
+      }),
+    ).toMatchObject({ kind: "session" });
+    expect(
+      await resolveGatewayRuntimeSession({
+        organizationId: org.id,
+        agentId: agent.id,
+        token,
+        bindingToken: team.binding,
+        secret: SECRET,
+        sessionName: team.workspace.workloadName,
+        runTaskId: team.task.id,
+      }),
+    ).toMatchObject({ kind: "reject" });
+  });
+
+  test("a workspace's runtime session resolves only in its own organization", async ({
+    makeOrganization,
     makeAgent,
   }) => {
     const org = await makeOrganization();
     const other = await makeOrganization();
-    const user = await makeUser();
     const agent = await makeAgent({ organizationId: org.id });
-    const teamId = randomUUID();
     const team = await persistWorkspace({
       organizationId: org.id,
       agentId: agent.id,
       actorKind: "team",
-      actorId: teamId,
-    });
-    const personal = await persistWorkspace({
-      organizationId: org.id,
-      agentId: agent.id,
-      actorKind: "user",
-      actorId: user.id,
-      actorUserId: user.id,
+      actorId: randomUUID(),
     });
     const principal = workloadPrincipal(team.workspace.id);
-    const root = scopedSessionId(principal, team.workspace.workloadName);
-
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: root,
-      }),
-    ).toMatchObject({
-      principal,
-      taskId: team.task.id,
-      actorUserId: null,
-      workloadName: team.workspace.workloadName,
-    });
-    const childSession = `${root}:native-child`;
-    await db.insert(schema.openappaSessionsTable).values({
-      actor: openappaActor(root),
-      root: openappaActor(root),
-      organizationId: org.id,
-      callerId: principal,
-      sessionId: root,
-      parentId: null,
-      startDecision: { decision: "ack", protocol: 1 },
-    });
-    await db.insert(schema.openappaSessionsTable).values({
-      actor: openappaActor(childSession),
-      root: openappaActor(root),
-      organizationId: org.id,
-      callerId: principal,
-      sessionId: childSession,
-      parentId: root,
-      startDecision: { decision: "ack", protocol: 1 },
-    });
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: childSession,
-        parentId: root,
-      }),
-    ).toMatchObject({ principal, taskId: team.task.id });
-    const grandchildSession = `${childSession}:grandchild`;
-    await db.insert(schema.openappaSessionsTable).values({
-      actor: openappaActor(grandchildSession),
-      root: openappaActor(root),
-      organizationId: org.id,
-      callerId: principal,
-      sessionId: grandchildSession,
-      parentId: childSession,
-      startDecision: { decision: "ack", protocol: 1 },
-    });
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: grandchildSession,
-        parentId: childSession,
-      }),
-    ).toMatchObject({ principal, taskId: team.task.id });
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: `${root}:native-child`,
-      }),
-    ).toBeNull();
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: "not-the-child",
-        parentId: root,
-      }),
-    ).toBeNull();
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: `${root}:native-child:grandchild`,
-        parentId: root,
-      }),
-    ).toBeNull();
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: team.workspace.workloadName,
-      }),
-    ).toBeNull();
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: `virtual-key:${team.virtualKeyId}`,
-        sessionId: scopedSessionId(
-          `virtual-key:${team.virtualKeyId}`,
-          team.workspace.workloadName,
-        ),
-      }),
-    ).toBeNull();
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: other.id,
-        callerId: principal,
-        sessionId: root,
-      }),
-    ).toBeNull();
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: `user:${user.id}`,
-        sessionId: `user:${user.id}|${personal.workspace.workloadName}`,
-      }),
-    ).toMatchObject({
-      principal: `user:${user.id}`,
-      actorUserId: user.id,
-    });
     expect(
       await resolveRuntimeSessionForWorkspace({
         organizationId: other.id,

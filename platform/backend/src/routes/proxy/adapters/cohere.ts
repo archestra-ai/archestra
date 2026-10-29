@@ -376,6 +376,11 @@ class CohereResponseAdapter implements LLMResponseAdapter<CohereResponse> {
       finish_reason: "COMPLETE",
     };
   }
+
+  /** The response as one text answer, as a governed child's turn ends. */
+  withReplacedText(text: string): CohereResponse {
+    return this.toRefusalResponse("", text);
+  }
 }
 
 // =============================================================================
@@ -579,9 +584,9 @@ class CohereStreamAdapter
         };
         isFinal = true;
         // Withhold the upstream message-end: it carries the tool-call finish
-        // reason and would reach the client before the proxy evaluates tool
-        // invocation policies. formatEndSSE emits the single message-end after
-        // evaluation (COMPLETE when a refusal replaced the response).
+        // reason and would reach the client before the proxy plugins rule on
+        // the tool calls. formatEndSSE emits the single message-end after
+        // the ruling (COMPLETE when a refusal replaced the response).
         break;
       }
 
@@ -809,7 +814,7 @@ function createCohereClient(
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
+          const errorText = await response.text().catch(() => "");
           throw upstreamHttpError(
             `Cohere API error: ${response.status} - ${errorText}`,
             response.status,
@@ -832,7 +837,7 @@ function createCohereClient(
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
+          const errorText = await response.text().catch(() => "");
           throw upstreamHttpError(
             `Error from Cohere API : ${response.status} - ${errorText}`,
             response.status,

@@ -94,7 +94,7 @@ describe("AccountProfilePage", () => {
       isPending: false,
     } as unknown as ReturnType<typeof useActiveMemberRole>);
     vi.mocked(useMyTeams).mockReturnValue({
-      data: [{ id: "t1", name: "Platform", myRole: "member", members: [] }],
+      data: [{ id: "t1", name: "Platform", myRole: "member", memberCount: 1 }],
       isPending: false,
       isLoadingError: false,
       refetch: vi.fn(),
@@ -108,6 +108,52 @@ describe("AccountProfilePage", () => {
       mutateAsync: vi.fn(),
       isPending: false,
     } as unknown as ReturnType<typeof useRotateUserToken>);
+  });
+
+  it("sends an old link to its Credentials section on to the Credentials tab", () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
+    window.history.replaceState(
+      null,
+      "",
+      "/account?github=connected#credentials",
+    );
+    try {
+      renderPage();
+      expect(replace).toHaveBeenCalledWith(
+        "/account/credentials?github=connected",
+      );
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("forwards the old fragment when it arrives while the tab is open", () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
+    window.history.replaceState(null, "", "/account");
+    try {
+      renderPage();
+      expect(replace).not.toHaveBeenCalled();
+      window.history.replaceState(null, "", "/account#credentials");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+      expect(replace).toHaveBeenCalledWith("/account/credentials");
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("stays on the Account tab without the old fragment", () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
+    renderPage();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("puts profile, access and sign-in & security on one page, in that order", () => {

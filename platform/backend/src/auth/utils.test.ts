@@ -12,6 +12,8 @@ vi.mock("./better-auth", () => ({
   },
 }));
 
+import { PGlite } from "@electric-sql/pglite";
+import ServiceAccountModel from "@/models/service-account";
 import {
   beforeEach,
   describe,
@@ -20,6 +22,7 @@ import {
   test,
 } from "@/test";
 import { auth as betterAuth } from "./better-auth";
+import { requestScope } from "./request-scope";
 import { hasPermission, userHasPermission } from "./utils";
 
 const mockBetterAuth = betterAuth as unknown as {
@@ -30,6 +33,59 @@ const mockBetterAuth = betterAuth as unknown as {
 };
 
 type ApiKey = Awaited<ReturnType<typeof betterAuth.api.verifyApiKey>>["key"];
+
+// Each request runs in its own async context, as Fastify's handlers do.
+const inRequest = <T>(memoize: boolean, body: () => Promise<T>) =>
+  new Promise<T>((resolve, reject) => {
+    setImmediate(() => {
+      requestScope.enter({ memoize });
+      body().then(resolve, reject);
+    });
+  });
+
+const countStatements = async <T>(body: () => Promise<T>) => {
+  const query = vi.spyOn(PGlite.prototype, "query");
+  try {
+    const result = await body();
+    return { result, statements: query.mock.calls.length };
+  } finally {
+    query.mockRestore();
+  }
+};
+
+describe("service-account callers", () => {
+  // The synthetic user `service-account:<id>` used to be resolved through
+  // findById: the account, its tokens, its creator and its labels — four
+  // statements for the three columns authorization reads, on every request.
+  test("resolves a synthetic service-account user with one account read per request", async ({
+    makeOrganization,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization();
+    const role = await makeCustomRole(org.id, {
+      permission: { agent: ["read"] },
+    });
+    const serviceAccount = await ServiceAccountModel.create({
+      organizationId: org.id,
+      name: "Crawler",
+      role: role.role,
+      createdBy: null,
+    });
+    const userId = `service-account:${serviceAccount.id}`;
+
+    const read = await inRequest(true, () =>
+      countStatements(async () => [
+        await userHasPermission(userId, org.id, "agent", "read"),
+        await userHasPermission(userId, org.id, "agent", "delete"),
+      ]),
+    );
+
+    expect(read.result).toEqual([true, false]);
+    // One account read, memoized for the second check, plus one read of the
+    // custom role's permissions.
+    expect(read.statements).toBe(2);
+  });
+});
 
 describe("hasPermission", () => {
   beforeEach(() => {

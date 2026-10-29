@@ -15,6 +15,7 @@ import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
 import InteractionDeltaManager from "@/models/interaction-delta-manager";
+import InteractionUserActivityModel from "@/models/interaction-user-activity";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { openappaActor, scopedSessionId } from "@/openappa/actor";
@@ -50,6 +51,47 @@ describe("interaction routes", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("ready most-active user list preserves organization scope and own-log visibility", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeOrganization,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    const other = await makeOrganization();
+    const foreign = await makeAgent({ organizationId: other.id });
+    const quiet = await makeUser({ name: "Alpha" });
+    const busy = await makeUser({ name: "Zulu" });
+    const excluded = await makeUser();
+    await makeInteraction(agent.id, { userId: quiet.id });
+    await makeInteraction(agent.id, { userId: busy.id });
+    await makeInteraction(agent.id, { userId: busy.id });
+    await makeInteraction(foreign.id, { userId: excluded.id });
+    await InteractionUserActivityModel.setEnabled(true);
+    expect(
+      (await InteractionUserActivityModel.rebuildBatch({ batchSize: 100 }))
+        .ready,
+    ).toBe(true);
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions/user-ids?limit=2",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([
+      { id: busy.id, name: busy.name },
+      { id: quiet.id, name: quiet.name },
+    ]);
+    await makeMember(quiet.id, organizationId, { role: "member" });
+    currentUser = quiet;
+    const own = await app.inject({
+      method: "GET",
+      url: "/api/interactions/user-ids?limit=100",
+    });
+    expect(own.statusCode).toBe(200);
+    expect(own.json()).toEqual([{ id: quiet.id, name: quiet.name }]);
   });
 
   test("returns scoped lineage and fails closed for ambiguous organization-wide lineage", async ({
@@ -217,6 +259,7 @@ describe("interaction routes", () => {
       profileId: agent.id,
       sessionId: "summary-session",
       model: "gpt-4",
+      durationMs: 1240,
       inputTokens: 12,
       outputTokens: 7,
       request: {
@@ -244,13 +287,19 @@ describe("interaction routes", () => {
         id: interaction.id,
         sessionId: "summary-session",
         model: "gpt-4",
+        durationMs: 1240,
         inputTokens: 12,
         outputTokens: 7,
       }),
     ]);
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().durationMs).toBe(1240);
     expect(response.json().data[0]).not.toHaveProperty("request");
     expect(response.json().data[0]).not.toHaveProperty("response");
-    expect(response.json().data[0]).not.toHaveProperty("dualLlmAnalyses");
   });
 
   test("lists interactions whose response carries a non-standard finish_reason", async ({
@@ -761,6 +810,43 @@ describe("interaction routes", () => {
     expect(all.json().data).toHaveLength(5);
   });
 
+  test("reads historical guardrail interactions after feature removal", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const interaction = await InteractionModel.create({
+      profileId: agent.id,
+      sessionId: "historical-session",
+      source: "guardrail:dual_llm",
+      type: "openai:chatCompletions",
+      request: { model: "gpt-4", messages: [] } as InsertInteraction["request"],
+      response: {
+        id: "synthetic-response",
+        object: "chat.completion",
+        created: 1,
+        model: "gpt-4",
+        choices: [],
+      } as InsertInteraction["response"],
+    });
+
+    const sessions = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions?limit=10",
+    });
+    expect(sessions.statusCode).toBe(200);
+    expect(sessions.json().data[0]).toMatchObject({
+      source: "guardrail:dual_llm",
+      sources: ["guardrail:dual_llm"],
+    });
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().source).toBe("guardrail:dual_llm");
+  });
+
   test("cursor-paginates distinct sessions plus sessionless interactions", async ({
     makeAgent,
   }) => {
@@ -816,6 +902,82 @@ describe("interaction routes", () => {
       hasNext: false,
       nextCursor: null,
     });
+  });
+
+  test("addresses a sessionless interaction as a session of its own, by its id", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+    });
+    const make = (sessionId: string | null) =>
+      InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        source: "api",
+        request: {
+          model: "gpt-4",
+          messages: [],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        } as unknown as InsertInteraction["response"],
+        type: "openai:chatCompletions",
+      });
+
+    const lone = await make(null);
+    await make(null);
+    const inSession = await make("shared-session");
+    const uuidSessionId = crypto.randomUUID();
+    const inUuidSession = await make(uuidSessionId);
+
+    const idsFor = async (url: string) => {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode).toBe(200);
+      return response.json().data.map((row: { id: string }) => row.id);
+    };
+
+    // The session list row, the page's requests and the export all resolve
+    // the sessionless request's id to that request alone.
+    const sessions = await app.inject({
+      method: "GET",
+      url: `/api/interactions/sessions?limit=1&sessionId=${lone.id}`,
+    });
+    expect(sessions.statusCode).toBe(200);
+    expect(sessions.json().data).toEqual([
+      expect.objectContaining({
+        sessionId: null,
+        interactionId: lone.id,
+        requestCount: 1,
+      }),
+    ]);
+    expect(
+      await idsFor(
+        `/api/interactions/summaries?limit=10&offset=0&sessionId=${lone.id}`,
+      ),
+    ).toEqual([lone.id]);
+    expect(
+      await idsFor(`/api/interactions?limit=10&offset=0&sessionId=${lone.id}`),
+    ).toEqual([lone.id]);
+
+    // A request that belongs to a session is reached through its session,
+    // not by its own id.
+    expect(
+      await idsFor(
+        `/api/interactions/summaries?limit=10&offset=0&sessionId=${inSession.id}`,
+      ),
+    ).toEqual([]);
+    // A uuid-shaped session id still matches its session's rows.
+    expect(
+      await idsFor(
+        `/api/interactions/summaries?limit=10&offset=0&sessionId=${uuidSessionId}`,
+      ),
+    ).toEqual([inUuidSession.id]);
   });
 
   test("walks tied session heads once when interactions straddle page boundaries", async ({
@@ -1218,6 +1380,56 @@ describe("interaction routes", () => {
       expect(extIds.json().map((e: { id: string }) => e.id)).toEqual([
         `ext-${limitedUser.id}`,
       ]);
+    });
+
+    test("log:read user-ids stays the caller for any search, ids, or limit", async () => {
+      currentUser = limitedUser;
+
+      for (const query of [
+        `search=${encodeURIComponent(otherUser.name)}`,
+        `ids=${otherUser.id}`,
+        "limit=100",
+      ]) {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/interactions/user-ids?${query}`,
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual([
+          { id: limitedUser.id, name: limitedUser.name },
+        ]);
+      }
+    });
+
+    test("log:admin user-ids searches, resolves ids, and caps the limit", async () => {
+      const search = await app.inject({
+        method: "GET",
+        url: `/api/interactions/user-ids?search=${encodeURIComponent(otherUser.name)}`,
+      });
+      expect(search.json()).toEqual([
+        { id: otherUser.id, name: otherUser.name },
+      ]);
+
+      const ids = await app.inject({
+        method: "GET",
+        url: `/api/interactions/user-ids?ids=${limitedUser.id},${currentUser.id}`,
+      });
+      // The caller has no logs here, so only the user with logs resolves.
+      expect(ids.json()).toEqual([
+        { id: limitedUser.id, name: limitedUser.name },
+      ]);
+
+      const one = await app.inject({
+        method: "GET",
+        url: "/api/interactions/user-ids?limit=1",
+      });
+      expect(one.json()).toHaveLength(1);
+
+      const tooMany = await app.inject({
+        method: "GET",
+        url: "/api/interactions/user-ids?limit=101",
+      });
+      expect(tooMany.statusCode).toBe(400);
     });
 
     test("log:read plus log:admin sees every row in the active organization", async ({

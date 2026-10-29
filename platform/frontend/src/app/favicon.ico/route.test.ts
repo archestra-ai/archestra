@@ -4,7 +4,8 @@ vi.mock("@/lib/config/config", () => ({
   getBackendBaseUrl: () => "http://localhost:9000",
 }));
 
-import { GET } from "./route";
+// The favicon cache is process state: each test gets a fresh module.
+let GET: typeof import("./route").GET;
 
 const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==";
@@ -21,7 +22,9 @@ describe("favicon route", () => {
   const originalInternalApiBaseUrl =
     process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ GET } = await import("./route"));
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
     delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;

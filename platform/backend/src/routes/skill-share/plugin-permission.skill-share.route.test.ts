@@ -7,7 +7,7 @@ import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import skillShareRoutes from "./skill-share.routes";
 
 beforeEach(() => {
-  config.plugins.enabled = true;
+  config.beta = false;
 });
 
 describe("executable marketplace link permissions", () => {

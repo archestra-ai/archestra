@@ -1,0 +1,1 @@
+ALTER TABLE "openappa_github_sync" ADD COLUMN "setup_pull_request_number" integer;

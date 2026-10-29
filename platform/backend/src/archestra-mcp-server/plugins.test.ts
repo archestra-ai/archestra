@@ -80,7 +80,7 @@ describe("plugin tool execution", () => {
       organizationId,
       userId: adminUserId,
     };
-    (config as { plugins: { enabled: boolean } }).plugins.enabled = true;
+    config.beta = false;
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -111,7 +111,7 @@ describe("plugin tool execution", () => {
     return data.filter((row) => row.action === action);
   }
 
-  test("plugin tools are registered only while the beta flag is on", () => {
+  test("plugin tools are registered with beta disabled", () => {
     const names = getArchestraMcpTools().map((tool) => tool.name);
     expect(names).toContain(TOOL_LIST_PLUGINS_FULL_NAME);
     expect(names).toContain(TOOL_GET_PLUGIN_FULL_NAME);
@@ -120,15 +120,10 @@ describe("plugin tool execution", () => {
     expect(names).toContain(TOOL_EDIT_PLUGIN_FULL_NAME);
     expect(names).toContain(TOOL_DELETE_PLUGIN_FULL_NAME);
     expect(names).not.toContain(`${ARCHESTRA_TOOL_PREFIX}import_plugin`);
-
-    (config as { plugins: { enabled: boolean } }).plugins.enabled = false;
-    const gatedNames = getArchestraMcpTools().map((tool) => tool.name);
-    expect(gatedNames).not.toContain(TOOL_LIST_PLUGINS_FULL_NAME);
-    expect(gatedNames).not.toContain(TOOL_DELETE_PLUGIN_FULL_NAME);
   });
 
-  test("handlers refuse a direct dispatch while the beta flag is off", async () => {
-    (config as { plugins: { enabled: boolean } }).plugins.enabled = false;
+  test("handlers execute a direct dispatch with beta disabled", async () => {
+    config.beta = false;
 
     const result = await executeArchestraTool(
       TOOL_LIST_PLUGINS_FULL_NAME,
@@ -136,8 +131,18 @@ describe("plugin tool execution", () => {
       context,
     );
 
+    expect(result.isError).not.toBe(true);
+    expect(textOf(result)).toContain("No plugins");
+  });
+
+  test("plugin dispatch still requires an authenticated user with beta disabled", async () => {
+    const result = await executeArchestraTool(
+      TOOL_LIST_PLUGINS_FULL_NAME,
+      {},
+      { ...context, userId: undefined },
+    );
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("Plugins are not enabled");
+    expect(textOf(result)).toContain("requires an acting user");
   });
 
   test("plugin tools are denied without plugin permissions", async ({

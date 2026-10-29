@@ -32,7 +32,6 @@ function makePayload(
       systemPrompt: "You are a helpful assistant",
       icon: "🤖",
       scope: "org", // Should be overridden to personal
-      considerContextUntrusted: false,
       toolExposureMode: "full",
       accessAllTools: false,
       incomingEmailEnabled: false,

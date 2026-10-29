@@ -1,4 +1,10 @@
-import { getArchestraToolFullName } from "@archestra/shared";
+import {
+  BatteryCredentialRequestSchema,
+  getArchestraToolFullName,
+} from "@archestra/shared";
+import { vi } from "vitest";
+import { openappaDeclarations } from "@/openappa/declarations";
+import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { expect, test } from "@/test";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
@@ -74,4 +80,98 @@ test("credential tools create, list, update, and delete definitions without expo
   expect(deleted.structuredContent).toMatchObject({ deleted: "sync-check" });
   const after = await invoke("get_runtime_credential", { key: "sync-check" });
   expect(after.isError).toBe(true);
+});
+
+test("request_battery_credentials resolves each battery's setup for the card", async ({
+  makeMember,
+  makeOrganization,
+  makeUser,
+}) => {
+  // With the sandbox on, a battery's setup is its multi-user target's, so pin
+  // it off to compare against the base declaration.
+  vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(false);
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, organization.id, { role: "admin" });
+  const context: ArchestraContext = {
+    agent: { id: "agent", name: "Agent" },
+    organizationId: organization.id,
+    userId: user.id,
+  };
+  const bundled = new Map(
+    (await openappaDeclarations.bundledBatteries()).map((battery) => [
+      battery.name,
+      battery,
+    ]),
+  );
+
+  const result = await executeArchestraTool(
+    getArchestraToolFullName("request_battery_credentials"),
+    { batteries: ["linear", "github", "linear"] },
+    context,
+  );
+
+  expect(result.isError).toBeFalsy();
+  const { batteries } = BatteryCredentialRequestSchema.parse(
+    result.structuredContent,
+  );
+  expect(batteries.map(({ name, title }) => [name, title])).toEqual([
+    ["linear", "Linear"],
+    ["github", "GitHub"],
+  ]);
+  for (const battery of batteries) {
+    const native = bundled.get(battery.name);
+    expect(battery.benefit).toBe(native?.benefit);
+    expect(battery.credentials).toEqual(native?.credentials);
+    expect(battery.setup.length).toBeGreaterThan(1);
+    expect(battery.setup.join("\n")).toBe(native?.setup);
+  }
+});
+
+test("request_battery_credentials names a battery it does not know", async ({
+  makeMember,
+  makeOrganization,
+  makeUser,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, organization.id, { role: "admin" });
+
+  const result = await executeArchestraTool(
+    getArchestraToolFullName("request_battery_credentials"),
+    { batteries: ["linear", "no-such-battery"] },
+    {
+      agent: { id: "agent", name: "Agent" },
+      organizationId: organization.id,
+      userId: user.id,
+    },
+  );
+
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result.content)).toContain("no-such-battery");
+  expect(result.structuredContent).toBeUndefined();
+});
+
+test("request_battery_credentials needs permission to create credentials", async ({
+  makeMember,
+  makeOrganization,
+  makeUser,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, organization.id, { role: "member" });
+
+  const result = await executeArchestraTool(
+    getArchestraToolFullName("request_battery_credentials"),
+    { batteries: ["linear"] },
+    {
+      agent: { id: "agent", name: "Agent" },
+      organizationId: organization.id,
+      userId: user.id,
+    },
+  );
+
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result.content)).toContain("credential:create");
+  expect(result.structuredContent).toBeUndefined();
 });

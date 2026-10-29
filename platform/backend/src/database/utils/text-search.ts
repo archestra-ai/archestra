@@ -1,4 +1,5 @@
 import { and, type Column, ilike, or, type SQL } from "drizzle-orm";
+import { escapeLikePattern } from "@/utils/sql-search";
 
 /**
  * Upper bound on how many tokens a single search string contributes to the
@@ -48,14 +49,4 @@ export function buildTokenizedSearchFilter({
     .filter((filter): filter is SQL => filter !== undefined);
 
   return and(...tokenFilters);
-}
-
-/**
- * Neutralize `LIKE` wildcards so a query containing `%` or `_` is matched
- * literally instead of silently widening the search. Backslash is Postgres'
- * default `LIKE` escape character, so escaping it alongside the wildcards
- * needs no explicit `ESCAPE` clause.
- */
-function escapeLikePattern(value: string): string {
-  return value.replace(/[\\%_]/g, (character) => `\\${character}`);
 }

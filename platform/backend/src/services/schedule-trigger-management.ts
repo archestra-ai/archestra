@@ -1,13 +1,92 @@
-import type { z } from "zod";
-import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import { PROJECT_INSTRUCTIONS_MAX_LENGTH } from "@archestra/shared";
+import { z } from "zod";
+import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
+import logger from "@/logging";
 import { AgentModel, AgentTeamModel, ScheduleTriggerModel } from "@/models";
-import { ApiError, ScheduleTriggerConfigurationSchema } from "@/types";
+import {
+  ApiError,
+  type Project,
+  type ScheduleTrigger,
+  ScheduleTriggerConfigurationSchema,
+} from "@/types";
 import type {
   CreateScheduleTriggerBodySchema,
   UpdateScheduleTriggerBodySchema,
 } from "@/types/schedule-trigger-input";
+import {
+  normalizeCronExpression,
+  normalizeTimezone,
+} from "@/utils/schedule-trigger";
 import { projectService } from "./project";
 import { findAccessibleScheduleTriggerOrThrow } from "./schedule-trigger-access";
+
+/** The chat/ChatOps shortcut: a private project supplies instructions and run history. */
+export async function createScheduleTriggerWithProject(params: {
+  body: Omit<
+    z.infer<typeof CreateScheduleTriggerBodySchema>,
+    "projectId" | "agentId"
+  > & { agentId: string };
+  userId: string;
+  organizationId: string;
+}): Promise<{ trigger: ScheduleTrigger; created: boolean }> {
+  const { body, userId, organizationId } = params;
+  if (!(await userHasPermission(userId, organizationId, "project", "create"))) {
+    throw new ApiError(
+      403,
+      "Creating a scheduled project requires project:create.",
+    );
+  }
+  // Validate before creating anything. The project service validates the name
+  // and selected agent before inserting its private, caller-owned project.
+  ScheduleTriggerConfigurationSchema.parse(body);
+  z.string().max(PROJECT_INSTRUCTIONS_MAX_LENGTH).parse(body.messageTemplate);
+  let project: Project;
+  try {
+    project = await projectService.create({
+      organizationId,
+      userId,
+      name: body.name,
+      description: null,
+      defaultAgentId: body.agentId,
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.statusCode === 409) {
+      // The owner/name unique constraint also serializes concurrent retries.
+      // Reuse only the exact private task; never change a conflicting project.
+      const existing = await findMatchingScheduledProject(params);
+      if (existing) return { trigger: existing, created: false };
+    }
+    throw error;
+  }
+  try {
+    await projectService.setInstructions({
+      id: project.id,
+      organizationId,
+      userId,
+      content: body.messageTemplate,
+    });
+    // Only publish an enabled trigger after its instructions are ready.
+    const trigger = await createScheduleTrigger({
+      organizationId,
+      userId,
+      body: { ...body, projectId: project.id },
+    });
+    return { trigger, created: true };
+  } catch (error) {
+    // Use the normal recoverable project deletion path, which also pauses any
+    // trigger persisted before an interrupted create. Existing projects never
+    // enter this path.
+    try {
+      await projectService.delete({ id: project.id, organizationId, userId });
+    } catch (cleanupError) {
+      logger.error(
+        { err: cleanupError, projectId: project.id },
+        "Failed to discard a new scheduled project after creation failed",
+      );
+    }
+    throw error;
+  }
+}
 
 export async function createScheduleTrigger(params: {
   body: z.infer<typeof CreateScheduleTriggerBodySchema>;
@@ -89,7 +168,7 @@ export async function updateScheduleTrigger(params: {
     id,
     userId,
     organizationId,
-    access: "mutate",
+    access: "update",
   });
   const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
     userId,
@@ -161,4 +240,44 @@ export async function updateScheduleTrigger(params: {
   }
 
   return updated;
+}
+
+async function findMatchingScheduledProject(
+  params: Parameters<typeof createScheduleTriggerWithProject>[0],
+): Promise<ScheduleTrigger | null> {
+  const { body, organizationId, userId } = params;
+  const { data: projects } = await projectService.list({
+    organizationId,
+    userId,
+    search: body.name,
+  });
+  const project = projects.find(
+    (candidate) =>
+      candidate.name === body.name.trim() &&
+      candidate.viewerRole === "owner" &&
+      candidate.visibility === null,
+  );
+  if (!project) return null;
+  const { content } = await projectService.getInstructions({
+    id: project.id,
+    organizationId,
+    userId,
+  });
+  if (content !== body.messageTemplate) return null;
+  const triggers = await ScheduleTriggerModel.listByOrganization({
+    organizationId,
+    projectId: project.id,
+    actorUserId: userId,
+    limit: 2,
+  });
+  const [trigger] = triggers;
+  return triggers.length === 1 &&
+    trigger.agentId === body.agentId &&
+    trigger.name === body.name &&
+    trigger.messageTemplate === body.messageTemplate &&
+    trigger.cronExpression === normalizeCronExpression(body.cronExpression) &&
+    trigger.timezone === normalizeTimezone(body.timezone) &&
+    trigger.enabled === (body.enabled ?? true)
+    ? trigger
+    : null;
 }

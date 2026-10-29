@@ -11,7 +11,7 @@ vi.mock("@/auth");
 vi.mock("@/cache-manager");
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
-    plugins: { enabled: true },
+    beta: false,
   }),
 );
 
@@ -84,6 +84,50 @@ describe("POST /api/connection-setups with plugins", () => {
         connectionSetupId: response.json().id,
       }),
     ).toEqual([plugin.id]);
+  });
+
+  test("a Claude Desktop setup bundles Desktop plugins and refuses Claude Code ones", async ({
+    makeAgent,
+  }) => {
+    const desktopPlugin = await seedPlugin("claude-desktop");
+    const codePlugin = await seedPlugin("claude-code");
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Desktop plugin gateway",
+    });
+
+    const implicit = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-desktop",
+        platform: "macos",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+      },
+    });
+    expect(implicit.statusCode).toBe(200);
+    expect(
+      await ConnectionSetupModel.getPluginIds({
+        connectionSetupId: implicit.json().id,
+      }),
+    ).toEqual([desktopPlugin.id]);
+
+    const explicit = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-desktop",
+        platform: "macos",
+        baseUrl: "http://localhost:9000/v1",
+        pluginIds: [codePlugin.id],
+      },
+    });
+    expect(explicit.statusCode).toBe(400);
+    expect(explicit.body).toContain(
+      "Plugins must target the selected connection client",
+    );
   });
 
   test("rejects reviewed hooks for the wrong client or Windows", async () => {
@@ -259,7 +303,7 @@ describe("POST /api/connection-setups with plugins", () => {
   }
 
   async function seedPlugin(
-    clientType: "claude-code" | "codex",
+    clientType: "claude-code" | "claude-desktop" | "codex",
     supportedPlatforms: Array<"posix" | "windows"> = ["posix"],
   ) {
     const plugin = await PluginModel.create({

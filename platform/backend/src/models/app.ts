@@ -32,6 +32,7 @@ import AppLabelModel from "./app-label";
 import AppToolModel from "./app-tool";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import CreatedByModel from "./created-by";
+import InteractionUserActivityModel from "./interaction-user-activity";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpCatalogUserModel from "./mcp-catalog-user";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
@@ -858,14 +859,31 @@ class AppModel {
     return ok ? await AppModel.findById(params.id) : null;
   }
 
-  /** Soft-delete an app (frees its name for re-use via the partial unique indexes). */
+  /**
+   * Soft-delete an app (frees its name for re-use via the partial unique
+   * indexes). Apps have no restore, so the row stays only for history and its
+   * permission policy goes with the delete.
+   */
   static async delete(id: string, tx?: Transaction): Promise<boolean> {
-    const count = await softDelete(
-      tx ?? db,
-      schema.appsTable,
-      eq(schema.appsTable.id, id),
-    );
-    return count > 0;
+    const run = async (transaction: Transaction) => {
+      const count = await softDelete(
+        transaction,
+        schema.appsTable,
+        eq(schema.appsTable.id, id),
+      );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (count > 0)
+        await ResourcePermissionPolicyModel.deleteForTarget({
+          tx: transaction,
+          resources: ["app"],
+          scope: id,
+        });
+      // SPDX-SnippetEnd
+      return count > 0;
+    };
+    return tx ? run(tx) : withDbTransaction(run);
   }
 
   /**
@@ -876,6 +894,7 @@ class AppModel {
    */
   static async purge(id: string): Promise<void> {
     await withDbTransaction(async (tx) => {
+      await InteractionUserActivityModel.lifecycleFence(tx);
       await tx
         .delete(schema.appVersionsTable)
         .where(eq(schema.appVersionsTable.appId, id));
@@ -893,6 +912,24 @@ class AppModel {
   }
 
   /** Audit lookup: the raw row scoped to an org, including soft-deleted. */
+  /** App names by id, within one organization; missing ids are absent. */
+  static async getNamesByIds(params: {
+    ids: string[];
+    organizationId: string;
+  }): Promise<Map<string, string>> {
+    if (params.ids.length === 0) return new Map();
+    const rows = await db
+      .select({ id: schema.appsTable.id, name: schema.appsTable.name })
+      .from(schema.appsTable)
+      .where(
+        and(
+          eq(schema.appsTable.organizationId, params.organizationId),
+          inArray(schema.appsTable.id, params.ids),
+        ),
+      );
+    return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
   /**
    * Ids, names, visibility and deletion state for a bulk route's audit record,
    * used on both sides of the write. Deliberately much narrower than

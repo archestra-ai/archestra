@@ -1,30 +1,20 @@
-import { createHmac } from "node:crypto";
+import { randomBytes } from "node:crypto";
 
 const MARK_TOP = "▄█▄▄▄█▄";
 const MARK_BOTTOM = "██▄█▄██";
 const RECEIPT_CODE = "([0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4})";
 
 const SESSION_RECEIPT_PATTERN = new RegExp(
-  `${MARK_TOP}\\r?\\n${MARK_BOTTOM} {2}(?:started )?protected session ${RECEIPT_CODE}|${MARK_TOP} {2}(?:started )?protected session ${RECEIPT_CODE}\\r?\\n${MARK_BOTTOM}`,
+  `${MARK_TOP}(?:\\r?\\n${MARK_BOTTOM} {2}| {1,4}${MARK_BOTTOM} {1,2}| {2})(?:started )?protected session ${RECEIPT_CODE}(?:(?:\\r?\\n| {1,4})${MARK_BOTTOM})?`,
   "g",
 );
 
-export function mintReceiptCode(params: {
-  secret: string;
-  organizationId: string;
-  callerId: string;
-  sessionId: string;
-  collision?: number;
-}): string {
-  const collision = params.collision ?? 0;
-  const base = `${DOMAIN}\n${params.organizationId}\n${params.callerId}\n${params.sessionId}`;
-  const input = collision > 0 ? `${base}\n${collision}` : base;
-  const digest = createHmac("sha256", params.secret).update(input).digest();
-  return encodeCrockford35(first35Bits(digest));
+export function mintReceiptCode(): string {
+  return encodeCrockford35(first35Bits(randomBytes(5)));
 }
 
 export function formatSessionReceipt(code: string): string {
-  return `${MARK_TOP}\n${MARK_BOTTOM}  protected session ${code}`;
+  return `${MARK_TOP}  protected session ${code}`;
 }
 
 export function appendSessionReceipt(text: string, code: string): string {
@@ -45,7 +35,7 @@ export function stripSessionReceipts(text: string): {
   if (matches.length === 0) return { text, codes };
   for (let index = matches.length - 1; index >= 0; index--) {
     const match = matches[index];
-    const code = match[1] ?? match[2];
+    const code = match[1];
     if (code) codes.unshift(code);
     const start = match.index ?? 0;
     const end = start + match[0].length;
@@ -58,7 +48,6 @@ export function stripSessionReceipts(text: string): {
 
 // === Internal helpers ===
 
-const DOMAIN = "appa-session-receipt-v1";
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const MAX_SCAN_BYTES = 8 * 1024 * 1024;
 const MAX_CODES_PER_SITE = 64;
@@ -68,8 +57,8 @@ function clonePattern(): RegExp {
 }
 
 // Receipt codes carry 35 bits (~34 billion values): birthday collisions become
-// probable around ~250K active sessions per organization, so minting retries
-// with a shifted HMAC input (`collision`) and degrades to issuing no mark.
+// probable around ~250K active sessions per organization, so assignment retries
+// with a new random code and degrades to issuing no mark.
 function first35Bits(digest: Buffer): bigint {
   let value = 0n;
   for (let index = 0; index < 5; index++) {

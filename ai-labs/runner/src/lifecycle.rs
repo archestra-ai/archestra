@@ -11,6 +11,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use tokio::time::{Duration, sleep};
 use tracing::{error, info, warn};
+use uuid::Uuid;
 
 use crate::client::{ClientError, EvalClient};
 
@@ -160,9 +161,7 @@ async fn drop_database(db_created: &Arc<Mutex<bool>>, db_name: &str, maint_db_ur
     }
 }
 
-const DEV_AUTH_SECRET: &str = "better-auth-secret-12345678901234567890";
 const DEFAULT_ADMIN_EMAIL: &str = "admin@example.com";
-const DEFAULT_ADMIN_PASSWORD: &str = "password";
 /// The dedicated bench Postgres the runner provisions when no external one is configured.
 /// Credentials and port must match `ai-labs/dev/docker-compose.bench-pg.yml`.
 const DEFAULT_BENCH_DATABASE_URL: &str = "postgres://postgres:postgres@localhost:5544/postgres";
@@ -275,6 +274,14 @@ impl Instance {
 
     pub async fn start(&mut self) -> Result<(), LifecycleError> {
         self.env = load_platform_env(&self.platform)?;
+        // The bench DB is fresh per run, so credentials that neither the platform `.env` nor the
+        // process env pin are generated here, once, and shared by the backend env and the admin
+        // sign-in below.
+        for key in ["ARCHESTRA_AUTH_SECRET", "ARCHESTRA_AUTH_ADMIN_PASSWORD"] {
+            self.env
+                .entry(key.to_string())
+                .or_insert_with(|| env_override(key).unwrap_or_else(random_credential));
+        }
         let (bench_db_url, managed) = resolve_bench_db_url(&self.env);
         self.db_managed = managed;
         info!(
@@ -479,8 +486,7 @@ impl Instance {
         let password = self
             .env
             .get("ARCHESTRA_AUTH_ADMIN_PASSWORD")
-            .map(|s| s.as_str())
-            .unwrap_or(DEFAULT_ADMIN_PASSWORD);
+            .ok_or_else(|| LifecycleError::Config("ARCHESTRA_AUTH_ADMIN_PASSWORD was not generated".into()))?;
         self.client
             .sign_in(email, password)
             .await
@@ -1196,7 +1202,7 @@ pub fn build_backend_env(
     let mut env: HashMap<String, String> = std::env::vars().collect();
     env.extend(base_env.iter().map(|(k, v)| (k.clone(), v.clone())));
     env.entry("ARCHESTRA_AUTH_SECRET".to_string())
-        .or_insert_with(|| DEV_AUTH_SECRET.to_string());
+        .or_insert_with(random_credential);
     env.insert("ARCHESTRA_DATABASE_URL".to_string(), db_url.to_string());
     env.insert("ARCHESTRA_INTERNAL_API_BASE_URL".to_string(), api_base_url.to_string());
     env.insert("ARCHESTRA_METRICS_PORT".to_string(), metrics_port.to_string());
@@ -1231,6 +1237,11 @@ fn non_empty(value: Option<String>) -> Option<String> {
 /// Read a process-env override (empty/whitespace → unset).
 fn env_override(key: &str) -> Option<String> {
     non_empty(std::env::var(key).ok())
+}
+
+/// A 64-hex-char secret built from two v4 UUIDs (OS CSPRNG), for per-run throwaway credentials.
+fn random_credential() -> String {
+    format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
 }
 
 /// The migration command to run instead of the dev `pnpm --filter @backend db:migrate`, if set.

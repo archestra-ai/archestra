@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Use the current managed GitHub token on every invocation, including git helpers."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+
+def main():
+    env = dict(os.environ)
+    explicit = env.get("ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE")
+    source = Path(explicit or "/var/run/archestra/credentials/current.json")
+    if explicit or source.exists():
+        try:
+            bundle = json.loads(source.read_text())
+            expected = env.get("ARCHESTRA_AGENT_RUNTIME_TASK_ID")
+            if expected and bundle["taskId"] != expected:
+                raise ValueError("wrong task")
+            credentials = bundle["credentials"]
+            for name in ("GITHUB_TOKEN", "GH_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"):
+                value = credentials.get(name)
+                if value is None:
+                    continue
+                if not value["value"] or value["expiresAt"] <= time.time() * 1000:
+                    raise ValueError("expired")
+                env[name] = value["value"]
+            if "GITHUB_TOKEN" in credentials and "GH_TOKEN" not in credentials:
+                env["GH_TOKEN"] = env["GITHUB_TOKEN"]
+        except (OSError, ValueError, KeyError, TypeError):
+            print("GitHub credential refresh is unavailable or expired; retry after refresh.", file=sys.stderr)
+            return 75
+    if sys.argv[1:3] == ["auth", "setup-git"]:
+        result = subprocess.run(["/usr/bin/gh", *sys.argv[1:]], env=env)
+        if result.returncode:
+            return result.returncode
+        # setup-git records the resolved binary path. A skill or derived image
+        # can rerun it after startup; keep Git on renewable credentials too.
+        helpers = subprocess.run(
+            ["git", "config", "--global", "--get-regexp", r"^credential\..*\.helper$"],
+            env=env, capture_output=True, text=True,
+        )
+        if helpers.returncode not in (0, 1):
+            return helpers.returncode
+        for line in helpers.stdout.splitlines():
+            key, _, command = line.partition(" ")
+            if "/usr/bin/gh auth git-credential" in command:
+                result = subprocess.run([
+                    "git", "config", "--global", "--fixed-value", "--replace-all", key,
+                    command.replace("/usr/bin/gh auth git-credential",
+                                    "/usr/local/bin/gh auth git-credential"), command,
+                ], env=env)
+                if result.returncode:
+                    return result.returncode
+        return 0
+    os.execve("/usr/bin/gh", ["gh", *sys.argv[1:]], env)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

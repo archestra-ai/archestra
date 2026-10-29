@@ -12,6 +12,38 @@ const REAL_ANSWER = [
   `**Sources** [1] "The limit was raised to 5,000 per minute in March" — ${DOC}#0 [2] "burst windows of up to 90 seconds are tolerated before throttling begins" — ${DOC}#0`,
 ].join("\n");
 
+describe("citation parsing edge cases", () => {
+  it("accepts whitespace and a bracket between the dash and the ref", () => {
+    expect(
+      extractCitedQuotes(`"a quote"  —  \`  ${DOC}#3`).map((c) => c.ref),
+    ).toEqual([`${DOC}#3`]);
+    expect(
+      extractCitedQuotes(`"a quote" - (${DOC}#3)`).map((c) => c.ref),
+    ).toEqual([`${DOC}#3`]);
+  });
+
+  it("finds no citation after a long whitespace run without a ref, quickly", () => {
+    const answer = `"x" —${" ".repeat(50_000)}z`;
+    const started = performance.now();
+    expect(extractCitedQuotes(answer)).toEqual([]);
+    expect(foldCitationSources(`[1] ${answer}`).entries).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it("strips trailing spaces and tabs per line only, quickly on long runs", () => {
+    const answer = `Answer with trailing   \nmore\t  next\n[1] "q" — ${DOC}#0`;
+    expect(foldCitationSources(answer).displayText).toBe(
+      "Answer with trailing\nmore next",
+    );
+
+    const long = `a${" ".repeat(50_000)}b\n`;
+    const started = performance.now();
+    const folded = foldCitationSources(`${long}[1] "q" — ${DOC}#0`);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(folded.displayText).toBe(`a${" ".repeat(50_000)}b`);
+  });
+});
+
 describe("foldCitationSources", () => {
   it("parses the entries and removes the Sources block from the display text", () => {
     const { displayText, entries } = foldCitationSources(REAL_ANSWER);

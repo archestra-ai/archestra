@@ -73,51 +73,23 @@ beforeEach(() => {
 });
 
 describe("TeamSyncConfigForm", () => {
-  it("shows the template debugger without token claims", async () => {
-    render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
-    expect(screen.getByText("Template Debugger")).toBeInTheDocument();
-    expect(screen.queryByText(/engineering/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/raw signed tokens/i)).not.toBeInTheDocument();
-  });
-
-  it("shows a live template test result for team sync extraction", async () => {
+  it("extracts groups automatically and updates as the template changes", async () => {
     const user = userEvent.setup();
-
     render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
-    await user.type(
-      screen.getByLabelText("Groups Handlebars Template"),
-      "{{#each groups}}{{this}},{{/each}}",
+    expect(await screen.findByText("1 groups extracted")).toBeInTheDocument();
+    const template = screen.getByLabelText("Groups Handlebars Template");
+    await user.type(template, "custom-group");
+    expect(
+      await screen.findByText("custom-group", { selector: "span" }),
+    ).toBeInTheDocument();
+    await user.clear(template);
+    expect(
+      await screen.findByText("Default extraction from the sign-in data."),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Enable Team Sync" }),
     );
-
-    expect(screen.getByText("Live Template Test")).toBeInTheDocument();
-    expect(await screen.findByText("Groups extracted")).toBeInTheDocument();
-    expect(
-      screen.getByText(/group identifier.*extracted/i),
-    ).toBeInTheDocument();
-  });
-
-  it("tests default team sync extraction when the template is empty", async () => {
-    render(<TestWrapper providerId="Okta" identityProviderId="idp-1" />);
-    expect(screen.getByText("Live Template Test")).toBeInTheDocument();
-    expect(await screen.findByText("Groups extracted")).toBeInTheDocument();
-    expect(screen.getByText(/using default extraction/i)).toBeInTheDocument();
-    expect(screen.queryByText("Enter a template to test.")).toBeNull();
-  });
-
-  it("shows the Okta groups claim hint", async () => {
-    render(<TestWrapper providerId="Okta" />);
-    expect(
-      screen.getByText(/Okta team sync commonly reads group names/i),
-    ).toBeInTheDocument();
-  });
-
-  it("shows the Entra groups and roles claim hint", async () => {
-    render(<TestWrapper providerId="EntraID" />);
-    expect(
-      screen.getByText(/Microsoft Entra ID team sync commonly reads/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/sync teams from Entra App roles/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Team Sync is off")).toBeInTheDocument();
+    expect(screen.queryByText("1 groups extracted")).not.toBeInTheDocument();
   });
 });

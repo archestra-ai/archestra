@@ -54,3 +54,15 @@ export type SkillShareLinkRevision = z.infer<
 export type InsertSkillShareLinkRevision = z.infer<
   typeof InsertSkillShareLinkRevisionSchema
 >;
+
+/** The newest revision's identity, without its payload. */
+export type RevisionHead = Pick<
+  SkillShareLinkRevision,
+  "sequence" | "contentHash" | "commitSha"
+>;
+
+/** The columns a disk replay needs from each revision. */
+export type ReplayRevision = Pick<
+  SkillShareLinkRevision,
+  "sequence" | "contentHash" | "commitSha" | "createdAt" | "payload"
+>;

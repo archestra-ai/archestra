@@ -2180,8 +2180,6 @@ describe("preview_app_tool", () => {
         agent: { id: agent.id, name: agent.name },
         organizationId,
         userId: user.id,
-        // the interactive chat harness sets this after the approval click
-        approvalRequiredPoliciesHandled: true,
       };
 
       const catalog = await makeInternalMcpCatalog({ organizationId });
@@ -2237,17 +2235,6 @@ describe("preview_app_tool", () => {
     const result = await preview({ appId, toolName: "hf__not_assigned" });
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("not assigned");
-  });
-
-  test("is refused server-side without the approval flag (raw gateway / A2A)", async () => {
-    // the chat carve-out cannot be the only gate: any context that did not pass
-    // through the approval click is refused in the handler itself
-    const result = await preview(
-      { appId, toolName },
-      { ...context, approvalRequiredPoliciesHandled: false },
-    );
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("human approval");
   });
 
   test("a member who cannot modify the app is refused", async ({
@@ -2389,6 +2376,54 @@ describe("unwrapToolResultForPreview (SDK tools.call parity)", () => {
         }),
       ),
     ).toBe("null");
+  });
+
+  test("embedded resources serialize alongside the text, blob base64 elided", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [
+            {
+              type: "text",
+              text: "successfully downloaded text file (SHA: abc)",
+            },
+            {
+              type: "resource",
+              resource: {
+                uri: "repo://acme/web/contents/package.json",
+                mimeType: "text/plain; charset=utf-8",
+                text: '{"name": "web"}',
+              },
+            },
+            {
+              type: "resource",
+              resource: {
+                uri: "repo://acme/web/contents/logo.png",
+                mimeType: 'image/png" onerror="alert(1)',
+                blob: "aGk=",
+              },
+            },
+          ],
+        }),
+      ),
+    ).toBe(
+      JSON.stringify({
+        text: "successfully downloaded text file (SHA: abc)",
+        resources: [
+          {
+            uri: "repo://acme/web/contents/package.json",
+            mimeType: "text/plain; charset=utf-8",
+            text: '{"name": "web"}',
+          },
+          {
+            uri: "repo://acme/web/contents/logo.png",
+            mimeType: 'image/png" onerror="alert(1)',
+            dataUrl:
+              "data:application/octet-stream;base64,…[base64 elided in preview]",
+          },
+        ],
+      }),
+    );
   });
 
   test("no text, structured, or media data serializes as null", () => {
@@ -3590,7 +3625,7 @@ describe("publish_app", () => {
     });
   });
 
-  test("a creator with full access can publish their app to the organization", async ({
+  test("a creator with full access to every app can publish their app to the organization", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -3598,7 +3633,7 @@ describe("publish_app", () => {
   }) => {
     const agent = await makeAgent({ name: "Publish Member" });
     const user = await makeUser();
-    await makeMember(user.id, agent.organizationId, { role: "member" });
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
     const app = await makeApp({
       organizationId: agent.organizationId,
       access: "personal",
@@ -3615,6 +3650,34 @@ describe("publish_app", () => {
     // The creator's full access lets them publish; the app's scope, read
     // from its grants, is now `org`.
     expect((await AppModel.findById(app.id))?.scope).toBe("org");
+  });
+
+  test("a member cannot publish their own app to the organization", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const agent = await makeAgent({ name: "Publish Refused" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: "member" });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      access: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish({ appId: app.id, scope: "org" }, context);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain(
+      "Only someone with Full access to every app",
+    );
+    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
   });
 
   test("publishing to a team requires teams", async ({
@@ -4055,25 +4118,6 @@ describe("pre-load guard precedence", () => {
     expect(res.isError).toBe(true);
     const text = (res.content[0] as any).text as string;
     expect(text).toContain("teams is only valid");
-    expect(text).not.toContain("No app found");
-  });
-
-  test("preview_app_tool: no approval on a missing app returns the approval error", async ({
-    makeAgent,
-    makeUser,
-    makeMember,
-  }) => {
-    // The context deliberately omits approvalRequiredPoliciesHandled so the
-    // server-side approval backstop fires before the app is ever loaded.
-    const ctx = await adminContext(makeAgent, makeUser, makeMember);
-    const res = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_PREVIEW_APP_TOOL_SHORT_NAME),
-      { appId: MISSING_APP_ID, toolName: "some__tool" },
-      ctx,
-    );
-    expect(res.isError).toBe(true);
-    const text = (res.content[0] as any).text as string;
-    expect(text).toContain("requires human approval");
     expect(text).not.toContain("No app found");
   });
 

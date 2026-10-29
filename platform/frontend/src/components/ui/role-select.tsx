@@ -16,6 +16,7 @@ interface RoleSelectProps {
   mode?: "assignment" | "filter";
   allOptionValue?: string;
   multiple?: boolean;
+  maxBadgeDisplay?: number;
   allowEmpty?: boolean;
   value?: string;
   onValueChange?: (value: string) => void;
@@ -81,6 +82,7 @@ export function RoleSelect({
   mode = "assignment",
   allOptionValue = "all",
   multiple = false,
+  maxBadgeDisplay = 3,
   allowEmpty = false,
   value,
   onValueChange,
@@ -133,6 +135,7 @@ export function RoleSelect({
         onValueChange={(roles) => onValueChange?.(roles.join(","))}
         items={items}
         minSelected={allowEmpty ? 0 : 1}
+        maxBadgeDisplay={maxBadgeDisplay}
         id={id}
         ariaLabel={ariaLabel ?? "Roles"}
         data-testid={testId}

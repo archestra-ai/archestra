@@ -1,4 +1,5 @@
 import {
+  ImagePullPolicySchema,
   isBuiltInCatalogId,
   ResourcePermissionGrantSchema,
   redactCatalogToolArguments,
@@ -41,12 +42,17 @@ import {
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import { catalogVisibleInEnvironment } from "@/services/environments/environment-isolation";
-import { assertCanWriteMcpDeploymentYaml } from "@/services/mcp-advanced-settings";
 import {
+  assertCanChangeMcpRuntimeConfig,
+  assertCanWriteMcpDeploymentYaml,
+} from "@/services/mcp-advanced-settings";
+import {
+  assertCatalogCredentialRecovery,
   extractLocalConfigSecrets,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
+import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
@@ -61,6 +67,7 @@ import {
   ResourceVisibilityScopeSchema,
   UuidIdSchema,
 } from "@/types";
+import { ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY } from "@/types/enterprise-managed-credentials";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 import { archestraMcpBranding } from "./branding";
@@ -75,6 +82,12 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -226,7 +239,9 @@ const McpConfigToolSchema = z
     transportType: z
       .enum(["stdio", "streamable-http"])
       .optional()
-      .describe("[Local] Transport type."),
+      .describe(
+        "[Local] Transport type. Omit it for remote servers: streamable-http is ignored and stdio is rejected.",
+      ),
     httpPort: z
       .number()
       .optional()
@@ -243,6 +258,9 @@ const McpConfigToolSchema = z
       .array(ImagePullSecretSchema)
       .optional()
       .describe("[Local] Image pull secrets for private registries."),
+    imagePullPolicy: ImagePullPolicySchema.optional().describe(
+      "[Local] Kubernetes imagePullPolicy for the server container. Unset uses Always for :latest or untagged images and IfNotPresent otherwise.",
+    ),
     deploymentSpecYaml: z
       .string()
       .optional()
@@ -342,12 +360,29 @@ const SearchPrivateMcpRegistryToolArgsSchema = z
       .describe(
         "Optional search query to filter MCP servers by name or description.",
       ),
+    access: resourceAccessToolArg({ examplePlural: "MCP servers" }),
+    shared_with: resourceSharedWithToolArg,
+    owner_ids: resourceOwnerIdsToolArg,
+  })
+  .strict();
+
+const GetMcpServersToolArgsSchema = z
+  .object({
+    access: resourceAccessToolArg({ examplePlural: "MCP servers" }),
+    shared_with: resourceSharedWithToolArg,
+    owner_ids: resourceOwnerIdsToolArg,
   })
   .strict();
 
 const GetMcpServerToolsToolArgsSchema = z
   .object({
     mcpServerId: UuidIdSchema.describe("The catalog ID of the MCP server."),
+    view: z
+      .enum(["full", "picker"])
+      .optional()
+      .describe(
+        "Picker metadata excludes parameter bodies and assigned-agent lists; defaults to full.",
+      ),
   })
   .strict();
 
@@ -421,6 +456,7 @@ const ReloadMcpServerToolsToolArgsSchema = z
   })
   .strict();
 
+type GetMcpServersArgs = z.infer<typeof GetMcpServersToolArgsSchema>;
 type SearchPrivateMcpRegistryArgs = z.infer<
   typeof SearchPrivateMcpRegistryToolArgsSchema
 >;
@@ -449,9 +485,9 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_MCP_SERVERS_SHORT_NAME,
     title: "Get MCP Servers",
     description: `List all MCP servers from the catalog. Use this to identify candidate MCP servers, then call ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} to fetch exact tool IDs for ${TOOL_CREATE_AGENT_SHORT_NAME}/${TOOL_EDIT_AGENT_SHORT_NAME} toolAssignments.`,
-    schema: EmptyToolArgsSchema,
+    schema: GetMcpServersToolArgsSchema,
     outputSchema: GetMcpServersOutputSchema,
-    handler: ({ context }) => handleGetMcpServers(context),
+    handler: ({ args, context }) => handleGetMcpServers(args, context),
   }),
   defineArchestraTool({
     shortName: TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
@@ -547,7 +583,10 @@ async function handleSearchPrivateMcpRegistry(
 
     let catalogItems: InternalMcpCatalog[];
 
-    if (query && query.trim() !== "") {
+    // `searchByQuery` has no `access` filter, so a filtered search narrows
+    // the filtered list by the same name/description substring instead.
+    const access = toolAccessSelection(args);
+    if (query && query.trim() !== "" && !access) {
       catalogItems = await InternalMcpCatalogModel.searchByQuery(query, {
         expandSecrets: false,
         userId: context.userId,
@@ -570,6 +609,7 @@ async function handleSearchPrivateMcpRegistry(
         isAdmin,
         organizationId,
         environmentId,
+        access,
         readGrantContext: (await userHasPermission(
           context.userId,
           organizationId,
@@ -579,6 +619,14 @@ async function handleSearchPrivateMcpRegistry(
           ? undefined
           : { userId: context.userId, organizationId },
       });
+      const needle = query?.trim().toLowerCase();
+      if (needle) {
+        catalogItems = catalogItems.filter((item) =>
+          [item.name, item.description].some((text) =>
+            text?.toLowerCase().includes(needle),
+          ),
+        );
+      }
     }
 
     if (catalogItems.length === 0) {
@@ -625,6 +673,7 @@ async function handleSearchPrivateMcpRegistry(
 }
 
 async function handleGetMcpServers(
+  args: GetMcpServersArgs,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
   const { agent: contextAgent, organizationId } = context;
@@ -648,6 +697,7 @@ async function handleGetMcpServers(
       isAdmin,
       organizationId,
       environmentId,
+      access: toolAccessSelection(args),
       readGrantContext: (await userHasPermission(
         context.userId,
         organizationId,
@@ -739,7 +789,15 @@ async function handleGetMcpServerTools(
     ) {
       return errorResult("You do not have permission to view this MCP server.");
     }
-    const tools = await ToolModel.findByCatalogId(args.mcpServerId);
+    const reader = {
+      kind: "caller",
+      userId: context.userId,
+      organizationId,
+    } as const;
+    const tools =
+      args.view === "picker"
+        ? await ToolModel.findPickerToolsByCatalogId(args.mcpServerId, reader)
+        : await ToolModel.findByCatalogId(args.mcpServerId, reader);
     return structuredSuccessResult({ tools }, JSON.stringify(tools, null, 2));
   } catch (error) {
     return catchError(error, "getting MCP server tools");
@@ -958,6 +1016,13 @@ async function handleEditMcpConfig(
     if (args.oauthConfig !== undefined)
       updateData.oauthConfig = args.oauthConfig;
 
+    const effectiveServerType = args.serverType ?? existing.serverType;
+    const transportTypeError = nonLocalTransportTypeError({
+      serverType: effectiveServerType,
+      transportType: args.transportType,
+    });
+    if (transportTypeError) return errorResult(transportTypeError);
+
     const localConfigUpdates: Record<string, unknown> = {};
     const localFields = [
       "command",
@@ -971,8 +1036,11 @@ async function handleEditMcpConfig(
       "httpPath",
       "nodePort",
       "imagePullSecrets",
+      "imagePullPolicy",
     ] as const;
     for (const field of localFields) {
+      if (field === "transportType" && effectiveServerType !== "local")
+        continue;
       if (args[field] !== undefined) {
         localConfigUpdates[field] = args[field];
       }
@@ -997,6 +1065,17 @@ async function handleEditMcpConfig(
         "No fields to update. Provide at least one configuration field.",
       );
     }
+    try {
+      await assertCanChangeMcpRuntimeConfig({
+        userId: context.userId,
+        organizationId,
+        catalogId: existing.id,
+        requested: updateData,
+        current: existing,
+      });
+    } catch (error) {
+      return errorResult((error as Error).message);
+    }
 
     // Validate before touching the secret bag: rotating a live credential and
     // then rejecting the edit would leave the bag ahead of the catalog row.
@@ -1007,6 +1086,17 @@ async function handleEditMcpConfig(
       catalogName: existing.name,
       existingLocalConfigSecretId: existing.localConfigSecretId,
       existingClientSecretId: existing.clientSecretId,
+      existingLocalConfig: existing.localConfig,
+      existingClientSecretKeys: [
+        ...(existing.oauthConfig ? ["client_secret"] : []),
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        ...(existing.enterpriseManagedConfig
+          ? [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]
+          : []),
+        // SPDX-SnippetEnd
+      ],
     });
     const updated = await InternalMcpCatalogModel.update(
       existing.id,
@@ -1110,6 +1200,12 @@ async function handleCreateMcpServer(
       return errorResult("serverType must be one of: local, remote, builtin.");
     }
 
+    const transportTypeError = nonLocalTransportTypeError({
+      serverType,
+      transportType: args.transportType,
+    });
+    if (transportTypeError) return errorResult(transportTypeError);
+
     const labels = args.labels ? deduplicateLabels(args.labels) : undefined;
 
     const localConfigFields = [
@@ -1124,9 +1220,11 @@ async function handleCreateMcpServer(
       "httpPath",
       "nodePort",
       "imagePullSecrets",
+      "imagePullPolicy",
     ] as const;
     const localConfig: Record<string, unknown> = {};
     for (const field of localConfigFields) {
+      if (field === "transportType" && serverType !== "local") continue;
       if (args[field] !== undefined) {
         localConfig[field] = args[field];
       }
@@ -1687,12 +1785,22 @@ async function discoverLocalMcpServerTools(params: {
       rawToolName: tool.name,
       description: tool.description,
       parameters: tool.inputSchema,
+      meta: {
+        _meta: tool._meta,
+        annotations: tool.annotations,
+        outputSchema: tool.outputSchema,
+      },
       catalogId: catalogItem.id,
     }));
 
     if (toolsToCreate.length > 0) {
       const createdTools =
         await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+      await recordInstallToolDescriptions({
+        mcpServerId: mcpServer.id,
+        syncedTools: createdTools,
+        reported: toolsToCreate,
+      });
       await assignDiscoveredToolsToAgents({
         agentIds: args.agentIds ?? [],
         toolIds: createdTools.map((tool) => tool.id),
@@ -1748,10 +1856,20 @@ async function discoverRemoteMcpServerTools(params: {
         rawToolName: tool.name,
         description: tool.description,
         parameters: tool.inputSchema,
+        meta: {
+          _meta: tool._meta,
+          annotations: tool.annotations,
+          outputSchema: tool.outputSchema,
+        },
         catalogId: catalogItem.id,
       }));
       const createdTools =
         await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+      await recordInstallToolDescriptions({
+        mcpServerId: mcpServer.id,
+        syncedTools: createdTools,
+        reported: toolsToCreate,
+      });
       await assignDiscoveredToolsToAgents({
         agentIds: args.agentIds ?? [],
         toolIds: createdTools.map((tool) => tool.id),
@@ -1851,7 +1969,7 @@ async function authorizeDeployScope(params: {
   }
 
   if (scope === "team" && teamId) {
-    const team = await TeamModel.findById(teamId);
+    const team = await TeamModel.findById(teamId, { includeMembers: false });
     if (!team) {
       return "Team not found.";
     }
@@ -1901,6 +2019,8 @@ async function moveCatalogSecretsToBag(params: {
   catalogName: string;
   existingLocalConfigSecretId: string | null;
   existingClientSecretId: string | null;
+  existingLocalConfig?: LocalConfig | null;
+  existingClientSecretKeys?: string[];
 }): Promise<void> {
   const {
     updateData,
@@ -1909,11 +2029,33 @@ async function moveCatalogSecretsToBag(params: {
     existingClientSecretId,
   } = params;
 
+  const submittedClientSecret = (
+    updateData.oauthConfig as { client_secret?: unknown } | null | undefined
+  )?.client_secret;
+  const clientRecovery = params.existingClientSecretKeys
+    ? {
+        requiredKeys: params.existingClientSecretKeys,
+        values: {
+          ...(typeof submittedClientSecret === "string" && submittedClientSecret
+            ? { client_secret: submittedClientSecret }
+            : {}),
+        },
+      }
+    : undefined;
+  await assertCatalogCredentialRecovery({
+    localSecretId: existingLocalConfigSecretId,
+    existingLocalConfig: params.existingLocalConfig,
+    localConfig: updateData.localConfig as LocalConfig | undefined,
+    clientSecretId: existingClientSecretId,
+    clientRecovery,
+  });
+
   if (updateData.localConfig !== undefined) {
     const { localConfig, secretId } = await extractLocalConfigSecrets({
       localConfig: updateData.localConfig as LocalConfig,
       existingSecretId: existingLocalConfigSecretId,
       catalogName,
+      existingLocalConfig: params.existingLocalConfig,
     });
     updateData.localConfig = localConfig;
     if (secretId) updateData.localConfigSecretId = secretId;
@@ -1935,9 +2077,27 @@ async function moveCatalogSecretsToBag(params: {
         catalogName,
         key: "client_secret",
         value: clientSecret,
+        recovery: clientRecovery,
       });
       updateData.oauthConfig = rest;
       updateData.clientSecretId = id;
     }
   }
+}
+
+/**
+ * `transportType` describes how a local server's pod speaks MCP, so it only
+ * belongs in a local config. A non-local entry has no pod: "streamable-http"
+ * matches how remote servers are reached and is dropped instead of turning the
+ * entry into an incomplete local config, while "stdio" cannot apply and is
+ * rejected.
+ */
+function nonLocalTransportTypeError(params: {
+  serverType: string;
+  transportType: string | undefined;
+}): string | null {
+  if (params.serverType === "local" || params.transportType !== "stdio") {
+    return null;
+  }
+  return `transportType "stdio" only applies to local MCP servers. Omit transportType for ${params.serverType} servers.`;
 }

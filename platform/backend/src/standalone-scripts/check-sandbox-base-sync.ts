@@ -1,5 +1,5 @@
 /**
- * Fails if platform/sandbox_base/ drifts from the runtime warm-base contract in
+ * Fails if platform/docker_images/sandbox_base/ drifts from the runtime warm-base contract in
  * sandbox-core/src/backends/dagger.rs. The sandbox base is built TWO ways — baked
  * (the Dockerfile, used when ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT=true) and at
  * runtime (build_warm_base) — so if the apt set / python deps / venv path / base
@@ -19,11 +19,11 @@ const daggerRs = readFileSync(
   "utf8",
 );
 const dockerfile = readFileSync(
-  path.join(PLATFORM, "sandbox_base/Dockerfile"),
+  path.join(PLATFORM, "docker_images/sandbox_base/Dockerfile"),
   "utf8",
 );
 const pyproject = readFileSync(
-  path.join(PLATFORM, "sandbox_base/pyproject.toml"),
+  path.join(PLATFORM, "docker_images/sandbox_base/pyproject.toml"),
   "utf8",
 );
 
@@ -53,7 +53,7 @@ function tomlDependencies(): string[] {
   const m = pyproject.match(/dependencies\s*=\s*\[([\s\S]*?)\]/);
   if (!m) {
     errors.push(
-      "could not parse dependencies from sandbox_base/pyproject.toml",
+      "could not parse dependencies from docker_images/sandbox_base/pyproject.toml",
     );
     return [];
   }
@@ -82,7 +82,7 @@ const runtimePy = [...arrayConst("DEFAULT_PYTHON_REQUIREMENTS")].sort();
 const bakedPy = [...tomlDependencies()].sort();
 if (JSON.stringify(runtimePy) !== JSON.stringify(bakedPy)) {
   errors.push(
-    `python deps differ — dagger.rs DEFAULT_PYTHON_REQUIREMENTS=[${runtimePy}] vs sandbox_base/pyproject.toml=[${bakedPy}]`,
+    `python deps differ — dagger.rs DEFAULT_PYTHON_REQUIREMENTS=[${runtimePy}] vs docker_images/sandbox_base/pyproject.toml=[${bakedPy}]`,
   );
 }
 
@@ -104,10 +104,12 @@ if (marker && !dockerfile.includes(marker)) {
 
 if (errors.length > 0) {
   process.stderr.write(
-    "sandbox_base/ is out of sync with dagger.rs build_warm_base():\n" +
+    "docker_images/sandbox_base/ is out of sync with dagger.rs build_warm_base():\n" +
       errors.map((e) => `  - ${e}`).join("\n") +
-      "\nReconcile platform/sandbox_base/ with the DEFAULT_* constants.\n",
+      "\nReconcile platform/docker_images/sandbox_base/ with the DEFAULT_* constants.\n",
   );
   process.exit(1);
 }
-process.stdout.write("sandbox_base/ is in sync with dagger.rs.\n");
+process.stdout.write(
+  "docker_images/sandbox_base/ is in sync with dagger.rs.\n",
+);

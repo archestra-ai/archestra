@@ -15,7 +15,7 @@ import {
 export type { ModelSource };
 
 /** The agent's resolved LLM config, as returned by the agents API. */
-type AgentLlmConfig = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type AgentLlmConfig = archestraApiTypes.GetAgentResponses["200"];
 
 // ===== LocalStorage Keys =====
 
@@ -102,17 +102,19 @@ interface OrganizationInfo {
   defaultLlmApiKeyId?: string | null;
 }
 
-/** The current user's saved default (model, key) pair — the "member" level. */
-interface MemberDefaultInfo {
-  modelId?: string | null;
-  chatApiKeyId?: string | null;
-}
-
 interface ChatContext {
   modelsByProvider: Record<string, ModelInfo[]>;
-  chatApiKeys: Array<{ id: string; provider: string }>;
+  /**
+   * The keys the viewer may USE (GET /api/llm-provider-api-keys/available),
+   * not every key they can see. A key shared as read-only is listed in
+   * settings but refused when a chat sends it.
+   */
+  chatApiKeys: Array<{
+    id: string;
+    provider: string;
+    isGithubAppKey?: boolean;
+  }>;
   organization: OrganizationInfo | null;
-  memberDefault: MemberDefaultInfo | null;
 }
 
 interface ResolveInitialModelParams extends ChatContext {
@@ -126,7 +128,7 @@ interface ResolvedModel {
 
 /**
  * Resolve which model to use on initial chat load.
- * Priority: member default -> agent default -> organization default ->
+ * Priority: agent default -> organization default ->
  * best available model. Returns null when no model can be resolved.
  *
  * Delegates to the shared `resolveModelSelection` so the client and the
@@ -135,8 +137,7 @@ interface ResolvedModel {
 export function resolveInitialModel(
   params: ResolveInitialModelParams,
 ): ResolvedModel | null {
-  const { modelsByProvider, agent, chatApiKeys, organization, memberDefault } =
-    params;
+  const { modelsByProvider, agent, chatApiKeys, organization } = params;
 
   const findKeyForProvider = (provider: string): string | null =>
     chatApiKeys.find((k) => k.provider === provider)?.id ?? null;
@@ -162,11 +163,17 @@ export function resolveInitialModel(
   // no key for it. So a per-user model is selectable by model alone: pairing it
   // with `findKeyForProvider` (null) would otherwise drop it from the catalog
   // and leave an org/agent default pointing at one half-pinned and skipped.
-  const isPerUserModel = (modelId: string | null | undefined): boolean => {
+  const isPerUserModel = (
+    modelId: string | null | undefined,
+    apiKeyId?: string | null,
+  ): boolean => {
     const provider = providerForModel(modelId);
     return (
       provider != null &&
-      providerRequiresPerUserCredential(provider as SupportedProvider)
+      providerRequiresPerUserCredential(provider as SupportedProvider) &&
+      // Paired with a GitHub App key, a Copilot model is an ordinary keyed
+      // model; only the personal sign-in path is per-user.
+      !chatApiKeys.some((key) => key.id === apiKeyId && key.isGithubAppKey)
     );
   };
 
@@ -197,13 +204,44 @@ export function resolveInitialModel(
     apiKeyId: string | null | undefined,
   ): ModelSelection => ({
     modelId,
-    apiKeyId: isPerUserModel(modelId) ? PER_USER_PLACEHOLDER_KEY : apiKeyId,
+    apiKeyId: isPerUserModel(modelId, apiKeyId)
+      ? PER_USER_PLACEHOLDER_KEY
+      : apiKeyId,
   });
 
+  // The organization default stores a key chosen by someone, at some point,
+  // that the viewer may not be allowed to use now (an admin's choice, a key
+  // whose grant was narrowed to read-only). Sending it is
+  // refused, so keep the level's model and pair it with a key the viewer can
+  // use for that provider instead, or skip the level when there is none. The
+  // agent's own key needs no grant — it is used through the agent — so the
+  // agent level, and any level naming that same key, is kept as is.
+  const toUsableLevel = (
+    modelId: string | null | undefined,
+    apiKeyId: string | null | undefined,
+  ): ModelSelection => {
+    if (
+      !modelId ||
+      !apiKeyId ||
+      isPerUserModel(modelId, apiKeyId) ||
+      apiKeyId === agent?.llmApiKeyId ||
+      chatApiKeys.some((k) => k.id === apiKeyId)
+    ) {
+      return toLevel(modelId, apiKeyId);
+    }
+    const provider = providerForModel(modelId);
+    return {
+      modelId,
+      apiKeyId: provider ? findKeyForProvider(provider) : null,
+    };
+  };
+
   const levels: ModelSelection[] = [
-    toLevel(memberDefault?.modelId, memberDefault?.chatApiKeyId),
     toLevel(agent?.modelId, agent?.llmApiKeyId),
-    toLevel(organization?.defaultModelId, organization?.defaultLlmApiKeyId),
+    toUsableLevel(
+      organization?.defaultModelId,
+      organization?.defaultLlmApiKeyId,
+    ),
   ];
 
   const resolved = resolveModelSelection({ levels, availableModels });
@@ -220,10 +258,43 @@ export function resolveInitialModel(
   // resolution (which surfaces the inline connect prompt).
   return {
     modelId: resolved.modelId,
-    apiKeyId: isPerUserModel(resolved.modelId)
+    apiKeyId: isPerUserModel(resolved.modelId, resolved.apiKeyId)
       ? null
       : (resolved.apiKeyId ?? null),
   };
+}
+
+/**
+ * The key an existing conversation should run a newly picked model through.
+ * Keeps the current key when it serves the model's provider and the viewer may
+ * send it — a key they may use, or the agent's own key, which works through
+ * the agent. Otherwise takes the first key the viewer may use for the
+ * provider, or null when they have none.
+ */
+export function resolveConversationKeyForModel(params: {
+  currentKeyId: string | null | undefined;
+  /** Provider of the conversation's current model (and so of its key). */
+  currentModelProvider: string | undefined;
+  agentApiKeyId: string | null | undefined;
+  modelProvider: string | undefined;
+  usableKeys: Array<{ id: string; provider: string }>;
+}): string | null {
+  const {
+    currentKeyId,
+    currentModelProvider,
+    agentApiKeyId,
+    modelProvider,
+    usableKeys,
+  } = params;
+  if (!modelProvider) return null;
+  if (currentKeyId) {
+    const usableCurrentKey = usableKeys.find((k) => k.id === currentKeyId);
+    const currentKeyProvider =
+      usableCurrentKey?.provider ??
+      (currentKeyId === agentApiKeyId ? currentModelProvider : undefined);
+    if (currentKeyProvider === modelProvider) return currentKeyId;
+  }
+  return usableKeys.find((k) => k.provider === modelProvider)?.id ?? null;
 }
 
 /**

@@ -11,7 +11,7 @@ describe("plugin executable-content approval", () => {
   let user: User;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
-    config.plugins.enabled = true;
+    config.beta = false;
     organizationId = (await makeOrganization()).id;
     // Not a member of the organization, so it holds no permissions.
     user = await makeUser();

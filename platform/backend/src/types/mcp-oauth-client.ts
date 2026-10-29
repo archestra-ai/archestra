@@ -37,6 +37,7 @@ export const McpOauthClientMetadataSchema = z.object({
 export const McpOauthClientSchema = z.object({
   id: z.string(),
   clientId: z.string(),
+  serviceAccountId: z.string().nullable(),
   name: z.string(),
   organizationId: z.string(),
   grantType: McpOauthClientGrantTypeSchema,

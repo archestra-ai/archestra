@@ -1,12 +1,38 @@
+import type { SupportedProvider } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import { ModelModel } from "@/models";
 import { TiktokenTokenizer } from "@/tokenizers";
 import type { CommonMcpToolDefinition } from "@/types";
-import {
-  calculateCacheCost,
-  calculateCost,
-  estimateToolTokens,
-} from "./cost-optimization";
+import { calculateInteractionCosts } from "../llm-proxy-helpers";
+import { calculateCost, estimateToolTokens } from "./cost-optimization";
+
+/** Cache cost and savings as the interaction write records them. */
+async function cacheCost(
+  model: string,
+  provider: SupportedProvider,
+  readTokens: number,
+  writeTokens: number,
+  write1hTokens = 0,
+) {
+  const result = await calculateInteractionCosts({
+    actualModel: model,
+    providerName: provider,
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: readTokens,
+      cacheWriteTokens: writeTokens,
+      cacheWrite1hTokens: write1hTokens,
+    },
+  });
+  return result.cacheCost === undefined
+    ? undefined
+    : {
+        cacheCost: result.cacheCost,
+        cacheSavings: result.cacheSavings,
+        cacheReadSavings: result.cacheReadSavings,
+      };
+}
 
 describe("calculateCost", () => {
   test("returns undefined when there is no usage at all", async () => {
@@ -254,9 +280,9 @@ describe("calculateCost", () => {
   });
 });
 
-describe("calculateCacheCost", () => {
+describe("interaction cache cost", () => {
   test("returns undefined when there are no cache tokens", async () => {
-    expect(await calculateCacheCost("gpt-4o", "openai", 0, 0)).toBeUndefined();
+    expect(await cacheCost("gpt-4o", "openai", 0, 0)).toBeUndefined();
   });
 
   test("splits cache cost and net savings using multipliers", async () => {
@@ -273,12 +299,7 @@ describe("calculateCacheCost", () => {
 
     // read 2000/1M * $10 = $0.02 full → actual 0.1x = $0.002, saved $0.018
     // write 1000/1M * $10 = $0.01 full → actual 1.25x = $0.0125, surcharge $0.0025
-    const result = await calculateCacheCost(
-      "cache-breakdown",
-      "anthropic",
-      2000,
-      1000,
-    );
+    const result = await cacheCost("cache-breakdown", "anthropic", 2000, 1000);
     expect(result?.cacheCost).toBeCloseTo(0.0145);
     expect(result?.cacheSavings).toBeCloseTo(0.0155);
   });
@@ -299,13 +320,7 @@ describe("calculateCacheCost", () => {
     // of 1000 write tokens, 400 are 1h (2x) and 600 are 5m (1.25x):
     //   cost  = 0.002 + 600/1M*$10*1.25 (0.0075) + 400/1M*$10*2 (0.008) = 0.0175
     //   saved = 0.018 - 600/1M*$10*0.25 (0.0015) - 400/1M*$10*1.0 (0.004) = 0.0125
-    const result = await calculateCacheCost(
-      "cache-1h",
-      "anthropic",
-      2000,
-      1000,
-      400,
-    );
+    const result = await cacheCost("cache-1h", "anthropic", 2000, 1000, 400);
     expect(result?.cacheCost).toBeCloseTo(0.0175);
     expect(result?.cacheSavings).toBeCloseTo(0.0125);
   });
@@ -326,12 +341,7 @@ describe("calculateCacheCost", () => {
 
     // read 2000/1M*$1 = 0.002 cost; write 1000/1M*$12 = 0.012 cost → 0.014
     // read saved 2000/1M*($10-$1) = 0.018; write surcharge 1000/1M*($12-$10) = 0.002
-    const result = await calculateCacheCost(
-      "cache-explicit",
-      "cohere",
-      2000,
-      1000,
-    );
+    const result = await cacheCost("cache-explicit", "cohere", 2000, 1000);
     expect(result?.cacheCost).toBeCloseTo(0.014);
     expect(result?.cacheSavings).toBeCloseTo(0.016);
   });
@@ -353,12 +363,7 @@ describe("calculateCacheCost", () => {
 
     // read 2000/1M*$1 = 0.002 cost; read saved 2000/1M*($10-$1) = 0.018.
     // 1000 write tokens are unpriced → contribute no cost and no savings.
-    const result = await calculateCacheCost(
-      "cache-read-only",
-      "cohere",
-      2000,
-      1000,
-    );
+    const result = await cacheCost("cache-read-only", "cohere", 2000, 1000);
     expect(result?.cacheCost).toBeCloseTo(0.002);
     expect(result?.cacheSavings).toBeCloseTo(0.018);
     expect(result?.cacheReadSavings).toBeCloseTo(0.018);

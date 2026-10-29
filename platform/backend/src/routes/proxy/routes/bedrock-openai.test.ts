@@ -1,12 +1,8 @@
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { bedrockAdapterFactory } from "../adapters/bedrock";
 import bedrockOpenaiProxyRoutes from "./bedrock-openai";
 
@@ -24,11 +20,8 @@ async function* asyncIterable<T>(items: T[]): AsyncIterable<T> {
   for (const item of items) yield item;
 }
 
-function createFastifyApp(): FastifyInstance {
-  const app = Fastify().withTypeProvider<ZodTypeProvider>();
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
-  return app;
+function createFastifyApp() {
+  return createFastifyInstance();
 }
 
 function parseSseChunks(body: string): unknown[] {
@@ -54,6 +47,8 @@ describe("/v1/bedrock/openai/chat/completions — non-streaming", () => {
 
   test("translates OpenAI body → Converse, returns OpenAI chat.completion", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const captured: Record<string, unknown>[] = [];
     vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
@@ -80,11 +75,17 @@ describe("/v1/bedrock/openai/chat/completions — non-streaming", () => {
     const app = createFastifyApp();
     await app.register(bedrockOpenaiProxyRoutes);
     const agent = await makeAgent({ name: "bedrock-openai-agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
       url: `/v1/bedrock/openai/${agent.id}/chat/completions`,
-      headers: HEADERS,
+      headers: { ...HEADERS, "x-archestra-virtual-key": passthroughKey },
       payload: {
         model: "zai.glm-4.7",
         messages: [
@@ -121,6 +122,8 @@ describe("/v1/bedrock/openai/chat/completions — non-streaming", () => {
 
   test("assistant tool_calls + tool results translate correctly", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const captured: Record<string, unknown>[] = [];
     vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
@@ -155,11 +158,17 @@ describe("/v1/bedrock/openai/chat/completions — non-streaming", () => {
     const app = createFastifyApp();
     await app.register(bedrockOpenaiProxyRoutes);
     const agent = await makeAgent({ name: "bedrock-openai-tools" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
       url: `/v1/bedrock/openai/${agent.id}/chat/completions`,
-      headers: HEADERS,
+      headers: { ...HEADERS, "x-archestra-virtual-key": passthroughKey },
       payload: {
         model: "zai.glm-4.7",
         messages: [
@@ -259,6 +268,8 @@ describe("/v1/bedrock/openai/chat/completions — non-streaming", () => {
 
   test("sanitizes client tool names Bedrock would reject, and restores them in the response", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const clientToolName = "weather.get current@v2";
     const providerToolName = "weather_get_current_v2";
@@ -296,11 +307,17 @@ describe("/v1/bedrock/openai/chat/completions — non-streaming", () => {
     const app = createFastifyApp();
     await app.register(bedrockOpenaiProxyRoutes);
     const agent = await makeAgent({ name: "bedrock-openai-tool-name" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
       url: `/v1/bedrock/openai/${agent.id}/chat/completions`,
-      headers: HEADERS,
+      headers: { ...HEADERS, "x-archestra-virtual-key": passthroughKey },
       payload: {
         model: "zai.glm-4.7",
         messages: [{ role: "user", content: "weather?" }],
@@ -359,6 +376,8 @@ describe("/v1/bedrock/openai/chat/completions — streaming", () => {
 
   test("emits OpenAI SSE chunks and [DONE] terminator", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
       () =>
@@ -396,11 +415,17 @@ describe("/v1/bedrock/openai/chat/completions — streaming", () => {
     const app = createFastifyApp();
     await app.register(bedrockOpenaiProxyRoutes);
     const agent = await makeAgent({ name: "bedrock-openai-stream" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
       url: `/v1/bedrock/openai/${agent.id}/chat/completions`,
-      headers: HEADERS,
+      headers: { ...HEADERS, "x-archestra-virtual-key": passthroughKey },
       payload: {
         model: "zai.glm-4.7",
         messages: [{ role: "user", content: "hi" }],
@@ -438,6 +463,8 @@ describe("/v1/bedrock/openai/chat/completions — streaming", () => {
 
   test("streaming tool call is re-emitted as OpenAI tool_calls deltas", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
       () =>
@@ -474,11 +501,17 @@ describe("/v1/bedrock/openai/chat/completions — streaming", () => {
     const app = createFastifyApp();
     await app.register(bedrockOpenaiProxyRoutes);
     const agent = await makeAgent({ name: "bedrock-openai-stream-tool" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
       url: `/v1/bedrock/openai/${agent.id}/chat/completions`,
-      headers: HEADERS,
+      headers: { ...HEADERS, "x-archestra-virtual-key": passthroughKey },
       payload: {
         model: "zai.glm-4.7",
         messages: [{ role: "user", content: "do the thing" }],

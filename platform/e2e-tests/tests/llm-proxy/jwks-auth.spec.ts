@@ -154,6 +154,7 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
   test("should fall through to provider API key when no IdP is bound", async ({
     request,
     getLlmProxy,
+    makeApiRequest,
   }) => {
     // The preceding tests reset the binding in their finally blocks, so the
     // singleton has no IdP here. Its id in the URL exercises the
@@ -165,27 +166,52 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
     };
     expect(proxy.identityProviderId).toBeNull();
 
-    // Call with a raw provider API key — no IdP means standard auth flow
-    const response = await request.post(
-      `${API_BASE_URL}/v1/openai/${proxy.id}/chat/completions`,
-      {
-        headers: {
-          Authorization: "Bearer openai-jwks-fallback-test",
-          "Content-Type": "application/json",
-        },
+    // The proxy rejects a provider key alone, so the caller authenticates with
+    // a passthrough key while the bearer still goes upstream as the provider key.
+    const passthroughKey = (await (
+      await makeApiRequest({
+        request,
+        method: "post",
+        urlSuffix: "/api/llm-virtual-keys",
         data: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Hello" }],
+          name: `jwks-fallback-${crypto.randomUUID().slice(0, 8)}`,
+          keyType: "passthrough",
         },
-      },
-    );
+      })
+    ).json()) as { id: string; value: string };
 
-    // WireMock accepts any API key and returns a mocked response
-    const body = await response.json();
-    expect(
-      response.status(),
-      `Expected 200 but got ${response.status()}. Response body: ${JSON.stringify(body)}`,
-    ).toBe(200);
-    expect(body.choices).toBeDefined();
+    try {
+      // With no IdP bound, the bearer is not tried as a JWT: it is the
+      // provider API key for the standard auth flow.
+      const response = await request.post(
+        `${API_BASE_URL}/v1/openai/${proxy.id}/chat/completions`,
+        {
+          headers: {
+            Authorization: "Bearer openai-jwks-fallback-test",
+            "X-Archestra-Virtual-Key": passthroughKey.value,
+            "Content-Type": "application/json",
+          },
+          data: {
+            model: "gpt-4",
+            messages: [{ role: "user", content: "Hello" }],
+          },
+        },
+      );
+
+      // WireMock accepts any API key and returns a mocked response
+      const body = await response.json();
+      expect(
+        response.status(),
+        `Expected 200 but got ${response.status()}. Response body: ${JSON.stringify(body)}`,
+      ).toBe(200);
+      expect(body.choices).toBeDefined();
+    } finally {
+      await makeApiRequest({
+        request,
+        method: "delete",
+        urlSuffix: `/api/llm-virtual-keys/${passthroughKey.id}`,
+        ignoreStatusCheck: true,
+      }).catch(() => {});
+    }
   });
 });

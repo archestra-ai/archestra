@@ -66,7 +66,7 @@ from contracts import (
 )
 from frontmatter import fm_str, parse_frontmatter
 
-# events whose hooks can block the action -- candidates for a tool-invocation policy.
+# events whose hooks can block the action -- such hooks are classified as guards.
 _BLOCKING_EVENTS = {"PreToolUse", "UserPromptSubmit", "PreCompact", "Stop", "SubagentStop"}
 
 
@@ -638,8 +638,8 @@ def _hook_note(parsed: _HookCmd, target: object) -> str:
 
 def _hook_bucket(hook: HookItem) -> str:
     """which summary bucket a discovered hook falls into. an unmappable event or unresolvable script
-    has no native-hook target -> manual. otherwise a guard needs review (native hook vs tool policy is
-    a judgment call) and a non-guard migrates cleanly as a native hook."""
+    has no native-hook target -> manual. otherwise a guard needs review (its blocking behavior must be
+    confirmed on the native hook) and a non-guard migrates cleanly as a native hook."""
     mappable = archestra_hook_event(hook.data.event) is not None and hook.data.source != "unresolved"
     if not mappable:
         return "manual"

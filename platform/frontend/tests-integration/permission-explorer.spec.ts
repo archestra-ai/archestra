@@ -157,6 +157,7 @@ test("read-only roles and personal access expose permissions and keyboard source
   await expect(
     dialog.getByRole("button", { name: "Agents Read granted", exact: true }),
   ).toBeVisible();
+  await expect(dialog.getByText("Read-only", { exact: true })).toBeVisible();
   await expect(dialog.getByRole("checkbox")).toHaveCount(0);
   await capture(page, "role-view-desktop");
 

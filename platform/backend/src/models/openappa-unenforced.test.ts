@@ -15,6 +15,13 @@ describe("OpenAppaUnenforcedModel.deleteOlderThan", () => {
       { organizationId: org.id, sessionId: "old-2", createdAt: old },
       { organizationId: org.id, sessionId: "old-3", createdAt: old },
       { organizationId: org.id, sessionId: "new" },
+      // A superyelled session stays out of OpenAPPA for good.
+      {
+        organizationId: org.id,
+        sessionId: "superyelled",
+        reason: "superyell",
+        createdAt: old,
+      },
     ]);
     await db.insert(schema.openappaUnenforcedCallsTable).values([
       {
@@ -42,9 +49,14 @@ describe("OpenAppaUnenforcedModel.deleteOlderThan", () => {
     expect(
       await OpenAppaUnenforcedModel.findSessions({
         organizationId: org.id,
-        sessionIds: ["old-1", "old-2", "old-3", "new"],
+        sessionIds: ["old-1", "old-2", "old-3", "new", "superyelled"],
       }),
-    ).toEqual([{ sessionId: "new", parentId: null }]);
+    ).toEqual(
+      expect.arrayContaining([
+        { sessionId: "new", parentId: null, reason: "enforcement_off" },
+        { sessionId: "superyelled", parentId: null, reason: "superyell" },
+      ]),
+    );
     expect(
       await OpenAppaUnenforcedModel.findCalls({
         organizationId: org.id,

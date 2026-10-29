@@ -4,8 +4,8 @@ export class SkillsNewPage {
   readonly page: Page;
   readonly heading: Locator;
   readonly searchInput: Locator;
-  // ActionCard button that opens the manual GitHub import dialog.
-  readonly customGithubUrlCard: Locator;
+  // ActionCard button that opens the GitHub / GitLab import dialog.
+  readonly gitRepositoryCard: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -13,8 +13,8 @@ export class SkillsNewPage {
     this.searchInput = page.getByPlaceholder(
       "Search skills by name, repo, or use case...",
     );
-    this.customGithubUrlCard = page.getByRole("button", {
-      name: "Custom GitHub URL",
+    this.gitRepositoryCard = page.getByRole("button", {
+      name: /^Git repository/,
     });
   }
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { anthropicAdapterFactory } from "../adapters/anthropic";
+import { kimiCodeAdapterFactory } from "../adapters/kimi-code";
 import { openaiAdapterFactory } from "../adapters/openai";
 import { openAiResponsesAdapterFactory } from "../adapters/openai-responses";
 import { xaiAdapterFactory } from "../adapters/xai";
@@ -195,6 +196,37 @@ describe("xai isSubscriptionCredential (X Premium credential format)", () => {
   });
 
   test("undefined credential stays metered", () => {
+    expect(isSubscription(undefined)).toBe(false);
+  });
+});
+
+describe("kimi-code isSubscriptionCredential (credential format)", () => {
+  const isSubscription = (credential: string | undefined) =>
+    kimiCodeAdapterFactory.isSubscriptionCredential?.(credential) ?? false;
+
+  test("Kimi Code membership key draws on the plan => subscription", () => {
+    expect(isSubscription("Bearer sk-kimi-abc123")).toBe(true);
+    expect(isSubscription("sk-kimi-abc123")).toBe(true);
+  });
+
+  test("a Kimi Code sign-in token draws on the plan => subscription", () => {
+    // Kimi Code 2.3.3 issues an opaque 21-character token.
+    expect(isSubscription("Bearer Ab3dEf6hIj9kLm2nOp5qR")).toBe(true);
+    expect(isSubscription("Ab3dEf6hIj9kLm2nOp5qR")).toBe(true);
+  });
+
+  test("a Moonshot key stays metered", () => {
+    expect(isSubscription("Bearer sk-abc123")).toBe(false);
+    expect(isSubscription("sk-abc123def456ghi789")).toBe(false);
+  });
+
+  test("a credential that is neither stays metered", () => {
+    // Not a Kimi Code token: a JWT, a short placeholder, a key with spaces.
+    expect(isSubscription("Bearer eyJhbGciOiJIUzI1NiJ9.e30.signature")).toBe(
+      false,
+    );
+    expect(isSubscription("placeholder")).toBe(false);
+    expect(isSubscription("not a key")).toBe(false);
     expect(isSubscription(undefined)).toBe(false);
   });
 });

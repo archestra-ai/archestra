@@ -41,10 +41,6 @@ export interface TestFixtures {
   deleteApiKey: typeof deleteApiKey;
   createIdentityProvider: typeof createIdentityProvider;
   deleteIdentityProvider: typeof deleteIdentityProvider;
-  createToolInvocationPolicy: typeof createToolInvocationPolicy;
-  deleteToolInvocationPolicy: typeof deleteToolInvocationPolicy;
-  createTrustedDataPolicy: typeof createTrustedDataPolicy;
-  deleteTrustedDataPolicy: typeof deleteTrustedDataPolicy;
   createMcpCatalogItem: typeof createMcpCatalogItem;
   deleteMcpCatalogItem: typeof deleteMcpCatalogItem;
   createEnvironment: typeof createEnvironment;
@@ -171,7 +167,7 @@ async function refreshAdminSession(request: APIRequestContext): Promise<void> {
   if (
     !permissions?.identityProvider?.includes("create") ||
     !permissions?.mcpRegistry?.includes("create") ||
-    !permissions?.toolPolicy?.includes("create")
+    !permissions?.agent?.includes("create")
   ) {
     throw new Error(
       `Refreshed session does not have admin permissions: ${JSON.stringify(permissions)}`,
@@ -387,91 +383,6 @@ export const deleteIdentityProvider = async (
     ignoreStatusCheck: true,
   });
 };
-
-/**
- * Create a tool invocation policy
- * (authnz is handled by the authenticated session)
- */
-const createToolInvocationPolicy = async (
-  request: APIRequestContext,
-  policy: {
-    toolId: string;
-    conditions: Array<{ key: string; operator: string; value: string }>;
-    action:
-      | "allow_when_context_is_untrusted"
-      | "block_when_context_is_untrusted"
-      | "block_always";
-    reason?: string;
-  },
-) =>
-  makeApiRequest({
-    request,
-    method: "post",
-    urlSuffix: "/api/autonomy-policies/tool-invocation",
-    data: {
-      toolId: policy.toolId,
-      conditions: policy.conditions,
-      action: policy.action,
-      reason: policy.reason,
-    },
-  });
-
-/**
- * Delete a tool invocation policy
- * (authnz is handled by the authenticated session)
- */
-const deleteToolInvocationPolicy = async (
-  request: APIRequestContext,
-  policyId: string,
-) =>
-  makeApiRequest({
-    request,
-    method: "delete",
-    urlSuffix: `/api/autonomy-policies/tool-invocation/${policyId}`,
-  });
-
-/**
- * Create a trusted data policy
- * (authnz is handled by the authenticated session)
- */
-const createTrustedDataPolicy = async (
-  request: APIRequestContext,
-  policy: {
-    toolId: string;
-    conditions: Array<{ key: string; operator: string; value: string }>;
-    action:
-      | "block_always"
-      | "mark_as_trusted"
-      | "mark_as_untrusted"
-      | "sanitize_with_dual_llm";
-    description?: string;
-  },
-) =>
-  makeApiRequest({
-    request,
-    method: "post",
-    urlSuffix: "/api/trusted-data-policies",
-    data: {
-      toolId: policy.toolId,
-      conditions: policy.conditions,
-      action: policy.action,
-      description: policy.description,
-    },
-  });
-
-/**
- * Delete a trusted data policy
- * (authnz is handled by the authenticated session)
- */
-const deleteTrustedDataPolicy = async (
-  request: APIRequestContext,
-  policyId: string,
-) =>
-  makeApiRequest({
-    request,
-    method: "delete",
-    urlSuffix: `/api/trusted-data-policies/${policyId}`,
-  });
 
 /**
  * Create an MCP catalog item
@@ -1208,18 +1119,6 @@ export const test = base.extend<TestFixtures>({
   },
   deleteIdentityProvider: async ({}, use) => {
     await use(deleteIdentityProvider);
-  },
-  createToolInvocationPolicy: async ({}, use) => {
-    await use(createToolInvocationPolicy);
-  },
-  deleteToolInvocationPolicy: async ({}, use) => {
-    await use(deleteToolInvocationPolicy);
-  },
-  createTrustedDataPolicy: async ({}, use) => {
-    await use(createTrustedDataPolicy);
-  },
-  deleteTrustedDataPolicy: async ({}, use) => {
-    await use(deleteTrustedDataPolicy);
   },
   createMcpCatalogItem: async ({}, use) => {
     await use(createMcpCatalogItem);

@@ -1,4 +1,5 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
+import { _iterSSEMessages } from "@anthropic-ai/sdk/core/streaming";
 import {
   ArchestraInternalErrorCode,
   PROVIDER_BILLING_BLOCK_BODY,
@@ -35,10 +36,19 @@ import {
 } from "@/types";
 import { isAnthropicBillingBlock } from "@/utils/anthropic-billing-error";
 import {
+  mergeAnthropicUsage,
+  normalizeAnthropicUsage,
+  primaryBillingUsage,
+} from "@/utils/billable-usage";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
+import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
+import {
   hasImageContent,
   isImageTooLarge,
   isMcpImageBlock,
 } from "../utils/mcp-image";
+import { wordToolCallId } from "../utils/tool-call-ids";
 import {
   type SamplingParam,
   withSamplingParamFallback,
@@ -134,6 +144,7 @@ class AnthropicRequestAdapter
               name: toolUse?.name ?? "unknown",
               arguments: toolUse?.arguments,
               content,
+              structured: typeof contentBlock.content !== "string",
               isError: contentBlock.is_error ?? false,
             });
           }
@@ -250,6 +261,8 @@ class AnthropicRequestAdapter
 
     messages = this.convertToolResultContent(messages);
     messages = stripEmptyTextBlocks(messages);
+    // After the result updates above, which look up the client's call ids.
+    messages = withAnthropicToolCallIds(messages);
 
     return {
       ...this.request,
@@ -336,7 +349,8 @@ class AnthropicRequestAdapter
                 name: toolUse.name,
                 arguments: toolUse.arguments,
                 content: toolResult,
-                isError: false,
+                structured: typeof contentBlock.content !== "string",
+                isError: contentBlock.is_error ?? false,
               });
             }
           }
@@ -388,6 +402,19 @@ class AnthropicRequestAdapter
             contentBlock.type === "tool_result" &&
             Object.hasOwn(updates, contentBlock.tool_use_id)
           ) {
+            // OpenAPPA reads the result as the JSON text of its blocks. When
+            // the approved output is those blocks as sent, the blocks stay:
+            // an image must reach the provider as an image, and a tool search
+            // answers with `tool_reference` blocks the provider reads to load
+            // the referenced tools. A changed output replaces them with its text.
+            if (
+              isApprovedAsSent({
+                sent: contentBlock.content,
+                approved: updates[contentBlock.tool_use_id],
+              })
+            ) {
+              return contentBlock;
+            }
             appliedCount++;
             logger.debug(
               { toolUseId: contentBlock.tool_use_id },
@@ -541,15 +568,7 @@ class AnthropicResponseAdapter
   }
 
   getUsage(): UsageView {
-    const { input, output, cacheRead, cacheWrite, cacheWrite1h } =
-      getUsageTokens(this.response.usage);
-    return {
-      inputTokens: input,
-      outputTokens: output,
-      cacheReadTokens: cacheRead,
-      cacheWriteTokens: cacheWrite,
-      cacheWrite1hTokens: cacheWrite1h,
-    };
+    return normalizeAnthropicUsage(this.response.usage, this.response.model);
   }
 
   getOriginalResponse(): AnthropicResponse {
@@ -561,30 +580,57 @@ class AnthropicResponseAdapter
     return reason ? [reason] : [];
   }
 
+  readonly supportsToolCallReview = true;
+
   withRewrittenToolCalls(
     toolCalls: Array<{
       id: string;
       name: string;
       arguments: string;
       wireId?: string;
+      reviewDetails?: string;
     }>,
   ): AnthropicResponse {
     // Positional: one rewritten entry per call this response carries, in
     // order. The id the client correlates by is the provider's unless the
     // call carries the one it is given instead.
     let next = 0;
-    const content = this.response.content.map((block) => {
-      if (block.type !== "tool_use") return block;
-      const rewritten = toolCalls[next++];
-      if (!rewritten) return block;
-      return {
-        ...block,
-        id: rewritten.wireId ?? block.id,
-        name: rewritten.name,
-        input: parseArgs(rewritten.arguments),
-      };
-    });
-    return { ...this.response, content };
+    const wireIdByProviderId = new Map<string, string>();
+    const content = this.response.content.flatMap(
+      (block): AnthropicResponse["content"] => {
+        if (block.type !== "tool_use") return [block];
+        const rewritten = toolCalls[next++];
+        if (!rewritten) return [block];
+        if (rewritten.wireId && rewritten.wireId !== block.id) {
+          wireIdByProviderId.set(block.id, rewritten.wireId);
+        }
+        return [
+          // A server-held review precedes its card as plain assistant text.
+          ...(rewritten.reviewDetails
+            ? [
+                {
+                  type: "text" as const,
+                  text: rewritten.reviewDetails,
+                  citations: null,
+                },
+              ]
+            : []),
+          {
+            ...block,
+            id: rewritten.wireId ?? block.id,
+            name: rewritten.name,
+            input: parseArgs(rewritten.arguments),
+          },
+        ];
+      },
+    );
+    // Response keys outside `content` (for example `safeguard_results`, keyed
+    // by tool-use id) must name the calls the way the client now knows them.
+    const { content: _content, ...rest } = this.response;
+    return {
+      ...(replaceToolUseIds(rest, wireIdByProviderId) as typeof rest),
+      content,
+    };
   }
 
   toRefusalResponse(
@@ -622,8 +668,8 @@ class AnthropicStreamAdapter
 {
   readonly provider = "anthropic" as const;
   readonly state: StreamAccumulatorState;
-  private toolUseBlockIndices = new Set<number>();
-  private currentToolCallIndex = -1;
+  /** Upstream content-block index → position in `state.toolCalls`. */
+  private toolCallByBlockIndex = new Map<number, number>();
   // Upstream content-block index -> the index the client is given, assigned in
   // the order blocks are actually emitted. Withholding a tool block, or holding
   // it back and releasing it after later text, would otherwise leave the client
@@ -665,11 +711,7 @@ class AnthropicStreamAdapter
         data: string;
       }
   >();
-  private textBlockIndices = new Set<number>();
-  private textByBlock = new Map<number, string>();
-  private pendingTextBlockStop = "";
-  private pendingTextBlockIndex: number | null = null;
-  private getTextSuffix: ((completedText: string) => string) | null = null;
+  private getTextPrefix: ((firstText: string) => string) | null = null;
   private textPrefixIssued = false;
 
   private startReasoningBlock(
@@ -727,6 +769,22 @@ class AnthropicStreamAdapter
       ) as AnthropicResponse["content"];
   }
 
+  // The upstream's own `message_delta` and `message_stop`. The proxy holds
+  // both back and writes them in formatEndSSE, after the policy gate, so the
+  // keys it does not set itself (for example `safeguard_results`, the server's
+  // auto mode verdicts) would otherwise never reach the client.
+  private upstreamMessageDelta: Record<string, unknown> | null = null;
+  private upstreamMessageStop: Record<string, unknown> | null = null;
+  // Upstream events of a type this adapter does not know, held while tool
+  // calls are buffered so they do not reach the client ahead of the calls
+  // they may describe.
+  private heldPassthroughEvents: Array<Record<string, unknown>> = [];
+  private providerUsage: Record<string, unknown> = {};
+  // Provider tool-use id -> the id the client is given, for calls released
+  // with a rewritten id. Upstream data passed through verbatim (verdicts keyed
+  // by tool-use id) must name the calls the way the client knows them.
+  private wireIdByProviderId = new Map<string, string>();
+
   private replacedText: string | null = null;
   private get responseReplacedWithText(): boolean {
     return this.replacedText !== null;
@@ -748,8 +806,8 @@ class AnthropicStreamAdapter
     };
   }
 
-  setTextSuffix(getSuffix: (completedText: string) => string): void {
-    this.getTextSuffix = getSuffix;
+  setTextSuffix(getPrefix: (firstText: string) => string): void {
+    this.getTextPrefix = getPrefix;
   }
 
   processChunk(chunk: AnthropicStreamChunk): ChunkProcessingResult {
@@ -768,16 +826,11 @@ class AnthropicStreamAdapter
         this.state.responseId = chunk.message.id;
         this.state.model = chunk.message.model;
         if (chunk.message.usage) {
-          this.state.usage = {
-            inputTokens: chunk.message.usage.input_tokens,
-            outputTokens: chunk.message.usage.output_tokens,
-            cacheReadTokens: chunk.message.usage.cache_read_input_tokens ?? 0,
-            cacheWriteTokens:
-              chunk.message.usage.cache_creation_input_tokens ?? 0,
-            cacheWrite1hTokens:
-              chunk.message.usage.cache_creation?.ephemeral_1h_input_tokens ??
-              0,
-          };
+          this.providerUsage = mergeAnthropicUsage({}, chunk.message.usage);
+          this.state.usage = normalizeAnthropicUsage(
+            this.providerUsage,
+            this.state.model,
+          );
         }
         sseData = `event: message_start\ndata: ${JSON.stringify(chunk)}\n\n`;
         isResponsePreamble = true;
@@ -786,7 +839,7 @@ class AnthropicStreamAdapter
       case "content_block_start":
         if (chunk.content_block.type === "tool_use") {
           let prefixSse = "";
-          if (!this.textPrefixIssued && this.getTextSuffix) {
+          if (!this.textPrefixIssued && this.getTextPrefix) {
             const prefix = this.resolveTextPrefix("");
             if (prefix) {
               this.textPrefixIssued = true;
@@ -806,8 +859,10 @@ class AnthropicStreamAdapter
               })}\n\n`;
             }
           }
-          this.toolUseBlockIndices.add(chunk.index);
-          this.currentToolCallIndex = this.state.toolCalls.length;
+          this.toolCallByBlockIndex.set(
+            chunk.index,
+            this.state.toolCalls.length,
+          );
           this.state.toolCalls.push({
             id: chunk.content_block.id,
             name: chunk.content_block.name,
@@ -820,9 +875,6 @@ class AnthropicStreamAdapter
             sseData = prefixSse;
           }
         } else {
-          if (chunk.content_block.type === "text") {
-            this.textBlockIndices.add(chunk.index);
-          }
           this.startReasoningBlock(chunk.index, chunk.content_block);
           // Everything except client tool calls (text, thinking,
           // redacted_thinking, server_tool_use, ...) streams through
@@ -838,10 +890,11 @@ class AnthropicStreamAdapter
       case "content_block_delta":
         if (
           chunk.delta.type === "input_json_delta" &&
-          this.toolUseBlockIndices.has(chunk.index)
+          this.toolCallByBlockIndex.has(chunk.index)
         ) {
-          if (this.currentToolCallIndex >= 0) {
-            this.state.toolCalls[this.currentToolCallIndex].arguments +=
+          const position = this.toolCallByBlockIndex.get(chunk.index);
+          if (position !== undefined) {
+            this.state.toolCalls[position].arguments +=
               chunk.delta.partial_json;
           }
           // Store raw event for replay after policy approval
@@ -849,15 +902,11 @@ class AnthropicStreamAdapter
           isToolCallChunk = true;
         } else {
           // input_json_delta outside a tool_use block belongs to a
-          // server-side tool and is not subject to invocation policies.
+          // server-side tool and is not subject to tool-call rulings.
           let prefixSse = "";
           if (chunk.delta.type === "text_delta") {
             this.state.text += chunk.delta.text;
-            this.textByBlock.set(
-              chunk.index,
-              `${this.textByBlock.get(chunk.index) ?? ""}${chunk.delta.text}`,
-            );
-            if (!this.textPrefixIssued && this.getTextSuffix) {
+            if (!this.textPrefixIssued && this.getTextPrefix) {
               const prefix = this.resolveTextPrefix(chunk.delta.text);
               this.textPrefixIssued = true;
               if (prefix) {
@@ -885,7 +934,7 @@ class AnthropicStreamAdapter
         break;
 
       case "content_block_stop":
-        if (!this.toolUseBlockIndices.has(chunk.index)) {
+        if (!this.toolCallByBlockIndex.has(chunk.index)) {
           const event = `event: content_block_stop\ndata: ${JSON.stringify(
             this.withOutIndex(chunk),
           )}\n\n`;
@@ -893,7 +942,9 @@ class AnthropicStreamAdapter
         } else {
           // A tool called with no input streams no `partial_json`; its input
           // is `{}`, not the empty string policy evaluation would reject.
-          const call = this.state.toolCalls[this.currentToolCallIndex];
+          const position = this.toolCallByBlockIndex.get(chunk.index);
+          const call =
+            position === undefined ? undefined : this.state.toolCalls[position];
           if (call?.arguments === "") call.arguments = "{}";
           // Store raw event for replay after policy approval
           this.state.rawToolCallEvents.push(chunk);
@@ -905,23 +956,38 @@ class AnthropicStreamAdapter
         if (chunk.delta.stop_reason) {
           this.state.stopReason = chunk.delta.stop_reason;
         }
-        if (chunk.usage?.output_tokens !== undefined) {
-          if (this.state.usage) {
-            this.state.usage.outputTokens = chunk.usage.output_tokens;
-          }
+        if (chunk.usage) {
+          this.providerUsage = mergeAnthropicUsage(
+            this.providerUsage,
+            chunk.usage,
+          );
+          this.state.usage = normalizeAnthropicUsage(
+            this.providerUsage,
+            this.state.model,
+          );
         }
+        this.upstreamMessageDelta = chunk as unknown as Record<string, unknown>;
         // Don't send message_delta yet - we'll send it after policy evaluation
         break;
 
       case "message_stop":
-        sseData = this.formatPendingTextBlockStop();
+        this.upstreamMessageStop = chunk as unknown as Record<string, unknown>;
         isFinal = true;
         // Don't send message_stop yet - we'll send it after policy evaluation
         break;
-    }
 
-    if (!isFinal && sseData) {
-      sseData = this.flushPendingTextBlockStop(sseData);
+      default: {
+        // An event type this adapter does not know goes to the client
+        // unchanged: clients add stream events over releases and expect a
+        // gateway to relay what it does not recognize.
+        const event = chunk as unknown as Record<string, unknown>;
+        if (this.state.rawToolCallEvents.length > 0) {
+          this.heldPassthroughEvents.push(event);
+        } else {
+          sseData = this.formatPassthroughEvent(event);
+        }
+        break;
+      }
     }
 
     return { sseData, isToolCallChunk, isFinal, isResponsePreamble };
@@ -972,6 +1038,8 @@ class AnthropicStreamAdapter
     });
   }
 
+  readonly supportsToolCallReview = true;
+
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
     // Same release semantics as getRawToolCallEvents: these blocks are becoming
     // the client's, so toProviderResponse must name them. The buffered raw
@@ -982,6 +1050,48 @@ class AnthropicStreamAdapter
     this.toolCallsReleased = true;
     const events: string[] = [];
     for (const toolCall of toolCalls) {
+      // A server-held review precedes its card, in one short-lived text block
+      // with its own output index, so every later block keeps its index.
+      if (toolCall.reviewDetails) {
+        const reviewIndex = this.nextOutIndex++;
+        const reviewEvents: Array<Record<string, unknown>> = [
+          {
+            type: "content_block_start",
+            index: reviewIndex,
+            content_block: { type: "text", text: "" },
+          },
+        ];
+        // Bound individual SSE frames without splitting a UTF-16 surrogate pair.
+        let offset = 0;
+        while (offset < toolCall.reviewDetails.length) {
+          let end = Math.min(offset + 4096, toolCall.reviewDetails.length);
+          const lastUnit = toolCall.reviewDetails.charCodeAt(end - 1);
+          if (
+            end < toolCall.reviewDetails.length &&
+            lastUnit >= 0xd800 &&
+            lastUnit <= 0xdbff
+          )
+            end--;
+          reviewEvents.push({
+            type: "content_block_delta",
+            index: reviewIndex,
+            delta: {
+              type: "text_delta",
+              text: toolCall.reviewDetails.slice(offset, end),
+            },
+          });
+          offset = end;
+        }
+        reviewEvents.push({ type: "content_block_stop", index: reviewIndex });
+        for (const event of reviewEvents) {
+          events.push(
+            `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          );
+        }
+      }
+      if (toolCall.wireId && toolCall.wireId !== toolCall.id) {
+        this.wireIdByProviderId.set(toolCall.id, toolCall.wireId);
+      }
       const index = this.nextOutIndex++;
       let input: Record<string, unknown> = {};
       try {
@@ -1058,34 +1168,53 @@ class AnthropicStreamAdapter
     this.state.rawToolCallEvents = [];
     this.state.stopReason = "end_turn";
     this.toolCallsReleased = false;
-    this.toolUseBlockIndices.clear();
-    this.textBlockIndices.clear();
-    this.textByBlock.clear();
-    this.pendingTextBlockStop = "";
-    this.pendingTextBlockIndex = null;
-    this.currentToolCallIndex = 0;
+    this.toolCallByBlockIndex.clear();
+    // Upstream data about the replaced turn (verdicts on its tool calls) does
+    // not describe what the client receives.
+    this.upstreamMessageDelta = null;
+    this.upstreamMessageStop = null;
+    this.heldPassthroughEvents = [];
   }
 
   formatEndSSE(): string {
     const events: string[] = [];
 
+    for (const event of this.heldPassthroughEvents) {
+      events.push(this.formatPassthroughEvent(event));
+    }
+    this.heldPassthroughEvents = [];
+
+    // The upstream's own end events, with the fields the proxy owns set over
+    // them. A text replacement keeps none of them: they describe the turn it
+    // replaced.
+    const upstreamDelta = this.responseReplacedWithText
+      ? {}
+      : this.withWireToolIds(this.upstreamMessageDelta ?? {});
+    const upstreamStop = this.responseReplacedWithText
+      ? {}
+      : this.withWireToolIds(this.upstreamMessageStop ?? {});
+    const upstreamDeltaBody = asRecord(upstreamDelta.delta);
+
     // message_delta with stop_reason
     events.push(
       `event: message_delta\ndata: ${JSON.stringify({
+        ...upstreamDelta,
         type: "message_delta",
         delta: {
+          ...upstreamDeltaBody,
           stop_reason: this.responseReplacedWithText
             ? "end_turn"
             : (this.state.stopReason ?? "end_turn"),
-          stop_sequence: null,
+          stop_sequence: upstreamDeltaBody.stop_sequence ?? null,
         },
-        usage: this.deltaUsage(),
+        usage: { ...asRecord(upstreamDelta.usage), ...this.deltaUsage() },
       })}\n\n`,
     );
 
     // message_stop
     events.push(
       `event: message_stop\ndata: ${JSON.stringify({
+        ...upstreamStop,
         type: "message_stop",
       })}\n\n`,
     );
@@ -1122,6 +1251,17 @@ class AnthropicStreamAdapter
         // Keep empty object if parse fails
       }
 
+      content.push(
+        ...(toolCall.reviewDetails
+          ? [
+              {
+                type: "text" as const,
+                text: toolCall.reviewDetails,
+                citations: null,
+              },
+            ]
+          : []),
+      );
       content.push({
         type: "tool_use",
         id: toolCall.id,
@@ -1178,9 +1318,10 @@ class AnthropicStreamAdapter
    * usual reading of "cumulative") records the turn with no prompt and no cache
    * reads at all.
    */
-  private deltaUsage(): Record<string, number> {
+  private deltaUsage(): Record<string, unknown> {
     const usage = this.state.usage;
     return {
+      ...this.providerUsage,
       input_tokens: usage?.inputTokens ?? 0,
       output_tokens: usage?.outputTokens ?? 0,
       cache_read_input_tokens: usage?.cacheReadTokens ?? 0,
@@ -1206,6 +1347,7 @@ class AnthropicStreamAdapter
       cacheWrite,
     );
     return {
+      ...this.providerUsage,
       input_tokens: usage?.inputTokens ?? 0,
       output_tokens: usage?.outputTokens ?? 0,
       cache_read_input_tokens: usage?.cacheReadTokens ?? 0,
@@ -1215,6 +1357,7 @@ class AnthropicStreamAdapter
       ...(cacheWrite > 0
         ? {
             cache_creation: {
+              ...asRecord(this.providerUsage.cache_creation),
               ephemeral_1h_input_tokens: cacheWrite1h,
               ephemeral_5m_input_tokens: cacheWrite - cacheWrite1h,
             },
@@ -1224,34 +1367,27 @@ class AnthropicStreamAdapter
   }
 
   private resolveTextPrefix(firstText: string): string {
-    if (!this.getTextSuffix || this.responseReplacedWithText) {
+    if (!this.getTextPrefix || this.responseReplacedWithText) {
       return "";
     }
-    return this.getTextSuffix(firstText);
+    return this.getTextPrefix(firstText);
   }
 
-  private formatPendingTextBlockStop(): string | null {
-    if (!this.pendingTextBlockStop) return null;
-    const suffix = "";
-    const textEvent = suffix
-      ? `event: content_block_delta\ndata: ${JSON.stringify({
-          type: "content_block_delta",
-          index: this.pendingTextBlockIndex,
-          delta: { type: "text_delta", text: suffix },
-        })}\n\n`
-      : "";
-    const stop = this.pendingTextBlockStop;
-    this.pendingTextBlockStop = "";
-    this.pendingTextBlockIndex = null;
-    return `${textEvent}${stop}`;
+  private formatPassthroughEvent(event: Record<string, unknown>): string {
+    const indexed =
+      typeof event.index === "number"
+        ? this.withOutIndex(
+            event as Record<string, unknown> & { index: number },
+          )
+        : event;
+    const out = this.withWireToolIds(indexed);
+    return `event: ${String(out.type)}\ndata: ${JSON.stringify(out)}\n\n`;
   }
 
-  private flushPendingTextBlockStop(sseData: string): string {
-    if (!this.pendingTextBlockStop) return sseData;
-    const pending = this.pendingTextBlockStop;
-    this.pendingTextBlockStop = "";
-    this.pendingTextBlockIndex = null;
-    return `${pending}${sseData}`;
+  private withWireToolIds(
+    value: Record<string, unknown>,
+  ): Record<string, unknown> {
+    return replaceToolUseIds(value, this.wireIdByProviderId);
   }
 
   /** Rewrite a block event's index to the one the client knows it by. */
@@ -1366,10 +1502,11 @@ export const anthropicAdapterFactory: LLMProvider<
           "anthropic",
           options.agent,
           options.source,
+          { reportTokens: false },
         )
       : undefined;
     const customFetch = observeResponseHeaders(
-      observableFetch,
+      fetchWithAbortSignal(observableFetch, options.abortSignal),
       options.onResponseHeaders,
     );
 
@@ -1455,7 +1592,7 @@ export const anthropicAdapterFactory: LLMProvider<
       input: request,
       strip: stripAnthropicSamplingParams,
       logContext: { provider: "anthropic", model: request.model },
-      run: (req) => {
+      run: async (req) => {
         const params = {
           ...req,
           messages: stripEmptyTextBlocks(req.messages),
@@ -1474,11 +1611,55 @@ export const anthropicAdapterFactory: LLMProvider<
         // identical in shape to a non-streaming response.
         // https://platform.claude.com/docs/en/api/errors#long-requests
         if (exceedsNonStreamingLimit(anthropicClient, req.max_tokens)) {
-          return anthropicClient.messages
-            .stream(
-              params as unknown as AnthropicProvider.Messages.MessageStreamParams,
-            )
-            .finalMessage();
+          const stream = anthropicClient.messages.stream(
+            params as unknown as AnthropicProvider.Messages.MessageStreamParams,
+          );
+          // The stable SDK's finalMessage does not retain every beta usage
+          // field. Capture raw cumulative usage before its accumulator drops it.
+          let usage: Record<string, unknown> = {};
+          if (typeof stream.on === "function") {
+            stream.on("streamEvent", (event) => {
+              if (event.type === "message_start") {
+                usage = mergeAnthropicUsage(usage, event.message.usage);
+              } else if (event.type === "message_delta") {
+                usage = mergeAnthropicUsage(usage, event.usage);
+              }
+            });
+          }
+          let response: AnthropicProvider.Messages.Message;
+          try {
+            response = await stream.finalMessage();
+          } catch (error) {
+            if (Object.keys(usage).length) {
+              const observed = normalizeAnthropicUsage(usage, req.model);
+              const breakdown =
+                observed.billingUsage ??
+                primaryBillingUsage(observed, req.model);
+              throw new ObservedProviderUsageError({
+                original: error,
+                usage: {
+                  ...observed,
+                  billingUsage: {
+                    ...breakdown,
+                    status: "incomplete",
+                    issues: [...breakdown.issues, "partial_stream"],
+                  },
+                },
+                response: {
+                  ...stream.currentMessage,
+                  usage,
+                  error: "Provider generation did not complete",
+                },
+              });
+            }
+            throw error;
+          }
+          return Object.keys(usage).length
+            ? {
+                ...response,
+                usage: { ...response.usage, ...usage },
+              }
+            : response;
         }
         return anthropicClient.messages.create(params);
       },
@@ -1500,12 +1681,19 @@ export const anthropicAdapterFactory: LLMProvider<
       // concatenate into more than one JSON value. we do our own guarded
       // tool-call accumulation in processChunk, so the raw event stream is all
       // we need.
-      run: (req) =>
-        anthropicClient.messages.create({
+      //
+      // The SDK's own Stream yields only the event types it knows and drops
+      // the rest, so read the raw response and parse every event instead. A
+      // client without raw responses (not the SDK) keeps its parsed events.
+      run: async (req) => {
+        const pending = anthropicClient.messages.create({
           ...req,
           messages: stripEmptyTextBlocks(req.messages),
           stream: true,
-        } as AnthropicProvider.Messages.MessageCreateParamsStreaming),
+        } as AnthropicProvider.Messages.MessageCreateParamsStreaming);
+        if (typeof pending.asResponse !== "function") return pending;
+        return iterateAnthropicStreamEvents(await pending.asResponse());
+      },
     });
   },
 
@@ -1645,14 +1833,46 @@ function parseArgs(argumentsJson: string): Record<string, unknown> {
   }
 }
 
+/** Tool-use ids Anthropic accepts; see `wordToolCallId`. */
+function withAnthropicToolCallIds(
+  messages: AnthropicMessages,
+): AnthropicMessages {
+  return messages.map((message) => {
+    if (!Array.isArray(message.content)) return message;
+    let changed = false;
+    const content = message.content.map((block) => {
+      if (block.type === "tool_use") {
+        const id = wordToolCallId(block.id);
+        if (id === block.id) return block;
+        changed = true;
+        return { ...block, id };
+      }
+      if (block.type === "tool_result") {
+        const toolUseId = wordToolCallId(block.tool_use_id);
+        if (toolUseId === block.tool_use_id) return block;
+        changed = true;
+        return { ...block, tool_use_id: toolUseId };
+      }
+      return block;
+    });
+    return changed ? ({ ...message, content } as typeof message) : message;
+  });
+}
+
 /**
  * Removes empty text blocks so Anthropic API does not reject the request
  * with "messages: text content blocks must be non-empty" (HTTP 400).
  */
 function stripEmptyTextBlocks(messages: AnthropicMessages): AnthropicMessages {
   if (!Array.isArray(messages)) return messages;
-  return messages.map((message) => {
-    if (!Array.isArray(message.content)) return message;
+  return messages.flatMap((message) => {
+    if (!Array.isArray(message.content)) {
+      return message.role === "system" &&
+        typeof message.content === "string" &&
+        !message.content.trim()
+        ? []
+        : [message];
+    }
     const filtered = message.content.filter((part) => {
       const record = part as Record<string, unknown>;
       if (
@@ -1664,9 +1884,92 @@ function stripEmptyTextBlocks(messages: AnthropicMessages): AnthropicMessages {
       }
       return true;
     });
-    return {
-      ...message,
-      content: filtered.length > 0 ? filtered : [{ type: "text", text: " " }],
-    };
+    // Compaction can leave an empty system placeholder. A whitespace filler is
+    // valid for some conversational turns, but never for a system text block.
+    if (message.role === "system" && filtered.length === 0) return [];
+    return [
+      {
+        ...message,
+        content: filtered.length > 0 ? filtered : [{ type: "text", text: " " }],
+      },
+    ];
   });
+}
+
+/**
+ * Every event of an Anthropic Messages SSE response, including types this
+ * proxy does not know. Clients add stream events over releases and expect a
+ * gateway to relay them, while the SDK's Stream silently drops any type
+ * outside its fixed list. `ping` and `error` keep the SDK's handling.
+ * https://code.claude.com/docs/en/llm-gateway-protocol#forward-as-open-lists
+ */
+async function* iterateAnthropicStreamEvents(
+  response: Response,
+): AsyncGenerator<AnthropicStreamChunk> {
+  for await (const sse of _iterSSEMessages(response, new AbortController())) {
+    if (sse.event === "ping") continue;
+    if (sse.event === "error") {
+      throw new AnthropicProvider.APIError(
+        undefined,
+        safeParseJson(sse.data) ?? sse.data,
+        undefined,
+        response.headers,
+      );
+    }
+    const event = safeParseJson(sse.data);
+    if (!event || typeof event !== "object" || Array.isArray(event)) {
+      logger.warn(
+        { event: sse.event },
+        "[AnthropicAdapter] Skipping stream event without a JSON object body",
+      );
+      continue;
+    }
+    const record = event as Record<string, unknown>;
+    yield (typeof record.type === "string" || !sse.event
+      ? record
+      : { ...record, type: sse.event }) as unknown as AnthropicStreamChunk;
+  }
+}
+
+function safeParseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * Replace every string equal to a provider tool-use id with the id the client
+ * was given. Used on upstream data the proxy passes through without knowing
+ * its shape, so a value keyed by tool-use id still names a call the client has.
+ */
+function replaceToolUseIds<T>(
+  value: T,
+  wireIdByProviderId: Map<string, string>,
+): T {
+  if (wireIdByProviderId.size === 0) return value;
+  if (typeof value === "string") {
+    return (wireIdByProviderId.get(value) ?? value) as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      replaceToolUseIds(item, wireIdByProviderId),
+    ) as T;
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        wireIdByProviderId.get(key) ?? key,
+        replaceToolUseIds(item, wireIdByProviderId),
+      ]),
+    ) as T;
+  }
+  return value;
 }

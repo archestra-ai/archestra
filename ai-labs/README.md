@@ -124,8 +124,6 @@ Which Archestra capability each task is built to exercise. A task usually leans 
 | `author-skill` | archestra-api | ✓ | | | author | | | | state |
 | `letter-count` | archestra-api | | | | | | | | state |
 | `author-aec-normalizer-skill` | archestra-api | ✓ | ✓ | | author | | | | state |
-| `advisor-verdict-escalation` | advisor | ✓ | ✓ | | | | | red-herring | |
-| `advisor-recovery-loop` | advisor | ✓ | ✓ | | | | | messy-data | |
 
 - **Sandbox** — needs code execution in the per-conversation sandbox.
 - **File in** — a file is staged into the conversation as an attachment (PDF/DOCX/XLSX/SQLite/zip/tar.gz/
@@ -287,21 +285,6 @@ three tasks —
 `share_backend = true` and includes `repo-docs-app`, `access-request-app`, `standup-notes-app`, and
 `keyboard-kanban-app`.
 
-`advisor` is a routing regression suite for the **Advisor** feature, run with advised lanes only (see
-the advisor lane attribute under "Run"): each task is engineered so consulting the Advisor is the
-right move, and each probes a different escalation regime. `advisor-verdict-escalation` is the
-*explicit judgment call* — a ship/no-ship code verdict whose deciding fact hides off the main path.
-`advisor-recovery-loop` is the *silent workaround* — a data rollup whose input quietly defeats the
-obvious parse; models don't surface the errors (the first attempt is already a skip-bad-lines
-workaround that exits cleanly), so they submit a confidently wrong total unless a consultation
-carrying the raw skipped lines lets the Advisor catch it. Each verifier asserts, via the tool-call
-snapshot, that a consult actually happened alongside the correct answer. An unadvised lane fails
-these by construction; that is the suite's contract, not a defect. Pass criteria are deliberately
-about *routing* (did the cheap executor escalate when it should), so a model that happens to
-one-shot the answer without consulting still fails — the suite measures the behavior, not the
-answer alone. The silent-workaround task is the harder bar by design: it stays red until the
-platform's consult delivery handles the case where the model feels no uncertainty at all.
-
 ## Lifecycle: fresh backend over shared infra
 
 The harness does not run its own Tilt stack. It resolves a Dagger code-runtime engine (see the ladder
@@ -402,20 +385,7 @@ carries a unique `name` (the selection handle), `provider` (`anthropic`/`openai`
 `model`, an optional `base_url` (e.g. an Anthropic-compatible gateway), and an optional `api_key_env`
 (default `<PROVIDER>_API_KEY`) — so two lanes can share a provider through different gateways/keys.
 
-A lane may also declare `advisor = "<other-lane-name>"`, turning it into an **advised arm**: its agents
-get the platform's built-in Advisor pointed at the referenced lane's model, plus an explicit
-`agent__advisor` delegation (explicit because the bench authenticates with a minted API key, for which
-the platform never auto-expands subagents). The referenced lane is only model configuration for the
-arm — it needs no rollouts of its own, its endpoint is embedded at load time so `--lanes` selection
-can't strip it, and it must not itself be advised. An advised lane always runs on an **isolated
-backend** regardless of the env's `share_backend`: the built-in Advisor is one row per platform
-environment, so its model is per-backend state that concurrent lanes must not share. Its cost is the
-sum of both models' spend — advisor rows are split off by the Advisor agent's id and priced at the
-advisor lane's slug, the rest at the lane's own — and each advised rollout's `run.json` carries
-`advisor_consult_count`, the advisor token share, and the advisor cost share (aggregated per group in
-`aggregate.json` and the report). The canonical A/B is three arms in one run: cheap alone,
-cheap+advisor, strong alone (e.g. `--lanes mimo-26-flash,mimo-26-flash-adv-deepseek-flash,deepseek-flash`). The
-`--lanes` flag selects lane names from the catalog (default: every lane), so you can define many and run
+The `--lanes` flag selects lane names from the catalog (default: every lane), so you can define many and run
 one; `--lanes-file` overrides the catalog path. `--max-workers` runs that many lanes concurrently
 (default: one worker per selected lane, capped at 4); tasks within a lane stay serial. On `benchmark`,
 `--run-dir` overrides the artifact directory (default `ai-labs/experiments/<timestamp>/`,
@@ -435,6 +405,16 @@ Analysis adds `<env>/<task>__<lane>/trajectory.md` (rendered trajectory),
 `trajectory_rubrics_<ts>.jsonl` (per-rollout rubric triage records; `_claude_` variant when produced
 by the Claude-skill pipeline), and the `trajectory_analys{es,is}_<ts>.md` docs. Browse it all locally
 with `archestra-bench dashboard [--experiments-dir <dir>] [--port <port>]`.
+
+## Native Guardrails suite (disabled)
+
+`archestra-bench guardrails-native` is additive and is not part of `benchmark`, `BENCH_ENVS`, nightly, or CI. With no `--execute` it prints the fixed plan and exits before any provider, CLI, filesystem, or shared-policy side effect.
+
+The only intervention is distributed: Claude and Codex, each as main recovery and parent/child, compared OFF/ON/ON/OFF. There is no profile flag. `--profile`, `--intervention`, `ARCHESTRA_BENCH_GUARDRAILS_PROFILE`, and `ARCHESTRA_BENCH_GUARDRAILS_INTERVENTION` are rejected.
+
+`--execute` runs `platform/benchmarks/claude-native-project-pilot.mjs` and `codex-native-project-pilot.mjs` with a fresh namespace and their historical arguments: namespace, `off|on`, main or child mode, `sequential`, `distributed`. Those pilots own the real Claude/Codex CLI arguments, loopback gateway setup, MCP project fixture, and the global deployment switch. The launcher reads each `pilot-summary.json` and `restoration.json`; a missing usage counter is a failure, not zero. It writes `aggregate.json`, `report.md`, and per-episode `run.json` only after qualification and restoration. The pilots do write and then restore the deployment switch. Do not pass this command from nightly or CI.
+
+When a finished run contains this suite, `aggregate.json` may include an optional `guardrails_native` object and `report.md` an optional section. Existing runs without that object stay unchanged. Publish and TensorBoard keep the current Slack summary and scalar paths.
 
 ## Prerequisites
 

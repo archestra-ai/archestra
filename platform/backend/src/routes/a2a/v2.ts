@@ -3,7 +3,7 @@ import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { type A2AActor, A2AError } from "@/agents/a2a/a2a-base";
+import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import {
   type A2AProtocolCancelTaskRequest,
@@ -44,6 +44,7 @@ import { preflightAgentRuntimeModelCompatibility } from "@/services/agent-runtim
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { type Agent, ApiError, UuidIdSchema } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
+import { clientErrorMessage } from "@/utils/db";
 
 /**
  * A2A (Agent-to-Agent) Protocol routes
@@ -182,7 +183,9 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // agent a direct fetch would refuse.
       const permitted = await Promise.all(
         candidates.map(async (agent) =>
-          (await validateMCPGatewayToken(agent.id, token)) ? agent : null,
+          (await validateMCPGatewayToken(agent.id, token, "a2a"))
+            ? agent
+            : null,
         ),
       );
 
@@ -244,7 +247,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const tokenAuth = await validateMCPGatewayToken(agent.id, token);
+      const tokenAuth = await validateMCPGatewayToken(agent.id, token, "a2a");
       if (!tokenAuth) {
         reply.header(
           "WWW-Authenticate",
@@ -851,7 +854,7 @@ function jsonRpcErrorParts(error: unknown): { code: number; message: string } {
   }
   return {
     code: -32603,
-    message: error instanceof Error ? error.message : "Internal error",
+    message: clientErrorMessage(error, "Internal error"),
   };
 }
 
@@ -882,7 +885,7 @@ function buildJsonRpcErrorEnvelope(id: A2AJsonRpcId, error: unknown) {
       code: -32603,
       message: "Internal error",
       data: {
-        reason: error instanceof Error ? error.message : String(error),
+        reason: clientErrorMessage(error, String(error)),
       },
     },
   };
@@ -984,7 +987,10 @@ class A2AV2Router {
     // The v2 protocol surface drives the full durable task lifecycle;
     // internal consumers (chatops) construct their own managers in the
     // default approval-only mode.
-    this.manager = new A2AManager({ taskMode: "full" });
+    this.manager = new A2AManager({
+      taskMode: "full",
+      callerAnswersOpenappaReviews: true,
+    });
   }
 
   async request(agentId: string, token: string, request: unknown) {
@@ -1099,9 +1105,15 @@ class A2AV2Router {
     request: A2AProtocolSendMessageRequest;
     detached: boolean;
   }): Promise<void> {
-    if (!params.detached || params.request.message.taskId) return;
     const runtime = resolveAgentRuntime(params.agent);
     if (!runtime) return;
+    if (params.actor.oauthExecution) {
+      throw new A2AError(
+        A2AErrorKind.UnsupportedOperation,
+        "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
+      );
+    }
+    if (!params.detached || params.request.message.taskId) return;
 
     try {
       await preflightAgentRuntimeModelCompatibility({

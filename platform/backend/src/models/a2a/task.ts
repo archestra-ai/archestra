@@ -17,6 +17,8 @@ import db, { schema } from "@/database";
 import type {
   A2AMessage,
   A2ATask,
+  A2ATaskApprovalRequest,
+  A2ATaskFailure,
   A2ATaskState,
   InsertA2AMessage,
   InsertA2ATask,
@@ -114,6 +116,8 @@ class A2ATaskModel {
     allowedFrom: A2ATaskState[];
     eventPayload: A2AProtocolStreamResponse;
     statusReason?: string;
+    /** Classification of a FAILED terminal state; stored with its reason. */
+    failure?: A2ATaskFailure;
     /** Also delete the task's approval-request rows (cancellation). */
     clearApprovals?: boolean;
   }): Promise<A2ATask | null> {
@@ -346,13 +350,7 @@ class A2ATaskModel {
         outcome: "applied" | "resumed";
         task: A2ATask;
         /** All approval rows after this application, fresh from the db. */
-        approvalRows: {
-          approvalId: string;
-          toolCallId: string;
-          toolName: string;
-          approved: boolean;
-          resolved: boolean;
-        }[];
+        approvalRows: A2ATaskApprovalRequest[];
         /** The approval message's content after the transform. */
         content: unknown;
       }
@@ -403,13 +401,7 @@ class A2ATaskModel {
           .where(eq(schema.a2aMessagesTable.id, params.lastMessageId));
 
         const approvalRows = await tx
-          .select({
-            approvalId: schema.a2aTaskApprovalRequestsTable.approvalId,
-            toolCallId: schema.a2aTaskApprovalRequestsTable.toolCallId,
-            toolName: schema.a2aTaskApprovalRequestsTable.toolName,
-            approved: schema.a2aTaskApprovalRequestsTable.approved,
-            resolved: schema.a2aTaskApprovalRequestsTable.resolved,
-          })
+          .select()
           .from(schema.a2aTaskApprovalRequestsTable)
           .where(eq(schema.a2aTaskApprovalRequestsTable.taskId, params.taskId));
 
@@ -607,12 +599,16 @@ class A2ATaskModel {
   static async listForActor(params: {
     actorKind: string;
     actorId: string;
-    agentId: string;
+    agentIds: readonly string[];
     contextId?: string;
     state?: A2ATaskState;
     statusChangedAfter?: Date;
     cursor?: { stateChangedAt: Date; id: string };
     pageSize: number;
+    /** Skip a run's earlier turns: keep a workspace's latest turn and standalone tasks. */
+    currentTurnsOnly?: boolean;
+    /** Only tasks of this organization's agents. */
+    organizationId?: string;
   }): Promise<{ tasks: A2ATask[]; totalSize: number }> {
     const orderingTimestamp = schema.a2aTasksTable.stateChangedAt;
 
@@ -620,7 +616,7 @@ class A2ATaskModel {
       eq(schema.a2aContextsTable.actorKind, params.actorKind),
       eq(schema.a2aContextsTable.actorId, params.actorId),
       or(
-        eq(schema.a2aTasksTable.agentId, params.agentId),
+        inArray(schema.a2aTasksTable.agentId, [...params.agentIds]),
         isNull(schema.a2aTasksTable.agentId),
       ),
       params.contextId
@@ -629,6 +625,26 @@ class A2ATaskModel {
       params.state ? eq(schema.a2aTasksTable.state, params.state) : undefined,
       params.statusChangedAfter
         ? sql`${orderingTimestamp} > ${params.statusChangedAfter}`
+        : undefined,
+      params.organizationId
+        ? inArray(
+            schema.a2aTasksTable.agentId,
+            db
+              .select({ id: schema.agentsTable.id })
+              .from(schema.agentsTable)
+              .where(
+                eq(schema.agentsTable.organizationId, params.organizationId),
+              ),
+          )
+        : undefined,
+      params.currentTurnsOnly
+        ? sql`NOT EXISTS (
+            SELECT 1 FROM ${schema.agentRunsTable}
+            JOIN ${schema.agentWorkspacesTable}
+              ON ${schema.agentWorkspacesTable.workloadName} = ${schema.agentRunsTable.workloadName}
+            WHERE ${schema.agentRunsTable.taskId} = ${schema.a2aTasksTable.id}
+              AND ${schema.agentWorkspacesTable.lastTaskId} IS DISTINCT FROM ${schema.a2aTasksTable.id}
+          )`
         : undefined,
     );
 
@@ -845,6 +861,7 @@ class A2ATaskModel {
       to: A2ATaskState;
       allowedFrom: A2ATaskState[];
       statusReason?: string;
+      failure?: A2ATaskFailure;
     },
   ): Promise<A2ATask | null> {
     const now = new Date();
@@ -857,6 +874,7 @@ class A2ATaskModel {
         ...(params.statusReason !== undefined
           ? { statusReason: params.statusReason }
           : {}),
+        ...(params.failure !== undefined ? { failure: params.failure } : {}),
       })
       .where(
         and(

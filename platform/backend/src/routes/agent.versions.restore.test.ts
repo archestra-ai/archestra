@@ -13,6 +13,8 @@ import {
   AgentVersionModel,
   EnvironmentModel,
   HookFileModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
   ToolModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -158,7 +160,9 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     const withTool = (await AgentVersionModel.forkIfChanged(agent.id))?.version;
 
     await AgentToolModel.delete({ agentId: agent.id, toolId: doomed.id });
-    await ToolModel.delete(doomed.id);
+    await db
+      .delete(schema.toolsTable)
+      .where(eq(schema.toolsTable.id, doomed.id));
     await AgentModel.update(agent.id, { description: "after" });
 
     const response = await restore(agent.id, withTool as number);
@@ -274,6 +278,137 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     const agentRow = await AgentModel.findById(agent.id, user.id, true);
     expect(agentRow?.llmApiKeyId).toBe(liveKey.id);
     expect(agentRow?.modelId).toBe(model[0].id);
+  });
+
+  async function makeTrioAgent(fixtures: {
+    makeAgent: (overrides: {
+      organizationId: string;
+      modelId: string;
+      llmApiKeyId: string;
+    }) => Promise<{ id: string; organizationId: string }>;
+    makeLlmProviderApiKey: (
+      organizationId: string,
+      secretId: null,
+    ) => Promise<{ id: string }>;
+  }) {
+    const key = await fixtures.makeLlmProviderApiKey(organizationId, null);
+    const [normal, fast, smart] = await Promise.all(
+      ["gpt-normal", "gpt-fast", "gpt-smart"].map((modelId) =>
+        ModelModel.create({
+          externalId: `openai/${modelId}`,
+          provider: "openai",
+          modelId,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: true,
+          lastSyncedAt: new Date(),
+        }),
+      ),
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      normal.id,
+      fast.id,
+      smart.id,
+    ]);
+    const agent = await fixtures.makeAgent({
+      organizationId,
+      modelId: normal.id,
+      llmApiKeyId: key.id,
+    });
+    return { agent, key, fast, smart };
+  }
+
+  test("restores the fast and smart tiers", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const { agent, fast, smart } = await makeTrioAgent({
+      makeAgent,
+      makeLlmProviderApiKey,
+    });
+    const withTiers = await AgentModel.update(agent.id, {
+      fastModelId: fast.id,
+      smartModelId: smart.id,
+    });
+    await AgentModel.update(agent.id, {
+      fastModelId: null,
+      smartModelId: null,
+    });
+
+    const response = await restore(agent.id, withTiers?.latestVersion ?? 0);
+    expect(response.statusCode).toBe(200);
+
+    const agentRow = await AgentModel.findById(agent.id, user.id, true);
+    expect(agentRow?.fastModelId).toBe(fast.id);
+    expect(agentRow?.smartModelId).toBe(smart.id);
+  });
+
+  test("refuses a version whose tier is no longer on the key, changing nothing", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const { agent, key, fast, smart } = await makeTrioAgent({
+      makeAgent,
+      makeLlmProviderApiKey,
+    });
+    const withTiers = await AgentModel.update(agent.id, {
+      fastModelId: fast.id,
+      smartModelId: smart.id,
+    });
+    await AgentModel.update(agent.id, {
+      fastModelId: null,
+      smartModelId: null,
+    });
+    await db
+      .delete(schema.llmProviderApiKeyModelsTable)
+      .where(
+        and(
+          eq(schema.llmProviderApiKeyModelsTable.apiKeyId, key.id),
+          eq(schema.llmProviderApiKeyModelsTable.modelId, fast.id),
+        ),
+      );
+
+    const response = await restore(agent.id, withTiers?.latestVersion ?? 0);
+    expect(response.statusCode).toBe(400);
+
+    const agentRow = await AgentModel.findById(agent.id, user.id, true);
+    expect(agentRow?.fastModelId).toBeNull();
+    expect(agentRow?.smartModelId).toBeNull();
+  });
+
+  test("a snapshot captured before tiers existed restores them to unset", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const { agent, fast, smart } = await makeTrioAgent({
+      makeAgent,
+      makeLlmProviderApiKey,
+    });
+    const [legacy] = await db
+      .select()
+      .from(schema.agentVersionsTable)
+      .where(
+        and(
+          eq(schema.agentVersionsTable.agentId, agent.id),
+          eq(schema.agentVersionsTable.version, 1),
+        ),
+      );
+    const { fastModel, smartModel, ...legacySnapshot } = legacy.snapshot;
+    await db
+      .update(schema.agentVersionsTable)
+      .set({ snapshot: legacySnapshot as typeof legacy.snapshot })
+      .where(eq(schema.agentVersionsTable.id, legacy.id));
+    await AgentModel.update(agent.id, {
+      fastModelId: fast.id,
+      smartModelId: smart.id,
+    });
+
+    const response = await restore(agent.id, 1);
+    expect(response.statusCode).toBe(200);
+
+    const agentRow = await AgentModel.findById(agent.id, user.id, true);
+    expect(agentRow?.fastModelId).toBeNull();
+    expect(agentRow?.smartModelId).toBeNull();
   });
 
   test("replaces the whole hook set", async ({ makeAgent }) => {

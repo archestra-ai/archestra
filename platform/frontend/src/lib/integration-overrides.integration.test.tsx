@@ -19,19 +19,20 @@ import { useSession } from "@/lib/auth/auth.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { organizationKeys } from "@/lib/organization.query";
 
-function XaiAvailability() {
-  const catalog = useModelProviderCatalog();
+function XaiAvailability({ fresh }: { fresh?: boolean }) {
+  const catalog = useModelProviderCatalog({ fresh });
   return (
     <span>{catalog.isHidden("xai") ? "xai hidden" : "xai available"}</span>
   );
 }
 
 /**
- * The catalog decides what every picker may offer, so it has to reflect what
- * the server holds now — not what this browser cached before an admin changed
- * it. The cache is seeded the way a refresh does it (the organization query is
- * snapshotted and restored), which used to count as fresh for five minutes and
- * left turned-off providers on offer until the entry aged out.
+ * Configuration pages decide from the catalog what may be set up, so their read
+ * has to reflect what the server holds now — not what this browser cached
+ * before an admin changed it. The cache is seeded the way a refresh does it
+ * (the organization query is snapshotted and restored), which used to count as
+ * fresh for five minutes and left turned-off providers on offer until the
+ * entry aged out. Other pickers read the cache, which mutations keep current.
  */
 describe("useModelProviderCatalog freshness", () => {
   beforeEach(() => {
@@ -41,7 +42,7 @@ describe("useModelProviderCatalog freshness", () => {
     } as unknown as ReturnType<typeof useSession>);
   });
 
-  it("re-reads the organization on mount instead of trusting a restored cache", async () => {
+  it("a fresh read re-reads the organization on mount instead of trusting a restored cache", async () => {
     vi.mocked(archestraApiSdk.getOrganization).mockResolvedValue({
       data: { modelProviderOverrides: { xai: { hidden: true } } },
       error: undefined,
@@ -61,7 +62,7 @@ describe("useModelProviderCatalog freshness", () => {
 
     render(
       <QueryClientProvider client={client}>
-        <XaiAvailability />
+        <XaiAvailability fresh />
       </QueryClientProvider>,
     );
 
@@ -69,5 +70,26 @@ describe("useModelProviderCatalog freshness", () => {
       expect(screen.getByText("xai hidden")).toBeInTheDocument(),
     );
     expect(archestraApiSdk.getOrganization).toHaveBeenCalled();
+  });
+
+  it("the default read uses the cached organization, so mounting a picker issues no request", async () => {
+    vi.mocked(archestraApiSdk.getOrganization).mockClear();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(organizationKeys.details(), {
+      modelProviderOverrides: { xai: { hidden: true } },
+    });
+
+    render(
+      <QueryClientProvider client={client}>
+        <XaiAvailability />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("xai hidden")).toBeInTheDocument();
+    // Give a refetch-on-mount the chance to start before checking it did not.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(archestraApiSdk.getOrganization).not.toHaveBeenCalled();
   });
 });

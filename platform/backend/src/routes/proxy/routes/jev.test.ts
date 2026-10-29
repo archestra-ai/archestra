@@ -22,6 +22,7 @@ import {
   expect,
   test,
 } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { useMswServer } from "@/test/msw";
 import type { Agent } from "@/types";
 import jevProxyRoutes from "./jev";
@@ -64,8 +65,9 @@ describe("Jev decisions proxy route", () => {
   const server = useMswServer();
   let app: FastifyInstance;
   let agent: Agent;
+  let passthroughToken: string;
 
-  beforeEach(async ({ makeAgent }) => {
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
     app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
@@ -73,6 +75,12 @@ describe("Jev decisions proxy route", () => {
     await app.register(jevProxyRoutes);
     // The default LLM proxy, so interactions are logged under this agent.
     agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
   });
 
   afterEach(async () => {
@@ -121,6 +129,8 @@ describe("Jev decisions proxy route", () => {
     const response = await send({
       token: value,
       body: { ...DECISIONS_REQUEST, model: "typesafe/jev-1.13" },
+      // The virtual key is itself the platform credential.
+      passthrough: false,
     });
 
     expect(response.statusCode, response.body).toBe(200);
@@ -148,7 +158,15 @@ describe("Jev decisions proxy route", () => {
     expect(response.body).toContain("Insufficient credits");
   });
 
-  function send(params: { token: string; body?: object }) {
+  /**
+   * Sends `token` as the provider credential. A raw provider token goes with a
+   * passthrough virtual key unless `passthrough` is false.
+   */
+  function send(params: {
+    token: string;
+    body?: object;
+    passthrough?: boolean;
+  }) {
     return app.inject({
       method: "POST",
       url: `/v1/jev/${agent.id}/decisions`,
@@ -157,6 +175,9 @@ describe("Jev decisions proxy route", () => {
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${params.token}`,
+        ...(params.passthrough === false
+          ? {}
+          : { "x-archestra-virtual-key": passthroughToken }),
       },
       payload: params.body ?? DECISIONS_REQUEST,
     });

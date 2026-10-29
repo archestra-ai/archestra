@@ -1,8 +1,9 @@
-import { MAX_CUSTOM_MODEL_TOKEN_LIMIT, TimeInMs } from "@archestra/shared";
+import { MAX_CUSTOM_MODEL_TOKEN_LIMIT } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -17,16 +18,9 @@ import OrganizationModel from "@/models/organization";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
-import { systemKeyManager } from "@/services/system-key-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import type { Model, User } from "@/types";
-import {
-  getStaleModelSyncApiKeys,
-  isModelSyncStateStale,
-  syncModelsForVisibleApiKeys,
-  triggerLazyModelSyncForStaleApiKeys,
-} from "./llm-provider-models";
 
 vi.mock("@/auth");
 
@@ -36,12 +30,6 @@ vi.mock("@/clients/gemini-client", () => ({
 
 vi.mock("@/clients/bedrock-credentials", () => ({
   isBedrockIamAuthEnabled: vi.fn(() => false),
-}));
-
-vi.mock("@/services/system-key-manager", () => ({
-  systemKeyManager: {
-    syncSystemKeys: vi.fn(),
-  },
 }));
 
 vi.mock("@/clients/models-dev-client", async (importOriginal) => {
@@ -69,7 +57,6 @@ const mockGetSecretValueForLlmProviderApiKey = vi.mocked(
 );
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
 const mockUserHasPermission = vi.mocked(userHasPermission);
-const mockSyncSystemKeys = vi.mocked(systemKeyManager.syncSystemKeys);
 
 describe("chat model routes", () => {
   const server = useMswServer();
@@ -107,6 +94,85 @@ describe("chat model routes", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("validates complete custom prices before writing and audits a valid pricing update", async () => {
+    const model = await ModelModel.create({
+      externalId: "openai/test-price-validation",
+      provider: "openai",
+      modelId: "test-price-validation",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      lastSyncedAt: new Date(),
+    });
+    const url = `/api/llm-models/${model.id}`;
+    const fields = [
+      "customPricePerMillionInput",
+      "customPricePerMillionOutput",
+      "customPricePerMillionCacheRead",
+      "customPricePerMillionCacheWrite",
+    ] as const;
+    for (const field of fields) {
+      for (const invalid of ["0,25", "1usd", "Infinity", "100000000"]) {
+        const response = await app.inject({
+          method: "PATCH",
+          url,
+          payload: {
+            customPricePerMillionInput: "1",
+            customPricePerMillionOutput: "2",
+            customPricePerMillionCacheRead: "0",
+            customPricePerMillionCacheWrite: "0.5",
+            [field]: invalid,
+          },
+        });
+        expect(response.statusCode, `${field}=${invalid}`).toBe(400);
+      }
+    }
+    expect(await ModelModel.findById(model.id)).toMatchObject({
+      customPricePerMillionInput: null,
+      customPricePerMillionOutput: null,
+      customPricePerMillionCacheRead: null,
+      customPricePerMillionCacheWrite: null,
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url,
+      payload: {
+        customPricePerMillionInput: "0.25",
+        customPricePerMillionOutput: "1e1",
+        customPricePerMillionCacheRead: "0",
+        customPricePerMillionCacheWrite: "0.5",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(await ModelModel.findById(model.id)).toMatchObject({
+      customPricePerMillionInput: "0.25",
+      customPricePerMillionOutput: "10.00",
+      customPricePerMillionCacheRead: "0.00",
+      customPricePerMillionCacheWrite: "0.50",
+    });
+    await vi.waitFor(async () => {
+      const { data: rows } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "llmModel",
+        sortDirection: "asc",
+        limit: 50,
+        offset: 0,
+      });
+      const successful = rows.filter((row) => row.outcome === "success");
+      expect(successful).toHaveLength(1);
+      expect(successful[0].action).toBe("llmModel.updated");
+      expect(successful[0].before).toMatchObject({
+        isCustomPrice: false,
+        priceSource: "default",
+      });
+      expect(successful[0].after).toMatchObject({
+        isCustomPrice: true,
+        pricePerMillionInput: "0.25",
+        pricePerMillionOutput: "10.00",
+      });
+    });
   });
 
   test("refresh reports individual failures, persists rejected subscriptions, and recovers after successful validation", async ({
@@ -489,36 +555,38 @@ describe("chat model routes", () => {
     ]);
   });
 
-  test("GET /api/llm-models/available marks responses when lazy sync is pending", async ({
-    makeSecret,
+  test("GET /api/llm-models/available only reads stored models", async ({
     makeLlmProviderApiKey,
   }) => {
-    const secret = await makeSecret({ secret: { apiKey: "openrouter-key" } });
-    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "openrouter",
+    // Never synced, so the old lazy path would have fetched it right away.
+    const apiKey = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "vllm",
       userId: user.id,
+      baseUrl: "http://vllm.test/v1",
     });
-    mockGetSecretValueForLlmProviderApiKey.mockResolvedValue("openrouter-key");
-    const syncSpy = vi
-      .spyOn(modelSyncService, "syncModelsForApiKey")
-      .mockResolvedValue(0);
+    let providerRequests = 0;
+    server.use(
+      http.get("http://vllm.test/v1/models", () => {
+        providerRequests += 1;
+        return HttpResponse.json({ object: "list", data: [] });
+      }),
+    );
+    const dueKeysSpy = vi.spyOn(LlmProviderApiKeyModel, "findDueForModelSync");
+    const syncSpy = vi.spyOn(modelSyncService, "syncModelsForApiKey");
 
     const response = await app.inject({
       method: "GET",
       url: `/api/llm-models/available?apiKeyId=${apiKey.id}`,
     });
+    await new Promise((resolve) => setImmediate(resolve));
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers["x-archestra-lazy-model-sync"]).toBe("pending");
     expect(response.json()).toEqual([]);
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(syncSpy).toHaveBeenCalledWith({
-      apiKeyId: apiKey.id,
-      provider: "openrouter",
-      apiKeyValue: "openrouter-key",
-      baseUrl: null,
-      extraHeaders: null,
-    });
+    expect(response.headers["x-archestra-lazy-model-sync"]).toBeUndefined();
+    expect(providerRequests).toBe(0);
+    expect(syncSpy).not.toHaveBeenCalled();
+    expect(dueKeysSpy).not.toHaveBeenCalled();
+    expect(modelsDevClient.syncIfNeeded).not.toHaveBeenCalled();
   });
 
   test("GET /api/llm-models only attaches keys visible to the caller", async ({
@@ -601,6 +669,230 @@ describe("chat model routes", () => {
     expect(copilotModel.apiKeys.map((k: { id: string }) => k.id)).toEqual([
       ownKey.id,
     ]);
+  });
+
+  test("GET /api/llm-models narrows by access and sharedWith", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeTeam,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+    const team = await makeTeam(organizationId, user.id);
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const share = async (
+      modelId: string,
+      subject: { type: "team"; id: string } | { type: "organization"; id: "*" },
+    ) => {
+      const model = await ModelModel.create({
+        externalId: `openai/${modelId}-${suffix}`,
+        provider: "openai",
+        modelId: `${modelId}-${suffix}`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      const key = {
+        organizationId,
+        resource: "llmModel" as const,
+        scope: model.id,
+      };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+        grants: [{ subject, actions: ["read", "use"] }],
+      });
+      return model;
+    };
+    const teamModel = await share("team-model", { type: "team", id: team.id });
+    const orgModel = await share("org-model", {
+      type: "organization",
+      id: "*",
+    });
+    // One sync: it replaces the key's whole model set.
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      apiKey.id,
+      [teamModel, orgModel].map((model) => ({
+        id: model.id,
+        modelId: model.modelId,
+      })),
+      "openai",
+    );
+    const ours = new Set([teamModel.id, orgModel.id]);
+
+    const list = async (params: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/llm-models?${params}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response
+        .json()
+        .filter((model: { id: string }) => ours.has(model.id))
+        .map((model: { id: string }) => model.id);
+    };
+
+    expect((await list("")).sort()).toEqual([...ours].sort());
+    expect(await list(`sharedWith=team:${team.id}`)).toEqual([teamModel.id]);
+    expect(await list("sharedWith=org")).toEqual([orgModel.id]);
+    // Nobody authors a synced model.
+    expect(await list("access=mine")).toEqual([]);
+  });
+
+  describe("GET /api/llm-models — slim reads", () => {
+    const createModel = (modelId: string, extra: Partial<Model> = {}) =>
+      ModelModel.create({
+        externalId: `openai/${modelId}`,
+        provider: "openai",
+        modelId,
+        description: `${modelId} description`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        lastSyncedAt: new Date(),
+        ...extra,
+      });
+
+    let seeded: {
+      orgKey: { id: string };
+      othersKey: { id: string };
+      chat: Model;
+    };
+
+    beforeEach(
+      async ({ makeSecret, makeLlmProviderApiKey, makeUser, makeMember }) => {
+        const secret = await makeSecret({ secret: { apiKey: "sk-test" } });
+        const orgKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+          provider: "openai",
+          name: "Org key",
+        });
+        const otherUser = await makeUser();
+        await makeMember(otherUser.id, organizationId);
+        const othersKey = await makeLlmProviderApiKey(
+          organizationId,
+          secret.id,
+          {
+            provider: "openai",
+            userId: otherUser.id,
+            name: "Someone else's key",
+          },
+        );
+        const chat = await createModel("gpt-chat");
+        const embedding = await createModel("text-embed", {
+          embeddingDimensions: 1536,
+        });
+        const hidden = await createModel("gpt-hidden", { ignored: true });
+        const othersOnly = await createModel("gpt-others-only");
+        await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+          orgKey.id,
+          [chat, embedding, hidden],
+          "openai",
+        );
+        await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+          othersKey.id,
+          [chat, othersOnly],
+          "openai",
+        );
+        seeded = { orgKey, othersKey, chat };
+      },
+    );
+
+    const get = async (url: string) => {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    };
+
+    test("narrows the full list by key or to embedding models, and can skip assignments", async () => {
+      const { orgKey, othersKey } = seeded;
+      const summary = (
+        models: Array<{
+          modelId: string;
+          apiKeys: Array<{ id: string }>;
+          labels: unknown[];
+        }>,
+      ) => models.map((model) => [model.modelId, model.apiKeys.length]);
+
+      expect(
+        summary(await get(`/api/llm-models?apiKeyIds=${orgKey.id}`)),
+      ).toEqual([
+        ["gpt-chat", 1],
+        ["gpt-hidden", 1],
+        ["text-embed", 1],
+      ]);
+      // Another member's personal key is not the caller's to filter by.
+      expect(await get(`/api/llm-models?apiKeyIds=${othersKey.id}`)).toEqual(
+        [],
+      );
+      // An empty key list asks for no models, not for every model.
+      expect(await get("/api/llm-models?apiKeyIds=")).toEqual([]);
+      expect(summary(await get("/api/llm-models?embedding=true"))).toEqual([
+        ["text-embed", 1],
+      ]);
+
+      const full = await get("/api/llm-models");
+      const slim = await get("/api/llm-models?includeAssignments=false");
+      expect(slim.map((model: { id: string }) => model.id)).toEqual(
+        full.map((model: { id: string }) => model.id),
+      );
+    });
+
+    test("lists each visible key's shown models for the key pickers", async () => {
+      const { orgKey } = seeded;
+
+      expect(await get("/api/llm-models/key-model-ids")).toEqual([
+        { apiKeyId: orgKey.id, modelIds: ["gpt-chat", "text-embed"] },
+      ]);
+    });
+
+    test("offers the full list's models, in order, with picker fields only", async () => {
+      const { chat } = seeded;
+      const full = await get("/api/llm-models");
+
+      const options = await get("/api/llm-models/options");
+
+      expect(options).toEqual(
+        full.map(
+          (model: {
+            id: string;
+            modelId: string;
+            provider: string;
+            description: string | null;
+            pricePerMillionInput: string | null;
+            pricePerMillionOutput: string | null;
+            isFree: boolean;
+            isBest: boolean;
+          }) => ({
+            id: model.id,
+            modelId: model.modelId,
+            provider: model.provider,
+            description: model.description,
+            pricePerMillionInput: model.pricePerMillionInput,
+            pricePerMillionOutput: model.pricePerMillionOutput,
+            isFree: model.isFree,
+            isBest: model.isBest,
+          }),
+        ),
+      );
+      expect(options.find((o: { id: string }) => o.id === chat.id)).toEqual(
+        expect.objectContaining({
+          pricePerMillionInput: "1",
+          pricePerMillionOutput: "2",
+        }),
+      );
+
+      // Without llmModel:read the grants decide, the same as for the list.
+      mockUserHasPermission.mockResolvedValue(false);
+      expect(
+        (await get("/api/llm-models/options")).map((o: { id: string }) => o.id),
+      ).toEqual(
+        (await get("/api/llm-models")).map((m: { id: string }) => m.id),
+      );
+    });
   });
 
   describe("GET /api/llm-models — effectiveContextLength", () => {
@@ -970,385 +1262,6 @@ describe("chat model routes", () => {
     });
     expect(afterDropResponse.statusCode).toBe(200);
     expect(afterDropResponse.json().embeddingDimensions).toBe(null);
-  });
-
-  test("syncModelsForVisibleApiKeys syncs visible keys and preserves baseUrl", async ({
-    makeSecret,
-  }) => {
-    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-    const openAiKey = await LlmProviderApiKeyModel.create({
-      organizationId,
-      secretId: secret.id,
-      name: "OpenAI Key",
-      provider: "openai",
-      scope: "personal",
-      userId: user.id,
-      baseUrl: "https://proxy.example.com/v1",
-    });
-    const vllmKey = await LlmProviderApiKeyModel.create({
-      organizationId,
-      secretId: null,
-      name: "vLLM Key",
-      provider: "vllm",
-      scope: "personal",
-      userId: user.id,
-      baseUrl: null,
-    });
-
-    mockGetSecretValueForLlmProviderApiKey.mockResolvedValue("resolved-secret");
-    const syncSpy = vi
-      .spyOn(modelSyncService, "syncModelsForApiKey")
-      .mockResolvedValue(1);
-
-    await syncModelsForVisibleApiKeys({
-      organizationId,
-      userId: user.id,
-    });
-
-    expect(syncSpy).toHaveBeenNthCalledWith(1, {
-      apiKeyId: vllmKey.id,
-      provider: "vllm",
-      apiKeyValue: "",
-      baseUrl: null,
-      extraHeaders: null,
-    });
-    expect(syncSpy).toHaveBeenNthCalledWith(2, {
-      apiKeyId: openAiKey.id,
-      provider: "openai",
-      apiKeyValue: "resolved-secret",
-      baseUrl: "https://proxy.example.com/v1",
-      extraHeaders: null,
-    });
-  });
-
-  test("syncModelsForVisibleApiKeys skips required providers when the secret cannot be resolved", async ({
-    makeSecret,
-  }) => {
-    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-    await LlmProviderApiKeyModel.create({
-      organizationId,
-      secretId: secret.id,
-      name: "OpenAI Key",
-      provider: "openai",
-      scope: "personal",
-      userId: user.id,
-    });
-    const availableKeysSpy = vi.spyOn(
-      LlmProviderApiKeyModel,
-      "getAvailableKeysForUser",
-    );
-    const syncSpy = vi
-      .spyOn(modelSyncService, "syncModelsForApiKey")
-      .mockResolvedValue(1);
-
-    mockGetSecretValueForLlmProviderApiKey.mockResolvedValue(undefined);
-
-    await syncModelsForVisibleApiKeys({
-      organizationId,
-      userId: user.id,
-    });
-
-    expect(availableKeysSpy).toHaveBeenCalled();
-    expect(syncSpy).not.toHaveBeenCalled();
-  });
-
-  test("syncModelsForVisibleApiKeys delegates Vertex AI system keys to system key sync", async () => {
-    mockIsVertexAiEnabled.mockReturnValue(true);
-
-    const syncSpy = vi
-      .spyOn(modelSyncService, "syncModelsForApiKey")
-      .mockResolvedValue(1);
-
-    await LlmProviderApiKeyModel.createSystemKey({
-      organizationId,
-      name: "Vertex AI",
-      provider: "gemini",
-    });
-
-    await syncModelsForVisibleApiKeys({
-      organizationId,
-      userId: user.id,
-    });
-
-    expect(mockSyncSystemKeys).toHaveBeenCalledWith(organizationId);
-    expect(syncSpy).not.toHaveBeenCalled();
-  });
-
-  test("isModelSyncStateStale uses provider-specific TTLs", () => {
-    const now = new Date("2026-05-28T12:00:00.000Z");
-
-    expect(isModelSyncStateStale({ provider: "openrouter", now })).toBe(true);
-    expect(
-      isModelSyncStateStale({
-        provider: "openrouter",
-        now,
-        syncState: {
-          linkedModelCount: 1,
-          oldestLastSyncedAt: new Date(now.getTime() - 59 * TimeInMs.Minute),
-        },
-      }),
-    ).toBe(false);
-    expect(
-      isModelSyncStateStale({
-        provider: "openrouter",
-        now,
-        syncState: {
-          linkedModelCount: 1,
-          oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
-        },
-      }),
-    ).toBe(true);
-    expect(
-      isModelSyncStateStale({
-        provider: "openai",
-        now,
-        syncState: {
-          linkedModelCount: 1,
-          oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
-        },
-      }),
-    ).toBe(false);
-  });
-
-  test("isModelSyncStateStale treats the exact TTL boundary as stale", () => {
-    const now = new Date("2026-05-28T12:00:00.000Z");
-    expect(
-      isModelSyncStateStale({
-        provider: "openrouter",
-        now,
-        syncState: {
-          linkedModelCount: 1,
-          oldestLastSyncedAt: new Date(now.getTime() - TimeInMs.Hour),
-        },
-      }),
-    ).toBe(true);
-  });
-
-  test("isModelSyncStateStale handles missing and zero-model sync states", () => {
-    const now = new Date("2026-05-28T12:00:00.000Z");
-
-    // null oldest timestamp with a positive count is still unusable -> stale
-    expect(
-      isModelSyncStateStale({
-        provider: "openai",
-        now,
-        syncState: { linkedModelCount: 1, oldestLastSyncedAt: null },
-      }),
-    ).toBe(true);
-
-    // zero linked models with a present sync state -> stale
-    expect(
-      isModelSyncStateStale({
-        provider: "openai",
-        now,
-        syncState: {
-          linkedModelCount: 0,
-          oldestLastSyncedAt: new Date(now.getTime() - TimeInMs.Minute),
-        },
-      }),
-    ).toBe(true);
-  });
-
-  test("isModelSyncStateStale spares zero-model keys synced recently", () => {
-    const now = new Date("2026-05-28T12:00:00.000Z");
-
-    // a key that legitimately resolves zero models must not be re-synced on
-    // every request once an attempt has been recorded within the TTL window
-    expect(
-      isModelSyncStateStale({
-        provider: "openrouter",
-        now,
-        syncState: { linkedModelCount: 0, oldestLastSyncedAt: null },
-        recentlyAttempted: true,
-      }),
-    ).toBe(false);
-
-    expect(
-      isModelSyncStateStale({
-        provider: "openrouter",
-        now,
-        syncState: { linkedModelCount: 0, oldestLastSyncedAt: null },
-        recentlyAttempted: false,
-      }),
-    ).toBe(true);
-
-    // recentlyAttempted never rescues a key whose linked models have aged out
-    expect(
-      isModelSyncStateStale({
-        provider: "openrouter",
-        now,
-        syncState: {
-          linkedModelCount: 1,
-          oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
-        },
-        recentlyAttempted: true,
-      }),
-    ).toBe(true);
-  });
-
-  test("getStaleModelSyncApiKeys ages a key by its own sync, not by another key syncing the same models", async ({
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    const connectedAt = new Date("2026-09-15T12:00:00.000Z");
-    const now = new Date(connectedAt.getTime() + 2 * TimeInMs.Day);
-    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-    const subscriptionKey = await makeLlmProviderApiKey(
-      organizationId,
-      secret.id,
-      { provider: "openai", userId: user.id },
-    );
-    const meteredKey = await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "openai",
-      userId: user.id,
-    });
-    const models = await Promise.all(
-      ["gpt-5.4", "gpt-5.6-sol"].map((modelId) =>
-        ModelModel.create({
-          externalId: `openai/${modelId}`,
-          provider: "openai",
-          modelId,
-          inputModalities: ["text"],
-          outputModalities: ["text"],
-          supportsToolCalling: true,
-          lastSyncedAt: now,
-        }),
-      ),
-    );
-    const links = models.map((model) => ({
-      id: model.id,
-      modelId: model.modelId,
-    }));
-
-    vi.useFakeTimers({ toFake: ["Date"] });
-    try {
-      // The subscription key synced once, when it was connected...
-      vi.setSystemTime(connectedAt);
-      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
-        subscriptionKey.id,
-        links,
-        "openai",
-      );
-      // ...while a metered key keeps syncing the very same models.
-      vi.setSystemTime(now);
-      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
-        meteredKey.id,
-        links,
-        "openai",
-      );
-    } finally {
-      vi.useRealTimers();
-    }
-
-    const staleKeys = await getStaleModelSyncApiKeys({
-      apiKeys: [subscriptionKey, meteredKey],
-      now,
-    });
-
-    expect(staleKeys.map((key) => key.id)).toEqual([subscriptionKey.id]);
-  });
-
-  test("getStaleModelSyncApiKeys treats old OpenRouter keys as stale", async ({
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    const now = new Date("2026-05-28T12:00:00.000Z");
-    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-    const staleOpenRouterKey = await makeLlmProviderApiKey(
-      organizationId,
-      secret.id,
-      { provider: "openrouter", userId: user.id },
-    );
-    const freshOpenAiKey = await makeLlmProviderApiKey(
-      organizationId,
-      secret.id,
-      { provider: "openai", userId: user.id },
-    );
-    const freshGeminiKey = await makeLlmProviderApiKey(
-      organizationId,
-      secret.id,
-      { provider: "gemini", userId: user.id },
-    );
-
-    vi.spyOn(
-      LlmProviderApiKeyModelLinkModel,
-      "getModelSyncStatesForApiKeys",
-    ).mockResolvedValue(
-      new Map([
-        [
-          staleOpenRouterKey.id,
-          {
-            apiKeyId: staleOpenRouterKey.id,
-            linkedModelCount: 1,
-            oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
-          },
-        ],
-        [
-          freshOpenAiKey.id,
-          {
-            apiKeyId: freshOpenAiKey.id,
-            linkedModelCount: 1,
-            oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
-          },
-        ],
-        [
-          freshGeminiKey.id,
-          {
-            apiKeyId: freshGeminiKey.id,
-            linkedModelCount: 1,
-            oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
-          },
-        ],
-      ]),
-    );
-
-    const staleKeys = await getStaleModelSyncApiKeys({
-      apiKeys: [staleOpenRouterKey, freshOpenAiKey, freshGeminiKey],
-      now,
-    });
-
-    expect(staleKeys.map((key) => key.id).sort()).toEqual(
-      [staleOpenRouterKey.id].sort(),
-    );
-  });
-
-  test("triggerLazyModelSyncForStaleApiKeys dedupes in-flight syncs", async ({
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    const secret = await makeSecret({ secret: { apiKey: "openrouter-key" } });
-    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "openrouter",
-      userId: user.id,
-    });
-    mockGetSecretValueForLlmProviderApiKey.mockResolvedValue("openrouter-key");
-
-    let resolveSync: ((value: number) => void) | undefined;
-    const syncSpy = vi
-      .spyOn(modelSyncService, "syncModelsForApiKey")
-      .mockImplementation(
-        () =>
-          new Promise<number>((resolve) => {
-            resolveSync = resolve;
-          }),
-      );
-
-    const firstSyncs = await triggerLazyModelSyncForStaleApiKeys({
-      organizationId,
-      apiKeys: [apiKey],
-    });
-    const secondSyncs = await triggerLazyModelSyncForStaleApiKeys({
-      organizationId,
-      apiKeys: [apiKey],
-    });
-
-    expect(firstSyncs).toHaveLength(1);
-    expect(secondSyncs).toHaveLength(1);
-    expect(secondSyncs[0]).toBe(firstSyncs[0]);
-    expect(syncSpy).toHaveBeenCalledTimes(1);
-
-    resolveSync?.(1);
-    await Promise.all(firstSyncs);
   });
 
   describe("team-restricted models", () => {

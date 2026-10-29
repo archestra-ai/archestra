@@ -42,6 +42,8 @@ interface KbInteractionData {
   outputTokens: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /** USD the provider reports it billed; recorded instead of the price-table estimate. */
+  reportedCost?: number;
 }
 
 interface KbObservabilityParams<T> {
@@ -108,6 +110,7 @@ export async function withKbObservability<T>(
         }
 
         const cost = await calculateKbCost({
+          reportedCost: interaction.reportedCost,
           model: interaction.model,
           provider: params.provider,
           inputTokens: interaction.inputTokens,
@@ -130,7 +133,7 @@ export async function withKbObservability<T>(
           cost,
           source: params.source,
         });
-        InteractionModel.create({
+        InteractionModel.record({
           profileId: null,
           connectorId: params.connectorId ?? null,
           source: params.source,
@@ -178,7 +181,7 @@ export function buildEmbeddingInteraction(params: {
     object: string;
     data: Array<{ object: string; embedding: number[]; index: number }>;
     model: string;
-    usage: { prompt_tokens: number; total_tokens: number };
+    usage: { prompt_tokens: number; total_tokens: number; cost?: number };
   };
 }): KbInteractionData {
   const { response } = params;
@@ -213,12 +216,14 @@ export function buildEmbeddingInteraction(params: {
     model: response.model,
     inputTokens: response.usage.prompt_tokens,
     outputTokens: 0,
+    reportedCost: response.usage.cost,
   };
 }
 
 // ===== Internal helpers =====
 
 async function calculateKbCost(params: {
+  reportedCost: number | undefined;
   model: string;
   provider: SupportedProvider;
   inputTokens: number;
@@ -226,6 +231,9 @@ async function calculateKbCost(params: {
   cacheReadTokens: number;
   cacheWriteTokens: number;
 }): Promise<number | undefined> {
+  if (params.reportedCost !== undefined) {
+    return params.reportedCost;
+  }
   try {
     return await calculateCost(
       params.model,
@@ -279,6 +287,7 @@ const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   deepseek: "deepseek:chatCompletions",
   minimax: "minimax:chatCompletions",
   kimi: "kimi:chatCompletions",
+  "kimi-code": "kimi-code:chatCompletions",
   azure: "azure:chatCompletions",
   "github-copilot": "github-copilot:chatCompletions",
   "microsoft-365-copilot": "microsoft-365-copilot:chatCompletions",

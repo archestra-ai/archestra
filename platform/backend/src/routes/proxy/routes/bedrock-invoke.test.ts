@@ -11,15 +11,11 @@
 
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { createFastifyInstance } from "@/fastify-instance";
 import { InteractionModel, ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { bedrockAdapterFactory } from "../adapters/bedrock";
 import bedrockProxyRoutes from "./bedrock";
 
@@ -37,11 +33,8 @@ beforeEach(async () => {
 
 const eventStreamCodec = new EventStreamCodec(toUtf8, fromUtf8);
 
-function createFastifyApp(): FastifyInstance {
-  const app = Fastify().withTypeProvider<ZodTypeProvider>();
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
-  return app;
+function createFastifyApp() {
+  return createFastifyInstance();
 }
 
 function anthropicStreamEvents(): unknown[] {
@@ -127,6 +120,8 @@ describe("/v1/bedrock/:agentId/model/:modelId/invoke — non-streaming", () => {
 
   test("routes model IDs with dots and colons and returns the Anthropic response", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const captured: { modelId: string; body: Record<string, unknown> }[] = [];
     vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
@@ -151,17 +146,26 @@ describe("/v1/bedrock/:agentId/model/:modelId/invoke — non-streaming", () => {
     const app = createFastifyApp();
     await app.register(bedrockProxyRoutes);
     const agent = await makeAgent({ name: "bedrock-invoke-agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const headers = {
+      ...HEADERS,
+      "x-archestra-virtual-key": await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: owner.id,
+      }),
+    };
 
     const response = await app.inject({
       method: "POST",
       // Model ID goes into the path verbatim — this is the exact URL shape the
       // Anthropic SDK's Bedrock client produces.
       url: `/v1/bedrock/${agent.id}/model/${MODEL_ID}/invoke`,
-      headers: HEADERS,
+      headers,
       payload: PAYLOAD,
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     const body = response.json();
     expect(body.type).toBe("message");
     expect(body.content).toEqual([
@@ -179,13 +183,24 @@ describe("/v1/bedrock/:agentId/model/:modelId/invoke — non-streaming", () => {
 
   test("default-agent variant routes without an agent id", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     // The default-agent route resolves the default gateway profile.
-    await makeAgent({
+    const agent = await makeAgent({
       name: "bedrock-invoke-default",
       isDefault: true,
       agentType: "profile",
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const headers = {
+      ...HEADERS,
+      "x-archestra-virtual-key": await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: owner.id,
+      }),
+    };
     vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
       () =>
         ({
@@ -208,11 +223,11 @@ describe("/v1/bedrock/:agentId/model/:modelId/invoke — non-streaming", () => {
     const response = await app.inject({
       method: "POST",
       url: `/v1/bedrock/model/${MODEL_ID}/invoke`,
-      headers: HEADERS,
+      headers,
       payload: PAYLOAD,
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     expect(response.json().content).toEqual([{ type: "text", text: "ok" }]);
   });
 });
@@ -222,6 +237,8 @@ describe("/v1/bedrock/:agentId/model/:modelId/invoke-with-response-stream", () =
 
   test("streams AWS event stream chunks wrapping Anthropic events and records the interaction", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const captured: { modelId: string; body: Record<string, unknown> }[] = [];
     vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
@@ -240,6 +257,15 @@ describe("/v1/bedrock/:agentId/model/:modelId/invoke-with-response-stream", () =
     const app = createFastifyApp();
     await app.register(bedrockProxyRoutes);
     const agent = await makeAgent({ name: "bedrock-invoke-stream-agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const headers = {
+      ...HEADERS,
+      "x-archestra-virtual-key": await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: owner.id,
+      }),
+    };
 
     const initialCount = (
       await InteractionModel.getAllInteractionsForProfile(agent.id)
@@ -248,11 +274,11 @@ describe("/v1/bedrock/:agentId/model/:modelId/invoke-with-response-stream", () =
     const response = await app.inject({
       method: "POST",
       url: `/v1/bedrock/${agent.id}/model/${MODEL_ID}/invoke-with-response-stream`,
-      headers: HEADERS,
+      headers,
       payload: PAYLOAD,
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     expect(response.headers["content-type"]).toBe(
       "application/vnd.amazon.eventstream",
     );
@@ -291,5 +317,126 @@ describe("/v1/bedrock/:agentId/model/:modelId/invoke-with-response-stream", () =
     expect(interaction.model).toBe(MODEL_ID);
     expect(interaction.inputTokens).toBe(12);
     expect(interaction.outputTokens).toBe(10);
+  });
+});
+
+// Claude Code on Bedrock sends capabilities as `anthropic_beta` plus body
+// fields the proxy does not interpret (auto mode's `safeguards`), and reads
+// keys the proxy does not set (the server's `safeguard_results`). Both must
+// pass through unchanged.
+// https://code.claude.com/docs/en/llm-gateway-protocol#feature-pass-through
+describe("/v1/bedrock InvokeModel feature pass-through", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const SAFEGUARDS = { auto_mode: { enabled: true } };
+  const SAFEGUARD_RESULTS = [{ tool_use_id: "toolu_1", verdict: "allow" }];
+  const PASSTHROUGH_PAYLOAD = {
+    ...PAYLOAD,
+    anthropic_beta: ["future-capability-2026-10-01"],
+    safeguards: SAFEGUARDS,
+  };
+
+  test("invoke forwards unknown body fields and returns unknown response keys", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const captured: Record<string, unknown>[] = [];
+    vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          invoke: async (_modelId: string, body: Record<string, unknown>) => {
+            captured.push(body);
+            return {
+              id: "msg_bedrock_safeguards",
+              type: "message",
+              role: "assistant",
+              content: [{ type: "text", text: "ok" }],
+              model: "claude-sonnet-4-5",
+              stop_reason: "end_turn",
+              stop_sequence: null,
+              usage: { input_tokens: 5, output_tokens: 1 },
+              safeguard_results: SAFEGUARD_RESULTS,
+            };
+          },
+        }) as never,
+    );
+    const app = createFastifyApp();
+    await app.register(bedrockProxyRoutes);
+    const agent = await makeAgent({ name: "bedrock-invoke-passthrough" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const headers = {
+      ...HEADERS,
+      "x-archestra-virtual-key": await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: owner.id,
+      }),
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/bedrock/${agent.id}/model/${MODEL_ID}/invoke`,
+      headers,
+      payload: PASSTHROUGH_PAYLOAD,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(captured[0]).toMatchObject({
+      anthropic_beta: ["future-capability-2026-10-01"],
+      safeguards: SAFEGUARDS,
+    });
+    expect(response.json().safeguard_results).toEqual(SAFEGUARD_RESULTS);
+  });
+
+  test("invoke-with-response-stream relays the upstream's end-event keys", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const captured: Record<string, unknown>[] = [];
+    const events = anthropicStreamEvents().map((event) =>
+      (event as { type: string }).type === "message_delta"
+        ? { ...(event as object), safeguard_results: SAFEGUARD_RESULTS }
+        : event,
+    );
+    vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          invokeStream: async (
+            _modelId: string,
+            body: Record<string, unknown>,
+          ) => {
+            captured.push(body);
+            return asyncIterable(events);
+          },
+        }) as never,
+    );
+    const app = createFastifyApp();
+    await app.register(bedrockProxyRoutes);
+    const agent = await makeAgent({ name: "bedrock-stream-passthrough" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const headers = {
+      ...HEADERS,
+      "x-archestra-virtual-key": await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: owner.id,
+      }),
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/bedrock/${agent.id}/model/${MODEL_ID}/invoke-with-response-stream`,
+      headers,
+      payload: PASSTHROUGH_PAYLOAD,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(captured[0]).toMatchObject({ safeguards: SAFEGUARDS });
+    const messageDelta = decodeInvokeStreamPayload(response.rawPayload).find(
+      (event) => event.type === "message_delta",
+    ) as { safeguard_results?: unknown } | undefined;
+    expect(messageDelta?.safeguard_results).toEqual(SAFEGUARD_RESULTS);
   });
 });

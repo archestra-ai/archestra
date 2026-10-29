@@ -4,10 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("sonner");
 
 const captureException = vi.fn();
-vi.mock("@sentry/nextjs", () => ({
-  captureException: (...args: unknown[]) => captureException(...args),
+vi.mock("@/lib/error-reporting", () => ({
+  errorReporting: {
+    captureException: (...args: unknown[]) => captureException(...args),
+  },
 }));
 
+import { sessionConfirmation } from "@/lib/auth/session-confirmation";
 import { getApiErrorMessage, handleApiError, throwOnApiError } from "./api";
 
 describe("throwOnApiError", () => {
@@ -98,6 +101,7 @@ describe("handleApiError exception reporting", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
+    sessionConfirmation.set(true);
   });
 
   // The dynamic import of the reporting client resolves on the microtask queue.
@@ -116,6 +120,22 @@ describe("handleApiError exception reporting", () => {
     expect(captureException).not.toHaveBeenCalled();
     // Still surfaced to the user — it is expected, not hidden.
     expect(toast.error).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a 401 quiet until a signed-in session is confirmed", async () => {
+    // The optimistic shell of an expired cookie: the redirect is the answer.
+    sessionConfirmation.set(false);
+    handleApiError({
+      error: { message: "sign in", type: "api_authentication_error" },
+    });
+    // Anything else still reaches the user.
+    handleApiError({
+      error: { message: "forbidden", type: "api_authorization_error" },
+    });
+    await flush();
+
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalledWith("sign in", expect.anything());
   });
 
   it("reports a server-side failure", async () => {

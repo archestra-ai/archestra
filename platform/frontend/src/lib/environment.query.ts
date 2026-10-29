@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { resolveDefaultEnvironmentId } from "@/lib/resolve-default-environment";
 import { handleApiError, throwOnApiError } from "@/lib/utils/api";
@@ -39,6 +40,9 @@ const EMPTY_ENVIRONMENT_LIST: EnvironmentList = {
 };
 
 export function useEnvironments(enabled = true) {
+  const { data: canReadEnvironments } = useHasPermissions({
+    environment: ["read"],
+  });
   return useQuery({
     queryKey: environmentKeys.list(),
     queryFn: async () => {
@@ -46,7 +50,7 @@ export function useEnvironments(enabled = true) {
       throwOnApiError(error);
       return data ?? EMPTY_ENVIRONMENT_LIST;
     },
-    enabled,
+    enabled: enabled && !!canReadEnvironments,
     staleTime: 5 * 60 * 1000,
   });
 }

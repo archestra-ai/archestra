@@ -4,6 +4,8 @@ import {
   isBrowserMcpTool,
   LOOPBACK_HOST,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+  type ModelSelection,
+  SOURCE_HEADER,
   TimeInMs,
 } from "@archestra/shared";
 import type {
@@ -21,7 +23,10 @@ import {
   getSkillDelegationTools,
 } from "@/archestra-mcp-server";
 import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
-import { isServiceAccountUserId } from "@/auth/service-account-user-id";
+import {
+  isServiceAccountUserId,
+  serviceAccountIdFromUserId,
+} from "@/auth/service-account-user-id";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
@@ -31,6 +36,7 @@ import {
   type ChatToolContext,
   type McpGatewayToken,
 } from "@/clients/chat-tool-builder";
+import { internalCallHeader } from "@/clients/internal-call";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
@@ -41,12 +47,19 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
+  ServiceAccountModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
 } from "@/models";
 import { isAppaDelegatedRun } from "@/openappa/service";
+import type { SubagentBinding } from "@/openappa/subagent-binding";
+import {
+  type A2AOAuthExecution,
+  authorizeA2AOAuthExecution,
+  buildAgentMcpToolList,
+} from "@/routes/mcp-gateway/utils";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
@@ -81,8 +94,12 @@ export function createLoopbackGatewayTransport(
     fetch: loopbackGatewayFetch,
     requestInit: {
       headers: new Headers({
+        ...internalCallHeader(),
         Authorization: `Bearer ${authToken}`,
         Accept: "application/json, text/event-stream",
+        // Tells the gateway's call log this is the built-in chat, not an
+        // outside agent holding the same personal token.
+        [SOURCE_HEADER]: "chat",
       }),
     },
   });
@@ -241,12 +258,22 @@ function getCacheKey(
  * Generate the full cache key for tool cache
  * Includes the isolation key because browser tools need correct tab selection
  */
-function getToolCacheKey(
-  agentId: string,
-  userId: string,
-  isolationKey?: string,
-  delegationChain?: string,
-): `${typeof CacheKey.ChatMcpTools}-${string}` {
+function getToolCacheKey(params: {
+  agentId: string;
+  userId: string;
+  isolationKey?: string;
+  delegationChain?: string;
+  sessionId?: string;
+  parentLlm?: ModelSelection;
+}): `${typeof CacheKey.ChatMcpTools}-${string}` {
+  const {
+    agentId,
+    userId,
+    isolationKey,
+    delegationChain,
+    sessionId,
+    parentLlm,
+  } = params;
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
   if (isolationKey) parts.push(isolationKey);
@@ -254,6 +281,13 @@ function getToolCacheKey(
   // under one isolation key. Each depth needs its own entry: the tools close
   // over the chain, which the executor reads to detect delegation cycles.
   if (delegationChain) parts.push(delegationChain);
+  // The fork's advertised tiers depend on the model and key the run is on.
+  if (parentLlm) parts.push(`${parentLlm.modelId}/${parentLlm.apiKeyId ?? ""}`);
+  // The tools close over the session id too, and record it on every call they
+  // persist, so a run filed under another session must not reuse them. UI
+  // chat keys both by the conversation id, which leaves its key unchanged.
+  if (sessionId && sessionId !== isolationKey)
+    parts.push(`session=${sessionId}`);
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
@@ -280,147 +314,105 @@ export const __test = {
 };
 
 /**
- * Select the appropriate token for a user based on team overlap
- * Priority:
- * 1. Personal user token (always preferred - ensures userId is available for global catalog tools)
- * 2. Organization token (fallback for admins)
- * 3. Team token where user is a member AND team is assigned to profile
+ * Select the token the chat MCP client presents to the gateway:
+ * - a service account (`service-account:<id>`) gets no bearer value: its
+ *   tools are listed in-process (see {@link getChatMcpTools});
+ * - the headless "system" sentinel uses the organization token;
+ * - a person uses their personal token.
  *
  * @param agentId - The profile (agent) ID
  * @param userId - The user requesting access
- * @param actorTeamId - Set when a team token made the call; uses that team's token
  * @returns Token value and metadata, or null if no token available
  */
 export async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
   organizationId: string,
-  actorTeamId?: string,
 ): Promise<McpGatewayToken | null> {
-  if (actorTeamId) {
-    const teamToken = await TeamTokenModel.findTeamToken(actorTeamId);
-    if (teamToken) {
-      const tokenValue = await TeamTokenModel.getTokenValue(teamToken.id);
-      if (tokenValue) {
-        logger.info(
-          { agentId, actorTeamId, tokenId: teamToken.id },
-          "Using the requesting team's own token for chat MCP client",
-        );
-        return {
-          tokenValue,
-          tokenId: teamToken.id,
-          teamId: actorTeamId,
-          isOrganizationToken: false,
-        };
-      }
-    }
-  }
-
-  // Get user's team IDs and profile's team IDs (needed for fallback token selection)
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
-  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
-  const commonTeamIds = userTeamIds.filter((id) => profileTeamIds.includes(id));
-
-  // Synthetic principals ("system" for internal/public email security modes,
-  // "service-account:<id>" for service-account callers) have no users row, so
-  // they can never own a personal user token — attempting to create one fails
-  // on the user_id foreign key. They fall back to org/team tokens below.
-  const isSyntheticUser = userId === "system" || isServiceAccountUserId(userId);
-
-  // 1. Always try to get/create a personal user token first
-  // This ensures userId is available in the token for global catalog tools
-  if (!isSyntheticUser) {
-    // Ensure user has a token (creates one if missing)
-    const userToken = await UserTokenModel.ensureUserToken(
-      userId,
-      organizationId,
-    );
-    const tokenValue = await UserTokenModel.getTokenValue(userToken.id);
-    if (tokenValue) {
-      logger.info(
-        {
-          agentId,
-          userId,
-          tokenId: userToken.id,
-        },
-        "Using personal user token for chat MCP client",
+  // Synthetic principals have no users row, so they can never own a personal
+  // user token. A service account needs no bearer value at all: its tools are
+  // listed and run in-process as the account, with the same agent access
+  // check the gateway applies to its keys.
+  const serviceAccountId = serviceAccountIdFromUserId(userId);
+  const serviceAccount = serviceAccountId
+    ? await ServiceAccountModel.findAccount(serviceAccountId, organizationId)
+    : null;
+  if (serviceAccount) {
+    const canUseAgent =
+      !serviceAccount.disabled &&
+      (await AgentTeamModel.userHasAgentAccess({
+        userId,
+        agentId,
+        action: "use",
+        isAgentAdmin: false,
+      }));
+    if (!canUseAgent) {
+      logger.warn(
+        { agentId, serviceAccountId: serviceAccount.id },
+        "Service account is disabled or cannot use this agent - no tools for chat MCP client",
       );
-      return {
-        tokenValue,
-        tokenId: userToken.id,
-        teamId: null,
-        isOrganizationToken: false,
-        isUserToken: true,
-      };
+      return null;
     }
+    return {
+      tokenValue: null,
+      tokenId: userId,
+      teamId: serviceAccount.teamId,
+      isOrganizationToken: false,
+      serviceAccountId: serviceAccount.id,
+    };
+  }
+  if (isServiceAccountUserId(userId)) {
+    logger.warn(
+      { agentId, userId },
+      "Service account not found - no gateway token for chat MCP client",
+    );
+    return null;
+  }
+  if (userId === "system") {
+    const orgToken = (await TeamTokenModel.findAll(organizationId)).find(
+      (token) => token.isOrganizationToken,
+    );
+    const tokenValue = orgToken
+      ? await TeamTokenModel.getTokenValue(orgToken.id)
+      : null;
+    if (!orgToken || !tokenValue) return null;
+    logger.info(
+      { agentId, userId, tokenId: orgToken.id },
+      "Using organization token for chat MCP client (system principal)",
+    );
+    return {
+      tokenValue,
+      tokenId: orgToken.id,
+      teamId: null,
+      isOrganizationToken: true,
+    };
   }
 
-  // Get all team tokens for this organization
-  const tokens = await TeamTokenModel.findAll(organizationId);
-
-  // 2. Synthetic principals have no team memberships so they can never match a
-  //    team token. Fall back to the organization token to preserve tool access.
-  if (isSyntheticUser) {
-    const orgToken = tokens.find((t) => t.isOrganizationToken);
-    if (orgToken) {
-      const tokenValue = await TeamTokenModel.getTokenValue(orgToken.id);
-      if (tokenValue) {
-        logger.info(
-          {
-            agentId,
-            userId,
-            tokenId: orgToken.id,
-          },
-          "Using organization token for chat MCP client (fallback)",
-        );
-        return {
-          tokenValue,
-          tokenId: orgToken.id,
-          teamId: null,
-          isOrganizationToken: true,
-        };
-      }
-    }
-  }
-
-  // 3. Try to find a team token where user is in that team and profile is assigned to it
-  if (commonTeamIds.length > 0) {
-    for (const token of tokens) {
-      if (token.teamId && commonTeamIds.includes(token.teamId)) {
-        const tokenValue = await TeamTokenModel.getTokenValue(token.id);
-        if (tokenValue) {
-          logger.info(
-            {
-              agentId,
-              userId,
-              tokenId: token.id,
-              teamId: token.teamId,
-            },
-            "Selected team-scoped token for chat MCP client (fallback)",
-          );
-          return {
-            tokenValue,
-            tokenId: token.id,
-            teamId: token.teamId,
-            isOrganizationToken: false,
-          };
-        }
-      }
-    }
-  }
-
-  logger.warn(
-    {
-      agentId,
-      userId,
-      userTeamCount: userTeamIds.length,
-      profileTeamCount: profileTeamIds.length,
-      commonTeamCount: commonTeamIds.length,
-      tokenCount: tokens.length,
-    },
-    "No valid token found for user",
+  // A personal token carries the userId that global catalog tools need.
+  const userToken = await UserTokenModel.ensureUserToken(
+    userId,
+    organizationId,
   );
+  const userTokenValue = await UserTokenModel.getTokenValue(userToken.id);
+  if (userTokenValue) {
+    logger.info(
+      {
+        agentId,
+        userId,
+        tokenId: userToken.id,
+      },
+      "Using personal user token for chat MCP client",
+    );
+    return {
+      tokenValue: userTokenValue,
+      tokenId: userToken.id,
+      teamId: null,
+      isOrganizationToken: false,
+      isUserToken: true,
+    };
+  }
 
+  logger.warn({ agentId, userId }, "No valid token found for user");
   return null;
 }
 
@@ -541,7 +533,7 @@ export function closeChatMcpClient(
   }
 
   // Also clear tool cache for this conversation/execution
-  deleteToolCacheScope(getToolCacheKey(agentId, userId, isolationKey));
+  deleteToolCacheScope(getToolCacheKey({ agentId, userId, isolationKey }));
 }
 
 /**
@@ -650,6 +642,10 @@ export async function getChatMcpClient(
         { agentId, userId },
         "No valid token available for user - cannot connect to MCP Gateway",
       );
+      return null;
+    }
+    if (tokenResult.tokenValue === null) {
+      // In-process principals (service accounts) have no gateway session.
       return null;
     }
     tokenValue = tokenResult.tokenValue;
@@ -825,13 +821,14 @@ function shouldValidateCachedClient(cacheKey: string): boolean {
  * @returns Record of tool name to AI SDK Tool object
  */
 export async function getChatMcpTools({
+  oauthExecution,
   agentName,
   agentId,
   userId,
   organizationId,
-  actorTeamId,
   chatOpsBindingId,
   chatOpsThreadId,
+  chatOpsPinnedAgentId,
   enabledToolIds,
   conversationId,
   isolationKey,
@@ -841,7 +838,6 @@ export async function getChatMcpTools({
   abortSignal,
   elicitation,
   user,
-  blockOnApprovalRequired,
   scheduleTriggerRunId,
   hookRunCollector,
   kbChunksCollector,
@@ -851,17 +847,21 @@ export async function getChatMcpTools({
   suppressContentLogging,
   encryptedChatAudit,
   modelAcceptsImageToolResults,
+  appaSubagent,
+  parentLlm,
+  openappaReviewPause,
 }: {
+  oauthExecution?: A2AOAuthExecution;
   agentName: string;
   agentId: string;
   userId: string;
   organizationId: string;
-  /** Set when a team token made the call (userId is then "system") */
-  actorTeamId?: string;
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
+  /** Set when the ChatOps conversation is with a Slack bot pinned to this agent */
+  chatOpsPinnedAgentId?: string;
   enabledToolIds?: string[];
   /**
    * Id of a persisted `conversations` row — tools may persist it as a foreign
@@ -887,8 +887,6 @@ export async function getChatMcpTools({
   elicitation?: ChatMcpElicitationBridge;
   /** User identity for OTEL span attributes */
   user?: { id: string; email?: string; name?: string };
-  /** Block tool execution when policy is require_approval (for A2A/autonomous contexts where no one can approve) */
-  blockOnApprovalRequired?: boolean;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
@@ -933,15 +931,32 @@ export async function getChatMcpTools({
    * Omitted by headless/legacy callers to preserve their current behavior.
    */
   modelAcceptsImageToolResults?: boolean;
+  /**
+   * The child trajectory an OpenAPPA spawn bound this delegated run to. The
+   * run then governs its own calls, remedies included. Never cached: it is
+   * one spawn's.
+   */
+  appaSubagent?: SubagentBinding;
+  /** The model and key this run is on, which a fork starts from. */
+  parentLlm?: ModelSelection;
+  /**
+   * Someone answers OpenAPPA reviews for this run (a Slack reviewer or the
+   * A2A caller): a reviewed `execute_remedy_plan` call pauses the run for
+   * approval. Never cached: other runs on the same scope may have no one.
+   */
+  openappaReviewPause?: boolean;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
-  const toolCacheKey = getToolCacheKey(
+  const toolCacheKey = getToolCacheKey({
     agentId,
     userId,
-    scopeKey,
+    isolationKey: scopeKey,
     delegationChain,
-  );
-  const shouldUseToolCache = !abortSignal;
+    sessionId,
+    parentLlm,
+  });
+  const shouldUseToolCache =
+    !oauthExecution && !abortSignal && !appaSubagent && !openappaReviewPause;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
@@ -959,6 +974,7 @@ export async function getChatMcpTools({
     cached.context.repeatTracker = repeatTracker ?? new ToolCallRepeatTracker();
     cached.context.modelAcceptsImageToolResults =
       modelAcceptsImageToolResults ?? true;
+    cached.context.parentLlm = parentLlm;
     logger.info(
       {
         agentId,
@@ -985,12 +1001,17 @@ export async function getChatMcpTools({
   );
 
   // Get token for direct tool execution (bypasses HTTP for security)
-  const mcpGwToken = await selectMCPGatewayToken(
-    agentId,
-    userId,
-    organizationId,
-    actorTeamId,
-  );
+  const mcpGwToken: McpGatewayToken | null = oauthExecution
+    ? {
+        ...(await authorizeA2AOAuthExecution({
+          agentId,
+          organizationId,
+          execution: oauthExecution,
+        })),
+        tokenValue: null,
+        oauthExecution,
+      }
+    : await selectMCPGatewayToken(agentId, userId, organizationId);
   if (!mcpGwToken) {
     logger.warn(
       { agentId, userId },
@@ -999,18 +1020,22 @@ export async function getChatMcpTools({
     throw new McpToolsUnavailableError("no gateway token for user");
   }
 
-  // Still use MCP client for listing tools (via MCP Gateway)
+  // List tools via the MCP Gateway, except for a service account, whose list
+  // is built in-process (it has no bearer value to present).
   // Pass the scope key for per-conversation/per-execution browser isolation.
   // Forward the already-resolved token to avoid a duplicate selectMCPGatewayToken call.
-  const client = await getChatMcpClient(
-    agentId,
-    userId,
-    organizationId,
-    scopeKey,
-    mcpGwToken.tokenValue,
-  );
+  const client =
+    mcpGwToken.tokenValue === null
+      ? null
+      : await getChatMcpClient(
+          agentId,
+          userId,
+          organizationId,
+          scopeKey,
+          mcpGwToken.tokenValue,
+        );
 
-  if (!client) {
+  if (mcpGwToken.tokenValue !== null && !client) {
     logger.warn(
       { agentId, userId },
       "No MCP client available - failing the turn instead of streaming with empty tools",
@@ -1019,15 +1044,23 @@ export async function getChatMcpTools({
   }
 
   try {
-    logger.info({ agentId, userId }, "MCP client available, listing tools...");
-    const { tools: mcpTools } = await client.listTools();
+    logger.info({ agentId, userId }, "Listing MCP tools...");
+    const mcpTools = client
+      ? (await client.listTools()).tools
+      : await listToolsInProcess({
+          agentId,
+          organizationId,
+          serviceAccountId: mcpGwToken.serviceAccountId,
+        });
 
     // Filter out agent skills and app-only tools.
     // Tools with _meta.ui.visibility that does not include "model" are intended
     // for app-iframe use only and must not appear in the LLM's tool list.
     // Default (no visibility field) = visible to both model and app.
-    // A2A-delegated runs cannot execute OpenAPPA tools, so do not offer them.
-    const delegatedRun = isAppaDelegatedRun(agentId, delegationChain);
+    // A2A-delegated runs cannot execute OpenAPPA tools, so do not offer them,
+    // unless a spawn bound the run to a child trajectory of its own.
+    const delegatedRun =
+      !appaSubagent && isAppaDelegatedRun(agentId, delegationChain);
     const filteredMcpTools = mcpTools.filter((tool) => {
       if (isAgentTool(tool.name)) return false;
       if (
@@ -1055,14 +1088,11 @@ export async function getChatMcpTools({
       "Fetched tools from MCP Gateway for agent/user",
     );
 
-    // Fetch the agent (for its trust config) and the agent's + user's teams
-    // (for trace span attributes).
-    const [agent, teams, userTeams] = await Promise.all([
-      AgentModel.findById(agentId),
+    // The agent's + user's teams, for trace span attributes.
+    const [teams, userTeams] = await Promise.all([
       AgentTeamModel.getTeamLabelInfoForAgent(agentId),
       TeamModel.getTeamLabelInfoForUser({ userId, organizationId }),
     ]);
-    const considerContextUntrusted = agent?.considerContextUntrusted ?? false;
 
     // Convert MCP tools to AI SDK Tool format
     const toolContext: ChatToolContext = {
@@ -1075,28 +1105,30 @@ export async function getChatMcpTools({
       openedAppId,
       chatOpsBindingId,
       chatOpsThreadId,
+      chatOpsPinnedAgentId,
       sessionId,
       delegationChain,
       scheduleTriggerRunId,
       abortSignal,
       elicitation,
       user,
-      blockOnApprovalRequired,
       hookRunCollector,
       kbChunksCollector,
       subagentToolStream,
       taskBridge,
       mcpGwToken,
-      considerContextUntrusted,
       suppressContentLogging,
       encryptedChatAudit,
       modelAcceptsImageToolResults: modelAcceptsImageToolResults ?? true,
+      openappaReviewPause,
       teams,
       userTeams,
       // One tracker per run: the caller's instance when it owns a stop policy,
       // otherwise a fresh one. On a cache hit it is rebound (see above) so
       // repeat counts never carry across runs.
       repeatTracker: repeatTracker ?? new ToolCallRepeatTracker(),
+      appaSubagent,
+      parentLlm,
     };
     const aiTools: Record<string, Tool> = {};
 
@@ -1131,6 +1163,9 @@ export async function getChatMcpTools({
             organizationId,
             userId,
             skipAccessCheck: userId === "system",
+            parentLlm,
+            delegationChain,
+            oauthExecution,
           }),
           getSkillDelegationTools({ agentId, organizationId, userId }),
         ]);
@@ -1167,6 +1202,21 @@ export async function getChatMcpTools({
       }
     }
 
+    if (oauthExecution) {
+      for (const tool of Object.values(aiTools)) {
+        const execute = tool.execute;
+        if (!execute) continue;
+        tool.execute = async (...args) => {
+          await authorizeA2AOAuthExecution({
+            agentId,
+            organizationId,
+            execution: oauthExecution,
+          });
+          return execute(...args);
+        };
+      }
+    }
+
     // Cache tools in-memory (LRU eviction and TTL handled by LRUCacheManager)
     if (shouldUseToolCache) {
       toolCache.set(toolCacheKey, { tools: aiTools, context: toolContext });
@@ -1183,17 +1233,19 @@ export async function getChatMcpTools({
     // turn instead of reusing the same failing session until the idle TTL. The
     // detail stays in the log above; the thrown message is kept generic so raw
     // gateway error text never reaches the API client.
-    const cacheKey = getCacheKey(agentId, userId, scopeKey);
-    try {
-      await client.close();
-    } catch (closeError) {
-      logger.warn(
-        { agentId, userId, closeError },
-        "Error closing MCP client after tool fetch failure (non-fatal)",
-      );
+    if (client) {
+      const cacheKey = getCacheKey(agentId, userId, scopeKey);
+      try {
+        await client.close();
+      } catch (closeError) {
+        logger.warn(
+          { agentId, userId, closeError },
+          "Error closing MCP client after tool fetch failure (non-fatal)",
+        );
+      }
+      clientCache.delete(cacheKey);
+      clientLastValidatedAt.delete(cacheKey);
     }
-    clientCache.delete(cacheKey);
-    clientLastValidatedAt.delete(cacheKey);
     throw new McpToolsUnavailableError("tool listing failed");
   }
 }
@@ -1389,4 +1441,25 @@ function deleteToolCacheScope(toolCacheKey: string): void {
   // The separator keeps the match on a key boundary: isolation key `exec-1`
   // must not reclaim `exec-10`'s entries.
   toolCache.deleteByPrefix(`${toolCacheKey}:`);
+}
+
+/**
+ * The tools/list a service account would get from the gateway, built the
+ * same way without a loopback request.
+ */
+async function listToolsInProcess(params: {
+  agentId: string;
+  organizationId: string;
+  serviceAccountId: string | undefined;
+}) {
+  const agent = await AgentModel.findGatewayAgentById(params.agentId);
+  if (!agent) throw new Error(`Agent not found: ${params.agentId}`);
+  const { tools } = await buildAgentMcpToolList({
+    agent,
+    tokenAuth: {
+      organizationId: params.organizationId,
+      serviceAccountId: params.serviceAccountId,
+    },
+  });
+  return tools;
 }

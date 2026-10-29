@@ -1,10 +1,23 @@
 import {
   type archestraApiTypes,
   type ChatProvider,
+  EMBEDDING_ONLY_PROVIDERS,
+  type EmbeddingOnlyProvider,
   isIntegrationHidden,
   providerSupportsChat,
+  type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
+import { QueryClientContext } from "@tanstack/react-query";
+import { useContext, useMemo } from "react";
+import config, { getConfiguredExternalProxyUrls } from "@/lib/config/config";
+import { documentOriginQueryKey } from "@/lib/connection-approval-query-keys";
+
+/** A provider with its own LLM proxy endpoint: chat providers plus Jev. */
+export type ProxyEndpointProvider = Exclude<
+  SupportedProvider,
+  EmbeddingOnlyProvider
+>;
 
 export type ConnectionBaseUrl = NonNullable<
   archestraApiTypes.GetOrganizationResponses["200"]["connectionBaseUrls"]
@@ -57,6 +70,22 @@ export function getConnectableProviders(
       // Embeddings-only providers serve no chat endpoint to connect a client
       // to, so they are never offered here however the overrides are set.
       providerSupportsChat(provider) &&
+      !isIntegrationHidden(overrides, provider),
+  );
+}
+
+/**
+ * The providers the LLM Proxy page lists endpoints for: the connectable chat
+ * providers plus decisions-only ones like Jev, which serve a proxy endpoint
+ * but no chat. Embeddings-only providers have no proxy endpoint at all.
+ */
+export function getProxyEndpointProviders(
+  organization: Parameters<typeof getConnectableProviders>[0],
+): ProxyEndpointProvider[] {
+  const overrides = organization?.modelProviderOverrides ?? null;
+  return SupportedProviders.filter(
+    (provider): provider is ProxyEndpointProvider =>
+      !EMBEDDING_ONLY_PROVIDERS.has(provider) &&
       !isIntegrationHidden(overrides, provider),
   );
 }
@@ -119,4 +148,49 @@ export function resolveEffectiveId(params: {
     firstAvailable ??
     null
   );
+}
+
+/**
+ * The connection base URL for the whole page: the admin default, then the
+ * first URL the deployment offers. Users don't pick one; admins can hide env
+ * URLs, and those never show up here.
+ */
+export function useConnectionBaseUrl(
+  metadata: readonly ConnectionBaseUrl[] | null | undefined,
+): string {
+  // On the server there is no window: a seeded document carries its origin,
+  // so the server render picks the URL the browser picks.
+  const seededOrigin = useContext(QueryClientContext)?.getQueryData<string>(
+    documentOriginQueryKey,
+  );
+  return useMemo(() => {
+    const configured = getConfiguredExternalProxyUrls();
+    const origin =
+      typeof window !== "undefined" ? window.location.origin : seededOrigin;
+    return resolveConnectionBaseUrl({
+      externalProxyUrls:
+        configured.length > 0 ? configured : origin ? [`${origin}/v1`] : [],
+      internalProxyUrl: config.api.internalProxyUrl,
+      metadata,
+    });
+  }, [metadata, seededOrigin]);
+}
+
+/**
+ * {@link useConnectionBaseUrl} for given URLs: the server seed passes the
+ * document's own origin where the browser passes `window.location.origin`.
+ */
+export function resolveConnectionBaseUrl(params: {
+  externalProxyUrls: readonly string[];
+  internalProxyUrl: string;
+  metadata: readonly ConnectionBaseUrl[] | null | undefined;
+}): string {
+  const baseUrls = resolveCandidateBaseUrls({
+    ...params,
+    metadata: params.metadata ?? null,
+  });
+  const adminDefault = resolveAdminDefaultBaseUrl(params.metadata ?? null);
+  return adminDefault && baseUrls.includes(adminDefault)
+    ? adminDefault
+    : baseUrls[0];
 }

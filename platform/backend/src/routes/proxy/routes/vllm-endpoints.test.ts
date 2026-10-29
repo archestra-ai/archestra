@@ -29,10 +29,13 @@ import {
   expect,
   test,
 } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
 import type { Agent } from "@/types";
 import { vllmAdapterFactory } from "../adapters";
 import vllmProxyRoutes from "./vllm";
+
+setupTestCacheManager();
 
 const ENDPOINTS = [
   { name: "glm", modelId: "glm-5.3" },

@@ -17,6 +17,7 @@ import { resolveGithubPatToken } from "@/skills/github-app-token";
 import { expect, test } from "@/test";
 import { useMswServer as setupMswServer } from "@/test/msw";
 import {
+  preflightMcpCredentials,
   resolveCredentialValue,
   resolveMcpCredentialValues,
 } from "./credentials";
@@ -125,7 +126,7 @@ test("reuses one personal value across runtime and MCP without sharing another u
       environment,
       installationScope: "personal",
     }),
-  ).rejects.toThrow("Connect the credential");
+  ).rejects.toThrow(/This server needs .*"Repository" credential/);
   await expect(
     resolveMcpCredentialValues({
       ...owner,
@@ -304,4 +305,85 @@ test("connection status remains scoped to the requested organization", async ({
       userId: user.id,
     }),
   ).toEqual([]);
+});
+
+test("says before install which credential stops a member, and why", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const organization = await makeOrganization();
+  const admin = await makeUser();
+  await makeMember(admin.id, organization.id, { role: "admin" });
+  const member = await makeUser();
+  await makeMember(member.id, organization.id, { role: "member" });
+  const define = (key: string, initialGrants?: []) =>
+    createRuntimeCredentialDefinition({
+      organizationId: organization.id,
+      userId: admin.id,
+      definition: {
+        key,
+        name: key === "shared" ? "Shared key" : "Restricted key",
+        description: "",
+        icon: null,
+        allowPersonal: true,
+        allowOrganization: false,
+      },
+      initialGrants,
+    });
+  // Shared with the organization, as a new credential is by default.
+  await define("shared");
+  // Kept to admins: no grant reaches a member.
+  await define("restricted", []);
+  const environment = ["shared", "restricted"].map((credentialId) => ({
+    key: credentialId.toUpperCase(),
+    type: "secret",
+    credentialId,
+    credentialScope: "personal" as const,
+    promptOnInstallation: false,
+    required: true,
+  }));
+  const params = { organizationId: organization.id, environment };
+
+  expect(
+    await preflightMcpCredentials({
+      ...params,
+      userId: member.id,
+      installationScope: "personal",
+    }),
+  ).toEqual([
+    {
+      envKey: "SHARED",
+      credentialId: "shared",
+      credentialName: "Shared key",
+      reason: "not_connected",
+    },
+    {
+      envKey: "RESTRICTED",
+      credentialId: "restricted",
+      credentialName: "Restricted key",
+      reason: "no_access",
+    },
+  ]);
+  // Installing for a team cannot carry anyone's personal value.
+  expect(
+    (
+      await preflightMcpCredentials({
+        ...params,
+        userId: member.id,
+        installationScope: "team",
+      })
+    ).map((blocker) => blocker.reason),
+  ).toEqual(["personal_only", "personal_only"]);
+  // The refusal at install says the same thing in words.
+  await expect(
+    resolveMcpCredentialValues({
+      ...params,
+      environment: [environment[1]],
+      userId: member.id,
+      installationScope: "personal",
+    }),
+  ).rejects.toThrow(
+    'This server needs the "Restricted key" credential, and you don\'t have access to it. Ask an admin to share it with you.',
+  );
 });

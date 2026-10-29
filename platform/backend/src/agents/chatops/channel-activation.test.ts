@@ -586,6 +586,36 @@ describe("isChannelAnswerAllEnabled", () => {
     expect(await isChannelAnswerAllEnabled(CHANNEL_PARAMS)).toBe(true);
     expect(ChatOpsChannelBindingModel.findByChannel).toHaveBeenCalledTimes(2);
   });
+
+  test("only one bot answers everything in a channel shared by the router and agent bots", async () => {
+    vi.mocked(ChatOpsChannelBindingModel.findByChannel).mockResolvedValue({
+      answerAllMessages: true,
+      agentId: "agent-owner",
+    } as never);
+    const params = { ...CHANNEL_PARAMS, channelId: "C-shared" };
+
+    // The owning agent's own bot answers everything; another agent's does not.
+    expect(
+      await isChannelAnswerAllEnabled({ ...params, agentId: "agent-owner" }),
+    ).toBe(true);
+    expect(
+      await isChannelAnswerAllEnabled({ ...params, agentId: "agent-other" }),
+    ).toBe(false);
+    // The router leaves it to that bot...
+    expect(
+      await isChannelAnswerAllEnabled({
+        ...params,
+        agentsWithOwnBot: new Set(["agent-owner", "agent-other"]),
+      }),
+    ).toBe(false);
+    // ...and answers everything itself when the owning agent has no bot.
+    expect(
+      await isChannelAnswerAllEnabled({
+        ...params,
+        agentsWithOwnBot: new Set(["agent-other"]),
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("un-mentioned channel traffic markers", () => {

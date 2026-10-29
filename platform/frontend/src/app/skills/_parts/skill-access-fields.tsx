@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef } from "react";
+import { AdvancedSection } from "@/components/advanced-section";
 import {
   ProfileLabels,
   type ProfileLabelsRef,
@@ -30,19 +31,29 @@ export const SkillAccessFields = forwardRef<
           onChange={(initialGrants) => onChange({ initialGrants })}
         />
       )}
-      <EnvironmentSelector
-        mode="multiple"
-        value={draft.environmentIds}
-        onChange={(environmentIds) => onChange({ environmentIds })}
-        resource="skill"
-        hideWhenOnlyDefault
-        helpText="Restrict this skill to specific environments. Leave empty to make it available to agents in every environment."
-      />
-      <ProfileLabels
-        ref={ref}
-        labels={draft.labels}
-        onLabelsChange={(labels) => onChange({ labels })}
-      />
+      {/* Environments and labels are refinements: they wait under Advanced
+          unless already set. */}
+      <AdvancedSection
+        defaultOpen={draft.labels.length > 0 || draft.environmentIds.length > 0}
+        // Alone in its section on an edit: the section already draws the rule.
+        className={creating ? undefined : "border-t-0 pt-0"}
+      >
+        <div className="flex flex-col gap-4">
+          <EnvironmentSelector
+            mode="multiple"
+            value={draft.environmentIds}
+            onChange={(environmentIds) => onChange({ environmentIds })}
+            resource="skill"
+            hideWhenOnlyDefault
+            helpText="Restrict this skill to specific environments. Leave empty to make it available to agents in every environment."
+          />
+          <ProfileLabels
+            ref={ref}
+            labels={draft.labels}
+            onLabelsChange={(labels) => onChange({ labels })}
+          />
+        </div>
+      </AdvancedSection>
     </div>
   );
 });

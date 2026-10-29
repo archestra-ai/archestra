@@ -14,14 +14,14 @@ export type DefaultAgentSource = "me" | "org";
 
 const COPY: Record<DefaultAgentSource, { tag: string; tooltip: string }> = {
   me: {
-    tag: "default (me)",
+    tag: "Your default",
     tooltip:
-      "The agent you pinned — preselected when you start a new chat, ahead of the organization default.",
+      "Your new chats start on this agent. You chose it with Set as default, ahead of the organization's default.",
   },
   org: {
-    tag: "default (org)",
+    tag: "Org default",
     tooltip:
-      "Your organization's default agent — preselected because you have not pinned one of your own.",
+      "Your new chats start on this agent because you haven't set a default of your own.",
   },
 };
 
@@ -39,12 +39,12 @@ const COPY: Record<DefaultAgentSource, { tag: string; tooltip: string }> = {
  * - WHY is identity, not precedence: the organization's default reads as the
  *   organization's whether or not this member also pinned it. Someone who
  *   pins the agent their organization already defaults to has not made it
- *   personally theirs, and a row calling that "default (me)" invites them to
+ *   personally theirs, and a row calling that "Your default" invites them to
  *   unpin something that would go on starting their chats regardless.
  *
  * A pin on the organization default is kept, not discarded — it is what keeps
  * that agent theirs if an admin later points the organization elsewhere, and
- * the row starts reading `default (me)` at exactly that moment.
+ * the row starts reading `Your default` at exactly that moment.
  */
 export function resolveDefaultAgentBadge(params: {
   personalDefaultAgentId?: string | null;
@@ -63,7 +63,7 @@ export function resolveDefaultAgentBadge(params: {
 /**
  * Whether a row offers to pin/unpin the viewer's default.
  *
- * Every chat agent does, except the one reading `default (org)`: that row
+ * Every chat agent does, except the one reading `Org default`: that row
  * already says it starts their chats, so a pin there offers nothing they can
  * see, and an unpin would take away nothing — the organization default goes
  * on applying either way. The action appears the moment that stops being

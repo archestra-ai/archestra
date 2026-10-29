@@ -1,6 +1,12 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, FileText, Github } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  FileText,
+  GitBranch,
+  Github,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
@@ -47,7 +53,7 @@ const CREATE_STEPS: Array<{ id: CreateStep; title: string }> = [
 ];
 
 const STEP_DESCRIPTIONS: Record<CreateStep, string> = {
-  source: "Import from a GitHub repo or start from a blank template.",
+  source: "Import from GitHub or GitLab, or start blank.",
   // The whole skill is on one page, so the sentence names the whole of it —
   // and the skill's own page says the same thing over the same form.
   configure:
@@ -128,7 +134,10 @@ function NewSkillWizard() {
         fileCount: skill.fileCount,
       },
     });
-  const goToSkills = () => router.push("/skills");
+  const goToSkills = (skillIds: string[]) => {
+    const params = new URLSearchParams({ imported: skillIds.join(",") });
+    router.push(`/skills?${params.toString()}`);
+  };
   const goToConfigureStep = () => setStep("configure");
 
   const catalogSearch = useSearchSkillCatalog(search);
@@ -174,9 +183,9 @@ function NewSkillWizard() {
                 <div className="mx-auto max-w-3xl space-y-8">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <CatalogSourceCard
-                      icon={<Github className="size-5" />}
-                      title="Custom GitHub URL"
-                      description="Paste any repository with SKILL.md directories."
+                      icon={<GitBranch className="size-5" />}
+                      title="Git repository"
+                      description="GitHub or GitLab, public or private."
                       onClick={openImport}
                     />
                     <CatalogSourceCard

@@ -8,7 +8,8 @@ export type NavDotKey =
   | "nav:apps"
   | "nav:connect"
   | "nav:model-providers"
-  | "nav:mcp-registry";
+  | "nav:mcp-registry"
+  | "nav:guardrails";
 
 export interface DottedNavItem {
   key: NavDotKey;
@@ -36,6 +37,7 @@ export const DOTTED_NAV_ITEMS: DottedNavItem[] = [
     mode: "studio",
     urlPrefixes: ["/mcp/registry"],
   },
+  { key: "nav:guardrails", mode: "studio", urlPrefixes: ["/openappa"] },
 ];
 
 /** The dot target the given pathname belongs to, if any. */

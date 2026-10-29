@@ -1,0 +1,1 @@
+ALTER TABLE "openappa_effective_policies" ADD COLUMN "served" jsonb;

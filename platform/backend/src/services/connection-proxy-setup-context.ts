@@ -7,6 +7,10 @@ const SIGNING_DOMAIN = "archestra-connection-proxy-setup-v1:";
 const PATH_PREFIX = "/v1/connection-setup/";
 const MAX_TOKEN_LENGTH = 2048;
 const SAFE_TOKEN = /^cps1_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+const REFERENCE_PREFIX = "csr1_";
+const REFERENCE_DOMAIN = "archestra-connection-setup-reference-v1:";
+// 132 bits of the HMAC: enough that no other text matches by chance.
+const REFERENCE_LENGTH = 22;
 
 interface ProxySetupClaims {
   aud: "connection-proxy-setup";
@@ -67,12 +71,62 @@ export function issueConnectionProxySetupContext(params: IssueParams): string {
   return token;
 }
 
-/** True only for this org, presented key, proxy, secret, and exact window. */
-export function verifyConnectionProxySetupContext(
+/**
+ * Verified setup scope and expiry for this org, presented key, proxy,
+ * secret, and exact window. Undefined when any check fails. Does not touch
+ * the database.
+ */
+export function readVerifiedConnectionProxySetup(
   params: VerifyParams,
-): boolean {
+): { setupId: string; organizationId: string; expiresAt: number } | undefined {
   try {
-    return claimsMatch(params);
+    return verifiedScope(params);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The setup reference the installer prints at its end. The agent that runs
+ * the installer reads it in its own conversation, so it marks the one
+ * conversation the setup context exempts. It is derived from the setup id with
+ * the server secret: nothing on the client, the setup URL included, yields
+ * it. It grants nothing on its own.
+ */
+export function connectionSetupReference(params: {
+  setupId: string;
+  secret: string | undefined;
+}): string {
+  if (!params.secret) {
+    throw new Error("Connection proxy setup signing key is missing");
+  }
+  const digest = createHmac("sha256", params.secret)
+    .update(REFERENCE_DOMAIN)
+    .update(params.setupId)
+    .digest("base64url");
+  return `${REFERENCE_PREFIX}${digest.slice(0, REFERENCE_LENGTH)}`;
+}
+
+/**
+ * True when the body holds the setup reference of the setup the context
+ * names. A session started after the setup has no such text, so the setup
+ * URL in its settings exempts nothing. Holding the reference does not by
+ * itself exempt the request. Call only for a context that
+ * `readVerifiedConnectionProxySetup` accepted.
+ */
+export function carriesConnectionSetupReference(params: {
+  token: string;
+  requestBody: unknown;
+  secret: string | undefined;
+}): boolean {
+  try {
+    const setupId = setupIdOf(params.token);
+    if (!setupId || !params.secret) return false;
+    const reference = connectionSetupReference({
+      setupId,
+      secret: params.secret,
+    });
+    return JSON.stringify(params.requestBody ?? null).includes(reference);
   } catch {
     return false;
   }
@@ -101,46 +155,63 @@ export function connectionProxySetupContext(
 
 const capabilities = new WeakMap<IncomingMessage, string>();
 
-function claimsMatch(params: VerifyParams): boolean {
+function verifiedScope(
+  params: VerifyParams,
+): { setupId: string; organizationId: string; expiresAt: number } | undefined {
   if (
     !params.secret ||
     !hasCompleteScope(params) ||
     !params.token.startsWith(PREFIX) ||
     params.token.length > MAX_TOKEN_LENGTH
   ) {
-    return false;
+    return undefined;
   }
   const parts = params.token.slice(PREFIX.length).split(".");
-  if (parts.length !== 2) return false;
+  if (parts.length !== 2) return undefined;
   const [payload, encodedSignature] = parts;
-  if (!payload || !encodedSignature) return false;
+  if (!payload || !encodedSignature) return undefined;
   const received = decodeCanonicalBase64Url(encodedSignature);
   const payloadBytes = decodeCanonicalBase64Url(payload);
-  if (!received || !payloadBytes) return false;
+  if (!received || !payloadBytes) return undefined;
   const expected = signature(payload, params.secret);
   if (
     received.length !== expected.length ||
     !timingSafeEqual(received, expected)
   ) {
-    return false;
+    return undefined;
   }
   const parsed = JSON.parse(payloadBytes.toString("utf8")) as unknown;
-  if (!isRecord(parsed)) return false;
+  if (!isRecord(parsed)) return undefined;
   const now = Date.now();
   const issuedAt = readInteger(parsed, "issuedAt");
   const expiresAt = readInteger(parsed, "expiresAt");
-  return (
-    parsed.aud === "connection-proxy-setup" &&
-    readRequiredString(parsed, "organizationId") === params.organizationId &&
-    readRequiredString(parsed, "virtualApiKeyId") === params.virtualApiKeyId &&
-    readRequiredString(parsed, "proxyAgentId") === params.proxyAgentId &&
-    readRequiredString(parsed, "setupId") !== undefined &&
-    issuedAt !== undefined &&
-    expiresAt !== undefined &&
-    issuedAt <= now &&
-    expiresAt > now &&
-    expiresAt - issuedAt === CONNECTION_SETUP_WINDOW_MS
-  );
+  const setupId = readRequiredString(parsed, "setupId");
+  const organizationId = readRequiredString(parsed, "organizationId");
+  if (
+    parsed.aud !== "connection-proxy-setup" ||
+    organizationId !== params.organizationId ||
+    readRequiredString(parsed, "virtualApiKeyId") !== params.virtualApiKeyId ||
+    readRequiredString(parsed, "proxyAgentId") !== params.proxyAgentId ||
+    setupId === undefined ||
+    organizationId === undefined ||
+    issuedAt === undefined ||
+    expiresAt === undefined ||
+    issuedAt > now ||
+    expiresAt <= now ||
+    expiresAt - issuedAt !== CONNECTION_SETUP_WINDOW_MS
+  ) {
+    return undefined;
+  }
+  return { setupId, organizationId, expiresAt };
+}
+
+function setupIdOf(token: string): string | undefined {
+  if (!token.startsWith(PREFIX)) return undefined;
+  const [payload] = token.slice(PREFIX.length).split(".");
+  const bytes = payload ? decodeCanonicalBase64Url(payload) : null;
+  if (!bytes) return undefined;
+  const parsed = JSON.parse(bytes.toString("utf8")) as unknown;
+  return isRecord(parsed) ? readRequiredString(parsed, "setupId") : undefined;
 }
 
 function hasCompleteScope(params: {

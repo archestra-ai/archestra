@@ -118,7 +118,9 @@ export async function getAgentActivationSkills(
 ): Promise<AgentActivationSkillsResponse> {
   if (!params.enabled) return { enabled: false, skills: [] };
 
-  const skills = (await listAvailableAgentSkills(params))
+  const skills = (
+    await listAvailableAgentSkills({ ...params, includeContent: false })
+  )
     .map(toAgentActivationSkill)
     .sort(
       (left, right) =>

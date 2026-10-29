@@ -5,6 +5,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { MemberModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
+import TeamModel from "@/models/team";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -88,6 +89,48 @@ describe("team routes", () => {
       payload: { roles: ["admin"] },
     });
     expect(denied.statusCode).toBe(403);
+  });
+
+  test("checks a team's organization without loading its members", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, adminUser.id);
+    const doomed = await makeTeam(organizationId, adminUser.id);
+    const loadMembers = vi.spyOn(TeamModel, "getTeamMembers");
+
+    const update = await app.inject({
+      method: "PUT",
+      url: `/api/teams/${team.id}`,
+      payload: { name: "Renamed team" },
+    });
+    expect(update.statusCode, update.body).toBe(200);
+    // Only the updated team in the response lists its members.
+    expect(loadMembers).toHaveBeenCalledTimes(1);
+    loadMembers.mockClear();
+
+    const added = await app.inject({
+      method: "POST",
+      url: `/api/teams/${team.id}/external-groups`,
+      payload: { groupIdentifier: "engineering" },
+    });
+    expect(added.statusCode, added.body).toBe(200);
+    const groups = await app.inject({
+      method: "GET",
+      url: `/api/teams/${team.id}/external-groups`,
+    });
+    expect(groups.statusCode, groups.body).toBe(200);
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/api/teams/${team.id}/external-groups/${added.json().id}`,
+    });
+    expect(removed.statusCode, removed.body).toBe(200);
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/teams/${doomed.id}`,
+    });
+    expect(deleted.statusCode, deleted.body).toBe(200);
+
+    expect(loadMembers).not.toHaveBeenCalled();
   });
 
   describe("PUT /api/teams/:id", () => {

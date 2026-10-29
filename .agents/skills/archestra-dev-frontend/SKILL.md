@@ -21,6 +21,10 @@ pnpm test
 pnpm knip   # flags unused exports; part of frontend check:ci
 ```
 
+## File and folder naming
+
+`platform/frontend/AGENTS.md`, "Conventions", holds the table: `_parts/` for route-private folders, `use-<thing>.ts` hooks beside their feature, kebab-case names, and the closed list of dot suffixes. Biome enforces it, so a misnamed file fails `pnpm lint`.
+
 ## Data fetching
 
 - Use TanStack Query for data fetching.
@@ -55,7 +59,7 @@ pnpm knip   # flags unused exports; part of frontend check:ci
 
 ## Buttons
 
-Never use a raw `<button>`; use `Button` with a standard size. `biome-plugins/no-raw-button.grit` fails the build on a raw `<button>` outside `components/ui/`, and its diagnostics cannot be suppressed.
+Never use a raw `<button>`; use `Button` with a standard size. `tools/biome-plugins/no-raw-button.grit` fails the build on a raw `<button>` outside `components/ui/`, and its diagnostics cannot be suppressed.
 
 Pick the size by where the button sits:
 
@@ -108,7 +112,7 @@ when a palette moves.
 
 Chrome page-translate re-parents bare text nodes into `<font>` wrappers. React still holds the original nodes, so deleting one — or inserting an element before it — throws `NotFoundError` and crashes the page (facebook/react#11538, no upstream fix). Never let React add, remove, or replace a **bare** text node: wrap conditional text in an element so only elements move.
 
-`biome-plugins/no-conditional-bare-jsx-text.grit` fails the build on the shapes below, and its diagnostics cannot be suppressed with `biome-ignore` — write them wrapped in the first place:
+`tools/biome-plugins/no-conditional-bare-jsx-text.grit` fails the build on the shapes below, and its diagnostics cannot be suppressed with `biome-ignore` — write them wrapped in the first place:
 
 - `{cond ? <Icon /> : "More"}` → `{cond ? <Icon /> : <span>More</span>}`.
 - `{cond ? (<><Loader2 />Loading…</>) : ("Load more")}` → wrap both branches; the fragment's own bare text is deleted when the branch flips, so `<span>Loading…</span>` inside it and `<span>Load more</span>` for the string.

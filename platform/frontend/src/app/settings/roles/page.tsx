@@ -1,21 +1,21 @@
 "use client";
 
-import { E2eTestId, getRoleDisplayName } from "@archestra/shared";
+import { E2eTestId } from "@archestra/shared";
 import { Eye } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RemoteUserSelect } from "@/components/remote-user-select";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import {
   useCanImpersonate,
   useImpersonateUser,
-  useImpersonationCandidates,
+  useImpersonationCandidatesPage,
 } from "@/lib/impersonation.query";
 
 const RolesListEnterprise = dynamic(() =>
@@ -33,27 +33,23 @@ const RolesListEnterprise = dynamic(() =>
 function RoleDebuggerDialog() {
   const canImpersonate = useCanImpersonate();
   const [open, setOpen] = useState(false);
+  // The first unsearched page decides whether anyone can be impersonated;
+  // the picker reuses this cached page when it opens.
   const {
-    data: candidates,
+    data: firstPage,
     isLoading,
     isLoadingError: isCandidatesLoadError,
     refetch: refetchCandidates,
-  } = useImpersonationCandidates();
+  } = useImpersonationCandidatesPage({ search: "", enabled: canImpersonate });
   const { mutate: impersonate, isPending } = useImpersonateUser();
   const [selectedUserId, setSelectedUserId] = useState<string>("");
-  const userOptions = (candidates ?? []).map((candidate) => ({
-    userId: candidate.id,
-    name: candidate.role
-      ? `${candidate.name} · ${getRoleDisplayName(candidate.role)}`
-      : candidate.name,
-    email: candidate.email,
-  }));
+  const hasCandidates = (firstPage?.pages[0]?.data.length ?? 0) > 0;
 
   if (!canImpersonate) return null;
   // A single-user organization has nobody to impersonate, so the trigger would
   // only ever open onto an empty picker. Errors keep it visible: hiding then
   // would make a failed fetch look like an empty org.
-  if (!isLoading && !isCandidatesLoadError && userOptions.length === 0) {
+  if (!isLoading && !isCandidatesLoadError && !hasCandidates) {
     return null;
   }
 
@@ -99,15 +95,13 @@ function RoleDebuggerDialog() {
             onRetry={() => refetchCandidates()}
           />
         ) : (
-          <UserSearchableSelect
+          <RemoteUserSelect
+            source="impersonable"
             value={selectedUserId}
             onValueChange={setSelectedUserId}
-            users={userOptions}
             disabled={isLoading}
             placeholder={isLoading ? "Loading users..." : "Select a user"}
-            searchPlaceholder="Search users by name or email"
             className="w-full"
-            emptyMessage="No matching users found."
           />
         )}
       </StandardDialog>

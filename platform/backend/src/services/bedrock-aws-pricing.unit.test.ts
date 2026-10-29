@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { BEDROCK_EMBEDDING_MODELS } from "@/knowledge-base/embedding-clients/bedrock-models";
 import awsPricesJson from "./bedrock-aws-prices.json";
 import {
   AWS_PRICE_IDENTITY,
@@ -78,6 +79,42 @@ describe("resolveBedrockAwsPrices", () => {
     expect(resolve("amazon.titan-embed-text-v1")?.completionPricePerToken).toBe(
       "0",
     );
+  });
+
+  test("prices the Cohere and Titan multimodal embedding models", () => {
+    // AWS prices these per input token only: Cohere Embed v3 at $0.10/M,
+    // Embed v4 text at $0.12/M, Titan Multimodal G1 text at $0.80/M.
+    expect(resolve("cohere.embed-english-v3")).toEqual({
+      promptPricePerToken: "1e-7",
+      completionPricePerToken: "0",
+    });
+    expect(resolve("cohere.embed-multilingual-v3")).toEqual({
+      promptPricePerToken: "1e-7",
+      completionPricePerToken: "0",
+    });
+    expect(resolve("amazon.titan-embed-image-v1")).toEqual({
+      promptPricePerToken: "8e-7",
+      completionPricePerToken: "0",
+    });
+    for (const modelId of [
+      "cohere.embed-v4:0",
+      "us.cohere.embed-v4:0",
+      "eu.cohere.embed-v4:0",
+      "global.cohere.embed-v4:0",
+    ]) {
+      expect(resolve(modelId), modelId).toEqual({
+        promptPricePerToken: "1.2e-7",
+        completionPricePerToken: "0",
+      });
+    }
+  });
+
+  test("prices every embedding model the Bedrock embedding client supports", () => {
+    // These are offered in the Knowledge embedding picker; an unpriced one
+    // falls to the fabricated default estimate and inflates indexing cost.
+    for (const model of BEDROCK_EMBEDDING_MODELS) {
+      expect(resolve(model.modelId), model.modelId).not.toBeNull();
+    }
   });
 
   test("selects the standard on-demand tier, not batch or flex", () => {

@@ -1128,36 +1128,6 @@ class KbDocumentModel {
     }
     return byKey;
   }
-
-  static async countByKnowledgeBaseIds(
-    knowledgeBaseIds: string[],
-  ): Promise<Map<string, number>> {
-    if (knowledgeBaseIds.length === 0) return new Map();
-
-    const results = await db
-      .select({
-        knowledgeBaseId:
-          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-        count: count(),
-      })
-      .from(schema.kbDocumentsTable)
-      .innerJoin(
-        schema.knowledgeBaseConnectorAssignmentsTable,
-        eq(
-          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
-          schema.kbDocumentsTable.connectorId,
-        ),
-      )
-      .where(
-        inArray(
-          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-          knowledgeBaseIds,
-        ),
-      )
-      .groupBy(schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId);
-
-    return new Map(results.map((r) => [r.knowledgeBaseId, r.count]));
-  }
 }
 
 /**

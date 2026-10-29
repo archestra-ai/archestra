@@ -86,6 +86,7 @@ export function ToolStatusRow({
               ) : (
                 <Button
                   key={action.label}
+                  type="button"
                   variant={action.variant ?? "secondary"}
                   size="sm"
                   onClick={action.onClick}

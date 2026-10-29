@@ -21,11 +21,7 @@ for (const legacyPermissions of [false, true]) {
     ] as const) {
       const actor = await makeUser();
       await makeMember(actor.id, org.id, { role });
-      for (const resource of [
-        "log",
-        "auditLog",
-        "openappaDiagnostics",
-      ] as const) {
+      for (const resource of ["log", "auditLog"] as const) {
         expect(
           await userHasPermission(actor.id, org.id, resource, "admin"),
         ).toBe(expected);

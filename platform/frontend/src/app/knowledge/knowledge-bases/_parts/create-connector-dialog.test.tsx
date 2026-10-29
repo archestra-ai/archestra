@@ -9,6 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { connectorSupportsAutoSync } from "./connector-dialog-config";
 import { CreateConnectorDialog } from "./create-connector-dialog";
 
@@ -58,6 +59,7 @@ Element.prototype.releasePointerCapture = vi.fn();
 
 const mockMutateAsync = vi.fn();
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("next/navigation");
 
 const mockStartGoogleDriveOAuth = vi.fn();
@@ -139,9 +141,24 @@ async function renderGithubConfigureStep() {
   return { ...result, user };
 }
 
+async function addGithubRepository(
+  user: ReturnType<typeof userEvent.setup>,
+  repository: string,
+) {
+  await user.click(screen.getByRole("button", { name: "Add repository" }));
+  const row = within(
+    screen.getByRole("group", { name: "Repository New repository" }),
+  );
+  await user.click(row.getByLabelText("Repository"));
+  const name = repository.trim();
+  await user.paste(name.includes("/") ? repository : ` example-org/${name} `);
+  await user.tab();
+}
+
 describe("CreateConnectorDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useSettingsAreaAccess).mockReturnValue(true);
     mockUseFeature.mockImplementation(() => true);
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
@@ -150,6 +167,206 @@ describe("CreateConnectorDialog", () => {
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
     vi.mocked(usePathname).mockReturnValue("/knowledge/knowledge-bases");
+  });
+
+  it("keeps selected repository settings separate from an unsaved All draft", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+    const { user } = await renderGithubConfigureStep();
+    for (const [label, value] of [
+      [/^Name$/, "Scoped folders"],
+      [/^Owner$/, "example-org"],
+      [/Personal Access Token/, "local-placeholder"],
+    ] as const)
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("switch", { name: "Include Repository Files" }),
+    );
+    fireEvent.change(screen.getByLabelText("Folders (optional)"), {
+      target: { value: "docs" },
+    });
+    await user.click(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    );
+    await addGithubRepository(user, "repo-a");
+    const row = within(
+      screen.getByRole("group", { name: "Repository example-org/repo-a" }),
+    );
+    expect(
+      row.getByRole("switch", { name: "Include Repository Files" }),
+    ).not.toBeChecked();
+    await user.click(
+      row.getByRole("switch", { name: "Include Repository Files" }),
+    );
+    fireEvent.change(row.getByLabelText("Folders (optional)"), {
+      target: { value: "manual-docs" },
+    });
+    fireEvent.change(row.getByLabelText("Exclude paths"), {
+      target: { value: "generated" },
+    });
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    const config = mockMutateAsync.mock.calls[0][0].config;
+    expect(config.includePaths ?? []).toEqual([]);
+    expect(config.repositoryOverrides).toEqual([
+      {
+        repository: "example-org/repo-a",
+        includeIssues: true,
+        includePullRequests: true,
+        labelsToSkip: [],
+        fileTypes: [],
+        includeRepositoryFiles: true,
+        includePaths: ["manual-docs"],
+        excludePaths: ["generated"],
+      },
+    ]);
+    expect(config.repos).toEqual(["example-org/repo-a"]);
+    expect(config).not.toHaveProperty("repositoryEntries");
+    expect(config).not.toHaveProperty("repositorySelectionMode");
+  });
+
+  it("creates independent repository settings using production switches and inputs", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+    const { user } = await renderGithubConfigureStep();
+    for (const [label, value] of [
+      [/^Name$/, "Repository documentation"],
+      [/^Owner$/, "example-org"],
+      [/Personal Access Token/, "local-placeholder"],
+    ] as const)
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    );
+    for (const [repository, folders, exclude] of [
+      [" repo-a ", "docs, handbook", "docs/internal"],
+      [" example-org/repo-b ", "guides", "guides/drafts"],
+    ]) {
+      await addGithubRepository(user, repository);
+      const row = within(
+        screen.getByRole("group", {
+          name: `Repository ${repository.trim().includes("/") ? repository.trim() : `example-org/${repository.trim()}`}`,
+        }),
+      );
+      await user.click(
+        row.getByRole("switch", { name: "Include Repository Files" }),
+      );
+      fireEvent.change(row.getByLabelText("Folders (optional)"), {
+        target: { value: folders },
+      });
+      fireEvent.change(row.getByLabelText("Exclude paths"), {
+        target: { value: exclude },
+      });
+    }
+    const row = within(
+      screen.getByRole("group", { name: "Repository example-org/repo-b" }),
+    );
+    await user.click(row.getByRole("switch", { name: "Include Issues" }));
+    fireEvent.change(row.getByLabelText("Labels to Skip (optional)"), {
+      target: { value: "temporary" },
+    });
+    fireEvent.change(row.getByLabelText("Labels to Skip (optional)"), {
+      target: { value: "" },
+    });
+    expect(screen.queryByText("Repository defaults")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Customize|Reset|Done/ }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(mockMutateAsync.mock.calls[0][0].config.repositoryOverrides).toEqual(
+      [
+        {
+          repository: "example-org/repo-a",
+          includeIssues: true,
+          includePullRequests: true,
+          labelsToSkip: [],
+          fileTypes: [],
+          includeRepositoryFiles: true,
+          includePaths: ["docs", "handbook"],
+          excludePaths: ["docs/internal"],
+        },
+        {
+          repository: "example-org/repo-b",
+          includeRepositoryFiles: true,
+          includeIssues: false,
+          includePullRequests: true,
+          fileTypes: [],
+          labelsToSkip: [],
+          includePaths: ["guides"],
+          excludePaths: ["guides/drafts"],
+        },
+      ],
+    );
+  });
+
+  it("does not turn a cleared explicit repository selection into discovery", async () => {
+    const { user } = await renderGithubConfigureStep();
+    for (const [label, value] of [
+      [/^Name$/, "Explicit repositories"],
+      [/^Owner$/, "example-org"],
+      [/Personal Access Token/, "local-placeholder"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("radio", {
+        name: "Selected repositories",
+      }),
+    );
+    await addGithubRepository(user, "repo-a");
+    await user.click(
+      screen.getByRole("button", {
+        name: "Remove repository example-org/repo-a",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    expect(
+      await screen.findByText(
+        "Add at least one repository or choose All accessible repositories.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    ).toBeChecked();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("keeps required General errors visible before repository validation errors", async () => {
+    const { user } = await renderGithubConfigureStep();
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("radio", {
+        name: "Selected repositories",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    expect(await screen.findByLabelText(/^Name$/)).toBeVisible();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("shows shared production controls directly in All mode without repository actions", async () => {
+    const { user } = await renderGithubConfigureStep();
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    expect(
+      screen.getByRole("switch", { name: "Include Issues" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Add repository" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Repository settings for/ }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    );
+    expect(
+      screen.queryByRole("switch", { name: "Include Issues" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add repository" }),
+    ).toBeVisible();
   });
 
   // SPDX-SnippetBegin
@@ -276,18 +493,20 @@ describe("CreateConnectorDialog", () => {
 
       expect(screen.getByText("Owner")).toBeInTheDocument();
       expect(screen.getByText("Credential")).toBeInTheDocument();
-      expect(screen.getByText("Labels to Skip (optional)")).not.toBeVisible();
+      expect(
+        screen.getByLabelText("Labels to Skip (optional)"),
+      ).not.toBeVisible();
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
-      await waitFor(() => {
-        expect(
-          screen.getByText("Include Repository Files"),
-        ).toBeInTheDocument();
-      });
-      expect(screen.getByText("Labels to Skip (optional)")).toBeInTheDocument();
       expect(
-        screen.queryByText("File Types (optional)"),
+        screen.getByRole("switch", { name: "Include Repository Files" }),
+      ).toBeVisible();
+      expect(
+        screen.getByLabelText("Labels to Skip (optional)"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByLabelText("File Types (optional)"),
       ).not.toBeInTheDocument();
 
       await user.click(
@@ -295,7 +514,9 @@ describe("CreateConnectorDialog", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("File Types (optional)")).toBeInTheDocument();
+        expect(
+          screen.getByLabelText("File Types (optional)"),
+        ).toBeInTheDocument();
       });
     });
 
@@ -304,11 +525,9 @@ describe("CreateConnectorDialog", () => {
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
-      await waitFor(() => {
-        expect(
-          screen.getByText("Include Repository Files"),
-        ).toBeInTheDocument();
-      });
+      expect(
+        screen.getByRole("switch", { name: "Include Repository Files" }),
+      ).toBeVisible();
 
       expect(screen.getAllByText("Credential")).toHaveLength(1);
     });
@@ -657,14 +876,12 @@ describe("CreateConnectorDialog", () => {
       return { ...result, user };
     }
 
-    it("shows login URL and email/token fields for salesforce", async () => {
+    it("shows My Domain and OAuth app credential fields for Salesforce", async () => {
       await renderSalesforceConfigureStep();
 
-      expect(screen.getByLabelText(/^Login URL$/)).toBeInTheDocument();
-      expect(screen.getByLabelText(/^Email$/)).toBeInTheDocument();
-      expect(
-        screen.getByLabelText(/^Password \+ Security Token$/),
-      ).toBeInTheDocument();
+      expect(screen.getByLabelText(/^My Domain URL$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Consumer Key$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Consumer Secret$/)).toBeInTheDocument();
     });
 
     it("does not expose batch size in the salesforce UI", async () => {
@@ -685,14 +902,14 @@ describe("CreateConnectorDialog", () => {
       fireEvent.change(screen.getByLabelText(/^Name$/), {
         target: { value: "Salesforce Connector" },
       });
-      fireEvent.change(screen.getByLabelText(/^Login URL$/), {
-        target: { value: "https://login.salesforce.com" },
+      fireEvent.change(screen.getByLabelText(/^My Domain URL$/), {
+        target: { value: "https://example.my.salesforce.com" },
       });
-      fireEvent.change(screen.getByLabelText(/^Email$/), {
-        target: { value: "admin@example.com" },
+      fireEvent.change(screen.getByLabelText(/^Consumer Key$/), {
+        target: { value: "consumer-key" },
       });
-      fireEvent.change(screen.getByLabelText(/^Password \+ Security Token$/), {
-        target: { value: "passwordAndToken" },
+      fireEvent.change(screen.getByLabelText(/^Consumer Secret$/), {
+        target: { value: "consumer-secret" },
       });
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
@@ -716,13 +933,14 @@ describe("CreateConnectorDialog", () => {
         name: "Salesforce Connector",
         connectorType: "salesforce",
         credentials: {
-          email: "admin@example.com",
-          apiToken: "passwordAndToken",
+          apiToken: "consumer-secret",
         },
       });
       expect(call[0].config).toMatchObject({
         type: "salesforce",
-        loginUrl: "https://login.salesforce.com",
+        authMethod: "oauth_client_credentials",
+        clientId: "consumer-key",
+        loginUrl: "https://example.my.salesforce.com",
         objects: ["Account", "Contact", "Opportunity"],
       });
     });
@@ -1052,7 +1270,7 @@ describe("CreateConnectorDialog", () => {
         .filter(
           (link) =>
             link.getAttribute("href") ===
-            "https://archestra.ai/docs/platform-knowledge#m-files-vaf-add-on",
+            "https://archestra.ai/docs/knowledge/connectors/m-files#m-files-vaf-add-on",
         );
       expect(docsLinks).toHaveLength(1);
       // The manual path is the mutually exclusive alternative tab: the
@@ -1319,11 +1537,7 @@ describe("CreateConnectorDialog", () => {
       ["Asana", "Personal Access Token", "asana-auto-sync-permissions"],
       ["Outline", "API Key", "outline-auto-sync-permissions"],
       ["OneDrive", "Client Secret", "onedrive-auto-sync-permissions"],
-      [
-        "Salesforce",
-        "Password + Security Token",
-        "salesforce-auto-sync-permissions",
-      ],
+      ["Salesforce", "Consumer Secret", "salesforce-auto-sync-permissions"],
       // Perforce's own credential is the *content* identity's login ticket;
       // permission sync signs in as the admin account in its own section.
       [
@@ -1355,7 +1569,7 @@ describe("CreateConnectorDialog", () => {
         }),
       ).toHaveAttribute(
         "href",
-        `https://archestra.ai/docs/platform-knowledge#${docsAnchor}`,
+        `https://archestra.ai/docs/knowledge/connectors/${docsAnchor.replace("-auto-sync-permissions", "")}#${docsAnchor}`,
       );
     });
 
@@ -1393,6 +1607,14 @@ describe("CreateConnectorDialog", () => {
       ).toHaveAttribute("href", "/settings/credentials");
     });
 
+    it("names credential management without linking a reader who cannot open Settings", async () => {
+      vi.mocked(useSettingsAreaAccess).mockReturnValue(false);
+      await renderGithubConfigureStep();
+      expect(screen.getByText("Manage credentials")).toBeVisible();
+      expect(
+        screen.queryByRole("link", { name: /Manage credentials/ }),
+      ).not.toBeInTheDocument();
+    });
     it("moves Google Drive's requirement to the mode picker when one account authorizes", async () => {
       mockUseFeature.mockImplementation((key: string) =>
         key === "kbGoogleDriveOAuth"
@@ -1425,7 +1647,7 @@ describe("CreateConnectorDialog", () => {
         within(modeItem).getByRole("link", { name: /Learn more/ }),
       ).toHaveAttribute(
         "href",
-        "https://archestra.ai/docs/platform-knowledge#google-drive-auto-sync-permissions",
+        "https://archestra.ai/docs/knowledge/connectors/google-drive#google-drive-auto-sync-permissions",
       );
     });
   });

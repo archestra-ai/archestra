@@ -1,13 +1,7 @@
-import {
-  BUILT_IN_AGENT_IDS,
-  BUILT_IN_AGENT_NAMES,
-  PLAYWRIGHT_MCP_CATALOG_ID,
-} from "@archestra/shared";
+import { PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
 import { describe, expect, vi } from "vitest";
-import { syncBuiltInAgents } from "@/database/seed";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import {
-  AgentModel,
   EnvironmentModel,
   InternalMcpCatalogModel,
   OrganizationModel,
@@ -42,33 +36,6 @@ describe("EnvironmentService", () => {
     await expect(
       createEnvironment({ organizationId: org.id, data: { name: "Prod" } }),
     ).rejects.toMatchObject({ statusCode: 409 });
-  });
-
-  test("environment create and delete leave the org-wide advisor alone", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    await syncBuiltInAgents();
-    const before = await AgentModel.getBuiltInAgent(
-      BUILT_IN_AGENT_IDS.ADVISOR,
-      org.id,
-    );
-    expect(before?.name).toBe(BUILT_IN_AGENT_NAMES.ADVISOR);
-    expect(before?.environmentId).toBeNull();
-
-    const created = await createEnvironment({
-      organizationId: org.id,
-      data: { name: "Staging" },
-    });
-    await deleteEnvironment({ id: created.id, organizationId: org.id });
-
-    // The advisor is org-wide, so neither hook touches it.
-    const after = await AgentModel.getBuiltInAgent(
-      BUILT_IN_AGENT_IDS.ADVISOR,
-      org.id,
-    );
-    expect(after?.id).toBe(before?.id);
-    expect(after?.environmentId).toBeNull();
   });
 
   test("listEnvironments reports the default (no-environment) assigned count, excluding built-ins and env-assigned items", async ({

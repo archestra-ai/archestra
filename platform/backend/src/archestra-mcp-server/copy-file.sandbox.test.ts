@@ -1,3 +1,6 @@
+import * as fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
   getArchestraToolFullName,
   TOOL_COPY_FILE_SHORT_NAME,
@@ -7,7 +10,11 @@ import {
 import { eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { ConversationAttachmentModel, ConversationModel } from "@/models";
+import {
+  ConversationAttachmentModel,
+  ConversationModel,
+  ProjectModel,
+} from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { executeArchestraTool } from "./index";
 import type { ArchestraContext } from "./types";
@@ -261,6 +268,61 @@ describe("copy_file", () => {
     });
     const rows = await fileRows("doc.md");
     expect(decode(rows.find((row) => row.appId === appId)?.data)).toBe("v2");
+  });
+
+  test("to.overwrite into a project replaces a hand-placed file in place", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "copy-file-overlay-"));
+    const savedProvider = config.fileStorage.provider;
+    const savedRoot = config.fileStorage.filesystemRoot;
+    config.fileStorage.provider = "filesystem";
+    config.fileStorage.filesystemRoot = root;
+    try {
+      const project = await ProjectModel.create({
+        organizationId,
+        userId,
+        name: "copy-overlay",
+        description: null,
+      });
+      const projectConversation = await ConversationModel.create({
+        userId,
+        organizationId,
+        agentId: context.agent.id,
+        projectId: project.id,
+        title: "in project",
+      });
+      const projectCtx = {
+        ...context,
+        conversationId: projectConversation.id,
+      };
+      // dropped into the project folder by hand: no files row
+      const onDisk = path.join(root, project.slug, "report.csv");
+      await fs.mkdir(path.dirname(onDisk), { recursive: true });
+      await fs.writeFile(onDisk, "old");
+      await saveInto(appRuntimeCtx(), "report.csv", "a,b\n1,2");
+
+      const result = await executeArchestraTool(
+        COPY_FILE,
+        {
+          from: { type: "app_file", filename: "report.csv" },
+          to: { scope: "chat", overwrite: true },
+        },
+        projectCtx,
+      );
+      expect(result.isError, JSON.stringify(result.content)).toBe(false);
+      expect(result.structuredContent).toMatchObject({
+        destination: "project",
+        overwritten: true,
+      });
+      expect(await fs.readFile(onDisk, "utf8")).toBe("a,b\n1,2");
+      expect(await fs.readdir(path.dirname(onDisk))).toEqual(["report.csv"]);
+      // only the app's own row exists; the project file stayed rowless
+      const rows = await fileRows("report.csv");
+      expect(rows.map((row) => row.projectId)).toEqual([null]);
+    } finally {
+      config.fileStorage.provider = savedProvider;
+      config.fileStorage.filesystemRoot = savedRoot;
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   test("a stringified arg with a semantic error surfaces the semantic error, not the string one", async () => {

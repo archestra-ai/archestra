@@ -88,6 +88,12 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
     });
 
     test("imports service-account grants on every new skill without sharing skipped skills", async () => {
+      // Sharing with everyone or a role takes Full access on every skill.
+      await MemberModel.updateRole(
+        ctx.user.id,
+        ctx.organizationId,
+        ADMIN_ROLE_NAME,
+      );
       const account = await ServiceAccountModel.create({
         organizationId: ctx.organizationId,
         name: "Skill import automation",
@@ -291,7 +297,13 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
   });
 
   describe("scope", () => {
-    test("creators can choose organization grants during import", async () => {
+    test("creators who manage every skill can choose organization grants during import", async () => {
+      // Sharing with everyone or a role takes Full access on every skill.
+      await MemberModel.updateRole(
+        ctx.user.id,
+        ctx.organizationId,
+        ADMIN_ROLE_NAME,
+      );
       stubGithub([
         {
           owner: "route-org-grants",

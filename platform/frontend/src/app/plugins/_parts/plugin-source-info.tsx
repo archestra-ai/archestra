@@ -1,4 +1,6 @@
-import { Github, Pencil } from "lucide-react";
+import { GIT_PROVIDER_LABELS } from "@archestra/shared";
+import { Pencil } from "lucide-react";
+import { GitProviderLogo } from "@/components/git/git-setup-chrome";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -6,8 +8,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { PluginListItem } from "@/lib/plugins/plugin.query";
+import { repositoryLabel } from "@/lib/skills/skill-source";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
+import { pluginRepository } from "./plugin-source-icon";
 
 export function PluginSourceInfo({
   plugin,
@@ -17,6 +21,8 @@ export function PluginSourceInfo({
     | "sourceKind"
     | "sourceRepo"
     | "sourceMarketplaceRepo"
+    | "sourceProvider"
+    | "sourceOrigin"
     | "githubSyncInterval"
     | "lastSyncedAt"
     | "pendingSourceSha"
@@ -26,8 +32,8 @@ export function PluginSourceInfo({
 }) {
   const isGithub = plugin.sourceKind === "github";
   const hasUpdate = isGithub && !!plugin.pendingSourceSha;
-  const Icon = isGithub ? Github : Pencil;
-  const repo = plugin.sourceMarketplaceRepo ?? plugin.sourceRepo;
+  const host = GIT_PROVIDER_LABELS[plugin.sourceProvider ?? "github"];
+  const repo = pluginRepository(plugin);
 
   return (
     <Tooltip>
@@ -43,24 +49,33 @@ export function PluginSourceInfo({
           aria-label={
             isGithub
               ? hasUpdate
-                ? "GitHub source: update available"
-                : "GitHub source details"
+                ? `${host} source: update available`
+                : `${host} source details`
               : "Manual source details"
           }
           onClick={(event) => event.stopPropagation()}
         >
-          <Icon className="size-3.5" />
+          {isGithub ? (
+            <GitProviderLogo
+              provider={plugin.sourceProvider ?? "github"}
+              size={14}
+            />
+          ) : (
+            <Pencil className="size-3.5" />
+          )}
         </Button>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs space-y-3">
         <div className="space-y-1">
           {isGithub ? (
             <>
-              {repo && <p className="break-all font-medium">{repo}</p>}
+              {repo && (
+                <p className="break-all font-medium">{repositoryLabel(repo)}</p>
+              )}
               <p>
                 {plugin.githubSyncInterval
-                  ? `${SYNC_INTERVAL_LABELS[plugin.githubSyncInterval]} from GitHub; new commits become review candidates.`
-                  : "Imported from GitHub; updates are checked manually."}
+                  ? `${SYNC_INTERVAL_LABELS[plugin.githubSyncInterval]} from ${host}; new commits become review candidates.`
+                  : `Imported from ${host}; updates are checked manually.`}
                 {` Last checked: ${formatRelativeTimeFromNow(
                   plugin.lastSyncedAt,
                   {

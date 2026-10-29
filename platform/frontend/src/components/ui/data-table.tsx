@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type Column,
   type ColumnDef,
   type ExpandedState,
   flexRender,
@@ -41,6 +42,12 @@ import {
 const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar", "select"]);
 const ACTIONS_COLUMN_ID = "actions";
 const SELECT_COLUMN_ID = "select";
+/**
+ * The narrowest a flexible column (a name, say) is counted at when deciding
+ * how wide the table must be: it gives up its configured width before any
+ * other column is dropped.
+ */
+const FLEXIBLE_COLUMN_FLOOR = 180;
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -80,6 +87,8 @@ interface DataTableProps<TData, TValue> {
   getRowId?: (row: TData, index: number) => string;
   /** Render a sub-component below a row when it is expanded. */
   renderSubComponent?: (props: { row: Row<TData> }) => React.ReactNode;
+  /** Render expanded TableRow elements in the same columns as their parent. */
+  renderExpandedRows?: (props: { row: Row<TData> }) => React.ReactNode;
   /** Return an optional class name for each rendered row. */
   getRowClassName?: (row: TData) => string | undefined;
   /** Show a loading spinner instead of "No results" when data is being fetched */
@@ -121,6 +130,12 @@ interface DataTableProps<TData, TValue> {
   fixedWidthColumnIds?: string[];
   /** Column ids that absorb remaining table width. */
   flexibleColumnIds?: string[];
+  /**
+   * Columns the table can do without, least useful first. When the table does
+   * not fit its container they drop in this order instead of the table
+   * scrolling sideways; unlisted columns always stay.
+   */
+  columnDropOrder?: string[];
 }
 
 export function DataTable<TData, TValue>({
@@ -141,6 +156,7 @@ export function DataTable<TData, TValue>({
   hideSelectedCount,
   getRowId,
   renderSubComponent,
+  renderExpandedRows,
   getRowClassName,
   isLoading = false,
   emptyMessage = "No results",
@@ -157,6 +173,7 @@ export function DataTable<TData, TValue>({
   tableClassName,
   fixedWidthColumnIds = [],
   flexibleColumnIds = [],
+  columnDropOrder = [],
 }: DataTableProps<TData, TValue>) {
   const localRangeSelection = useBulkRangeSelectionController();
   const rangeSelection = controlledRangeSelection ?? localRangeSelection;
@@ -167,6 +184,22 @@ export function DataTable<TData, TValue>({
     pageSize: 10,
   });
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  // Columns dropped because the table is wider than its container, recomputed
+  // from the container's width; see `columnsToFit`.
+  const [autoHidden, setAutoHidden] = useState<string[]>([]);
+  const [containerWidth, setContainerWidth] = useState<number | null>(null);
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  React.useLayoutEffect(() => {
+    const element = scrollContainerRef.current;
+    // Absent outside browsers (jsdom); every column then stays shown.
+    if (!element || typeof ResizeObserver === "undefined") return;
+    setContainerWidth(element.clientWidth);
+    const observer = new ResizeObserver(([entry]) =>
+      setContainerWidth(entry.contentRect.width),
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   // Use controlled sorting if provided, otherwise use internal state
   const sorting = controlledSorting ?? internalSorting;
@@ -202,9 +235,10 @@ export function DataTable<TData, TValue>({
     // Only use client-side sorting when not using manual sorting
     ...(manualSorting ? {} : { getSortedRowModel: getSortedRowModel() }),
     getFilteredRowModel: getFilteredRowModel(),
-    ...(renderSubComponent
+    ...(renderSubComponent || renderExpandedRows
       ? {
           getExpandedRowModel: getExpandedRowModel(),
+          getRowCanExpand: () => true,
           onExpandedChange: setExpanded,
         }
       : {}),
@@ -217,9 +251,12 @@ export function DataTable<TData, TValue>({
       : undefined,
     state: {
       sorting,
-      columnVisibility,
+      columnVisibility: {
+        ...columnVisibility,
+        ...Object.fromEntries(autoHidden.map((id) => [id, false])),
+      },
       rowSelection: rowSelection || {},
-      ...(renderSubComponent ? { expanded } : {}),
+      ...(renderSubComponent || renderExpandedRows ? { expanded } : {}),
       pagination: pagination
         ? {
             pageIndex: pagination.pageIndex,
@@ -276,6 +313,32 @@ export function DataTable<TData, TValue>({
     }
   }, [isLoading, pageCount, pageIndex, table]);
 
+  // Drop the table's listed columns until the rest fit the container, so a
+  // narrow window shows fewer columns instead of a horizontal scroll. Measured
+  // against the container, which does not grow with the table it scrolls.
+  const shownByChoice = table
+    .getAllLeafColumns()
+    .filter((column) => columnVisibility[column.id] !== false);
+  // Zero is no layout at all (a hidden tab, jsdom), not a narrow window.
+  const nextAutoHidden = !containerWidth
+    ? []
+    : columnsToFit({
+        columns: shownByChoice,
+        width: containerWidth,
+        flexibleColumnIds,
+        dropOrder: columnDropOrder,
+      });
+  const nextAutoHiddenKey = nextAutoHidden.join(",");
+  React.useLayoutEffect(() => {
+    setAutoHidden((current) =>
+      current.join(",") === nextAutoHiddenKey
+        ? current
+        : nextAutoHiddenKey
+          ? nextAutoHiddenKey.split(",")
+          : [],
+    );
+  }, [nextAutoHiddenKey]);
+
   const visibleColumns = table.getVisibleLeafColumns();
   const selectColumn = visibleColumns.find(
     (column) => column.id === SELECT_COLUMN_ID,
@@ -310,15 +373,24 @@ export function DataTable<TData, TValue>({
           away with the content on a table wide enough to scroll. */}
       <div className="relative">
         {isLoading && <TableLoadingBar />}
-        <div className="overflow-x-auto rounded-md border">
-          {/* The table never shrinks below the columns' summed configured sizes
-            (tanstack defaults unsized columns to 150px) — on narrow screens
-            the wrapper scrolls horizontally instead of crushing columns until
-            headers stack letter-by-letter and cell contents overlap. */}
+        <div
+          ref={scrollContainerRef}
+          className="overflow-x-auto rounded-md border"
+        >
+          {/* The table never shrinks below the columns' summed sizes (tanstack
+            defaults unsized columns to 150px; flexible ones count at their
+            floor) instead of crushing columns until headers stack
+            letter-by-letter. Listed columns that do not fit drop first; the
+            wrapper scrolls only when the ones that must stay still do not. */}
           <Table
             aria-busy={isLoading}
             className={tableClassName}
-            style={{ minWidth: configuredTableSize }}
+            style={{
+              minWidth: minimumTableWidth({
+                columns: visibleColumns,
+                flexibleColumnIds,
+              }),
+            }}
           >
             {!hideHeader && (
               <TableHeader>
@@ -431,6 +503,9 @@ export function DataTable<TData, TValue>({
                         </TableCell>
                       ))}
                     </TableRow>
+                    {renderExpandedRows &&
+                      row.getIsExpanded() &&
+                      renderExpandedRows({ row })}
                     {renderSubComponent && row.getIsExpanded() && (
                       <TableRow>
                         <TableCell
@@ -599,4 +674,45 @@ function getColumnStyle(params: {
     style.minWidth = params.minSize;
   }
   return Object.keys(style).length > 0 ? style : undefined;
+}
+
+/**
+ * The columns in `dropOrder` to drop, in that order, until the table's
+ * minimum width fits `width`. Only listed columns drop: which ones a table can
+ * do without depends on what it lists, so an unlisted column stays and the
+ * table scrolls instead.
+ */
+function columnsToFit<TData>(params: {
+  columns: Column<TData, unknown>[];
+  width: number;
+  flexibleColumnIds: string[];
+  dropOrder: string[];
+}): string[] {
+  const { columns, width, flexibleColumnIds, dropOrder } = params;
+  const droppable = dropOrder.flatMap((id) => {
+    const column = columns.find((candidate) => candidate.id === id);
+    return column ? [column] : [];
+  });
+  const hidden: string[] = [];
+  let shown = columns;
+  for (const column of droppable) {
+    if (minimumTableWidth({ columns: shown, flexibleColumnIds }) <= width)
+      break;
+    hidden.push(column.id);
+    shown = shown.filter((candidate) => candidate.id !== column.id);
+  }
+  return hidden;
+}
+
+function minimumTableWidth<TData>(params: {
+  columns: Column<TData, unknown>[];
+  flexibleColumnIds: string[];
+}): number {
+  return params.columns.reduce((total, column) => {
+    if (column.id === SELECT_COLUMN_ID)
+      return total + DATA_TABLE_SELECT_COLUMN_SIZE;
+    if (params.flexibleColumnIds.includes(column.id))
+      return total + Math.min(column.getSize(), FLEXIBLE_COLUMN_FLOOR);
+    return total + column.getSize();
+  }, 0);
 }

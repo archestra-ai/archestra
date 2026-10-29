@@ -9,6 +9,7 @@ import {
 import { z } from "zod";
 import logger from "@/logging";
 import { projectService } from "@/services/project";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import type { ProjectListItem } from "@/types";
 import { ApiError, LabelWithDetailsSchema } from "@/types";
 import {
@@ -18,6 +19,12 @@ import {
   errorResult,
   structuredSuccessResult,
 } from "./helpers";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 
 const USER_CONTEXT_REQUIRED =
   "This tool requires an authenticated user context. Call it with a user token.";
@@ -222,6 +229,9 @@ const registry = defineArchestraTools([
             "Case-insensitive substring matched against the project name and " +
               "description. Omit to list everything the caller can reach.",
           ),
+        access: resourceAccessToolArg({ examplePlural: "projects" }),
+        shared_with: resourceSharedWithToolArg,
+        owner_ids: resourceOwnerIdsToolArg,
       })
       .strict(),
     outputSchema: ListProjectsOutputSchema,
@@ -234,16 +244,29 @@ const registry = defineArchestraTools([
       const { userId, organizationId } = context;
 
       try {
-        // `isProjectAdmin` is deliberately not passed: without a scope filter
-        // the service drops admin-oversight rows anyway, so a project admin
-        // sees exactly what they can access — same as everyone else. Oversight
-        // of other members' private projects stays a UI concern.
-        const projects = await projectService.list({
+        // Without `access`, `isProjectAdmin` is deliberately not passed: the
+        // service drops admin-oversight rows anyway, so a project admin sees
+        // exactly what they can access — same as everyone else. An explicit
+        // `access` replaces that rule, so `others` reaches the oversight rows
+        // of a project admin, as the REST list does.
+        const isProjectAdmin = args.access
+          ? await ResourcePermissions.allows({
+              userId,
+              organizationId,
+              resource: "project",
+              scope: "*",
+              action: "update",
+            })
+          : undefined;
+        const { data: shown, total } = await projectService.list({
           organizationId,
           userId,
+          isProjectAdmin,
           search: args.query,
+          access: toolAccessSelection(args),
+          limit: MAX_LISTED_PROJECTS,
+          offset: 0,
         });
-        const shown = projects.slice(0, MAX_LISTED_PROJECTS);
         const summary =
           shown.length === 0
             ? "No projects matched."
@@ -253,8 +276,8 @@ const registry = defineArchestraTools([
                     `${p.name} (id=${p.id}, ${p.conversationCount} chat(s))`,
                 )
                 .join("\n") +
-              (projects.length > MAX_LISTED_PROJECTS
-                ? `\n(showing the first ${MAX_LISTED_PROJECTS} of ${projects.length}; narrow with query.)`
+              (total > MAX_LISTED_PROJECTS
+                ? `\n(showing the first ${MAX_LISTED_PROJECTS} of ${total}; narrow with query.)`
                 : "");
         return structuredSuccessResult(
           { projects: shown.map(toProjectSummary) },

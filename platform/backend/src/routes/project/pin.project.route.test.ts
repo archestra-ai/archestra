@@ -50,7 +50,8 @@ describe("PUT/DELETE /api/projects/:id/pin", () => {
       url: `/api/projects/${project.id}/pin`,
     });
     expect(pin.statusCode).toBe(200);
-    let list = await projectService.list({ organizationId, userId: owner.id });
+    let list = (await projectService.list({ organizationId, userId: owner.id }))
+      .data;
     expect(list.find((p) => p.id === project.id)?.pinnedAt).toBeInstanceOf(
       Date,
     );
@@ -60,7 +61,8 @@ describe("PUT/DELETE /api/projects/:id/pin", () => {
       url: `/api/projects/${project.id}/pin`,
     });
     expect(unpin.statusCode).toBe(200);
-    list = await projectService.list({ organizationId, userId: owner.id });
+    list = (await projectService.list({ organizationId, userId: owner.id }))
+      .data;
     expect(list.find((p) => p.id === project.id)?.pinnedAt).toBeNull();
   });
 
@@ -89,14 +91,18 @@ describe("PUT/DELETE /api/projects/:id/pin", () => {
       ).statusCode,
     ).toBe(200);
 
-    const memberList = await projectService.list({
-      organizationId,
-      userId: member.id,
-    });
-    const ownerList = await projectService.list({
-      organizationId,
-      userId: owner.id,
-    });
+    const memberList = (
+      await projectService.list({
+        organizationId,
+        userId: member.id,
+      })
+    ).data;
+    const ownerList = (
+      await projectService.list({
+        organizationId,
+        userId: owner.id,
+      })
+    ).data;
     expect(
       memberList.find((p) => p.id === project.id)?.pinnedAt,
     ).toBeInstanceOf(Date);

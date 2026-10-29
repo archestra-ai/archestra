@@ -312,7 +312,7 @@ function runInContainer(assertions: string) {
       "-i",
       "--network=none",
       "-v",
-      `${path.resolve("../agent_images/bin")}:/usr/local/bin:ro`,
+      `${path.resolve("../docker_images/agent/bin")}:/usr/local/bin:ro`,
       "--entrypoint=/bin/sh",
       process.env.ARCHESTRA_TEST_SANDBOX_IMAGE ?? "",
       "-s",

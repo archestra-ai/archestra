@@ -6,16 +6,27 @@ import {
   subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 import { KeyRound } from "lucide-react";
-import { useState } from "react";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { type ComponentProps, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 
+import { lazyComponent } from "@/lib/utils/preloadable-lazy";
 import { cn } from "@/lib/utils/tailwind";
 
+// The key form (react-hook-form and the provider forms) loads when it opens.
+const CreateLlmProviderApiKeyDialog = lazyComponent<
+  ComponentProps<
+    typeof import("@/components/create-llm-provider-api-key-dialog").CreateLlmProviderApiKeyDialog
+  >
+>(() =>
+  import("@/components/create-llm-provider-api-key-dialog").then(
+    (m) => m.CreateLlmProviderApiKeyDialog,
+  ),
+);
+
 type ReconnectCredential = Pick<LlmProviderApiKey, "id" | "name" | "provider"> &
-  Partial<Pick<LlmProviderApiKey, "subscriptionKind">>;
+  Partial<Pick<LlmProviderApiKey, "subscriptionKind" | "isGithubAppKey">>;
 
 export function SubscriptionReconnectNotice({
   credential,
@@ -27,9 +38,10 @@ export function SubscriptionReconnectNotice({
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const kind =
-    subscriptionKindFromKeyMetadata(credential) ??
-    subscriptionKindForProvider(credential.provider);
+  const kind = credential.isGithubAppKey
+    ? null
+    : (subscriptionKindFromKeyMetadata(credential) ??
+      subscriptionKindForProvider(credential.provider));
   if (!kind) return null;
   const subscription = SUBSCRIPTION_CREDENTIALS[kind];
   return (
@@ -88,7 +100,6 @@ export function SubscriptionReconnectNotice({
           }}
           allowedProviders={[credential.provider]}
           credentialMode="subscription"
-          requiresExactSubscriptionCredential
         />
       )}
     </>

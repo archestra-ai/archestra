@@ -30,3 +30,11 @@ export function clientSessionId(sessionId: string): string {
   const separator = sessionId.indexOf("|");
   return separator >= 0 ? sessionId.slice(separator + 1) : sessionId;
 }
+
+/** Recovers the existing cache scope, not an authorization claim. */
+export function sessionCallerId(sessionId: string): string | undefined {
+  const separator = sessionId.indexOf("|");
+  if (separator <= 0) return undefined;
+  const caller = sessionId.slice(0, separator);
+  return /^(user|app|virtual-key):.+$/.test(caller) ? caller : undefined;
+}

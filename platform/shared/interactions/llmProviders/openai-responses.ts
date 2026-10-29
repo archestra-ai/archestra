@@ -1,5 +1,4 @@
 import type { WithoutEncryptedChatUnavailable } from "../../encrypted-chat-content";
-import { parseArchestraToolRefusal } from "../../tool-refusal";
 import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
 import { tryParseJson } from "./json";
@@ -67,37 +66,10 @@ class OpenAiResponsesInteraction implements InteractionUtils {
       .flatMap((item) => requestedToolNamesByCallId.get(item.call_id) ?? []);
   }
 
-  getToolNamesRefused(): string[] {
-    const toolNames = new Set<string>();
-
-    for (const item of this.interaction.response.output) {
-      if (!isResponseMessage(item)) {
-        continue;
-      }
-
-      for (const part of item.content) {
-        if (part.type !== "refusal") {
-          continue;
-        }
-
-        const toolName = parseArchestraToolRefusal(part.refusal).toolName;
-        if (toolName) {
-          toolNames.add(toolName);
-        }
-      }
-    }
-
-    return Array.from(toolNames);
-  }
-
   getToolNamesRequested(): string[] {
     return this.interaction.response.output
       .filter(isResponseFunctionCall)
       .map((item) => item.name);
-  }
-
-  getToolRefusedCount(): number {
-    return this.getToolNamesRefused().length;
   }
 
   getLastUserMessage(): string {

@@ -1,6 +1,7 @@
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { guardrailsPolicyRevisionsTable } from "@/database/schemas/guardrails-policy";
+import { GUARDRAILS_POLICY_MAX_LENGTH } from "./guardrails-policy-proposal";
 
 export const UnsupportedAppaClientActionSchema = z.enum(["bypass", "block"]);
 export type UnsupportedAppaClientAction = z.infer<
@@ -11,7 +12,7 @@ export const GuardrailsPolicySchema = createSelectSchema(
   guardrailsPolicyRevisionsTable,
 ).extend({ updatedAt: z.coerce.date().nullable() });
 export const ValidateGuardrailsPolicySchema = z.strictObject({
-  content: z.string().min(1).max(262144),
+  content: z.string().min(1).max(GUARDRAILS_POLICY_MAX_LENGTH),
 });
 export const UpdateGuardrailsPolicySchema =
   ValidateGuardrailsPolicySchema.extend({

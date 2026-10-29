@@ -1,7 +1,6 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import config from "@/config";
 import { PluginSkillUsageEventModel } from "@/models";
 import { getPluginSkill, listPluginSkills } from "@/plugins/plugin-skills";
 import {
@@ -28,11 +27,11 @@ const pluginSkillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId }, reply) => {
-      assertPluginsEnabled();
       return reply.send(
         await listPluginSkills({
           organizationId,
           userId: user.id,
+          includeUsage: true,
         }),
       );
     },
@@ -54,7 +53,6 @@ const pluginSkillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, query, user, organizationId }, reply) => {
-      assertPluginsEnabled();
       const skillPath = query.skillPath ?? "";
       const skill = await getPluginSkill({
         pluginId: params.pluginId,
@@ -96,7 +94,6 @@ const pluginSkillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, query, user, organizationId }, reply) => {
-      assertPluginsEnabled();
       const skill = await getPluginSkill({
         pluginId: params.pluginId,
         skillPath: query.skillPath ?? "",
@@ -110,11 +107,3 @@ const pluginSkillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default pluginSkillRoutes;
-
-// === Internal helpers ===
-
-function assertPluginsEnabled(): void {
-  if (!config.plugins.enabled) {
-    throw new ApiError(404, "Plugins are not enabled");
-  }
-}

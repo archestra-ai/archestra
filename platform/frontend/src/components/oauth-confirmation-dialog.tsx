@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, ShieldCheck, User } from "lucide-react";
+import { ShieldCheck, User } from "lucide-react";
 import { useState } from "react";
 import {
   type McpServerInstallScope,
@@ -9,8 +9,6 @@ import {
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { useFeature } from "@/lib/config/config.query";
 
 export interface OAuthInstallResult {
   /** Installation scope (personal, team, org) */
@@ -62,7 +60,6 @@ export function OAuthConfirmationDialog({
     preselectedTeamId ?? null,
   );
   const [canInstall, setCanInstall] = useState(true);
-  const byosEnabled = useFeature("byosEnabled");
 
   const handleConfirm = () => {
     onConfirm({ scope, teamId: selectedTeamId });
@@ -115,15 +112,7 @@ export function OAuthConfirmationDialog({
         ) : null
       }
     >
-      {canInstall && byosEnabled ? (
-        <InlineNotice>
-          <AlertCircle />
-          <InlineNoticeText>
-            Read-only Vault Secret Manager doesn't support OAuth credentials.
-            They will be stored in the database.
-          </InlineNoticeText>
-        </InlineNotice>
-      ) : null}
+      {null}
 
       {isReauth ? (
         <p className="text-muted-foreground text-sm">

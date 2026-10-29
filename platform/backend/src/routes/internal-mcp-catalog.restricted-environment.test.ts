@@ -1,8 +1,10 @@
+import { topResourcePermissionPreset } from "@archestra/shared";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { InternalMcpCatalogModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createEnvironment } from "@/services/environments/environment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
@@ -157,7 +159,26 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
       payload: bodyWith(name, environmentId),
     });
     expect(res.statusCode).toBe(200);
-    return res.json().id as string;
+    const id = res.json().id as string;
+    // Moving an entry changes where it runs. A member, who cannot add entries
+    // to the registry, needs the deploy permission on the entry for that.
+    const entry = {
+      organizationId,
+      resource: "mcpRegistry" as const,
+      scope: id,
+    };
+    const previous = await ResourcePermissionPolicyModel.find(entry);
+    await ResourcePermissionPolicyModel.replace({
+      ...entry,
+      revision: previous?.revision ?? 0,
+      grants: [
+        {
+          subject: { type: "user", id: user.id },
+          actions: [...topResourcePermissionPreset("mcpRegistry").actions],
+        },
+      ],
+    });
+    return id;
   }
 
   test("updating environmentId on an existing catalog item persists, and clearing to default works", async () => {

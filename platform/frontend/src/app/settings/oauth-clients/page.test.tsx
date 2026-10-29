@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -34,31 +34,87 @@ import {
 import { useOrganization } from "@/lib/organization.query";
 import OauthClientsPage from "./page";
 
+const page = (data: unknown[], limit = 20, total = data.length) => ({
+  data,
+  pagination: {
+    currentPage: 1,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+    hasNext: total > limit,
+    hasPrev: false,
+  },
+});
+const client = {
+  id: "client-1",
+  clientId: "oauth_example",
+  name: "Combined bot",
+  organizationId: "org-1",
+  grantType: "client_credentials",
+  scopes: ["mcp", "a2a", "llm:proxy"],
+  allowedGatewayIds: ["agent-1"],
+  providerApiKeys: [
+    {
+      provider: "openai",
+      providerApiKeyId: "key-1",
+      providerApiKeyName: "Main OpenAI",
+    },
+  ],
+  includeFutureProviders: false,
+  redirectUris: [],
+  disabled: false,
+  labels: [],
+  createdBy: null,
+  billingTeam: { id: "team-1", name: "Platform" },
+  spendCap: {
+    limitId: "cap-1",
+    limitValue: 200,
+    cleanupInterval: "calendar_month",
+    currentUsage: 34,
+  },
+  createdAt: "2026-09-01T00:00:00.000Z",
+};
+const requested: string[] = [];
 const server = setupServer(
-  http.get(`${API_ORIGIN}/api/llm-oauth-clients`, ({ request }) => {
-    const limit = Number(new URL(request.url).searchParams.get("limit"));
-    if (limit > 100) {
-      return HttpResponse.json(
-        { error: { message: "Limit exceeds maximum", type: "validation" } },
-        { status: 400 },
-      );
-    }
+  http.get(`${API_ORIGIN}/api/oauth-clients`, () =>
+    HttpResponse.json(page([])),
+  ),
+  http.get(`${API_ORIGIN}/api/agents/options`, ({ request }) => {
+    expect(new URL(request.url).searchParams.get("ids")).toBe("agent-1");
     return HttpResponse.json({
-      data: [],
-      pagination: {
-        currentPage: 1,
-        limit,
-        total: 0,
-        totalPages: 0,
-        hasNext: false,
-        hasPrev: false,
-      },
+      data: [{ id: "agent-1", name: "Support agent", agentType: "agent" }],
+      pagination: { limit: 1000, hasNext: false, nextCursor: null },
     });
   }),
-  http.get(`${API_ORIGIN}/api/mcp-oauth-clients`, () => HttpResponse.json([])),
-  http.get(`${API_ORIGIN}/api/agents/all`, () => HttpResponse.json([])),
+  http.get(`${API_ORIGIN}/api/oauth-clients/labels/keys`, () =>
+    HttpResponse.json([]),
+  ),
+  http.get(`${API_ORIGIN}/api/teams`, () =>
+    HttpResponse.json(
+      page([
+        { id: "team-1", name: "Platform", description: null, memberCount: 0 },
+      ]),
+    ),
+  ),
+  http.get(`${API_ORIGIN}/api/limits`, () => HttpResponse.json([])),
   http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
     HttpResponse.json([]),
+  ),
+  http.get(
+    `${API_ORIGIN}/api/resource-permissions/:resource/:scope`,
+    ({ params }) => {
+      requested.push(`${params.resource}/${params.scope}`);
+      return HttpResponse.json({
+        resource: params.resource,
+        scope: params.scope,
+        name: "Combined bot",
+        revision: 1,
+        grants: [],
+        inheritedGrants: [],
+        actorSubjects: [],
+        effectiveActions: ["read", "update", "manage-permissions"],
+      });
+    },
   ),
 );
 
@@ -87,8 +143,8 @@ describe("OauthClientsPage", () => {
     } as unknown as ReturnType<typeof useHasPermissions>);
     vi.mocked(useScopedCapabilities).mockReturnValue({
       data: [
-        { resource: "llmOauthClient", scope: "*", action: "read" },
-        { resource: "mcpOauthClient", scope: "*", action: "read" },
+        { resource: "oauthClient", scope: "*", action: "read" },
+        { resource: "oauthClient", scope: "*", action: "read" },
       ],
     } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useOrganization).mockReturnValue({
@@ -96,113 +152,126 @@ describe("OauthClientsPage", () => {
     } as unknown as ReturnType<typeof useOrganization>);
   });
 
-  it("loads the unified list within the API pagination limit", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <OauthClientsPage />
-      </QueryClientProvider>,
+  it("loads one paginated endpoint and removes the Types filter", async () => {
+    let query: URLSearchParams | undefined;
+    server.use(
+      http.get(`${API_ORIGIN}/api/oauth-clients`, ({ request }) => {
+        query = new URL(request.url).searchParams;
+        return HttpResponse.json(page([]));
+      }),
     );
-
+    renderPage();
     expect(
       await screen.findByText(
         "No OAuth clients yet. Register one for an application that authenticates with OAuth.",
       ),
     ).toBeVisible();
+    expect(Number(query?.get("limit"))).toBeLessThanOrEqual(100);
+    expect(screen.queryByText("Types")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Couldn't load OAuth clients"),
     ).not.toBeInTheDocument();
   });
 
-  it("opens a client's permissions from its row actions", async () => {
-    const requested: string[] = [];
+  it("shows all enabled capabilities and opens the combined edit flow", async () => {
     server.use(
-      http.get(`${API_ORIGIN}/api/mcp-oauth-clients`, () =>
-        HttpResponse.json([
-          {
-            id: "client-row-1",
-            clientId: "client-1",
-            name: "Deploy bot",
-            organizationId: "org-1",
-            grantType: "client_credentials",
-            allowedGatewayIds: [],
-            redirectUris: [],
-            disabled: false,
-            authorId: "user-1",
-            authorName: "Ada",
-            createdBy: null,
-            labels: [],
-            createdAt: "2026-09-01T00:00:00.000Z",
-            updatedAt: "2026-09-01T00:00:00.000Z",
-          },
-        ]),
-      ),
-      http.get(
-        `${API_ORIGIN}/api/resource-permissions/:resource/:scope`,
-        ({ params }) => {
-          requested.push(`${params.resource}/${params.scope}`);
-          return HttpResponse.json({
-            resource: params.resource,
-            scope: params.scope,
-            name: "Deploy bot",
-            revision: 1,
-            grants: [],
-            inheritedGrants: [],
-            effectiveActions: ["read", "manage-permissions"],
-          });
-        },
+      http.get(`${API_ORIGIN}/api/oauth-clients`, () =>
+        HttpResponse.json(page([client])),
       ),
     );
     const user = userEvent.setup();
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <OauthClientsPage />
-      </QueryClientProvider>,
-    );
-
-    const row = (await screen.findByText("Deploy bot")).closest("tr");
-    if (!row) throw new Error("Missing client row");
-    await user.click(within(row).getByRole("button", { name: /Permissions/ }));
-
+    renderPage();
+    const row = (await screen.findByText("Combined bot")).closest("tr");
+    if (!row) throw new Error("Missing row");
+    for (const label of [
+      "MCP Gateway",
+      "A2A",
+      "LLM Proxy",
+      "1 target",
+      "1 agent",
+      "1 key",
+      "Main OpenAI",
+    ])
+      expect(await within(row).findByText(label)).toBeVisible();
     expect(
-      await screen.findByRole("dialog", { name: /Deploy bot permissions/ }),
+      screen.queryByRole("columnheader", { name: "Budget" }),
+    ).not.toBeInTheDocument();
+    await user.click(within(row).getByText("Combined bot"));
+    expect(
+      await screen.findByRole("dialog", { name: /Combined bot/ }),
     ).toBeVisible();
-    expect(requested).toContain("mcpOauthClient/client-row-1");
+    await user.click(screen.getByRole("button", { name: "Budget" }));
+    expect(
+      screen.getByRole("textbox", { name: "Spend cap in dollars" }),
+    ).toHaveValue("200");
+    expect(
+      await screen.findByRole("combobox", {
+        name: "Who pays for this client?",
+      }),
+    ).toHaveTextContent("Platform");
+    await user.click(screen.getByRole("button", { name: "Access" }));
+    for (const label of [/MCP Gateway/, /A2A/, /LLM Proxy/])
+      expect(screen.getByRole("checkbox", { name: label })).toBeChecked();
+    await waitFor(() => expect(requested).toContain("oauthClient/client-1"));
   });
 
-  it("offers the permissions of both client kinds from the header menu", async () => {
+  it("loads a capability filter from the URL and keeps combined clients visible", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("capability=mcp") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    let capability: string | null = null;
+    server.use(
+      http.get(`${API_ORIGIN}/api/oauth-clients`, ({ request }) => {
+        capability = new URL(request.url).searchParams.get("capability");
+        return HttpResponse.json(page([client]));
+      }),
+    );
+    renderPage();
+    expect(await screen.findByText("Combined bot")).toBeVisible();
+    expect(capability).toBe("mcp");
+    expect(
+      screen.getByRole("combobox", { name: "Filter by API access" }),
+    ).toHaveTextContent("MCP Gateway");
+  });
+
+  it("offers a single canonical permissions control", async () => {
     let headerAction: React.ReactNode = null;
     const { useSetSettingsAction } = await import("@/app/settings/layout");
     vi.mocked(useSetSettingsAction).mockReturnValue((node) => {
       headerAction = node;
     });
-    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(
+      "No OAuth clients yet. Register one for an application that authenticates with OAuth.",
+    );
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <OauthClientsPage />
-      </QueryClientProvider>,
-    );
-    render(
-      <QueryClientProvider client={queryClient}>
         {headerAction}
       </QueryClientProvider>,
     );
-
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-
+    const user = userEvent.setup();
     expect(
-      screen.getByRole("menuitem", { name: "LLM client permissions" }),
-    ).toBeVisible();
+      screen.queryByRole("button", { name: "LLM client permissions" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Permissions" }));
     expect(
-      screen.getByRole("menuitem", { name: "MCP client permissions" }),
+      await screen.findByRole("dialog", { name: /Permissions for all/ }),
     ).toBeVisible();
   });
 });
+function renderPage() {
+  return render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <OauthClientsPage />
+    </QueryClientProvider>,
+  );
+}

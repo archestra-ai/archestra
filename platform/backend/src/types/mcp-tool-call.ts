@@ -14,10 +14,19 @@ export const MCPGatewayAuthMethodSchema = z.enum([
   "user_token",
   "org_token",
   "team_token",
+  "service_account_token",
   "external_idp",
   "session",
 ]);
 export type MCPGatewayAuthMethod = z.infer<typeof MCPGatewayAuthMethodSchema>;
+
+/**
+ * Who sent a call over the HTTP gateway: any outside agent ("api"), or the
+ * built-in chat's loopback client ("chat"), which marks itself with the
+ * X-Archestra-Source header.
+ */
+export const McpGatewayCallSourceSchema = z.enum(["api", "chat"]);
+export type McpGatewayCallSource = z.infer<typeof McpGatewayCallSourceSchema>;
 
 /**
  * Select schema for MCP tool calls (includes joined userName from users table)
@@ -42,12 +51,14 @@ export const SelectMcpToolCallSchema = createSelectSchema(
     // toolResult can have different structures depending on the method type
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable(),
+    source: McpGatewayCallSourceSchema.nullable(),
   },
 )
   // Server-side plumbing telling the read path which key the row is under.
   // Clients never need it: a locked row announces itself through the sentinel,
   // which carries the conversation id.
-  .omit({ encryptedChatConversationId: true })
+  // toolName/isError are statistics columns derived from toolCall/toolResult.
+  .omit({ encryptedChatConversationId: true, toolName: true, isError: true })
   .extend({
     userName: z.string().nullable(),
     // Name of the owning app for app-owned calls; null for agent-owned calls
@@ -69,8 +80,11 @@ export const InsertMcpToolCallSchema = createInsertSchema(
     // toolResult can have different structures depending on the method type
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable().optional(),
+    source: McpGatewayCallSourceSchema.nullable().optional(),
   },
 )
+  // Derived by McpToolCallModel.create from toolCall/toolResult.
+  .omit({ toolName: true, isError: true })
   .extend({
     ownerType: ToolOwnerTypeSchema.optional(),
     agentId: z.string().uuid().nullable().optional(),

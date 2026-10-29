@@ -5,28 +5,31 @@ import { vi } from "vitest";
 import type WebSocket from "ws";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import { a2aTaskRunService } from "@/agents/a2a/a2a-task-run-service";
+import config from "@/config";
 import {
   A2AArtifactModel,
   A2AContextModel,
   A2ATaskModel,
   AgentRunModel,
 } from "@/models";
+import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import { afterEach, test as base, beforeEach, expect } from "@/test";
 import { useMswServer } from "@/test/msw";
 import type { AgentRunRecord } from "@/types";
 import manager from "./manager";
 import { AGENT_RUNTIME_TASK_LABEL } from "./naming";
+import { agentSandboxApi } from "./sandbox-api";
 
 // The singleton caches clients: keep this fake cluster out of shared workers.
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
-    agentRuntime: { enabled: true },
     orchestrator: {
       kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
     },
   }),
 );
 
+const podStartTimeoutSeconds = config.agentRuntime.podStartTimeoutSeconds;
 const origin = "https://kubernetes.example.test";
 const sandboxUrl = `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/:name`;
 const podsUrl = `${origin}/api/v1/namespaces/test/pods`;
@@ -63,6 +66,7 @@ const test = base.extend<{ run: AgentRunRecord }>({
 });
 
 beforeEach(() => {
+  vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
   vi.spyOn(KubeConfig.prototype, "loadFromDefault").mockImplementation(
     function (this: KubeConfig) {
       this.loadFromOptions({
@@ -89,8 +93,208 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await a2aTaskRunService.failInFlightRuns();
+  config.agentRuntime.podStartTimeoutSeconds = podStartTimeoutSeconds;
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+test("recovers a cold workspace that starts after five minutes within the configured timeout", async ({
+  run,
+}) => {
+  config.agentRuntime.podStartTimeoutSeconds = 900;
+  vi.useFakeTimers({ toFake: ["Date"] });
+  let polls = 0;
+  server.use(
+    http.get(
+      `${origin}/api/v1/namespaces/test/secrets/:name`,
+      () => new HttpResponse(null, { status: 404 }),
+    ),
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({ metadata: { name: run.workloadName }, spec: {} }),
+    ),
+    http.patch(sandboxUrl, () => HttpResponse.json({})),
+    http.get(podsUrl, () => {
+      polls++;
+      if (polls === 1) vi.setSystemTime(Date.now() + 6 * 60_000);
+      return HttpResponse.json({
+        items: [
+          {
+            metadata: { name: "worker" },
+            status: { phase: polls === 1 ? "Pending" : "Running" },
+          },
+        ],
+      });
+    }),
+  );
+  const exec = completeExec("present");
+
+  await expect(manager.recoverRun(run)).resolves.toBeUndefined();
+  expect(polls).toBeGreaterThan(1);
+  expect(exec).toHaveBeenCalledOnce();
+});
+
+test("fails a pending workspace at the configured timeout without executing its turn", async ({
+  run,
+}) => {
+  config.agentRuntime.podStartTimeoutSeconds = 60;
+  vi.useFakeTimers({ toFake: ["Date"] });
+  let polls = 0;
+  server.use(
+    http.get(
+      `${origin}/api/v1/namespaces/test/secrets/:name`,
+      () => new HttpResponse(null, { status: 404 }),
+    ),
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({ metadata: { name: run.workloadName }, spec: {} }),
+    ),
+    http.patch(sandboxUrl, () => HttpResponse.json({})),
+    http.get(podsUrl, () => {
+      polls++;
+      vi.setSystemTime(Date.now() + 60_000);
+      return HttpResponse.json({
+        items: [{ metadata: { name: "worker" }, status: { phase: "Pending" } }],
+      });
+    }),
+  );
+  const exec = completeExec();
+
+  await expect(manager.recoverRun(run)).rejects.toThrow(
+    "The run could not be resumed within 60 seconds. Last observed startup step: Waiting for a node.",
+  );
+  expect(polls).toBe(1);
+  expect(exec).not.toHaveBeenCalled();
+});
+
+test.for([
+  ["registry.example/agent:2", false, "software image"],
+  ["registry.example/agent:1", true, "access to the host system"],
+  [
+    "registry.example/agent:2",
+    true,
+    "software image and access to the host system",
+  ],
+] as const)("refuses a changed image %s with privileged=%s before modifying the saved workspace", async ([
+  image,
+  privileged,
+  changed,
+], { run }) => {
+  server.use(
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({
+        metadata: { name: run.workloadName },
+        spec: {
+          podTemplate: {
+            spec: {
+              containers: [
+                { name: "agent-runtime", image: "registry.example/agent:1" },
+              ],
+            },
+          },
+        },
+      }),
+    ),
+  );
+  const spec: AgentRunLaunchSpec = {
+    taskId: run.taskId,
+    agentRuntimeId: run.agentId,
+    frozenName: run.workloadName,
+    runtimeScope: run.runtimeScope,
+    image,
+    privileged,
+    command: ["/bin/true"],
+    resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
+    env: {},
+    secretEnv: {},
+    activeDeadlineSeconds: 600,
+    workspaceStorageSize: "1Gi",
+    nodeSelector: {},
+    imagePullSecrets: [],
+    inputFileCount: 0,
+    effectiveNetworkPolicy: { source: "built_in", policy: null },
+  };
+  const exec = completeExec();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await expect(manager.continueRun({ session: run, spec })).rejects.toThrow(
+      `This run cannot resume because these Agent settings changed: ${changed}. Start a new run from the Agent page to use the updated settings. Saved files are kept until their retention deadline.`,
+    );
+  }
+  expect(exec).not.toHaveBeenCalled();
+});
+
+test.for([
+  60, 900,
+])("keeps image migration's five-minute pod-removal budget with a %i-second startup timeout", async (timeout, {
+  run,
+}) => {
+  config.agentRuntime.podStartTimeoutSeconds = timeout;
+  vi.useFakeTimers({ toFake: ["Date"] });
+  let polls = 0;
+  const patches: unknown[] = [];
+  const image = config.agentRuntime.catalogImages["claude-code"];
+  server.use(
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({
+        metadata: { name: run.workloadName },
+        spec: {
+          podTemplate: {
+            spec: {
+              containers: [
+                {
+                  name: "agent-runtime",
+                  image: image.replace(/:[^/]+$/, ":previous"),
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ),
+    http.patch(sandboxUrl, async ({ request }) => {
+      patches.push(await request.json());
+      return HttpResponse.json({});
+    }),
+    http.get(podsUrl, () => {
+      polls++;
+      vi.setSystemTime(Date.now() + 60_000);
+      return HttpResponse.json({
+        items: [
+          {
+            metadata: {
+              name: "worker",
+              deletionTimestamp: new Date().toISOString(),
+            },
+            status: { phase: "Succeeded" },
+          },
+        ],
+      });
+    }),
+  );
+  const spec: AgentRunLaunchSpec = {
+    taskId: run.taskId,
+    agentRuntimeId: run.agentId,
+    frozenName: run.workloadName,
+    runtimeScope: run.runtimeScope,
+    image,
+    command: ["/bin/true"],
+    privileged: false,
+    resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
+    env: {},
+    secretEnv: {},
+    activeDeadlineSeconds: 600,
+    workspaceStorageSize: "1Gi",
+    nodeSelector: {},
+    imagePullSecrets: [],
+    inputFileCount: 0,
+    effectiveNetworkPolicy: { source: "built_in", policy: null },
+  };
+  const exec = completeExec();
+
+  await expect(manager.continueRun({ session: run, spec })).rejects.toThrow(
+    "The Agent did not stop in time to update its software image",
+  );
+  expect(polls).toBe(5);
+  expect(patches).toEqual([{ spec: { operatingMode: "Suspended" } }]);
+  expect(exec).not.toHaveBeenCalled();
 });
 
 for (const endpoint of [sandboxUrl, podsUrl]) {
@@ -239,6 +443,7 @@ test.for([
       : {
           outcome: "failed",
           reason: "The Agent Runtime turn exited with status 7",
+          failure: { code: "turn.exit_status", retriable: false },
         },
   );
 });
@@ -253,6 +458,7 @@ test("propagates a custom image failure without a platform code registry", async
     outcome: "failed",
     reason:
       "The selected dataset is unavailable. Choose an existing dataset. (Runtime exit status 42.)",
+    failure: { code: "image.custom_indexer.dataset_missing", retriable: false },
   });
 });
 
@@ -261,6 +467,7 @@ test("does not expose malformed failure payloads", async ({ run }) => {
   await expect(manager.waitForCompletion({ session: run })).resolves.toEqual({
     outcome: "failed",
     reason: "The Agent Runtime turn exited with status 78",
+    failure: { code: "turn.exit_status", retriable: false },
   });
 });
 
@@ -284,6 +491,7 @@ test("still fails when the sandbox was deleted", async ({ run }) => {
   ).resolves.toEqual({
     outcome: "failed",
     reason: "The Agent Sandbox no longer exists",
+    failure: { code: "run.workspace_missing", retriable: false },
   });
 });
 
@@ -310,7 +518,328 @@ test.for([
   completeExec("");
   await expect(
     manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
-  ).resolves.toEqual({ outcome: "failed", reason: "Workspace ended" });
+  ).resolves.toEqual({
+    outcome: "failed",
+    reason: "Workspace ended",
+    failure: {
+      code:
+        condition === "SandboxExpired" ? "run.deadline_exceeded" : "pod.failed",
+      retriable: false,
+    },
+  });
+});
+
+test.for([
+  {
+    name: "container memory termination",
+    status: {
+      phase: "Failed",
+      containerStatuses: [
+        {
+          name: "agent-runtime",
+          state: {
+            terminated: {
+              exitCode: 137,
+              signal: 9,
+              reason: "OOMKilled",
+              message: "Container exceeded its memory limit",
+            },
+          },
+        },
+      ],
+    },
+    details: [
+      "agent-runtime",
+      "OOMKilled",
+      "exit code 137",
+      "signal 9",
+      "Container exceeded its memory limit",
+    ],
+    failure: { code: "pod.oom_killed", retriable: false },
+  },
+  {
+    name: "node eviction",
+    status: {
+      phase: "Failed",
+      reason: "Evicted",
+      message: "The node was low on resource: ephemeral-storage.",
+    },
+    details: ["Evicted", "The node was low on resource: ephemeral-storage."],
+    failure: { code: "pod.evicted", retriable: true },
+  },
+  {
+    name: "workspace initialization failure",
+    status: {
+      phase: "Failed",
+      initContainerStatuses: [
+        {
+          name: "initialize-workspace",
+          state: {
+            terminated: {
+              exitCode: 1,
+              reason: "Error",
+              message: "Could not initialize the workspace volume",
+            },
+          },
+        },
+      ],
+    },
+    details: [
+      "initialize-workspace",
+      "exit code 1",
+      "Could not initialize the workspace volume",
+    ],
+    failure: { code: "pod.failed", retriable: false },
+  },
+  {
+    name: "missing termination diagnostics",
+    status: { phase: "Failed" },
+    details: ["Kubernetes reported no additional failure details"],
+    failure: { code: "pod.failed", retriable: false },
+  },
+  {
+    name: "pod disruption",
+    status: {
+      phase: "Failed",
+      conditions: [
+        {
+          type: "DisruptionTarget",
+          status: "True",
+          reason: "TerminationByKubelet",
+          message: "Kubelet is terminating the pod.",
+        },
+      ],
+      containerStatuses: [
+        {
+          name: "completed-helper",
+          state: { terminated: { exitCode: 0, reason: "Completed" } },
+        },
+      ],
+    },
+    details: ["TerminationByKubelet", "Kubelet is terminating the pod."],
+    failure: { code: "pod.evicted", retriable: true },
+  },
+])("preserves Kubernetes diagnostics for $name instead of a generic Sandbox summary", async ({
+  status,
+  details,
+  failure,
+}, { run }) => {
+  server.use(
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({
+        status: {
+          conditions: [
+            {
+              type: "Finished",
+              status: "True",
+              reason: "PodFailed",
+              message: "Pod failed",
+            },
+          ],
+        },
+      }),
+    ),
+    http.get(podsUrl, () =>
+      HttpResponse.json({
+        items: [{ metadata: { name: "worker", namespace: "test" }, status }],
+      }),
+    ),
+  );
+  const exec = completeExec();
+  const completion = await manager.waitForCompletion({ session: run });
+  expect(completion.outcome).toBe("failed");
+  expect(completion.reason).toContain("test/worker");
+  for (const detail of details) expect(completion.reason).toContain(detail);
+  expect(completion.failure).toEqual(failure);
+  expect(completion.reason).not.toContain("exit code 0");
+  expect(exec).not.toHaveBeenCalled();
+});
+
+test("reports a failed pod before the Sandbox controller publishes its finished condition", async ({
+  run,
+}) => {
+  server.use(
+    http.get(podsUrl, () =>
+      HttpResponse.json({
+        items: [
+          {
+            metadata: { name: "worker" },
+            status: {
+              phase: "Failed",
+              reason: "Evicted",
+              message: "The node was low on resource: memory.",
+            },
+          },
+        ],
+      }),
+    ),
+  );
+  const exec = completeExec();
+  await expect(
+    manager.waitForCompletion({ session: run }),
+  ).resolves.toMatchObject({
+    outcome: "failed",
+    reason: expect.stringContaining("Evicted"),
+  });
+  expect(exec).not.toHaveBeenCalled();
+});
+
+test("keeps Sandbox expiry context alongside pod termination diagnostics", async ({
+  run,
+}) => {
+  server.use(
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({
+        status: {
+          conditions: [
+            {
+              type: "Finished",
+              status: "True",
+              reason: "SandboxExpired",
+              message: "The saved files have reached their retention deadline.",
+            },
+          ],
+        },
+      }),
+    ),
+    http.get(podsUrl, () =>
+      HttpResponse.json({
+        items: [
+          {
+            metadata: { name: "worker" },
+            status: {
+              phase: "Failed",
+              containerStatuses: [
+                {
+                  name: "agent-runtime",
+                  state: {
+                    terminated: { exitCode: 143, signal: 15, reason: "Error" },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    ),
+  );
+  const completion = await manager.waitForCompletion({ session: run });
+  expect(completion.reason).toContain("exit code 143");
+  expect(completion.reason).toContain("SandboxExpired");
+  expect(completion.reason).toContain(
+    "The saved files have reached their retention deadline.",
+  );
+});
+
+test("keeps a recorded successful turn ahead of a finished Sandbox condition", async ({
+  run,
+}) => {
+  server.use(
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({
+        status: {
+          conditions: [
+            {
+              type: "Finished",
+              status: "True",
+              reason: "PodFailed",
+              message: "Pod failed",
+            },
+          ],
+        },
+      }),
+    ),
+  );
+  completeExec("0");
+  await expect(manager.waitForCompletion({ session: run })).resolves.toEqual({
+    outcome: "succeeded",
+  });
+});
+
+test("bounds and strips terminal control sequences from pod diagnostics without including the pod spec", async ({
+  run,
+}) => {
+  server.use(
+    http.get(podsUrl, () =>
+      HttpResponse.json({
+        items: [
+          {
+            metadata: { name: "worker" },
+            spec: {
+              containers: [
+                {
+                  name: "agent-runtime",
+                  env: [{ name: "API_KEY", value: "synthetic-private-value" }],
+                },
+              ],
+            },
+            status: {
+              phase: "Failed",
+              reason: "Evicted",
+              message: `\u001b[31m${"diagnostic ".repeat(600)}\u001b[0m\u0000`,
+              containerStatuses: [
+                {
+                  name: "agent-runtime",
+                  state: {
+                    terminated: {
+                      exitCode: 137,
+                      reason: "OOMKilled",
+                      message: "termination ".repeat(600),
+                    },
+                  },
+                },
+                {
+                  name: "helper",
+                  state: {
+                    terminated: { exitCode: 1, message: "helper ".repeat(600) },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    ),
+  );
+  const completion = await manager.waitForCompletion({ session: run });
+  expect(completion.reason).toContain("OOMKilled");
+  expect(completion.reason).toContain("truncated");
+  expect(completion.reason?.length).toBeLessThanOrEqual(4096);
+  expect(completion.reason).not.toContain("\u001b");
+  expect(completion.reason).not.toContain("\u0000");
+  expect(completion.reason).not.toContain("synthetic-private-value");
+});
+
+test("preserves failed-pod diagnostics while resuming a workspace, before executing a turn", async ({
+  run,
+}) => {
+  server.use(
+    http.get(
+      `${origin}/api/v1/namespaces/test/secrets/:name`,
+      () => new HttpResponse(null, { status: 404 }),
+    ),
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({ metadata: { name: run.workloadName }, spec: {} }),
+    ),
+    http.patch(sandboxUrl, () => HttpResponse.json({})),
+    http.get(podsUrl, () =>
+      HttpResponse.json({
+        items: [
+          {
+            metadata: { name: "worker" },
+            status: {
+              phase: "Failed",
+              reason: "Evicted",
+              message: "The node was low on resource: memory.",
+            },
+          },
+        ],
+      }),
+    ),
+  );
+  const exec = completeExec();
+  await expect(manager.recoverRun(run)).rejects.toThrow("Evicted");
+  expect(exec).not.toHaveBeenCalled();
 });
 
 test.for([
@@ -463,6 +992,56 @@ test("cancellation wins over a successful in-flight result read", async ({
   await expect(
     manager.waitForCompletion({ session: run, abortSignal: controller.signal }),
   ).resolves.toEqual({ outcome: "aborted" });
+});
+
+test.for([
+  403, 503,
+])("persists a readable HTTP %i connection failure when a recovered run ends", async (status, {
+  run,
+}) => {
+  server.use(
+    http.get(
+      `${origin}/api/v1/namespaces/test/secrets/:name`,
+      () => new HttpResponse(null, { status: 404 }),
+    ),
+    http.delete(
+      `${origin}/api/v1/namespaces/test/secrets/:name`,
+      () => new HttpResponse(null, { status: 404 }),
+    ),
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({
+        metadata: { labels: { [AGENT_RUNTIME_TASK_LABEL]: run.taskId } },
+        spec: {},
+        status: {},
+      }),
+    ),
+  );
+  let observations = 0;
+  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+    if ((args[3] as string[]).join(" ").includes("read-turn-result")) {
+      observations++;
+      // The real SDK handshake shape is covered by exec-handshake.unit.test.
+      throw {
+        message: `Unexpected server response: ${status}`,
+        target: { authorization: "synthetic-private-token" },
+      };
+    }
+    args[8]?.({ status: "Success" });
+    return socket();
+  });
+  const lifecycle = new A2AManager({ taskMode: "full" });
+  const reason = `Agent Runtime exec connection failed (HTTP ${status})`;
+  await expect(
+    lifecycle.adoptAgentRun({ taskId: run.taskId, session: run }),
+  ).rejects.toThrow(reason);
+  expect(await A2ATaskModel.findById(run.taskId)).toMatchObject({
+    state: "TASK_STATE_FAILED",
+    statusReason: reason,
+  });
+  expect(observations).toBe(1);
+  expect(
+    (await AgentRunModel.findByTaskId(run.taskId))?.endedAt,
+  ).toBeInstanceOf(Date);
 });
 
 test("an already canceled monitor makes no requests", async ({ run }) => {

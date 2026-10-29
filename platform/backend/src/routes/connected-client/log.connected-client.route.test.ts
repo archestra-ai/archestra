@@ -1,0 +1,301 @@
+import {
+  ADMIN_ROLE_NAME,
+  EDITOR_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
+import db, { schema, withDbTransaction } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
+import { ConnectedClientModel, ConnectionSetupModel } from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  authenticatedRouteApp,
+  USER_HEADER,
+} from "@/test/authenticated-route-app";
+import type { ConnectionSetupClientId, User } from "@/types";
+
+describe("GET /api/connected-clients/log", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let admin: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    organizationId = (await makeOrganization()).id;
+    admin = await makeUser({ name: "Admin" });
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & { organizationId: string; user: User }
+      ).organizationId = organizationId;
+      (request as typeof request & { user: User }).user = admin;
+    });
+    const { default: routes } = await import("./connected-client.routes");
+    await app.register(routes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const getLog = async (query = "") => {
+    const response = await app.inject({
+      method: "GET",
+      // A page size in the query replaces the default one.
+      url: `/api/connected-clients/log?${
+        query.includes("limit=") ? query.slice(1) : `limit=10${query}`
+      }`,
+    });
+    expect(response.statusCode).toBe(200);
+    return response.json();
+  };
+
+  test("logs each redeemed setup as a connect event, newest first", async ({
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const ada = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(ada.id, organizationId);
+    const gateway = await makeAgent({
+      organizationId,
+      name: "Engineering tools",
+      agentType: "mcp_gateway",
+    });
+    await redeem(ada.id, "codex", { deviceName: "work-laptop" });
+    await redeem(ada.id, "claude-code", {
+      deviceName: "home-mac",
+      mcpGatewayId: gateway.id,
+    });
+    // Started but never ran: not a connection.
+    await ConnectionSetupModel.create({
+      organizationId,
+      userId: admin.id,
+      clientId: "cursor",
+      platform: "macos",
+      baseUrl: "http://localhost:9000/v1",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const body = await getLog();
+
+    expect(body.data).toEqual([
+      expect.objectContaining({
+        action: "connected",
+        userName: "Ada Lovelace",
+        clientId: "claude-code",
+        platform: "macos",
+        deviceName: "home-mac",
+        mcpGateway: { id: gateway.id, name: "Engineering tools" },
+        llmProxy: null,
+        disconnectedBy: null,
+      }),
+      expect.objectContaining({
+        action: "connected",
+        clientId: "codex",
+        deviceName: "work-laptop",
+        mcpGateway: null,
+      }),
+    ]);
+    expect(Date.parse(body.data[0].occurredAt)).toBeGreaterThan(
+      Date.now() - 60_000,
+    );
+  });
+
+  test("logs one disconnect event per disconnect, naming an admin who did it", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser();
+    await makeMember(ada.id, organizationId);
+    await redeem(ada.id, "codex", { deviceName: "work-laptop" });
+    await redeem(ada.id, "codex", { deviceName: "home-mac" });
+    await disconnect(ada.id, "codex", admin.id);
+
+    const body = await getLog();
+
+    expect(body.data.map((e: { action: string }) => e.action)).toEqual([
+      "disconnected",
+      "connected",
+      "connected",
+    ]);
+    expect(body.data[0]).toMatchObject({
+      clientId: "codex",
+      deviceName: null,
+      disconnectedBy: { id: admin.id, name: "Admin" },
+    });
+    expect(
+      (await getLog("&action=disconnected")).data.map(
+        (e: { action: string }) => e.action,
+      ),
+    ).toEqual(["disconnected"]);
+  });
+
+  test("logs an agent's first OAuth sign-in under its registered name", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(ada.id, organizationId);
+    const outsider = await makeUser({ name: "Outsider" });
+    await db.insert(schema.oauthClientsTable).values([
+      {
+        id: "droid-row",
+        clientId: "droid-client",
+        name: "Droid",
+        redirectUris: ["http://localhost:1/callback"],
+      },
+      {
+        id: "amp-row",
+        clientId: "amp-client",
+        name: "Amp MCP Client (archestra)",
+        redirectUris: ["http://localhost:41592/oauth/callback"],
+      },
+    ]);
+    await db.insert(schema.oauthConsentsTable).values([
+      { id: "c1", clientId: "droid-client", userId: ada.id, scopes: ["mcp"] },
+      { id: "c2", clientId: "amp-client", userId: ada.id, scopes: ["mcp"] },
+      // Not a member of this organization.
+      { id: "c3", clientId: "droid-client", userId: outsider.id, scopes: [] },
+    ]);
+
+    const { data } = await getLog();
+    expect(data).toHaveLength(2);
+    expect(data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "connected",
+          via: "oauthSignIn",
+          userId: ada.id,
+          clientId: null,
+          agentName: "Droid",
+        }),
+        expect.objectContaining({
+          via: "oauthSignIn",
+          clientId: "amp",
+          agentName: "Amp",
+        }),
+      ]),
+    );
+  });
+
+  test("filters by user", async ({ makeUser, makeMember }) => {
+    const ada = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(ada.id, organizationId);
+    const grace = await makeUser({ name: "Grace Hopper" });
+    await makeMember(grace.id, organizationId);
+    await redeem(ada.id, "codex");
+    await redeem(grace.id, "codex");
+    await redeem(grace.id, "cursor");
+
+    const names = (body: { data: { userName: string }[] }) =>
+      body.data.map((entry) => entry.userName);
+    expect(names(await getLog(`&userId=${ada.id}`))).toEqual(["Ada Lovelace"]);
+  });
+
+  test("pages with a cursor without repeating or skipping events", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser();
+    await makeMember(ada.id, organizationId);
+    for (const clientId of ["codex", "cursor", "opencode"] as const) {
+      await redeem(ada.id, clientId);
+    }
+
+    const first = await getLog("&limit=2");
+    expect(first.data.map((e: { clientId: string }) => e.clientId)).toEqual([
+      "opencode",
+      "cursor",
+    ]);
+    expect(first.pagination.hasNext).toBe(true);
+    const second = await getLog(
+      `&limit=2&cursor=${first.pagination.nextCursor}`,
+    );
+    expect(second.data.map((e: { clientId: string }) => e.clientId)).toEqual([
+      "codex",
+    ]);
+    expect(second.pagination.hasNext).toBe(false);
+  });
+
+  test("leaves out other organizations' events", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const otherOrgId = (await makeOrganization()).id;
+    const outsider = await makeUser();
+    await makeMember(outsider.id, otherOrgId);
+    await redeem(outsider.id, "codex", { organizationId: otherOrgId });
+
+    expect((await getLog()).data).toEqual([]);
+  });
+
+  test.for([
+    [ADMIN_ROLE_NAME, 200],
+    [EDITOR_ROLE_NAME, 403],
+    [MEMBER_ROLE_NAME, 403],
+  ] as const)("is for admins only: %s gets %i", async ([role, statusCode], {
+    makeUser,
+    makeMember,
+  }) => {
+    const caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role });
+    const { default: routes } = await import("./connected-client.routes");
+    const gated = await authenticatedRouteApp({
+      organizationId,
+      routes: [routes],
+    });
+    try {
+      const response = await gated.inject({
+        method: "GET",
+        url: "/api/connected-clients/log?limit=10",
+        headers: { [USER_HEADER]: caller.id },
+      });
+      expect(response.statusCode).toBe(statusCode);
+    } finally {
+      await gated.close();
+    }
+  });
+
+  async function disconnect(
+    userId: string,
+    clientId: ConnectionSetupClientId,
+    revokedByUserId: string,
+  ) {
+    await withDbTransaction((tx) =>
+      ConnectedClientModel.revokeForUser({
+        organizationId,
+        userId,
+        clientId,
+        revokedByUserId,
+        tx,
+      }),
+    );
+  }
+
+  async function redeem(
+    userId: string,
+    clientId: ConnectionSetupClientId,
+    options: {
+      deviceName?: string;
+      mcpGatewayId?: string;
+      organizationId?: string;
+    } = {},
+  ) {
+    const { rawToken } = await ConnectionSetupModel.create({
+      organizationId: options.organizationId ?? organizationId,
+      userId,
+      clientId,
+      platform: "macos",
+      deviceName: options.deviceName,
+      mcpGatewayId: options.mcpGatewayId,
+      baseUrl: "http://localhost:9000/v1",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    // Redeems in one millisecond tie on consumedAt, and the log orders by it.
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await ConnectionSetupModel.claimByToken({ rawToken });
+  }
+});

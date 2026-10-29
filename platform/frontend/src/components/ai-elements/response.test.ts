@@ -1,7 +1,10 @@
 import { render } from "@testing-library/react";
 import { createElement } from "react";
-import { describe, expect, it } from "vitest";
-import { isSameOriginUrl, Response } from "./response";
+import { beforeAll, describe, expect, it } from "vitest";
+import { isSameOriginUrl, preloadResponseMarkdown, Response } from "./response";
+
+// The renderer is a lazy chunk; once loaded it renders in the same pass.
+beforeAll(() => preloadResponseMarkdown());
 
 const APP_ID = "7b0839a1-4663-4371-a739-e5dac7f8c33e";
 

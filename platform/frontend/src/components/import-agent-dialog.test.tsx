@@ -76,7 +76,6 @@ const validPayload = {
     systemPrompt: "Be helpful",
     icon: "🤖",
     scope: "personal",
-    considerContextUntrusted: false,
     toolExposureMode: "full",
     incomingEmailEnabled: false,
     incomingEmailSecurityMode: "private",

@@ -40,6 +40,7 @@ export function makeSessionSummary(
     sources: ["api"],
     interactionId: null,
     requestCount: 1,
+    failedOverCount: 0,
     totalInputTokens: 100,
     totalOutputTokens: 50,
     totalCacheReadTokens: 0,
@@ -54,6 +55,7 @@ export function makeSessionSummary(
     models: ["gpt-4o"],
     profileId: "test-profile-id",
     profileName: "Test Agent",
+    profileAgentType: "agent",
     externalAgentIds: [],
     externalAgentIdLabels: [],
     authMethods: [],
@@ -65,8 +67,10 @@ export function makeSessionSummary(
     lastUserMessagePreview: null,
     lastInteractionId: null,
     lastInteractionType: null,
+    contentNotStored: false,
     conversationTitle: null,
     claudeCodeTitle: null,
+    connectorName: null,
     ...overrides,
   };
 }
@@ -79,9 +83,15 @@ export function makeInteraction(
     profileId: "test-profile-id",
     connectorId: null,
     appId: null,
+    providerApiKeyId: null,
+    modelPoolId: null,
+    attempt: null,
+    attemptOutcome: null,
+    failureReason: null,
     externalAgentId: null,
     runId: null,
     userId: null,
+    serviceAccountId: null,
     virtualKeyId: null,
     passthroughVirtualKeyId: null,
     environmentId: null,
@@ -90,6 +100,8 @@ export function makeInteraction(
     billingMode: "metered",
     authenticatedAppId: null,
     authenticatedAppName: null,
+    billingTeamId: null,
+    attributionLabels: null,
     request: {
       model: "gpt-4o",
       messages: [{ role: "user", content: "What is the capital of France?" }],
@@ -114,6 +126,7 @@ export function makeInteraction(
     type: "openai:chatCompletions",
     model: "gpt-4o",
     baselineModel: null,
+    durationMs: null,
     inputTokens: 100,
     inputTokensEstimated: false,
     outputTokens: 50,
@@ -167,13 +180,14 @@ export const llmLogsSessionsSeed = [
     source: "api",
     lastUserMessagePreview: "Plain API session message",
     lastInteractionType: "openai:chatCompletions",
+    contentNotStored: false,
   }),
 ];
 
 /**
  * Requests inside the seeded Claude Code session, so the session detail page
- * has a conversation to show above its table rather than the empty state. The
- * ids differ so the table's rows link to distinct interaction detail pages.
+ * has a conversation to show rather than the empty state. The ids differ so
+ * each row of its request list selects a distinct request.
  */
 export const llmLogsInteractionsSeed = [
   makeInteraction({

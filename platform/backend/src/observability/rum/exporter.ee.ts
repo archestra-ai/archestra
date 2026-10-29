@@ -69,10 +69,10 @@ class RumExporter {
         }),
       ),
       processors: [
-        new BatchLogRecordProcessor(
-          new OTLPLogExporter(logExporter),
-          config.observability.rum.batchProcessor,
-        ),
+        new BatchLogRecordProcessor({
+          exporter: new OTLPLogExporter(logExporter),
+          ...config.observability.rum.batchProcessor,
+        }),
       ],
     });
     this.otelLogger = this.loggerProvider.getLogger(

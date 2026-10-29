@@ -74,7 +74,7 @@ runs:
 
     - name: Download platform image artifact
       if: ${{ inputs.source == 'artifact' }}
-      uses: ./.github/actions/github-download-artifact
+      uses: $/.github/actions/github-download-artifact
       with:
         name: ${{ inputs.artifact-name }}
         path: /tmp
@@ -82,8 +82,13 @@ runs:
     - name: Load platform Docker image
       if: ${{ inputs.source == 'artifact' }}
       shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.image-tag }}
       run: |
         gunzip -c /tmp/platform-image.tar.gz | docker load
+        # Fail closed if a wrong/missing archive was selected. Artifact-loaded
+        # jobs must consume this exact run's image, never silently pull a tag.
+        docker image inspect "${PLATFORM_IMAGE_TAG}" > /dev/null
 
     - name: Resolve platform image tag
       id: resolve-tag

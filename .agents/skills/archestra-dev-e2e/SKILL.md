@@ -69,7 +69,7 @@ Choose the project that should run the spec and confirm it appears in the output
 ## Fixtures
 
 - Use the Playwright fixtures pattern.
-- API fixtures live in `e2e-tests/tests/api-fixtures.ts` — import relative to the spec's location (`./api-fixtures` from `tests/`, `../api-fixtures` from a subdirectory like `tests/llm-proxy/`). They include `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, and `deleteTrustedDataPolicy`.
+- API fixtures live in `e2e-tests/tests/api-fixtures.ts` — import relative to the spec's location (`./api-fixtures` from `tests/`, `../api-fixtures` from a subdirectory like `tests/llm-proxy/`). They include `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`.
 - UI fixtures live in `e2e-tests/fixtures.ts` — import relative to the spec's location (`../fixtures` from `tests/`). They include `goToPage` and `makeRandomString`.
 - API behavior that `app.inject` + PGlite can cover belongs in backend Vitest route tests (#6155). Keep Playwright for browser flows and behavior requiring the real stack, such as host kubectl, NetworkPolicy enforcement, or Helm fixtures.
 

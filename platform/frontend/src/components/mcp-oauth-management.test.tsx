@@ -1,45 +1,48 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useProfiles } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
 import {
-  useCreateMcpOauthClient,
-  useDeleteMcpOauthClient,
-  useMcpOauthClients,
-  useRotateMcpOauthClientSecret,
-  useUpdateMcpOauthClient,
-} from "@/lib/mcp-oauth-clients.query";
+  useCreateOauthClient,
+  useDeleteOauthClient,
+  useOauthClientsForResource,
+  useRotateOauthClientSecret,
+  useUpdateOauthClient,
+} from "@/lib/oauth-clients.query";
 import { McpOauthManagement } from "./mcp-oauth-management";
 
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/agent.query", () => ({ useProfiles: vi.fn() }));
-vi.mock("@/lib/mcp-oauth-clients.query", () => ({
-  useCreateMcpOauthClient: vi.fn(),
-  useDeleteMcpOauthClient: vi.fn(),
-  useMcpOauthClients: vi.fn(),
-  useRotateMcpOauthClientSecret: vi.fn(),
-  useUpdateMcpOauthClient: vi.fn(),
+vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+  useLlmProviderApiKeys: () => ({ data: [] }),
 }));
-vi.mock("@/components/create-oauth-client-dialog", () => ({
-  CreateOAuthClientDialog: (props: {
+vi.mock("@/lib/oauth-clients.query", () => ({
+  useCreateOauthClient: vi.fn(),
+  useDeleteOauthClient: vi.fn(),
+  useOauthClientsForResource: vi.fn(),
+  useRotateOauthClientSecret: vi.fn(),
+  useUpdateOauthClient: vi.fn(),
+}));
+vi.mock("@/components/create-managed-oauth-client-dialog", () => ({
+  CreateManagedOAuthClientDialog: (props: {
     open: boolean;
-    fixedClientType?: string;
+    defaultClientType?: string;
     defaultAllowedGatewayIds?: string[];
   }) =>
     props.open ? (
       <div>
-        create:{props.fixedClientType}:
+        create:{props.defaultClientType}:
         {props.defaultAllowedGatewayIds?.join(",")}
       </div>
     ) : null,
 }));
-vi.mock("@/components/mcp-oauth-client-dialogs", () => ({
-  EditOAuthClientDialog: (props: { oauthClient: { name: string } | null }) =>
+vi.mock("@/components/edit-managed-oauth-client-dialog", () => ({
+  EditManagedOAuthClientDialog: (props: {
+    oauthClient: { name: string } | null;
+  }) =>
     props.oauthClient ? <div>editing:{props.oauthClient.name}</div> : null,
 }));
 vi.mock("@/components/delete-confirm-dialog", () => ({
@@ -55,6 +58,7 @@ const assignedClient = {
   name: "Assigned client",
   clientId: "mcp_client_1",
   grantType: "client_credentials",
+  scopes: ["mcp", "a2a"],
   allowedGatewayIds: ["resource-1"],
   redirectUris: [],
   disabled: false,
@@ -69,22 +73,16 @@ beforeEach(() => {
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "user-1" } },
   } as ReturnType<typeof useSession>);
-  vi.mocked(useProfiles).mockReturnValue({ data: [] } as ReturnType<
-    typeof useProfiles
-  >);
-  vi.mocked(useMcpOauthClients).mockReturnValue({
-    data: [
-      assignedClient,
-      { ...assignedClient, id: "other", name: "Other", allowedGatewayIds: [] },
-    ],
+  vi.mocked(useOauthClientsForResource).mockReturnValue({
+    data: [assignedClient, { ...assignedClient, id: "other", name: "Other" }],
     isPending: false,
     isLoadingError: false,
-  } as unknown as ReturnType<typeof useMcpOauthClients>);
+  } as unknown as ReturnType<typeof useOauthClientsForResource>);
   for (const hook of [
-    useCreateMcpOauthClient,
-    useUpdateMcpOauthClient,
-    useRotateMcpOauthClientSecret,
-    useDeleteMcpOauthClient,
+    useCreateOauthClient,
+    useUpdateOauthClient,
+    useRotateOauthClientSecret,
+    useDeleteOauthClient,
   ]) {
     vi.mocked(hook).mockReturnValue({
       isPending: false,
@@ -95,21 +93,23 @@ beforeEach(() => {
 });
 
 describe("McpOauthManagement", () => {
-  it("filters clients and independently exposes permitted operations", () => {
+  it("lists the resource's clients and independently exposes permitted operations", () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permission) =>
         ({
-          data:
-            "mcpOauthClient" in permission &&
-            permission.mcpOauthClient.includes("read"),
+          data: permission.oauthClient?.includes("read") === true,
         }) as ReturnType<typeof useHasPermissions>,
     );
     mockClientGrants(["update"]);
 
-    render(<McpOauthManagement resourceId="resource-1" resourceKind="agent" />);
+    render(<McpOauthManagement resourceId="resource-1" />);
 
+    expect(useOauthClientsForResource).toHaveBeenCalledWith({
+      resourceId: "resource-1",
+      enabled: true,
+    });
     expect(screen.getByText("Assigned client")).toBeInTheDocument();
-    expect(screen.queryByText("Other")).not.toBeInTheDocument();
+    expect(screen.getByText("Other")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Edit Assigned client" }),
     ).toBeInTheDocument();
@@ -124,9 +124,9 @@ describe("McpOauthManagement", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens fixed MCP create, edit, rotate, and delete dialogs", async () => {
+  it("opens combined create, edit, rotate, and delete dialogs", async () => {
     const user = userEvent.setup();
-    render(<McpOauthManagement resourceId="resource-1" resourceKind="agent" />);
+    render(<McpOauthManagement resourceId="resource-1" />);
 
     await user.click(
       screen.getByRole("button", { name: /Create OAuth client/ }),
@@ -149,7 +149,7 @@ describe("McpOauthManagement", () => {
   it("hides edit and delete when grants cover a different client", () => {
     mockClientGrants(["update", "delete"], "other");
 
-    render(<McpOauthManagement resourceId="resource-1" resourceKind="agent" />);
+    render(<McpOauthManagement resourceId="resource-1" />);
 
     expect(screen.getByText("Assigned client")).toBeInTheDocument();
     expect(
@@ -164,7 +164,7 @@ describe("McpOauthManagement", () => {
 function mockClientGrants(actions: string[], scope = assignedClient.id) {
   vi.mocked(useScopedCapabilities).mockReturnValue({
     data: actions.map((action) => ({
-      resource: "mcpOauthClient",
+      resource: "oauthClient",
       action,
       scope,
     })),

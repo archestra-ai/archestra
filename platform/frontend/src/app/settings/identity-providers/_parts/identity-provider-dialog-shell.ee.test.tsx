@@ -3,18 +3,25 @@ import {
   type IdentityProviderFormValues,
 } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { describe, expect, it, vi } from "vitest";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   type IdentityProviderDialogSection,
   IdentityProviderDialogShell,
 } from "./identity-provider-dialog-shell.ee";
 
-function TestDialog({ onSubmit }: { onSubmit: () => void }) {
+function TestDialog({
+  onSubmit,
+  invalidRule = false,
+}: {
+  onSubmit: () => void;
+  invalidRule?: boolean;
+}) {
   const [activeSection, setActiveSection] =
     useState<IdentityProviderDialogSection>("general");
   const form = useForm<IdentityProviderFormValues>({
@@ -36,7 +43,9 @@ function TestDialog({ onSubmit }: { onSubmit: () => void }) {
         scopes: ["openid"],
         mapping: { id: "sub", email: "email", name: "name" },
       },
-      roleMapping: { rules: [] },
+      roleMapping: {
+        rules: invalidRule ? [{ expression: "", role: "member" }] : [],
+      },
     },
   });
 
@@ -55,10 +64,18 @@ function TestDialog({ onSubmit }: { onSubmit: () => void }) {
         { id: "team-sync", label: "Team Sync" },
       ]}
       onActiveSectionChange={setActiveSection}
-      onSubmit={form.handleSubmit(onSubmit)}
+      onSubmit={onSubmit}
       footer={<Button type="submit">Save</Button>}
     >
-      <div>{activeSection}</div>
+      <div>
+        <span>{activeSection}</span>
+        {activeSection === "role-mapping" && invalidRule && (
+          <Input
+            aria-label="Rule expression"
+            {...form.register("roleMapping.rules.0.expression")}
+          />
+        )}
+      </div>
     </IdentityProviderDialogShell>
   );
 }
@@ -77,5 +94,23 @@ describe("IdentityProviderDialogShell", () => {
 
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(onSubmit).toHaveBeenCalledOnce();
+  });
+  it("reveals an invalid rule in an unmounted section and lets the admin fix it", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<TestDialog onSubmit={onSubmit} invalidRule />);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole("textbox", { name: "Rule expression" }),
+    ).toHaveFocus();
+    expect(screen.getByRole("alert")).toHaveTextContent("Role Mapping");
+    await user.type(
+      screen.getByRole("textbox", { name: "Rule expression" }),
+      "true",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

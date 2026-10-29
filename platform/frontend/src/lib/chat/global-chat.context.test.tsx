@@ -1,11 +1,16 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { act, render, waitFor } from "@testing-library/react";
-import { useEffect } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { ChatProvider, useGlobalChat } from "./global-chat.context";
+import {
+  ChatProvider,
+  useChatSession,
+  useChatSessionSnapshot,
+  useGlobalChat,
+} from "./global-chat.context";
 
 type ChatSessionSnapshot = ReturnType<
   ReturnType<typeof useGlobalChat>["getSession"]
@@ -140,7 +145,9 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled(), {
+      timeout: 5_000,
+    });
 
     vi.useFakeTimers();
     act(() => {
@@ -1323,6 +1330,93 @@ describe("ChatProvider retries", () => {
   });
 });
 
+describe("streamed session updates", () => {
+  type StreamState = { messages: UIMessage[]; status: string };
+  let streamState: StreamState;
+  const listeners = new Set<() => void>();
+  const setStreamState = (next: StreamState) => {
+    streamState = next;
+    for (const listener of listeners) listener();
+  };
+  const assistantReply = (text: string): UIMessage[] => [
+    { id: "user-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+    { id: "assistant-1", role: "assistant", parts: [{ type: "text", text }] },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    streamState = { messages: [], status: "ready" };
+    mocks.useChat.mockImplementation(function useStreamingChat() {
+      const state = useSyncExternalStore(
+        (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+        () => streamState,
+      );
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        clearError: mocks.clearError,
+        error: undefined,
+        messages: state.messages,
+        regenerate: mocks.regenerate,
+        resumeStream: mocks.resumeStream,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: state.status,
+        stop: mocks.stop,
+      };
+    });
+  });
+
+  it("re-renders session subscribers per chunk but global consumers only when generation starts or stops", async () => {
+    const globalRenders: boolean[] = [];
+    function GlobalConsumer() {
+      const { generatingConversationIds } = useGlobalChat();
+      globalRenders.push(generatingConversationIds.has("conversation-1"));
+      return null;
+    }
+    let latestText = "";
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <GlobalConsumer />
+        <CaptureChatSession
+          onSession={(session) => {
+            const part = session?.messages.at(-1)?.parts[0];
+            latestText = part?.type === "text" ? part.text : "";
+          }}
+        />
+      </ChatProvider>,
+    );
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    act(() => {
+      setStreamState({ messages: assistantReply(""), status: "streaming" });
+    });
+    await waitFor(() => expect(globalRenders.at(-1)).toBe(true));
+    const rendersBeforeChunks = globalRenders.length;
+
+    let text = "";
+    for (let chunk = 0; chunk < 20; chunk++) {
+      text += `word${chunk} `;
+      act(() => {
+        setStreamState({ messages: assistantReply(text), status: "streaming" });
+      });
+    }
+    await waitFor(() => expect(latestText).toBe(text));
+    // The sidebar and other global consumers sit out every streamed chunk.
+    expect(globalRenders.length).toBe(rendersBeforeChunks);
+
+    act(() => {
+      setStreamState({ messages: assistantReply(text), status: "ready" });
+    });
+    await waitFor(() => expect(globalRenders.at(-1)).toBe(false));
+  });
+});
+
 describe("ChatProvider auto title generation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1732,6 +1826,146 @@ describe("stopping with queued messages", () => {
     rerender(tree());
     await waitFor(() => expect(mocks.sendMessage).not.toHaveBeenCalled());
     expect(chatMessageQueue.get(conversationId)).toHaveLength(0);
+  });
+
+  it.each([
+    "ready",
+    "approval-requested",
+    "input-available",
+    "approval-responded",
+  ])("does not interrupt when the current session is %s", async (state) => {
+    let session: ChatSessionSnapshot;
+    if (state === "ready") status = "ready";
+    else
+      messages = [
+        {
+          id: "assistant",
+          role: "assistant",
+          parts: [
+            {
+              type: "dynamic-tool",
+              toolName: "write",
+              toolCallId: "call",
+              state,
+              input: {},
+            },
+          ],
+        },
+      ] as UIMessage[];
+    render(
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+        <CaptureChatSession
+          conversationId={conversationId}
+          onSession={(value) => {
+            session = value;
+          }}
+        />
+      </ChatProvider>,
+    );
+    await waitFor(() => expect(session).toBeDefined());
+    const stopServer = vi.fn().mockResolvedValue(undefined);
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, { text: "correction" });
+      session?.stop({
+        preserveQueuedMessages: true,
+        interruptQueued: true,
+        stopServer,
+      });
+    });
+    expect(stopServer).not.toHaveBeenCalled();
+    expect(mocks.stop).not.toHaveBeenCalled();
+    if (state !== "ready")
+      expect(chatMessageQueue.get(conversationId)).toHaveLength(1);
+  });
+
+  it.each([
+    true,
+    false,
+  ])("sends the full queue in one turn after interrupt (aborted=%s)", async (isAbort) => {
+    let session: ChatSessionSnapshot;
+    let finishStop: () => void = () => {};
+    const stopServer = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishStop = resolve;
+        }),
+    );
+    const tree = () => (
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+        <CaptureChatSession
+          conversationId={conversationId}
+          onSession={(value) => {
+            session = value;
+          }}
+        />
+      </ChatProvider>
+    );
+    const { rerender } = render(tree());
+    await waitFor(() => expect(session).toBeDefined());
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, {
+        text: "first correction",
+        files: [
+          {
+            url: "data:text/plain;base64,SGk=",
+            mediaType: "text/plain",
+            filename: "note.txt",
+          },
+        ],
+      });
+      chatMessageQueue.enqueue(conversationId, { text: "second correction" });
+      session?.stop({
+        preserveQueuedMessages: true,
+        interruptQueued: true,
+        stopServer,
+      });
+      session?.stop({
+        preserveQueuedMessages: true,
+        interruptQueued: true,
+        stopServer,
+      });
+    });
+    expect(stopServer).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: { id: "interrupted", role: "assistant", parts: [] },
+        isAbort,
+        isError: false,
+      });
+    });
+    status = "ready";
+    rerender(tree());
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+    await act(async () => finishStop());
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [{ type: "text", text: "second correction" }],
+      }),
+    );
+    const append = mocks.setMessages.mock.calls.at(-1)?.[0];
+    expect(typeof append).toBe("function");
+    if (typeof append !== "function")
+      throw new Error("Missing batch transcript update");
+    expect(append([])).toEqual([
+      expect.objectContaining({
+        role: "user",
+        parts: [
+          { type: "text", text: "first correction" },
+          {
+            type: "file",
+            url: "data:text/plain;base64,SGk=",
+            mediaType: "text/plain",
+            filename: "note.txt",
+          },
+        ],
+      }),
+    ]);
+    expect(chatMessageQueue.get(conversationId)).toHaveLength(0);
+    rerender(tree());
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it("sends the oldest queued message immediately after a steering interrupt", async () => {
@@ -2365,6 +2599,99 @@ describe("context window breakdown state", () => {
     expect(sessionA.current?.contextWindow).toBeNull();
     expect(sessionB.current?.contextWindow).toBeNull();
   });
+
+  it("reconciles contextWindow.usedTokens when data-token-usage refines the prompt token count", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-breakdown",
+        data: validBreakdown,
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextWindow?.usedTokens).toBe(84_200),
+    );
+    expect(latestSessionRef.current?.contextTokensUsed).toBe(84_200);
+
+    // Provider reports exact prompt tokens after the response finishes.
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-token-usage",
+        data: { inputTokens: 168_400, outputTokens: 120, totalTokens: 168_520 },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(168_400),
+    );
+    expect(latestSessionRef.current?.contextWindow?.usedTokens).toBe(168_400);
+    expect(latestSessionRef.current?.contextWindow?.freeTokens).toBe(
+      200_000 - 168_400,
+    );
+  });
+
+  it("clears stale contextWindow when compaction updates contextTokensUsed", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-breakdown",
+        data: validBreakdown,
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextWindow).not.toBeNull(),
+    );
+    expect(latestSessionRef.current?.contextTokensUsed).toBe(
+      validBreakdown.usedTokens,
+    );
+
+    act(() => {
+      latestSessionRef.current?.recordContextCompaction({
+        trigger: "manual",
+        originalTokenEstimate: 84_200,
+        compactedTokenEstimate: 12_000,
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(12_000),
+    );
+    expect(latestSessionRef.current?.contextWindow).toBeNull();
+  });
 });
 
 describe("ChatProvider app-tool cache invalidation", () => {
@@ -2858,6 +3185,58 @@ function RegisterChatSession({
   return null;
 }
 
+describe("useChatSession snapshot", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.resumeStream.mockReturnValue(new Promise(() => {}));
+    const messages: UIMessage[] = [];
+    mocks.useChat.mockImplementation(() => ({
+      addToolApprovalResponse: mocks.addToolApprovalResponse,
+      addToolResult: mocks.addToolResult,
+      clearError: mocks.clearError,
+      error: undefined,
+      messages,
+      regenerate: mocks.regenerate,
+      resumeStream: mocks.resumeStream,
+      sendMessage: mocks.sendMessage,
+      setMessages: mocks.setMessages,
+      status: "ready",
+      stop: mocks.stop,
+    }));
+  });
+
+  it("runs effects keyed on the session's functions once it appears, even when an urgent re-render lands at the same time", async () => {
+    // What a just-created chat waits for before sending its opening message.
+    // An unrelated urgent state update arriving with the session snapshot must
+    // not leave those effects believing the functions were already there.
+    const seenSendMessage: string[] = [];
+    function SessionConsumer() {
+      const { subscribeSessionUpdates } = useGlobalChat();
+      const [, setUnrelated] = useState(0);
+      const session = useChatSession({ conversationId: "conversation-1" });
+      // Subscribed after the snapshot's own listener, so this urgent no-op
+      // update lands while the snapshot's transition update is still pending.
+      useEffect(
+        () => subscribeSessionUpdates(() => setUnrelated((value) => value)),
+        [subscribeSessionUpdates],
+      );
+      const sendMessage = session?.sendMessage;
+      useEffect(() => {
+        seenSendMessage.push(typeof sendMessage);
+      }, [sendMessage]);
+      return null;
+    }
+
+    render(
+      <ChatProvider>
+        <SessionConsumer />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(seenSendMessage).toContain("function"));
+  });
+});
+
 function CaptureChatSession({
   conversationId = "conversation-1",
   onSession,
@@ -2865,11 +3244,10 @@ function CaptureChatSession({
   conversationId?: string;
   onSession: (session: ChatSessionSnapshot) => void;
 }) {
-  const { getSession } = useGlobalChat();
-  const session = getSession(conversationId);
+  const session = useChatSessionSnapshot(conversationId);
 
   useEffect(() => {
-    onSession(session);
+    onSession(session ?? undefined);
   }, [onSession, session]);
 
   return null;

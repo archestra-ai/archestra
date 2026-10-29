@@ -19,20 +19,25 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import {
-  MCP_SERVER_ISSUE_KINDS,
-  type McpServerAttentionFacet,
-} from "@/lib/mcp/mcp-server-issues";
+import { MCP_SERVER_ISSUE_KINDS } from "@/lib/mcp/mcp-server-issues";
 import { cn } from "@/lib/utils/tailwind";
+import {
+  ATTENTION_FACET_STATUS_VALUES,
+  INSTALLED_STATUS_VALUE,
+  NOT_INSTALLED_STATUS_VALUE,
+  type SortKey,
+  selectedAttentionFacet,
+  withAttentionFacet,
+} from "./registry-list-params";
 
-export type SortKey =
-  | "attention"
-  | "name-asc"
-  | "name-desc"
-  | "newest"
-  | "oldest"
-  | "most-tools"
-  | "issue-age";
+export {
+  ATTENTION_FACET_STATUS_VALUES,
+  INSTALLED_STATUS_VALUE,
+  NOT_INSTALLED_STATUS_VALUE,
+  type SortKey,
+  selectedAttentionFacet,
+  withAttentionFacet,
+};
 
 export const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "attention", label: "Action required" },
@@ -78,57 +83,6 @@ export function emptyRegistryFilters(): RegistryFilters {
  * can be linked to from the sidebar, bookmarked, and redirected to.
  */
 export const REGISTRY_STATUS_PARAM = "status";
-
-export const INSTALLED_STATUS_VALUE = "installed";
-export const NOT_INSTALLED_STATUS_VALUE = "not-installed";
-
-/**
- * The audience facets, as status values. They share the `status` param with
- * the installed/not-installed options but are mutually exclusive with each
- * other, because an item belongs to exactly one facet and a viewer asking
- * "what is mine" is asking one question, not building a set.
- */
-export const ATTENTION_FACET_STATUS_VALUES = {
-  you: "needs-my-action",
-  others: "waiting-on-someone-else",
-  muted: "muted",
-} as const satisfies Record<McpServerAttentionFacet, string>;
-
-const FACET_BY_STATUS_VALUE = new Map<string, McpServerAttentionFacet>(
-  (
-    Object.entries(ATTENTION_FACET_STATUS_VALUES) as [
-      McpServerAttentionFacet,
-      string,
-    ][]
-  ).map(([facet, value]) => [value, facet]),
-);
-
-/** The facet a `status` selection is narrowed to, or null for the whole list. */
-export function selectedAttentionFacet(
-  status: Set<string>,
-): McpServerAttentionFacet | null {
-  for (const value of status) {
-    const facet = FACET_BY_STATUS_VALUE.get(value);
-    if (facet) return facet;
-  }
-  return null;
-}
-
-/**
- * `status` with exactly one facet selected, or none. The facets replace each
- * other rather than accumulating: an item belongs to exactly one of them, so a
- * selection of two would always be a selection of everything.
- */
-export function withAttentionFacet(
-  status: Set<string>,
-  facet: McpServerAttentionFacet | null,
-): Set<string> {
-  const next = new Set(
-    [...status].filter((value) => !FACET_BY_STATUS_VALUE.has(value)),
-  );
-  if (facet) next.add(ATTENTION_FACET_STATUS_VALUES[facet]);
-  return next;
-}
 
 export const STATUS_OPTIONS: FilterOption[] = [
   { value: INSTALLED_STATUS_VALUE, label: "Installed" },

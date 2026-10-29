@@ -1,6 +1,10 @@
+import type { ResourcePermissionGrant } from "@archestra/shared";
+import { DEFAULT_CREDENTIAL_GRANTS } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { RuntimeCredentialDefinition } from "@/types";
+import CreatedByModel from "../created-by";
+import ResourcePermissionPolicyModel from "../resource-permission-policy";
 
 export async function listSharedCredentials(params: {
   organizationId: string;
@@ -50,24 +54,52 @@ export async function createSharedCredential(data: {
   kind: RuntimeCredentialDefinition["kind"];
   secretId?: string | null;
   githubUrl?: string | null;
+  gitlabUrl?: string | null;
   appId?: string | null;
   installationId?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
+  /** The user or `service-account:` actor creating it; null for system writes. */
+  createdBy?: string | null;
+  initialPermissionGrants?: ResourcePermissionGrant[];
 }) {
   return db.transaction(async (tx) => {
     const id = data.id ?? crypto.randomUUID();
-    const { secretId, ...definition } = data;
+    const {
+      secretId,
+      initialPermissionGrants,
+      createdBy = null,
+      ...definition
+    } = data;
     const [created] = await tx
       .insert(schema.runtimeCredentialDefinitionsTable)
-      .values({
-        ...definition,
-        id,
-        key: `${data.kind.replaceAll("_", "-")}.${id}`,
-        allowPersonal: false,
-        allowOrganization: true,
-      })
+      .values(
+        await CreatedByModel.forInsert({
+          data: {
+            ...definition,
+            id,
+            key: `${data.kind.replaceAll("_", "-")}.${id}`,
+            allowPersonal: false,
+            allowOrganization: true,
+            createdBy,
+          },
+          userIdField: "createdBy",
+          transaction: tx,
+        }),
+      )
       .returning();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await ResourcePermissionPolicyModel.createInitial({
+      tx,
+      organizationId: created.organizationId,
+      resource: "credential",
+      scope: created.id,
+      grants: initialPermissionGrants ?? DEFAULT_CREDENTIAL_GRANTS,
+      authorId: CreatedByModel.id(created, created.createdBy) ?? null,
+    });
+    // SPDX-SnippetEnd
     if (secretId)
       await tx.insert(schema.runtimeCredentialConnectionsTable).values({
         organizationId: data.organizationId,
@@ -144,6 +176,15 @@ export async function deleteSharedCredential(id: string): Promise<boolean> {
       .where(eq(schema.runtimeCredentialDefinitionsTable.id, id))
       .returning();
     if (!deleted) return false;
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await ResourcePermissionPolicyModel.deleteForTarget({
+      tx,
+      resources: ["credential"],
+      scope: deleted.id,
+    });
+    // SPDX-SnippetEnd
     await tx
       .delete(schema.runtimeCredentialConnectionsTable)
       .where(

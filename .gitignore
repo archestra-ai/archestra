@@ -19,8 +19,11 @@ platform/CLAUDE_LOCAL.md
 
 *.pyc
 __pycache__/
+.pytest_cache/
+.ruff_cache/
 
-.claude/worktrees/
+/.claude/worktrees/
+/worktrees/
 **/.claude/*.lock
 .turbo/
 .dev-stack.pid

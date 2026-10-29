@@ -218,5 +218,12 @@ describe("encrypted chat attachments", () => {
     const [listed] = withoutKey.json().attachments;
     expect(listed.name).not.toBe(FILE_NAME);
     expect(listed.mimeType).toBe("text/plain");
+
+    const wrongKey = await app.inject({
+      method: "GET",
+      url,
+      headers: dekHeader(randomBytes(32)),
+    });
+    expect(wrongKey.statusCode).toBe(409);
   });
 });

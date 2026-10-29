@@ -6,7 +6,11 @@
  */
 export const MCP_HUMAN_RULING_META_KEY = "archestraHumanRuling";
 
-export type McpHumanRuling = "approve" | "deny";
+/**
+ * `superseded`: the reviewer answered, but the organization's policy changed
+ * first, so the answer was not applied and the agent proposes the call again.
+ */
+export type McpHumanRuling = "approve" | "deny" | "superseded";
 
 /**
  * Reads the human ruling from a tool result's `_meta`.
@@ -21,5 +25,9 @@ export function extractMcpHumanRuling(result: unknown): McpHumanRuling | null {
     result as { _meta?: { [MCP_HUMAN_RULING_META_KEY]?: unknown } }
   )._meta?.[MCP_HUMAN_RULING_META_KEY];
 
-  return candidate === "approve" || candidate === "deny" ? candidate : null;
+  return candidate === "approve" ||
+    candidate === "deny" ||
+    candidate === "superseded"
+    ? candidate
+    : null;
 }

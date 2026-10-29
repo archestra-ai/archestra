@@ -47,11 +47,11 @@ if ! docker info &>/dev/null; then
 fi
 
 echo "=== Building platform Docker image ==="
-mkdir -p "$PLATFORM_DIR/prev-static-assets"
+mkdir -p "$PLATFORM_DIR/docker/prev-static-assets"
 docker build -t "$PLATFORM_IMAGE" "$PLATFORM_DIR"
 
 echo "=== Building MCP server base image ==="
-docker build -t "$MCP_BASE_IMAGE" "$PLATFORM_DIR/mcp_server_docker_image"
+docker build -t "$MCP_BASE_IMAGE" "$PLATFORM_DIR/docker_images/mcp_server"
 
 echo "=== Creating Kind cluster '$KIND_CLUSTER' ==="
 # Delete existing cluster with same name (idempotent)

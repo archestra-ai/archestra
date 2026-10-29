@@ -1,8 +1,16 @@
 name: Update Client Versions
 
+# Client and browser version updates:
+# - identity: the client and editor versions the backend sends upstream when it
+#   emulates a first-party client. Hourly, auto-merged.
+# - agent-runtime: the agent CLIs installed in the agent catalog images. Daily,
+#   held back by a cooldown, and left for review because the image validation
+#   builds are not required checks.
+# - playwright-mcp: upstream browser MCP image. Daily, review required.
 on:
   schedule:
     - cron: "23 * * * *"
+    - cron: "41 6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -13,9 +21,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  update:
-    name: Propose latest stable client versions
-    if: github.repository == 'archestra-ai/archestra'
+  identity:
+    name: Propose latest stable client identity versions
+    if: github.repository == 'archestra-ai/archestra' && github.event.schedule != '41 6 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -29,6 +37,8 @@ jobs:
       BRANCH: automation/client-versions
       CODEX_FILE: platform/backend/src/routes/chat/model-fetchers/openai.ts
       GROK_FILE: platform/backend/src/services/xai-subscription-token.ts
+      COPILOT_FILE: platform/backend/src/services/github-copilot-token.ts
+      COPILOT_CLI_FILE: platform/backend/src/services/agent-connection-setup/agents/copilot-cli.ts
     steps:
       - name: Checkout trusted main branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,7 +48,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js and pnpm
-        uses: ./.github/actions/setup-env
+        uses: $/.github/actions/setup-env
 
       # Each client resolves on its own, so one unreachable source does not
       # hold back the other. The last step fails the job for any miss.
@@ -86,15 +96,64 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve latest stable VS Code release
+        id: vscode
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          page=1
+          while :; do
+            version="$(gh api "repos/microsoft/vscode/releases?per_page=30&page=$page" --jq '
+              if length == 0 then "END"
+              else ([.[] | select(.draft == false and .prerelease == false and
+                (.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .tag_name] | first // "")
+              end')"
+            if [[ "$version" == "END" ]]; then
+              echo "::error::No stable VS Code release found"
+              exit 1
+            fi
+            [[ -n "$version" ]] && break
+            ((page += 1))
+          done
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve latest stable Copilot Chat release
+        id: copilot-chat
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          page=1
+          while :; do
+            tag="$(gh api "repos/microsoft/vscode-copilot-chat/releases?per_page=30&page=$page" --jq '
+              if length == 0 then "END"
+              else ([.[] | select(.draft == false and .prerelease == false and
+                (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]{1,4}$"))) | .tag_name] | first // "")
+              end')"
+            if [[ "$tag" == "END" ]]; then
+              echo "::error::No stable Copilot Chat release found"
+              exit 1
+            fi
+            [[ -n "$tag" ]] && break
+            ((page += 1))
+          done
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       # The App token makes pushes and the new PR trigger ordinary CI.
       - name: Generate releaser token
         id: token
-        uses: ./.github/actions/github-app-token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
+
+      - name: Configure Git identity
+        uses: $/.github/actions/configure-git-identity
 
       - name: Prepare automation branch
         id: branch
@@ -103,8 +162,6 @@ jobs:
         run: |
           set -euo pipefail
           gh auth setup-git --hostname github.com --force
-          git config user.name "Archestra releaser automation"
-          git config user.email "releaser-bot@users.noreply.github.com"
           git fetch origin main
 
           target="$RUNNER_TEMP/client-versions-branch"
@@ -125,36 +182,41 @@ jobs:
         env:
           CODEX_TAG: ${{ steps.codex.outputs.tag }}
           GROK_VERSION: ${{ steps.grok.outputs.version }}
+          VSCODE_VERSION: ${{ steps.vscode.outputs.version }}
+          COPILOT_CHAT_TAG: ${{ steps.copilot-chat.outputs.tag }}
           TARGET: ${{ steps.branch.outputs.path }}
         run: |
           set -euo pipefail
-          if [[ -n "$CODEX_TAG" ]]; then
-            pnpm --dir backend update:codex-models-client-version "$CODEX_TAG" "$TARGET/$CODEX_FILE"
-          fi
-          if [[ -n "$GROK_VERSION" ]]; then
-            pnpm --dir backend update:grok-client-version "$GROK_VERSION" "$TARGET/$GROK_FILE"
-          fi
-
-          # git diff --quiet exits 1 for a change and above 1 for an error.
-          # file_changed returns 0 (true) when the file differs from HEAD.
-          file_changed() {
-            if git -C "$TARGET" diff --quiet -- "$1"; then
-              return 1
-            else
-              local status=$?
-              if [[ "$status" -ne 1 ]]; then
-                exit "$status"
-              fi
-              return 0
+          summary=()
+          run_updater() {
+            local label="$1"
+            shift
+            local before
+            before="$(git -C "$TARGET" diff)"
+            "$@"
+            local after
+            after="$(git -C "$TARGET" diff)"
+            if [[ "$before" != "$after" ]]; then
+              summary+=("$label")
             fi
           }
-          summary=()
-          if file_changed "$CODEX_FILE"; then
-            summary+=("Codex ${CODEX_TAG#rust-v}")
+          if [[ -n "$CODEX_TAG" ]]; then
+            run_updater "Codex ${CODEX_TAG#rust-v}" \
+              pnpm --dir backend update:codex-models-client-version "$CODEX_TAG" "$TARGET/$CODEX_FILE"
           fi
-          if file_changed "$GROK_FILE"; then
-            summary+=("Grok CLI $GROK_VERSION")
+          if [[ -n "$GROK_VERSION" ]]; then
+            run_updater "Grok CLI $GROK_VERSION" \
+              pnpm --dir backend update:grok-client-version "$GROK_VERSION" "$TARGET/$GROK_FILE"
           fi
+          if [[ -n "$VSCODE_VERSION" ]]; then
+            run_updater "VS Code $VSCODE_VERSION" \
+              pnpm --dir backend update:vscode-client-version "$VSCODE_VERSION" "$TARGET/$COPILOT_FILE" "$TARGET/$COPILOT_CLI_FILE"
+          fi
+          if [[ -n "$COPILOT_CHAT_TAG" ]]; then
+            run_updater "Copilot Chat ${COPILOT_CHAT_TAG#v}" \
+              pnpm --dir backend update:copilot-chat-client-version "$COPILOT_CHAT_TAG" "$TARGET/$COPILOT_FILE"
+          fi
+
           if [[ "${#summary[@]}" -eq 0 ]]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -172,7 +234,7 @@ jobs:
           SUMMARY: ${{ steps.update.outputs.summary }}
         run: |
           set -euo pipefail
-          git -C "$TARGET" add -- "$CODEX_FILE" "$GROK_FILE"
+          git -C "$TARGET" add -- "$CODEX_FILE" "$GROK_FILE" "$COPILOT_FILE" "$COPILOT_CLI_FILE"
           git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "chore: update client versions ($SUMMARY)"
           git -C "$TARGET" push origin "HEAD:refs/heads/$BRANCH"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
@@ -186,7 +248,7 @@ jobs:
           TARGET: ${{ steps.branch.outputs.path }}
         run: |
           set -euo pipefail
-          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$CODEX_FILE" "$GROK_FILE"; then
+          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$CODEX_FILE" "$GROK_FILE" "$COPILOT_FILE" "$COPILOT_CLI_FILE"; then
             echo "Client versions already match main."
             exit 0
           else
@@ -197,7 +259,7 @@ jobs:
           fi
 
           pr_title="chore: update client versions"
-          pr_body="Track stable Codex CLI and Grok CLI releases. Codex filters the ChatGPT subscription model catalog by client version, and xAI's SuperGrok session proxy rejects Grok CLI versions below its minimum."
+          pr_body="Track stable Codex CLI, Grok CLI, VS Code, and GitHub Copilot Chat releases. Codex filters the ChatGPT subscription model catalog by client version, xAI's SuperGrok session proxy rejects Grok CLI versions below its minimum, and GitHub Copilot endpoints require a current VS Code and Copilot Chat editor identity."
           owner="${GH_REPO%%/*}"
           existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
           if [[ -z "$existing_pr" ]]; then
@@ -218,30 +280,325 @@ jobs:
           gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"url=" + .url' >> "$GITHUB_OUTPUT"
 
       - name: Fail for an unresolved client
-        if: steps.codex.outcome == 'failure' || steps.grok.outcome == 'failure'
+        if: >-
+          steps.codex.outcome == 'failure' ||
+          steps.grok.outcome == 'failure' ||
+          steps.vscode.outcome == 'failure' ||
+          steps.copilot-chat.outcome == 'failure'
         env:
           CODEX_OUTCOME: ${{ steps.codex.outcome }}
           GROK_OUTCOME: ${{ steps.grok.outcome }}
+          VSCODE_OUTCOME: ${{ steps.vscode.outcome }}
+          COPILOT_CHAT_OUTCOME: ${{ steps.copilot-chat.outcome }}
         run: |
-          echo "::error::Could not resolve every client version (Codex: $CODEX_OUTCOME, Grok CLI: $GROK_OUTCOME)"
+          echo "::error::Could not resolve every client version (Codex: $CODEX_OUTCOME, Grok CLI: $GROK_OUTCOME, VS Code: $VSCODE_OUTCOME, Copilot Chat: $COPILOT_CHAT_OUTCOME)"
           exit 1
 
-  # Hourly runs stay quiet unless a run fails or pushes a new version.
+  agent-runtime:
+    name: Propose agent runtime CLI updates
+    if: github.repository == 'archestra-ai/archestra' && github.event.schedule != '23 * * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
+      summary: ${{ steps.update.outputs.summary }}
+      pull_request_url: ${{ steps.pr.outputs.url }}
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      BRANCH: automation/agent-runtime-clis
+      AGENT_DIR: platform/docker_images/agent
+    steps:
+      - name: Checkout trusted main branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js and pnpm
+        uses: $/.github/actions/setup-env
+
+      - name: Generate releaser token
+        id: token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Configure Git identity
+        uses: $/.github/actions/configure-git-identity
+
+      - name: Prepare automation branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git --hostname github.com --force
+          git fetch origin main
+
+          target="$RUNNER_TEMP/agent-runtime-clis-branch"
+          existing="$(git ls-remote --heads origin "refs/heads/$BRANCH")"
+          if [[ -n "$existing" ]]; then
+            git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            git worktree add -b "$BRANCH" "$target" "origin/$BRANCH"
+            git -C "$target" -c core.hooksPath=/dev/null merge --no-edit origin/main
+          else
+            git worktree add -b "$BRANCH" "$target" origin/main
+          fi
+          echo "path=$target" >> "$GITHUB_OUTPUT"
+
+      # The updater comes from the trusted main checkout and only changes the
+      # image inputs in the separate automation worktree. Every CLI resolves on
+      # its own; the last step fails the job for any miss.
+      - name: Update agent runtime CLIs
+        id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ steps.branch.outputs.path }}
+        run: |
+          set -euo pipefail
+          status=0
+          pnpm --silent --dir backend update:agent-runtime-clis \
+            --agent-dir "$TARGET/$AGENT_DIR" | tee "$RUNNER_TEMP/agent-runtime-clis.log" || status=$?
+
+          # The OpenClaw pin is a package.json dependency, so its lockfile must follow.
+          if ! git -C "$TARGET" diff --quiet -- "$AGENT_DIR/openclaw/package.json"; then
+            if ! pnpm --dir "$TARGET/$AGENT_DIR/openclaw" install --lockfile-only --ignore-scripts; then
+              echo "::error::Could not refresh the OpenClaw lockfile; leaving OpenClaw unchanged"
+              git -C "$TARGET" checkout -- "$AGENT_DIR/openclaw"
+              sed -i '/^Updated OpenClaw /d' "$RUNNER_TEMP/agent-runtime-clis.log"
+              status=1
+            fi
+          fi
+
+          echo "failed=$([[ "$status" -eq 0 ]] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+          summary="$(sed -n 's/^Updated //p' "$RUNNER_TEMP/agent-runtime-clis.log" | paste -sd ',' - | sed 's/,/, /g')"
+          if [[ -z "$summary" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push update
+        id: push
+        if: steps.update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          TARGET: ${{ steps.branch.outputs.path }}
+          SUMMARY: ${{ steps.update.outputs.summary }}
+        run: |
+          set -euo pipefail
+          git -C "$TARGET" add -- "$AGENT_DIR/Dockerfile" "$AGENT_DIR/openclaw/package.json" "$AGENT_DIR/openclaw/pnpm-lock.yaml"
+          git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "chore: update agent runtime CLIs ($SUMMARY)"
+          git -C "$TARGET" push origin "HEAD:refs/heads/$BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      # Also recovers a branch pushed by an earlier run whose PR creation failed.
+      # No auto-merge: the agent image validation builds are not required checks.
+      - name: Open or update pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET: ${{ steps.branch.outputs.path }}
+        run: |
+          set -euo pipefail
+          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$AGENT_DIR"; then
+            echo "Agent runtime CLIs already match main."
+            exit 0
+          else
+            status=$?
+            if [[ "$status" -ne 1 ]]; then
+              exit "$status"
+            fi
+          fi
+
+          pr_title="chore: update agent runtime CLIs"
+          pr_body="Raise the agent CLIs in the agent catalog images (Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok CLI, Kimi Code, and GitHub Copilot CLI) to their newest stable release that has been public for at least 7 days, matching the repository's \`minimumReleaseAge\`. Upstream channel pointers cap each pick: npm \`stable\` for Claude Code, npm \`latest\` for Codex, OpenCode, OpenClaw, Kimi Code, and GitHub Copilot CLI, GitHub releases for Hermes, and xAI's stable channel for Grok CLI.
+
+          Merge once every **Validate agent-\*** check passes. Those builds run each image's startup and MCP tests on amd64 and arm64, but they are not required checks. Hermes and OpenClaw carry source patches that a new release can invalidate."
+          owner="${GH_REPO%%/*}"
+          existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
+          if [[ -z "$existing_pr" ]]; then
+            pr="$(gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "$pr_title" \
+              --body "$pr_body")"
+          else
+            pr="$existing_pr"
+            gh pr edit "$pr" --title "$pr_title" --body "$pr_body"
+          fi
+          gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"url=" + .url' >> "$GITHUB_OUTPUT"
+
+      - name: Fail for an unresolved agent runtime CLI
+        if: steps.update.outputs.failed == 'true'
+        run: |
+          echo "::error::Could not update every agent runtime CLI; see the update step log"
+          exit 1
+
+  playwright-mcp:
+    name: Propose upstream Playwright MCP updates
+    if: github.repository == 'archestra-ai/archestra' && github.event.schedule != '23 * * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
+      summary: ${{ steps.update.outputs.summary }}
+      pull_request_url: ${{ steps.pr.outputs.url }}
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      BRANCH: automation/playwright-mcp
+      IMAGE_FILE: platform/backend/src/playwright-mcp-image.json
+    steps:
+      - name: Checkout trusted main branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js and pnpm
+        uses: $/.github/actions/setup-env
+
+      - name: Generate releaser token
+        id: token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Configure Git identity
+        uses: $/.github/actions/configure-git-identity
+
+      - name: Prepare automation branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git --hostname github.com --force
+          git fetch origin main
+
+          target="$RUNNER_TEMP/playwright-mcp-branch"
+          existing="$(git ls-remote --heads origin "refs/heads/$BRANCH")"
+          if [[ -n "$existing" ]]; then
+            git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            git worktree add -b "$BRANCH" "$target" "origin/$BRANCH"
+            git -C "$target" -c core.hooksPath=/dev/null merge --no-edit origin/main
+          else
+            git worktree add -b "$BRANCH" "$target" origin/main
+          fi
+          echo "path=$target" >> "$GITHUB_OUTPUT"
+
+      # Execute only the updater from trusted main, writing immutable image inputs
+      # into the automation worktree after validating both architectures.
+      - name: Update upstream Playwright MCP
+        id: update
+        env:
+          TARGET: ${{ steps.branch.outputs.path }}
+        run: |
+          set -euo pipefail
+          pnpm --silent --dir backend update:playwright-mcp \
+            --file "$TARGET/$IMAGE_FILE" | tee "$RUNNER_TEMP/playwright-mcp.log"
+          if git -C "$TARGET" diff --quiet -- "$IMAGE_FILE"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            summary="$(sed -n 's/^Updated //p' "$RUNNER_TEMP/playwright-mcp.log")"
+            echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push update
+        id: push
+        if: steps.update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          TARGET: ${{ steps.branch.outputs.path }}
+          SUMMARY: ${{ steps.update.outputs.summary }}
+        run: |
+          set -euo pipefail
+          git -C "$TARGET" add -- "$IMAGE_FILE"
+          git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "chore: update upstream Playwright MCP ($SUMMARY)"
+          git -C "$TARGET" push origin "HEAD:refs/heads/$BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      # Also recovers a branch pushed by an earlier run whose PR creation failed.
+      # No auto-merge: upstream image changes require compatibility/security review.
+      - name: Open or update pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET: ${{ steps.branch.outputs.path }}
+        run: |
+          set -euo pipefail
+          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$IMAGE_FILE"; then
+            echo "Upstream Playwright MCP already matches main."
+            exit 0
+          else
+            status=$?
+            if [[ "$status" -ne 1 ]]; then
+              exit "$status"
+            fi
+          fi
+
+          pr_title="chore: update upstream Playwright MCP"
+          pr_body="Update the built-in browser to the newest stable upstream Playwright MCP release that has been public for at least seven days. Pin its immutable multi-architecture image digest and record the actual upstream Node/Playwright versions for review.
+
+          This uses Microsoft’s published image unchanged. Review upstream release notes, runtime vulnerabilities and browser compatibility before merging; a version update does not guarantee that upstream has patched every known CVE."
+          owner="${GH_REPO%%/*}"
+          existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
+          if [[ -z "$existing_pr" ]]; then
+            pr="$(gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "$pr_title" \
+              --body "$pr_body")"
+          else
+            pr="$existing_pr"
+            gh pr edit "$pr" --title "$pr_title" --body "$pr_body"
+          fi
+          gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"url=" + .url' >> "$GITHUB_OUTPUT"
+
+  # Runs stay quiet unless a job fails or pushes a new version.
   notify:
-    name: Report update result
-    needs: update
-    if: ${{ always() && github.repository == 'archestra-ai/archestra' && (needs.update.result == 'failure' || needs.update.outputs.pushed == 'true') }}
+    name: Report update results
+    needs: [identity, agent-runtime, playwright-mcp]
+    if: >-
+      always() && github.repository == 'archestra-ai/archestra' && (
+        needs.identity.result == 'failure' || needs.identity.outputs.pushed == 'true' ||
+        needs.agent-runtime.result == 'failure' || needs.agent-runtime.outputs.pushed == 'true' ||
+        needs.playwright-mcp.result == 'failure' || needs.playwright-mcp.outputs.pushed == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
     steps:
-      - name: Post result to alerting
+      - name: Post results to alerting
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTING_WEBHOOK_URL }}
-          UPDATE_RESULT: ${{ needs.update.result }}
-          PUSHED: ${{ needs.update.outputs.pushed }}
-          SUMMARY: ${{ needs.update.outputs.summary }}
-          PULL_REQUEST_URL: ${{ needs.update.outputs.pull_request_url }}
+          IDENTITY_RESULT: ${{ needs.identity.result }}
+          IDENTITY_PUSHED: ${{ needs.identity.outputs.pushed }}
+          IDENTITY_SUMMARY: ${{ needs.identity.outputs.summary }}
+          IDENTITY_PULL_REQUEST_URL: ${{ needs.identity.outputs.pull_request_url }}
+          RUNTIME_RESULT: ${{ needs.agent-runtime.result }}
+          RUNTIME_PUSHED: ${{ needs.agent-runtime.outputs.pushed }}
+          RUNTIME_SUMMARY: ${{ needs.agent-runtime.outputs.summary }}
+          RUNTIME_PULL_REQUEST_URL: ${{ needs.agent-runtime.outputs.pull_request_url }}
+          PLAYWRIGHT_RESULT: ${{ needs.playwright-mcp.result }}
+          PLAYWRIGHT_PUSHED: ${{ needs.playwright-mcp.outputs.pushed }}
+          PLAYWRIGHT_SUMMARY: ${{ needs.playwright-mcp.outputs.summary }}
+          PLAYWRIGHT_PULL_REQUEST_URL: ${{ needs.playwright-mcp.outputs.pull_request_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -250,16 +607,35 @@ jobs:
             exit 0
           fi
 
-          if [[ "$UPDATE_RESULT" == "failure" ]]; then
-            message=":rotating_light: Client version update failed. <$RUN_URL|View workflow run>"
-            # One client can fail after the other one pushed its update.
-            if [[ "$PUSHED" == "true" && -n "$PULL_REQUEST_URL" ]]; then
-              message+=" The run still proposed $SUMMARY: <$PULL_REQUEST_URL|View pull request>"
+          # Prints one Slack line for a job, or nothing when it has nothing to report.
+          report() {
+            local title="$1" result="$2" pushed="$3" summary="$4" url="$5" ask="$6"
+            if [[ "$result" == "failure" ]]; then
+              local line=":rotating_light: $title update failed. <$RUN_URL|View workflow run>"
+              # One client can fail after another one pushed its update.
+              if [[ "$pushed" == "true" && -n "$url" ]]; then
+                line+=" The run still proposed $summary: <$url|View pull request>"
+              fi
+              echo "$line"
+            elif [[ "$pushed" != "true" ]]; then
+              return 0
+            elif [[ -n "$url" ]]; then
+              echo "$title update proposed ($summary): <$url|View pull request>$ask"
+            else
+              echo "$title update pushed ($summary), but no pull request was found. <$RUN_URL|View workflow run>"
             fi
-          elif [[ -n "$PULL_REQUEST_URL" ]]; then
-            message="Client version update proposed ($SUMMARY): <$PULL_REQUEST_URL|View pull request>"
-          else
-            message="Client version update pushed ($SUMMARY), but no pull request was found. <$RUN_URL|View workflow run>"
+          }
+
+          message="$(
+            report "Client identity version" "$IDENTITY_RESULT" "$IDENTITY_PUSHED" \
+              "$IDENTITY_SUMMARY" "$IDENTITY_PULL_REQUEST_URL" ""
+            report "Agent runtime CLI" "$RUNTIME_RESULT" "$RUNTIME_PUSHED" \
+              "$RUNTIME_SUMMARY" "$RUNTIME_PULL_REQUEST_URL" " — merge once the Validate agent-* checks pass."
+            report "Playwright MCP image" "$PLAYWRIGHT_RESULT" "$PLAYWRIGHT_PUSHED" \
+              "$PLAYWRIGHT_SUMMARY" "$PLAYWRIGHT_PULL_REQUEST_URL" " — review upstream runtime vulnerabilities and browser compatibility before merging."
+          )"
+          if [[ -z "$message" ]]; then
+            exit 0
           fi
           jq -n --arg text "$message" '{text: $text}' |
             curl --fail-with-body -sS --max-time 15 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL"

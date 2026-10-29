@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { CreatedBy } from "@archestra/shared";
 import {
+  ALL_ARCHESTRA_TOKEN_PREFIXES,
   ARCHESTRA_TOKEN_PREFIX,
   MEMBER_ROLE_NAME,
   type Permissions,
@@ -33,6 +34,13 @@ import { ServiceAccountLabelModel } from "./entity-labels";
 import OrganizationRoleModel from "./organization-role";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel from "./resource-permission-subject";
+
+/**
+ * How often a token's `last_used_at` is rewritten while it is in use. The
+ * column only feeds a "last used" label, so a minute of staleness is fine and
+ * saves an UPDATE on every service-account request.
+ */
+const TOKEN_LAST_USED_REFRESH_MS = 60_000;
 
 class ServiceAccountModel {
   static readonly MAX_TOKENS_PER_SERVICE_ACCOUNT = 50;
@@ -224,7 +232,9 @@ class ServiceAccountModel {
       id: serviceAccount.id,
       organizationId: serviceAccount.organizationId,
       name: serviceAccount.name,
+      icon: serviceAccount.icon,
       role: serviceAccount.role,
+      teamId: serviceAccount.teamId,
       disabled: serviceAccount.disabled,
       tokenCount: serviceAccount.tokenCount,
       createdAt: serviceAccount.createdAt.toISOString(),
@@ -235,7 +245,9 @@ class ServiceAccountModel {
   static async create(params: {
     organizationId: string;
     name: string;
+    icon?: string | null;
     role: string;
+    teamId?: string | null;
     labels?: LabelWithDetails[];
     /**
      * Required, but nullable: every interactive create knows its user, and
@@ -257,7 +269,9 @@ class ServiceAccountModel {
             data: {
               organizationId: params.organizationId,
               name: params.name,
+              icon: params.icon,
               role: params.role,
+              teamId: params.teamId ?? null,
               createdBy: params.createdBy,
             },
             userIdField: "createdBy",
@@ -307,7 +321,12 @@ class ServiceAccountModel {
   static async update(
     id: string,
     organizationId: string,
-    data: Partial<Pick<SelectServiceAccount, "name" | "role" | "disabled">> & {
+    data: Partial<
+      Pick<
+        SelectServiceAccount,
+        "name" | "icon" | "role" | "disabled" | "teamId"
+      >
+    > & {
       labels?: LabelWithDetails[];
     },
   ): Promise<ServiceAccountDetailResponse | null> {
@@ -463,11 +482,88 @@ class ServiceAccountModel {
     return updated ? normalizeToken(updated) : null;
   }
 
+  /** The account row alone, without the keys {@link findById} lists. */
+  static async findAccount(
+    id: string,
+    organizationId: string,
+  ): Promise<SelectServiceAccount | null> {
+    const [row] = await db
+      .select()
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.id, id),
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Adopt an existing token value as one of the account's keys, so a client
+   * already configured with it keeps working. Returns false when that value
+   * already belongs to a service account, which makes re-running an import a
+   * no-op.
+   */
+  static async importToken(params: {
+    serviceAccountId: string;
+    name: string;
+    value: string;
+    lastUsedAt: Date | null;
+    createdAt: Date;
+  }): Promise<boolean> {
+    const inserted = await db
+      .insert(schema.serviceAccountTokensTable)
+      .values({
+        serviceAccountId: params.serviceAccountId,
+        name: params.name,
+        tokenHash: hashToken(params.value),
+        tokenStart: params.value.slice(0, 16),
+        lastUsedAt: params.lastUsedAt,
+        createdAt: params.createdAt,
+      })
+      .onConflictDoNothing()
+      .returning({ id: schema.serviceAccountTokensTable.id });
+    return inserted.length > 0;
+  }
+
+  static async isNameTaken(
+    organizationId: string,
+    name: string,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.serviceAccountsTable.id })
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+          eq(schema.serviceAccountsTable.name, name),
+        ),
+      )
+      .limit(1);
+    return Boolean(row);
+  }
+
+  static async isTokenImported(value: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.serviceAccountTokensTable.id })
+      .from(schema.serviceAccountTokensTable)
+      .where(eq(schema.serviceAccountTokensTable.tokenHash, hashToken(value)))
+      .limit(1);
+    return Boolean(row);
+  }
+
   static async verifyToken(token: string): Promise<{
     serviceAccount: SelectServiceAccount;
     token: SelectServiceAccountToken;
   } | null> {
-    if (!token.startsWith(ARCHESTRA_TOKEN_PREFIX)) return null;
+    // Imported team and organization tokens keep their original value, which
+    // may carry a legacy prefix.
+    if (
+      !ALL_ARCHESTRA_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix))
+    )
+      return null;
 
     const tokenHash = hashToken(token);
     const [row] = await db
@@ -500,12 +596,47 @@ class ServiceAccountModel {
       return null;
     }
 
-    await db
-      .update(schema.serviceAccountTokensTable)
-      .set({ lastUsedAt: new Date() })
-      .where(eq(schema.serviceAccountTokensTable.id, row.token.id));
+    // last_used_at feeds a "last used" label; writing it on every request put
+    // an UPDATE on the hot path of every service-account call. Refresh it at
+    // most once per TOKEN_LAST_USED_REFRESH_MS per token.
+    const lastUsedAt = row.token.lastUsedAt?.getTime() ?? 0;
+    if (Date.now() - lastUsedAt >= TOKEN_LAST_USED_REFRESH_MS) {
+      await db
+        .update(schema.serviceAccountTokensTable)
+        .set({ lastUsedAt: new Date() })
+        .where(eq(schema.serviceAccountTokensTable.id, row.token.id));
+    }
 
     return row;
+  }
+
+  /**
+   * The columns the authorization path needs for a synthetic service-account
+   * caller. `findById` also reads the tokens, the creator and the labels:
+   * four statements per permission check, paid on every request.
+   */
+  static async findAuthContext(
+    id: string,
+    organizationId: string,
+  ): Promise<Pick<
+    SelectServiceAccount,
+    "organizationId" | "role" | "disabled"
+  > | null> {
+    const [row] = await db
+      .select({
+        organizationId: schema.serviceAccountsTable.organizationId,
+        role: schema.serviceAccountsTable.role,
+        disabled: schema.serviceAccountsTable.disabled,
+      })
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.id, id),
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   static async getPermissions(
@@ -537,7 +668,9 @@ function normalizeServiceAccount(
     id: serviceAccount.id,
     organizationId: serviceAccount.organizationId,
     name: serviceAccount.name,
+    icon: serviceAccount.icon,
     role: serviceAccount.role,
+    teamId: serviceAccount.teamId,
     disabled: serviceAccount.disabled,
     createdAt: serviceAccount.createdAt,
     updatedAt: serviceAccount.updatedAt,
@@ -610,6 +743,7 @@ function createTokenValue(): string {
 }
 
 function hashToken(token: string): string {
+  // codeql[js/insufficient-password-hash] Lookup digest of a randomBytes(32) bearer token, not a password. OAuth issuer return values are heuristically classified as passwords.
   return createHash("sha256").update(token).digest("hex");
 }
 

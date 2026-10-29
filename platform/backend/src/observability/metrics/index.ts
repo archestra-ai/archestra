@@ -5,6 +5,7 @@ export * as audit from "./audit";
 export * as chat from "./chat";
 export * as database from "./database";
 export * as fileStorage from "./file-storage";
+export * as limit from "./limit";
 export * as llm from "./llm";
 export * as mcp from "./mcp";
 export * as rag from "./rag";

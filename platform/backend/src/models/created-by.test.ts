@@ -135,13 +135,15 @@ describe("service-account authorship across resource models", () => {
 
   test("attributes an external agent", async () => {
     const agent = await A2aRemoteAgentModel.create({
-      organizationId,
-      name: "Release specialist",
-      authorId: actorId,
-      scope: "org",
-      discoveryMode: "inline_card",
-      agentCard: { name: "Release specialist" },
-      cardHash: "abc",
+      data: {
+        organizationId,
+        name: "Release specialist",
+        authorId: actorId,
+        scope: "org",
+        discoveryMode: "inline_card",
+        agentCard: { name: "Release specialist" },
+        cardHash: "abc",
+      },
     });
     expect(agent.authorId).toBeNull();
     expect(

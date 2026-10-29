@@ -40,11 +40,10 @@ describe("getAllArchestraMcpTools", () => {
   });
 
   test("keeps the code-runtime tools that getArchestraMcpTools drops when no runtime is configured", () => {
-    // Pinned explicitly: with the runtime on, the assertions below would pass
-    // vacuously instead of failing, and the gap between the two accessors is
-    // the whole point of this test.
-    expect(config.skillsSandbox.enabled).toBe(false);
-    expect(config.hooks.enabled).toBe(false);
+    // Exercise the unconfigured deployment regardless of the runner's runtime
+    // settings. The test setup restores config after each test.
+    config.skillsSandbox.enabled = false;
+    config.hooks.enabled = false;
 
     const served = shortNamesOf(getArchestraMcpTools());
     const all = shortNamesOf(getAllArchestraMcpTools());
@@ -56,6 +55,28 @@ describe("getAllArchestraMcpTools", () => {
       expect(all).toContain(shortName);
       expect(served).not.toContain(shortName);
     }
+  });
+
+  test("advertises no pattern a provider refuses as a regex", () => {
+    // OpenAI fails every request from an agent holding a tool whose schema has
+    // a pattern it refuses, not just the call: a Unicode property escape such
+    // as \p{Cc} is rejected, and a group repeated with `+`, such as
+    // `(\/[a-z]+)+`, ends the model's turn with no reply.
+    const patterns = (schema: unknown): string[] =>
+      schema && typeof schema === "object"
+        ? Object.entries(schema).flatMap(([key, value]) =>
+            key === "pattern" && typeof value === "string"
+              ? [value]
+              : patterns(value),
+          )
+        : [];
+    const offenders = getAllArchestraMcpTools().filter((tool) =>
+      patterns(tool.inputSchema).some(
+        (pattern) => /\\[pP]\{/.test(pattern) || /\)\+/.test(pattern),
+      ),
+    );
+
+    expect(offenders.map((tool) => tool.name)).toEqual([]);
   });
 });
 
@@ -396,7 +417,9 @@ describe("preflightArchestraToolCall", () => {
     expect(refused).toEqual(
       await executeArchestraTool(todoWrite, { todos: [todo] }, context),
     );
-    expect((refused?.content[0] as any).text).toContain("is not assigned");
+    expect((refused?.content[0] as any).text).toContain(
+      "is not available through",
+    );
   });
 
   test("passes an argument that run_tool unwraps, since run_tool runs it", async () => {

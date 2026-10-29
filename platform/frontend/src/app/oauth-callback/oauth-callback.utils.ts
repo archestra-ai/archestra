@@ -75,11 +75,18 @@ export function getOAuthCallbackErrorState(params: {
   error: string | null;
   errorDescription: string | null;
   state: string | null;
+  expectedState: string | null;
 }): OAuthCallbackErrorState | null {
-  const { code, error, errorDescription, state } = params;
+  const { code, error, errorDescription, state, expectedState } = params;
 
   if (code && state) {
-    return null;
+    return expectedState && state === expectedState
+      ? null
+      : {
+          title: "OAuth Connection Expired",
+          description:
+            "This authorization does not match the connection started in this tab. Start the connection again.",
+        };
   }
 
   if (error) {

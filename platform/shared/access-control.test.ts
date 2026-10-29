@@ -138,38 +138,67 @@ describe("access-control", () => {
 
   describe("outbound A2A administration", () => {
     test("external A2A pages share the Agents read gate", () => {
-      expect(requiredPagePermissionsMap["/agents/a2a"]).toEqual({
-        agent: ["read"],
-      });
+      for (const page of [
+        "/agents/a2a",
+        "/agents/a2a/new",
+        "/agents/a2a/[id]",
+      ]) {
+        expect(requiredPagePermissionsMap[page]).toEqual({
+          agent: ["read"],
+        });
+      }
       expect(requiredPagePermissionsMap["/a2a/agents"]).toBeUndefined();
     });
 
-    test("the shared page gate defers the Agent chooser's OR authorization to its server page", () => {
-      expect(requiredPagePermissionsMap["/agents/new"]).toBeUndefined();
+    test("the Agent chooser takes the permission its create calls need", () => {
+      expect(requiredPagePermissionsMap["/agents/new"]).toEqual({
+        agent: ["create"],
+      });
     });
 
-    test("credential-bearing configuration mutations require organization settings administration", () => {
+    test("connecting an external agent takes the same permission as creating a local one", () => {
       for (const routeId of [
         RouteId.InspectA2aRemoteAgent,
         RouteId.CreateA2aRemoteAgent,
-        RouteId.UpdateA2aRemoteAgent,
-        RouteId.DeleteA2aRemoteAgent,
       ]) {
         expect(requiredEndpointPermissionsMap[routeId]).toEqual({
-          organizationSettings: ["update"],
+          agent: ["create"],
         });
       }
     });
 
-    test("run metadata is restricted while approved target summaries remain assignable", () => {
-      expect(
-        requiredEndpointPermissionsMap[RouteId.ListA2aRemoteAgentRuns],
-      ).toEqual({ organizationSettings: ["read"] });
-      expect(
-        requiredEndpointPermissionsMap[RouteId.ListA2aRemoteAgents],
-      ).toEqual({ agent: ["read"] });
-      expect(memberPermissions.organizationSettings).toEqual([]);
-      expect(editorPermissions.organizationSettings).toEqual([]);
+    test("each external agent's own grants decide everything after it exists", () => {
+      // The route gate only admits agent readers. The handler then checks the
+      // external agent's permission policy for the action it performs.
+      for (const routeId of [
+        RouteId.ListA2aRemoteAgents,
+        RouteId.GetA2aRemoteAgent,
+        RouteId.UpdateA2aRemoteAgent,
+        RouteId.DeleteA2aRemoteAgent,
+        RouteId.ListA2aRemoteAgentRuns,
+        RouteId.TransferRemoteAgentOwnership,
+      ]) {
+        expect(requiredEndpointPermissionsMap[routeId]).toEqual({
+          agent: ["read"],
+        });
+      }
+    });
+
+    test("organization settings play no part in external agents", () => {
+      for (const routeId of [
+        RouteId.InspectA2aRemoteAgent,
+        RouteId.CreateA2aRemoteAgent,
+        RouteId.ListA2aRemoteAgents,
+        RouteId.GetA2aRemoteAgent,
+        RouteId.UpdateA2aRemoteAgent,
+        RouteId.DeleteA2aRemoteAgent,
+        RouteId.ListA2aRemoteAgentRuns,
+        RouteId.TransferRemoteAgentOwnership,
+      ]) {
+        expect(requiredEndpointPermissionsMap[routeId]).not.toHaveProperty(
+          "organizationSettings",
+        );
+      }
     });
   });
 
@@ -245,8 +274,6 @@ describe("access-control", () => {
   });
 
   describe("secrets routes", () => {
-    // The secrets backend is organization configuration; reading one stored
-    // Vault reference serves the MCP catalog form for one entry.
     test("the secrets backend is organization settings", () => {
       expect(requiredEndpointPermissionsMap[RouteId.GetSecretsType]).toEqual({
         organizationSettings: ["read"],
@@ -257,11 +284,6 @@ describe("access-control", () => {
       expect(requiredPagePermissionsMap["/settings/secrets"]).toEqual({
         organizationSettings: ["read"],
       });
-    });
-
-    test("reading a Vault reference is decided per registry entry", () => {
-      // The handler requires an update grant on the owning entry.
-      expect(requiredEndpointPermissionsMap[RouteId.GetSecret]).toEqual({});
     });
   });
 
@@ -356,7 +378,7 @@ describe("buildForbiddenErrorMessage", () => {
         missingPermissions: { project: ["read"] },
       }),
     ).toBe(
-      "You don't have permission to upload project files. Missing permission: project:read (View projects and your own sessions inside them).",
+      "You don't have permission to upload project files. Missing permission: project:read (View projects, their schedules, and your own sessions inside them).",
     );
   });
 
@@ -375,7 +397,7 @@ describe("buildForbiddenErrorMessage", () => {
       "agent:read (Open Agents, and use the code sandboxes and files of agents you can use)",
     );
     expect(message).toContain(
-      "project:read (View projects and your own sessions inside them)",
+      "project:read (View projects, their schedules, and your own sessions inside them)",
     );
     expect(message.indexOf("agent:read")).toBeLessThan(
       message.indexOf("project:read"),
@@ -407,17 +429,15 @@ describe("own-vs-all log split (Read and Admin role actions)", () => {
 });
 
 describe("platform_admin predefined role", () => {
-  test("withholds impersonation and organization-wide diagnostics", () => {
+  test("withholds impersonation, organization-wide diagnostics, and the SRE agent", () => {
     const p = predefinedPermissionsMap.platform_admin;
     expect(p.log).toEqual(["read"]);
     expect(p.auditLog).toEqual(["read"]);
     expect(p.member).not.toContain("impersonate");
-    expect(p.openappaDiagnostics).toEqual(["read", "update"]);
+    expect(p.sre).toEqual([]);
     // …and is otherwise the full admin set.
     for (const [resource, actions] of Object.entries(allAvailableActions)) {
-      if (
-        ["log", "auditLog", "member", "openappaDiagnostics"].includes(resource)
-      ) {
+      if (["log", "auditLog", "member", "sre"].includes(resource)) {
         continue;
       }
       expect(p[resource as keyof typeof p]).toEqual(actions);
@@ -429,9 +449,9 @@ describe("platform_admin predefined role", () => {
     expect(findUngrantablePermissions(p, adminPermissions)).toEqual(
       expect.arrayContaining([
         "member:impersonate",
-        "openappaDiagnostics:admin",
         "log:admin",
         "auditLog:admin",
+        "sre:read",
       ]),
     );
     // …while granting its own role or member stays possible.

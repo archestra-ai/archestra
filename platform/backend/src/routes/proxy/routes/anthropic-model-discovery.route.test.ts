@@ -5,21 +5,29 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
-import { expect, test } from "vitest";
 import config from "@/config";
+import { expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { useMswServer } from "@/test/msw";
 import anthropicProxyRoutes from "./anthropic";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper, not a React hook
 const server = useMswServer();
 
-test.each([
+test.for([
   { token: "sk-ant-oat01-subscription", subscription: true },
   { token: "sk-ant-api03-metered", subscription: false },
 ])("discovers models for a bearer credential (subscription=$subscription)", async ({
   token,
   subscription,
-}) => {
+}, { makeAgent, makeUser, makeMember }) => {
+  const agent = await makeAgent();
+  const owner = await makeUser();
+  await makeMember(owner.id, agent.organizationId);
+  const passthroughToken = await makePassthroughCredential({
+    organizationId: agent.organizationId,
+    ownerId: owner.id,
+  });
   config.llm.anthropic.baseUrl = "https://api.anthropic.com";
   config.llm.anthropic.vertexAi.enabled = false;
   server.use(
@@ -51,8 +59,11 @@ test.each([
   try {
     const response = await app.inject({
       method: "GET",
-      url: "/v1/anthropic/v1/models",
-      headers: { authorization: `Bearer ${token}` },
+      url: `/v1/anthropic/${agent.id}/v1/models`,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-archestra-virtual-key": passthroughToken,
+      },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({

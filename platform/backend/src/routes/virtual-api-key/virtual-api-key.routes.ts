@@ -5,30 +5,40 @@ import {
   PaginationQuerySchema,
   parseLabelsParam,
   perUserCredentialLabel,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import {
   CreatedByModel,
   LlmProviderApiKeyModel,
   MemberModel,
+  ModelPoolModel,
   TeamModel,
   VirtualApiKeyLabelModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { readVirtualKeyValue } from "@/services/connection-setup";
+import { credentialBilling } from "@/services/credential-billing";
 import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
+import { assertCanGrantModelPools } from "@/services/model-pool-grants";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
+  CredentialSpendCapInputSchema,
   constructResponseSchema,
   type LabelWithDetails,
   LabelWithDetailsSchema,
+  ModelPoolIdsInputSchema,
   ResourceVisibilityScopeSchema,
   type User,
   VirtualApiKeyTypeSchema,
@@ -51,6 +61,7 @@ const VirtualApiKeyBodyObjectSchema = z.object({
   name: z.string().min(1, "Name is required").max(256),
   keyType: VirtualApiKeyTypeSchema.default("standard"),
   expiresAt: z.coerce.date().nullable().optional(),
+  includeFutureProviders: z.boolean().optional(),
   providerApiKeys: z
     .array(
       z.object({
@@ -60,6 +71,21 @@ const VirtualApiKeyBodyObjectSchema = z.object({
     )
     .default([]),
   labels: z.array(LabelWithDetailsSchema).optional(),
+  /**
+   * Team the key's spend is charged to. Omit to keep the current team; `null`
+   * stops billing a team.
+   */
+  billingTeamId: z.string().nullable().optional(),
+  /**
+   * The key's spend cap, stored as a `token_cost` limit on the key. Omit to
+   * keep it; `null` removes it.
+   */
+  spendCap: CredentialSpendCapInputSchema.nullable().optional(),
+  /**
+   * Model pools the key may call by name even when it maps none of their
+   * members. Omit to keep the key's current pools. Needs model pools on.
+   */
+  modelPoolIds: ModelPoolIdsInputSchema,
 });
 
 /**
@@ -72,17 +98,24 @@ function refineVirtualApiKeyBody(
   ctx: z.RefinementCtx,
 ): void {
   if (value.keyType === "passthrough") {
-    if (value.providerApiKeys.length > 0) {
+    if (value.providerApiKeys.length > 0 || value.includeFutureProviders) {
       ctx.addIssue({
         code: "custom",
         path: ["providerApiKeys"],
         message: "Passthrough virtual keys cannot map provider API keys",
       });
     }
+    if (value.modelPoolIds?.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["modelPoolIds"],
+        message: "Passthrough virtual keys cannot use model pools",
+      });
+    }
     return;
   }
 
-  if (value.providerApiKeys.length === 0) {
+  if (value.providerApiKeys.length === 0 && !value.includeFutureProviders) {
     ctx.addIssue({
       code: "custom",
       path: ["providerApiKeys"],
@@ -137,6 +170,9 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(VirtualApiKeyWithParentInfoSchema),
@@ -153,13 +189,16 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           keyType,
           scope,
           labels,
+          access: relations,
+          sharedWith,
+          owner,
         },
         organizationId,
         user,
       },
       reply,
     ) => {
-      const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
+      const [userTeamIds, isVirtualKeyAdmin, access] = await Promise.all([
         TeamModel.getUserTeamIds(user.id),
         ResourcePermissions.allows({
           userId: user.id,
@@ -167,6 +206,13 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           resource: "llmVirtualKey",
           scope: "*",
           action: "update",
+        }),
+        ResourcePermissionSubjectModel.resolveAccessFilter({
+          userId: user.id,
+          organizationId,
+          relations,
+          sharedWith,
+          ownerIds: owner,
         }),
       ]);
 
@@ -181,6 +227,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         keyType,
         scope,
         labels: parseLabelsParam(labels),
+        access,
       });
       return reply.send(result);
     },
@@ -220,7 +267,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetVirtualApiKeyValue,
         description:
-          "Get the raw value of a virtual API key. Only the key's author can reveal it.",
+          "Get the raw value of a virtual API key. Only the key's author can reveal it; a key created by a service account with no owner is revealed to that service account.",
         tags: ["Virtual API Keys"],
         params: z.object({
           id: z.string().uuid(),
@@ -238,8 +285,9 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Virtual API key not found");
       }
       // The raw value is a bearer credential — visibility (shared team/org
-      // keys) is not enough to reveal it; only the author holds the secret.
-      if (virtualKey.authorId !== user.id) {
+      // keys) is not enough to reveal it; only its creator principal (the
+      // author, or the service account that created an ownerless key) may.
+      if (CreatedByModel.id(virtualKey, virtualKey.authorId) !== user.id) {
         throw new ApiError(403, "Only the key's creator can reveal its value.");
       }
 
@@ -417,6 +465,20 @@ async function createVirtualApiKey(params: {
     throw new ApiError(400, "Expiration date must be in the future");
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (body.includeFutureProviders) {
+    await ResourcePermissions.require({
+      organizationId,
+      userId: user.id,
+      resource: "llmProviderApiKey",
+      scope: "*",
+      action: "use",
+    });
+  }
+  // SPDX-SnippetEnd
+
   const isVirtualKeyAdmin = await ResourcePermissions.allows({
     userId: user.id,
     organizationId: organizationId,
@@ -429,6 +491,11 @@ async function createVirtualApiKey(params: {
     creatorId: user.id,
     organizationId,
     isAdmin: isVirtualKeyAdmin,
+  });
+  await credentialBilling.assertCanSetBillingTeam({
+    organizationId,
+    userId: user.id,
+    teamId: body.billingTeamId,
   });
 
   // Passthrough keys are always personal and carry no provider keys; they only
@@ -447,15 +514,22 @@ async function createVirtualApiKey(params: {
       expiresAt: body.expiresAt ?? null,
       scope: "personal",
       authorId: ownerId,
+      billingTeamId: body.billingTeamId ?? null,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       initialPermissionGrants: body.initialGrants ?? [],
       // SPDX-SnippetEnd
     });
+    await credentialBilling.applySpendCap({
+      entityType: "virtual_key",
+      entityId: created.virtualKey.id,
+      cap: body.spendCap,
+    });
 
     return {
       ...created.virtualKey,
+      ...(await readBilling(created.virtualKey)),
       value: created.value,
       teams: created.teams,
       authorName: created.authorName,
@@ -477,26 +551,44 @@ async function createVirtualApiKey(params: {
     userId: user.id,
     ownerId,
   });
+  await assertCanGrantModelPools({
+    modelPoolIds: body.modelPoolIds,
+    organizationId,
+    userId: user.id,
+  });
 
   const { virtualKey, value, teams, authorName, providerApiKeys } =
     await VirtualApiKeyModel.create({
       organizationId,
       name: body.name,
       keyType: "standard",
+      includeFutureProviders: body.includeFutureProviders,
       expiresAt: body.expiresAt ?? null,
       // The retired visibility column; the grants decide who reaches the key.
       scope: "personal",
       authorId: ownerId,
       providerApiKeys: body.providerApiKeys,
+      billingTeamId: body.billingTeamId ?? null,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       initialPermissionGrants: body.initialGrants ?? [],
       // SPDX-SnippetEnd
     });
+  await credentialBilling.applySpendCap({
+    entityType: "virtual_key",
+    entityId: virtualKey.id,
+    cap: body.spendCap,
+  });
+  await setModelPools({
+    modelPoolIds: body.modelPoolIds,
+    organizationId,
+    virtualApiKeyId: virtualKey.id,
+  });
 
   return {
     ...virtualKey,
+    ...(await readBilling(virtualKey)),
     value,
     teams,
     authorName,
@@ -559,6 +651,23 @@ async function updateVirtualApiKey(params: {
     throw new ApiError(400, "Expiration date must be in the future");
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (
+    body.includeFutureProviders &&
+    !(await VirtualApiKeyModel.findById(id))?.includeFutureProviders
+  ) {
+    await ResourcePermissions.require({
+      organizationId,
+      userId: user.id,
+      resource: "llmProviderApiKey",
+      scope: "*",
+      action: "use",
+    });
+  }
+  // SPDX-SnippetEnd
+
   await requireVirtualKeyModifyPermission({
     virtualKey: accessContext,
     userId: user.id,
@@ -569,6 +678,22 @@ async function updateVirtualApiKey(params: {
   if (body.keyType !== accessContext.keyType) {
     throw new ApiError(400, "Virtual key type cannot be changed");
   }
+
+  await credentialBilling.assertCanSetBillingTeam({
+    organizationId,
+    userId: user.id,
+    teamId: body.billingTeamId,
+    currentTeamId: accessContext.billingTeamId,
+  });
+  await credentialBilling.assertCanSetSpendCap({
+    organizationId,
+    userId: user.id,
+    cap: body.spendCap,
+    current: await credentialBilling.getSpendCap({
+      entityType: "virtual_key",
+      entityId: id,
+    }),
+  });
 
   let updatedVirtualKey: Awaited<ReturnType<typeof VirtualApiKeyModel.update>>;
   if (accessContext.keyType === "passthrough") {
@@ -581,6 +706,7 @@ async function updateVirtualApiKey(params: {
       authorId: accessContext.authorId,
       teamIds: [],
       providerApiKeys: [],
+      billingTeamId: body.billingTeamId,
     });
   } else {
     // An edit changes the key itself, never who can reach it. Access lives in
@@ -591,6 +717,11 @@ async function updateVirtualApiKey(params: {
         await VirtualApiKeyModel.getProviderApiKeys(id)
       ).map((key) => key.providerApiKeyId),
       mappings: body.providerApiKeys,
+      organizationId,
+      userId: user.id,
+    });
+    await assertCanGrantModelPools({
+      modelPoolIds: body.modelPoolIds,
       organizationId,
       userId: user.id,
     });
@@ -610,17 +741,31 @@ async function updateVirtualApiKey(params: {
       id,
       name: body.name,
       expiresAt: body.expiresAt ?? null,
+      includeFutureProviders: body.includeFutureProviders,
       scope: accessContext.scope,
       // Preserve the key's owner; an edit must not transfer it to the editor
       // (e.g. an admin editing a key minted on behalf of another user).
       authorId: accessContext.authorId,
       teamIds: accessContext.teamIds,
       providerApiKeys: body.providerApiKeys,
+      billingTeamId: body.billingTeamId,
     });
   }
 
   if (!updatedVirtualKey) {
     throw new ApiError(404, "Virtual API key not found");
+  }
+  await credentialBilling.applySpendCap({
+    entityType: "virtual_key",
+    entityId: id,
+    cap: body.spendCap,
+  });
+  if (accessContext.keyType === "standard") {
+    await setModelPools({
+      modelPoolIds: body.modelPoolIds,
+      organizationId,
+      virtualApiKeyId: id,
+    });
   }
 
   const visibilityMetadata =
@@ -629,6 +774,7 @@ async function updateVirtualApiKey(params: {
 
   return {
     ...updatedVirtualKey,
+    ...(await readBilling(updatedVirtualKey)),
     teams: visibilityMetadata.teams.get(id) ?? [],
     authorName: visibilityMetadata.authorName.get(id) ?? null,
     createdBy: await CreatedByModel.resolveOne(
@@ -637,6 +783,29 @@ async function updateVirtualApiKey(params: {
     providerApiKeys,
     labels: await syncAndReadLabels(id, body.labels),
   };
+}
+
+/** Saves the pools a create/update body names; undefined keeps the current ones. */
+async function setModelPools(params: {
+  modelPoolIds: string[] | undefined;
+  organizationId: string;
+  virtualApiKeyId: string;
+}): Promise<void> {
+  if (params.modelPoolIds === undefined || !config.llmProxy.modelPoolsEnabled)
+    return;
+  await ModelPoolModel.setPoolsForVirtualApiKey({
+    organizationId: params.organizationId,
+    virtualApiKeyId: params.virtualApiKeyId,
+    poolIds: params.modelPoolIds,
+  });
+}
+
+async function readBilling(virtualKey: {
+  id: string;
+  billingTeamId: string | null;
+}) {
+  const billing = await VirtualApiKeyModel.getBillingMetadata([virtualKey]);
+  return billing.get(virtualKey.id) ?? { billingTeam: null, spendCap: null };
 }
 
 /**

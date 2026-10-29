@@ -28,6 +28,9 @@ export function useLlmOauthClients(params?: LlmOauthClientsParams) {
   const providerApiKeyId = params?.providerApiKeyId;
   const grantType = params?.grantType;
   const labels = params?.labels;
+  const access = params?.access;
+  const sharedWith = params?.sharedWith;
+  const owner = params?.owner;
 
   return useQuery({
     queryKey: [
@@ -38,6 +41,7 @@ export function useLlmOauthClients(params?: LlmOauthClientsParams) {
       providerApiKeyId,
       grantType,
       labels,
+      { access, sharedWith, owner },
     ],
     queryFn: async () => {
       const { data, error } = await getLlmOauthClients({
@@ -48,6 +52,9 @@ export function useLlmOauthClients(params?: LlmOauthClientsParams) {
           providerApiKeyId: providerApiKeyId || undefined,
           grantType: grantType || undefined,
           labels,
+          access,
+          sharedWith,
+          owner,
         },
       });
       throwOnApiError(error, { toastOnError: params?.toastOnError ?? true });

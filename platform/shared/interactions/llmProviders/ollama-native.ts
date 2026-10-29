@@ -8,7 +8,7 @@
  */
 import type { archestraApiTypes } from "../../index";
 import type { PartialUIMessage } from "../types";
-import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
+import type { Interaction, InteractionUtils } from "./common";
 
 type NativeRequest = archestraApiTypes.OllamaNativeChatRequest;
 type NativeResponse = archestraApiTypes.OllamaNativeChatResponse;
@@ -130,14 +130,6 @@ class OllamaNativeChatInteraction implements InteractionUtils {
 
   // Native `/api/chat` has no `refusal` field, so refusals are not represented
   // on the wire and there is nothing to extract here.
-  getToolNamesRefused(): string[] {
-    return [];
-  }
-
-  getToolRefusedCount(): number {
-    return 0;
-  }
-
   getToolNamesRequested(): string[] {
     const requested = new Set<string>();
     for (const toolCall of this.response.message.tool_calls ?? []) {
@@ -162,11 +154,11 @@ class OllamaNativeChatInteraction implements InteractionUtils {
   // in place of the response, and a throw here is caught upstream by falling
   // back to an empty message list — which would drop the whole request side of
   // the log entry, exactly when someone is trying to see what was sent.
-  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
+  mapToUiMessages(): PartialUIMessage[] {
     // Deterministic per call, so repeated renders produce identical ids.
     this.syntheticToolCallSeq = 0;
     return [
-      ...this.mapRequestToUiMessages(dualLlmAnalyses),
+      ...this.mapRequestToUiMessages(),
       this.mapMessageToUi({
         role: "assistant",
         content: this.response?.message?.content ?? "",
@@ -175,9 +167,7 @@ class OllamaNativeChatInteraction implements InteractionUtils {
     ];
   }
 
-  private mapRequestToUiMessages(
-    dualLlmAnalyses?: DualLlmAnalysis[],
-  ): PartialUIMessage[] {
+  private mapRequestToUiMessages(): PartialUIMessage[] {
     const messages = this.request.messages;
     const uiMessages: PartialUIMessage[] = [];
 
@@ -214,25 +204,6 @@ class OllamaNativeChatInteraction implements InteractionUtils {
           if (toolResult && toolResult.role === "tool") {
             claimed.add(resultIndex);
             parts.push(...this.mapMessageToUi(toolResult).parts);
-            // Only correlate by id when there is one — on the native wire both
-            // sides are undefined and `undefined === undefined` would attach
-            // the first analysis to every call.
-            const dualLlm = toolCall.id
-              ? dualLlmAnalyses?.find((r) => r.toolCallId === toolCall.id)
-              : undefined;
-            if (dualLlm) {
-              parts.push({
-                type: "dual-llm-analysis",
-                toolCallId: dualLlm.toolCallId,
-                safeResult: dualLlm.result,
-                conversations: Array.isArray(dualLlm.conversations)
-                  ? (dualLlm.conversations as Array<{
-                      role: "user" | "assistant";
-                      content: string | unknown;
-                    }>)
-                  : [],
-              });
-            }
           }
         });
         uiMessages.push({ ...uiMessage, parts });

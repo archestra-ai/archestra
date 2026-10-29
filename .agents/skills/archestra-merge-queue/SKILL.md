@@ -36,14 +36,25 @@ allow queue entry but do not validate the combined merge-group commit.
    A missing merge-queue rule is a blocker: the same CLI command could otherwise
    merge directly. Do not bypass the queue with `--admin`, change rules/secrets/
    runner variables, approve your own PR, or enqueue other PRs.
-4. Run relevant local checks using `archestra-dev-testing` and the skills for
-   the changed domain. For platform work, run from `platform/` using `pnpm`.
-   Address fixable PR policy failures. Missing reviews, access, a release freeze,
-   or an intentionally draft PR need a concrete blocker report, not a bypass.
-5. Refresh the PR head immediately before enqueueing and use explicit PR/repo
-   arguments with `--match-head-commit`. If it changed, inspect the new diff and
-   revalidate affected work first. Read back queue membership or auto-merge
-   state after the command; its successful exit is not evidence of a merge.
+4. Run the relevant focused tests using `archestra-dev-testing` and the skills
+   for the changed domain. Address fixable PR policy failures. Missing reviews,
+   access, a release freeze, or an intentionally draft PR need a concrete blocker
+   report, not a bypass.
+5. For platform work, run `pnpm enqueue <PR-number> --repo <repository>` from
+   `platform/` in a clean checkout of the exact PR head. This runs preflight
+   (types, lint, unused exports, white-label copy, frontend/shared unit tests),
+   refreshes the remote PR head and live queue rule, and uses GitHub's queue-only
+   operation with `expectedHeadOid` to queue only that revision. Do not run preflight
+   separately before enqueue: the wrapper already runs it once. Builds, backend
+   suites, Rust checks, browser suites and codegen stay in queue CI. Use the
+   wrapper once on the finished revision, not on intermediate commits or pushes.
+   Fix failures and rerun after changes. Direct GitHub queueing can bypass this
+   local command; GitHub does not enforce its preflight result for admission.
+   Wait for required PR checks and reviews before invoking it; it stops if GitHub
+   rejects queue admission and never enables generic auto-merge. For work outside
+   platform, use the guarded GitHub command in the reference after focused local
+   validation. Read back queue membership and continue monitoring; queue entry
+   is not evidence of a completed merge.
 
 ## Monitor the current attempt
 
@@ -116,7 +127,7 @@ verify it still matches the commit the repair was based on before publishing;
 inspect unexpected collaborator changes rather than overwriting them. Push
 explicitly to the PR's head repository and branch, confirm GitHub's new
 `headRefOid` equals the verified local commit, and recheck PR policy. Use the
-same guarded queue command for the new head, then resume monitoring its new
+same enqueue workflow for the new head, then resume monitoring its new
 synthetic SHA. Fixable failure is a loop through local verification, publication,
 and monitoring, not a stopping point.
 

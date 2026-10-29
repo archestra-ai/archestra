@@ -70,7 +70,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return {
         resource: `${baseUrl}${resourcePath}`,
         authorization_servers: authorizationServers,
-        scopes_supported: ["mcp"],
+        scopes_supported: [resourcePath.includes("/a2a/") ? "a2a" : "mcp"],
         bearer_methods_supported: ["header"],
       };
     },

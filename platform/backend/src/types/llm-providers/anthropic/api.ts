@@ -31,7 +31,9 @@ const ToolChoiceSchema = z.union([
 
 // Mirrors @anthropic-ai/sdk BetaJSONOutputFormat / BetaOutputConfig.
 // Sent by the Vercel AI SDK to enable native structured output on opus-4-6.
-const OutputConfigSchema = z.object({
+// Loose: Claude Code also sends keys this schema does not list, such as
+// `task_budget`, and a dropped key silently turns that capability off.
+const OutputConfigSchema = z.looseObject({
   effort: z.string().nullable().optional(),
   format: z
     .object({
@@ -82,16 +84,22 @@ const ThinkingConfigSchema = z.union([
   z.object({ type: z.string() }).passthrough(),
 ]);
 
-export const MessagesRequestSchema = z.object({
+// Loose at the top level, like `thinking`: Fastify replaces the request body
+// with this parse, so a field the schema does not list would never reach the
+// upstream. Claude Code adds request fields over releases (for example
+// `safeguards`, which asks the server to review auto mode actions) and expects
+// a gateway to forward them unchanged.
+// https://code.claude.com/docs/en/llm-gateway-protocol#forward-as-open-lists
+export const MessagesRequestSchema = z.looseObject({
   model: z.string(),
   messages: z.array(MessageParamSchema),
   max_tokens: z.number(),
   container: z.string().nullable().optional(),
-  context_management: z.object().nullable().optional(),
+  context_management: z.looseObject({}).nullable().optional(),
   mcp_servers: z.array(z.any()).optional(),
   metadata: z
-    .object({
-      user_id: z.string().nullable(),
+    .looseObject({
+      user_id: z.string().nullable().optional(),
     })
     .optional(),
   output_config: OutputConfigSchema.optional(),
@@ -102,14 +110,14 @@ export const MessagesRequestSchema = z.object({
   system: z
     .union([
       z.string(),
-      z.object({
+      z.looseObject({
         type: z.enum(["text"]),
         text: z.string(),
         cache_control: z.any().nullable().optional(),
         citations: z.array(z.any()).nullable().optional(),
       }),
       z.array(
-        z.object({
+        z.looseObject({
           type: z.enum(["text"]),
           text: z.string(),
           cache_control: z.any().nullable().optional(),
@@ -153,6 +161,15 @@ export const MessagesResponseSchema = z.object({
   type: z.enum(["message"]),
   usage: UsageSchema,
 });
+
+// What the proxy routes serialize. The response serializer drops keys its
+// schema does not list, and clients read keys added over releases (for example
+// `safeguard_results`, the server's auto mode verdicts), so the wire schema
+// keeps them. MessagesResponseSchema stays closed for the inferred type, which
+// SDK `Message` values must stay assignable to.
+export const MessagesResponseWireSchema = MessagesResponseSchema.extend({
+  usage: UsageSchema.loose(),
+}).loose();
 
 export const MessagesHeadersSchema = z
   .object({

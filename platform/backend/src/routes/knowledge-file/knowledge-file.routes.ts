@@ -4,7 +4,10 @@ import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -19,6 +22,7 @@ import {
   ConversationAttachmentModel,
   ConversationModel,
   CreatedByModel,
+  KbConnectorDocumentCountModel,
   KbDirectoryModel,
   KbFileLabelModel,
   KbFileModel,
@@ -28,6 +32,7 @@ import {
   TeamModel,
 } from "@/models";
 import type { KbFileViewer } from "@/models/kb-file";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import {
   findAccessibleKnowledgeBase,
   findAccessibleKnowledgeBasesForFiles,
@@ -85,6 +90,9 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KbFileSchema),
@@ -94,6 +102,13 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request) => {
       const { limit, offset, directoryId, search, labels } = request.query;
       const viewer = await resolveViewer(request);
+      const access = await ResourcePermissionSubjectModel.resolveAccessFilter({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        relations: request.query.access,
+        sharedWith: request.query.sharedWith,
+        ownerIds: request.query.owner,
+      });
 
       const parsedLabels = parseLabelsParam(labels);
       const labelFilteredIds = parsedLabels
@@ -113,6 +128,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
               : directoryId,
         search,
         labelFilteredIds,
+        access,
         limit,
         offset,
       });
@@ -724,6 +740,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }),
         },
       });
+      await refreshUploadDocumentCounts(organizationId);
 
       return reply.send(outcome);
     },
@@ -747,6 +764,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!deleted) throw new ApiError(404, "File not found");
+      await refreshUploadDocumentCounts(organizationId);
       return { success: true };
     },
   );
@@ -1062,6 +1080,18 @@ async function assertKnowledgeBaseInOrg(params: {
   return (
     await findAccessibleKnowledgeBase({ ...params, id: params.knowledgeBaseId })
   ).id;
+}
+
+/**
+ * A file's documents live in the upload connector of every knowledge base it
+ * was indexed into, so deleting files recounts the organization's upload
+ * connectors.
+ */
+async function refreshUploadDocumentCounts(organizationId: string) {
+  await KbConnectorDocumentCountModel.refreshForOrganization({
+    organizationId,
+    connectorType: "file_upload",
+  });
 }
 
 /** A file's `visibility` and `teamIds` response fields, from its grants. */

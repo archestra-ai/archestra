@@ -1,22 +1,46 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   isResourcePermissionPreset,
-  type ResourcePermissionGrant,
   ScopedResourceSchema,
   widenToPreset,
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import db, { type Transaction } from "@/database";
 import logger from "@/logging";
+import OAuthClientUpgradeModel from "@/models/oauth-client-upgrade";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import StartupMigrationModel from "@/models/startup-migration";
+
+/** Run once per database, including when multiple web replicas start together. */
+export async function ensureScopedResourcePermissionCutover(): Promise<void> {
+  let waiting = false;
+  while (
+    !(await StartupMigrationModel.tryRun({
+      id: "scoped-resource-permissions-v1",
+      migrate: runScopedResourcePermissionCutover,
+    }))
+  ) {
+    if (!waiting) {
+      logger.info(
+        "[ResourcePermissions] Waiting for the permission upgrade on another replica",
+      );
+      waiting = true;
+    }
+    await sleep(1000);
+  }
+}
 
 /**
  * Convert the retired visibility fields into grants, and retire the role
  * actions the grants replace.
  *
- * This runs at startup after schema migrations so existing resources and role
+ * The startup coordinator runs this after schema migrations so resources and role
  * authority convert together in one transaction. Each policy imports legacy
  * authority only once, merges any existing grants, and then becomes the source
  * of truth. Later permission edits, including revocations, survive restarts.
+ *
+ * @public — exercised directly by cutover compatibility tests, including replay
  */
 export async function runScopedResourcePermissionCutover(
   /** Join a caller's transaction, so a test can roll the whole thing back. */
@@ -35,9 +59,11 @@ export async function runScopedResourcePermissionCutover(
       ...SHARING_CONVERSION_STATEMENTS,
       SESSION_SHARING_CONVERSION,
       ...ROLE_RETIREMENT_STATEMENTS,
+      EXTERNAL_AGENT_AUTHORITY,
     ])
       await tx.execute(statement);
     await widenGrantsToPresets(tx);
+    await OAuthClientUpgradeModel.run(tx);
   };
   if (transaction) await run(transaction);
   else await db.transaction(run);
@@ -113,6 +139,9 @@ WITH candidates AS (
   SELECT k.organization_id, 'llmProviderApiKey', k.id::text, k.scope, k.user_id, k.id
   FROM chat_api_keys k
   UNION ALL
+  SELECT r.organization_id, 'externalAgent', r.id::text, r.scope, r.author_id, r.id
+  FROM a2a_remote_agents r
+  UNION ALL
   -- An OAuth client keeps its owner and audience in its metadata, because the
   -- row belongs to the OAuth provider's table. Only the two kinds the platform
   -- registers convert; a client that registered itself (dynamic registration,
@@ -166,7 +195,8 @@ WITH candidates AS (
     WHERE roles.organization_id = t.organization_id
       AND COALESCE(roles.permission::jsonb -> (CASE
         WHEN t.resource IN ('knowledgeBase', 'knowledgeConnector', 'knowledgeFile')
-        THEN 'knowledgeSource' ELSE t.resource END), '[]'::jsonb) ? 'read'
+        THEN 'knowledgeSource' WHEN t.resource = 'externalAgent' THEN 'agent'
+        ELSE t.resource END), '[]'::jsonb) ? 'read'
   ) reader ON true
   WHERE t.visibility = 'org'
   UNION ALL
@@ -265,6 +295,16 @@ WITH candidates AS (
   FROM targets t JOIN virtual_api_key_team vt ON vt.virtual_api_key_id = t.source_id
   JOIN team tm ON tm.id = vt.team_id AND tm.organization_id = t.organization_id
   WHERE t.resource = 'llmVirtualKey'
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'team', rt.team_id, ARRAY['read', 'use']::text[]
+  FROM targets t JOIN a2a_remote_agent_teams rt ON rt.remote_agent_id = t.source_id
+  JOIN team tm ON tm.id = rt.team_id AND tm.organization_id = t.organization_id
+  WHERE t.resource = 'externalAgent' AND t.visibility = 'team'
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'user', ru.user_id, ARRAY['read', 'use']::text[]
+  FROM targets t JOIN a2a_remote_agent_users ru ON ru.remote_agent_id = t.source_id
+  JOIN member m ON m.user_id = ru.user_id AND m.organization_id = t.organization_id
+  WHERE t.resource = 'externalAgent'
   UNION ALL
   -- Team members could see a team's OAuth clients; managing one took the
   -- retired team-admin action, which the team-relative statement below turns
@@ -375,9 +415,9 @@ WITH RECURSIVE effective_teams(organization_id, user_id, team_id) AS (
     EXISTS (SELECT 1 FROM resource_permission_policies p
       WHERE p.organization_id = o.id AND p.resource = r.resource AND p.scope = 'teams:*')
     OR NOT EXISTS (SELECT 1 FROM resource_permission_policies p
-      WHERE p.organization_id = o.id AND p.resource = r.resource AND p.scope = '*' AND p.legacy_sharing_migrated)
+      WHERE p.organization_id = o.id AND (p.resource = r.resource OR (r.resource IN ('mcpOauthClient','llmOauthClient') AND p.resource = 'oauthClient')) AND p.scope = '*' AND p.legacy_sharing_migrated)
   )
-), relative_entries AS (
+), relative_entries AS MATERIALIZED (
   SELECT p.organization_id, p.resource, g->'subject'->>'type' AS subject_type,
     g->'subject'->>'id' AS subject_id, action
   FROM resource_permission_policies p CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
@@ -417,6 +457,7 @@ WITH RECURSIVE effective_teams(organization_id, user_id, team_id) AS (
   UNION SELECT organization_id, 'plugin', id::text FROM plugins
   UNION SELECT organization_id, 'llmVirtualKey', id::text FROM virtual_api_keys
   UNION SELECT organization_id, 'llmProviderApiKey', id::text FROM chat_api_keys
+  UNION SELECT organization_id, 'externalAgent', id::text FROM a2a_remote_agents
   UNION SELECT organization_id, 'knowledgeBase', id::text FROM knowledge_bases
   UNION SELECT organization_id, 'knowledgeConnector', id::text FROM knowledge_base_connectors
   UNION SELECT organization_id, 'knowledgeFile', id::text FROM kb_files
@@ -428,14 +469,24 @@ WITH RECURSIVE effective_teams(organization_id, user_id, team_id) AS (
 ), anchored AS (
   SELECT DISTINCT p.organization_id, p.resource, p.scope, et.user_id
   FROM resource_permission_policies p JOIN objects o USING (organization_id, resource, scope)
+  -- Filter to migration sources before expanding policies and team membership.
+  -- After cutover the materialized source is empty, so the recursive team and
+  -- member scans are never needed on subsequent starts.
+  JOIN (SELECT DISTINCT organization_id, resource FROM relative_entries) needed
+    USING (organization_id, resource)
   CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
   JOIN effective_teams et ON et.organization_id = p.organization_id
     AND g->'subject'->>'type' = 'team' AND et.team_id = g->'subject'->>'id'
 ), materialized AS (
   SELECT DISTINCT a.organization_id, a.resource, a.scope, a.user_id, r.action
-  FROM anchored a JOIN subjects s ON s.organization_id = a.organization_id AND s.user_id = a.user_id
-  JOIN relative_entries r ON r.organization_id = a.organization_id AND r.resource = a.resource
-    AND r.subject_type = s.subject_type AND r.subject_id = s.subject_id
+  -- Keep each complete match as one key. Separate equalities let PostgreSQL
+  -- choose an organization-only merge join and filter billions of unrelated
+  -- user/resource pairs in a large, single-organization deployment.
+  FROM anchored a JOIN subjects s
+    ON ARRAY[s.organization_id, s.user_id] = ARRAY[a.organization_id, a.user_id]
+  JOIN relative_entries r
+    ON ARRAY[r.organization_id, r.resource, r.subject_type, r.subject_id]
+      = ARRAY[a.organization_id, a.resource, s.subject_type, s.subject_id]
 ), affected AS (
   SELECT DISTINCT organization_id, resource, scope FROM materialized
 ), entries AS (
@@ -629,6 +680,103 @@ ON CONFLICT (organization_id, resource, scope) DO UPDATE
 SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
 WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `),
+  // ---------------------------------------------------------------------
+  // shareExistingCredentialsWithOrganization
+  // ---------------------------------------------------------------------
+  sql.raw(`
+-- Every member could see every credential and connect their own value to it
+-- (\`credential:read\`). That reach moves onto each credential, as a grant to
+-- everyone in the organization, the same grant a new credential starts with.
+-- On the credential, not at \`*\`: a grant at \`*\` cannot be taken away from
+-- one credential, so no credential could ever be kept to a team.
+--
+-- Runs once per organization, in the same pass that converts the role
+-- actions below and marks the organization converted. Revoking the grant
+-- afterwards therefore sticks.
+INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
+SELECT d.organization_id, 'credential', d.id::text,
+  jsonb_build_array(jsonb_build_object(
+    'subject', jsonb_build_object('type', 'organization', 'id', '*'),
+    'actions', jsonb_build_array('read', 'use'))),
+  true
+FROM credential_definitions d
+WHERE NOT EXISTS (
+  SELECT 1 FROM resource_permission_policies p
+  WHERE p.organization_id = d.organization_id AND p.resource = 'credential'
+    AND p.scope = '*' AND p.legacy_sharing_migrated
+)
+ON CONFLICT (organization_id, resource, scope) DO NOTHING;
+`),
+  // ---------------------------------------------------------------------
+  // convertCredentialAuthority
+  // ---------------------------------------------------------------------
+  sql.raw(`
+-- Who could change or delete a saved credential was decided entirely by the
+-- caller's \`credential\` role actions. Those actions become grants at \`*\`,
+-- for the same reason convertServiceAccountAuthority above writes there:
+-- they reached every credential, including ones created later. Members'
+-- read was converted onto each credential above.
+--
+-- A custom role's \`credential:read\` let its holders connect their own value
+-- to a personal credential. Connecting is \`use\` now, so read carries use.
+WITH role_actions AS (
+  -- Built-in roles keep their permissions in code, not in this table.
+  SELECT o.id AS organization_id, builtin.id AS subject_id, action
+  FROM organization o
+  CROSS JOIN (VALUES
+    ('admin', ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']),
+    ('platform_admin', ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']),
+    ('editor', ARRAY['read', 'use', 'update', 'delete', 'manage-permissions'])
+  ) builtin(id, actions)
+  CROSS JOIN LATERAL unnest(builtin.actions) action
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = o.id AND p.resource = 'credential'
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
+  UNION ALL
+  SELECT roles.organization_id, roles.id, expanded.action
+  FROM organization_role roles
+  CROSS JOIN LATERAL (
+    SELECT action FROM jsonb_array_elements_text(
+      COALESCE(roles.permission::jsonb->'credential', '[]'::jsonb)) action
+    WHERE action IN ('read', 'update', 'delete')
+    UNION
+    SELECT 'use' WHERE COALESCE(roles.permission::jsonb->'credential', '[]'::jsonb) ? 'read'
+    UNION
+    SELECT 'manage-permissions' WHERE COALESCE(roles.permission::jsonb->'credential', '[]'::jsonb) ? 'update'
+  ) expanded
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = roles.organization_id AND p.resource = 'credential'
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
+), entries AS (
+  -- Merged with what is stored and compared before writing, as above.
+  SELECT organization_id, 'role' AS subject_type, subject_id, action FROM role_actions
+  UNION ALL
+  SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action
+  FROM resource_permission_policies p
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+  WHERE p.resource = 'credential' AND p.scope = '*'
+    AND p.organization_id IN (SELECT organization_id FROM role_actions)
+), subjects AS (
+  SELECT organization_id, subject_type, subject_id,
+    jsonb_agg(DISTINCT action ORDER BY action) AS actions
+  FROM entries GROUP BY organization_id, subject_type, subject_id
+), policies AS (
+  SELECT organization_id,
+    jsonb_agg(jsonb_build_object('subject', jsonb_build_object('type', subject_type, 'id', subject_id), 'actions', actions)
+      ORDER BY subject_type, subject_id) AS grants
+  FROM subjects GROUP BY organization_id
+)
+INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
+SELECT organization_id, 'credential', '*', grants, true FROM policies
+ON CONFLICT (organization_id, resource, scope) DO UPDATE
+SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
+WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
+`),
 ];
 
 /** @public — read by resource-permissions-cutover.roles.test.ts */
@@ -656,7 +804,7 @@ WITH holders AS (
   FROM organization o
   CROSS JOIN (VALUES
     ('project'), ('plugin'), ('llmVirtualKey'), ('llmProviderApiKey'),
-    ('knowledgeSource'), ('scheduledTask'),
+    ('knowledgeSource'),
     ('mcpOauthClient'), ('llmOauthClient')
   ) AS source(role_action)
   JOIN LATERAL (
@@ -690,7 +838,7 @@ WITH holders AS (
   ) mapped
   WHERE NOT EXISTS (
     SELECT 1 FROM resource_permission_policies p
-    WHERE p.organization_id = h.organization_id AND p.resource = mapped.resource
+    WHERE p.organization_id = h.organization_id AND (p.resource = mapped.resource OR (mapped.resource IN ('mcpOauthClient','llmOauthClient') AND p.resource = 'oauthClient'))
       AND p.scope = '*' AND p.legacy_sharing_migrated
   ) OR EXISTS (
     -- A custom role's old admin flag still needs converting on this first
@@ -917,14 +1065,15 @@ WHERE NOT resource_permission_policies.legacy_sharing_migrated
 -- object grants before these flags retire. \`project:share-org\` converts to
 -- nothing: sharing a project with the organization is a grant written by
 -- whoever manages the project's permissions, and its holders already hold
--- their project grants. Preserve unrelated permissions and role IDs.
+-- their project grants. \`credential:update\` and \`credential:delete\` became
+-- grants at \`*\`. Preserve unrelated permissions and role IDs.
 WITH converted AS (
   SELECT r.id, COALESCE((
     SELECT jsonb_object_agg(resource, CASE
       WHEN resource IN (
         'agent', 'mcpGateway', 'mcpRegistry', 'skill', 'app',
         'project', 'plugin', 'llmVirtualKey', 'llmProviderApiKey',
-        'knowledgeSource', 'scheduledTask',
+        'knowledgeSource',
         'mcpServerInstallation', 'mcpOauthClient', 'llmOauthClient'
       ) THEN
         COALESCE((SELECT jsonb_agg(action ORDER BY ordinal)
@@ -933,6 +1082,12 @@ WITH converted AS (
             '"admin"'::jsonb, '"team-admin"'::jsonb, '"deploy-to-restricted"'::jsonb,
             '"read-all"'::jsonb, '"share-org"'::jsonb
           )), '[]'::jsonb)
+      -- Editing and deleting a credential are grants now
+      -- (convertCredentialAuthority); only opening the page and creating stay.
+      WHEN resource = 'credential' THEN
+        COALESCE((SELECT jsonb_agg(action ORDER BY ordinal)
+          FROM jsonb_array_elements(actions) WITH ORDINALITY AS items(action, ordinal)
+          WHERE action NOT IN ('"update"'::jsonb, '"delete"'::jsonb)), '[]'::jsonb)
       ELSE actions END)
     FROM jsonb_each(r.permission::jsonb) AS resources(resource, actions)
   ), '{}'::jsonb) AS permission
@@ -1032,42 +1187,43 @@ WHERE NOT resource_permission_policies.legacy_sharing_migrated
  * @public — read by the cutover tests
  */
 export async function widenGrantsToPresets(tx: Transaction): Promise<void> {
-  const result = await tx.execute<{
-    organization_id: string;
-    resource: string;
-    scope: string;
-    grants: ResourcePermissionGrant[];
-  }>(
-    sql`SELECT organization_id, resource, scope, grants FROM resource_permission_policies`,
-  );
+  let after:
+    | { organizationId: string; resource: string; scope: string }
+    | undefined;
   let widened = 0;
-  for (const policy of result.rows) {
-    const resource = ScopedResourceSchema.safeParse(policy.resource);
-    if (!resource.success) continue;
-    if (
-      policy.grants.every((grant) =>
-        isResourcePermissionPreset(grant.actions, resource.data),
+  while (true) {
+    const policies = await ResourcePermissionPolicyModel.listForPresetUpgrade({
+      tx,
+      after,
+    });
+    if (!policies.length) break;
+    after = policies[policies.length - 1];
+    for (const policy of policies) {
+      const resource = ScopedResourceSchema.safeParse(policy.resource);
+      if (!resource.success) continue;
+      if (
+        policy.grants.every((grant) =>
+          isResourcePermissionPreset(grant.actions, resource.data),
+        )
       )
-    )
-      continue;
-    const grants = policy.grants
-      .map((grant) =>
-        isResourcePermissionPreset(grant.actions, resource.data)
-          ? grant
-          : {
-              ...grant,
-              actions: widenToPreset(grant.actions, resource.data).sort(),
-            },
-      )
-      .filter((grant) => grant.actions.length);
-    await tx.execute(sql`
-      UPDATE resource_permission_policies
-      SET grants = ${JSON.stringify(grants)}::jsonb,
-        revision = revision + 1, updated_at = now()
-      WHERE organization_id = ${policy.organization_id}
-        AND resource = ${policy.resource} AND scope = ${policy.scope}
-    `);
-    widened++;
+        continue;
+      const grants = policy.grants
+        .map((grant) =>
+          isResourcePermissionPreset(grant.actions, resource.data)
+            ? grant
+            : {
+                ...grant,
+                actions: widenToPreset(grant.actions, resource.data).sort(),
+              },
+        )
+        .filter((grant) => grant.actions.length);
+      await ResourcePermissionPolicyModel.updatePresetUpgradePolicy({
+        tx,
+        policy,
+        grants,
+      });
+      widened++;
+    }
   }
   if (widened)
     logger.info(
@@ -1075,3 +1231,55 @@ export async function widenGrantsToPresets(tx: Transaction): Promise<void> {
       "[ResourcePermissions] Widened grants to the nearest permission preset",
     );
 }
+
+// convertExternalAgentAuthority
+const EXTERNAL_AGENT_AUTHORITY = sql.raw(`
+-- External agents follow local agents. Whoever reaches every local agent
+-- through the \`agent\` policy at \`*\` reaches every external agent with
+-- the same actions. Built-in admin and platform admin are named as well,
+-- because their permissions live in code. It runs after the role retirement,
+-- so the \`agent\` policy already holds the converted \`admin\` roles. It
+-- runs once per organization, so later edits to this policy stay.
+WITH unconverted AS (
+  SELECT o.id AS organization_id FROM organization o
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = o.id AND p.resource = 'externalAgent'
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
+), role_actions AS (
+  SELECT u.organization_id, 'role' AS subject_type, builtin.id AS subject_id,
+    unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) AS action
+  FROM unconverted u
+  CROSS JOIN (VALUES ('admin'), ('platform_admin')) builtin(id)
+  UNION ALL
+  SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action
+  FROM resource_permission_policies p
+  JOIN unconverted u ON u.organization_id = p.organization_id
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+  WHERE p.resource = 'agent' AND p.scope = '*'
+), entries AS (
+  SELECT organization_id, subject_type, subject_id, action FROM role_actions
+  UNION ALL
+  SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action
+  FROM resource_permission_policies p
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+  WHERE p.resource = 'externalAgent' AND p.scope = '*'
+), subjects AS (
+  SELECT organization_id, subject_type, subject_id,
+    jsonb_agg(DISTINCT action ORDER BY action) AS actions
+  FROM entries GROUP BY organization_id, subject_type, subject_id
+), policies AS (
+  SELECT organization_id,
+    jsonb_agg(jsonb_build_object('subject', jsonb_build_object('type', subject_type, 'id', subject_id), 'actions', actions)
+      ORDER BY subject_type, subject_id) AS grants
+  FROM subjects GROUP BY organization_id
+)
+INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
+SELECT organization_id, 'externalAgent', '*', grants, true FROM policies
+ON CONFLICT (organization_id, resource, scope) DO UPDATE
+SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
+WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
+`);

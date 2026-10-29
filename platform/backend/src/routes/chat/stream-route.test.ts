@@ -118,8 +118,9 @@ vi.mock("@/observability/tracing", async (importOriginal) => {
   };
 });
 
-vi.mock("./context-compaction", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./context-compaction")>();
+vi.mock("./compaction/compact-messages", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./compaction/compact-messages")>();
   return {
     ...actual,
     compactMessagesForChat: mockCompactMessagesForChat,
@@ -789,8 +790,6 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       if (value && typeof value === "object" && "apiKey" in value)
         value.apiKey = "";
     }
-    config.chat.defaultProvider = "anthropic";
-    config.chat.defaultModel = "claude-sonnet-4-5";
 
     const compactedMessages = [
       {
@@ -937,8 +936,6 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       if (value && typeof value === "object" && "apiKey" in value)
         value.apiKey = "";
     }
-    config.chat.defaultProvider = "anthropic";
-    config.chat.defaultModel = "claude-sonnet-4-5";
 
     mockStreamText.mockClear();
 
@@ -1575,36 +1572,44 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     });
   });
 
-  test("keeps Gemini image-model providerOptions free of thinkingConfig", async ({
-    makeConversation,
-  }) => {
-    const model = await makeGeminiModelRow("gemini-2.5-flash-image");
-    const geminiConversation = await makeConversation(agentId, {
-      userId: user.id,
-      organizationId,
-      modelId: model.id,
-    });
-    mockStreamText.mockClear();
+  for (const modelId of ["gemini-2.5-flash-image", "gemini-nano-banana-2.1"]) {
+    test(`enables image output without text thinking settings for ${modelId}`, async ({
+      makeConversation,
+    }) => {
+      const model = await makeGeminiModelRow(modelId);
+      const geminiConversation = await makeConversation(agentId, {
+        userId: user.id,
+        organizationId,
+        modelId: model.id,
+      });
+      mockStreamText.mockClear();
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/chat",
-      payload: {
-        id: geminiConversation.id,
-        messages: [
-          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
-        ],
-      },
-    });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chat",
+        payload: {
+          id: geminiConversation.id,
+          messages: [
+            {
+              id: "msg-1",
+              role: "user",
+              parts: [{ type: "text", text: "hi" }],
+            },
+          ],
+        },
+      });
 
-    expect(response.statusCode).toBe(200);
-    await executionPromise;
+      expect(response.statusCode).toBe(200);
+      await executionPromise;
 
-    expect(mockStreamText).toHaveBeenCalledTimes(1);
-    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
-      responseModalities: ["TEXT", "IMAGE"],
+      expect(mockStreamText).toHaveBeenCalledTimes(1);
+      expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual(
+        {
+          responseModalities: ["TEXT", "IMAGE"],
+        },
+      );
     });
-  });
+  }
 
   // Seeds a synced OpenAI model row so resolveConversationModel dereferences
   // the conversation to that model id + the openai provider.
@@ -3213,15 +3218,20 @@ describe("POST /api/chat handler composition", () => {
     expect(response.statusCode).toBe(200);
     await executionPromise;
 
-    // A tool-call step re-emits the breakdown with the provider's real input
-    // count. onStepFinish only emits once a result is committed, which the
-    // awaited execution above has done.
+    // Both tool-call steps and the final response step re-emit the breakdown
+    // with the provider's real input count. onStepFinish only emits once a
+    // result is committed, which the awaited execution above has done.
     const streamConfig = mockStreamText.mock.calls.at(-1)?.[0] as {
       onStepFinish?: (step: unknown) => Promise<void> | void;
     };
     await streamConfig.onStepFinish?.({
       usage: { inputTokens: 1200, outputTokens: 10, totalTokens: 1210 },
       finishReason: "tool-calls",
+      toolCalls: [],
+    });
+    await streamConfig.onStepFinish?.({
+      usage: { inputTokens: 2400, outputTokens: 25, totalTokens: 2425 },
+      finishReason: "stop",
       toolCalls: [],
     });
 
@@ -3231,8 +3241,12 @@ describe("POST /api/chat handler composition", () => {
         (event.value as { type?: string })?.type ===
           "data-context-window-breakdown",
     );
-    // Both the pre-stream breakdown and the post-step re-emit.
-    expect(breakdownWrites.length).toBeGreaterThan(1);
+    // Pre-stream breakdown + post-tool-step + post-final-step re-emits.
+    expect(breakdownWrites.length).toBeGreaterThanOrEqual(3);
+    expect(
+      (breakdownWrites.at(-1)?.value as { data?: { usedTokens?: number } })
+        ?.data?.usedTokens,
+    ).toBe(2400);
 
     // Every one of these carries UI state the client reads via onData. A
     // non-transient copy lands in the assistant message instead, where it is

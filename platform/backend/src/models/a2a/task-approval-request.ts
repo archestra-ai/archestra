@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import type { A2AArchestraApprovalRequest } from "@/agents/a2a/a2a-protocol";
 import db, { schema } from "@/database";
 import type {
@@ -77,6 +77,180 @@ class A2ATaskApprovalRequestModel {
       byTask.set(req.taskId, list);
     }
     return byTask;
+  }
+
+  static async findByTaskIdAndApprovalId(params: {
+    taskId: string;
+    approvalId: string;
+  }): Promise<A2ATaskApprovalRequest | null> {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    const [req] = await db
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.taskId, params.taskId),
+          eq(table.approvalId, params.approvalId),
+        ),
+      )
+      .limit(1);
+    return req ?? null;
+  }
+
+  static async attachChatReviewer(params: {
+    taskId: string;
+    approvalId: string;
+    userId: string;
+    channelId: string;
+    threadId?: string;
+  }) {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    await db
+      .update(table)
+      .set({
+        reviewerUserId: params.userId,
+        chatChannelId: params.channelId,
+        ...(params.threadId ? { chatThreadId: params.threadId } : {}),
+      })
+      .where(
+        and(
+          eq(table.taskId, params.taskId),
+          eq(table.approvalId, params.approvalId),
+          eq(table.resolved, false),
+        ),
+      );
+  }
+
+  /** A bare chat approval is accepted only when exactly one result is returned. */
+  static async findPendingInChatThread(params: {
+    organizationId: string;
+    channelId: string;
+    threadId: string;
+    approvalId?: string;
+  }): Promise<A2ATaskApprovalRequest[]> {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    const now = new Date();
+    const rows = await db
+      .select({ approval: table })
+      .from(table)
+      .innerJoin(
+        schema.a2aTasksTable,
+        eq(table.taskId, schema.a2aTasksTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.a2aTasksTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.a2aTasksTable.state, "TASK_STATE_INPUT_REQUIRED"),
+          eq(table.chatChannelId, params.channelId),
+          eq(table.chatThreadId, params.threadId),
+          eq(table.resolved, false),
+          isNotNull(table.reviewerUserId),
+          isNull(table.ruling),
+          params.approvalId
+            ? eq(table.approvalId, params.approvalId)
+            : undefined,
+          or(
+            gt(table.expiresAt, now),
+            and(
+              isNull(table.expiresAt),
+              gt(
+                table.createdAt,
+                new Date(now.getTime() - 24 * 60 * 60 * 1000),
+              ),
+            ),
+          ),
+        ),
+      )
+      .limit(2);
+    return rows.map((row) => row.approval);
+  }
+
+  /**
+   * Links a paused `execute_remedy_plan` call to its OpenAPPA review. Without
+   * a reviewer, whoever can answer the task's approvals over A2A decides.
+   */
+  static async attachOpenappaReview(params: {
+    taskId: string;
+    approvalId: string;
+    offerId: string;
+    reviewText: string;
+    remedyArguments: Record<string, unknown>;
+    expiresAt: Date;
+    reviewerUserId?: string;
+    chatChannelId?: string;
+    chatThreadId?: string;
+  }): Promise<A2ATaskApprovalRequest | null> {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    const [req] = await db
+      .update(table)
+      .set({
+        openappaOfferId: params.offerId,
+        openappaReviewText: params.reviewText,
+        remedyArguments: params.remedyArguments,
+        reviewerUserId: params.reviewerUserId ?? null,
+        chatChannelId: params.chatChannelId ?? null,
+        chatThreadId: params.chatThreadId ?? null,
+        expiresAt: params.expiresAt,
+      })
+      .where(
+        and(
+          eq(table.taskId, params.taskId),
+          eq(table.approvalId, params.approvalId),
+          eq(table.resolved, false),
+        ),
+      )
+      .returning();
+    return req ?? null;
+  }
+
+  /**
+   * Records the reviewer's ruling once. Returns null when the review is
+   * already decided, has expired, or belongs to another reviewer.
+   */
+  static async recordOpenappaRuling(params: {
+    id: string;
+    /** Null for a review the A2A caller answers. */
+    reviewerUserId: string | null;
+    ruling: "approve" | "deny";
+    now: Date;
+  }): Promise<A2ATaskApprovalRequest | null> {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    const [req] = await db
+      .update(table)
+      .set({ ruling: params.ruling, decidedAt: params.now })
+      .where(
+        and(
+          eq(table.id, params.id),
+          params.reviewerUserId === null
+            ? isNull(table.reviewerUserId)
+            : eq(table.reviewerUserId, params.reviewerUserId),
+          isNotNull(table.openappaOfferId),
+          isNull(table.ruling),
+          gt(table.expiresAt, params.now),
+        ),
+      )
+      .returning();
+    return req ?? null;
+  }
+
+  /**
+   * Paused tasks whose OpenAPPA review expired. A row outlives its review only
+   * while the task has not resumed, so a decided row here means the resume
+   * never happened.
+   */
+  static async findTaskIdsWithExpiredOpenappaReviews(
+    now: Date,
+  ): Promise<string[]> {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    const rows = await db
+      .selectDistinct({ taskId: table.taskId })
+      .from(table)
+      .where(and(isNotNull(table.openappaOfferId), lte(table.expiresAt, now)));
+    return rows.map((row) => row.taskId);
   }
 
   static async delete(id: string): Promise<void> {

@@ -55,7 +55,17 @@ vi.mock("@/components/ai-elements/sources", () => ({
 }));
 
 vi.mock("@/components/ai-elements/tool", () => ({
-  Tool: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Tool: ({
+    children,
+    defaultOpen,
+  }: {
+    children: React.ReactNode;
+    defaultOpen?: boolean;
+  }) => (
+    <div data-testid="tool" data-open={String(Boolean(defaultOpen))}>
+      {children}
+    </div>
+  ),
   ToolContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -84,10 +94,6 @@ vi.mock("@/components/chat/inline-chat-error", () => ({
 
 vi.mock("@/components/chat/message-actions", () => ({
   MessageActions: () => null,
-}));
-
-vi.mock("@/components/chat/policy-denied-tool", () => ({
-  PolicyDeniedTool: () => null,
 }));
 
 vi.mock("@/components/divider", () => ({
@@ -138,6 +144,46 @@ describe("MessageThread", () => {
     expect(screen.getByTestId("tool-output-label")).toHaveTextContent(
       "Cancelled",
     );
+  });
+
+  it("opens a call still waiting on its result only when asked to", () => {
+    const messages: PartialUIMessage[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "read_file",
+            toolCallId: "call-done",
+            state: "output-available",
+            input: { path: "a.ts" },
+            output: "contents",
+          },
+          {
+            type: "dynamic-tool",
+            toolName: "exec_command",
+            toolCallId: "call-pending",
+            state: "input-available",
+            input: { cmd: "git status" },
+          },
+        ],
+      },
+    ];
+
+    const { unmount } = render(
+      <MessageThread messages={messages} openPendingTools />,
+    );
+    expect(
+      screen.getAllByTestId("tool").map((tool) => tool.dataset.open),
+    ).toEqual(["false", "true"]);
+    unmount();
+
+    // Chat streams calls in this state; they stay folded there.
+    render(<MessageThread messages={messages} />);
+    expect(
+      screen.getAllByTestId("tool").map((tool) => tool.dataset.open),
+    ).toEqual(["false", "false"]);
   });
 
   it("does not render a message bubble for whitespace-only text parts", () => {
@@ -239,186 +285,5 @@ describe("MessageThread", () => {
     expect(error.compareDocumentPosition(retry)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-  });
-
-  it("renders the unsafe-context divider after the boundary tool result", () => {
-    const messages: PartialUIMessage[] = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-read_email",
-            toolCallId: "call-unsafe",
-            state: "output-available",
-            input: { folder: "inbox" },
-            output: { emails: [{ from: "ceo@external.com" }] },
-          },
-        ],
-      },
-    ];
-
-    render(
-      <MessageThread
-        messages={messages}
-        unsafeContextBoundary={{
-          kind: "tool_result",
-          reason: "tool_result_marked_untrusted",
-          toolCallId: "call-unsafe",
-          toolName: "read_email",
-        }}
-      />,
-    );
-
-    expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
-  });
-
-  it("renders the preexisting unsafe-context divider for sensitive policy denials", () => {
-    const messages: PartialUIMessage[] = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [
-          {
-            type: "text",
-            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
-          },
-        ],
-      },
-    ];
-
-    render(<MessageThread messages={messages} />);
-
-    expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
-  });
-
-  it("renders the unsafe-context divider before the first text after the boundary tool result", () => {
-    const messages: PartialUIMessage[] = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-read_email",
-            toolCallId: "call-unsafe",
-            state: "output-available",
-            input: { folder: "inbox" },
-            output: { emails: [{ from: "ceo@external.com" }] },
-          },
-          {
-            type: "text",
-            text: "Done.",
-          },
-        ],
-      },
-    ];
-
-    render(
-      <MessageThread
-        messages={messages}
-        unsafeContextBoundary={{
-          kind: "tool_result",
-          reason: "tool_result_marked_untrusted",
-          toolCallId: "call-unsafe",
-          toolName: "read_email",
-        }}
-      />,
-    );
-
-    const divider = screen.getByText("Sensitive context below");
-    const assistantText = screen.getByText("Done.");
-
-    expect(
-      divider.compareDocumentPosition(assistantText) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
-  it("matches persisted unsafe boundaries by tool name when tool call ids differ", () => {
-    const messages: PartialUIMessage[] = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-internal-dev-test-server__print_archestra_test",
-            toolCallId: "ai-sdk-tool-call-id",
-            state: "output-available",
-            input: {},
-            output: { content: "ARCHESTRA_TEST = asdfasdfadsf" },
-          },
-          {
-            type: "text",
-            text: "Done.",
-          },
-        ],
-      },
-    ];
-
-    render(
-      <MessageThread
-        messages={messages}
-        unsafeContextBoundary={{
-          kind: "tool_result",
-          reason: "tool_result_marked_untrusted",
-          toolCallId: "mcp-tool-call-id",
-          toolName: "internal-dev-test-server__print_archestra_test",
-        }}
-      />,
-    );
-
-    const divider = screen.getByText("Sensitive context below");
-    const assistantText = screen.getByText("Done.");
-
-    expect(
-      divider.compareDocumentPosition(assistantText) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
-  it("renders the sensitive-context divider only once after the thread becomes unsafe", () => {
-    const messages: PartialUIMessage[] = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-internal-dev-test-server__print_archestra_test",
-            toolCallId: "ai-sdk-tool-call-id",
-            state: "output-available",
-            input: {},
-            output: { content: "ARCHESTRA_TEST = asdfasdfadsf" },
-          },
-          {
-            type: "text",
-            text: '"ARCHESTRA_TEST = asdfasdfadsf"',
-          },
-        ],
-      },
-      {
-        id: "assistant-2",
-        role: "assistant",
-        parts: [
-          {
-            type: "text",
-            text: "\nI tried to invoke the internal-dev-test-server__print_archestra_test tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains sensitive data",
-          },
-        ],
-      },
-    ];
-
-    render(
-      <MessageThread
-        messages={messages}
-        unsafeContextBoundary={{
-          kind: "tool_result",
-          reason: "tool_result_marked_untrusted",
-          toolCallId: "mcp-tool-call-id",
-          toolName: "internal-dev-test-server__print_archestra_test",
-        }}
-      />,
-    );
-
-    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
   });
 });

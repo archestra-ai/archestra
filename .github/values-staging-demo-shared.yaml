@@ -18,13 +18,12 @@ archestra:
     ARCHESTRA_BETA: "true"
     # Keep these capabilities available even if the beta master switch changes.
     ARCHESTRA_OPENAPPA_YELL_ENABLED: "true"
+    ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED: "true"
     ARCHESTRA_LLM_PROXY_PLUGINS: ""
-    ARCHESTRA_MCP_SERVER_ALERTING_ENABLED: "true"
     ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED: "true"
-    ARCHESTRA_MCP_SKILLS_ENABLED: "true"
-    # Runtime enablement is independent of beta. Sessions use the existing
-    # isolated node pool; each installation supplies its own in-cluster URL.
-    ARCHESTRA_AGENT_RUNTIME_ENABLED: "true"
+    # Agent Runtime turns on when the cluster serves the Agent Sandbox API.
+    # Sessions use the existing isolated node pool; each installation supplies
+    # its own in-cluster URL.
     ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE: "1"
     ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS: "4"
     ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED: "true"
@@ -35,10 +34,10 @@ archestra:
     ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
     ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED: "true"
     ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF: "main"
-    ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
+    ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED: "true"
     ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
     ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
     ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"

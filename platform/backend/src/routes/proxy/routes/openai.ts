@@ -28,12 +28,14 @@ import {
   RESPONSES_SUFFIX,
 } from "../common";
 import {
+  createPassthroughAuthenticator,
   isJwtLike,
   resolveAgent,
   validatePassthroughVirtualKey,
   virtualKeyRateLimiter,
 } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { registerAudioRoutes } from "./audio";
 import {
   extractBearerToken,
   OpenAiModelsHeadersSchema,
@@ -59,6 +61,7 @@ const CodexModelsSchema = z.object({
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
+  await registerAudioRoutes(fastify, "openai");
 
   logger.debug("[UnifiedProxy] Registering unified OpenAI routes");
 
@@ -71,6 +74,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: OPENAI_HANDLED_ENDPOINT_SUFFIXES,
       upstream: config.llm.openai.baseUrl,
       providerName: "OpenAI",
+      authenticate: createPassthroughAuthenticator("openai"),
     }),
   });
 
@@ -391,6 +395,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
     const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
       request,
+      agentId,
       provider: "openai",
       token: extractBearerToken(request.headers.authorization),
     });

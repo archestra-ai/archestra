@@ -1,13 +1,23 @@
 import { describe, expect, test } from "vitest";
+import { OPENCODE_FAMILY } from "../opencode-family";
 import {
   ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
+  CLAUDE_CODE_CLIENT_ID,
+  CLAUDE_DESKTOP_CLIENT_ID,
   CLIENT_FILTER_OPTIONS,
   ClientFilterSchema,
   clientFilterToAgentIds,
   clientForExternalAgentIds,
+  isClaudeDesktopClientAgentId,
   isCodexOriginator,
   isCodexUserAgent,
+  isKiloClientAgentId,
+  isKiloUserAgent,
+  isKimiCodeUserAgent,
   isOpenCodeClientAgentId,
+  isOpenCodeUserAgent,
+  KILO_CLIENT_ID,
+  KIMI_CODE_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "./client";
 
@@ -20,6 +30,8 @@ describe("Codex originator", () => {
     expect(isCodexOriginator("codex_exec")).toBe(true);
     expect(isCodexOriginator("codex-tui")).toBe(true);
     expect(isCodexOriginator("codex_vscode")).toBe(true);
+    expect(isCodexOriginator("codex_work_desktop")).toBe(true);
+    expect(isCodexUserAgent("codex_work_desktop/0.162.0")).toBe(true);
     expect(isCodexOriginator("Codex 1.2.3")).toBe(true);
     expect(isCodexUserAgent("archestra_codex_connection/1.0.0")).toBe(true);
   });
@@ -54,6 +66,9 @@ describe("OpenCode client attribution", () => {
       "cursor",
       "codex",
       "opencode",
+      "kilo",
+      "pi",
+      "kimi-code",
       "copilot-cli",
     ]);
   });
@@ -65,7 +80,7 @@ describe("OpenCode client attribution", () => {
     ).toMatchObject({
       filter: "opencode",
       label: "OpenCode",
-      icon: "/icons/opencode.png",
+      mark: OPENCODE_FAMILY.opencode.mark,
     });
   });
 
@@ -76,8 +91,97 @@ describe("OpenCode client attribution", () => {
       expect.objectContaining({
         value: "opencode",
         label: "OpenCode",
-        icon: "/icons/opencode.png",
+        mark: OPENCODE_FAMILY.opencode.mark,
       }),
     );
+  });
+});
+
+describe("Pi coding client attribution", () => {
+  test("resolves normalized client ids and exposes the exact stored-id filter", () => {
+    expect(clientForExternalAgentIds(["unrelated", " PI "])).toMatchObject({
+      filter: "pi",
+      label: "Pi",
+      mark: { viewBox: "0 0 560 560" },
+    });
+    expect(ClientFilterSchema.parse("pi")).toBe("pi");
+    expect(clientFilterToAgentIds("pi")).toEqual(["pi"]);
+    expect(CLIENT_FILTER_OPTIONS).toContainEqual(
+      expect.objectContaining({
+        value: "pi",
+        label: "Pi",
+        mark: expect.any(Object),
+      }),
+    );
+    expect(
+      clientForExternalAgentIds(["inflection", "pi_session", "pi-other"]),
+    ).toBeNull();
+  });
+});
+
+describe("Kilo Code client attribution", () => {
+  test("recognizes Kilo's own User-Agent and leaves OpenCode's alone", () => {
+    const kilo =
+      "kilo/latest/7.8.8/cli ai-sdk/provider-utils/4.0.46 runtime/bun/1.4.2";
+    expect(isKiloUserAgent(kilo)).toBe(true);
+    expect(isOpenCodeUserAgent(kilo)).toBe(false);
+    for (const userAgent of [
+      "opencode/1.17.0",
+      "kilocode/1.0.0",
+      "my-kilo/1.0.0",
+      "",
+      undefined,
+      null,
+    ]) {
+      expect(isKiloUserAgent(userAgent)).toBe(false);
+    }
+  });
+
+  test("resolves stored ids and the logs filter to the Kilo Code family", () => {
+    expect(isKiloClientAgentId(" KILO ")).toBe(true);
+    expect(clientForExternalAgentIds(["kilo"])).toMatchObject({
+      filter: "kilo",
+      label: "Kilo Code",
+      mark: OPENCODE_FAMILY.kilo.mark,
+    });
+    expect(ClientFilterSchema.parse("kilo")).toBe("kilo");
+    expect(clientFilterToAgentIds("kilo")).toEqual([KILO_CLIENT_ID]);
+  });
+});
+
+describe("Kimi Code client attribution", () => {
+  test("recognizes Kimi Code's User-Agent only", () => {
+    expect(isKimiCodeUserAgent("kimi-code-cli/2.3.3")).toBe(true);
+    expect(isKimiCodeUserAgent("kimi-code-cli/2.3.3 (web)")).toBe(true);
+    for (const userAgent of [
+      "kimi-cli/1.0",
+      "KimiCLI/0.9",
+      "OpenAI/JS 6.1.0",
+      "",
+      null,
+      undefined,
+    ]) {
+      expect(isKimiCodeUserAgent(userAgent)).toBe(false);
+    }
+  });
+
+  test("files its traffic under the Kimi Code family", () => {
+    expect(clientForExternalAgentIds([KIMI_CODE_CLIENT_ID])).toMatchObject({
+      filter: "kimi-code",
+      label: "Kimi Code",
+      provider: "kimi-code",
+    });
+  });
+});
+
+describe("Claude Desktop client attribution", () => {
+  test("recognizes the normalized Desktop client id and rejects other Claude ids", () => {
+    expect(isClaudeDesktopClientAgentId(CLAUDE_DESKTOP_CLIENT_ID)).toBe(true);
+    expect(isClaudeDesktopClientAgentId("  ANTHROPIC_CLAUDE_DESKTOP ")).toBe(
+      true,
+    );
+    expect(isClaudeDesktopClientAgentId(CLAUDE_CODE_CLIENT_ID)).toBe(false);
+    expect(isClaudeDesktopClientAgentId("anthropic_claude")).toBe(false);
+    expect(isClaudeDesktopClientAgentId(undefined)).toBe(false);
   });
 });

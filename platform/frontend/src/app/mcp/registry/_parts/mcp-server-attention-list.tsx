@@ -20,7 +20,10 @@ import {
   mcpServerAlertTarget,
   mcpServerAlertTargetKey,
 } from "./mcp-server-alert-target";
-import type { CatalogItem, InstalledServer } from "./mcp-server-card";
+import type {
+  RegistryListItem as CatalogItem,
+  InstalledServer,
+} from "./mcp-server-card";
 import { McpServerTable } from "./mcp-server-table";
 import {
   UninstallServerDialog,
@@ -32,6 +35,8 @@ export function McpServerAttentionList({
   issuesByCatalog,
   servers,
   facet,
+  pagination,
+  onPaginationChange,
   tableContext,
   onReinstall,
 }: {
@@ -39,6 +44,10 @@ export function McpServerAttentionList({
   issuesByCatalog: Map<string, McpServerIssue[]>;
   servers: InstalledServer[];
   facet: McpServerAttentionFacet;
+  pagination?: React.ComponentProps<typeof McpServerTable>["pagination"];
+  onPaginationChange?: React.ComponentProps<
+    typeof McpServerTable
+  >["onPaginationChange"];
   tableContext?: Pick<
     React.ComponentProps<typeof McpServerTable>,
     | "getServerInfo"
@@ -143,8 +152,12 @@ export function McpServerAttentionList({
     : [];
   const selectedUninstallInstalls: UninstallServerInstall[] =
     selectedConnections.map((server) => ({
-      server: { id: server.id, name: server.name },
-      assignedAgents: server.assignedAgents ?? [],
+      server: {
+        id: server.id,
+        name: server.name,
+        scope: server.scope,
+        teamId: server.teamId,
+      },
     }));
   const canRemoveSelected =
     !!canDeleteInstalls &&
@@ -185,6 +198,14 @@ export function McpServerAttentionList({
     );
   };
   const clearSelection = () => updateSelection(() => new Set());
+  // An alert's selection is only actionable while its row is on screen, so
+  // paging clears it rather than keeping selections nobody can see.
+  const pageKey = `${pagination?.pageIndex ?? 0}:${pagination?.pageSize ?? 0}`;
+  const [selectionPageKey, setSelectionPageKey] = useState(pageKey);
+  if (selectionPageKey !== pageKey) {
+    setSelectionPageKey(pageKey);
+    setSelectedTargetKeys(new Set());
+  }
   const removeCompletedSelections = (
     succeededTargets: readonly DismissAlertTarget[],
   ) => {
@@ -223,6 +244,9 @@ export function McpServerAttentionList({
         onClear={clearSelection}
         busy={restoring}
       >
+        {pagination && pagination.total > pagination.pageSize ? (
+          <span className="text-xs text-muted-foreground">This page only</span>
+        ) : null}
         {restoringDismissed ? (
           <Button
             variant="outline"
@@ -272,6 +296,8 @@ export function McpServerAttentionList({
         items={items}
         issuesByCatalog={issuesByCatalog}
         onReinstall={onReinstall}
+        pagination={pagination}
+        onPaginationChange={onPaginationChange}
         {...effectiveTableContext}
         attention={{
           facet,

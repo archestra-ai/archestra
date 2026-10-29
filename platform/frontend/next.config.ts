@@ -93,6 +93,13 @@ const nextConfig: NextConfig = {
         destination: "/github/callback",
         permanent: false,
       },
+      // OpenAPPA settings were renamed to match the Guardrails sidebar entry.
+      // The browser keeps any #fragment (e.g. #enforcement) across the hop.
+      {
+        source: "/settings/openappa",
+        destination: "/settings/guardrails",
+        permanent: true,
+      },
       {
         source: "/agents/skills/:path*",
         destination: "/skills/:path*",
@@ -214,7 +221,7 @@ function getAllowedDevOrigins(): string[] {
     .filter((value): value is string => !!value)
     .map((value) => {
       try {
-        return new URL(value).host;
+        return new URL(value).hostname;
       } catch {
         return value;
       }

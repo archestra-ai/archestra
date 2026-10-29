@@ -17,6 +17,7 @@ import {
 } from "@/clients/azure-openai-credentials";
 import {
   buildAzureResponsesBaseUrl,
+  createAzureFetchWithRequestQuery,
   normalizeAzureApiKey,
   shouldUseAzureOpenAiApiVersion,
 } from "@/clients/azure-url";
@@ -42,7 +43,12 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
-import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
+import { withOpenAiResponsesToolCallIds } from "../utils/tool-call-ids";
+import {
+  carriesResponsesTerminal,
+  formatResponsesStreamErrorFrame,
+} from "./responses-stream-error-frame";
 import {
   formatResponsesFunctionCallFrames,
   namespaceOf,
@@ -80,6 +86,7 @@ export const azureResponsesAdapterFactory: LLMProvider<
   // The Responses parser drops a chat-completions-shaped error frame as an
   // unknown chunk, turning an upstream failure into a blank turn.
   formatStreamErrorFrame: formatResponsesStreamErrorFrame,
+  carriesStreamTerminal: carriesResponsesTerminal,
 
   createRequestAdapter(
     request: AzureResponsesRequest,
@@ -124,9 +131,14 @@ export const azureResponsesAdapterFactory: LLMProvider<
       );
     }
 
-    const customFetch = options.agent
+    const observableFetch = options.agent
       ? metrics.llm.getObservableFetch("azure", options.agent, options.source)
       : undefined;
+    const customFetch = createAzureFetchWithRequestQuery({
+      fetch: observableFetch,
+      rawQuery: options.azureRequest?.rawQuery,
+      abortSignal: options.abortSignal,
+    });
 
     if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
       return new OpenAIProvider({
@@ -235,10 +247,9 @@ class AzureResponsesRequestAdapter
     }
 
     // Pair function_call_output items with their function_call by call_id so
-    // tool results surface as CommonMessage.toolCalls — the shape trusted-data
-    // / Dual LLM policy evaluation reads. Without the pairing, Responses-routed
-    // conversations look tool-free to the evaluator and sanitization is
-    // silently bypassed.
+    // tool results surface as CommonMessage.toolCalls. Without the pairing,
+    // Responses-routed conversations look tool-free to anything that reads
+    // the common format.
     const toolCallsByCallId = getToolCallsByCallId(this.request.input);
 
     return this.request.input.flatMap((item) =>
@@ -266,6 +277,7 @@ class AzureResponsesRequestAdapter
           ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
           arguments: toolCall?.arguments,
           content: item.output,
+          structured: typeof item.output !== "string",
           isError: false,
         },
       ];
@@ -333,24 +345,33 @@ class AzureResponsesRequestAdapter
     return {
       ...this.request,
       model: this.getModel(),
-      input: this.request.input.map((item) => {
-        if (!isFunctionCallOutputItem(item)) {
-          return item;
-        }
+      input: this.request.input
+        .map((item) => {
+          if (!isFunctionCallOutputItem(item)) {
+            return item;
+          }
 
-        // Presence, not truthiness: a sanitizer that reduces sensitive output
-        // to nothing has replaced it, and forwarding the original instead would
-        // hand the model exactly what was withheld.
-        const updatedOutput = this.toolResultUpdates[item.call_id];
-        if (updatedOutput === undefined) {
-          return item;
-        }
+          // Presence, not truthiness: a sanitizer that reduces sensitive output
+          // to nothing has replaced it, and forwarding the original instead would
+          // hand the model exactly what was withheld.
+          const updatedOutput = this.toolResultUpdates[item.call_id];
+          if (updatedOutput === undefined) {
+            return item;
+          }
+          // Kept as sent: the output's parts (input_image, input_text) stay.
+          if (
+            isApprovedAsSent({ sent: item.output, approved: updatedOutput })
+          ) {
+            return item;
+          }
 
-        return {
-          ...item,
-          output: updatedOutput,
-        };
-      }) as unknown as ResponseInput,
+          return {
+            ...item,
+            output: updatedOutput,
+          };
+        })
+        // After the result updates above, which look up the client's call ids.
+        .map(withOpenAiResponsesToolCallIds) as unknown as ResponseInput,
     };
   }
 }
@@ -1033,8 +1054,8 @@ function toCommonMessages(
 ): CommonMessage[] {
   // "easy input message" items carry role/content and omit `type` (it defaults
   // to "message"); the AI SDK emits this shape. Without handling it here,
-  // getMessages() drops the user's prompt and trusted-data / Dual LLM policy
-  // evaluation (llm-proxy-handler) silently sees an empty conversation.
+  // getMessages() drops the user's prompt and every common-format reader
+  // silently sees an empty conversation.
   if ((item.type === "message" || item.type === undefined) && "role" in item) {
     return [
       {
@@ -1054,9 +1075,9 @@ function toCommonMessages(
       {
         role: "tool",
         content,
-        // An output whose function_call was pruned from the input still
-        // carries untrusted data — surface it under the "unknown" name so
-        // default trusted-data policies apply rather than nothing.
+        // An output whose function_call was pruned from the input is still a
+        // tool result — surface it under the "unknown" name rather than drop
+        // it.
         toolCalls: [
           {
             id: item.call_id,

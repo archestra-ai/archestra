@@ -5,9 +5,14 @@ import {
   appaSessionIdentity,
 } from "@/openappa/wire";
 import { AppaChatAdapter } from "./adapters/chat";
-import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
+import {
+  AppaClaudeCodeAdapter,
+  AppaClaudeDesktopAdapter,
+} from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
-import { AppaOpenCodeAdapter } from "./adapters/opencode";
+import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
+import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
+import { AppaPiAdapter } from "./adapters/pi";
 import type {
   AppaChildTrajectory,
   AppaClientAdapter,
@@ -22,8 +27,14 @@ import { withCallerScope } from "./utils";
  */
 export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
   [
+    new AppaPiAdapter(),
+    new AppaKimiCodeAdapter(),
+    // Before Claude Code: Desktop's Code and Cowork tabs also send Claude Code's UA and session header.
+    new AppaClaudeDesktopAdapter(),
     new AppaClaudeCodeAdapter(),
     new AppaCodexAdapter(),
+    // Before OpenCode: Kilo's setup also sends OpenCode's session header.
+    new AppaKiloAdapter(),
     new AppaOpenCodeAdapter(),
     new AppaChatAdapter(),
   ],
@@ -34,28 +45,31 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
  *
  * Precedence:
  * 1. An explicit `X-Appa-Session-ID` header.
- * 2. Native client signals (Claude Code header, Codex metadata, OpenCode headers).
+ * 2. Native client signals (Claude Code header, Codex metadata, OpenCode
+ *    headers, Kimi Code's prompt cache key).
  * 3. Generic wire-family fallbacks.
  *
  * When provided, `X-Appa-Parent-ID` overrides any native parent ID.
  */
 export function extractAppaSessionIdentity(params: {
-  family: AppaWireFamily;
+  /**
+   * Undefined for a wire OpenAPPA does not read. The session then comes from
+   * headers only: the client adapters read no body of that wire.
+   */
+  family: AppaWireFamily | undefined;
   body: unknown;
   headers: Readonly<Record<string, string | string[] | undefined>>;
 }): AppaSessionIdentity {
   const generic = appaSessionIdentity(params);
   if (generic.provenance === "appa-header") return generic;
-  const adapter = APPA_CLIENT_ADAPTERS.find((candidate) =>
-    candidate.matches({
-      headers: params.headers,
-      requestBody: params.body,
-    }),
-  );
-  const native = adapter?.extractSessionIdentity?.({
+  const matchContext = {
     headers: params.headers,
-    requestBody: params.body,
-  });
+    requestBody: params.family ? params.body : undefined,
+  };
+  const adapter = APPA_CLIENT_ADAPTERS.find((candidate) =>
+    candidate.matches(matchContext),
+  );
+  const native = adapter?.extractSessionIdentity?.(matchContext);
   if (!native?.sessionId) return generic;
   return {
     ...native,

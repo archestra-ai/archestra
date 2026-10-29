@@ -1,6 +1,12 @@
+import { ASK_USER_OTHER_ANSWER_FIELD } from "@archestra/shared";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { preloadResponseMarkdown } from "@/components/ai-elements/response";
+
+// The markdown renderer is a lazy chunk; once loaded it renders in one pass.
+beforeAll(() => preloadResponseMarkdown());
+
 import type { AskUserGroupMember } from "./ask-user-outcome";
 import { McpElicitationCard } from "./mcp-elicitation-card";
 import {
@@ -21,7 +27,7 @@ describe("McpElicitationCard", () => {
     vi.useRealTimers();
   });
 
-  it("shows a single question with Dismiss and Submit, no tabs or navigation", async () => {
+  it("answers a single question on the click itself, with no Submit, header, tabs or navigation", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
 
@@ -50,19 +56,16 @@ describe("McpElicitationCard", () => {
       screen.queryByTestId("mcp-elicitation-back"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Dismiss question" }),
-    ).toBeInTheDocument();
-    expect(
       screen.queryByText("1 of 1", { exact: false }),
     ).not.toBeInTheDocument();
 
-    const submit = screen.getByRole("button", { name: "Submit" });
-    expect(submit).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Submit" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     await user.click(
-      screen.getByRole("radio", { name: "Accept for this session" }),
+      screen.getByRole("button", { name: "Accept for this session" }),
     );
-    expect(submit).toBeEnabled();
-    await user.click(submit);
 
     expect(onRespond).toHaveBeenCalledTimes(1);
     expect(onRespond).toHaveBeenCalledWith({
@@ -72,7 +75,42 @@ describe("McpElicitationCard", () => {
     });
   });
 
-  it("renders an OpenAPPA review inline with formatted arguments and submits approval", async () => {
+  it("shows a link, a command and the agent's line breaks in the question as such, and a link click answers nothing", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const url =
+      "https://example.com/agents/agent-1?setup=credentials&keys=MY_TOKEN";
+
+    render(
+      <McpElicitationCard
+        requests={[
+          singleChoice({
+            id: "q-1",
+            message: `Open ${url} and save the token.\nThen run \`kubectl port-forward pod/web 3000:3000\`.\nDone?`,
+            options: ["Done", "Not yet"],
+          }),
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    const card = screen.getByTestId("mcp-elicitation-card");
+    const link = within(card).getByText(url);
+    expect(link.closest("[data-streamdown='link']")).not.toBeNull();
+    expect(
+      within(card).getByText("kubectl port-forward pod/web 3000:3000").tagName,
+    ).toBe("CODE");
+    expect(card.querySelectorAll("br")).toHaveLength(2);
+
+    await user.click(link);
+
+    expect(onRespond).not.toHaveBeenCalled();
+    expect(
+      within(card).getByRole("button", { name: "Done" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the reviewed arguments immediately beside the approval controls", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
     const request = openappaReview();
@@ -83,14 +121,17 @@ describe("McpElicitationCard", () => {
     const card = screen.getByTestId("mcp-elicitation-card");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("archestra__todo_write")).toBeInTheDocument();
+    expect(screen.getByText("Approval requested")).toBeInTheDocument();
     expect(screen.getByText(/qa-hitl/)).toBeInTheDocument();
     expect(card).not.toHaveTextContent(/\\"/);
 
-    const submit = screen.getByRole("button", { name: "Submit" });
-    expect(submit).toBeDisabled();
-    await user.click(screen.getByRole("radio", { name: "approve" }));
-    expect(submit).toBeEnabled();
-    await user.click(submit);
+    expect(card).not.toHaveTextContent("APPA asks you to rule");
+    expect(card).not.toHaveTextContent("What this ruling would cover");
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Submit" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Approve" }));
 
     expect(onRespond).toHaveBeenCalledExactlyOnceWith({
       id: "review-1",
@@ -99,54 +140,107 @@ describe("McpElicitationCard", () => {
     });
   });
 
-  it("dismisses a single question from the header without submitting a selection", async () => {
+  it("keeps accepted review coverage and decision controls visible when arguments are collapsed", async () => {
     const user = userEvent.setup();
-    const onRespond = vi.fn().mockResolvedValue(true);
     render(
       <McpElicitationCard
         requests={[
-          singleChoice({
-            id: "q-1",
-            message: "Who should see the app?",
-            options: ["Only me", "Team"],
+          openappaReview({
+            coverage: [
+              "  - attention: human-approval",
+              "  - the readers must be the public audience",
+            ].join("\n"),
           }),
         ]}
-        onRespond={onRespond}
+        onRespond={vi.fn()}
       />,
     );
 
-    const dismiss = screen.getByRole("button", { name: "Dismiss question" });
-    dismiss.focus();
-    await user.keyboard("{Enter}");
-    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
-      id: "q-1",
-      action: "cancel",
-    });
+    const card = screen.getByTestId("mcp-elicitation-card");
+    expect(card).toHaveTextContent("Approving also accepts:");
+    expect(card).toHaveTextContent("the readers must be the public audience");
+    expect(card).not.toHaveTextContent("What this ruling would cover");
+    expect(card).not.toHaveTextContent("attention: human-approval");
+    expect(card).not.toHaveTextContent("APPA asks you to rule");
+    await user.click(screen.getByText("archestra__todo_write"));
+    expect(screen.getByRole("button", { name: "Approve" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeVisible();
+    expect(card).toHaveTextContent("the readers must be the public audience");
+    expect(screen.queryByText(/qa-hitl/)).not.toBeInTheDocument();
   });
 
-  it("dismisses a question with Escape from an option", async () => {
+  it.each([
+    { name: "empty", input: {}, expected: "{}" },
+    {
+      name: "nested",
+      input: { filters: { states: ["open", "pending"] }, token: "[redacted]" },
+      expected: "[redacted]",
+    },
+    {
+      name: "large",
+      input: {
+        records: Array.from({ length: 35 }, (_, i) => `Synthetic row ${i + 1}`),
+      },
+      expected: "Synthetic row 35",
+    },
+  ])("shows $name reviewed arguments without opening the approval card", async ({
+    input,
+    expected,
+  }) => {
     const user = userEvent.setup();
-    const onRespond = vi.fn().mockResolvedValue(true);
     render(
       <McpElicitationCard
         requests={[
-          singleChoice({
-            id: "q-1",
-            message: "Who should see the app?",
-            options: ["Only me", "Team"],
-          }),
+          { ...openappaReview(), reviewedArguments: JSON.stringify(input) },
         ]}
-        onRespond={onRespond}
+        onRespond={vi.fn()}
       />,
     );
+    expect(
+      screen.getByRole("region", { name: "Code sample, json" }),
+    ).toBeVisible();
+    const more = screen.queryByRole("button", { name: /Show \d+ more lines/ });
+    if (more) {
+      await user.click(more);
+    }
+    expect(
+      screen.getByRole("region", { name: "Code sample, json" }),
+    ).toHaveTextContent(expected);
+    expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeEnabled();
+  });
 
-    await user.click(screen.getByRole("radio", { name: "Team" }));
-    await user.keyboard("{Escape}");
-
+  it.each([
+    "approve",
+    "deny",
+  ] as const)("submits %s once while saving and removes completed review controls", async (decision) => {
+    const user = userEvent.setup();
+    const saving = deferred<boolean>();
+    const onRespond = vi.fn(() => saving.promise);
+    const request = openappaReview();
+    const { rerender } = render(
+      <McpElicitationCard requests={[request]} onRespond={onRespond} />,
+    );
+    await user.dblClick(
+      screen.getByRole("button", {
+        name: decision === "approve" ? "Approve" : "Deny",
+      }),
+    );
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeDisabled();
     expect(onRespond).toHaveBeenCalledExactlyOnceWith({
-      id: "q-1",
-      action: "cancel",
+      id: request.id,
+      action: "accept",
+      content: { action: decision },
     });
+    await act(async () => saving.resolve(true));
+    rerender(<McpElicitationCard requests={[]} onRespond={onRespond} />);
+    expect(
+      screen.queryByRole("button", { name: "Approve" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Deny" }),
+    ).not.toBeInTheDocument();
   });
 
   it("submits an all-optional multi-choice question with nothing checked", async () => {
@@ -224,8 +318,13 @@ describe("McpElicitationCard", () => {
       screen.queryByTestId("mcp-elicitation-submit"),
     ).not.toBeInTheDocument();
 
-    // Picking a single-choice option answers the tab and moves on.
+    // Picking an option only selects it; Next moves on.
     await user.click(screen.getByRole("radio", { name: "My team" }));
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByTestId("mcp-elicitation-tab-1")).toHaveAttribute(
         "aria-selected",
@@ -269,6 +368,269 @@ describe("McpElicitationCard", () => {
     });
   });
 
+  it("takes a typed Other answer inline without auto-advancing, and sends it on Submit", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const owner = {
+      ...singleChoice({
+        id: "q-owner",
+        header: "Owner",
+        message: "Which GitHub account owns the repository?",
+        options: ["my-user", "my-org"],
+      }),
+      requestedSchema: {
+        type: "object",
+        properties: {
+          choice: {
+            type: "string",
+            title: "Choice",
+            enum: ["my-user", "my-org"],
+          },
+          [ASK_USER_OTHER_ANSWER_FIELD]: {
+            type: "string",
+            title: "Type something",
+          },
+        },
+        required: [],
+      },
+    };
+    expect(isChoiceElicitationRequest(owner)).toBe(true);
+
+    render(
+      <McpElicitationCard
+        requests={[
+          owner,
+          singleChoice({
+            id: "q-name",
+            message: "Repository name?",
+            options: ["openappa-policy", "guardrails"],
+          }),
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "Type something" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Type something" }));
+    expect(
+      screen.getByRole("textbox", { name: "Type something" }),
+    ).toHaveFocus();
+    await user.keyboard("acme");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveTextContent(
+      "(answered)",
+    );
+
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
+    await user.click(screen.getByRole("radio", { name: "guardrails" }));
+    await user.click(screen.getByTestId("mcp-elicitation-submit"));
+
+    expect(onRespond).toHaveBeenCalledWith({
+      id: "q-owner",
+      action: "accept",
+      content: { choice: "", [ASK_USER_OTHER_ANSWER_FIELD]: "acme" },
+    });
+    expect(onRespond).toHaveBeenCalledWith({
+      id: "q-name",
+      action: "accept",
+      content: { choice: "guardrails" },
+    });
+  });
+
+  it("stays on the question when the user types right after clicking an option", async () => {
+    const user = userEvent.setup();
+    render(
+      <McpElicitationCard
+        requests={[
+          withOther(
+            singleChoice({
+              id: "q-owner",
+              header: "Owner",
+              message: "Owner?",
+              options: ["my-user", "my-org"],
+            }),
+          ),
+          singleChoice({
+            id: "q-name",
+            message: "Repository name?",
+            options: ["openappa-policy", "guardrails"],
+          }),
+        ]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "my-org" }));
+    await user.click(screen.getByRole("radio", { name: "Type something" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Type something" }),
+      "a",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("sends checked options with typed Other text, and drops the text once Other is unchecked", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    render(
+      <McpElicitationCard
+        requests={[
+          withOther(
+            multiChoice({
+              id: "q-steps",
+              message: "Which steps should run?",
+              options: ["Run tests", "Deploy"],
+            }),
+          ),
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: "Run tests" }));
+    await user.click(screen.getByRole("checkbox", { name: "Type something" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Type something" }),
+      "lint",
+    );
+    await user.click(screen.getByRole("checkbox", { name: "Type something" }));
+    expect(
+      screen.queryByRole("textbox", { name: "Type something" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Type something" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Type something" }),
+      "build",
+    );
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+
+    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
+      id: "q-steps",
+      action: "accept",
+      content: {
+        option_0: true,
+        option_1: false,
+        [ASK_USER_OTHER_ANSWER_FIELD]: "build",
+      },
+    });
+  });
+
+  it("keeps an enum and an independent optional text field off the inline card", () => {
+    const request: ChatMcpElicitationRequest = {
+      ...singleChoice({
+        id: "q-deploy",
+        message: "Deploy where?",
+        options: ["staging", "production"],
+      }),
+      toolName: "deployer__deploy",
+      requestedSchema: {
+        type: "object",
+        properties: {
+          environment: { type: "string", enum: ["staging", "production"] },
+          comment: { type: "string", title: "Comment" },
+        },
+        required: ["environment"],
+      },
+    };
+
+    expect(isChoiceElicitationRequest(request)).toBe(false);
+  });
+
+  it("leaves a lone question's typed answer to the chat composer", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    render(
+      <McpElicitationCard
+        requests={[
+          {
+            ...singleChoice({
+              id: "q-owner",
+              message: "Owner?",
+              options: ["my-user", "my-org"],
+            }),
+            requestedSchema: {
+              type: "object",
+              properties: {
+                choice: { type: "string", enum: ["my-user", "my-org"] },
+                [ASK_USER_OTHER_ANSWER_FIELD]: {
+                  type: "string",
+                  title: "Type something",
+                },
+              },
+              required: [],
+            },
+          },
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /Type something/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "my-org" }));
+
+    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
+      id: "q-owner",
+      action: "accept",
+      content: { choice: "my-org", [ASK_USER_OTHER_ANSWER_FIELD]: "" },
+    });
+  });
+
+  it("hands a lone question's Type something to the chat composer", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const onTypeAnswer = vi.fn();
+    render(
+      <McpElicitationCard
+        requests={[
+          {
+            ...singleChoice({
+              id: "q-owner",
+              message: "Owner?",
+              options: ["my-user", "my-org"],
+            }),
+            requestedSchema: {
+              type: "object",
+              properties: {
+                choice: { type: "string", enum: ["my-user", "my-org"] },
+                [ASK_USER_OTHER_ANSWER_FIELD]: {
+                  type: "string",
+                  title: "Type something",
+                },
+              },
+              required: [],
+            },
+          },
+        ]}
+        onRespond={onRespond}
+        onTypeAnswer={onTypeAnswer}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Type something/ }));
+
+    expect(onTypeAnswer).toHaveBeenCalledOnce();
+    expect(onRespond).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Type your answer below/ }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("shows only navigation in the footer of every tab but the last", async () => {
     const user = userEvent.setup();
 
@@ -292,13 +654,9 @@ describe("McpElicitationCard", () => {
     expect(footerButtons()).toEqual(["Back", "Next"]);
     await user.click(screen.getByTestId("mcp-elicitation-next"));
     expect(footerButtons()).toEqual(["Back", "Submit"]);
-    // Dismissing stays within reach on every tab, from the header.
-    expect(
-      screen.getByRole("button", { name: "Dismiss questions" }),
-    ).toBeInTheDocument();
   });
 
-  it("moves on when the already-picked option is clicked again", async () => {
+  it("stays on the tab when an option is picked, until Next is clicked", async () => {
     const user = userEvent.setup();
 
     render(
@@ -312,19 +670,14 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "A" }));
-    await waitFor(() =>
-      expect(screen.getByText("Second?")).toBeInTheDocument(),
-    );
-    await user.click(screen.getByTestId("mcp-elicitation-back"));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(screen.getByText("First?")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "A" })).toBeChecked();
 
-    // Confirming the answer it already has moves on, like the first pick.
-    await user.click(screen.getByRole("radio", { name: "A" }));
-    await waitFor(() =>
-      expect(screen.getByTestId("mcp-elicitation-tab-1")).toHaveAttribute(
-        "aria-selected",
-        "true",
-      ),
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
+    expect(screen.getByTestId("mcp-elicitation-tab-1")).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
   });
 
@@ -426,6 +779,7 @@ describe("McpElicitationCard", () => {
     await user.click(screen.getByTestId("mcp-elicitation-back"));
     expect(screen.getByText("First?")).toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: "A" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByTestId("mcp-elicitation-submit")).toBeEnabled(),
     );
@@ -513,27 +867,6 @@ describe("McpElicitationCard", () => {
     expect(screen.getByText("Second?")).toBeInTheDocument();
   });
 
-  it("dismisses every question in the card from its header", async () => {
-    const user = userEvent.setup();
-    const onRespond = vi.fn().mockResolvedValue(true);
-
-    render(
-      <McpElicitationCard
-        requests={[
-          singleChoice({ id: "q-1", message: "First?", options: ["A", "B"] }),
-          singleChoice({ id: "q-2", message: "Second?", options: ["C", "D"] }),
-        ]}
-        onRespond={onRespond}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Dismiss questions" }));
-
-    expect(onRespond).toHaveBeenCalledTimes(2);
-    expect(onRespond).toHaveBeenCalledWith({ id: "q-1", action: "cancel" });
-    expect(onRespond).toHaveBeenCalledWith({ id: "q-2", action: "cancel" });
-  });
-
   it("appends a question that arrives later without losing picks or the active tab", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
@@ -553,6 +886,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "B" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByText("Second?")).toBeInTheDocument(),
     );
@@ -600,6 +934,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "A" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByText("Second?")).toBeInTheDocument(),
     );
@@ -610,10 +945,12 @@ describe("McpElicitationCard", () => {
     rerender(<McpElicitationCard requests={[second]} onRespond={onRespond} />);
 
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "D" })).toBeChecked();
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled(),
-    );
+    await user.click(screen.getByRole("button", { name: "D" }));
+    expect(onRespond).toHaveBeenLastCalledWith({
+      id: "q-2",
+      action: "accept",
+      content: { choice: "D" },
+    });
   });
 
   it("keeps one group container through acknowledgement and the final summary", async () => {
@@ -731,6 +1068,7 @@ describe("McpElicitationCard", () => {
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: "Only me" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() => {
       expect(
         screen.getByRole("radio", { name: "Staging" }),
@@ -771,6 +1109,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "Blue" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByText("Pick a fruit")).toBeInTheDocument(),
     );
@@ -854,7 +1193,7 @@ describe("McpElicitationCard", () => {
       />,
     );
 
-    expect(screen.getByRole("radio", { name: "Blue" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Blue" })).toBeEnabled();
 
     rerender(
       <McpElicitationCard
@@ -883,6 +1222,101 @@ describe("McpElicitationCard", () => {
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Answers" })).toHaveTextContent(
       "Stopped without an answer",
+    );
+  });
+
+  it("marks a typed answer apart from a picked option", () => {
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember("call-1", "Pick a color", {
+            status: "answered",
+            selected: ["Blue"],
+          }),
+          groupMember("call-2", "Which site?", {
+            status: "answered",
+            selected: [],
+            text: "Google",
+          }),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const [picked, typed] = within(
+      screen.getByRole("list", { name: "Answers" }),
+    ).getAllByRole("listitem");
+    expect(picked).toHaveTextContent("Pick a colorBlue");
+    expect(picked).not.toHaveTextContent("Typed answer");
+    expect(typed).toHaveTextContent("Which site?GoogleTyped answer");
+  });
+
+  it("folds the offered options under an answered question until expanded", async () => {
+    const user = userEvent.setup();
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember(
+            "call-1",
+            "Stricter or looser?",
+            { status: "answered", selected: ["Stricter"] },
+            ["Stricter", "Looser"],
+          ),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("list", { name: "Offered options" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show 2 options" }));
+
+    const options = within(
+      screen.getByRole("list", { name: "Offered options" }),
+    ).getAllByRole("listitem");
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Stricter",
+      "Looser",
+    ]);
+    expect(options[0]).toHaveAttribute("aria-current", "true");
+    expect(options[1]).not.toHaveAttribute("aria-current");
+  });
+
+  it("folds a long answered question until the user expands it", async () => {
+    const user = userEvent.setup();
+    const longQuestion = `${"It is late on a Friday and prod is down. ".repeat(8)}What do you do first?`;
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember("call-1", longQuestion, {
+            status: "answered",
+            selected: ["Roll back"],
+          }),
+          groupMember("call-2", "Pick a color", {
+            status: "answered",
+            selected: ["Blue"],
+          }),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    // Only the long question offers to expand.
+    const toggle = screen.getByRole("button", { name: "Show full question" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(toggle);
+
+    expect(screen.getByRole("button", { name: "Show less" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
     );
   });
 
@@ -932,6 +1366,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "Blue" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByText("Pick a fruit")).toBeInTheDocument(),
     );
@@ -954,84 +1389,36 @@ describe("McpElicitationCard", () => {
       />,
     );
 
-    expect(screen.getByRole("radio", { name: "Apple" })).toBeChecked();
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Apple" }));
     expect(onRespond).toHaveBeenLastCalledWith({
       id: "q-2",
       action: "accept",
       content: { choice: "Apple" },
     });
   });
-
-  it("does not snapshot an already-submitted question when dismissing the remainder", async () => {
-    const user = userEvent.setup();
-    const first = singleChoice({
-      id: "q-1",
-      toolCallId: "call-1",
-      message: "Pick a color",
-      options: ["Blue", "Green"],
-    });
-    const second = singleChoice({
-      id: "q-2",
-      toolCallId: "call-2",
-      message: "Pick a fruit",
-      options: ["Apple", "Pear"],
-    });
-    const dismissResponse = deferred<boolean>();
-    const onRespond = vi
-      .fn()
-      .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce(false)
-      .mockReturnValue(dismissResponse.promise);
-    const { rerender } = render(
-      <McpElicitationCard
-        groupId="assistant-1-ask-user-1"
-        members={[
-          groupMember("call-1", "Pick a color", { status: "waiting" }),
-          groupMember("call-2", "Pick a fruit", { status: "waiting" }),
-        ]}
-        requests={[first, second]}
-        onRespond={onRespond}
-      />,
-    );
-
-    await user.click(screen.getByRole("radio", { name: "Blue" }));
-    await waitFor(() =>
-      expect(screen.getByText("Pick a fruit")).toBeInTheDocument(),
-    );
-    await user.click(screen.getByRole("radio", { name: "Apple" }));
-    await user.click(screen.getByRole("button", { name: "Submit" }));
-    expect(onRespond).toHaveBeenCalledTimes(2);
-
-    rerender(
-      <McpElicitationCard
-        groupId="assistant-1-ask-user-1"
-        members={[
-          groupMember("call-1", "Pick a color", { status: "waiting" }),
-          groupMember("call-2", "Pick a fruit", { status: "waiting" }),
-        ]}
-        requests={[second]}
-        onRespond={onRespond}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Dismiss questions" }));
-    expect(onRespond).toHaveBeenCalledTimes(3);
-    expect(onRespond).toHaveBeenLastCalledWith({
-      id: "q-2",
-      action: "cancel",
-    });
-    expect(
-      screen.queryByRole("radio", { name: "Blue" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Apple" })).toBeInTheDocument();
-
-    await act(async () => {
-      dismissResponse.resolve(true);
-      await dismissResponse.promise;
-    });
-  });
 });
+
+function withOther(
+  request: ChatMcpElicitationRequest,
+): ChatMcpElicitationRequest {
+  const schema = request.requestedSchema as {
+    properties: Record<string, unknown>;
+  };
+  return {
+    ...request,
+    requestedSchema: {
+      type: "object",
+      properties: {
+        ...schema.properties,
+        [ASK_USER_OTHER_ANSWER_FIELD]: {
+          type: "string",
+          title: "Type something",
+        },
+      },
+      required: [],
+    },
+  };
+}
 
 function singleChoice(params: {
   id: string;
@@ -1058,7 +1445,9 @@ function singleChoice(params: {
   };
 }
 
-function openappaReview(): ChatMcpElicitationRequest {
+function openappaReview(params?: {
+  coverage?: string;
+}): ChatMcpElicitationRequest {
   return {
     id: "review-1",
     conversationId: CONVERSATION_ID,
@@ -1071,7 +1460,7 @@ function openappaReview(): ChatMcpElicitationRequest {
       '{"todos":"[{\\"id\\":1,\\"content\\":\\"qa-hitl\\",\\"status\\":\\"pending\\"}]"}',
       "",
       "What this ruling would cover:",
-      "  attention: signoff",
+      params?.coverage ?? "  attention: signoff",
     ].join("\n"),
     mode: "form",
     kind: "openappa_review",
@@ -1096,8 +1485,9 @@ function groupMember(
   toolCallId: string,
   question: string,
   outcome: AskUserGroupMember["outcome"],
-) {
-  return { toolCallId, question, outcome };
+  options: string[] = [],
+): AskUserGroupMember {
+  return { toolCallId, question, options, outcome };
 }
 
 function deferred<T>() {

@@ -17,6 +17,7 @@ import type {
 import a2aTasksTable from "./a2a-task";
 import agentsTable from "./agent";
 import projectsTable from "./project";
+import serviceAccountTokensTable from "./service-account-token";
 import usersTable from "./user";
 import virtualApiKeysTable from "./virtual-api-key";
 
@@ -69,6 +70,11 @@ const agentRunsTable = pgTable(
     /** Revoked when the session ends; a live key outliving its runtime keeps billing. */
     virtualApiKeyId: uuid("virtual_api_key_id").references(
       () => virtualApiKeysTable.id,
+      { onDelete: "set null" },
+    ),
+    /** Expiring service-account gateway credential minted for this run. */
+    gatewayTokenId: uuid("gateway_token_id").references(
+      () => serviceAccountTokensTable.id,
       { onDelete: "set null" },
     ),
     /** Optional channel callback for a detached run's terminal result. */

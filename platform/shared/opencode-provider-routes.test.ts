@@ -1,10 +1,17 @@
 import { describe, expect, test } from "vitest";
 import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  OPENCODE_PRIMARY_PROVIDERS,
   openCodePassthroughBaseUrl,
 } from "./opencode-provider-routes";
 
 describe("OpenCode passthrough provider routes", () => {
+  test("accepts an organization's Kimi and Kimi Code keys as primary providers", () => {
+    expect(OPENCODE_PRIMARY_PROVIDERS).toEqual(
+      expect.arrayContaining(["kimi", "kimi-code"]),
+    );
+  });
+
   test("preserves native provider ids and maps each wire to its proxy base URL", () => {
     expect(
       Object.fromEntries(
@@ -21,10 +28,13 @@ describe("OpenCode passthrough provider routes", () => {
       mistral: "https://example.com/v1/mistral",
       groq: "https://example.com/v1/groq",
       openrouter: "https://example.com/v1/openrouter",
+      xai: "https://example.com/v1/xai",
       deepseek: "https://example.com/v1/deepseek",
       zhipuai: "https://example.com/v1/zhipuai",
       minimax: "https://example.com/v1/minimax",
       moonshotai: "https://example.com/v1/kimi",
+      "kimi-code-plan-global": "https://example.com/v1/kimi-code",
+      "kimi-code-plan-cn": "https://example.com/v1/kimi-code",
     });
   });
 });

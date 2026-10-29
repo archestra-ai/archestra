@@ -3,7 +3,9 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   getArchestraToolFullName,
+  getArchestraToolShortName,
   getCreationDefaultArchestraToolShortNames,
+  isAppRuntimeOnlyArchestraToolShortName,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   TOOL_CREATE_SKILL_FULL_NAME,
@@ -66,7 +68,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
 
     // Verify agent has Archestra tools assigned
     const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
-    const archestraToolCount = getArchestraMcpTools().length;
+    const archestraToolCount = seededArchestraTools().length;
     expect(toolIds).toHaveLength(archestraToolCount);
 
     // Verify getMcpToolsByAgent returns Archestra tools
@@ -75,7 +77,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
 
     // Verify the tool names match
     const toolNames = tools.map((t) => t.name).sort();
-    const expectedNames = getArchestraMcpTools()
+    const expectedNames = seededArchestraTools()
       .map((t) => t.name)
       .sort();
     expect(toolNames).toEqual(expectedNames);
@@ -155,7 +157,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     // Get all tools - should include Archestra + MCP server tool
     const tools = await ToolModel.getMcpToolsByAgent(agent.id);
 
-    const archestraToolCount = getArchestraMcpTools().length;
+    const archestraToolCount = seededArchestraTools().length;
     expect(tools).toHaveLength(archestraToolCount + 1); // Archestra tools + 1 MCP tool
 
     // Verify MCP tool is included
@@ -163,7 +165,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     expect(mcpToolFound).toBeDefined();
 
     // Verify Archestra tools are included
-    const archestraToolNames = getArchestraMcpTools().map((t) => t.name);
+    const archestraToolNames = seededArchestraTools().map((t) => t.name);
     for (const name of archestraToolNames) {
       const archestraToolFound = tools.find((t) => t.name === name);
       expect(archestraToolFound).toBeDefined();
@@ -202,7 +204,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     expect(proxyTool).toBeUndefined();
 
     // Should only have Archestra tools (proxy-discovered tools are excluded)
-    const archestraToolCount = getArchestraMcpTools().length;
+    const archestraToolCount = seededArchestraTools().length;
     expect(tools).toHaveLength(archestraToolCount);
   });
 
@@ -516,8 +518,31 @@ describe("Archestra Tools Dynamic Assignment", () => {
       await ToolModel.backfillOpenAppaToolsToAllAgents();
       expect(await assignedToolNames(agent.id)).toEqual(before);
 
+      const firstRequiredTool = await ToolModel.findByName(
+        getArchestraToolFullName(REQUIRED_OPENAPPA_TOOL_SHORT_NAMES[0]),
+      );
+      expect(firstRequiredTool).not.toBeNull();
+      if (!firstRequiredTool) throw new Error("Required tool was not seeded");
+      await AgentToolModel.createManyIfNotExists(agent.id, [
+        firstRequiredTool.id,
+      ]);
+
       openappaConfig.enabled = true;
       await ToolModel.backfillOpenAppaToolsToAllAgents();
+      const requiredTools = await Promise.all(
+        REQUIRED_OPENAPPA_TOOL_SHORT_NAMES.map((name) =>
+          ToolModel.findByName(getArchestraToolFullName(name)),
+        ),
+      );
+      expect(
+        await AgentModel.findNonBuiltInIdsMissingToolAssignments({
+          organizationId: agent.organizationId,
+          toolIds: requiredTools.map((tool) => {
+            if (!tool) throw new Error("Required tool was not seeded");
+            return tool.id;
+          }),
+        }),
+      ).toEqual([]);
       await ToolModel.backfillOpenAppaToolsToAllAgents();
       expect((await assignedToolNames(agent.id)).sort()).toEqual(
         [
@@ -646,13 +671,13 @@ describe("Archestra Tools Dynamic Assignment", () => {
     );
   });
 
-  test("AgentModel.create assigns no sandbox or file tools when the runtime is disabled", async ({
+  test("AgentModel.create assigns the file tools but not the runtime tools when the runtime is disabled", async ({
     makeAgent,
   }) => {
     const sandboxConfig = config.skillsSandbox as { enabled: boolean };
     const originalSandbox = sandboxConfig.enabled;
-    // Seed with the runtime on so the tools exist; turning it off must keep
-    // the whole sandbox group off the new agent.
+    // Seed with the runtime on so the runtime tools exist too; turning it off
+    // must keep them off the new agent while the file tools still land.
     sandboxConfig.enabled = true;
     try {
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -666,14 +691,55 @@ describe("Archestra Tools Dynamic Assignment", () => {
         TOOL_RUN_COMMAND_FULL_NAME,
         TOOL_UPLOAD_FILE_FULL_NAME,
         TOOL_DOWNLOAD_FILE_FULL_NAME,
-        ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES.map(
-          getArchestraToolFullName,
-        ),
       ]) {
         expect(names).not.toContain(fullName);
       }
+      expect(names).toEqual(
+        expect.arrayContaining(
+          PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES.map(
+            getArchestraToolFullName,
+          ),
+        ),
+      );
+    } finally {
+      sandboxConfig.enabled = originalSandbox;
+    }
+  });
+
+  test("with the runtime off, the file tools are seeded and backfilled to existing agents", async ({
+    makeAgent,
+  }) => {
+    const sandboxConfig = config.skillsSandbox as { enabled: boolean };
+    const originalSandbox = sandboxConfig.enabled;
+    sandboxConfig.enabled = false;
+    try {
+      // An agent that predates the file tools' rows (the upgrade case).
+      const agent = await makeAgent({ name: "Existing Agent" });
+      const created = await ToolModel.seedArchestraTools(
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
+      const fileToolNames = PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES.map(
+        getArchestraToolFullName,
+      );
+      expect(created).toEqual(expect.arrayContaining(fileToolNames));
+      expect(created).not.toContain(TOOL_RUN_COMMAND_FULL_NAME);
+
+      await ToolModel.backfillNewSandboxToolsToAgents(created);
+
+      const names = await assignedToolNames(agent.id);
+      expect(names).toEqual(expect.arrayContaining(fileToolNames));
+      expect(names).not.toContain(TOOL_RUN_COMMAND_FULL_NAME);
     } finally {
       sandboxConfig.enabled = originalSandbox;
     }
   });
 });
+
+// The built-ins that become tool rows: app-runtime-only ones never do (see
+// `ToolModel.seedArchestraTools`).
+function seededArchestraTools() {
+  return getArchestraMcpTools().filter((tool) => {
+    const shortName = getArchestraToolShortName(tool.name);
+    return !(shortName && isAppRuntimeOnlyArchestraToolShortName(shortName));
+  });
+}

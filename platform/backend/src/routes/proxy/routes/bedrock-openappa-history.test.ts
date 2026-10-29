@@ -1,22 +1,22 @@
 /**
  * Bedrock Converse proxy routes — OpenAPPA calls left in a client's history.
  *
- * The proxy never restores a notice on the Converse wire, so the history a
- * client sends back keeps what an OpenAPPA session handed it: the notice call
- * that took a blocked call's place, with the proxy's record and the signed
- * remedy offers, and the model's remedy call, with the receipt and the offer
- * JWS the proxy stamped on it. With no OpenAPPA plugin registered no session
- * path runs, and the provider still gets those calls back holding only what
- * the model saw and wrote.
+ * The history a client sends back keeps what an OpenAPPA session handed it:
+ * the notice call that took a blocked call's place, with the proxy's record
+ * and leftover offer fields, and the model's remedy call, with the receipt and
+ * the legacy offer fields the proxy used to stamp. With no OpenAPPA plugin
+ * registered no session path runs, yet the provider still gets the blocked
+ * call back as the model wrote it, and the remedy call holding only what the
+ * model wrote.
  */
 
 import { vi } from "vitest";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
-import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import { getLlmProxyPluginRegistry } from "@/proxy/plugins/registry";
 import { afterEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { bedrockAdapterFactory } from "../adapters/bedrock";
 import bedrockProxyRoutes from "./bedrock";
 
@@ -41,8 +41,10 @@ function toolSpec(name: string) {
 describe("Bedrock Converse proxy — OpenAPPA history", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  test("forwards a Converse history without the notice's signed offers or the remedy call's receipt", async ({
+  test("forwards a Converse history with the blocked call restored and no remedy receipt", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     // The registry is process-wide: no session path may touch this history.
     expect(getLlmProxyPluginRegistry().hasPlugins()).toBe(false);
@@ -70,16 +72,21 @@ describe("Bedrock Converse proxy — OpenAPPA history", () => {
     const app = createFastifyInstance();
     await app.register(bedrockProxyRoutes);
     const agent = await makeAgent({ name: "bedrock-openappa-history-agent" });
-    const offer = signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: agent.organizationId,
-        sessionId: "virtual-key:converse-client|weather-session",
-        offerId: OFFER_ID,
-        tool: "get_weather",
-        spelling: "get_weather",
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+    // Leftover offer material from persisted history. Not minted, and not a route.
+    const offer = {
+      protected: "eyJhbGciOiJIUzI1NiJ9",
+      payload: JSON.stringify({
+        session_id: "historical-offer-session",
+        offer_id: OFFER_ID,
       }),
-      config.openappa.offerSigningSecret,
-    );
+      signature: "historical-offer",
+    };
     const remedy = {
       offer_id: OFFER_ID,
       plan: "Allow this get_weather call once.",
@@ -88,7 +95,7 @@ describe("Bedrock Converse proxy — OpenAPPA history", () => {
     const response = await app.inject({
       method: "POST",
       url: `/v1/bedrock/${agent.id}/converse`,
-      headers: HEADERS,
+      headers: { ...HEADERS, "x-archestra-virtual-key": passthroughKey },
       payload: {
         modelId: MODEL_ID,
         // Converse requires toolConfig whenever the history holds tool blocks.
@@ -111,13 +118,15 @@ describe("Bedrock Converse proxy — OpenAPPA history", () => {
                 toolUse: {
                   toolUseId: "tooluse_weather",
                   name: NOTICE_TOOL,
-                  input: buildNoticeArguments({
-                    id: "tooluse_weather",
-                    tool: "get_weather",
-                    arguments: { location: "San Francisco" },
-                    result: RULING,
+                  input: {
+                    ...buildNoticeArguments({
+                      id: "tooluse_weather",
+                      tool: "get_weather",
+                      arguments: { location: "San Francisco" },
+                      result: RULING,
+                    }),
                     offers: [offer],
-                  }),
+                  },
                 },
               },
             ],
@@ -177,12 +186,17 @@ describe("Bedrock Converse proxy — OpenAPPA history", () => {
       {
         toolUse: {
           toolUseId: "tooluse_weather",
-          name: NOTICE_TOOL,
-          input: {
-            tool: "get_weather",
-            arguments: { location: "San Francisco" },
-            ruling: RULING,
-          },
+          name: "get_weather",
+          input: { location: "San Francisco" },
+        },
+      },
+    ]);
+    expect(messages[2].content).toEqual([
+      {
+        toolResult: {
+          toolUseId: "tooluse_weather",
+          content: [{ text: RULING }],
+          status: "error",
         },
       },
     ]);

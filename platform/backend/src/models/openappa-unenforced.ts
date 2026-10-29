@@ -1,6 +1,9 @@
-import { and, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, ne, or, type SQL, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { UnenforcedCallReason } from "@/types/openappa-unenforced";
+import type {
+  UnenforcedCallReason,
+  UnenforcedSessionReason,
+} from "@/types/openappa-unenforced";
 
 const sessions = schema.openappaUnenforcedSessionsTable;
 const calls = schema.openappaUnenforcedCallsTable;
@@ -15,25 +18,42 @@ class OpenAppaUnenforcedModel {
     organizationId: string;
     sessionId: string;
     parentId: string | undefined;
+    reason?: UnenforcedSessionReason;
   }): Promise<void> {
-    await db
-      .insert(sessions)
-      .values({
-        organizationId: params.organizationId,
-        sessionId: params.sessionId,
-        parentId: params.parentId ?? null,
-      })
-      .onConflictDoNothing();
+    const insert = db.insert(sessions).values({
+      organizationId: params.organizationId,
+      sessionId: params.sessionId,
+      parentId: params.parentId ?? null,
+      reason: params.reason ?? "enforcement_off",
+    });
+    // A superyell outranks a record that the session started while
+    // enforcement was off: only a superyell record outlives the retention.
+    if (params.reason === "superyell")
+      await insert.onConflictDoUpdate({
+        target: [sessions.organizationId, sessions.sessionId],
+        set: { reason: "superyell" },
+      });
+    else await insert.onConflictDoNothing();
   }
 
-  /** The sessions among `sessionIds` that started while enforcement was off. */
+  /** The sessions among `sessionIds` that OpenAPPA leaves alone. */
   static async findSessions(params: {
     organizationId: string;
     sessionIds: readonly string[];
-  }): Promise<Array<{ sessionId: string; parentId: string | null }>> {
+  }): Promise<
+    Array<{
+      sessionId: string;
+      parentId: string | null;
+      reason: UnenforcedSessionReason;
+    }>
+  > {
     if (params.sessionIds.length === 0) return [];
     return db
-      .select({ sessionId: sessions.sessionId, parentId: sessions.parentId })
+      .select({
+        sessionId: sessions.sessionId,
+        parentId: sessions.parentId,
+        reason: sessions.reason,
+      })
       .from(sessions)
       .where(
         and(
@@ -78,7 +98,12 @@ class OpenAppaUnenforcedModel {
   ): Promise<{ sessions: number; calls: number }> {
     const limits = { before, batchSize, maxBatches };
     return {
-      sessions: await deleteInBatches(sessions, limits),
+      // A superyelled session stays out of OpenAPPA for good.
+      sessions: await deleteInBatches(
+        sessions,
+        limits,
+        ne(sessions.reason, "superyell"),
+      ),
       calls: await deleteInBatches(calls, limits),
     };
   }
@@ -136,6 +161,7 @@ class OpenAppaUnenforcedModel {
 async function deleteInBatches(
   table: typeof sessions | typeof calls,
   params: { before: Date; batchSize: number; maxBatches: number },
+  keep?: SQL,
 ): Promise<number> {
   const { before, batchSize, maxBatches } = params;
   let total = 0;
@@ -143,7 +169,7 @@ async function deleteInBatches(
     const expired = db
       .select({ ctid: sql`ctid` })
       .from(table)
-      .where(lt(table.createdAt, before))
+      .where(and(lt(table.createdAt, before), keep))
       .limit(batchSize);
     const removed = await db
       .delete(table)

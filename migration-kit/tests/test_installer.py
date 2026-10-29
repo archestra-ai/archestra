@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
-from install import InstallError, fetch_kit_files, write_kit
+from install import InstallError, detected_destinations, fetch_kit_files, write_kit
 
 # --- write_kit: the path-safety / clobber boundary ------------------------------------------------
 
@@ -171,3 +171,15 @@ def test_fetch_rejects_response_from_unexpected_host() -> None:
             api="https://actual.invalid/contents/{path}",
             allowed_hosts=("https://allowed.invalid/",),
         )
+
+
+# --- detected_destinations: which agents get the skill ------------------------------------------
+
+def test_installs_for_every_agent_found_and_falls_back_to_claude_code(tmp_path: Path) -> None:
+    agents = tuple((name, tmp_path / name, tmp_path / name / "skills") for name in ("claude", "cursor", "opencode"))
+    assert detected_destinations(agents) == [("claude", tmp_path / "claude" / "skills" / "migrate-to-archestra")]
+
+    (tmp_path / "cursor").mkdir()
+    (tmp_path / "opencode").mkdir()
+    assert [name for name, _ in detected_destinations(agents)] == ["cursor", "opencode"]
+

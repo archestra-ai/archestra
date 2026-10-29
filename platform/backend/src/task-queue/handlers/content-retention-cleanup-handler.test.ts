@@ -2,7 +2,12 @@ import { count, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { ConversationModel, MessageModel } from "@/models";
+import {
+  ConversationModel,
+  MessageModel,
+  SkillSandboxModel,
+  SkillSandboxReplayEventModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InteractionRequest, InteractionResponse } from "@/types";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
@@ -262,6 +267,52 @@ describe("handleContentRetentionCleanup", () => {
       .select({ id: schema.conversationsTable.id })
       .from(schema.conversationsTable);
     expect(remaining.id).toBe(active.id);
+  });
+
+  test("deletes an expired conversation's sandboxes with their staged files", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    config.retention.chatConversationsDays = 180;
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const [expired] = await db
+      .insert(schema.conversationsTable)
+      .values({
+        id: crypto.randomUUID(),
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "old",
+        lastMessageAt: daysAgo(200),
+      })
+      .returning();
+    const sandbox = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: expired.id,
+      defaultCwd: "/home/sandbox",
+    });
+    await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      userId: user.id,
+      path: "/home/sandbox/tool-results/result.txt",
+      mimeType: "text/plain",
+      originalName: "result.txt",
+      sizeBytes: 6,
+      data: Buffer.from("secret"),
+    });
+
+    await handleContentRetentionCleanup();
+
+    expect(await SkillSandboxModel.findById(sandbox.id)).toBeNull();
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(schema.skillSandboxFilesTable)
+      .where(eq(schema.skillSandboxFilesTable.sandboxId, sandbox.id));
+    expect(Number(total)).toBe(0);
   });
 
   test("a soft-deleted (trashed) conversation still expires — trash never extends lifetime", async ({

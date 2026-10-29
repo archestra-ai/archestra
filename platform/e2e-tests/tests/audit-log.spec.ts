@@ -17,8 +17,7 @@ test.describe("Audit log UI", {
     await goToAdminPage("/llm/logs");
     await adminPage.waitForLoadState("domcontentloaded");
 
-    // Three tabs: LLM Proxy, MCP Gateway, Audit. Audit is only rendered with
-    // auditLog:read permission, which admin has.
+    // Audit is rendered with auditLog:read permission, which admin has.
     await expect(
       adminPage.getByRole("link", { name: "Audit", exact: true }),
     ).toBeVisible({ timeout: 15_000 });
@@ -42,7 +41,7 @@ test.describe("Audit log UI", {
     ).toBeVisible({ timeout: 15_000 });
 
     // Column headers are stable and part of the visual contract.
-    for (const column of ["Activity", "Actor", "Resource", "Time"]) {
+    for (const column of ["Event", "Actor", "Status", "Time"]) {
       await expect(
         adminPage.getByRole("columnheader", { name: column }),
       ).toBeVisible();

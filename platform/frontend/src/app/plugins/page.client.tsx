@@ -5,7 +5,7 @@ import {
   Braces,
   ChevronDown,
   ChevronUp,
-  Github,
+  GitBranch,
   PackagePlus,
   Pencil,
   Plus,
@@ -30,12 +30,15 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -45,6 +48,7 @@ import {
   TableCardViewToggle,
 } from "@/components/table-card-view";
 import type { TableRowAction } from "@/components/table-row-actions";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -59,7 +63,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   usePluginLabelKeys,
   usePluginLabelValues,
@@ -72,6 +75,7 @@ import {
   useDeletePlugin,
   usePlugins,
 } from "@/lib/plugins/plugin.query";
+import { repositoryLabel } from "@/lib/skills/skill-source";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import {
   getPluginActionModel,
@@ -85,7 +89,10 @@ import {
   pluginDetailHref,
   resolvePluginInstallSelection,
 } from "./_parts/plugin-page-config";
-import { PluginSourceIcon } from "./_parts/plugin-source-icon";
+import {
+  PluginSourceIcon,
+  pluginRepository,
+} from "./_parts/plugin-source-icon";
 import { PluginSourceInfo } from "./_parts/plugin-source-info";
 
 const PLUGINS_DESCRIPTION =
@@ -95,35 +102,10 @@ export default function PluginsPage() {
   return (
     <div className="h-full w-full">
       <ErrorBoundary>
-        <PluginsGate />
+        <PluginsList />
       </ErrorBoundary>
     </div>
   );
-}
-
-function PluginsGate() {
-  const enabled = useFeature("plugins");
-
-  // The feature flag arrives with the rest of the config; until it does this
-  // page cannot know whether it is a plugins page or a "disabled" notice. It
-  // waits without drawing anything rather than stacking a second loader in
-  // front of the one the list would show a moment later.
-  if (enabled === undefined) {
-    return null;
-  }
-
-  if (!enabled) {
-    return (
-      <PageLayout
-        title="Plugins"
-        description="Plugins are disabled for this deployment."
-      >
-        <div />
-      </PageLayout>
-    );
-  }
-
-  return <PluginsList />;
 }
 
 function PluginsList() {
@@ -150,8 +132,14 @@ function PluginsList() {
     isPending,
     isFetching,
     isLoadingError,
+    error: pluginsError,
     refetch,
-  } = usePlugins(true, { labels: labelsFilter });
+  } = usePlugins(true, {
+    labels: labelsFilter,
+    access: scopeFilter.access,
+    sharedWith: scopeFilter.sharedWith,
+    owner: scopeFilter.owner,
+  });
 
   const setFilter = useCallback(
     (name: string, value: string) => {
@@ -191,9 +179,7 @@ function PluginsList() {
               return false;
           }
           if (sourceRepo) {
-            const pluginRepo =
-              plugin.sourceMarketplaceRepo ?? plugin.sourceRepo;
-            if (pluginRepo !== sourceRepo) return false;
+            if (pluginRepository(plugin) !== sourceRepo) return false;
           }
           return true;
         })
@@ -210,7 +196,7 @@ function PluginsList() {
       Array.from(
         new Set(
           (plugins ?? [])
-            .map((plugin) => plugin.sourceMarketplaceRepo ?? plugin.sourceRepo)
+            .map(pluginRepository)
             .filter((repo): repo is string => !!repo),
         ),
       ).sort(),
@@ -241,6 +227,7 @@ function PluginsList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
+      ...RESOURCE_ACCESS_FILTER_PARAMS,
       "labels",
     ]) {
       params.delete(key);
@@ -317,9 +304,7 @@ function PluginsList() {
       },
     ];
     return (
-      <ResourceTableRowActions
-        kind="plugin"
-        resource={{ ...plugin, name: plugin.displayName }}
+      <TableRowActions
         actions={actions}
         dropdownActions={dropdownActions}
         itemName={plugin.displayName}
@@ -442,6 +427,7 @@ function PluginsList() {
       <PageLayout title="Plugins" description={PLUGINS_DESCRIPTION}>
         <QueryLoadError
           title="Couldn't load your plugins"
+          error={pluginsError}
           onRetry={() => refetch()}
         />
       </PageLayout>
@@ -534,8 +520,8 @@ function PluginsList() {
                             ["all", "All sources"],
                             [
                               "github",
-                              "GitHub",
-                              <Github key="github" className="size-4" />,
+                              "Git repository",
+                              <GitBranch key="github" className="size-4" />,
                             ],
                             [
                               "manual",
@@ -572,7 +558,7 @@ function PluginsList() {
                                       (repo) =>
                                         [
                                           repo,
-                                          repo,
+                                          repositoryLabel(repo),
                                           <RepositoryOwnerIcon
                                             key={repo}
                                             repo={repo}
@@ -594,6 +580,7 @@ function PluginsList() {
                     />
                   }
                 >
+                  <ResourceAccessFilter resource="plugin" noun="plugins" />
                   <FacetSelect
                     label="Filter by client"
                     value={client}
@@ -604,6 +591,11 @@ function PluginsList() {
                         "claude-code",
                         "Claude Code",
                         clientFilterIcon("claude-code"),
+                      ],
+                      [
+                        "claude-desktop",
+                        "Claude Desktop",
+                        clientFilterIcon("claude-desktop"),
                       ],
                       ["codex", "Codex", clientFilterIcon("codex")],
                       [
@@ -841,7 +833,7 @@ function PluginsEmptyState() {
       className="min-h-[60vh]"
       icon={Braces}
       title="No plugins yet."
-      description="Create a plugin for Claude Code, Codex, Copilot CLI, or Cursor."
+      description="Create a plugin for Claude Code, Claude Desktop, Codex, Copilot CLI, or Cursor."
       action={
         <PermissionButton
           permissions={{ plugin: ["create", "update"] }}

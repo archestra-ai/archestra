@@ -1,13 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/plugins/plugin.query");
-vi.mock("@/lib/github-app-config.query");
-vi.mock("@/lib/github-pat.query");
+vi.mock("@/lib/git-credentials.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/components/editor");
@@ -30,8 +29,7 @@ vi.mock("@/components/resource-access-section", () => ({
 import { useRouter, useSearchParams } from "next/navigation";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useGithubAppConfigs } from "@/lib/github-app-config.query";
-import { useGithubPats } from "@/lib/github-pat.query";
+import { useGitCredentials } from "@/lib/git-credentials.query";
 import { useAppearanceSettings } from "@/lib/organization.query";
 import {
   type PluginDetail,
@@ -84,6 +82,8 @@ const BASE_PLUGIN = {
   githubSyncRef: null,
   githubPatId: null,
   githubAppConfigId: null,
+  gitlabTokenId: null,
+  sourceProvider: null,
   lastSyncedAt: null,
   lastSyncError: null,
   pendingSourceSha: null,
@@ -138,12 +138,9 @@ beforeEach(() => {
   vi.mocked(useAppearanceSettings).mockReturnValue({
     data: undefined,
   } as unknown as ReturnType<typeof useAppearanceSettings>);
-  vi.mocked(useGithubAppConfigs).mockReturnValue({
+  vi.mocked(useGitCredentials).mockReturnValue({
     data: [],
-  } as unknown as ReturnType<typeof useGithubAppConfigs>);
-  vi.mocked(useGithubPats).mockReturnValue({
-    data: [],
-  } as unknown as ReturnType<typeof useGithubPats>);
+  } as unknown as ReturnType<typeof useGitCredentials>);
   const mutationStub = {
     mutateAsync: vi.fn(),
     mutate: vi.fn(),
@@ -238,7 +235,7 @@ describe("PluginDetailPage", () => {
     ).toHaveAttribute("aria-current", "page");
   });
 
-  it("locks a repository-owned plugin and says where to change it instead", async () => {
+  it("locks a repository-owned plugin and edits its source in a dialog", async () => {
     const user = userEvent.setup();
     renderPage({
       ...BASE_PLUGIN,
@@ -247,20 +244,49 @@ describe("PluginDetailPage", () => {
       githubSyncInterval: "1d",
     });
 
+    // The repository owns the files: they are locked, not fields that ignore typing.
     expect(
       screen.getByRole("textbox", { name: "File contents" }),
     ).toHaveAttribute("readonly");
-    // The source that owns those bytes is editable, directly under them.
-    expect(screen.getByText("GitHub source")).toBeVisible();
-    expect(screen.getByLabelText("Repository URL")).toHaveValue("acme/hooks");
+    expect(screen.getByLabelText("Display name")).toBeDisabled();
+    expect(screen.getByLabelText("Description")).toBeDisabled();
+    // The source is a summary, not inline fields.
+    expect(screen.getByRole("link", { name: /acme\/hooks/ })).toBeVisible();
+    expect(screen.queryByLabelText("Repository")).not.toBeInTheDocument();
 
-    // A field that silently refuses keystrokes reads as broken, so the reason
-    // is on the field itself.
-    await user.hover(screen.getByLabelText("Display name"));
-    // Radix renders the reason twice — once visibly, once for screen readers.
+    // The same steps that set it up, opened on the repository it reads.
+    await user.click(screen.getByRole("button", { name: "Edit source" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit source" });
+    expect(within(dialog).getByText("Public repository")).toBeVisible();
+    expect(within(dialog).getByLabelText("Repository")).toHaveValue(
+      "https://github.com/acme/hooks",
+    );
+    await user.click(within(dialog).getByRole("button", { name: /Advanced/ }));
+    await user.type(within(dialog).getByLabelText("Branch"), "release");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    // The dialog saves the source alone; the page draft is untouched.
+    expect(updateMutateAsync).toHaveBeenCalledWith({
+      githubSource: {
+        repoUrl: "https://github.com/acme/hooks",
+        ref: "release",
+        syncInterval: "1d",
+      },
+    });
+  });
+
+  it("shows the immutable plugin identity as a hint on the name, not a field", async () => {
+    const user = userEvent.setup();
+    renderPage({ ...BASE_PLUGIN, pluginSlug: "session-attribution-1a2b3c4d" });
+
+    expect(screen.queryByLabelText("Plugin identity")).not.toBeInTheDocument();
+    await user.hover(
+      screen.getByRole("button", {
+        name: "Plugin identity: session-attribution-1a2b3c4d",
+      }),
+    );
     expect(
-      (await screen.findAllByText(/synced from GitHub/i))[0],
-    ).toBeVisible();
+      (await screen.findAllByText("session-attribution-1a2b3c4d")).length,
+    ).toBeGreaterThan(0);
   });
 
   it("offers no save row to someone who may not change this plugin", () => {
@@ -277,7 +303,7 @@ describe("PluginDetailPage", () => {
     ).toBeVisible();
   });
 
-  it("keeps GitHub update controls in a compact header dialog", async () => {
+  it("reviews a pending update from the source card", async () => {
     const user = userEvent.setup();
     renderPage({
       ...BASE_PLUGIN,
@@ -289,17 +315,11 @@ describe("PluginDetailPage", () => {
       pendingDetectedAt: "2026-08-20T00:00:00.000Z",
     });
 
-    expect(screen.getByLabelText("Repository URL")).toHaveValue("acme/hooks");
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    await user.click(screen.getByRole("menuitem", { name: "Review update" }));
-    expect(
-      screen.getByRole("dialog", { name: "GitHub updates" }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("combobox", { name: "Check cadence" }),
-    ).toBeVisible();
     expect(screen.getByText("Update ready for review")).toBeVisible();
-    expect(screen.getByText("Checked against GitHub")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Review" }));
+    expect(
+      screen.getByRole("dialog", { name: "Source updates" }),
+    ).toBeVisible();
     expect(
       screen.queryByText("Update candidate ready for review"),
     ).not.toBeInTheDocument();
@@ -327,7 +347,11 @@ describe("PluginDetailPage", () => {
       sourceMarketplacePluginName: "policy-runtime",
     });
 
-    expect(screen.getByText("Imported from GitHub")).toBeVisible();
+    // Provenance is the source card's repository, not a header badge.
+    expect(
+      screen.getByRole("link", { name: /acme\/policy-plugins/ }),
+    ).toBeVisible();
+    expect(screen.queryByText("Imported from GitHub")).not.toBeInTheDocument();
     expect(screen.queryByText("Archestra")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More actions" }));
     expect(screen.getByRole("menuitem", { name: "Updates" })).toBeVisible();

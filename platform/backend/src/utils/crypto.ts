@@ -5,6 +5,7 @@ import {
   randomBytes,
 } from "node:crypto";
 import config from "@/config";
+import { SecretDecryptionError } from "./secret-decryption-error";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
@@ -221,16 +222,16 @@ export function decryptSecretValueWithKey(
     decrypted = decryptStringWithKey(encrypted.__encrypted, key);
   } catch (error) {
     if (error instanceof Error && error.message.includes("format")) {
-      throw new Error("Invalid encrypted secret format");
+      throw new SecretDecryptionError("Invalid encrypted secret format", error);
     }
     // Node throws an opaque "Unsupported state or unable to authenticate
     // data" here; name the overwhelmingly likely operational cause instead.
-    throw new Error(
+    throw new SecretDecryptionError(
       "Failed to decrypt stored secret: it was encrypted with a different key " +
         "than the one derived from the current ARCHESTRA_SECRETS_ENCRYPTION_SECRET " +
         "(the encryption secret was rotated without running the re-encryption " +
         "migration, or the database came from an environment with a different secret)",
-      { cause: error },
+      error,
     );
   }
 

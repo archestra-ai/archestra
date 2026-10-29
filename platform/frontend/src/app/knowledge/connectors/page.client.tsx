@@ -6,7 +6,14 @@ import {
   type ConnectorType,
 } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { ArchiveRestore, Database, Pencil, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArchiveRestore,
+  Database,
+  FileText,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -32,8 +39,15 @@ import {
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
-import { ResourceDeletedStatusFilter } from "@/components/resource-scope-filter";
+import {
+  ResourceDeletedStatusFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -46,6 +60,7 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -71,6 +86,7 @@ import {
   useConnector,
   useConnectorsPaginated,
   useDeleteConnector,
+  useHasLegacySalesforceConnector,
   usePermanentlyDeleteConnector,
   useRestoreConnector,
 } from "@/lib/knowledge/connector.query";
@@ -87,6 +103,7 @@ const CONNECTOR_TYPE_OPTIONS = [
   "github",
   "gitlab",
   "servicenow",
+  "salesforce",
   "perforce",
   "mfiles",
   "web_crawler",
@@ -125,6 +142,11 @@ function ConnectorsList() {
   // Label filtering is server-side, so the value rides the list query.
   const labelsFilter = searchParams.get("labels") || undefined;
 
+  // The trash lists by deletion, not by access, so the filters stay off it.
+  const { hasActiveScopeFilters, access, sharedWith, owner } =
+    useScopeFilterParams();
+  const accessFilters = isDeletedView ? {} : { access, sharedWith, owner };
+
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
   const offset = pageIndex * pageSize;
@@ -147,6 +169,7 @@ function ConnectorsList() {
             archestraApiTypes.GetConnectorsData["query"]
           >["connectorType"]),
     status: isDeletedView ? "deleted" : undefined,
+    ...accessFilters,
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const editIdFromUrl = searchParams.get("edit");
@@ -185,7 +208,7 @@ function ConnectorsList() {
 
   // Changing a filter invalidates an escalation rather than silently
   // re-pointing "all N" at a different N.
-  const filterSignature = `${search}|${connectorTypeFilter}|${isDeletedView}|${labelsFilter ?? ""}`;
+  const filterSignature = `${search}|${connectorTypeFilter}|${isDeletedView}|${labelsFilter ?? ""}|${JSON.stringify(accessFilters)}`;
   const allMatchingActive = selectAllMatchingFor === filterSignature;
   const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
     useControlledRowSelection({
@@ -215,6 +238,7 @@ function ConnectorsList() {
               >["connectorType"]),
         status: isDeletedView ? "deleted" : undefined,
         labels: labelsFilter,
+        ...accessFilters,
       },
       { enabled: allMatchingActive },
     );
@@ -235,7 +259,8 @@ function ConnectorsList() {
     !!search ||
     connectorTypeFilter !== "all" ||
     isDeletedView ||
-    Boolean(labelsFilter);
+    Boolean(labelsFilter) ||
+    hasActiveScopeFilters;
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -263,7 +288,13 @@ function ConnectorsList() {
 
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
-    for (const key of ["search", "connectorType", "status", "labels"]) {
+    for (const key of [
+      "search",
+      "connectorType",
+      "status",
+      "labels",
+      ...RESOURCE_ACCESS_FILTER_PARAMS,
+    ]) {
       params.delete(key);
     }
     params.set("page", "1");
@@ -326,6 +357,15 @@ function ConnectorsList() {
           lastSyncAt={row.original.lastSyncAt}
           lastSyncStatus={row.original.lastSyncStatus}
         />
+      ),
+    },
+    {
+      id: "documents",
+      header: "Documents",
+      cell: ({ row }) => (
+        <span className="tabular-nums">
+          {row.original.totalDocsIngested.toLocaleString()}
+        </span>
       ),
     },
 
@@ -421,6 +461,7 @@ function ConnectorsList() {
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !connectors}
     >
+      <SalesforceAuthMigrationNotice />
       <TableCardView storageKey="archestra-connectors-view">
         <div>
           <CollectionFilters>
@@ -436,6 +477,12 @@ function ConnectorsList() {
                 />
               }
             >
+              {!isDeletedView && (
+                <ResourceAccessFilter
+                  resource="knowledgeConnector"
+                  noun="connectors"
+                />
+              )}
               <Select
                 value={connectorTypeFilter}
                 onValueChange={handleConnectorTypeChange}
@@ -574,7 +621,9 @@ function ConnectorsList() {
                             />
                           </div>
                         }
-                      ></TableCard>
+                      >
+                        <DocumentCount total={connector.totalDocsIngested} />
+                      </TableCard>
                     ))}
                   </TableCardList>
                 }
@@ -734,5 +783,40 @@ function DeleteConnectorDialog({
       confirmLabel="Delete Connector"
       pendingLabel="Deleting..."
     />
+  );
+}
+
+// ===== Internal pieces =====
+
+/** Same shape as the document stat on knowledge base cards. */
+function DocumentCount({ total }: { total: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+      <FileText className="h-3.5 w-3.5" />
+      <span className="font-medium text-foreground tabular-nums">
+        {total.toLocaleString()}
+      </span>
+      <span>{total === 1 ? "document" : "documents"}</span>
+    </span>
+  );
+}
+
+function SalesforceAuthMigrationNotice() {
+  const { data: hasLegacyConnector } = useHasLegacySalesforceConnector();
+  if (!hasLegacyConnector) return null;
+  return (
+    <InlineNotice variant="warning" className="mb-4 sm:mb-6">
+      <AlertTriangle />
+      <InlineNoticeText>
+        Salesforce password login retires in Summer ’27. Migrate existing
+        connectors to OAuth.
+      </InlineNoticeText>
+      <Link
+        href="/knowledge/connectors?connectorType=salesforce"
+        className="underline underline-offset-4"
+      >
+        Review Salesforce connectors
+      </Link>
+    </InlineNotice>
   );
 }

@@ -75,6 +75,67 @@ describe("resolveProviderApiKey", () => {
     expect(result.chatApiKeyId).toBeDefined();
   });
 
+  test("prefers the configured key over the primary org-wide key when no user acts", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization({ legacyPermissions: true });
+    const primarySecret = await makeSecret({
+      secret: { apiKey: "sk-primary" },
+    });
+    await makeLlmProviderApiKey(org.id, primarySecret.id, {
+      provider: "anthropic",
+      isPrimary: true,
+    });
+    const configuredSecret = await makeSecret({
+      secret: { apiKey: "sk-configured" },
+    });
+    const configuredKey = await makeLlmProviderApiKey(
+      org.id,
+      configuredSecret.id,
+      { provider: "anthropic", isPrimary: false },
+    );
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      provider: "anthropic",
+      agentLlmApiKeyId: configuredKey.id,
+    });
+
+    expect(result.chatApiKeyId).toBe(configuredKey.id);
+    expect(result.apiKey).toBe("sk-configured");
+  });
+
+  test("falls back to the org-wide key when the configured key is another provider's", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization({ legacyPermissions: true });
+    const anthropicSecret = await makeSecret({
+      secret: { apiKey: "sk-anthropic" },
+    });
+    const anthropicKey = await makeLlmProviderApiKey(
+      org.id,
+      anthropicSecret.id,
+      { provider: "anthropic" },
+    );
+    const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const openaiKey = await makeLlmProviderApiKey(org.id, openaiSecret.id, {
+      provider: "openai",
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      provider: "anthropic",
+      agentLlmApiKeyId: openaiKey.id,
+    });
+
+    expect(result.chatApiKeyId).toBe(anthropicKey.id);
+    expect(result.apiKey).toBe("sk-anthropic");
+  });
+
   test("returns baseUrl when key has custom base URL", async ({
     makeOrganization,
     makeUser,

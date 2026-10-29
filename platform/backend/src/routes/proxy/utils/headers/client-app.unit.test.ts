@@ -2,6 +2,7 @@ import {
   CLAUDE_CLIENT_ID,
   CODEX_CLIENT_ID,
   CURSOR_CLIENT_ID,
+  KILO_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
 import { describe, expect, test } from "vitest";
@@ -9,6 +10,7 @@ import {
   detectClaudeClientId,
   detectCodexClientId,
   detectCursorClientId,
+  detectKiloClientId,
   detectOpenCodeClientId,
 } from "./client-app";
 
@@ -219,6 +221,27 @@ describe("detectOpenCodeClientId", () => {
     ).toBeUndefined();
     expect(
       detectOpenCodeClientId({ "x-session-affinity": "ses_untrusted" }),
+    ).toBeUndefined();
+  });
+});
+
+describe("detectKiloClientId", () => {
+  test("attributes Kilo Code by the User-Agent its CLI sends", () => {
+    expect(
+      detectKiloClientId({
+        "user-agent":
+          "kilo/latest/7.8.8/cli ai-sdk/provider-utils/4.0.46 runtime/bun/1.4.2",
+      }),
+    ).toBe(KILO_CLIENT_ID);
+  });
+
+  test("leaves OpenCode, other clients and bare session headers alone", () => {
+    expect(detectKiloClientId({})).toBeUndefined();
+    expect(
+      detectKiloClientId({ "user-agent": "opencode/1.17.0" }),
+    ).toBeUndefined();
+    expect(
+      detectKiloClientId({ "x-session-affinity": "ses_untrusted" }),
     ).toBeUndefined();
   });
 });

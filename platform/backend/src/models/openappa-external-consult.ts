@@ -4,7 +4,10 @@ import {
   type CursorPaginatedResult,
   createCursorPaginatedResult,
   decodeCursor,
+  encodeCursor,
 } from "@/database/utils/pagination";
+import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
+import { openPlainJson } from "@/openappa/plaintext-envelope";
 import type {
   ExternalConsult,
   ExternalConsultOutcome,
@@ -32,8 +35,33 @@ class OpenappaExternalConsultModel {
     return createCursorPaginatedResult(
       rows,
       { limit: params.limit, cursor: params.cursor },
-      (row) => ({ value: row.createdAt.toISOString(), id: row.id }),
+      cursorPosition,
     );
+  }
+
+  /** One consult, when it is in the organization and the caller may read it. */
+  static async findById(params: {
+    organizationId: string;
+    id: string;
+    callerId?: string;
+  }): Promise<ExternalConsult | null> {
+    if (!UUID.test(params.id)) return null;
+    const conditions: SQL[] = [
+      eq(table.organizationId, params.organizationId),
+      eq(table.id, params.id),
+    ];
+    if (params.callerId) conditions.push(eq(table.callerId, params.callerId));
+    const [row] = await db
+      .select()
+      .from(table)
+      .where(and(...conditions))
+      .limit(1);
+    return row ? readable(row) : null;
+  }
+
+  /** The cursor that continues right after `row`, for a page cut short. */
+  static cursorAfter(row: ExternalConsult): string {
+    return encodeCursor(cursorPosition(row));
   }
 
   /** Up to `max` rows in the same order, read a page at a time. */
@@ -141,6 +169,34 @@ class OpenappaExternalConsultModel {
     if (filters.sessionId)
       conditions.push(eq(table.sessionId, filters.sessionId));
     if (filters.callerId) conditions.push(eq(table.callerId, filters.callerId));
+    if (filters.llmSessionId) {
+      // The LLM session id is the client's own session id, the part after
+      // the caller scope in OpenAPPA's session id. Matching it to session
+      // families (indexed on that suffix) and then consults by root brings
+      // in every trajectory of the session, sub-agents included.
+      const sessions = schema.openappaSessionsTable;
+      conditions.push(
+        inArray(
+          table.root,
+          db
+            .select({ root: sessions.root })
+            .from(sessions)
+            .where(
+              and(
+                eq(sessions.organizationId, params.organizationId),
+                sql`substr(${sessions.sessionId}, strpos(${sessions.sessionId}, '|') + 1) = ${filters.llmSessionId}`,
+              ),
+            ),
+        ),
+      );
+    }
+    // Neither column is indexed: like the exact filters above, this narrows
+    // the newest-first walk of the (organization, created_at) index row by row.
+    const search = buildTokenizedSearchFilter({
+      query: filters.search,
+      columns: [table.externalName, table.sessionId],
+    });
+    if (search) conditions.push(search);
 
     // An unreadable cursor is treated as none: the newest page.
     const position = decodeCursor(params.cursor);
@@ -154,12 +210,13 @@ class OpenappaExternalConsultModel {
       );
     }
 
-    return db
+    const rows = await db
       .select()
       .from(table)
       .where(and(...conditions))
       .orderBy(desc(table.createdAt), desc(table.id))
       .limit(params.size);
+    return rows.map(readable);
   }
 }
 
@@ -172,6 +229,26 @@ export interface ExternalConsultFilters {
   root?: string;
   sessionId?: string;
   callerId?: string;
+  /** The LLM session (client session id) the consults were raised in. */
+  llmSessionId?: string;
+  /** Case-insensitive substring of the external's name or the session ID. */
+  search?: string;
+}
+
+function cursorPosition(row: ExternalConsult) {
+  return { value: row.createdAt.toISOString(), id: row.id };
+}
+
+/**
+ * A consult as the runtime recorded it: a request or answer holding a NUL
+ * character is stored in the plaintext escape envelope and read through it.
+ */
+function readable(row: ExternalConsult): ExternalConsult {
+  return {
+    ...row,
+    request: openPlainJson(row.request),
+    answer: openPlainJson(row.answer),
+  };
 }
 
 const EXPORT_PAGE_SIZE = 500;

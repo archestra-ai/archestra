@@ -11,7 +11,7 @@
  * the client reads the same prompt count its provider reported.
  *
  * A synthesized terminal `response.completed` — the frame the client gets when
- * the proxy replaces the turn (tool-invocation refusal, dual-LLM fail-closed)
+ * the proxy replaces the turn (a plugin's tool-call refusal)
  * rather than relaying upstream's own — must always carry a numeric usage
  * object. The Responses parser validates every chunk against a discriminated
  * union whose `response.completed` arm requires `usage.input_tokens` and

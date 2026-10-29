@@ -117,8 +117,53 @@ describe("createOpenAiCodexResponsesClient", () => {
     expect(capturedBody?.store).toBe(false);
     expect(capturedBody?.stream).toBe(true);
     expect(capturedBody?.include).toContain("reasoning.encrypted_content");
+    // A caller without instructions of its own gets the Codex persona.
+    expect(capturedBody?.instructions).toEqual(
+      expect.stringContaining("coding agent"),
+    );
     // Responses events are passed through unchanged.
     expect(types).toContain("response.completed");
+  });
+
+  it("adds no persona when the caller sends its instructions as a developer message", async () => {
+    // Codex sends its own instructions this way; an added persona made it
+    // answer a greeting twice.
+    let capturedBody: Record<string, unknown> | undefined;
+    const innerFetch = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        capturedBody = JSON.parse(init?.body as string);
+        return sseResponse([
+          { type: "response.completed", response: { id: "resp_1" } },
+        ]);
+      },
+    );
+    const client = createOpenAiCodexResponsesClient({
+      credential: CREDENTIAL,
+      options: { source: "api" },
+      innerFetch,
+    }) as unknown as CodexResponsesClient;
+
+    const stream = (await client.responses.create({
+      model: "gpt-6-luna",
+      input: [
+        {
+          type: "message",
+          role: "developer",
+          content: [{ type: "input_text", text: "You are Codex." }],
+        },
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "Hi" }],
+        },
+      ],
+      stream: true,
+    } as never)) as AsyncIterable<unknown>;
+    for await (const _event of stream) {
+      // drain
+    }
+
+    expect(capturedBody).not.toHaveProperty("instructions");
   });
 
   it("strips max_output_tokens, which the Codex backend rejects as unsupported", async () => {

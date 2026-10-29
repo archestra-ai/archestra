@@ -1246,6 +1246,111 @@ describe("PUT /api/skill-sandbox/artifacts/:artifactId/content", () => {
     ).toBe("system guidance");
   });
 
+  describe("a hand-placed project file (obj_ ref, no row)", () => {
+    let root: string;
+    let savedProvider: typeof config.fileStorage.provider;
+    let savedRoot: string;
+
+    beforeEach(async () => {
+      root = await fs.mkdtemp(path.join(os.tmpdir(), "artifact-put-objref-"));
+      savedProvider = config.fileStorage.provider;
+      savedRoot = config.fileStorage.filesystemRoot;
+      config.fileStorage.provider = "filesystem";
+      config.fileStorage.filesystemRoot = root;
+    });
+    afterEach(async () => {
+      config.fileStorage.provider = savedProvider;
+      config.fileStorage.filesystemRoot = savedRoot;
+      await fs.rm(root, { recursive: true, force: true });
+    });
+
+    async function dropInProject(name: string, content: string) {
+      const project = await projectService.create({
+        organizationId,
+        userId: owner.id,
+        name: `dropped-${name}`,
+        description: null,
+      });
+      const { ProjectModel } = await import("@/models");
+      const slug = (await ProjectModel.findById(project.id))?.slug ?? "";
+      const onDisk = path.join(root, slug, name);
+      await fs.mkdir(path.dirname(onDisk), { recursive: true });
+      await fs.writeFile(onDisk, content);
+      const listed = await fileStore.search({
+        organizationId,
+        userId: owner.id,
+        scope: { kind: "project", projectId: project.id, projectName: null },
+      });
+      const ref = listed.find((f) => f.filename === name)?.downloadRef ?? "";
+      expect(ref.startsWith("obj_")).toBe(true);
+      return { project, onDisk, ref };
+    }
+
+    test("a project member edits it in place; it stays rowless", async () => {
+      const { project, onDisk, ref } = await dropInProject("plan.md", "v1");
+
+      const res = await app.inject({
+        method: "PUT",
+        url: `/api/skill-sandbox/artifacts/${ref}/content`,
+        payload: { content: "v2" },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        fileId: ref,
+        filename: "plan.md",
+        sizeBytes: 2,
+      });
+      expect(await fs.readFile(onDisk, "utf8")).toBe("v2");
+      expect(
+        await FileModel.listByProject({
+          organizationId,
+          projectId: project.id,
+        }),
+      ).toEqual([]);
+    });
+
+    test("a non-member gets 404 and the bytes are unchanged", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const { onDisk, ref } = await dropInProject("secret.md", "keep");
+      const outsider = await makeUser({ email: "objref-outsider@test.com" });
+      await makeMember(outsider.id, organizationId, {});
+      actingUser = outsider;
+
+      const res = await app.inject({
+        method: "PUT",
+        url: `/api/skill-sandbox/artifacts/${ref}/content`,
+        payload: { content: "tampered" },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(await fs.readFile(onDisk, "utf8")).toBe("keep");
+    });
+
+    test("a hand-placed instructions file is refused (409); a non-text one is 415", async () => {
+      const instructions = await dropInProject(
+        PROJECT_INSTRUCTIONS_FILENAME,
+        "guidance",
+      );
+      const reserved = await app.inject({
+        method: "PUT",
+        url: `/api/skill-sandbox/artifacts/${instructions.ref}/content`,
+        payload: { content: "rewritten" },
+      });
+      expect(reserved.statusCode).toBe(409);
+      expect(await fs.readFile(instructions.onDisk, "utf8")).toBe("guidance");
+
+      const image = await dropInProject("chart.png", "png-bytes");
+      const binary = await app.inject({
+        method: "PUT",
+        url: `/api/skill-sandbox/artifacts/${image.ref}/content`,
+        payload: { content: "text" },
+      });
+      expect(binary.statusCode).toBe(415);
+      expect(await fs.readFile(image.onDisk, "utf8")).toBe("png-bytes");
+    });
+  });
+
   test("a non-UUID ref is rejected (400) and an unknown UUID is 404", async () => {
     const bad = await app.inject({
       method: "PUT",

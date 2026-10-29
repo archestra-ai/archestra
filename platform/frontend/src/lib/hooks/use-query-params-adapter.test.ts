@@ -77,6 +77,25 @@ describe("useQueryParamsAdapter", () => {
     );
   });
 
+  it("updates the URL in place without a router navigation when shallow", () => {
+    const pushState = vi.spyOn(window.history, "pushState");
+    const { result } = renderHook(() =>
+      useQueryParamsAdapter({ paramNames: externalAgentParamNames }),
+    );
+
+    act(() => {
+      result.current.updateQueryParams({ name: "shallow" }, { shallow: true });
+    });
+
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(pushState).toHaveBeenCalledWith(
+      null,
+      "",
+      "/agents?name=regular-agent&page=4&externalName=shallow&externalPage=3&externalPageSize=25",
+    );
+    pushState.mockRestore();
+  });
+
   it.each([
     "regular-first",
     "external-first",

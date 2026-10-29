@@ -1,0 +1,247 @@
+name: Docs
+
+# Everything docs in one place: the docs content checks that run on every pull
+# request, and the screenshot capture that re-renders every docs screenshot of
+# the app in light and dark mode.
+#
+# Merge groups validate every screenshot without publication. Screenshots are
+# published by Release PR Generation in one combined commit, or by a manual
+# run here (which opens a pull request with the changes). Locally the
+# same capture runs with `pnpm docs:screenshots` (see
+# .agents/skills/archestra-docs-writer/SKILL.md).
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+  # Required checks must also run on merge_group when merge queue is enabled.
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+    inputs:
+      validation_only:
+        description: Validate all screenshots without publishing images or opening a PR
+        type: boolean
+        default: false
+      only:
+        description: Comma-separated screenshot ids (or prefixes) to capture; empty captures all
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: "docs-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  docs-image-policy:
+    name: Docs Image Policy
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Enforce docs asset format and size policy
+        run: python3 .github/scripts/check-docs-image-policy.py
+
+  docs-links:
+    name: Docs Link Check
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      pull-requests: read # Validate the release's saved benchmark before queue entry.
+      actions: read # Verify the combined generator's exact successful run attempt.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Validate docs navigation
+        run: python3 .github/scripts/check-docs-navigation.py
+
+      - name: Check internal doc links, anchors, and asset embeds resolve
+        run: python3 .github/scripts/check-docs-links.py
+
+      - name: Check built-in MCP tool mentions link to the tool reference
+        run: python3 .github/scripts/check-docs-mcp-tool-links.py
+
+      - name: Check API route mentions deep-link to the API reference
+        run: python3 .github/scripts/check-docs-api-links.py
+
+      - name: Check RBAC permission mentions link to the permissions reference
+        run: python3 .github/scripts/check-docs-permission-links.py
+
+      - name: Check environment variable mentions link to their reference entry
+        run: python3 .github/scripts/check-docs-env-var-links.py
+
+      - name: Check metric mentions link to the metrics reference
+        run: python3 .github/scripts/check-docs-metric-links.py
+
+      - name: Run docs check regression tests
+        run: python3 -m unittest discover -s .github/scripts -p 'test_docs_*.py'
+
+      - name: Test release generation coordination
+        run: node --test .github/scripts/release-pr-generation.test.mjs
+
+      # This required check must stay pending until all release codegen finishes.
+      # Otherwise the merge queue locks the release branch before its tables land.
+      - name: Require current release benchmark tables
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.user.login == 'archestra-ci[bot]' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          startsWith(github.event.pull_request.head.ref, 'release-please--branches--') &&
+          endsWith(github.event.pull_request.head.ref, '--components--platform')
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { verifyGeneration } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-pr-generation.mjs`);
+            const { verifyBenchmarkDocs } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/update-proxy-benchmark-docs.mjs`);
+            for (let attempt = 0; attempt < 140; attempt++) {
+              const generation = await verifyGeneration({github, context});
+              const result = generation.ready ? await verifyBenchmarkDocs({github, context}) : generation;
+              if (result.ready) {
+                core.info(result.reason);
+                return;
+              }
+              core.info(result.reason);
+              if (attempt < 139) await new Promise(resolve => setTimeout(resolve, 30000));
+            }
+            core.setFailed('Release benchmark tables are not current. Inspect LLM Proxy Benchmark publication before enqueueing.');
+
+  # Standalone manual validation retains the local build fallback. Queue/PR
+  # validation is owned by platform-e2e-tests.yml, where capture can depend
+  # directly on the exact image build. Manual check names stay distinct so a
+  # skipped job here cannot mask a failed required queue check.
+  docs-screenshot-validation:
+    name: Manual Docs Screenshot Validation
+    needs: [docs-screenshot-capture]
+    # Merge-queue validation lives beside its image producer in platform-e2e-tests.yml.
+    if: always() && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Report screenshot validation
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          VALIDATION_ONLY: ${{ inputs.validation_only }}
+          CAPTURE_RESULT: ${{ needs.docs-screenshot-capture.result }}
+        run: python3 .github/scripts/check-docs-screenshot-result.py
+
+  docs-screenshot-capture:
+    name: Capture Docs Screenshots (manual validation)
+    if: github.event_name == 'workflow_dispatch' && inputs.validation_only
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Standalone validation checks the selected manual ref.
+          fetch-depth: 1
+      - uses: $/.github/actions/capture-docs-screenshots
+        # No filter: every queue commit must exercise the entire manifest.
+
+  docs-screenshots:
+    name: Docs Screenshots
+    # Release PR captures belong to the single generation coordinator.
+    if: github.event_name == 'workflow_dispatch' && !inputs.validation_only
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 60
+    permissions:
+      contents: write # Required to push updated screenshots.
+      pull-requests: write # Required to open the screenshot pull request on manual runs.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # Pushes made with GITHUB_TOKEN don't re-trigger workflows; the app token's do.
+      - name: Generate GitHub App token
+        id: generate-token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Checkout with push credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true # zizmor: ignore[artipacked] the job pushes updated screenshots.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          token: ${{ steps.generate-token.outputs.token }}
+          fetch-depth: 2
+
+      - uses: $/.github/actions/capture-docs-screenshots
+        with:
+          only: ${{ inputs.only }}
+
+      - name: Configure Git identity
+        uses: $/.github/actions/configure-git-identity
+
+      - name: Commit updated screenshots
+        id: publish-screenshots
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_BRANCH: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          # Validate image-only capture commits without publishing another batch
+          # of volatile values (keys, approval codes, relative timestamps).
+          if [ "$(python3 .github/scripts/should-commit-docs-screenshots.py "$EVENT_NAME")" = "false" ]; then
+            echo "Screenshot commit validated; retaining its captured images."
+            exit 0
+          fi
+          if [ -z "$(git status --porcelain -- docs/assets)" ]; then
+            echo "Screenshots are up to date."
+            exit 0
+          fi
+          git add docs/assets
+          git diff --cached --stat
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git commit -m "docs: update screenshots"
+            # Reject a concurrent release update rather than publishing stale captures.
+            python3 .github/scripts/push-docs-screenshots.py "$HEAD_BRANCH"
+          else
+            branch="docs/screenshots-${RUN_ID}"
+            git switch -c "$branch"
+            git commit -m "docs: update screenshots"
+            git push origin "$branch"
+            gh pr create \
+              --base "$BASE_BRANCH" \
+              --head "$branch" \
+              --title "docs: update screenshots" \
+              --body "Re-captured every docs screenshot of the app in light and dark mode (workflow run ${RUN_ID})."
+          fi
+
+      - name: Retain screenshots when the release head is queued
+        if: steps.publish-screenshots.outputs.queued == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: queued-docs-screenshots
+          path: docs/assets
+          retention-days: 7

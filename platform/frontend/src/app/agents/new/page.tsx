@@ -1,34 +1,11 @@
-import type { ErrorExtended } from "@archestra/shared";
-
-import { ForbiddenPage } from "@/app/_parts/forbidden-page";
 import { AgentCreatePage } from "@/components/agent-pages/agent-create-page";
-import { ServerErrorFallback } from "@/components/error-fallback";
-import { serverHasPermissions } from "@/lib/auth/auth.server";
 
-export const dynamic = "force-dynamic";
-
-export default async function NewAgentPageServer() {
-  try {
-    const [canCreateAgent, canAddExternalAgent] = await Promise.all([
-      serverHasPermissions({ agent: ["create"] }),
-      serverHasPermissions({
-        agent: ["read"],
-        organizationSettings: ["update"],
-      }),
-    ]);
-
-    if (!canCreateAgent && !canAddExternalAgent) {
-      return <ForbiddenPage />;
-    }
-
-    return (
-      <AgentCreatePage
-        kind="agent"
-        canCreateAgent={canCreateAgent}
-        canAddExternalAgent={canAddExternalAgent}
-      />
-    );
-  } catch (error) {
-    return <ServerErrorFallback error={error as ErrorExtended} />;
-  }
+/**
+ * Every choice on this page, including connecting an external agent over A2A,
+ * needs Agent create, the same permission the backend checks. The client page
+ * guard refuses the route without it (`requiredPagePermissionsMap`), so the
+ * page only renders for a reader who can create agents.
+ */
+export default function NewAgentPageServer() {
+  return <AgentCreatePage kind="agent" canCreateAgent />;
 }

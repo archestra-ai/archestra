@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 
 class SiteNotificationModel {
@@ -56,19 +56,37 @@ class SiteNotificationModel {
     return notification;
   }
 
-  static async create(data: {
-    organizationId: string;
-    content: string;
-    expiresAt?: Date;
-    isActive?: boolean;
-  }) {
+  static async replaceCurrent(
+    data: Parameters<typeof SiteNotificationModel.create>[0],
+  ) {
+    return withDbTransaction(async (tx) => {
+      // Serialize replacements even when the organization has no active row.
+      await tx
+        .select({ id: schema.organizationsTable.id })
+        .from(schema.organizationsTable)
+        .where(eq(schema.organizationsTable.id, data.organizationId))
+        .for("update");
+      await SiteNotificationModel.deactivateAll(data.organizationId, tx);
+      return SiteNotificationModel.create(data, tx);
+    });
+  }
+
+  static async create(
+    data: {
+      organizationId: string;
+      content: string;
+      expiresAt?: Date;
+      isActive?: boolean;
+    },
+    tx?: Transaction,
+  ) {
     logger.debug(
       { data },
       "SiteNotificationModel.create: creating notification",
     );
     const id = crypto.randomUUID();
     const now = new Date();
-    const [notification] = await db
+    const [notification] = await (tx ?? db)
       .insert(schema.siteNotificationsTable)
       .values({
         id,
@@ -115,13 +133,13 @@ class SiteNotificationModel {
     return result;
   }
 
-  static async deactivateAll(organizationId: string) {
+  static async deactivateAll(organizationId: string, tx?: Transaction) {
     logger.debug(
       { organizationId },
       "SiteNotificationModel.deactivateAll: deactivating all notifications",
     );
     const now = new Date();
-    await db
+    await (tx ?? db)
       .update(schema.siteNotificationsTable)
       .set({ isActive: false, updatedAt: now })
       .where(

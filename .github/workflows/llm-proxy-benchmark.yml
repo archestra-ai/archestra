@@ -1,24 +1,133 @@
 name: LLM Proxy Benchmark
 
 on:
+  workflow_call:
+    inputs:
+      release-generation:
+        type: boolean
+        default: false
   pull_request:
     paths:
       - platform/benchmarks/**
+      - platform/backend/src/server/llm-proxy-timing*
+      - platform/package.json
+      - platform/CHANGELOG.md
       - .github/workflows/llm-proxy-benchmark.yml
+      - .github/scripts/publish-proxy-benchmark-comment*
+      - .github/scripts/proxy-benchmark-baseline*
+      - .github/scripts/update-proxy-benchmark-docs*
   workflow_dispatch:
+    inputs:
+      compare_litellm:
+        description: Run isolated pinned LiteLLM proxy comparison instead of release benchmarks
+        required: false
+        default: false
+        type: boolean
+      compare_litellm_sensitivity:
+        description: Use bounded clean-database and 8 GiB database-memory sensitivity mode
+        required: false
+        default: false
+        type: boolean
+      baseline_sha:
+        description: Optional full baseline commit SHA for a paired comparison on this runner
+        required: false
+        default: ''
+        type: string
+      release_sha:
+        description: Optional full commit SHA of an earlier release to measure again on this runner, as release PRs do
+        required: false
+        default: ''
+        type: string
+      web_workers:
+        description: Candidate web processes within a fixed total database pool of 20 (manual configuration experiment)
+        required: false
+        default: '1'
+        type: choice
+        options: ['1', '2', '4']
+      cpu_profile:
+        description: Diagnostic CPU profile only; cannot publish release results or compare revisions
+        required: false
+        default: false
+        type: boolean
 
-permissions:
-  contents: read
-
-concurrency:
-  group: llm-proxy-benchmark-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+permissions: {}
 
 jobs:
+  select:
+    name: Select benchmark runs
+    # Release measurements run only inside the single generation coordinator.
+    if: inputs.release-generation || !startsWith(github.head_ref, 'release-please--branches--')
+    concurrency:
+      group: llm-proxy-select-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read # Inspect source and previous release metadata.
+      pull-requests: read # Read changed paths; no PR code is executed.
+    outputs:
+      run: ${{ steps.select.outputs.run }}
+      release: ${{ steps.select.outputs.release }}
+      previous-release-sha: ${{ steps.previous.outputs.sha }}
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: select
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const release = Boolean(pr && pr.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}` && pr.head.ref.startsWith('release-please--branches--') && pr.head.ref.endsWith('--components--platform'));
+            let run = context.eventName === 'workflow_dispatch' || release;
+            // The caller has already rejected a verified combined-generation
+            // head. Every selected source, including a legacy docs-only head,
+            // must produce a benchmark artifact for this same run attempt.
+            if (pr && !run && !release) {
+              const files = await github.paginate(github.rest.pulls.listFiles, {...context.repo, pull_number: pr.number, per_page: 100});
+              run = files.some(({filename}) => filename.startsWith('platform/benchmarks/') || filename.startsWith('platform/backend/src/server/llm-proxy-timing') || filename === '.github/workflows/llm-proxy-benchmark.yml' || filename.startsWith('.github/scripts/publish-proxy-benchmark-comment') || filename.startsWith('.github/scripts/proxy-benchmark-baseline') || filename.startsWith('.github/scripts/update-proxy-benchmark-docs'));
+            }
+            core.setOutput('run', String(run));
+            core.setOutput('release', String(release));
+      # Release selection runs from the trusted base, never release PR code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.select.outputs.release == 'true' && steps.select.outputs.run == 'true'
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: |
+            .github/scripts
+            platform/benchmarks
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: previous
+        if: steps.select.outputs.release == 'true' && steps.select.outputs.run == 'true'
+        with:
+          script: |
+            const { findPreviousRelease } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/proxy-benchmark-baseline.mjs`);
+            try {
+              const previous = await findPreviousRelease({github, context});
+              if (previous) {
+                const {data: commit} = await github.rest.repos.getCommit({...context.repo, ref: previous.tag_name});
+                core.info(`Measuring ${previous.tag_name} again on the benchmark runner`);
+                core.setOutput('sha', commit.sha);
+              }
+            } catch (error) {
+              // The comment falls back to the release's saved metrics.
+              core.warning(`Previous release lookup failed: ${error.message}`);
+            }
+
   benchmark:
     name: Measure LLM proxy latency
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    needs: select
+    if: needs.select.outputs.run == 'true'
+    # A fixed 16 vCPU size keeps the load client, mock and database off the
+    # measured web process. Results record the CPU model; comparisons across
+    # different CPUs are suppressed.
+    runs-on: ubicloud-standard-16-ubuntu-2404
+    timeout-minutes: 60
+    # A generated table commit skips this job. Scope cancellation here so
+    # that commit cannot cancel the successful run publishing its own docs.
+    concurrency:
+      group: llm-proxy-measure-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: platform
@@ -26,33 +135,151 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 11.9.0
           run_install: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24.11.1'
+          node-version: '24.22.1'
           cache: pnpm
           cache-dependency-path: platform/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
+      - uses: ./.github/actions/setup-rust-build # zizmor: ignore[self-repository] Build using the explicitly checked-out measured revision.
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: 'false'
       - run: pnpm exec biome check benchmarks/*.mjs
-      - name: Validate timing and failure handling
-        run: node --test benchmarks/measure.test.mjs
+      - name: Validate timing and reporting
+        run: node --test benchmarks/*.test.mjs benchmarks/cross-proxy/*.test.mjs ../.github/scripts/*proxy-benchmark*.test.mjs
+      - name: Validate server timing boundaries
+        run: pnpm --dir backend exec vitest run src/server/llm-proxy-timing.unit.test.ts
+      - name: Run controlled LiteLLM comparison
+        if: github.event_name == 'workflow_dispatch' && inputs.compare_litellm
+        env:
+          SENSITIVITY: ${{ inputs.compare_litellm_sensitivity }}
+        run: |
+          if [ "$SENSITIVITY" = true ]; then
+            timeout 15m bash benchmarks/cross-proxy/run.sh --sensitivity
+          else
+            bash benchmarks/cross-proxy/run.sh
+          fi
       - name: Run mock inference benchmark
-        # CI is a correctness check and a separate hardware baseline, not an
-        # absolute latency gate on noisy shared runners.
-        run: bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2
+        if: ${{ !inputs.compare_litellm }}
+        # A repeatable shared-runner measurement, not an absolute latency gate.
+        env:
+          CPU_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.cpu_profile == true }}
+          BASELINE_SHA: ${{ inputs.baseline_sha }}
+          WEB_WORKERS: ${{ inputs.web_workers || '1' }}
+        run: |
+          if ! [[ "$WEB_WORKERS" =~ ^[124]$ ]]; then
+            echo 'Invalid worker count' >&2
+            exit 1
+          fi
+          if [ "$CPU_PROFILE" = true ]; then
+            if [ "$WEB_WORKERS" != 1 ]; then
+              echo 'Profile one web process at a time.' >&2
+              exit 1
+            fi
+            if [ -n "$BASELINE_SHA" ]; then
+              echo 'CPU profiles are diagnostic and cannot be paired benchmark evidence.' >&2
+              exit 1
+            fi
+            bash benchmarks/ci.sh --cpu-profile --scenarios=chat,tools --concurrency=1,10,50 --requests=1000 --repeats=3
+          else
+            bash benchmarks/ci.sh --requests=300 --stream-requests=300 --repeats=2 "--web-workers=$WEB_WORKERS"
+          fi
+      - name: Measure the previous release on the same runner
+        # Release comments compare with this, not with numbers from whatever
+        # hardware ran the previous release. A failure keeps the fallback.
+        if: (needs.select.outputs.previous-release-sha != '' || inputs.release_sha != '') && !inputs.cpu_profile
+        continue-on-error: true
+        env:
+          RELEASE_SHA: ${{ needs.select.outputs.previous-release-sha || inputs.release_sha }}
+        run: bash benchmarks/remeasure-release.sh "$RELEASE_SHA"
+      - name: Compare pinned revisions on the same runner
+        if: github.event_name == 'workflow_dispatch' && !inputs.cpu_profile && inputs.baseline_sha != ''
+        env:
+          BASELINE_SHA: ${{ inputs.baseline_sha }}
+          WEB_WORKERS: ${{ inputs.web_workers || '1' }}
+        run: bash benchmarks/compare.sh "$BASELINE_SHA" "$WEB_WORKERS"
       - name: Publish summary
         if: always()
         run: |
+          if [ -f benchmarks/results/cross-proxy-sensitivity/summary.md ]; then
+            cat benchmarks/results/cross-proxy-sensitivity/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f benchmarks/results/cross-proxy/summary.md ]; then
+            cat benchmarks/results/cross-proxy/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
           if [ -f benchmarks/results/ci/summary.md ]; then
             cat benchmarks/results/ci/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
+          if [ -f benchmarks/results/release/summary.md ]; then
+            { echo; echo '### Previous release on this runner'; echo; cat benchmarks/results/release/summary.md; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f benchmarks/results/comparison/summary.md ]; then
+            cat benchmarks/results/comparison/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f benchmarks/results/profile/summary.md ]; then
+            cat benchmarks/results/profile/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Upload measurements and diagnostics
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: llm-proxy-benchmark
+          name: ${{ inputs.release-generation && format('release-generation-benchmark-{0}', github.run_attempt) || 'llm-proxy-benchmark' }}
           path: platform/benchmarks/results/
           retention-days: 14
+
+  comment:
+    name: Update release benchmark summary
+    needs: [select, benchmark]
+    if: ${{ always() && !cancelled() && needs.select.outputs.release == 'true' && needs.benchmark.result != 'skipped' }}
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: llm-proxy-publish-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write # Maintain one summary on the same-repository release PR.
+    steps:
+      # Execute the publisher from the trusted base, never measured PR code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true # Setup failures can precede artifact creation.
+        with:
+          name: ${{ inputs.release-generation && format('release-generation-benchmark-{0}', github.run_attempt) || 'llm-proxy-benchmark' }}
+          path: benchmark-artifact
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: publish
+        env:
+          BENCHMARK_RESULT: ${{ needs.benchmark.result }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const read = (file) => {
+              if (!fs.existsSync(file)) return null;
+              if (fs.statSync(file).size > 65536) throw new Error('Benchmark summary is too large');
+              return JSON.parse(fs.readFileSync(file, 'utf8'));
+            };
+            let summary = null;
+            try {
+              summary = read('benchmark-artifact/ci/report.json');
+            } catch {
+              core.warning('Benchmark summary is unavailable or invalid; publishing failure status.');
+            }
+            let remeasured = null;
+            try {
+              remeasured = read('benchmark-artifact/release/report.json');
+            } catch {
+              core.warning('Previous release measurement is invalid; using its saved metrics.');
+            }
+            const { publishBenchmarkComment } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/publish-proxy-benchmark-comment.mjs`);
+            const result = await publishBenchmarkComment({github, context, summary, remeasured, benchmarkResult: process.env.BENCHMARK_RESULT});
+            core.info(result);

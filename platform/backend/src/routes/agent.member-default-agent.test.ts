@@ -183,6 +183,37 @@ describe("/api/members/default-agent", () => {
     expect(await current()).toBeNull();
   });
 
+  test("names the member's personal chat agent apart from their default, without seeding one", async ({
+    makeInternalAgent,
+  }) => {
+    const read = () =>
+      app
+        .inject({ method: "GET", url: "/api/members/default-agent" })
+        .then((r) => r.json());
+
+    // Reading must not create the assistant it reports.
+    expect(await read()).toEqual({
+      defaultAgentId: null,
+      personalChatAgentId: null,
+    });
+
+    const assistantId = await AgentModel.ensurePersonalChatAgent({
+      userId: user.id,
+      organizationId,
+    });
+    const other = await makeInternalAgent({
+      organizationId,
+      access: "personal",
+      authorId: user.id,
+    });
+    await put(other.id);
+
+    expect(await read()).toEqual({
+      defaultAgentId: other.id,
+      personalChatAgentId: assistantId,
+    });
+  });
+
   test("restoring an agent does not re-adopt it as the default", async ({
     makeInternalAgent,
   }) => {

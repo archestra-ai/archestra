@@ -10,6 +10,7 @@ import {
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import ConnectionSetupModel from "@/models/connection-setup";
+import PluginModel from "@/models/plugin";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import routes from "./client-connection.routes";
@@ -37,11 +38,16 @@ describe("browser-approved client connection", () => {
     await app.close();
   });
 
-  async function start() {
+  async function start(exclude?: string[], deviceName?: string) {
     const response = await app.inject({
       method: "POST",
       url: "/api/client-connections",
-      payload: { clientId: "claude-code", platform: "linux" },
+      payload: {
+        clientId: "claude-code",
+        platform: "linux",
+        exclude,
+        deviceName,
+      },
     });
     expect(response.statusCode).toBe(200);
     expect(response.headers["cache-control"]).toBe("no-store");
@@ -56,6 +62,7 @@ describe("browser-approved client connection", () => {
       userId?: string;
       clientId?: "cursor";
       platform?: "windows";
+      includeSkills?: boolean;
     } = {},
   ) {
     return ConnectionSetupModel.create({
@@ -137,6 +144,109 @@ describe("browser-approved client connection", () => {
         },
       });
       expect(JSON.stringify(rows)).not.toContain(pending.deviceCode);
+    });
+  });
+
+  test("the installer's machine name is shown for approval and kept on the bound setup", async () => {
+    const pending = await start(undefined, "  work-laptop ");
+    const details = await app.inject({
+      url: `/api/client-connections/${pending.id}`,
+    });
+    expect(details.json()).toMatchObject({ deviceName: "work-laptop" });
+    const ticket = await setup();
+    expect((await decide(pending.id, ticket.setup.id)).statusCode).toBe(200);
+    const claimed = await ConnectionSetupModel.claimByToken({
+      rawToken: `archestra_con_${pending.deviceCode}`,
+    });
+    expect(claimed?.deviceName).toBe("work-laptop");
+
+    const legacy = await start();
+    const legacyDetails = await app.inject({
+      url: `/api/client-connections/${legacy.id}`,
+    });
+    expect(legacyDetails.json()).toMatchObject({ deviceName: null });
+  });
+
+  test("carries the gateway and plugins picked on the Connect page to the approval", async () => {
+    const started = await app.inject({
+      method: "POST",
+      url: "/api/client-connections",
+      payload: {
+        clientId: "claude-code",
+        platform: "linux",
+        gateway: "coding-gateway",
+        plugins: ["openappa-1a2b3c4d"],
+      },
+    });
+    expect(started.statusCode).toBe(200);
+    const details = await app.inject({
+      url: `/api/client-connections/${started.json<{ id: string }>().id}`,
+    });
+    expect(details.json()).toMatchObject({
+      gateway: "coding-gateway",
+      plugins: ["openappa-1a2b3c4d"],
+    });
+
+    const legacy = await start();
+    const legacyDetails = await app.inject({
+      url: `/api/client-connections/${legacy.id}`,
+    });
+    expect(legacyDetails.json()).toMatchObject({
+      gateway: null,
+      plugins: null,
+    });
+  });
+
+  test("approval can include parts omitted from the initial request", async ({
+    makeAgent,
+  }) => {
+    const pending = await start(["tools", "skills", "proxy", "plugins"]);
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    const plugin = await PluginModel.create({
+      organizationId,
+      userId: user.id,
+      input: {
+        displayName: "Setup plugin",
+        description: "Connection setup test",
+        clientType: "claude-code",
+        supportedPlatforms: ["posix"],
+        files: [
+          {
+            path: "hooks/hooks.json",
+            content: "{}",
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+    });
+    if (!plugin) throw new Error("Failed to create test plugin");
+    const ticket = await ConnectionSetupModel.create({
+      organizationId,
+      userId: user.id,
+      clientId: "claude-code",
+      platform: "linux",
+      baseUrl: "http://localhost:3000/v1",
+      expiresAt: new Date(Date.now() + 900_000),
+      mcpGatewayId: gateway.id,
+      llmProxyId: proxy.id,
+      includeSkills: true,
+      pluginIds: [plugin.id],
+    });
+    expect((await decide(pending.id, ticket.setup.id)).statusCode).toBe(200);
+    expect(await poll(pending.deviceCode)).toBe("approved");
+    expect(
+      await ConnectionSetupModel.findByToken(
+        `archestra_con_${pending.deviceCode}`,
+      ),
+    ).toMatchObject({
+      mcpGatewayId: gateway.id,
+      llmProxyId: proxy.id,
+      includeSkills: true,
     });
   });
 

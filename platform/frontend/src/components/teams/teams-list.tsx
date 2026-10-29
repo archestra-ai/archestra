@@ -1,5 +1,6 @@
 "use client";
 import {
+  ADMIN_ROLE_NAME,
   archestraApiSdk,
   type archestraApiTypes,
   E2eTestId,
@@ -36,7 +37,7 @@ import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome, toBulkOutcome } from "@/lib/bulk-action";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -52,6 +53,7 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { TeamManagementDialog } from "./team-management-dialog";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
+type ManagedTeam = archestraApiTypes.GetTeamResponses["200"];
 
 export function TeamsList() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
@@ -60,15 +62,13 @@ export function TeamsList() {
   const setActionButton = useSetSettingsAction();
   const queryClient = useQueryClient();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const sectionParam = searchParams.get("section");
   const teamId = searchParams.get("team");
   const { data: teamFromUrl } = useTeam(teamId ?? undefined);
   const {
     entity: managedTeam,
     open: openManagementDialog,
     close: closeManagementDialog,
-    openedFromUrl,
-  } = useDialogUrlParam<Team>({
+  } = useDialogUrlParam<ManagedTeam>({
     paramName: "team",
     entityFromUrl: teamFromUrl ?? null,
     alsoClearOnClose: ["section"],
@@ -88,12 +88,13 @@ export function TeamsList() {
   const { data: teams, isFetching: isLoading } = useTeams({
     name: search,
     labels: labelsParam ?? undefined,
+    includeMembers: false,
   });
   const { data: hierarchyTeams = [] } = useTeams({
+    includeRelations: false,
     enabled: Boolean(search || labelsParam),
   });
   const { data: labelKeys } = useTeamLabelKeys();
-  const { data: session } = useSession();
   const { data: canUpdateTeams = false } = useHasPermissions({
     team: ["update"],
   });
@@ -102,14 +103,10 @@ export function TeamsList() {
   const { data: canReadIdentityProviders = false } = useHasPermissions({
     identityProvider: ["read"],
   });
-  const currentUserId = session?.user.id;
-  const isTeamAdminOf = useCallback(
-    (team: Team) =>
-      team.members?.some(
-        (member) => member.userId === currentUserId && member.role === "admin",
-      ) ?? false,
-    [currentUserId],
-  );
+  // List rows and the team opened from the URL both carry the caller's
+  // `myRole` (non-managers always get their own teams).
+  const isTeamAdminOf = (team: Pick<ManagedTeam, "myRole">) =>
+    team.myRole === ADMIN_ROLE_NAME;
 
   const handleRemoveLabel = useCallback(
     (key: string, value: string) => {
@@ -258,7 +255,10 @@ export function TeamsList() {
       header: "Members",
       enableSorting: false,
       cell: ({ row }) => {
-        const count = row.original.members?.length || 0;
+        // During a rolling update an older backend can answer without
+        // `memberCount`, and it ignores `includeMembers=false`.
+        const count =
+          row.original.memberCount ?? row.original.members?.length ?? 0;
         return (
           <div className="text-sm">
             {count} member{count !== 1 ? <span>s</span> : null}
@@ -441,9 +441,6 @@ export function TeamsList() {
           open={!!managedTeam}
           onOpenChange={(open) => !open && closeManagementDialog()}
           team={managedTeam}
-          initialSection={
-            openedFromUrl && sectionParam === "token" ? "token" : undefined
-          }
           readOnly={!canUpdateTeams && !isTeamAdminOf(managedTeam)}
         />
       )}

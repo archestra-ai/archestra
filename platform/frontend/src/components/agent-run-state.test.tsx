@@ -46,6 +46,22 @@ describe("AgentRunState", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("explains when a historical failure lost its readable details", async () => {
+    render(
+      <AgentRunState
+        state="TASK_STATE_FAILED"
+        statusReason="[object Object]"
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "View failed details" }),
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "No readable failure details were recorded for this run.",
+    );
+    expect(screen.getByRole("dialog")).not.toHaveTextContent("[object Object]");
+  });
+
   it("keeps an icon-only history status accessible", () => {
     render(
       <AgentRunState

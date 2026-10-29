@@ -37,6 +37,7 @@ vi.mock("@/components/agent-runtime-credential-prompt", () => ({
 }));
 
 vi.mock("@/lib/agent-runtime.query", () => ({
+  runtimePreflightDisabledReason: () => undefined,
   useAgentRuntimePreflight: () => ({
     data: { ready: true, missing: [], misconfigured: [] },
     isPending: false,
@@ -59,11 +60,10 @@ vi.mock("@/lib/agent.query", () => ({
 }));
 
 vi.mock("@/lib/chat/chat.query", () => ({
-  useMemberDefaultModel: () => ({ data: null }),
   useOpenappaStatus: () => ({ data: null }),
 }));
 
-vi.mock("@/lib/chat/use-initial-chat-model-state.hook", () => ({
+vi.mock("@/lib/chat/use-initial-chat-model-state", () => ({
   useInitialChatModelState: () => ({
     agentId: "runtime-agent",
     modelId: "model-1",
@@ -91,7 +91,7 @@ vi.mock("@/lib/llm-models.query", () => ({
 }));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
-  useLlmProviderApiKeys: () => ({ data: [] }),
+  useAvailableLlmProviderApiKeys: () => ({ data: [] }),
 }));
 
 vi.mock("@/lib/organization.query", () => ({

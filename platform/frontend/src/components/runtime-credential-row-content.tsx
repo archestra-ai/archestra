@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
-import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import {
+  RuntimeCredentialIcon,
+  runtimeCredentialIconOf,
+} from "@/components/runtime-credential-icon";
 import { Badge } from "@/components/ui/badge";
 import type { RuntimeCredentialDefinition } from "@/lib/runtime-credentials.query";
 
@@ -15,15 +18,7 @@ export function RuntimeCredentialRowContent({
   return (
     <div className="flex min-w-0 flex-1 items-start gap-3">
       <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-        <RuntimeCredentialIcon
-          icon={
-            definition.icon ??
-            (definition.kind === "github_app" ||
-            definition.kind === "github_app_user"
-              ? "logo:github"
-              : null)
-          }
-        />
+        <RuntimeCredentialIcon icon={runtimeCredentialIconOf(definition)} />
       </div>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
@@ -50,7 +45,7 @@ export function RuntimeCredentialDescription({
   definition,
   className = "mt-1",
 }: {
-  definition: RuntimeCredentialDefinition;
+  definition: Pick<RuntimeCredentialDefinition, "key" | "description">;
   className?: string;
 }) {
   if (definition.key === "claude-code") {

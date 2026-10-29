@@ -40,6 +40,7 @@ import {
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { useMswServer } from "@/test/msw";
 import { ApiError, type OpenAi } from "@/types";
 import {
@@ -178,10 +179,14 @@ describe("OpenAI proxy reasoning effort", () => {
 
   test("forwards max reasoning effort to the upstream provider", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);
     const agent = await makeAgent({ name: "Reasoning Effort Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
     await ModelModel.create({
       externalId: "openai/reasoning-model",
       provider: "openai",
@@ -222,7 +227,13 @@ describe("OpenAI proxy reasoning effort", () => {
       const response = await app.inject({
         method: "POST",
         url: `/v1/openai/${agent.id}/chat/completions`,
-        headers: { authorization: "Bearer test-key" },
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": await makePassthroughCredential({
+            organizationId: agent.organizationId,
+            ownerId: owner.id,
+          }),
+        },
         payload: {
           model: "reasoning-model",
           messages: [{ role: "user", content: "Hello" }],
@@ -283,11 +294,17 @@ describe("OpenAI proxy streaming", () => {
     expect(createClientSpy).not.toHaveBeenCalled();
   });
 
-  test("streaming response has SSE format", async ({ makeAgent }) => {
+  test("streaming response has SSE format", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);
 
     const agent = await makeAgent({ name: "Test Streaming Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     const response = await app.inject({
       method: "POST",
@@ -295,6 +312,10 @@ describe("OpenAI proxy streaming", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
         "user-agent": "test-client",
       },
       payload: {
@@ -312,11 +333,17 @@ describe("OpenAI proxy streaming", () => {
     expect(body).toContain("data: [DONE]");
   });
 
-  test("streaming response contains content chunks", async ({ makeAgent }) => {
+  test("streaming response contains content chunks", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);
 
     const agent = await makeAgent({ name: "Test Streaming Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     const response = await app.inject({
       method: "POST",
@@ -324,6 +351,10 @@ describe("OpenAI proxy streaming", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
         "user-agent": "test-client",
       },
       payload: {
@@ -356,11 +387,15 @@ describe("OpenAI proxy streaming", () => {
 
   test("streaming response includes token usage in the SSE body", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);
 
     const agent = await makeAgent({ name: "Test Streaming Usage Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     const response = await app.inject({
       method: "POST",
@@ -368,6 +403,10 @@ describe("OpenAI proxy streaming", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
         "user-agent": "test-client",
       },
       payload: {
@@ -410,7 +449,11 @@ describe("OpenAI cost tracking", () => {
     vi.restoreAllMocks();
   });
 
-  test("stores cost and baselineCost in interaction", async ({ makeAgent }) => {
+  test("stores cost and baselineCost in interaction", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);
 
@@ -426,6 +469,8 @@ describe("OpenAI cost tracking", () => {
     });
 
     const agent = await makeAgent({ name: "Test Cost Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     const response = await app.inject({
       method: "POST",
@@ -433,6 +478,10 @@ describe("OpenAI cost tracking", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
         "user-agent": "test-client",
       },
       payload: {
@@ -459,6 +508,8 @@ describe("OpenAI cost tracking", () => {
 
   test("maps an upstream provider error to its status code and records the failed interaction", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     // An SDK error carrying the upstream HTTP status (e.g. a provider 429)
     // must reach the client with that status — not as a generic 500 — and the
@@ -485,6 +536,8 @@ describe("OpenAI cost tracking", () => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);
     const agent = await makeAgent({ name: "Upstream Error Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     const response = await app.inject({
       method: "POST",
@@ -492,6 +545,10 @@ describe("OpenAI cost tracking", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
         "user-agent": "test-client",
       },
       payload: {
@@ -517,6 +574,8 @@ describe("OpenAI cost tracking", () => {
 
   test("creates embeddings through OpenAI proxy routes", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);
@@ -537,6 +596,12 @@ describe("OpenAI cost tracking", () => {
       agentType: "llm_proxy",
       isDefault: true,
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     let capturedApiKey: string | undefined;
     vi.spyOn(openAiEmbeddingsAdapterFactory, "createClient").mockImplementation(
@@ -552,6 +617,7 @@ describe("OpenAI cost tracking", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-openai-key",
+        "x-archestra-virtual-key": passthroughToken,
         "user-agent": "test-client",
       },
       payload: {
@@ -1088,6 +1154,8 @@ describe("OpenAI Responses proxy", () => {
 
   test("creates a response and records an openai responses interaction", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);
@@ -1104,6 +1172,8 @@ describe("OpenAI Responses proxy", () => {
     });
 
     const agent = await makeAgent({ name: "Test Responses Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
     const { InteractionModel } = await import("@/models");
     const initialInteractions =
       await InteractionModel.getAllInteractionsForProfile(agent.id);
@@ -1114,6 +1184,10 @@ describe("OpenAI Responses proxy", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
         "user-agent": "test-client",
       },
       payload: {
@@ -1146,11 +1220,15 @@ describe("OpenAI Responses proxy", () => {
 
   test("streams responses as OpenAI Responses SSE events", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);
 
     const agent = await makeAgent({ name: "Test Streaming Responses Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     const response = await app.inject({
       method: "POST",
@@ -1158,6 +1236,10 @@ describe("OpenAI Responses proxy", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
         "user-agent": "test-client",
       },
       payload: {
@@ -1349,7 +1431,11 @@ describe("OpenAI Responses proxy", () => {
     expect(JSON.stringify(interactions)).not.toContain(accessToken);
   });
 
-  test("routes a codex exec ChatGPT bearer to the subscription backend", async ({
+  test.for([
+    "codex_exec",
+    "Codex Desktop",
+    "codex_work_desktop",
+  ])("routes a %s ChatGPT bearer to the subscription backend", async (originator, {
     makeAgent,
     makeMember,
     makeUser,
@@ -1384,8 +1470,8 @@ describe("OpenAI Responses proxy", () => {
         authorization: `Bearer ${accessToken}`,
         "x-archestra-virtual-key": passthroughToken,
         "chatgpt-account-id": "account_123",
-        originator: "codex_exec",
-        "user-agent": "codex_exec/0.156.1",
+        originator,
+        "user-agent": `${originator}/0.162.0`,
       },
       payload: { model: "gpt-5.6-sol", input: "Hello!" },
     });
@@ -1394,8 +1480,16 @@ describe("OpenAI Responses proxy", () => {
     expect(capturedOptions?.openAiCodexPassthrough).toMatchObject({
       accessToken,
       accountId: "account_123",
-      originator: "codex_exec",
+      originator,
     });
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.at(-1)).toMatchObject({
+      authMethod: "passthrough_virtual_key",
+      billingMode: "subscription",
+    });
+    expect(JSON.stringify(interactions)).not.toContain(accessToken);
   });
 
   test("routes the native verifier ChatGPT bearer to the subscription client and keeps API keys metered", async ({
@@ -1667,7 +1761,7 @@ describe("OpenAI Responses proxy", () => {
     };
     const headers = {
       authorization: "Bearer sk-fixture",
-      "X-Archestra-Passthrough": key.value,
+      "x-archestra-virtual-key": key.value,
     };
     const result = await app.inject({
       method: "POST",
@@ -1700,7 +1794,10 @@ describe("OpenAI Responses proxy", () => {
     await app.close();
   });
 
-  test("does not forward a Codex ChatGPT bearer without proxy access", async ({
+  test.for([
+    "codex_cli_rs",
+    "codex_work_desktop",
+  ])("does not forward a %s ChatGPT bearer without proxy access", async (originator, {
     makeAgent,
   }) => {
     const app = createOpenAiRouteTestApp();
@@ -1714,7 +1811,7 @@ describe("OpenAI Responses proxy", () => {
         authorization:
           "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature",
         "chatgpt-account-id": "account_123",
-        originator: "codex_cli_rs",
+        originator,
       },
       payload: { model: "gpt-5.6-sol", input: "Hello!" },
     });
@@ -1724,7 +1821,10 @@ describe("OpenAI Responses proxy", () => {
     expect(openAiResponsesAdapterFactory.createClient).not.toHaveBeenCalled();
   });
 
-  test("lists Codex subscription models only for a caller with proxy access", async ({
+  test.for([
+    "codex_cli_rs",
+    "codex_work_desktop",
+  ])("lists %s subscription models only for a caller with proxy access", async (originator, {
     makeAgent,
     makeMember,
     makeUser,
@@ -1745,7 +1845,7 @@ describe("OpenAI Responses proxy", () => {
       authorization:
         "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature",
       "chatgpt-account-id": "account_123",
-      originator: "codex_cli_rs",
+      originator,
     };
     const denied = await app.inject({
       method: "GET",
@@ -1797,7 +1897,7 @@ describe("OpenAI Responses proxy", () => {
     const forwardedHeaders = new Headers(fetchStub.mock.calls[0]?.[1]?.headers);
     expect(forwardedHeaders.get("authorization")).toBe(headers.authorization);
     expect(forwardedHeaders.get("chatgpt-account-id")).toBe("account_123");
-    expect(forwardedHeaders.get("originator")).toBe("codex_cli_rs");
+    expect(forwardedHeaders.get("originator")).toBe(originator);
     expect(forwardedHeaders.has("x-archestra-virtual-key")).toBe(false);
   });
 
@@ -2099,7 +2199,9 @@ describe("OpenAI Responses proxy", () => {
       payload: { model: "gpt-4o", input: "Hello!" },
     });
 
-    expect(response.statusCode).toBe(200);
+    // A bare provider key is refused by the platform-credential gate, so the
+    // bridge header alone never reaches bridge selection.
+    expect(response.statusCode).toBe(401);
     expect(capturedOptions?.openAiCodexPassthrough).toBeUndefined();
   });
 });
@@ -2120,6 +2222,8 @@ describe("OpenAI streaming mode", () => {
 
   test("streaming mode completes normally and records interaction", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);
@@ -2136,6 +2240,8 @@ describe("OpenAI streaming mode", () => {
     });
 
     const agent = await makeAgent({ name: "Test Streaming Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     const { InteractionModel } = await import("@/models");
 
@@ -2149,6 +2255,10 @@ describe("OpenAI streaming mode", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
         "user-agent": "test-client",
       },
       payload: {
@@ -2185,7 +2295,7 @@ describe("OpenAI streaming mode", () => {
 
   test("streaming mode interrupted still records interaction", {
     timeout: 10000,
-  }, async ({ makeAgent }) => {
+  }, async ({ makeAgent, makeMember, makeUser }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
@@ -2209,6 +2319,8 @@ describe("OpenAI streaming mode", () => {
     const agent = await makeAgent({
       name: "Test Interrupted Streaming Agent",
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     const { InteractionModel } = await import("@/models");
 
@@ -2222,6 +2334,10 @@ describe("OpenAI streaming mode", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
         "user-agent": "test-client",
       },
       payload: {
@@ -2254,7 +2370,7 @@ describe("OpenAI streaming mode", () => {
 
   test("streaming mode interrupted before usage handles gracefully", {
     timeout: 10000,
-  }, async ({ makeAgent }) => {
+  }, async ({ makeAgent, makeMember, makeUser }) => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
@@ -2278,6 +2394,8 @@ describe("OpenAI streaming mode", () => {
     const agent = await makeAgent({
       name: "Test Interrupted Before Usage Agent",
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     const response = await app.inject({
       method: "POST",
@@ -2285,6 +2403,10 @@ describe("OpenAI streaming mode", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
         "user-agent": "test-client",
       },
       payload: {

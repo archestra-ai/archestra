@@ -1,0 +1,144 @@
+diff --git a/dist/index.js b/dist/index.js
+index dce56a3b37acb5e95514c122bb30705f6574e2a4..44defc2ecdb6fe463d696e6c665d49b014ef9516 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -642,6 +642,13 @@ var XaiChatLanguageModel = class {
+     const contentBlocks = {};
+     const lastReasoningDeltas = {};
+     let activeReasoningBlockId = void 0;
++    let activeTextBlockId = void 0;
++    const blockIdCounts = {};
++    const nextBlockId = (baseId) => {
++      const count = (blockIdCounts[baseId] || 0) + 1;
++      blockIdCounts[baseId] = count;
++      return count === 1 ? baseId : `${baseId}-${count}`;
++    };
+     const self = this;
+     return {
+       stream: response.pipeThrough(
+@@ -704,17 +711,17 @@ var XaiChatLanguageModel = class {
+               if ((lastMessage == null ? void 0 : lastMessage.role) === "assistant" && textContent === lastMessage.content) {
+                 return;
+               }
+-              const blockId = `text-${value.id || choiceIndex}`;
+-              if (contentBlocks[blockId] == null) {
+-                contentBlocks[blockId] = { type: "text", ended: false };
++              if (activeTextBlockId == null) {
++                activeTextBlockId = nextBlockId(`text-${value.id || choiceIndex}`);
++                contentBlocks[activeTextBlockId] = { type: "text", ended: false };
+                 controller.enqueue({
+                   type: "text-start",
+-                  id: blockId
++                  id: activeTextBlockId
+                 });
+               }
+               controller.enqueue({
+                 type: "text-delta",
+-                id: blockId,
++                id: activeTextBlockId,
+                 delta: textContent
+               });
+             }
+@@ -724,17 +731,25 @@ var XaiChatLanguageModel = class {
+                 return;
+               }
+               lastReasoningDeltas[blockId] = delta.reasoning_content;
+-              if (contentBlocks[blockId] == null) {
+-                contentBlocks[blockId] = { type: "reasoning", ended: false };
+-                activeReasoningBlockId = blockId;
++              if (activeTextBlockId != null) {
++                controller.enqueue({
++                  type: "text-end",
++                  id: activeTextBlockId
++                });
++                contentBlocks[activeTextBlockId].ended = true;
++                activeTextBlockId = void 0;
++              }
++              if (activeReasoningBlockId == null) {
++                activeReasoningBlockId = nextBlockId(blockId);
++                contentBlocks[activeReasoningBlockId] = { type: "reasoning", ended: false };
+                 controller.enqueue({
+                   type: "reasoning-start",
+-                  id: blockId
++                  id: activeReasoningBlockId
+                 });
+               }
+               controller.enqueue({
+                 type: "reasoning-delta",
+-                id: blockId,
++                id: activeReasoningBlockId,
+                 delta: delta.reasoning_content
+               });
+             }
+diff --git a/dist/index.mjs b/dist/index.mjs
+index b67b0772b39b7d768042636f794dd5822b5acdbd..bd7d9962efe5601b7b5341809128f4d3a662c475 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -628,6 +628,13 @@ var XaiChatLanguageModel = class {
+     const contentBlocks = {};
+     const lastReasoningDeltas = {};
+     let activeReasoningBlockId = void 0;
++    let activeTextBlockId = void 0;
++    const blockIdCounts = {};
++    const nextBlockId = (baseId) => {
++      const count = (blockIdCounts[baseId] || 0) + 1;
++      blockIdCounts[baseId] = count;
++      return count === 1 ? baseId : `${baseId}-${count}`;
++    };
+     const self = this;
+     return {
+       stream: response.pipeThrough(
+@@ -690,17 +697,17 @@ var XaiChatLanguageModel = class {
+               if ((lastMessage == null ? void 0 : lastMessage.role) === "assistant" && textContent === lastMessage.content) {
+                 return;
+               }
+-              const blockId = `text-${value.id || choiceIndex}`;
+-              if (contentBlocks[blockId] == null) {
+-                contentBlocks[blockId] = { type: "text", ended: false };
++              if (activeTextBlockId == null) {
++                activeTextBlockId = nextBlockId(`text-${value.id || choiceIndex}`);
++                contentBlocks[activeTextBlockId] = { type: "text", ended: false };
+                 controller.enqueue({
+                   type: "text-start",
+-                  id: blockId
++                  id: activeTextBlockId
+                 });
+               }
+               controller.enqueue({
+                 type: "text-delta",
+-                id: blockId,
++                id: activeTextBlockId,
+                 delta: textContent
+               });
+             }
+@@ -710,17 +717,25 @@ var XaiChatLanguageModel = class {
+                 return;
+               }
+               lastReasoningDeltas[blockId] = delta.reasoning_content;
+-              if (contentBlocks[blockId] == null) {
+-                contentBlocks[blockId] = { type: "reasoning", ended: false };
+-                activeReasoningBlockId = blockId;
++              if (activeTextBlockId != null) {
++                controller.enqueue({
++                  type: "text-end",
++                  id: activeTextBlockId
++                });
++                contentBlocks[activeTextBlockId].ended = true;
++                activeTextBlockId = void 0;
++              }
++              if (activeReasoningBlockId == null) {
++                activeReasoningBlockId = nextBlockId(blockId);
++                contentBlocks[activeReasoningBlockId] = { type: "reasoning", ended: false };
+                 controller.enqueue({
+                   type: "reasoning-start",
+-                  id: blockId
++                  id: activeReasoningBlockId
+                 });
+               }
+               controller.enqueue({
+                 type: "reasoning-delta",
+-                id: blockId,
++                id: activeReasoningBlockId,
+                 delta: delta.reasoning_content
+               });
+             }

@@ -294,6 +294,7 @@ export async function resolveDefaultChatAgentId(params: {
   const accessible = await AgentModel.findAll(userId, false, {
     agentType: "agent",
     excludeBuiltIn: true,
+    includeTools: false,
   });
   const [first] = accessible.sort(
     (a, b) =>

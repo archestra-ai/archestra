@@ -269,14 +269,20 @@ test.describe("MCP Registry layout", () => {
   }) => {
     await seed(mswControl);
     await mcpRegistryPage.goto();
-
     await page
       .getByRole("textbox", { name: "Search MCP servers by name" })
-      .fill("not-installed");
+      .click();
+    // Page time stands still, so only a filter that needs no pause can apply.
+    // A paused clock also stops animation frames, which actionability checks
+    // wait on, so the query is typed with a raw keyboard insert.
+    await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 1_000));
+
+    await page.keyboard.insertText("not-installed");
+    await page.clock.runFor(1);
 
     await expect(mcpRegistryPage.cardForCatalogItem("org-crowded")).toHaveCount(
       0,
-      { timeout: 200 },
     );
     await expect(
       mcpRegistryPage.cardForCatalogItem("not-installed"),
@@ -370,3 +376,58 @@ test.describe("MCP Registry layout", () => {
     );
   });
 });
+
+for (const width of [1280, 800]) {
+  test(`credential actions stay inside their cell at ${width}px`, async ({
+    page,
+    mswControl,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await seed(mswControl);
+    await mswControl.use({
+      method: "get",
+      url: "/api/mcp_server",
+      body: [
+        ...SERVERS,
+        makeInstalledServer({
+          id: "srv-reauth-other",
+          catalogId: "cat-reauth",
+          serverType: "remote",
+          ownerId: "test-other-user",
+          ownerEmail: "reviewer@example.test",
+          oauthRefreshError: undefined,
+        }),
+      ],
+    });
+    await page.goto("/mcp/registry/cat-reauth?tab=credentials");
+    // Row actions are icon buttons named for their row ("Re-authenticate
+    // owner@example.test").
+    const reauthenticate = page.getByRole("button", {
+      name: /^Re-authenticate /,
+    });
+    await expect(reauthenticate).toBeVisible();
+    const overflow = await reauthenticate.evaluate((button) => {
+      const cell = button.closest("td");
+      if (!cell) throw new Error("Credential action is missing its table cell");
+      const bounds = cell.getBoundingClientRect();
+      return Array.from(cell.querySelectorAll("button")).map((action) => {
+        const rect = action.getBoundingClientRect();
+        return {
+          label: action.textContent?.trim(),
+          left: Math.max(0, bounds.left - rect.left),
+          right: Math.max(0, rect.right - bounds.right),
+        };
+      });
+    });
+    for (const action of overflow) {
+      expect(
+        action.left,
+        `${action.label} overlaps the previous column`,
+      ).toBeLessThanOrEqual(1);
+      expect(
+        action.right,
+        `${action.label} overflows its cell`,
+      ).toBeLessThanOrEqual(1);
+    }
+  });
+}

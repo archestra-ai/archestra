@@ -1,4 +1,5 @@
 import { eq, sql } from "drizzle-orm";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
 import {
   ConversationModel,
@@ -512,6 +513,69 @@ describe("SkillSandboxReplayEventModel", () => {
 });
 
 describe("Cascade behavior", () => {
+  test("a service account owns one default sandbox and its files; deleting the account removes them", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeServiceAccount,
+  }) => {
+    const org = await makeOrganization();
+    const account = await makeServiceAccount(org.id);
+    const accountUserId = serviceAccountUserId(account.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await ConversationModel.create({
+      userId: accountUserId,
+      organizationId: org.id,
+      agentId: agent.id,
+    });
+
+    const sandbox = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: org.id,
+      userId: accountUserId,
+      conversationId: conversation.id,
+      defaultCwd: "/home/sandbox",
+    });
+    const again = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: org.id,
+      userId: accountUserId,
+      conversationId: conversation.id,
+      defaultCwd: "/home/sandbox",
+    });
+    expect(again.id).toBe(sandbox.id);
+    expect(sandbox.userId).toBe(accountUserId);
+
+    // a person in the same conversation gets a separate default
+    const person = await makeUser();
+    const personSandbox = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: org.id,
+      userId: person.id,
+      conversationId: conversation.id,
+      defaultCwd: "/home/sandbox",
+    });
+    expect(personSandbox.id).not.toBe(sandbox.id);
+
+    const file = await fileStore.put({
+      organizationId: org.id,
+      userId: accountUserId,
+      projectId: null,
+      conversationId: conversation.id,
+      sandboxId: sandbox.id,
+      filename: "report.txt",
+      mimeType: "text/plain",
+      sizeBytes: 1,
+      data: Buffer.from("a"),
+    });
+    expect((await FileModel.findById(file.id))?.userId).toBe(accountUserId);
+
+    await db
+      .delete(schema.serviceAccountsTable)
+      .where(eq(schema.serviceAccountsTable.id, account.id));
+
+    expect(await SkillSandboxModel.findById(sandbox.id)).toBeNull();
+    expect(await FileModel.findById(file.id)).toBeNull();
+    expect(await SkillSandboxModel.findById(personSandbox.id)).not.toBeNull();
+  });
+
   test("deleting a sandbox removes its replay log and mounts; persistent files survive with sandbox_id nulled", async ({
     makeOrganization,
     makeUser,

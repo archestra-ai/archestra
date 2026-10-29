@@ -3,7 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useAllMatchingAgentCatalog } from "./agent-catalog.query";
+import {
+  useAgentCatalog,
+  useAllMatchingAgentCatalog,
+} from "./agent-catalog.query";
 
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -66,6 +69,7 @@ describe("useAllMatchingAgentCatalog", () => {
         name: "research",
         sortBy: "name",
         sortDirection: "asc",
+        includeTools: false,
         selectableOnly: true,
         limit: 100,
         offset: 0,
@@ -76,10 +80,38 @@ describe("useAllMatchingAgentCatalog", () => {
         name: "research",
         sortBy: "name",
         sortDirection: "asc",
+        includeTools: false,
         selectableOnly: true,
         limit: 100,
         offset: 100,
       },
+    });
+  });
+});
+
+describe("useAgentCatalog", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("asks for rows without their tools unless the caller wants them", async () => {
+    sdk.getAgentCatalog.mockResolvedValue({
+      data: { data: [] },
+      error: undefined,
+    } as never);
+
+    const { result } = setup(() => ({
+      page: useAgentCatalog({ limit: 10, offset: 0 }),
+      withTools: useAgentCatalog({ limit: 10, offset: 0, includeTools: true }),
+    }));
+
+    await waitFor(() => {
+      expect(result.current.page.isSuccess).toBe(true);
+      expect(result.current.withTools.isSuccess).toBe(true);
+    });
+    expect(sdk.getAgentCatalog).toHaveBeenCalledWith({
+      query: { includeTools: false, limit: 10, offset: 0 },
+    });
+    expect(sdk.getAgentCatalog).toHaveBeenCalledWith({
+      query: { includeTools: true, limit: 10, offset: 0 },
     });
   });
 });

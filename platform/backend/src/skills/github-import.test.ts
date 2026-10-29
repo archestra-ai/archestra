@@ -1,3 +1,4 @@
+import { gitHostFromUrl } from "@archestra/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   STUB_COMMIT_SHA as COMMIT_SHA,
@@ -24,6 +25,10 @@ import {
 afterEach(() => {
   vi.unstubAllGlobals();
 });
+
+function isGithubApiUrl(url: string): boolean {
+  return new URL(url).hostname === "api.github.com";
+}
 
 /**
  * Stub GitHub, then override specific raw-file responses by path: `delayMs`
@@ -207,12 +212,12 @@ describe("discoverSkills", () => {
 
     await discoverSkills({ repoUrl: "disc-cache/skills" });
     const apiCallsAfterFirst = fetchMock.mock.calls.filter(([input]) =>
-      String(input).includes("api.github.com"),
+      isGithubApiUrl(String(input)),
     ).length;
 
     await discoverSkills({ repoUrl: "disc-cache/skills" });
     const apiCallsAfterSecond = fetchMock.mock.calls.filter(([input]) =>
-      String(input).includes("api.github.com"),
+      isGithubApiUrl(String(input)),
     ).length;
 
     expect(apiCallsAfterSecond).toBe(apiCallsAfterFirst);
@@ -230,7 +235,10 @@ describe("discoverSkills", () => {
     await discoverSkills({ repoUrl: "disc-tokeniso/skills" });
     await discoverSkills({
       repoUrl: "disc-tokeniso/skills",
-      githubToken: "ghp_other",
+      access: {
+        host: gitHostFromUrl({ provider: "github" }),
+        token: "ghp_other",
+      },
     });
 
     const treeCalls = fetchMock.mock.calls.filter(([input]) =>
@@ -548,7 +556,7 @@ describe("repository URL parsing", () => {
     expect(result.repoUrl).toBe(`${owner}/skills`);
     const commitCall = fetchMock.mock.calls
       .map(([input]) => String(input))
-      .find((u) => u.includes("api.github.com"));
+      .find((u) => isGithubApiUrl(u));
     expect(commitCall).toContain(`/repos/${owner}/skills/`);
   });
 
@@ -589,7 +597,7 @@ describe("repository URL parsing", () => {
     "www.github.com/some-owner/skills",
   ])("rejects the non-GitHub host in %s with a clear error", async (repoUrl) => {
     await expect(discoverSkills({ repoUrl })).rejects.toThrow(
-      /Only github\.com repositories are supported/,
+      /Repository URL must belong to https:\/\/github\.com/,
     );
   });
 });

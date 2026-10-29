@@ -29,6 +29,31 @@ beforeEach(() => modelsDevClient.clearFetchCache());
 afterEach(() => modelsDevClient.clearFetchCache());
 
 describe("ModelSyncService", () => {
+  test("keeps the original Nano Banana name searchable without registry metadata", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "gemini",
+      models: [{ id: "gemini-2.5-flash-image" }],
+      modelsDevData: {},
+    });
+    expect(model.description).toBe("Nano Banana");
+    expect(model.modelId).toBe("gemini-2.5-flash-image");
+  });
+  test("syncs Nano Banana 2.1 as an image model even without registry metadata", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "gemini",
+      models: [{ id: "gemini-nano-banana-2.1" }],
+      modelsDevData: {},
+    });
+
+    expect(model.description).toBe("Nano Banana 2.1");
+    expect(model.inputModalities).toEqual(["text", "image", "video", "pdf"]);
+    expect(model.outputModalities).toEqual(["text", "image"]);
+    expect(model.supportsToolCalling).toBe(false);
+    expect(model.supportsReasoningEffort).toBe(false);
+    expect(model.contextLength).toBe(131_072);
+    expect(model.outputLength).toBe(32_768);
+    expect(model.embeddingDimensions).toBeNull();
+  });
   const originalOpenAiFetcher = modelFetchers.openai;
   const originalAzureFetcher = modelFetchers.azure;
   const originalGeminiFetcher = modelFetchers.gemini;
@@ -943,6 +968,7 @@ describe("ModelSyncService", () => {
       },
       {
         id: "text-embedding-3-large",
+        underlyingModelName: "text-embedding-3-large",
         displayName: "Text Embedding 3 Large",
         provider: "azure" as SupportedProvider,
       },
@@ -1090,6 +1116,43 @@ describe("ModelSyncService", () => {
     ]);
   });
 
+  test("prices a custom-named Claude deployment on Microsoft Foundry from its backing model", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "anthropic",
+      models: [{ id: "team-sonnet", underlyingModelName: "claude-sonnet-4-6" }],
+      modelsDevData: {
+        anthropic: {
+          id: "anthropic",
+          name: "Anthropic",
+          models: {
+            "claude-sonnet-4-6": {
+              id: "claude-sonnet-4-6",
+              name: "Claude Sonnet 4.6",
+              tool_call: true,
+              modalities: { input: ["text", "image", "pdf"], output: ["text"] },
+              cost: {
+                input: 3,
+                output: 15,
+                cache_read: 0.3,
+                cache_write: 3.75,
+              },
+              limit: { context: 1000000, output: 64000 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model).toEqual(
+      expect.objectContaining({
+        modelId: "team-sonnet",
+        contextLength: 1000000,
+        promptPricePerToken: "0.000003",
+        completionPricePerToken: "0.000015",
+      }),
+    );
+  });
+
   test("uses an authoritative fetched embedding dimension over the name heuristic", () => {
     const [model] = buildModelsToUpsert({
       provider: "ollama",
@@ -1212,10 +1275,10 @@ describe("ModelSyncService", () => {
     expect(model.promptPricePerToken).toBeNull();
   });
 
-  test("enriches an Azure deployment from the models.dev azure catalog when the deployment name matches", () => {
+  test("enriches an Azure deployment from its backing model in the azure catalog", () => {
     const [model] = buildModelsToUpsert({
       provider: "azure",
-      models: [{ id: "gpt-4o" }],
+      models: [{ id: "gpt-4o", underlyingModelName: "gpt-4o" }],
       modelsDevData: {
         azure: {
           id: "azure",
@@ -1253,7 +1316,12 @@ describe("ModelSyncService", () => {
     // outrank the registry tier.
     const [model] = buildModelsToUpsert({
       provider: "azure",
-      models: [{ id: "text-embedding-3-small" }],
+      models: [
+        {
+          id: "text-embedding-3-small",
+          underlyingModelName: "text-embedding-3-small",
+        },
+      ],
       modelsDevData: {
         azure: {
           id: "azure",

@@ -266,6 +266,9 @@ describe("McpElicitationDialog", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(screen.queryByText("Action")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^decline$/i }),
+    ).not.toBeInTheDocument();
   });
 
   it.each([
@@ -273,7 +276,10 @@ describe("McpElicitationDialog", () => {
       button: /approve/i,
       response: { action: "accept", content: { action: "approve" } },
     },
-    { button: /decline/i, response: { action: "decline" } },
+    {
+      button: /^deny$/i,
+      response: { action: "accept", content: { action: "deny" } },
+    },
     { button: /^cancel$/i, response: { action: "cancel" } },
   ])("answers a review with the button pressed ($response.action)", async ({
     button,
@@ -296,6 +302,28 @@ describe("McpElicitationDialog", () => {
       id: reviewRequest.id,
       ...response,
     });
+  });
+
+  it("keeps an ordinary form decline as a decline, not a review denial", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(undefined);
+    render(
+      <McpElicitationDialog
+        request={request}
+        isSubmitting={false}
+        onRespond={onRespond}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /^decline$/i }));
+
+    expect(onRespond).toHaveBeenCalledWith({
+      id: request.id,
+      action: "decline",
+    });
+    expect(
+      screen.queryByRole("button", { name: /^deny$/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders a third-party request as a plain form even when its tool is named like the review tool", () => {

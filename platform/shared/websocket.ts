@@ -49,6 +49,15 @@ const BrowserPressKeyPayloadSchema = z.object({
   key: z.string(), // Key name like "Enter", "Tab", "ArrowDown", "PageDown"
 });
 
+const BrowserScrollPayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+  // Pointer position in viewport coordinates; the page under it scrolls
+  x: z.number().finite().min(0).max(10_000),
+  y: z.number().finite().min(0).max(10_000),
+  deltaX: z.number().finite().min(-10_000).max(10_000),
+  deltaY: z.number().finite().min(-10_000).max(10_000),
+});
+
 const BrowserGetSnapshotPayloadSchema = z.object({
   conversationId: z.string().uuid(),
 });
@@ -106,6 +115,16 @@ const SubscribeAgentRunLogsPayloadSchema = z.object({
   includeSessionHistory: z.boolean().optional(),
   runId: z.string().uuid(),
   lines: z.number().int().min(1).max(10_000).optional(),
+  /**
+   * For an ended run with a complete recording: send only about this many of
+   * its last bytes, leaving out earlier turns (see `omittedBytes`).
+   */
+  tailBytes: z
+    .number()
+    .int()
+    .min(64 * 1024)
+    .max(64 * 1024 * 1024)
+    .optional(),
 });
 
 // MCP Deployment Status payloads
@@ -139,6 +158,10 @@ export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("browser_press_key"),
     payload: BrowserPressKeyPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("browser_scroll"),
+    payload: BrowserScrollPayloadSchema,
   }),
   z.object({
     type: z.literal("browser_get_snapshot"),
@@ -274,6 +297,15 @@ export type BrowserTypeResultMessage = {
 
 export type BrowserPressKeyResultMessage = {
   type: "browser_press_key_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
+export type BrowserScrollResultMessage = {
+  type: "browser_scroll_result";
   payload: {
     conversationId: string;
     success: boolean;
@@ -497,6 +529,8 @@ export type AgentRunLogsEndedMessage = {
     source?: "full" | "tail";
     truncated?: boolean;
     totalBytes?: number;
+    /** Stored bytes a `tailBytes` subscription left out. */
+    omittedBytes?: number;
     readable?: {
       provider: string;
       version: number;
@@ -572,6 +606,47 @@ export type ConversationUpdatedMessage = {
   };
 };
 
+/** One replayed assertion in a live validation run. */
+export type OpenAppaValidationProgressStep = {
+  line: number;
+  tool: string;
+  expected: string;
+  actual: string | null;
+  status: "passed" | "failed" | "cannot_run";
+  error?: string | null;
+  /** Why a blocked call was blocked. */
+  reasons?: string[];
+};
+
+/**
+ * Progress of one validation run, pushed to the user who started it while
+ * replay works through the files one at a time. `token` is the id the client
+ * sent with the run request, so a page only follows the run it started.
+ */
+export type OpenAppaValidationProgressMessage = {
+  type: "openappa_validation_progress";
+  payload:
+    | { token: string; phase: "started"; paths: string[] }
+    | { token: string; phase: "file_started"; path: string }
+    | {
+        token: string;
+        phase: "file_finished";
+        path: string;
+        status: "passed" | "failed" | "cannot_run";
+        assertionCount: number;
+        durationMs: number;
+        error?: string | null;
+        steps: OpenAppaValidationProgressStep[];
+      }
+    | {
+        token: string;
+        phase: "finished";
+        /** The recorded run, or null when the run could not be recorded. */
+        runId: string | null;
+        error?: string;
+      };
+};
+
 export type ServerWebSocketMessage =
   | BrowserScreenshotMessage
   | BrowserNavigateResultMessage
@@ -580,6 +655,7 @@ export type ServerWebSocketMessage =
   | BrowserClickResultMessage
   | BrowserTypeResultMessage
   | BrowserPressKeyResultMessage
+  | BrowserScrollResultMessage
   | BrowserSnapshotMessage
   | BrowserSetZoomResultMessage
   | McpLogsMessage
@@ -602,6 +678,7 @@ export type ServerWebSocketMessage =
   | McpServersChangedMessage
   | WebSocketReadyMessage
   | ConversationUpdatedMessage
+  | OpenAppaValidationProgressMessage
   | ErrorMessage;
 
 /**

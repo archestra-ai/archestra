@@ -21,6 +21,7 @@ vi.mock("@archestra/shared/access-control", async (importOriginal) => ({
 }));
 
 import { betterAuth, hasPermission } from "@/auth";
+import { createFastifyInstance } from "@/fastify-instance";
 import { UserModel } from "@/models";
 import {
   beforeEach,
@@ -227,7 +228,10 @@ describe("authPlugin integration", () => {
         url: "/api/agents",
         method: "POST",
         headers: {},
-        routeOptions: { schema: { operationId: "createAgent" } },
+        routeOptions: {
+          url: "/api/agents",
+          schema: { operationId: "createAgent" },
+        },
       } as unknown as FastifyRequest;
 
       await expect(authnz.handle(request, mockReply())).rejects.toThrow(
@@ -255,7 +259,7 @@ describe("authPlugin integration", () => {
         url: "/api/unknown",
         method: "GET",
         headers: {},
-        routeOptions: { schema: {} }, // No operationId
+        routeOptions: { url: "/api/unknown", schema: {} }, // No operationId
       } as unknown as FastifyRequest;
 
       await expect(authnz.handle(request, mockReply())).rejects.toThrow(
@@ -284,7 +288,10 @@ describe("authPlugin integration", () => {
         url: "/api/agents",
         method: "POST",
         headers: {},
-        routeOptions: { schema: { operationId: "createAgent" } },
+        routeOptions: {
+          url: "/api/agents",
+          schema: { operationId: "createAgent" },
+        },
       } as unknown as FastifyRequest;
 
       await authnz.handle(request, mockReply());
@@ -423,6 +430,156 @@ describe("authPlugin integration", () => {
       await expect(authnz.handle(request, mockReply())).rejects.toThrow(
         ApiError,
       );
+    });
+  });
+
+  describe("unmatched routes", () => {
+    async function makeApp() {
+      const app = createFastifyInstance();
+      await app.register(authPlugin);
+      app.get(
+        "/api/agents",
+        { schema: { operationId: "getAgents" } },
+        async () => ({ ok: true }),
+      );
+      // Registered, but absent from requiredEndpointPermissionsMap.
+      app.get(
+        "/api/unmapped",
+        { schema: { operationId: "unmappedRoute" } },
+        async () => ({ ok: true }),
+      );
+      return app;
+    }
+
+    async function signIn({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }: {
+      makeOrganization: () => Promise<{ id: string }>;
+      makeUser: () => Promise<{ id: string }>;
+      makeMember: (userId: string, organizationId: string) => Promise<unknown>;
+    }) {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      mockBetterAuth.api.getSession.mockResolvedValue(
+        sessionResult({
+          user: { id: user.id },
+          session: { activeOrganizationId: org.id },
+        }),
+      );
+    }
+
+    test("a signed-in request to a path no route matches gets 404", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      await signIn({ makeOrganization, makeUser, makeMember });
+      const app = await makeApp();
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: "/api/organization/members",
+        });
+        expect(response.statusCode, response.body).toBe(404);
+        expect(response.json()).toMatchObject({
+          statusCode: 404,
+          error: "Not Found",
+        });
+      } finally {
+        await app.close();
+      }
+    });
+
+    test("the same path without a session still gets 401", async () => {
+      mockBetterAuth.api.getSession.mockResolvedValue(sessionResult(null));
+      const app = await makeApp();
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: "/api/organization/members",
+        });
+        expect(response.statusCode, response.body).toBe(401);
+      } finally {
+        await app.close();
+      }
+    });
+
+    test("a registered route missing from the permissions map still gets 403", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      await signIn({ makeOrganization, makeUser, makeMember });
+      mockHasPermission.mockResolvedValue({ success: true, error: null });
+      const app = await makeApp();
+      try {
+        const unmapped = await app.inject({
+          method: "GET",
+          url: "/api/unmapped",
+        });
+        expect(unmapped.statusCode, unmapped.body).toBe(403);
+        expect(unmapped.body).toContain("not registered for access control");
+        const mapped = await app.inject({ method: "GET", url: "/api/agents" });
+        expect(mapped.statusCode, mapped.body).toBe(200);
+      } finally {
+        await app.close();
+      }
+    });
+  });
+
+  describe("request-local session reads", () => {
+    test.for([
+      "GET",
+      "HEAD",
+      "POST",
+    ] as const)("%s preserves refreshed cookies and reads again on the next request", async (method, {
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      mockBetterAuth.api.getSession.mockResolvedValue({
+        response: {
+          user: { id: user.id },
+          session: { activeOrganizationId: org.id },
+        },
+        headers: new Headers({
+          "set-cookie": "session_data=refreshed; HttpOnly",
+        }),
+      } as unknown as Session);
+      mockHasPermission.mockResolvedValue({ success: true, error: null });
+      const app = createFastifyInstance();
+      await app.register(authPlugin);
+      app.route({
+        method,
+        url: "/api/agents",
+        schema: { operationId: "getAgents" },
+        handler: async (request) => ({ userId: request.user.id }),
+      });
+      try {
+        mockBetterAuth.api.getSession.mockClear();
+        const response = await app.inject({ method, url: "/api/agents" });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.headers["set-cookie"]).toContain(
+          "session_data=refreshed; HttpOnly",
+        );
+        expect(mockBetterAuth.api.getSession).toHaveBeenCalledTimes(
+          method === "POST" ? 2 : 1,
+        );
+        mockBetterAuth.api.getSession.mockResolvedValue(sessionResult(null));
+        const revoked = await app.inject({ method, url: "/api/agents" });
+        expect(revoked.statusCode, revoked.body).toBe(401);
+        expect(mockBetterAuth.api.getSession).toHaveBeenCalledTimes(
+          method === "POST" ? 3 : 2,
+        );
+      } finally {
+        await app.close();
+      }
     });
   });
 

@@ -1,5 +1,10 @@
 import { z } from "zod";
+import { type ClientMark, KIMI_MARK, PI_MARK } from "../client-mark";
 import type { SupportedProvider } from "../model-constants";
+import {
+  OPENCODE_FAMILY_CLIENTS,
+  openCodeFamilyClientForUserAgent,
+} from "../opencode-family";
 
 /**
  * Client-app attribution for an interaction lives in
@@ -38,6 +43,9 @@ export const CURSOR_CLIENT_LABEL = "Cursor";
 
 /** Human-readable label for the OpenCode client id in the UI. */
 export const OPENCODE_CLIENT_LABEL = "OpenCode";
+
+/** Human-readable label for the Kilo client id in the UI. */
+export const KILO_CLIENT_LABEL = "Kilo Code";
 
 /**
  * `external_agent_id` values for Claude clients:
@@ -88,6 +96,20 @@ export const CURSOR_CLIENT_ID = "cursor";
 export const OPENCODE_CLIENT_ID = "opencode";
 
 /**
+ * `external_agent_id` value for Kilo Code's CLI, an OpenCode fork. The
+ * Connect page's proxy snippet sends it in a provider request header; the
+ * Kilo User-Agent ({@link isKiloUserAgent}) is the fallback.
+ */
+export const KILO_CLIENT_ID = "kilo";
+
+/**
+ * `external_agent_id` value for Moonshot's Kimi Code CLI. Its connection setup
+ * sends it in a provider request header; the Kimi Code User-Agent
+ * ({@link isKimiCodeUserAgent}) is the fallback.
+ */
+export const KIMI_CODE_CLIENT_ID = "kimi-code";
+
+/**
  * First-party Codex originators. Codex stamps its client identity on every
  * request in the `originator` header (default `codex_cli_rs`, overridable via
  * `CODEX_INTERNAL_ORIGINATOR_OVERRIDE`) and repeats it as the leading token of
@@ -101,6 +123,7 @@ const CODEX_FIRST_PARTY_ORIGINATORS = new Set<string>([
   "codex_exec",
   "codex-tui",
   "codex_vscode",
+  "codex_work_desktop",
 ]);
 
 /**
@@ -156,9 +179,44 @@ export function isCursorUserAgent(
 export function isOpenCodeUserAgent(
   userAgent: string | null | undefined,
 ): boolean {
+  return openCodeFamilyClientForUserAgent(userAgent)?.id === "opencode";
+}
+
+/**
+ * Whether a User-Agent denotes Kilo Code's CLI. Kilo leads its User-Agent
+ * with `kilo/<channel>/<version>/<surface>`, e.g.
+ * `kilo/latest/7.8.8/cli ai-sdk/provider-utils/4.0.46 runtime/bun/1.4.2`.
+ * Its OpenAI subscription login sends OpenCode's identity instead.
+ */
+export function isKiloUserAgent(userAgent: string | null | undefined): boolean {
+  return openCodeFamilyClientForUserAgent(userAgent)?.id === "kilo";
+}
+
+/**
+ * The headers Kimi Code 2.3.3 sends with every model request to identify the
+ * client and the device. The LLM proxy relays exactly these to the Kimi Code
+ * API; any other header a request carries stays with the proxy.
+ */
+export const KIMI_CODE_CLIENT_HEADERS = [
+  "user-agent",
+  "x-msh-platform",
+  "x-msh-version",
+  "x-msh-device-name",
+  "x-msh-device-model",
+  "x-msh-os-version",
+  "x-msh-device-id",
+] as const;
+
+/**
+ * Whether a User-Agent denotes the Kimi Code CLI. Kimi Code sends
+ * `kimi-code-cli/<version>` on every model request, whatever the provider type.
+ */
+export function isKimiCodeUserAgent(
+  userAgent: string | null | undefined,
+): boolean {
   return (
     !!userAgent &&
-    userAgent.split("/", 1)[0]?.trim().toLowerCase() === "opencode"
+    userAgent.split("/", 1)[0]?.trim().toLowerCase() === "kimi-code-cli"
   );
 }
 
@@ -217,6 +275,13 @@ export function isClaudeClientAgentId(
     return false;
   }
   return CLAUDE_CLIENT_AGENT_ID_SET.has(externalAgentId.trim().toLowerCase());
+}
+
+/** Whether an `external_agent_id` value denotes Claude Desktop. */
+export function isClaudeDesktopClientAgentId(
+  externalAgentId: string | null | undefined,
+): boolean {
+  return externalAgentId?.trim().toLowerCase() === CLAUDE_DESKTOP_CLIENT_ID;
 }
 
 /**
@@ -298,6 +363,21 @@ export function isOpenCodeClientAgentId(
   return OPENCODE_CLIENT_AGENT_ID_SET.has(externalAgentId.trim().toLowerCase());
 }
 
+/** `external_agent_id` values for Kilo Code, a set like the other families. */
+export const KILO_CLIENT_AGENT_IDS = [KILO_CLIENT_ID] as const;
+
+const KILO_CLIENT_AGENT_ID_SET = new Set<string>(KILO_CLIENT_AGENT_IDS);
+
+/** Whether an `external_agent_id` value denotes Kilo Code. */
+export function isKiloClientAgentId(
+  externalAgentId: string | null | undefined,
+): boolean {
+  if (!externalAgentId) {
+    return false;
+  }
+  return KILO_CLIENT_AGENT_ID_SET.has(externalAgentId.trim().toLowerCase());
+}
+
 /**
  * Values used by the `/llm/logs` "Client" filter (URL/query key). Distinct from
  * the stored ids above: the backend expands each to its client's agent-id set
@@ -308,6 +388,7 @@ export const CODEX_CLIENT_FILTER = "codex";
 export const COPILOT_CLI_CLIENT_FILTER = "copilot-cli";
 export const CURSOR_CLIENT_FILTER = "cursor";
 export const OPENCODE_CLIENT_FILTER = "opencode";
+export const KILO_CLIENT_FILTER = "kilo";
 
 export const ClientFilterSchema = z.enum([
   CLAUDE_CLIENT_FILTER,
@@ -317,6 +398,9 @@ export const ClientFilterSchema = z.enum([
   COPILOT_CLI_CLIENT_FILTER,
   CURSOR_CLIENT_FILTER,
   OPENCODE_CLIENT_FILTER,
+  KILO_CLIENT_FILTER,
+  "pi",
+  KIMI_CODE_CLIENT_ID,
 ]);
 
 export type ClientFilter = z.infer<typeof ClientFilterSchema>;
@@ -336,6 +420,12 @@ export interface ClientFamily {
    * `provider` logo.
    */
   icon?: string;
+  /**
+   * The family's own mark on its brand tile (OpenCode, Kilo Code), drawn as
+   * the Connect page draws it. When set, the UI renders it instead of `icon`
+   * or the `provider` logo.
+   */
+  mark?: ClientMark;
   agentIds: ReadonlyArray<string>;
   isClientAgentId: (externalAgentId: string | null | undefined) => boolean;
 }
@@ -381,14 +471,34 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
     agentIds: CODEX_CLIENT_AGENT_IDS,
     isClientAgentId: isCodexClientAgentId,
   },
+  // OpenCode and Kilo Code route to many providers; their own mark takes
+  // precedence. The filter is also the Connect tile id, so proxy traffic and
+  // sign-ins merge into one connected agent.
+  ...OPENCODE_FAMILY_CLIENTS.map((client) => ({
+    filter: client.id,
+    label: client.label,
+    provider: "openai" as const,
+    mark: client.mark,
+    agentIds: [client.id] as readonly string[],
+    isClientAgentId: (externalAgentId: string | null | undefined) =>
+      externalAgentId?.trim().toLowerCase() === client.id,
+  })),
   {
-    filter: OPENCODE_CLIENT_FILTER,
-    label: OPENCODE_CLIENT_LABEL,
-    // OpenCode routes to many providers; its own mark takes precedence.
+    filter: "pi",
+    label: "Pi",
+    // Multi-provider coding client; its own mark always takes precedence.
     provider: "openai",
-    icon: "/icons/opencode.png",
-    agentIds: OPENCODE_CLIENT_AGENT_IDS,
-    isClientAgentId: isOpenCodeClientAgentId,
+    mark: PI_MARK,
+    agentIds: ["pi"],
+    isClientAgentId: (id) => id?.trim().toLowerCase() === "pi",
+  },
+  {
+    filter: KIMI_CODE_CLIENT_ID,
+    label: "Kimi Code",
+    provider: "kimi-code",
+    mark: KIMI_MARK,
+    agentIds: [KIMI_CODE_CLIENT_ID],
+    isClientAgentId: (id) => id?.trim().toLowerCase() === KIMI_CODE_CLIENT_ID,
   },
   {
     filter: COPILOT_CLI_CLIENT_FILTER,
@@ -436,9 +546,11 @@ export const CLIENT_FILTER_OPTIONS: ReadonlyArray<{
   label: string;
   provider: SupportedProvider;
   icon?: string;
-}> = CLIENT_FAMILIES.map(({ filter, label, provider, icon }) => ({
+  mark?: ClientMark;
+}> = CLIENT_FAMILIES.map(({ filter, label, provider, icon, mark }) => ({
   value: filter,
   label,
   provider,
   icon,
+  mark,
 }));

@@ -229,12 +229,12 @@ export type AppaClientAdapter = {
   /** The teammates the history's launch receipts name, by name. */
   teammateLaunches?(requestBody: unknown): Map<string, AppaTeammateLaunch>;
   /**
-   * The teammate a durable launch receipt names. Used when compaction has
+   * The child a durable launch receipt names. Used when compaction has
    * dropped the receipt from the request but the runtime still retained it.
    */
   launchIdentity?(
     text: string,
-  ): { name: string; childNativeId: string } | undefined;
+  ): { name?: string; childNativeId: string } | undefined;
   /** The name a spawn call gives the teammate it starts, if it names one. */
   teammateName?(call: { name: string; arguments: unknown }): string | undefined;
   /**

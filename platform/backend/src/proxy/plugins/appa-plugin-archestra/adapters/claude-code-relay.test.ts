@@ -845,4 +845,28 @@ describe("the result of a message call", () => {
     expect(admitted.withheld).toBe(true);
     expect(JSON.stringify(admitted.content)).not.toContain("release branch");
   });
+
+  test("admits a void-return subagent hand-back in a system message with trailing total_tokens", () => {
+    const systemText = [
+      "Another Claude session sent a message while you were working:",
+      '<agent-message from="researcher">',
+      '[Subagent hand-back] Agent "Fetch welcome page" (a607d7df1a606039e) finished while you were working. The report follows:',
+      "  [harness: subagent completed]",
+      "",
+      "  ▄█▄▄▄█▄  finished subagent DWN-5BHD",
+      "</agent-message>",
+      AGENT_CLOSING,
+      "",
+      "<total_tokens>14894774 tokens left</total_tokens>",
+    ].join("\n");
+    const request = {
+      messages: [{ role: "system", content: systemText }],
+    };
+    const arrivals = claudeCodeRelayArrivals(request);
+    expect(arrivals).toHaveLength(1);
+    expect(arrivals[0]?.harnessOnly).toBe(true);
+    expect(arrivals[0]?.recorded?.([])).toBe(true);
+    expect(arrivals[0]?.admit([])).toEqual({ withheld: false });
+    expect(request.messages[0]?.content).toBe(systemText);
+  });
 });

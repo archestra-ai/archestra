@@ -487,7 +487,9 @@ class AgentRunModel {
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
-        initiatorName: schema.usersTable.name,
+        initiatorName: sql<
+          string | null
+        >`coalesce(${schema.usersTable.name}, ${schema.serviceAccountsTable.name})`,
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -515,6 +517,17 @@ class AgentRunModel {
       .leftJoin(
         schema.usersTable,
         eq(schema.agentRunsTable.actorUserId, schema.usersTable.id),
+      )
+      .leftJoin(
+        schema.serviceAccountsTable,
+        and(
+          eq(schema.agentRunsTable.actorKind, "serviceAccount"),
+          sql`${schema.agentRunsTable.actorId} = ${schema.serviceAccountsTable.id}::text`,
+          eq(
+            schema.agentRunsTable.organizationId,
+            schema.serviceAccountsTable.organizationId,
+          ),
+        ),
       )
       .where(
         and(

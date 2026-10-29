@@ -24988,6 +24988,7 @@ export type GetAgentRunsResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         initiatorName: string | null;
+        canAttach?: boolean;
         shareVisibility: 'organization' | 'team' | 'user' | null;
         /**
          * Share recipient teams; null unless the viewer owns the run
@@ -25463,6 +25464,7 @@ export type GetMyAgentRunResponses = {
             } | null;
         } | null;
         viewerRole: 'owner' | 'shared';
+        canAttach?: boolean;
         startupProgress?: {
             phase: 'queued' | 'scheduling' | 'pulling' | 'starting' | 'attaching';
             message: string;
@@ -127812,6 +127814,7 @@ export type GetProjectRunsResponses = {
             } | null;
         } | null;
         viewerRole: 'owner' | 'shared';
+        canAttach?: boolean;
         startupProgress?: {
             phase: 'queued' | 'scheduling' | 'pulling' | 'starting' | 'attaching';
             message: string;

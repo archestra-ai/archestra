@@ -22,6 +22,7 @@ import {
 } from "vitest";
 import type { AgentRunListItem } from "@/lib/agent-runtime.query";
 import { useSession } from "@/lib/auth/auth.query";
+import { copyToClipboard } from "@/lib/clipboard";
 
 const state = { runs: [] as AgentRunListItem[] };
 const server = setupServer(
@@ -33,6 +34,9 @@ let queryClient: QueryClient;
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
+vi.mock("@/lib/clipboard", () => ({
+  copyToClipboard: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/components/agent-run-state", () => ({
   AgentRunState: () => <span>Run state</span>,
@@ -42,7 +46,8 @@ vi.mock("@/components/agent-run-terminal", () => ({
   AgentRunTerminal: () => <div>Live terminal</div>,
 }));
 
-vi.mock("@/components/agent-run-logs", () => ({
+vi.mock("@/components/agent-run-logs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/agent-run-logs")>()),
   AgentRunLogs: () => <div>Retained output</div>,
 }));
 
@@ -205,8 +210,8 @@ describe("AgentRuns", () => {
     fireEvent.click(screen.getByRole("button", { name: /Shared review/ }));
     expect(screen.getByText("by Sam Chen")).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: "More run actions" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "More run actions" }),
+    ).toBeVisible();
     expect(screen.getByText("Retained output")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
     expect(
@@ -272,6 +277,78 @@ describe("AgentRuns", () => {
       target: { value: "nothing like this" },
     });
     expect(screen.getByText("No runs match these filters.")).toBeVisible();
+  });
+
+  it("copies the exact selected run ID and follows selection changes", async () => {
+    state.runs.push({
+      ...createRun(null),
+      id: "run-2",
+      taskId: "22345678-abcd-4000-8000-123456789abc",
+      title: "Second run",
+    });
+    renderRuns();
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", {
+        name: `Copy run ID ${state.runs[0].taskId}`,
+      }),
+    );
+    expect(copyToClipboard).toHaveBeenLastCalledWith(state.runs[0].taskId);
+    await user.click(screen.getByRole("button", { name: /Second run/ }));
+    await user.click(
+      screen.getByRole("button", {
+        name: `Copy run ID ${state.runs[1].taskId}`,
+      }),
+    );
+    expect(copyToClipboard).toHaveBeenLastCalledWith(state.runs[1].taskId);
+  });
+
+  it("lets a service-account manager connect without showing ownership actions", async () => {
+    state.runs = [
+      {
+        ...createRun(null),
+        actorKind: "serviceAccount",
+        actorId: "account-1",
+        actorUserId: null,
+        initiatorName: "Build automation",
+        canAttach: true,
+      },
+    ];
+    renderRuns();
+    expect(await screen.findByText("Live terminal")).toBeVisible();
+    expect(screen.getByText("by Build automation")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "More run actions" }),
+    ).toBeNull();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Run history" }));
+    expect(screen.getByText("Retained output")).toBeVisible();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "More run actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Download logs" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("menuitem", { name: "Share" })).toBeNull();
+  });
+
+  it("keeps a service-account run read-only when terminal permission is absent", async () => {
+    state.runs = [
+      {
+        ...createRun(null),
+        actorKind: "serviceAccount",
+        actorId: "account-1",
+        actorUserId: null,
+        initiatorName: null,
+        canAttach: false,
+      },
+    ];
+    renderRuns();
+    expect(await screen.findByText("by a service account")).toBeVisible();
+    expect(screen.getByText("Retained output")).toBeVisible();
+    expect(screen.queryByText("Live terminal")).toBeNull();
   });
 
   it("links an empty run history to a new Chat with this Agent selected", async () => {

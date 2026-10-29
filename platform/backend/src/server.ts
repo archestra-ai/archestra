@@ -52,7 +52,9 @@ import { cacheManager } from "@/cache-manager";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { registerMcpClientHibernationInvalidation } from "@/clients/mcp-client";
+import mcpClient, {
+  registerMcpClientHibernationInvalidation,
+} from "@/clients/mcp-client";
 // SPDX-SnippetEnd
 import config, {
   resolveAllowedOrigins,
@@ -1468,6 +1470,8 @@ function registerWebServerShutdown(
       }
 
       await drainBackgroundWork();
+      await mcpClient.disconnectAll();
+      await drainBackgroundWork();
       cacheManager.shutdown();
       await flushShutdownTelemetry();
       clearTimeout(shutdownDeadline);
@@ -1661,6 +1665,8 @@ const startWorker = async () => {
         // SPDX-SnippetEnd
         await posthogErrorTrackingService.shutdown();
         await skillSandboxRuntimeService.shutdown();
+        await drainBackgroundWork();
+        await mcpClient.disconnectAll();
         await drainBackgroundWork();
         cacheManager.shutdown();
         await flushShutdownTelemetry();

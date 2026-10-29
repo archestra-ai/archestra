@@ -361,7 +361,7 @@ export default function ApiKeysPage() {
     try {
       await deleteMutation.mutateAsync({
         id: selectedApiKey.id,
-        subscription: deletingSubscription,
+        kind: deletingSubscription ? "subscription" : "key",
       });
       setIsDeleteDialogOpen(false);
       setSelectedApiKey(null);

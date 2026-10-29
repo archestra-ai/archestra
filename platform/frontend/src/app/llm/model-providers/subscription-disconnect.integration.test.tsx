@@ -375,7 +375,166 @@ describe("member subscription disconnect", () => {
     expect(await card.findByRole("button", { name: "Connect" })).toBeEnabled();
     expect(attempts).toBe(2);
   });
+
+  it("says a subscription removed elsewhere was already disconnected", async () => {
+    const user = userEvent.setup();
+    const key = makeLlmProviderApiKey({
+      provider: "github-copilot",
+      subscriptionKind: "github-copilot",
+      userId: memberId,
+    });
+    let connected = true;
+    server.use(
+      http.get("/api/llm-provider-api-keys", () =>
+        HttpResponse.json(connected ? [key] : []),
+      ),
+      http.delete("/api/llm-provider-api-keys/:id", () => {
+        connected = false;
+        return notFound();
+      }),
+    );
+    renderPage();
+    const card = within(
+      await screen.findByTestId("subscription-provider-card-github-copilot"),
+    );
+    await user.click(await card.findByRole("button", { name: "Disconnect" }));
+    await confirmDisconnect(user);
+    expect(await card.findByRole("button", { name: "Connect" })).toBeEnabled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(toast.info).toHaveBeenCalledWith(
+      "This subscription was already disconnected",
+    );
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  // The first request failed after it had already removed the subscription,
+  // so the retry finds nothing. The card must follow the server without a
+  // reload, and the retry must not report a missing API key.
+  it("follows a disconnect that failed after removing the subscription", async () => {
+    const user = userEvent.setup();
+    const key = makeLlmProviderApiKey({
+      provider: "github-copilot",
+      subscriptionKind: "github-copilot",
+      userId: memberId,
+    });
+    let connected = true;
+    server.use(
+      http.get("/api/llm-provider-api-keys", () =>
+        HttpResponse.json(connected ? [key] : []),
+      ),
+      http.delete("/api/llm-provider-api-keys/:id", () => {
+        if (!connected) return notFound();
+        connected = false;
+        return HttpResponse.json(
+          {
+            error: {
+              message: "Database query timed out.",
+              type: "api_service_unavailable_error",
+            },
+          },
+          { status: 503 },
+        );
+      }),
+    );
+    renderPage();
+    const card = within(
+      await screen.findByTestId("subscription-provider-card-github-copilot"),
+    );
+    await user.click(await card.findByRole("button", { name: "Disconnect" }));
+    await confirmDisconnect(user);
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    // The open dialog hides the page from the accessibility tree.
+    expect(
+      await card.findByRole("button", { name: "Connect", hidden: true }),
+    ).toBeInTheDocument();
+
+    await confirmDisconnect(user);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(toast.info).toHaveBeenCalledWith(
+      "This subscription was already disconnected",
+    );
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(card.getByRole("button", { name: "Connect" })).toBeEnabled();
+  });
 });
+
+describe("API key delete", () => {
+  it("says a key removed elsewhere was already deleted and drops its row", async () => {
+    const user = userEvent.setup();
+    const key = makeLlmProviderApiKey({
+      id: "shared-key",
+      name: "Shared API key",
+      scope: "org",
+      userId: null,
+    });
+    let present = true;
+    server.use(
+      http.get("/api/user/permissions", () =>
+        HttpResponse.json({
+          ...permissions,
+          llmProviderApiKey: ["read", "delete"],
+        }),
+      ),
+      http.get("/api/resource-permissions", () =>
+        HttpResponse.json([
+          { resource: "llmProviderApiKey", action: "delete", scope: "*" },
+        ]),
+      ),
+      http.get("/api/llm-provider-api-keys", () =>
+        HttpResponse.json(present ? [key] : []),
+      ),
+      http.delete("/api/llm-provider-api-keys/:id", () => {
+        present = false;
+        return notFound();
+      }),
+    );
+    renderPage();
+    await user.click(
+      await screen.findByRole(
+        "button",
+        { name: "Delete Shared API key" },
+        { timeout: 5000 },
+      ),
+    );
+    const confirm = within(screen.getByRole("dialog")).getByRole("button", {
+      name: "Delete API Key",
+    });
+    await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
+    await user.click(confirm);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(toast.info).toHaveBeenCalledWith("This API key was already deleted");
+    expect(toast.error).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Delete Shared API key" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+});
+
+async function confirmDisconnect(user: ReturnType<typeof userEvent.setup>) {
+  const confirm = within(screen.getByRole("dialog")).getByRole("button", {
+    name: "Disconnect",
+  });
+  await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
+  await user.click(confirm);
+}
+
+function notFound() {
+  return HttpResponse.json(
+    {
+      error: {
+        message: "LLM provider API key not found",
+        type: "api_not_found_error",
+      },
+    },
+    { status: 404 },
+  );
+}
 
 function renderPage() {
   render(

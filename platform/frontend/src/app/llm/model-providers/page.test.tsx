@@ -778,7 +778,7 @@ describe("ApiKeysPage", () => {
     expect(mockDeleteApiKey).toHaveBeenCalledTimes(1);
     expect(mockDeleteApiKey).toHaveBeenCalledWith({
       id: "provider-key-1",
-      subscription: false,
+      kind: "key",
     });
   });
 

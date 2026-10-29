@@ -32,7 +32,7 @@ Your sign-in belongs only to you and is never shared across your organization. I
 
 Share your organization's Copilot Business or Enterprise models across teams, agents, and CI pipelines without purchasing per-user seats.
 
-To connect a plan, your Archestra account needs permission to create provider keys and credentials ([`llmProviderApiKey:create`](/docs/reference/permissions#llmProviderApiKey:create) and [`credential:create`](/docs/reference/permissions#credential:create)).
+To connect a plan, your Archestra account needs permission to create provider keys and credentials ([`llmProviderApiKey:create`](/docs/reference/permissions#llmProviderApiKey:create) and [`credential:create`](/docs/reference/permissions#credential:create)). On GitHub, your organization must have [App access to Copilot](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-for-organization/manage-app-copilot-access) enabled.
 
 <span id="connect-an-enterprise-plan"></span>
 

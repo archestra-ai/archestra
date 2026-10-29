@@ -393,15 +393,18 @@ describe("LimitsPage", () => {
     expect(
       screen.getByRole("combobox", { name: "Limit scope" }),
     ).toHaveTextContent("Team");
-    fireEvent.keyDown(screen.getByRole("combobox", { name: "Limit scope" }), {
-      key: "Enter",
-    });
+    fireEvent.click(screen.getByRole("combobox", { name: "Limit scope" }));
+    const scopes = screen.getByRole("listbox", { name: "Limit scope" });
     expect(
-      screen.queryByText("Organization", { exact: true }),
-    ).not.toBeInTheDocument();
+      within(scopes).getByRole("option", { name: /Organization/ }),
+    ).toBeDisabled();
     expect(
-      screen.queryByText("Virtual Key", { exact: true }),
-    ).not.toBeInTheDocument();
+      within(scopes).getByRole("option", { name: /Virtual Key/ }),
+    ).toBeDisabled();
+    expect(
+      within(scopes).getByRole("option", { name: /Organization/ }),
+    ).toHaveTextContent("Requires organization-wide Limits permission.");
+    expect(within(scopes).getByRole("option", { name: /^Team/ })).toBeEnabled();
     fireEvent.keyDown(screen.getByRole("combobox", { name: "Limit scope" }), {
       key: "Escape",
     });

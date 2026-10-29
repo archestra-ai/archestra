@@ -1274,7 +1274,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
   },
 
-  // Team membership & external-group mappings live in join tables the team
+  // Team membership & Team Sync group links live in join tables the team
   // snapshot reflects; the parent team survives member/mapping removal, so pin
   // team.updated on both the POST (add) and the per-child DELETE.
   "/api/teams/:id/members": {

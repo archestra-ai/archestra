@@ -12721,7 +12721,7 @@ export const getTeamLabelValues = <ThrowOnError extends boolean = false>(options
 export const getTeamExternalGroups = <ThrowOnError extends boolean = false>(options: Options<GetTeamExternalGroupsData, ThrowOnError>) => (options.client ?? client).get<GetTeamExternalGroupsResponses, GetTeamExternalGroupsErrors, ThrowOnError>({ url: '/api/teams/{id}/external-groups', ...options });
 
 /**
- * Add an external group mapping to a team for SSO team sync
+ * Link an identity provider group to a team for Team Sync
  *
  * Authentication:
  *
@@ -12741,7 +12741,7 @@ export const addTeamExternalGroup = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Remove an external group mapping from a team for SSO team sync
+ * Unlink an identity provider group from a team's Team Sync
  *
  * Authentication:
  *

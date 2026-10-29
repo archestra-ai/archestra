@@ -136319,6 +136319,10 @@ export type GetTeamMembersPageData = {
          * Return only these users (comma-separated, at most 100), to check which of them are members. With search, a user must match both.
          */
         userIds?: Array<string>;
+        /**
+         * Return only members with this team role.
+         */
+        role?: 'admin' | 'member';
     };
     url: '/api/teams/{id}/members/page';
 };
@@ -136863,6 +136867,8 @@ export type GetTeamExternalGroupsResponses = {
         id: string;
         teamId: string;
         groupIdentifier: string;
+        identityProviderId: string | null;
+        role: 'admin' | 'member';
         createdAt: string;
     }>;
 };
@@ -136872,6 +136878,14 @@ export type GetTeamExternalGroupsResponse = GetTeamExternalGroupsResponses[keyof
 export type AddTeamExternalGroupData = {
     body: {
         groupIdentifier: string;
+        /**
+         * Match the group only for sign-ins through this identity provider. Omit to match it from any provider.
+         */
+        identityProviderId?: string | null;
+        /**
+         * The team role members of this group receive.
+         */
+        role?: 'admin' | 'member';
     };
     path: {
         id: string;
@@ -136956,6 +136970,8 @@ export type AddTeamExternalGroupResponses = {
         id: string;
         teamId: string;
         groupIdentifier: string;
+        identityProviderId: string | null;
+        role: 'admin' | 'member';
         createdAt: string;
     };
 };

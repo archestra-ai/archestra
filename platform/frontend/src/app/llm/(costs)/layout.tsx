@@ -104,7 +104,7 @@ export default function CostsLayout({
             config.description
           )
         }
-        tabs={tabs}
+        tabs={tabs.length > 1 ? tabs : []}
         actionButton={actionButton}
       >
         {children}

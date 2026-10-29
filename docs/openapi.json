@@ -528737,6 +528737,19 @@
           },
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "member"
+              ]
+            },
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "description": "Return only members with this team role."
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "path",
@@ -530277,6 +530290,17 @@
                       "groupIdentifier": {
                         "type": "string"
                       },
+                      "identityProviderId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "admin",
+                          "member"
+                        ]
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -530286,6 +530310,8 @@
                       "id",
                       "teamId",
                       "groupIdentifier",
+                      "identityProviderId",
+                      "role",
                       "createdAt"
                     ],
                     "additionalProperties": false
@@ -530539,7 +530565,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Add an external group mapping to a team for SSO team sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
+        "description": "Link an identity provider group to a team for Team Sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "requestBody": {
           "required": true,
           "content": {
@@ -530550,6 +530576,21 @@
                   "groupIdentifier": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "identityProviderId": {
+                    "description": "Match the group only for sign-ins through this identity provider. Omit to match it from any provider.",
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "default": "member",
+                    "description": "The team role members of this group receive.",
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "member"
+                    ]
                   }
                 },
                 "required": [
@@ -530586,6 +530627,17 @@
                     "groupIdentifier": {
                       "type": "string"
                     },
+                    "identityProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "member"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -530595,6 +530647,8 @@
                     "id",
                     "teamId",
                     "groupIdentifier",
+                    "identityProviderId",
+                    "role",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -530849,7 +530903,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Remove an external group mapping from a team for SSO team sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
+        "description": "Unlink an identity provider group from a team's Team Sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {

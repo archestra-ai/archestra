@@ -1353,7 +1353,7 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Returns only the CALLER'S own decoded token claims (never another user's,
   // never provider configuration), so team admins can find their group value
-  // while configuring external group sync.
+  // while linking groups in Team Sync.
   [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
     team: ["read"],
   },

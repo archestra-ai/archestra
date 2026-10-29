@@ -1156,43 +1156,39 @@ export default function LimitsPage() {
                     disabled={Boolean(editingLimit)}
                     items={ENTITY_TYPE_ITEMS.filter(
                       (item) =>
-                        Boolean(editingLimit) ||
-                        access.globalCreate ||
-                        item.value === "team",
-                    )
-                      .filter(
-                        (item) =>
-                          item.value === formState.entityType ||
-                          (formState.limitType === "token_cost" &&
-                            formState.cleanupInterval !== "minute") ||
-                          ["organization", "team", "virtual_key"].includes(
-                            item.value,
-                          ),
-                      )
-                      .map((item) => ({
-                        value: item.value,
-                        label: item.label,
-                        searchText: `${item.label} ${item.description}`,
-                        content: (
-                          <span className="flex flex-col gap-0.5">
-                            <span className="flex items-center gap-2">
-                              {item.icon}
-                              {item.label}
-                            </span>
-                            <span className="pl-6 text-xs text-muted-foreground">
-                              {formState.limitType === "token_cost"
-                                ? item.description
-                                : "Shared allowance across matching requests."}
-                            </span>
-                          </span>
+                        item.value === formState.entityType ||
+                        (formState.limitType === "token_cost" &&
+                          formState.cleanupInterval !== "minute") ||
+                        ["organization", "team", "virtual_key"].includes(
+                          item.value,
                         ),
-                        selectedContent: (
+                    ).map((item) => ({
+                      value: item.value,
+                      label: item.label,
+                      disabled: !access.globalCreate && item.value !== "team",
+                      searchText: `${item.label} ${item.description}`,
+                      content: (
+                        <span className="flex flex-col gap-0.5">
                           <span className="flex items-center gap-2">
                             {item.icon}
                             {item.label}
                           </span>
-                        ),
-                      }))}
+                          <span className="pl-6 text-xs text-muted-foreground">
+                            {!access.globalCreate && item.value !== "team"
+                              ? "Requires organization-wide Limits permission."
+                              : formState.limitType === "token_cost"
+                                ? item.description
+                                : "Shared allowance across matching requests."}
+                          </span>
+                        </span>
+                      ),
+                      selectedContent: (
+                        <span className="flex items-center gap-2">
+                          {item.icon}
+                          {item.label}
+                        </span>
+                      ),
+                    }))}
                     className="w-full sm:flex-1"
                     showSearchIcon={false}
                   />

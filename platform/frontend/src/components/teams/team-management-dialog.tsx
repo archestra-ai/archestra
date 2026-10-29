@@ -14,7 +14,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { ChevronDown, Trash2, Users } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { ArrowRight, Search, Trash2, UserPlus, Users } from "lucide-react";
 import Link from "next/link";
 import {
   type ComponentType,
@@ -25,12 +26,15 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import { AdvancedSection } from "@/components/advanced-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,8 +49,10 @@ import {
 } from "@/components/ui/select";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { Textarea } from "@/components/ui/textarea";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { UserSearchableSelect } from "@/components/user-searchable-select";
+import {
+  UserSearchableMultiSelect,
+  type UserSelectOption,
+} from "@/components/user-searchable-multi-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
@@ -64,10 +70,11 @@ import { throwOnApiError } from "@/lib/utils/api";
 import { formatRoleName } from "@/lib/utils/role";
 import { cn } from "@/lib/utils/tailwind";
 import { EnterpriseLicenseRequired } from "../enterprise-license-required";
+import { TeamMemberRoleSelect } from "./team-member-role-select";
 
 type Team = archestraApiTypes.GetTeamResponses["200"];
 type TeamListItem = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
-type TeamDialogSection = "team" | "members" | "external-groups";
+type TeamDialogSection = "team" | "members" | "team-sync";
 type TeamMemberRole = typeof ADMIN_ROLE_NAME | typeof MEMBER_ROLE_NAME;
 
 const MEMBERS_PAGE_SIZE = 20;
@@ -79,10 +86,11 @@ const MEMBERS_PAGE_SIZE = 20;
  */
 type StagedMemberChange =
   | { type: "add"; role: TeamMemberRole; name?: string; email?: string }
-  | { type: "remove" }
+  // `role` is set when the removed member is an admin, for the admin count.
+  | { type: "remove"; role?: TeamMemberRole }
   | { type: "role"; role: TeamMemberRole };
 type StagedMemberChanges = Map<string, StagedMemberChange>;
-type TeamManagementExternalSyncSectionComponent = ComponentType<{
+type TeamSyncSectionComponent = ComponentType<{
   open: boolean;
   team: Team;
   readOnly?: boolean;
@@ -101,8 +109,8 @@ type TeamManagementDialogProps =
       team: Team;
       /**
        * View-only access for callers who can read identity-provider
-       * configuration but not manage the team: only the External Group Sync
-       * section is shown, without its mutation controls.
+       * configuration but not manage the team: only the Team Sync section is
+       * shown, without its mutation controls.
        */
       readOnly?: boolean;
     };
@@ -110,7 +118,7 @@ type TeamManagementDialogProps =
 const editNavItems = [
   { id: "team", label: "Team" },
   { id: "members", label: "Members" },
-  { id: "external-groups", label: "External Group Sync" },
+  { id: "team-sync", label: "Team Sync" },
 ] satisfies Array<{ id: TeamDialogSection; label: string }>;
 
 const createNavItems = [{ id: "team", label: "Team" }] satisfies Array<{
@@ -141,8 +149,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     new Map(),
   );
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const TeamManagementExternalSyncSection =
-    useTeamManagementExternalSyncSection();
+  const TeamSyncSection = useTeamSyncSection();
 
   const { data: canUpdateTeams = false } = useHasPermissions({
     team: ["update"],
@@ -152,32 +159,39 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     enabled: open && (mode === "create" || canUpdateTeams),
   });
 
+  const syncAvailable = config.enterpriseFeatures.core;
   const navItems = useMemo(() => {
+    const syncItem = {
+      ...editNavItems[2],
+      disabled: !syncAvailable,
+      status: !syncAvailable ? "Enterprise license required" : undefined,
+    };
+    const items = [editNavItems[0], editNavItems[1], syncItem];
     if (mode === "create") {
       return team ? [editNavItems[0], editNavItems[1]] : createNavItems;
     }
 
     if (readOnly) {
-      return [editNavItems[2]];
+      return [syncItem];
     }
 
     if (!canUpdateTeams) {
-      return editNavItems;
+      return items;
     }
 
-    return editNavItems;
-  }, [canUpdateTeams, mode, readOnly, team]);
+    return items;
+  }, [canUpdateTeams, mode, readOnly, team, syncAvailable]);
   const title =
     mode === "create" && !team
       ? "Create Team"
       : readOnly
-        ? "External Group Sync"
+        ? "Team Sync"
         : "Edit Team";
   const canEditDetails = mode === "create" || canUpdateTeams;
 
   useEffect(() => {
     if (!open) return;
-    setActiveSection(readOnly ? "external-groups" : "team");
+    setActiveSection(readOnly ? "team-sync" : "team");
     setMemberChanges(new Map());
     setAssignmentBlocked(null);
     if (mode === "create") {
@@ -201,12 +215,12 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     const canShowActiveSection =
       (activeSection === "team" && !readOnly) ||
       (activeSection === "members" && !!team && !readOnly) ||
-      activeSection === "external-groups";
+      (activeSection === "team-sync" && syncAvailable);
 
     if (!canShowActiveSection) {
-      setActiveSection(readOnly ? "external-groups" : "team");
+      setActiveSection(readOnly ? "team-sync" : "team");
     }
-  }, [activeSection, readOnly, team]);
+  }, [activeSection, readOnly, team, syncAvailable]);
 
   const saveTeam = useMutation({
     mutationFn: async () => {
@@ -356,7 +370,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      description="Manage team details, members, and external group sync."
+      description="Manage team details, members, and Team Sync."
       sidebarLabel={name.trim() || (mode === "create" ? "New team" : "Team")}
       sidebarDescription="Team"
       sidebarIcon={<Users className="h-4 w-4 text-muted-foreground" />}
@@ -421,15 +435,17 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
         />
       )}
       {activeSection === "members" && team && (
-        <TeamMembersSection
+        <MembersSection
           open={open}
           team={team}
-          memberChanges={memberChanges}
-          onMemberChangesChange={(changes) => {
+          changes={memberChanges}
+          onChangesChange={(changes) => {
             setMemberChanges(changes);
             setAssignmentBlocked(null);
           }}
-          onGoToExternalGroups={() => setActiveSection("external-groups")}
+          onGoToTeamSync={
+            syncAvailable ? () => setActiveSection("team-sync") : undefined
+          }
         />
       )}
       {(activeSection === "team" || activeSection === "members") && (
@@ -447,13 +463,10 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
         />
       )}
 
-      {activeSection === "external-groups" && mode === "edit" && team && (
-        <TeamManagementExternalSyncSection
-          open={open}
-          team={team}
-          readOnly={readOnly}
-        />
-      )}
+      {activeSection === "team-sync" &&
+        syncAvailable &&
+        mode === "edit" &&
+        team && <TeamSyncSection open={open} team={team} readOnly={readOnly} />}
     </TabbedDialogShell>
   );
 }
@@ -510,7 +523,7 @@ function TeamSection(props: {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="team-roles">Organization Roles</Label>
+          <Label htmlFor="team-roles">Inherited Roles</Label>
           <FieldDescription id="team-roles-description">
             Members of this team and its descendant teams inherit these
             permissions. Alternatively, assign roles directly to{" "}
@@ -526,122 +539,71 @@ function TeamSection(props: {
             multiple
             allowEmpty
             id="team-roles"
-            ariaLabel="Organization Roles"
+            ariaLabel="Inherited Roles"
             aria-describedby="team-roles-description"
             value={props.roles}
             onValueChange={props.onRolesChange}
             disabled={props.readOnlyDetails}
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="team-parent">Parent Team</Label>
-          <FieldDescription id="team-parent-description">
-            Nest this team in your organization hierarchy. Resource access is
-            inherited through the hierarchy; team administration is not.{" "}
-            <ExternalDocsLink
-              href={getDocsUrl(
-                DocsPage.PlatformAccessControl,
-                "team-hierarchies",
-              )}
-            >
-              Learn about inherited access
-            </ExternalDocsLink>
-            .
-          </FieldDescription>
-          <SearchableSelect
-            id="team-parent"
-            ariaLabel="Parent Team"
-            aria-describedby="team-parent-description"
-            value={props.parentId ?? "root"}
-            onValueChange={(value) =>
-              props.onParentIdChange(value === "root" ? null : value)
-            }
-            disabled={props.readOnlyDetails}
-            className="w-full"
-            placeholder="No parent team"
-            searchPlaceholder="Search teams..."
-            emptyMessage="No matching teams found."
-            pinnedItems={[{ value: "root", label: "No parent team" }]}
-            items={parentOptions.map((candidate) => ({
-              value: candidate.id,
-              label: formatTeamPath(props.organizationTeams, candidate.id),
-              description: candidate.description ?? undefined,
-            }))}
-          />
-        </div>
-        {props.readOnlyDetails ? (
-          <ReadOnlyAdvancedLabels labels={props.labels} />
-        ) : (
-          <AdvancedLabelsSection
-            attributionSource="billingTeam"
-            ref={props.labelsRef}
-            labels={props.labels}
-            onLabelsChange={props.onLabelsChange}
-          />
-        )}
+        <AdvancedSection keepMounted>
+          <div className="space-y-2">
+            <Label htmlFor="team-parent">Parent Team</Label>
+            <FieldDescription id="team-parent-description">
+              Nest this team in your organization hierarchy. Resource access is
+              inherited through the hierarchy; team administration is not.{" "}
+              <ExternalDocsLink
+                href={getDocsUrl(
+                  DocsPage.PlatformAccessControl,
+                  "team-hierarchies",
+                )}
+              >
+                Learn about inherited access
+              </ExternalDocsLink>
+              .
+            </FieldDescription>
+            <SearchableSelect
+              id="team-parent"
+              ariaLabel="Parent Team"
+              aria-describedby="team-parent-description"
+              value={props.parentId ?? "root"}
+              onValueChange={(value) =>
+                props.onParentIdChange(value === "root" ? null : value)
+              }
+              disabled={props.readOnlyDetails}
+              className="w-full"
+              placeholder="No parent team"
+              searchPlaceholder="Search teams..."
+              emptyMessage="No matching teams found."
+              pinnedItems={[{ value: "root", label: "No parent team" }]}
+              items={parentOptions.map((candidate) => ({
+                value: candidate.id,
+                label: formatTeamPath(props.organizationTeams, candidate.id),
+                description: candidate.description ?? undefined,
+              }))}
+            />
+          </div>
+          {props.readOnlyDetails ? (
+            <ReadOnlyLabels labels={props.labels} />
+          ) : (
+            <AdvancedLabelsSection
+              attributionSource="billingTeam"
+              ref={props.labelsRef}
+              labels={props.labels}
+              onLabelsChange={props.onLabelsChange}
+            />
+          )}
+        </AdvancedSection>
       </div>
     </div>
   );
 }
 
-function TeamMembersSection(props: {
-  open: boolean;
-  team: Team;
-  memberChanges: StagedMemberChanges;
-  onMemberChangesChange: (changes: StagedMemberChanges) => void;
-  onGoToExternalGroups: () => void;
-}) {
+function ReadOnlyLabels({ labels }: { labels: ProfileLabel[] }) {
   return (
-    <div className="space-y-4">
-      <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-xs">
-        <p>
-          <span className="font-medium">Optional:</span> add members manually,
-          or use{" "}
-          <UnstyledButton
-            type="button"
-            onClick={props.onGoToExternalGroups}
-            className="text-primary hover:underline"
-          >
-            External Group Sync
-          </UnstyledButton>{" "}
-          to sync membership. Configure roles through{" "}
-          <ExternalDocsLink
-            href={getDocsUrl(DocsPage.PlatformSsoRoleMapping, "role-mapping")}
-          >
-            Role Mapping
-          </ExternalDocsLink>
-          .
-        </p>
-        <div className="space-y-1 text-muted-foreground">
-          <p>
-            <span className="font-medium text-foreground">Admin:</span> edit the
-            team, manage members, and view and manage its limits.
-          </p>
-          <p>
-            <span className="font-medium text-foreground">Member:</span> use
-            resources available to the team. New members and synced members
-            default to Member.
-          </p>
-        </div>
-      </div>
-      <MembersSection
-        open={props.open}
-        team={props.team}
-        changes={props.memberChanges}
-        onChangesChange={props.onMemberChangesChange}
-      />
-    </div>
-  );
-}
-
-function ReadOnlyAdvancedLabels({ labels }: { labels: ProfileLabel[] }) {
-  return (
-    <details className="group border-t pt-3">
-      <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium">
-        Advanced
-        <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="flex flex-wrap gap-2 pt-4">
+    <div className="space-y-2">
+      <Label>Labels</Label>
+      <div className="flex flex-wrap gap-2">
         {labels.length === 0 ? (
           <span className="text-sm text-muted-foreground">No labels</span>
         ) : (
@@ -657,7 +619,7 @@ function ReadOnlyAdvancedLabels({ labels }: { labels: ProfileLabel[] }) {
           ))
         )}
       </div>
-    </details>
+    </div>
   );
 }
 
@@ -666,18 +628,20 @@ function MembersSection({
   team,
   changes,
   onChangesChange,
+  onGoToTeamSync,
 }: {
   open: boolean;
   team: Team;
   changes: StagedMemberChanges;
   onChangesChange: (changes: StagedMemberChanges) => void;
+  onGoToTeamSync?: () => void;
 }) {
   const {
     users: userOptions,
-    isSearching: isMembersPending,
-    onSearchQueryChange: setMemberSearch,
-    emptyMessage: membersEmptyMessage,
+    onSearchQueryChange: setCandidateSearch,
+    emptyMessage: candidatesEmptyMessage,
   } = useMemberSearch({ limit: 20, enabled: open });
+  const [adding, setAdding] = useState(false);
 
   // A team can have thousands of members, so they are searched and paged on
   // the server; staged changes are kept per user across pages.
@@ -705,7 +669,7 @@ function MembersSection({
         },
       });
       throwOnApiError(error, { toastOnError: false });
-      // Tagged with its search so the header describes the rows on screen
+      // Tagged with its search so the summary describes the rows on screen
       // while a newer search is still loading.
       return data ? { ...data, search: debouncedMemberSearch } : null;
     },
@@ -714,6 +678,30 @@ function MembersSection({
   });
   const pageMembers = memberPage?.data ?? [];
   const pageTotal = memberPage?.pagination.total ?? 0;
+
+  // Team-wide totals for the summary line, independent of the search.
+  const { data: savedTotals } = useQuery({
+    queryKey: ["teamMembers", team.id, "totals"],
+    queryFn: async () => {
+      const [all, admins] = await Promise.all([
+        archestraApiSdk.getTeamMembersPage({
+          path: { id: team.id },
+          query: { limit: 1 },
+        }),
+        archestraApiSdk.getTeamMembersPage({
+          path: { id: team.id },
+          query: { limit: 1, role: ADMIN_ROLE_NAME },
+        }),
+      ]);
+      throwOnApiError(all.error, { toastOnError: false });
+      throwOnApiError(admins.error, { toastOnError: false });
+      return {
+        members: all.data?.pagination.total ?? 0,
+        admins: admins.data?.pagination.total ?? 0,
+      };
+    },
+    enabled: open,
+  });
 
   // Which of the users offered for adding are already members, wherever they
   // sit in the paged list.
@@ -735,6 +723,13 @@ function MembersSection({
     placeholderData: keepPreviousData,
   });
 
+  // Users picked in the add strip may scroll out of the current search
+  // results before they are added; keep their names for the staged rows.
+  const seenUsers = useRef(new Map<string, UserSelectOption>());
+  for (const option of userOptions) {
+    seenUsers.current.set(option.userId, option);
+  }
+
   const setChange = (userId: string, change: StagedMemberChange | null) => {
     const next = new Map(changes);
     if (change) {
@@ -745,29 +740,36 @@ function MembersSection({
     onChangesChange(next);
   };
 
-  const stageAdd = (userId: string) => {
-    if (changes.get(userId)?.type === "remove") {
-      // Re-adding an existing member just cancels a staged removal.
-      setChange(userId, null);
-    } else if (
-      !membersAmongOptions.some((member) => member.userId === userId)
-    ) {
-      const user = userOptions.find((option) => option.userId === userId);
-      setChange(userId, {
-        type: "add",
-        role: MEMBER_ROLE_NAME,
-        name: user?.name ?? undefined,
-        email: user?.email ?? undefined,
-      });
+  const stageAdds = (userIds: string[], role: TeamMemberRole) => {
+    const next = new Map(changes);
+    for (const userId of userIds) {
+      if (next.get(userId)?.type === "remove") {
+        // Re-adding an existing member just cancels a staged removal.
+        next.delete(userId);
+      } else if (
+        !membersAmongOptions.some((member) => member.userId === userId)
+      ) {
+        const user = seenUsers.current.get(userId);
+        next.set(userId, {
+          type: "add",
+          role,
+          name: user?.name ?? undefined,
+          email: user?.email ?? undefined,
+        });
+      }
     }
-    setMemberSearch("");
+    onChangesChange(next);
+    setCandidateSearch("");
   };
 
-  const stageRemove = (userId: string) => {
+  const stageRemove = (userId: string, originalRole: string | null) => {
     if (changes.get(userId)?.type === "add") {
       setChange(userId, null);
     } else {
-      setChange(userId, { type: "remove" });
+      setChange(userId, {
+        type: "remove",
+        role: originalRole === ADMIN_ROLE_NAME ? ADMIN_ROLE_NAME : undefined,
+      });
     }
   };
 
@@ -793,20 +795,17 @@ function MembersSection({
     (entry): entry is [string, Extract<StagedMemberChange, { type: "add" }>] =>
       entry[1].type === "add",
   );
-  const stagedRemovalCount = [...changes.values()].filter(
-    (change) => change.type === "remove",
-  ).length;
 
   // Staged additions first, then this page of server members with staged
   // removals hidden and staged role changes applied.
-  const memberRows = [
+  const memberRows: MemberRow[] = [
     ...stagedAdds.map(([userId, change]) => ({
       userId,
       displayName: change.name || change.email || userId,
       displayEmail: change.email || userId,
       role: change.role as string,
       originalRole: null,
-      pending: true,
+      staged: "added" as const,
     })),
     ...pageMembers
       .filter((member) => changes.get(member.userId)?.type !== "remove")
@@ -818,7 +817,7 @@ function MembersSection({
           displayEmail: member.email || member.userId,
           role: change?.type === "role" ? change.role : member.role,
           originalRole: member.role,
-          pending: !!change,
+          staged: change?.type === "role" ? ("changed" as const) : null,
         };
       }),
   ];
@@ -829,153 +828,324 @@ function MembersSection({
       .map((member) => member.userId)
       .filter((userId) => changes.get(userId)?.type !== "remove"),
   ]);
-  const canAddAnyMember = userOptions.some(
-    (user) => !disabledUserIds.has(user.userId),
-  );
-  const hasStagedChanges = changes.size > 0;
-  const isSearchingMembers = !!memberPage?.search;
+
+  // Saved totals with the staged changes applied.
+  let memberCount = savedTotals?.members ?? 0;
+  let adminCount = savedTotals?.admins ?? 0;
+  for (const change of changes.values()) {
+    if (change.type === "add") {
+      memberCount += 1;
+      if (change.role === ADMIN_ROLE_NAME) adminCount += 1;
+    } else if (change.type === "remove") {
+      memberCount -= 1;
+      if (change.role === ADMIN_ROLE_NAME) adminCount -= 1;
+    } else {
+      adminCount += change.role === ADMIN_ROLE_NAME ? 1 : -1;
+    }
+  }
+  const searchedFor = memberPage?.search ?? "";
   const showMemberSearch = memberSearch !== "" || pageTotal > MEMBERS_PAGE_SIZE;
 
+  // Cells read the latest handlers through a ref so the columns, and the
+  // controls inside them, stay mounted across renders.
+  const handlers = useRef({ stageRole, stageRemove });
+  handlers.current = { stageRole, stageRemove };
+  const columns = useMemo<ColumnDef<MemberRow>[]>(
+    () => [
+      {
+        id: "name",
+        header: "Name",
+        cell: ({ row }) => <MemberNameCell row={row.original} />,
+      },
+      {
+        id: "role",
+        header: "Team role",
+        size: 136,
+        cell: ({ row }) => (
+          <TeamMemberRoleSelect
+            size="sm"
+            className="w-[7.5rem]"
+            value={row.original.role as TeamMemberRole}
+            ariaLabel={`Team role for ${row.original.displayName}`}
+            onChange={(role) =>
+              handlers.current.stageRole({
+                userId: row.original.userId,
+                role,
+                originalRole: row.original.originalRole,
+              })
+            }
+          />
+        ),
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        size: 72,
+        cell: ({ row }) => (
+          <TableRowActions
+            itemName={row.original.displayName}
+            actions={[
+              {
+                label: "Remove from team",
+                icon: <Trash2 className="h-4 w-4" />,
+                variant: "destructive",
+                onClick: () =>
+                  handlers.current.stageRemove(
+                    row.original.userId,
+                    row.original.originalRole,
+                  ),
+              },
+            ]}
+          />
+        ),
+      },
+    ],
+    [],
+  );
+
+  const unsaved =
+    changes.size > 0 ? (
+      <UnsavedMemberChanges
+        count={changes.size}
+        onDiscard={() => onChangesChange(new Map())}
+      />
+    ) : null;
+
   return (
-    <div className="space-y-6">
-      <div className="space-y-2 max-w-3xl">
-        <Label>Add User</Label>
-        <UserSearchableSelect
-          value=""
-          onValueChange={stageAdd}
-          users={userOptions}
-          disabledUserIds={disabledUserIds}
-          placeholder={
-            canAddAnyMember ? "Select a user" : "All listed users already added"
-          }
-          searchPlaceholder="Search users by name or email"
-          className="w-full"
-          onSearchQueryChange={setMemberSearch}
-          emptyMessage={membersEmptyMessage}
-          hint={
-            canAddAnyMember || isMembersPending
-              ? undefined
-              : "All users in the current result set are already members of this team."
-          }
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <div className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
+          <p className="flex min-w-0 items-center gap-1.5 truncate text-sm text-muted-foreground">
+            <MemberCount value={memberCount} noun="member" />
+            <span aria-hidden>·</span>
+            <MemberCount value={adminCount} noun="admin" />
+            {onGoToTeamSync && (
+              <>
+                <span aria-hidden>·</span>
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto gap-1 p-0 text-sm text-muted-foreground hover:text-foreground"
+                  onClick={onGoToTeamSync}
+                >
+                  <span>Synced groups</span>
+                  <ArrowRight className="size-3.5" />
+                </Button>
+              </>
+            )}
+          </p>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            {showMemberSearch && (
+              <div className="relative w-52">
+                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={memberSearch}
+                  onChange={(event) => {
+                    setMemberListSearch(event.target.value);
+                    setPageIndex(0);
+                  }}
+                  onKeyDown={(event) => {
+                    // Enter would submit the dialog's form.
+                    if (event.key === "Enter") event.preventDefault();
+                  }}
+                  placeholder="Search members"
+                  aria-label="Search members"
+                  className="h-8 pl-8"
+                />
+              </div>
+            )}
+            <Button
+              type="button"
+              variant={adding ? "secondary" : "outline"}
+              size="sm"
+              aria-expanded={adding}
+              onClick={() => setAdding((current) => !current)}
+            >
+              <UserPlus className="h-4 w-4" />
+              <span>Add members</span>
+            </Button>
+          </div>
+        </div>
+        {adding && (
+          <MemberAddStrip
+            users={userOptions}
+            disabledUserIds={disabledUserIds}
+            onSearchQueryChange={setCandidateSearch}
+            emptyMessage={candidatesEmptyMessage}
+            onAdd={(userIds, role) => {
+              stageAdds(userIds, role);
+              setAdding(false);
+            }}
+            onCancel={() => setAdding(false)}
+          />
+        )}
+      </div>
+
+      <div className={cn(isMemberPageStale && "opacity-60 transition-opacity")}>
+        <DataTable
+          columns={columns}
+          data={memberRows}
+          getRowId={(row) => row.userId}
+          manualPagination
+          isLoading={isMemberPagePending}
+          getRowClassName={(row) => (row.staged ? "bg-muted/30" : undefined)}
+          fixedWidthColumnIds={["role", "actions"]}
+          flexibleColumnIds={["name"]}
+          emptyIcon={Users}
+          emptyMessage="No members yet"
+          emptyDescription="Add people to give them this team's resources."
+          hasActiveFilters={searchedFor !== ""}
+          filteredEmptyMessage="No members match your search"
+          onClearFilters={() => {
+            setMemberListSearch("");
+            setPageIndex(0);
+          }}
         />
       </div>
 
-      <div className="space-y-2">
-        <Label
-          className={cn(isMemberPageStale && "opacity-60 transition-opacity")}
-        >
-          {isSearchingMembers
-            ? `Current Members (${pageTotal} matching)`
-            : `Current Members (${Math.max(0, pageTotal - stagedRemovalCount) + stagedAdds.length})`}
-        </Label>
-        {showMemberSearch && (
-          <Input
-            value={memberSearch}
-            onChange={(event) => {
-              setMemberListSearch(event.target.value);
-              setPageIndex(0);
-            }}
-            placeholder="Search members by name or email"
-            aria-label="Search members"
-            className="max-w-3xl"
-          />
-        )}
-        {isMemberPagePending ? (
-          <p className="text-sm text-muted-foreground">Loading members…</p>
-        ) : memberRows.length === 0 && pageTotal === 0 ? (
-          <div className="rounded-lg border border-dashed p-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              {isSearchingMembers
-                ? "No members match this search"
-                : "No members in this team yet"}
-            </p>
-          </div>
-        ) : (
-          <div
-            className={cn(
-              "space-y-2",
-              isMemberPageStale && "opacity-60 transition-opacity",
-            )}
+      {pageTotal > MEMBERS_PAGE_SIZE ? (
+        <TablePagination
+          compact
+          pageIndex={pageIndex}
+          pageSize={MEMBERS_PAGE_SIZE}
+          total={pageTotal}
+          onPaginationChange={({ pageIndex: next }) => setPageIndex(next)}
+          leftContent={unsaved}
+        />
+      ) : (
+        unsaved && <div className="flex h-8 items-center">{unsaved}</div>
+      )}
+    </div>
+  );
+}
+
+type MemberRow = {
+  userId: string;
+  displayName: string;
+  displayEmail: string;
+  role: string;
+  originalRole: string | null;
+  staged: "added" | "changed" | null;
+};
+
+function MemberAddStrip({
+  users,
+  disabledUserIds,
+  onSearchQueryChange,
+  emptyMessage,
+  onAdd,
+  onCancel,
+}: {
+  users: UserSelectOption[];
+  disabledUserIds: Set<string>;
+  onSearchQueryChange: (value: string) => void;
+  emptyMessage: string;
+  onAdd: (userIds: string[], role: TeamMemberRole) => void;
+  onCancel: () => void;
+}) {
+  const [userIds, setUserIds] = useState<string[]>([]);
+  const [role, setRole] = useState<TeamMemberRole>(MEMBER_ROLE_NAME);
+
+  return (
+    <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-2 animate-in fade-in-0 slide-in-from-top-1 duration-150">
+      <UserSearchableMultiSelect
+        value={userIds}
+        onValueChange={setUserIds}
+        users={users}
+        disabledUserIds={disabledUserIds}
+        onSearchQueryChange={onSearchQueryChange}
+        emptyMessage={emptyMessage}
+        placeholder="Choose people to add"
+        searchPlaceholder="Search users by name or email"
+        maxBadgeDisplay={2}
+        className="min-w-0 flex-1"
+      />
+      <TeamMemberRoleSelect
+        value={role}
+        onChange={setRole}
+        ariaLabel="Team role for new members"
+        className="w-32 bg-background"
+      />
+      <Button
+        type="button"
+        disabled={userIds.length === 0}
+        onClick={() => onAdd(userIds, role)}
+      >
+        {userIds.length > 1 ? `Add ${userIds.length}` : "Add"}
+      </Button>
+      <Button type="button" variant="ghost" onClick={onCancel}>
+        Cancel
+      </Button>
+    </div>
+  );
+}
+
+function MemberNameCell({ row }: { row: MemberRow }) {
+  return (
+    <div className="min-w-0 leading-tight">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate text-sm font-medium">{row.displayName}</span>
+        {row.staged && (
+          <Badge
+            variant="outline"
+            className="border-primary/30 px-1.5 py-0 text-[11px] text-primary"
           >
-            {memberRows.map((row) => (
-              <div
-                key={row.userId}
-                className="grid grid-cols-[minmax(0,1fr)_210px_40px] items-center gap-3 rounded-lg border p-3"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-medium">
-                      {row.displayName}
-                    </p>
-                    {row.pending && (
-                      <Badge variant="outline" className="shrink-0 text-xs">
-                        pending
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {row.displayEmail}
-                  </p>
-                </div>
-                <Select
-                  value={row.role}
-                  onValueChange={(role: TeamMemberRole) =>
-                    stageRole({
-                      userId: row.userId,
-                      role,
-                      originalRole: row.originalRole,
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
-                    <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => stageRemove(row.userId)}
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                  <span className="sr-only">Remove member</span>
-                </Button>
-              </div>
-            ))}
-          </div>
+            {row.staged === "added" ? "New" : "Changed"}
+          </Badge>
         )}
-        {pageTotal > MEMBERS_PAGE_SIZE && (
-          <TablePagination
-            pageIndex={pageIndex}
-            pageSize={MEMBERS_PAGE_SIZE}
-            total={pageTotal}
-            onPaginationChange={({ pageIndex: next }) => setPageIndex(next)}
-            compact
-          />
-        )}
-        {hasStagedChanges && (
-          <FieldDescription>
-            Member changes are applied when you save.
-          </FieldDescription>
-        )}
+      </div>
+      <div className="truncate text-xs text-muted-foreground">
+        {row.displayEmail}
       </div>
     </div>
   );
 }
 
-function TeamManagementExternalSyncSectionUnavailable() {
+function MemberCount({ value, noun }: { value: number; noun: string }) {
+  return (
+    <span className="whitespace-nowrap">
+      <span className="font-medium text-foreground tabular-nums">{value}</span>
+      <span> {value === 1 ? noun : `${noun}s`}</span>
+    </span>
+  );
+}
+
+function UnsavedMemberChanges({
+  count,
+  onDiscard,
+}: {
+  count: number;
+  onDiscard: () => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+      <span aria-hidden className="size-1.5 rounded-full bg-primary" />
+      <span>
+        {count} unsaved {count === 1 ? "change" : "changes"}
+      </span>
+      <span aria-hidden>·</span>
+      <Button
+        type="button"
+        variant="link"
+        size="sm"
+        className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
+        onClick={onDiscard}
+      >
+        Discard
+      </Button>
+    </span>
+  );
+}
+
+function TeamSyncSectionUnavailable() {
   return <EnterpriseLicenseRequired featureName="Team Sync" />;
 }
 
-function useTeamManagementExternalSyncSection(): TeamManagementExternalSyncSectionComponent {
-  const [Section, setSection] =
-    useState<TeamManagementExternalSyncSectionComponent>(
-      () => TeamManagementExternalSyncSectionUnavailable,
-    );
+function useTeamSyncSection(): TeamSyncSectionComponent {
+  const [Section, setSection] = useState<TeamSyncSectionComponent>(
+    () => TeamSyncSectionUnavailable,
+  );
 
   useEffect(() => {
     if (!config.enterpriseFeatures.core) return;
@@ -984,9 +1154,9 @@ function useTeamManagementExternalSyncSection(): TeamManagementExternalSyncSecti
 
     async function loadEnterpriseSection() {
       // biome-ignore lint/style/noRestrictedImports: conditional ee component with team sync
-      const module = await import("./team-management-external-sync.ee");
+      const module = await import("./team-sync-section.ee");
       if (!cancelled) {
-        setSection(() => module.TeamManagementExternalSyncSection);
+        setSection(() => module.TeamSyncSection);
       }
     }
 

@@ -3048,9 +3048,14 @@ export function normalizeToolInputSchema(
 
   // MCP clients (Kilo, Claude Code, …) copy tools/list schemas into the
   // provider tool list. Gemini 400s the whole request if any advertised
-  // schema still has a non-string `const`/`enum`. Execution still validates
-  // against the original Zod/JSON Schema.
-  return sanitizeGeminiToolSchema(objectSchema) as McpListTool["inputSchema"];
+  // schema still has a non-string `const`/`enum`. The client's model may be
+  // any model, so a field that takes any value stays free: typed as an
+  // object, strict models turn `limit: 10` in run_tool's tool_args into
+  // `limit: {}`. Execution still validates against the original Zod/JSON
+  // Schema.
+  return sanitizeGeminiToolSchema(objectSchema, {
+    anyValue: "any",
+  }) as McpListTool["inputSchema"];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

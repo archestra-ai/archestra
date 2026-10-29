@@ -168,6 +168,55 @@ describe("Slack startup cancellation", () => {
     }
   }, 15000);
 
+  test("an initial API error stops startup before a retry can reject unhandled", async () => {
+    const fixture = await createSlackSocketFixture();
+    fixture.rejectNextConnection();
+    fixture.failNextConnection(503);
+    const provider = new SlackProvider(slackConfig);
+    try {
+      const started = performance.now();
+      const pending = provider.initialize().then(
+        () => ({ error: undefined, elapsed: performance.now() - started }),
+        (error: unknown) => ({ error, elapsed: performance.now() - started }),
+      );
+      // On the unfixed SDK path, internal_error schedules a retry in five
+      // seconds and the subsequent HTTP error escapes as an unhandled rejection.
+      await delay(5500);
+      const result = await pending;
+      expect(result.error).toMatchObject({
+        message: expect.stringContaining("then retry"),
+      });
+      expect(result.elapsed).toBeLessThan(1000);
+      expect(provider.getBotUserId()).toBeNull();
+      expect(
+        fixture.calls.filter((method) => method === "apps.connections.open"),
+      ).toHaveLength(1);
+      expect(fixture.connections).toBe(0);
+
+      // The queued HTTP error belongs to an explicit fresh attempt now.
+      const failedRetry = new SlackProvider(slackConfig);
+      try {
+        await expect(failedRetry.initialize()).rejects.toThrow("then retry");
+      } finally {
+        await failedRetry.cleanup();
+      }
+      const retry = new SlackProvider(slackConfig);
+      try {
+        await retry.initialize();
+        expect(retry.getBotUserId()).toBe("UBOT_TEST");
+        expect(fixture.connections).toBe(1);
+        expect(
+          fixture.calls.filter((method) => method === "apps.connections.open"),
+        ).toHaveLength(3);
+      } finally {
+        await retry.cleanup();
+      }
+    } finally {
+      await provider.cleanup();
+      await fixture.close();
+    }
+  }, 15000);
+
   test("initial rate limiting fails promptly without retaining a Retry-After timer", async () => {
     const fixture = await createSlackSocketFixture();
     fixture.failNextConnection(429, 60);
@@ -188,23 +237,24 @@ describe("Slack startup cancellation", () => {
     }
   });
 
-  test("an established session reconnects through rate limiting and a transient HTTP failure", async () => {
+  test("an established session reconnects through rate limiting and API/HTTP failures", async () => {
     const fixture = await createSlackSocketFixture();
     const provider = new SlackProvider(slackConfig);
     try {
       await provider.initialize();
       expect(fixture.connections).toBe(1);
       fixture.failNextConnection(429);
+      fixture.rejectNextConnection();
       fixture.failNextConnection(503);
       fixture.disconnect();
-      await expect.poll(() => fixture.connections, { timeout: 12000 }).toBe(2);
+      await expect.poll(() => fixture.connections, { timeout: 20000 }).toBe(2);
       expect(
         fixture.calls.filter((method) => method === "apps.connections.open"),
-      ).toHaveLength(4);
+      ).toHaveLength(5);
       expect(provider.getBotUserId()).toBe("UBOT_TEST");
     } finally {
       await provider.cleanup();
       await fixture.close();
     }
-  }, 15000);
+  }, 25000);
 });

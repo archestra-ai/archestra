@@ -35,6 +35,7 @@ import {
   SelectTeamMemberListItemSchema,
   SelectTeamMemberSchema,
   SelectTeamSchema,
+  TeamMemberRoleSchema,
   UpdateTeamBodySchema,
   UpdateTeamMemberBodySchema,
 } from "@/types";
@@ -448,6 +449,9 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Return only these users (comma-separated, at most 100), to check which of them are members. With search, a user must match both.",
             ),
+          role: TeamMemberRoleSchema.optional().describe(
+            "Return only members with this team role.",
+          ),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectTeamMemberListItemSchema),
@@ -457,7 +461,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         params: { id },
-        query: { limit, offset, search, userIds },
+        query: { limit, offset, search, userIds, role },
         organizationId,
         user,
         headers,
@@ -477,6 +481,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         offset,
         search: search || undefined,
         userIds,
+        role,
       });
       return reply.send({
         data: result.data,
@@ -749,8 +754,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.AddTeamExternalGroup,
-        description:
-          "Add an external group mapping to a team for SSO team sync",
+        description: "Link an identity provider group to a team for Team Sync",
         tags: ["Teams"],
         params: z.object({
           id: z.string(),
@@ -762,7 +766,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         params: { id },
-        body: { groupIdentifier },
+        body: { groupIdentifier, identityProviderId, role },
         organizationId,
         user,
         headers,
@@ -787,29 +791,41 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamId: id,
         userId: user.id,
         headers,
-        action: "manage team external group sync",
+        action: "manage Team Sync for this team",
       });
+
+      if (identityProviderId) {
+        if (
+          !(await TeamModel.isIdentityProviderInOrganization({
+            identityProviderId,
+            organizationId: organizationId,
+          }))
+        ) {
+          throw new ApiError(400, "Identity provider not found");
+        }
+      }
 
       // Normalize group identifier to lowercase for case-insensitive matching
       const normalizedGroupIdentifier = groupIdentifier.toLowerCase();
 
-      // Check if the mapping already exists
+      // Check if the mapping already exists for this provider
       const existingGroups = await TeamModel.getExternalGroups(id);
       if (
         existingGroups.some(
-          (g) => g.groupIdentifier.toLowerCase() === normalizedGroupIdentifier,
+          (g) =>
+            g.groupIdentifier.toLowerCase() === normalizedGroupIdentifier &&
+            (g.identityProviderId ?? null) === (identityProviderId ?? null),
         )
       ) {
-        throw new ApiError(
-          409,
-          "This external group is already mapped to this team",
-        );
+        throw new ApiError(409, "This group is already linked to this team");
       }
 
-      const externalGroup = await TeamModel.addExternalGroup(
-        id,
-        normalizedGroupIdentifier,
-      );
+      const externalGroup = await TeamModel.addExternalGroup({
+        teamId: id,
+        groupIdentifier: normalizedGroupIdentifier,
+        identityProviderId,
+        role,
+      });
 
       return reply.send(externalGroup);
     },
@@ -821,7 +837,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.RemoveTeamExternalGroup,
         description:
-          "Remove an external group mapping from a team for SSO team sync",
+          "Unlink an identity provider group from a team's Team Sync",
         tags: ["Teams"],
         params: z.object({
           id: z.string(),
@@ -852,13 +868,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamId: id,
         userId: user.id,
         headers,
-        action: "manage team external group sync",
+        action: "manage Team Sync for this team",
       });
 
       const success = await TeamModel.removeExternalGroupById(id, groupId);
 
       if (!success) {
-        throw new ApiError(404, "External group mapping not found");
+        throw new ApiError(404, "Team Sync group link not found");
       }
 
       return reply.send({ success: true });

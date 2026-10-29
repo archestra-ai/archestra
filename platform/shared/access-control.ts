@@ -1194,26 +1194,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentA2aDelegations]: {},
   [RouteId.SyncAgentA2aDelegations]: {},
   [RouteId.GetAllDelegationConnections]: {},
-  [RouteId.GetLimits]: {
-    llmLimit: ["read"],
-  },
-  [RouteId.GetLimitLabelKeys]: { llmLimit: ["read"] },
-  [RouteId.GetLimitLabelValues]: { llmLimit: ["read"] },
-  [RouteId.CreateLimit]: {
-    llmLimit: ["create"],
-  },
-  [RouteId.GetLimit]: {
-    llmLimit: ["read"],
-  },
-  [RouteId.UpdateLimit]: {
-    llmLimit: ["update"],
-  },
-  [RouteId.DeleteLimit]: {
-    llmLimit: ["delete"],
-  },
-  [RouteId.BulkDeleteLimits]: {
-    llmLimit: ["delete"],
-  },
+  // Handlers also allow a team admin for only their own team's limits.
+  [RouteId.GetLimits]: {},
+  [RouteId.GetLimitLabelKeys]: {},
+  [RouteId.GetLimitLabelValues]: {},
+  [RouteId.CreateLimit]: {},
+  [RouteId.GetLimit]: {},
+  [RouteId.UpdateLimit]: {},
+  [RouteId.DeleteLimit]: {},
+  [RouteId.BulkDeleteLimits]: {},
   [RouteId.ListDefaultUserLimits]: {
     llmLimit: ["read"],
   },
@@ -1378,7 +1367,7 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Returns only the CALLER'S own decoded token claims (never another user's,
   // never provider configuration), so team admins can find their group value
-  // while configuring external group sync.
+  // while linking groups in Team Sync.
   [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
     team: ["read"],
   },

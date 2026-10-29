@@ -1537,6 +1537,7 @@ describe("LimitValidationService", () => {
       makeUser,
       makeTeam,
       makeMember,
+      makeTeamMember,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
@@ -1547,6 +1548,7 @@ describe("LimitValidationService", () => {
         access: { teams: [team.id] },
       });
       await makeMember(user.id, org.id, { role: "admin" });
+      await makeTeamMember(team.id, user.id);
 
       const teamLimit = await LimitModel.create({
         entityType: "team",
@@ -1586,10 +1588,66 @@ describe("LimitValidationService", () => {
 
       const result = await LimitValidationService.checkLimitsBeforeRequest({
         agentId: agent.id,
+        userId: user.id,
       });
 
       expect(result).not.toBeNull();
       expect(result?.[1]).toContain("team-level");
+    });
+
+    test("another team's exhausted limit on a shared agent does not block a caller outside it", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeMember,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const owner = await makeUser();
+      const teamA = await makeTeam(org.id, owner.id);
+      const teamB = await makeTeam(org.id, owner.id);
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [teamA.id, teamB.id] },
+      });
+      const memberOfA = await makeUser();
+      const memberOfB = await makeUser();
+      for (const [user, team] of [
+        [memberOfA, teamA],
+        [memberOfB, teamB],
+      ] as const) {
+        await makeMember(user.id, org.id);
+        await makeTeamMember(team.id, user.id);
+      }
+      const teamALimit = await LimitModel.create({
+        entityType: "team",
+        entityId: teamA.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        model: ["gpt-4o"],
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "team",
+        teamA.id,
+        "gpt-4o",
+        1000000,
+        1000000,
+      );
+      await LimitModel.patch(teamALimit.id, { lastCleanup: new Date() });
+
+      expect(
+        await LimitValidationService.checkLimitsBeforeRequest({
+          agentId: agent.id,
+          userId: memberOfB.id,
+        }),
+      ).toBeNull();
+      expect(
+        await LimitValidationService.checkLimitsBeforeRequest({
+          agentId: agent.id,
+          userId: memberOfA.id,
+        }),
+      ).not.toBeNull();
     });
 
     test("should return refusal message when limit is exceeded", async ({
@@ -2898,6 +2956,7 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     makeOrganization,
     makeTeam,
     makeMember,
+    makeTeamMember,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
@@ -2912,6 +2971,7 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     const secret = await makeSecret();
     const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
     await makeMember(user.id, org.id, { role: "admin" });
+    await makeTeamMember(team.id, user.id);
 
     // Create limits for all 5 entity types
     const vkLimit = await LimitModel.create({

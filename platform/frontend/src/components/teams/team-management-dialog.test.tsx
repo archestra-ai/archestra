@@ -54,7 +54,7 @@ describe("TeamManagementDialog", () => {
 
     expect(screen.getByText("Team")).toBeInTheDocument();
     expect(screen.getByText("Members")).toBeInTheDocument();
-    expect(screen.getByText("External Group Sync")).toBeInTheDocument();
+    expect(screen.getByText("Team Sync")).toBeInTheDocument();
   });
 
   it("shows the appropriate team sections", () => {
@@ -67,7 +67,7 @@ describe("TeamManagementDialog", () => {
 
     renderDialog();
 
-    expect(screen.getByText("External Group Sync")).toBeInTheDocument();
+    expect(screen.getByText("Team Sync")).toBeInTheDocument();
   });
 });
 

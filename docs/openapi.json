@@ -382471,7 +382471,16 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get all label keys used by limits\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:read`: View token usage limits",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "key",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -382720,11 +382729,11 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:read"
-          ]
-        }
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits.",
+          "permissions": []
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits."
       }
     },
     "/api/limits/labels/values": {
@@ -382733,7 +382742,6 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get all label values used by limits\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:read`: View token usage limits",
         "parameters": [
           {
             "schema": {
@@ -382741,8 +382749,7 @@
             },
             "in": "query",
             "name": "key",
-            "required": false,
-            "description": "Filter values by label key"
+            "required": false
           }
         ],
         "responses": {
@@ -382993,11 +383000,11 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:read"
-          ]
-        }
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits.",
+          "permissions": []
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits."
       }
     },
     "/api/limits": {
@@ -383006,7 +383013,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get all limits with optional filtering and per-model usage breakdown\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:read`: View token usage limits",
+        "description": "Get all limits with optional filtering and per-model usage breakdown\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read` for organization-wide access. A session-authenticated team admin receives only limits for teams they directly administer, with optional entity filters.",
         "parameters": [
           {
             "schema": {
@@ -383135,6 +383142,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "teamManaged": {
+                        "type": "boolean",
+                        "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                      },
                       "cleanupInterval": {
                         "type": "string",
                         "enum": [
@@ -383249,6 +383260,7 @@
                       "behavior",
                       "mcpServerName",
                       "toolName",
+                      "teamManaged",
                       "lastCleanup",
                       "createdAt",
                       "updatedAt",
@@ -383494,10 +383506,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:read"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin receives only limits for teams they directly administer, with optional entity filters.",
+          "permissions": []
         }
       },
       "post": {
@@ -383505,7 +383516,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Create a new limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:create`: Create new usage limits",
+        "description": "Create a new limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:create`, or a session-authenticated team admin creating a limit on their own team.",
         "requestBody": {
           "required": true,
           "content": {
@@ -383706,6 +383717,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "teamManaged": {
+                      "type": "boolean",
+                      "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                    },
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
@@ -383744,6 +383759,7 @@
                     "behavior",
                     "mcpServerName",
                     "toolName",
+                    "teamManaged",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt"
@@ -383987,10 +384003,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:create"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:create`, or a session-authenticated team admin creating a limit on their own team.",
+          "permissions": []
         }
       }
     },
@@ -384000,7 +384015,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get a limit by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:read`: View token usage limits",
+        "description": "Get a limit by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read`, or a session-authenticated team admin for a limit on their own team.",
         "parameters": [
           {
             "schema": {
@@ -384085,6 +384100,10 @@
                     "reason": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "teamManaged": {
+                      "type": "boolean",
+                      "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
                     },
                     "cleanupInterval": {
                       "type": "string",
@@ -384200,6 +384219,7 @@
                     "behavior",
                     "mcpServerName",
                     "toolName",
+                    "teamManaged",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt",
@@ -384444,10 +384464,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:read"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:read`, or a session-authenticated team admin for a limit on their own team.",
+          "permissions": []
         }
       },
       "patch": {
@@ -384455,7 +384474,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Update a limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:update`: Modify existing usage limits",
+        "description": "Update a limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:update`, or a session-authenticated team admin updating a limit on their own team.",
         "requestBody": {
           "required": true,
           "content": {
@@ -384647,6 +384666,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "teamManaged": {
+                      "type": "boolean",
+                      "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                    },
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
@@ -384685,6 +384708,7 @@
                     "behavior",
                     "mcpServerName",
                     "toolName",
+                    "teamManaged",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt"
@@ -384928,10 +384952,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:update"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:update`, or a session-authenticated team admin updating a limit on their own team.",
+          "permissions": []
         }
       },
       "delete": {
@@ -384939,7 +384962,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Delete a limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:delete`: Remove usage limits",
+        "description": "Delete a limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:delete`, or a session-authenticated team admin deleting a limit on their own team.",
         "parameters": [
           {
             "schema": {
@@ -385206,10 +385229,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:delete"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:delete`, or a session-authenticated team admin deleting a limit on their own team.",
+          "permissions": []
         }
       }
     },
@@ -385219,7 +385241,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Delete several limits in one request. Missing or out-of-organization ids are reported in `failed` while visible limits are deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:delete`: Remove usage limits",
+        "description": "Delete several limits in one request. Missing or out-of-organization ids are reported in `failed` while visible limits are deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:delete`, or a session-authenticated team admin deleting only limits for teams they administer. Unauthorized targets are reported as not found.",
         "requestBody": {
           "required": true,
           "content": {
@@ -385544,10 +385566,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:delete"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:delete`, or a session-authenticated team admin deleting only limits for teams they administer. Unauthorized targets are reported as not found.",
+          "permissions": []
         }
       }
     },
@@ -538407,6 +538428,9 @@
                                 "syncedFromSso": {
                                   "type": "boolean"
                                 },
+                                "roleSyncedFromSso": {
+                                  "type": "boolean"
+                                },
                                 "createdAt": {
                                   "type": "string",
                                   "format": "date-time"
@@ -538418,6 +538442,7 @@
                                 "userId",
                                 "role",
                                 "syncedFromSso",
+                                "roleSyncedFromSso",
                                 "createdAt"
                               ],
                               "additionalProperties": false
@@ -538932,6 +538957,9 @@
                           "syncedFromSso": {
                             "type": "boolean"
                           },
+                          "roleSyncedFromSso": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -538943,6 +538971,7 @@
                           "userId",
                           "role",
                           "syncedFromSso",
+                          "roleSyncedFromSso",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -539359,6 +539388,9 @@
                           "syncedFromSso": {
                             "type": "boolean"
                           },
+                          "roleSyncedFromSso": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -539370,6 +539402,7 @@
                           "userId",
                           "role",
                           "syncedFromSso",
+                          "roleSyncedFromSso",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -539837,6 +539870,9 @@
                           "syncedFromSso": {
                             "type": "boolean"
                           },
+                          "roleSyncedFromSso": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -539848,6 +539884,7 @@
                           "userId",
                           "role",
                           "syncedFromSso",
+                          "roleSyncedFromSso",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -540822,6 +540859,9 @@
                       "syncedFromSso": {
                         "type": "boolean"
                       },
+                      "roleSyncedFromSso": {
+                        "type": "boolean"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -540844,6 +540884,7 @@
                       "userId",
                       "role",
                       "syncedFromSso",
+                      "roleSyncedFromSso",
                       "createdAt",
                       "name",
                       "email",
@@ -541160,6 +541201,9 @@
                     "syncedFromSso": {
                       "type": "boolean"
                     },
+                    "roleSyncedFromSso": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -541171,6 +541215,7 @@
                     "userId",
                     "role",
                     "syncedFromSso",
+                    "roleSyncedFromSso",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -541476,6 +541521,19 @@
           },
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "member"
+              ]
+            },
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "description": "Return only members with this team role."
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "path",
@@ -541511,6 +541569,9 @@
                           "syncedFromSso": {
                             "type": "boolean"
                           },
+                          "roleSyncedFromSso": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -541533,6 +541594,7 @@
                           "userId",
                           "role",
                           "syncedFromSso",
+                          "roleSyncedFromSso",
                           "createdAt",
                           "name",
                           "email",
@@ -541902,6 +541964,9 @@
                     "syncedFromSso": {
                       "type": "boolean"
                     },
+                    "roleSyncedFromSso": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -541913,6 +541978,7 @@
                     "userId",
                     "role",
                     "syncedFromSso",
+                    "roleSyncedFromSso",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -543016,6 +543082,17 @@
                       "groupIdentifier": {
                         "type": "string"
                       },
+                      "identityProviderId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "admin",
+                          "member"
+                        ]
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -543025,6 +543102,8 @@
                       "id",
                       "teamId",
                       "groupIdentifier",
+                      "identityProviderId",
+                      "role",
                       "createdAt"
                     ],
                     "additionalProperties": false
@@ -543278,7 +543357,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Add an external group mapping to a team for SSO team sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
+        "description": "Link an identity provider group to a team for Team Sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "requestBody": {
           "required": true,
           "content": {
@@ -543289,6 +543368,21 @@
                   "groupIdentifier": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "identityProviderId": {
+                    "description": "Match the group only for sign-ins through this identity provider. Omit to match it from any provider.",
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "default": "member",
+                    "description": "The team role members of this group receive.",
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "member"
+                    ]
                   }
                 },
                 "required": [
@@ -543325,6 +543419,17 @@
                     "groupIdentifier": {
                       "type": "string"
                     },
+                    "identityProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "member"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -543334,6 +543439,8 @@
                     "id",
                     "teamId",
                     "groupIdentifier",
+                    "identityProviderId",
+                    "role",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -543588,7 +543695,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Remove an external group mapping from a team for SSO team sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
+        "description": "Unlink an identity provider group from a team's Team Sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {

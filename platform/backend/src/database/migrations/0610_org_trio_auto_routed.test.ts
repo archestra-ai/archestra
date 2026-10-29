@@ -40,7 +40,11 @@ async function makeDatabase() {
       agent_type text NOT NULL,
       is_default boolean NOT NULL DEFAULT false,
       deleted_at timestamp,
+      auto_routing_enabled boolean NOT NULL DEFAULT false,
       model_pool_id text,
+      runtime jsonb,
+      llm_api_key_id text,
+      model_id text,
       ${TIER_COLUMNS.map(
         (column) =>
           `${column} text CONSTRAINT agents_${column}_models_id_fk REFERENCES models(id)`,
@@ -92,6 +96,7 @@ async function addOrganization(
     trio: [string | null, string | null, string | null];
     defaultKey: string | null;
     autoTiers: [string | null, string | null, string | null];
+    enabled?: boolean;
   },
 ) {
   const [fast, normal, smart] = org.trio;
@@ -104,9 +109,16 @@ async function addOrganization(
   ]);
   const [autoFast, autoNormal, autoSmart] = org.autoTiers;
   await database.query(
-    `INSERT INTO agents (id, organization_id, agent_type, is_default, auto_routing_fast_model_id, auto_routing_normal_model_id, auto_routing_smart_model_id)
-     VALUES ($1, $2, 'llm_proxy', true, $3, $4, $5)`,
-    [`proxy-${org.id}`, org.id, autoFast, autoNormal, autoSmart],
+    `INSERT INTO agents (id, organization_id, agent_type, is_default, auto_routing_enabled, auto_routing_fast_model_id, auto_routing_normal_model_id, auto_routing_smart_model_id)
+     VALUES ($1, $2, 'llm_proxy', true, $3, $4, $5, $6)`,
+    [
+      `proxy-${org.id}`,
+      org.id,
+      org.enabled ?? false,
+      autoFast,
+      autoNormal,
+      autoSmart,
+    ],
   );
 }
 
@@ -120,7 +132,7 @@ async function trioOf(database: PGlite, organizationId: string) {
   return rows[0];
 }
 
-test("auto-routing tiers move into the organization trio, the normal tier only with a shared key", async () => {
+test("auto-routing tiers move into the organization trio, the normal tier only with a shared key, and routing left without its trio is disabled", async () => {
   const database = await makeDatabase();
   try {
     // Tiers everywhere; the normal tier is served by two shared keys and a
@@ -130,6 +142,7 @@ test("auto-routing tiers move into the organization trio, the normal tier only w
       trio: ["fast-0", "normal-0", null],
       defaultKey: "primary-default",
       autoTiers: ["fast-1", "normal-1", "smart-1"],
+      enabled: true,
     });
     await addKey(database, {
       id: "primary-default",
@@ -185,6 +198,7 @@ test("auto-routing tiers move into the organization trio, the normal tier only w
       trio: [null, "normal-0", null],
       defaultKey: "personal-only-default",
       autoTiers: ["fast-1", "normal-1", "smart-1"],
+      enabled: true,
     });
     await addKey(database, {
       id: "personal-only-default",
@@ -230,9 +244,19 @@ test("auto-routing tiers move into the organization trio, the normal tier only w
     });
     const { rows: columns } = await database.query<{ name: string }>(
       `SELECT column_name AS name FROM information_schema.columns
-       WHERE table_name = 'agents' AND column_name LIKE '%model_id' ORDER BY 1`,
+       WHERE table_name = 'agents' AND column_name = ANY($1) ORDER BY 1`,
+      [TIER_COLUMNS],
     );
     expect(columns).toEqual([]);
+    // Routing stays on only where the trio is exactly the tiers it routed.
+    const { rows: enabled } = await database.query(
+      "SELECT organization_id, auto_routing_enabled AS enabled FROM agents ORDER BY 1",
+    );
+    expect(enabled).toEqual([
+      { organization_id: "keeps-key", enabled: false },
+      { organization_id: "personal-only", enabled: false },
+      { organization_id: "primary", enabled: true },
+    ]);
   } finally {
     await database.close();
   }
@@ -251,6 +275,65 @@ test("an Auto agent or conversation cannot also name a model pool", async () => 
         ),
       ).rejects.toMatchObject({ code: "23514" });
     }
+  } finally {
+    await database.close();
+  }
+});
+
+test("an enabled organization missing a tier is disabled", async () => {
+  const database = await makeDatabase();
+  try {
+    await addOrganization(database, {
+      id: "missing",
+      trio: [null, "normal-0", null],
+      defaultKey: null,
+      autoTiers: [null, null, null],
+      enabled: true,
+    });
+
+    await database.exec(migration);
+
+    const { rows } = await database.query(
+      "SELECT auto_routing_enabled AS enabled FROM agents",
+    );
+    expect(rows).toEqual([{ enabled: false }]);
+  } finally {
+    await database.close();
+  }
+});
+
+test("the default model stays while an Agent Runtime agent inherits it", async () => {
+  const database = await makeDatabase();
+  try {
+    await addOrganization(database, {
+      id: "runtime",
+      trio: ["fast-0", "normal-0", "smart-0"],
+      defaultKey: "runtime-default",
+      autoTiers: ["fast-1", "normal-1", "smart-1"],
+      enabled: true,
+    });
+    await addKey(database, {
+      id: "runtime-default",
+      organizationId: "runtime",
+      createdAt: "2026-01-01",
+      models: ["normal-0", "normal-1"],
+    });
+    await database.exec(
+      `INSERT INTO agents (id, organization_id, agent_type, runtime) VALUES ('coder', 'runtime', 'agent', '{"command":["codex"]}')`,
+    );
+
+    await database.exec(migration);
+
+    expect(await trioOf(database, "runtime")).toEqual({
+      fast: "fast-1",
+      normal: "normal-0",
+      smart: "smart-1",
+      key: "runtime-default",
+    });
+    const { rows } = await database.query(
+      "SELECT auto_routing_enabled AS enabled FROM agents WHERE id = 'proxy-runtime'",
+    );
+    expect(rows).toEqual([{ enabled: false }]);
   } finally {
     await database.close();
   }

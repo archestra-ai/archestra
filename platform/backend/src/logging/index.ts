@@ -4,10 +4,7 @@ import {
   context as otelContext,
   trace,
 } from "@opentelemetry/api";
-import {
-  logs,
-  type Logger as OtelLogger,
-} from "@opentelemetry/api-logs";
+import { logs, type Logger as OtelLogger } from "@opentelemetry/api-logs";
 import pino from "pino";
 import pretty from "pino-pretty";
 import { createLogger } from "@/logging/create-logger";

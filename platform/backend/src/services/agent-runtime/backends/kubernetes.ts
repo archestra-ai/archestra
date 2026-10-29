@@ -261,19 +261,13 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     return agentRuntimeManager.withSessionLease(session, operation);
   }
 
-  async workspaceRunsTierSettings(params: {
-    session: AgentRunRecord;
-    settings: AgentRuntimeTierSettings;
-  }): Promise<boolean> {
-    return agentRuntimeManager.workspaceRunsTierSettings(params);
-  }
-
   async switchWorkspaceTier(params: {
     session: AgentRunRecord;
     tier: AgentRuntimeTier;
     settings: AgentRuntimeTierSettings;
     resumePrompt: string;
     shouldResume: () => Promise<boolean>;
+    onStarted?: (switching: boolean) => void;
   }): Promise<boolean> {
     return agentRuntimeManager.switchWorkspaceTier(params);
   }

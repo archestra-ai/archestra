@@ -7,6 +7,7 @@ import {
   AgentRunModel,
   AgentWorkspaceModel,
 } from "@/models";
+import { ClusterLeaseHeldError } from "@/models/mcp-deployment-lease";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import {
   issueRuntimeBinding,
@@ -39,10 +40,12 @@ describe("POST /api/agent-runtime/self/tier", () => {
     makeAgent,
   }) => {
     const run = await liveTurn({ makeAgent, ctx });
-    vi.spyOn(backend, "workspaceRunsTierSettings").mockResolvedValue(false);
     const switchTier = vi
       .spyOn(backend, "switchWorkspaceTier")
-      .mockResolvedValue(true);
+      .mockImplementation(async ({ onStarted }) => {
+        onStarted?.(true);
+        return true;
+      });
 
     const response = await post(run.binding, { tier: "full" });
     expect(response.statusCode, response.body).toBe(202);
@@ -74,13 +77,29 @@ describe("POST /api/agent-runtime/self/tier", () => {
     makeAgent,
   }) => {
     const run = await liveTurn({ makeAgent, ctx });
-    vi.spyOn(backend, "workspaceRunsTierSettings").mockResolvedValue(true);
-    const switchTier = vi.spyOn(backend, "switchWorkspaceTier");
+    vi.spyOn(backend, "switchWorkspaceTier").mockImplementation(
+      async ({ onStarted }) => {
+        onStarted?.(false);
+        return false;
+      },
+    );
 
     const response = await post(run.binding, { tier: "light" });
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toEqual({ tier: "light", switching: false });
-    expect(switchTier).not.toHaveBeenCalled();
+  });
+
+  test("refuses a request while another switch of the run is in progress", async ({
+    makeAgent,
+  }) => {
+    const run = await liveTurn({ makeAgent, ctx });
+    vi.spyOn(backend, "switchWorkspaceTier").mockRejectedValue(
+      new ClusterLeaseHeldError("agent-run-tier-switch", "run"),
+    );
+
+    const response = await post(run.binding, { tier: "full" });
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json().error.message).toContain("already in progress");
   });
 
   test("refuses a missing or forged binding and a turn that is no longer current", async ({

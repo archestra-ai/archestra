@@ -243,25 +243,23 @@ export interface AgentRuntimeBackendDriver {
     operation: () => Promise<void>,
   ): Promise<boolean>;
 
-  /** Whether the workspace's compute already runs these tier settings. */
-  workspaceRunsTierSettings?(params: {
-    session: AgentRunRecord;
-    settings: AgentRuntimeTierSettings;
-  }): Promise<boolean>;
   /**
    * Move a workspace to another tier's image, host access and resources on
    * the same volume. A turn that is running continues in the replacement as
    * a native continuation prompted with `resumePrompt`, so its task does not
-   * end. Resolves false when the workspace already runs these settings.
-   * Optional: a backend without movable compute offers no tiers.
+   * end. Resolves false when the workspace already runs these settings, and
+   * rejects with `ClusterLeaseHeldError` while another switch of the run is
+   * in progress. Optional: a backend without movable compute offers no tiers.
    */
   switchWorkspaceTier?(params: {
     session: AgentRunRecord;
     tier: AgentRuntimeTier;
     settings: AgentRuntimeTierSettings;
     resumePrompt: string;
-    /** Checked once compute is stopped; false leaves the workspace stopped. */
+    /** Checked before compute starts again; false leaves it stopped. */
     shouldResume: () => Promise<boolean>;
+    /** Once the run's switch is exclusive: whether the workspace moves. */
+    onStarted?: (switching: boolean) => void;
   }): Promise<boolean>;
 }
 

@@ -12,6 +12,11 @@ const AGENT_RUNTIME_PURPOSE_LABEL = "archestra.io/purpose";
 const AGENT_RUNTIME_PURPOSE_VALUE = "agent-runtime";
 
 export const AGENT_RUNTIME_LEASE_SCOPE = "agent-run-transition";
+/**
+ * One tier switch per run. Not the session lease: a run adopted after a
+ * control-plane restart holds that one for its whole turn.
+ */
+export const AGENT_RUNTIME_TIER_SWITCH_LEASE_SCOPE = "agent-run-tier-switch";
 
 /** Sandbox annotation: the tier its Pod template runs, when the Agent has tiers. */
 export const AGENT_RUNTIME_TIER_ANNOTATION = "archestra.io/agent-runtime-tier";

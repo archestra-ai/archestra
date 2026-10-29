@@ -217,6 +217,8 @@ start_session() {
     return 0
   fi
   mkdir -p "$LOG_DIR"
+  # One log per run: readiness checks must not read an earlier run's crash.
+  if [ -f "$LOG_DIR/$name.log" ]; then mv -f "$LOG_DIR/$name.log" "$LOG_DIR/$name.previous.log"; fi
   tmx new-session -d -s "$name" -c "$dir" \
     "exec bash -c $(printf '%q' "$cmd") >> $(printf '%q' "$LOG_DIR/$name.log") 2>&1"
 }
@@ -470,7 +472,7 @@ wait_ready() {
 # --- commands --------------------------------------------------------------
 
 cmd_start() {
-  local wait="$1" e2e=0 mock_data=0
+  local wait="$1" e2e=0 mock_data=0 name
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -488,6 +490,13 @@ cmd_start() {
     log "stack already running; logs in $LOG_DIR"
     [ "$wait" = 1 ] && wait_ready
     return 0
+  fi
+  # The servers read .env when they start: switching a running stack to the
+  # e2e environment restarts them.
+  if [ "$e2e" = 1 ] && ! e2e_enabled; then
+    for name in backend frontend; do
+      session_alive "$name" && { log "restarting $name with the e2e environment"; stop_session "$name"; }
+    done
   fi
   ensure_env "$e2e"
   install_dependencies

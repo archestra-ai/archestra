@@ -418,39 +418,50 @@ export function withAgentRuntimeTier(params: {
   tier: AgentRuntimeTier;
   settings: Pick<AgentRunLaunchSpec, "image" | "privileged" | "resources">;
 }): Pick<k8s.V1PodSpec, "containers" | "initContainers"> {
-  const { podSpec, tier, settings } = params;
+  const { tier, settings } = params;
+  const moved = withAgentRuntimeImage(params.podSpec, settings.image);
+  return {
+    ...moved,
+    containers: moved.containers.map((entry) =>
+      entry.name === AGENT_RUNTIME_CONTAINER_NAME
+        ? {
+            ...entry,
+            env: withEnv(entry.env, AGENT_RUNTIME_TIER_ENV, tier),
+            resources: buildResourceRequirements(settings.resources),
+            volumeMounts: [
+              ...(entry.volumeMounts ?? []).filter(
+                ({ mountPath }) => mountPath !== DOCKER_DATA_PATH,
+              ),
+              ...dockerDataMounts(settings.privileged),
+            ],
+            securityContext: agentContainerSecurityContext(settings.privileged),
+          }
+        : entry,
+    ),
+  };
+}
+
+/**
+ * The containers with the agent's image replaced, the workspace initializer's
+ * too, keeping each one's pull policy rule for the new tag.
+ */
+export function withAgentRuntimeImage(
+  podSpec: Pick<k8s.V1PodSpec, "containers" | "initContainers">,
+  image: string,
+): Pick<k8s.V1PodSpec, "containers" | "initContainers"> {
   const previousImage = podSpec.containers.find(
     (entry) => entry.name === AGENT_RUNTIME_CONTAINER_NAME,
   )?.image;
-  const imagePullPolicy = usesFloatingAgentImageTag(settings.image)
+  const imagePullPolicy = usesFloatingAgentImageTag(image)
     ? ("Always" as const)
     : undefined;
   const withImage = (entry: k8s.V1Container): k8s.V1Container => {
     if (entry.image !== previousImage) return entry;
     const { imagePullPolicy: _previousPolicy, ...rest } = entry;
-    return {
-      ...rest,
-      image: settings.image,
-      ...(imagePullPolicy ? { imagePullPolicy } : {}),
-    };
+    return { ...rest, image, ...(imagePullPolicy ? { imagePullPolicy } : {}) };
   };
   return {
-    containers: podSpec.containers.map((entry) => {
-      const moved = withImage(entry);
-      if (entry.name !== AGENT_RUNTIME_CONTAINER_NAME) return moved;
-      return {
-        ...moved,
-        env: withEnv(moved.env, AGENT_RUNTIME_TIER_ENV, tier),
-        resources: buildResourceRequirements(settings.resources),
-        volumeMounts: [
-          ...(moved.volumeMounts ?? []).filter(
-            ({ mountPath }) => mountPath !== DOCKER_DATA_PATH,
-          ),
-          ...dockerDataMounts(settings.privileged),
-        ],
-        securityContext: agentContainerSecurityContext(settings.privileged),
-      };
-    }),
+    containers: podSpec.containers.map(withImage),
     ...(podSpec.initContainers
       ? { initContainers: podSpec.initContainers.map(withImage) }
       : {}),
@@ -459,12 +470,12 @@ export function withAgentRuntimeTier(params: {
 
 /**
  * Name the started turn the next Pod continues instead of failing it as
- * interrupted (see the supervisor). Set only together with the note a tier
- * switch writes beside that turn.
+ * interrupted (see the supervisor), or, with null, none. Set only together
+ * with the note a tier switch writes beside that turn.
  */
 export function withTurnResume(
   podSpec: Pick<k8s.V1PodSpec, "containers" | "initContainers">,
-  taskId: string,
+  taskId: string | null,
 ): Pick<k8s.V1PodSpec, "containers" | "initContainers"> {
   return {
     ...podSpec,
@@ -472,7 +483,12 @@ export function withTurnResume(
       entry.name === AGENT_RUNTIME_CONTAINER_NAME
         ? {
             ...entry,
-            env: withEnv(entry.env, AGENT_RUNTIME_RESUME_TURN_ENV, taskId),
+            env:
+              taskId === null
+                ? (entry.env ?? []).filter(
+                    ({ name }) => name !== AGENT_RUNTIME_RESUME_TURN_ENV,
+                  )
+                : withEnv(entry.env, AGENT_RUNTIME_RESUME_TURN_ENV, taskId),
           }
         : entry,
     ),

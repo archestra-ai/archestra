@@ -6,9 +6,7 @@ import {
   AgentRunModel,
   AgentWorkspaceModel,
 } from "@/models";
-import McpDeploymentLeaseModel, {
-  ClusterLeaseHeldError,
-} from "@/models/mcp-deployment-lease";
+import { ClusterLeaseHeldError } from "@/models/mcp-deployment-lease";
 import type { AgentRuntimeTier } from "@/types";
 import { ApiError } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
@@ -85,43 +83,48 @@ export async function requestAgentRuntimeTierSwitch(params: {
     );
 
   const backend = resolveAgentRuntimeBackendDriver(session.backend);
-  if (!backend.switchWorkspaceTier || !backend.workspaceRunsTierSettings)
+  if (!backend.switchWorkspaceTier)
     throw new ApiError(409, "This runtime backend has a single tier");
-  if (await backend.workspaceRunsTierSettings({ session, settings }))
-    return { tier: params.tier, switching: false };
 
-  const switchWorkspaceTier = backend.switchWorkspaceTier.bind(backend);
-  trackBackgroundWork(
-    // Not the session lease: a run adopted after a control-plane restart
-    // holds that one for its whole turn. This lease only keeps two requests
-    // from moving one workspace at once; the later one finds it moved.
-    McpDeploymentLeaseModel.withLease(
-      { scope: TIER_SWITCH_LEASE_SCOPE, key: session.id },
-      async () => {
-        await switchWorkspaceTier({
-          session,
-          tier: params.tier,
-          settings,
-          resumePrompt: tierSwitchResumePrompt(params.tier),
-          shouldResume: async () => {
-            const current = await A2ATaskModel.findById(session.taskId);
-            return Boolean(current && !isTerminalA2ATaskState(current.state));
-          },
-        });
+  // The switch replaces the Pod the caller runs in, so it continues in the
+  // background. Answer once it holds the run's switch lease and knows whether
+  // the workspace moves: a concurrent request is refused, never told a tier
+  // the workspace is about to leave.
+  const switching = await new Promise<boolean>((resolve, reject) => {
+    const work = backend.switchWorkspaceTier?.({
+      session,
+      tier: params.tier,
+      settings,
+      resumePrompt: tierSwitchResumePrompt(params.tier),
+      shouldResume: async () => {
+        const current = await A2ATaskModel.findById(session.taskId);
+        return Boolean(current && !isTerminalA2ATaskState(current.state));
       },
-    ).catch((error) => {
-      if (error instanceof ClusterLeaseHeldError) return;
-      logger.warn(
-        { error, taskId: session.taskId, tier: params.tier },
-        "Agent Runtime tier switch did not complete",
-      );
-    }),
-  );
-  logger.info(
-    { taskId: session.taskId, tier: params.tier },
-    "Agent Runtime tier switch requested by its run",
-  );
-  return { tier: params.tier, switching: true };
+      onStarted: resolve,
+    });
+    if (!work) return;
+    trackBackgroundWork(
+      work.catch((error) => {
+        if (error instanceof ClusterLeaseHeldError) {
+          reject(
+            new ApiError(409, "A runtime tier switch is already in progress"),
+          );
+          return;
+        }
+        // Before the switch started, the caller hears why; after it, the
+        // replaced turn learns the outcome from its tier in the new Pod.
+        reject(error);
+        logger.warn(
+          { error, taskId: session.taskId, tier: params.tier },
+          "Agent Runtime tier switch did not complete",
+        );
+      }),
+    );
+  });
+  if (switching)
+    logger.info(
+      { taskId: session.taskId, tier: params.tier },
+      "Agent Runtime tier switch requested by its run",
+    );
+  return { tier: params.tier, switching };
 }
-
-const TIER_SWITCH_LEASE_SCOPE = "agent-run-tier-switch";

@@ -34,6 +34,21 @@ describe("DebouncedInput", () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
+  it("commits each change synchronously when debounce is disabled", () => {
+    const onChange = vi.fn();
+    render(
+      <DebouncedInput initialValue="" onChange={onChange} debounceMs={0} />,
+    );
+
+    const input = screen.getByRole("textbox");
+    typeInInput(input, "first");
+    expect(onChange).toHaveBeenNthCalledWith(1, "first");
+
+    typeInInput(input, "second");
+    expect(onChange).toHaveBeenNthCalledWith(2, "second");
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
   it("does not call onChange on initial render", () => {
     const onChange = vi.fn();
     render(<DebouncedInput initialValue="initial" onChange={onChange} />);

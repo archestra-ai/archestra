@@ -10,6 +10,7 @@ import {
   AppaClaudeDesktopAdapter,
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPiAdapter } from "./adapters/pi";
 import type {
@@ -27,6 +28,7 @@ import { withCallerScope } from "./utils";
 export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
   [
     new AppaPiAdapter(),
+    new AppaKimiCodeAdapter(),
     // Before Claude Code: Desktop's Code and Cowork tabs also send Claude Code's UA and session header.
     new AppaClaudeDesktopAdapter(),
     new AppaClaudeCodeAdapter(),
@@ -43,7 +45,8 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
  *
  * Precedence:
  * 1. An explicit `X-Appa-Session-ID` header.
- * 2. Native client signals (Claude Code header, Codex metadata, OpenCode headers).
+ * 2. Native client signals (Claude Code header, Codex metadata, OpenCode
+ *    headers, Kimi Code's prompt cache key).
  * 3. Generic wire-family fallbacks.
  *
  * When provided, `X-Appa-Parent-ID` overrides any native parent ID.

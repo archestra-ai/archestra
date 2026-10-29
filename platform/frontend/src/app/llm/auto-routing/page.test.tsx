@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   AUTO_ROUTING_BACKFILL_MAX_COST_USD,
   archestraApiClient,
@@ -29,7 +30,10 @@ import type {
   AutoRoutingSimulation,
 } from "@/lib/auto-routing.query";
 import type { LlmModel } from "@/lib/llm-models.query";
-import { useOrganization } from "@/lib/organization.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import { formatDate } from "@/lib/utils/date-time";
 import AutoRoutingOverviewPage from "./page";
 import AutoRoutingPlansPage from "./plans/page";
@@ -179,6 +183,9 @@ beforeEach(() => {
   vi.mocked(useOrganization).mockReturnValue({
     data: null,
   } as unknown as ReturnType<typeof useOrganization>);
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: null,
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
 });
 
 afterEach(() => server.resetHandlers());
@@ -385,7 +392,7 @@ describe("AutoRoutingOverviewPage", () => {
     renderPage();
 
     expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
-      "Cold start: 12 of 100 scored sessions",
+      "Cold start · 12 of 100 sessions scored",
     );
   });
 
@@ -400,7 +407,7 @@ describe("AutoRoutingOverviewPage", () => {
     renderPage();
 
     expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
-      "Cold start: 1,000 of 1,000 scored sessions",
+      "Cold start · 1,000 of 1,000 sessions scored",
     );
   });
 
@@ -417,7 +424,7 @@ describe("AutoRoutingOverviewPage", () => {
     expect(screen.getByText("84.0%")).toBeInTheDocument();
     expect(screen.getByText("+2.0 points")).toBeInTheDocument();
     expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
-      "Active plan from",
+      "Active plan",
     );
   });
 
@@ -633,7 +640,7 @@ describe("AutoRoutingOverviewPage", () => {
 
     expect(await screen.findByText("$12.50/day")).toBeInTheDocument();
     expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
-      "Active plan from",
+      "Active plan",
     );
     expect(await screen.findByText("420")).toBeInTheDocument();
     expect(settingsReads).toBe(1);
@@ -852,16 +859,148 @@ describe("past sessions", () => {
     return scores;
   }
 
-  it("lists what a scan found by request shape and client", async () => {
-    serveBackfill({ backfill: scanned(), scoreOffer: offer });
+  it("scans past traffic before routing is enabled", async () => {
+    settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
+    let scans = 0;
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/backfill/scan`, () => {
+        scans++;
+        return HttpResponse.json({
+          backfill: scanned({ status: "running" }),
+          scoreOffer: null,
+        } satisfies AutoRoutingBackfillState);
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Scan past sessions" }),
+    );
+
+    await waitFor(() => expect(scans).toBe(1));
+  });
+
+  it("says routing is off beside past sessions, and drops it once enabled", async () => {
+    settings = makeSettings({ enabled: false });
+    serveBackfill({ backfill: scanned({ status: "done" }), scoreOffer: null });
+    server.use(
+      http.put(`${API_ORIGIN}/api/auto-routing/settings`, () =>
+        HttpResponse.json({
+          ...makeSettings({ enabled: true }),
+          fit: null,
+        } satisfies AutoRoutingSettingsChange),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText("Auto routing is off")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("switch", { name: "Disabled" }));
+    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
+
+    await waitFor(() =>
+      expect(screen.queryByText("Auto routing is off")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("drops a fit-blocked notice once a re-plan refits", async () => {
+    serveBackfill(
+      {
+        backfill: scanned({
+          status: "done",
+          fitBlockedReason: "No daily budget is set.",
+        }),
+        scoreOffer: null,
+      },
+      { backfill: scanned({ status: "done" }), scoreOffer: null },
+    );
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () =>
+        HttpResponse.json({
+          ...makeSettings(),
+          fit: null,
+        } satisfies AutoRoutingSettingsChange),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    expect(
+      await screen.findByText("No plan is fitted on these sessions"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Re-plan now" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("No plan is fitted on these sessions"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("shows how far past sessions got: found, scored, and what the plan needs", async () => {
+    serveBackfill({
+      backfill: scanned({
+        status: "running",
+        phase: "score",
+        progress: { scored: 30, sample: 240, noText: 0, failed: 0 },
+      }),
+      scoreOffer: null,
+    });
+    renderPage();
+
+    expect(
+      await screen.findByTestId("auto-routing-past-sessions-funnel"),
+    ).toHaveTextContent("240 found → 30 of 240 scored → plan needs 100");
+  });
+
+  it("totals sessions per client, folding agents and the tail", async () => {
+    const chain = `${randomUUID()}:${randomUUID()}`;
+    serveBackfill({
+      backfill: scanned({
+        breakdown: [
+          {
+            apiShape: "messages",
+            client: "anthropic_claude_code",
+            sessions: 200,
+          },
+          { apiShape: "messages", client: "anthropic_claude", sessions: 50 },
+          { apiShape: "responses", client: "openai_codex", sessions: 120 },
+          { apiShape: "responses", client: "kilo", sessions: 60 },
+          { apiShape: "chat_completions", client: "kilo", sessions: 20 },
+          { apiShape: "responses", client: chain, sessions: 30 },
+          { apiShape: "messages", client: randomUUID(), sessions: 5 },
+          { apiShape: "responses", client: "opencode", sessions: 25 },
+          {
+            apiShape: "messages",
+            client: "anthropic_claude_desktop",
+            sessions: 4,
+          },
+          { apiShape: "chat_completions", client: "unknown", sessions: 3 },
+        ],
+      }),
+      scoreOffer: offer,
+    });
     renderPage();
 
     const section = await screen.findByTestId("auto-routing-past-sessions");
     expect(
       within(section)
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual(["Messages, Claude Code: 200", "Chat Completions, OpenCode: 40"]);
+        .getAllByRole("row")
+        .map((row) =>
+          within(row)
+            .getAllByRole("cell")
+            .slice(0, 2)
+            .map((cell) => cell.textContent),
+        ),
+    ).toEqual([
+      ["Claude Code", "250"],
+      ["Codex", "120"],
+      ["Kilo Code", "80"],
+      ["Archestra agents", "35"],
+      ["OpenCode", "25"],
+      ["Other", "7"],
+    ]);
   });
 
   it("accepts a spending limit up to the API's bound and no further", async () => {
@@ -930,10 +1069,10 @@ describe("past sessions", () => {
 
       await vi.advanceTimersByTimeAsync(5_000);
       // The fit has not published yet: nothing re-read the settings.
-      expect(screen.queryByText(/Active plan from/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Active plan/)).not.toBeInTheDocument();
       await vi.advanceTimersByTimeAsync(5_000);
 
-      expect(await screen.findByText(/Active plan from/)).toBeInTheDocument();
+      expect(await screen.findByText(/Active plan/)).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -1090,7 +1229,7 @@ describe("past sessions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("folds into one line beside an active plan with nothing to re-score", async () => {
+  it("beside an active plan with nothing to score, offers only a scan", async () => {
     settings = makeSettings({
       status: {
         ...makeSettings().status,
@@ -1104,14 +1243,40 @@ describe("past sessions", () => {
       }),
       scoreOffer: null,
     });
+    let scans = 0;
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/backfill/scan`, () => {
+        scans++;
+        return HttpResponse.json({
+          backfill: scanned({ status: "running" }),
+          scoreOffer: null,
+        } satisfies AutoRoutingBackfillState);
+      }),
+    );
+    const user = userEvent.setup();
     renderPage();
 
+    await user.click(
+      await screen.findByRole("button", { name: "Scan past sessions" }),
+    );
+
+    await waitFor(() => expect(scans).toBe(1));
+  });
+
+  it("shows spend only for a scoring run, not for a scan", async () => {
+    serveBackfill({
+      backfill: scanned({
+        progress: { sample: 240, scored: 200, noText: 0, failed: 0 },
+      }),
+      scoreOffer: offer,
+    });
+    renderPage();
+
+    const section = await screen.findByTestId("auto-routing-past-sessions");
     expect(
-      await screen.findByTestId("auto-routing-past-traffic"),
-    ).toHaveTextContent("Past traffic: 238 scored");
-    expect(
-      screen.queryByTestId("auto-routing-past-sessions"),
-    ).not.toBeInTheDocument();
+      within(section).getByTestId("auto-routing-past-sessions-funnel"),
+    ).toHaveTextContent("200 of 240 scored");
+    expect(within(section).queryByText(/Spent/)).not.toBeInTheDocument();
   });
 });
 

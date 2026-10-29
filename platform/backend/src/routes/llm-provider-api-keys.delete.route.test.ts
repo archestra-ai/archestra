@@ -1,9 +1,11 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
   LlmOauthClientModel,
   LlmProviderApiKeyModel,
+  ModelModel,
   OrganizationModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -29,6 +31,7 @@ describe("deleting an LLM provider API key that virtual keys map to", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 
@@ -204,5 +207,31 @@ describe("deleting an LLM provider API key that virtual keys map to", () => {
     expect(organization?.embeddingChatApiKeyId).toBeNull();
     expect(organization?.ocrChatApiKeyId).toBeNull();
     expect(organization?.rerankerChatApiKeyId).toBe(otherKey.id);
+  });
+
+  // A subscription disconnect timed out in this cleanup after the key was
+  // already gone: the client kept showing it, and the retry got a 404.
+  test("single delete succeeds when the model cleanup after it fails", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const apiKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+    );
+    const cleanup = vi
+      .spyOn(ModelModel, "deleteOrphanedModels")
+      .mockRejectedValue(
+        new Error("canceling statement due to statement timeout"),
+      );
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${apiKey.id}`,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(await LlmProviderApiKeyModel.findById(apiKey.id)).toBeNull();
   });
 });

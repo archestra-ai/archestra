@@ -9,16 +9,10 @@ import {
   useAutoRoutingPlan,
   useAutoRoutingSettings,
 } from "@/lib/auto-routing.query";
-import { formatDate } from "@/lib/utils/date-time";
 import { AddJevKeyLink } from "./_parts/add-jev-key";
 import { useFittedTierModels } from "./_parts/fitted-tier-models";
 import { PastSessions } from "./_parts/past-sessions";
-import {
-  describeFitError,
-  type FittedHistory,
-  parseFittedHistory,
-  parsePlanSummary,
-} from "./_parts/plan-document";
+import { describeFitError, parsePlanSummary } from "./_parts/plan-document";
 import { PlanSummaryView } from "./_parts/plan-summary";
 import { AutoRoutingSettingsForm } from "./_parts/settings-form";
 import { TryPrompt } from "./_parts/try-prompt";
@@ -45,14 +39,13 @@ export default function AutoRoutingOverviewPage() {
     <div className="space-y-6">
       <AutoRoutingSettingsForm settings={settings} canUpdate={canUpdate} />
       <PlanStatus settings={settings} />
-      {settings.enabled && (
-        <PastSessions
-          required={settings.status.coldStart.required}
-          hasActivePlan={settings.status.activePlan !== null}
-          canUpdate={canUpdate}
-          scorer={settings.status.scorer}
-        />
-      )}
+      <PastSessions
+        routingEnabled={settings.enabled}
+        required={settings.status.coldStart.required}
+        hasActivePlan={settings.status.activePlan !== null}
+        canUpdate={canUpdate}
+        scorer={settings.status.scorer}
+      />
       <ActivePlanSummary settings={settings} />
       <TryPrompt canUpdate={canUpdate} scorer={settings.status.scorer} />
     </div>
@@ -61,17 +54,35 @@ export default function AutoRoutingOverviewPage() {
 
 function PlanStatus({ settings }: { settings: AutoRoutingSettings }) {
   const { activePlan, coldStart, lastFitError, scorer } = settings.status;
-  const { data: plan } = useAutoRoutingPlan(activePlan?.id ?? null);
-  const history = plan ? parseFittedHistory(plan.diagnostics) : null;
   const fitError = lastFitError ? describeFitError(lastFitError) : null;
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3 text-sm">
-        <span data-testid="auto-routing-status">
-          {activePlan
-            ? `Active plan from ${formatDate({ date: activePlan.createdAt })}${history ? `. ${learnedFrom(history)}` : ""}`
-            : `Cold start: ${Math.min(coldStart.sessions, coldStart.required).toLocaleString("en-US")} of ${coldStart.required.toLocaleString("en-US")} scored sessions`}
+        <span
+          className="flex items-center gap-2"
+          data-testid="auto-routing-status"
+        >
+          <span
+            aria-hidden
+            className={
+              activePlan
+                ? "size-2 rounded-full bg-primary"
+                : "size-2 rounded-full border border-muted-foreground"
+            }
+          />
+          {activePlan ? (
+            <span className="font-medium">Active plan</span>
+          ) : (
+            <span>
+              <span className="font-medium">Cold start</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {count(Math.min(coldStart.sessions, coldStart.required))} of{" "}
+                {count(coldStart.required)} sessions scored
+              </span>
+            </span>
+          )}
         </span>
         {!activePlan && scorer === "no_jev_key" && <AddJevKeyLink />}
       </div>
@@ -91,15 +102,8 @@ function PlanStatus({ settings }: { settings: AutoRoutingSettings }) {
   );
 }
 
-function learnedFrom(history: FittedHistory): string {
-  const past =
-    history.past_sessions > 0
-      ? ` (${history.past_sessions.toLocaleString("en-US")} from past traffic)`
-      : "";
-  const sessions = `Learned from ${history.sessions.toLocaleString("en-US")} sessions${past}`;
-  return history.last_created_at
-    ? `${sessions}, data up to ${formatDate({ date: history.last_created_at })}`
-    : sessions;
+function count(value: number): string {
+  return value.toLocaleString("en-US");
 }
 
 function ActivePlanSummary({ settings }: { settings: AutoRoutingSettings }) {

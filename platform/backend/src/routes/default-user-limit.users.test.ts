@@ -53,6 +53,37 @@ describe("user limit usage routes", () => {
     };
   };
 
+  test("a soft custom budget does not hide the enforced default in the user summary", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId,
+      environmentId: null,
+      limitValue: 10,
+      cleanupInterval: "calendar_month",
+    });
+    const user = await member({ makeUser, makeMember }, "Soft budget user");
+    await makeInteraction(agentId, { userId: user.id, cost: "12" });
+    await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      cleanupInterval: "calendar_month",
+      behavior: "soft",
+    });
+    const body = await list();
+    expect(body.data.find((row) => row.userId === user.id)).toMatchObject({
+      source: "organization_default",
+      limitValue: 10,
+      spent: 12,
+      status: "at",
+    });
+    expect(body.summary.custom).toBe(0);
+  });
+
   test("ranks users by how close they are to the limit that applies to them", async ({
     makeUser,
     makeMember,

@@ -1006,6 +1006,11 @@ class ConversationModel {
     await tx
       .delete(schema.conversationsTable)
       .where(eq(schema.conversationsTable.id, id));
+    await ResourcePermissionPolicyModel.deleteForTarget({
+      tx,
+      resources: ["conversation"],
+      scope: id,
+    });
   }
   // SPDX-SnippetEnd
 

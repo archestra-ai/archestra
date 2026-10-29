@@ -5,6 +5,7 @@ import {
   legacyMcpClientServerNames,
   OPENCODE_PRIMARY_PROVIDERS,
   openCodePassthroughProviders,
+  PROVIDER_MODEL_TIERS,
   providerDisplayNames,
   RouteId,
   resolveMcpClientServerName,
@@ -124,6 +125,7 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   "claude-desktop": ["anthropic"],
   codex: ["openai"],
   pi: INSTALLER_CLIENT_KEY_PROVIDERS.pi,
+  "kimi-code": INSTALLER_CLIENT_KEY_PROVIDERS["kimi-code"],
   // Cursor routes every model through the Model Router with one key that maps
   // many providers ("primary-providers"), never a single provider.
   cursor: [],
@@ -558,13 +560,18 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         model &&
         clientId !== "copilot-cli" &&
         clientId !== "claude-desktop" &&
-        clientId !== "pi"
+        clientId !== "pi" &&
+        clientId !== "kimi-code"
       ) {
         throw new ApiError(
           400,
-          "model is only supported for copilot-cli, claude-desktop and pi setups",
+          "model is only supported for copilot-cli, claude-desktop, pi and kimi-code setups",
         );
       }
+      // Kimi Code names one model in its provider entry. Without a choice,
+      // use the provider's default.
+      if (clientId === "kimi-code" && provider)
+        model ??= PROVIDER_MODEL_TIERS[provider].normal;
 
       const organization = await OrganizationModel.getById(organizationId);
       if (
@@ -684,6 +691,8 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (provider === "anthropic" || provider === "bedrock")) ||
             ((clientId === "codex" || clientId === "pi") &&
               provider === "openai") ||
+            (clientId === "kimi-code" &&
+              (provider === "kimi-code" || provider === "kimi")) ||
             (clientId === "copilot-cli" && provider === "github-copilot") ||
             isOpenCodeFamilyClient(clientId))
         ) {
@@ -819,6 +828,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } else if (
         !isOpenCodeFamilyClient(clientId) &&
         clientId !== "pi" &&
+        clientId !== "kimi-code" &&
         organization.connectionPluginsEnabled
       ) {
         const canDeliverPlugins = await userCanDeliverPlugins({
@@ -1140,7 +1150,8 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           marketplaceRender &&
           marketplaceRender.pluginIds.length === 0 &&
           setup.clientId !== "claude-desktop" &&
-          setup.clientId !== "pi"
+          setup.clientId !== "pi" &&
+          setup.clientId !== "kimi-code"
             ? await SkillMarketplaceRepoModel.ensureForViewer({
                 organizationId: setup.organizationId,
                 userId: setup.userId,
@@ -1261,7 +1272,7 @@ interface MarketplaceRenderContext {
   pluginNames: string[];
   pluginClientType: Exclude<
     ConnectionSetupClientId,
-    OpenCodeFamilyClientId | "pi"
+    OpenCodeFamilyClientId | "pi" | "kimi-code"
   > | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
@@ -1532,7 +1543,8 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       pluginClientType:
         pluginIds.length > 0 &&
         !isOpenCodeFamilyClient(setup.clientId) &&
-        setup.clientId !== "pi"
+        setup.clientId !== "pi" &&
+        setup.clientId !== "kimi-code"
           ? setup.clientId
           : null,
       pluginPlatform:

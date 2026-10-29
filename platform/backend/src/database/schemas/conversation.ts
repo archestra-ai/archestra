@@ -162,6 +162,11 @@ const conversationsTable = softDeletablePgTable(
     // is the hard floor beneath the trash — which the partial owner-scoped
     // index above cannot serve.
     index("conversations_last_message_at_idx").on(table.lastMessageAt),
+    // Deleting a model clears modelId through its foreign key; without this
+    // each deleted model reads the whole table.
+    index("conversations_model_id_idx")
+      .on(table.modelId)
+      .where(sql`${table.modelId} IS NOT NULL`),
   ],
 );
 

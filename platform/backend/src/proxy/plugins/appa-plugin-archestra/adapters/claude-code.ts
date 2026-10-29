@@ -1,7 +1,7 @@
 import { EXTERNAL_AGENT_ID_HEADER } from "@archestra/shared/consts";
 import { isClaudeDesktopClientAgentId } from "@archestra/shared/interactions/client";
 import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
-import type { AppaSessionIdentity } from "@/openappa/wire";
+import { type AppaSessionIdentity, declaredToolEntries } from "@/openappa/wire";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
 import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
@@ -233,8 +233,13 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
 
   launchIdentity(
     text: string,
-  ): { name: string; childNativeId: string } | undefined {
-    if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) return undefined;
+  ): { name?: string; childNativeId: string } | undefined {
+    if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) {
+      const identifier = childLaunchIdentifier(text);
+      return identifier?.label === "agentId"
+        ? { childNativeId: identifier.value }
+        : undefined;
+    }
     const id = /^agent_id:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
     const name = /^name:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
     if (!id || !name || !isChildId(id) || !isChildId(name)) return undefined;
@@ -245,7 +250,16 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   teammateLaunches(requestBody: unknown): Map<string, AppaTeammateLaunch> {
     const launches = new Map<string, AppaTeammateLaunch>();
     for (const { text, callId, teammate } of spawnResultTexts(requestBody)) {
-      if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) continue;
+      if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) {
+        const identifier = childLaunchIdentifier(text);
+        if (identifier?.label === "agentId" && isChildId(teammate)) {
+          launches.set(teammate, {
+            childNativeId: identifier.value,
+            spawnCallId: callId,
+          });
+        }
+        continue;
+      }
       const id = /^agent_id:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
       const name = /^name:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
       if (id && name === teammate && isChildId(id) && isChildId(name))
@@ -270,13 +284,13 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   }
 
   childHandbackValue(args: unknown): string | undefined {
-    const raw = stringField(args);
+    const raw = typeof args === "string" ? args : undefined;
     const parsed = raw ? parseJson(raw) : undefined;
     const record = asRecord(args) ?? asRecord(parsed);
     if (!record) return raw;
     for (const key of HANDBACK_VALUE_KEYS) {
-      const value = stringField(record[key]);
-      if (value) return value;
+      const value = record[key];
+      if (typeof value === "string") return value;
     }
     return undefined;
   }
@@ -285,13 +299,14 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     args: unknown,
     admitted: string,
   ): string | Record<string, unknown> {
-    const raw = stringField(args);
+    const raw = typeof args === "string" ? args : undefined;
     const parsed = raw ? parseJson(raw) : undefined;
     const record = asRecord(args) ?? asRecord(parsed);
     if (!record) return admitted;
     const key =
-      HANDBACK_VALUE_KEYS.find((candidate) => stringField(record[candidate])) ??
-      "message";
+      HANDBACK_VALUE_KEYS.find(
+        (candidate) => typeof record[candidate] === "string",
+      ) ?? "message";
     const rewritten = { [key]: admitted };
     return typeof args === "string" ? JSON.stringify(rewritten) : rewritten;
   }
@@ -440,10 +455,10 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
  * Identifies Claude Desktop requests. Claude Desktop's Code and Cowork tabs
  * share Claude Code's runtime, tool names (`Bash`, `Agent`, `SendMessage`,
  * `AskUserQuestion`, `WaitForMcpServers`), and session/subagent wire format.
- * Only its identity and gateway setup instructions differ: the
- * `anthropic_claude_desktop` agent id header set by Desktop's setup, a
+ * Its differences are identity (`anthropic_claude_desktop` agent id header,
  * `claude-desktop` User-Agent, or a `cowork`/`claude-desktop` Anthropic billing
- * entrypoint in the system prompt.
+ * entrypoint in the system prompt), gateway setup instructions, and native
+ * question rendering/answer matching.
  */
 export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
   override readonly id = "claude-desktop" as const;
@@ -452,6 +467,31 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
     header: "claude-desktop-header",
     metadata: "claude-desktop-metadata",
   } as const;
+  // Claude Desktop's Code tab omits `option.preview` entirely, and its Cowork
+  // tab sanitizes HTML-like substrings inside `option.preview` via DOMPurify
+  // and hides the preview pane on narrow widths. Asking the full question
+  // without `option.preview` renders the call and policy scope as literal
+  // `whitespace-pre-wrap` text across both tabs and keeps single-click choice
+  // submission enabled.
+  override readonly nativeQuestion = {
+    toolName: "AskUserQuestion",
+    fromAskUser: (args: AskUserArguments) => ({
+      questions: [
+        {
+          question: args.question,
+          header: questionHeader(args.header, 12),
+          options: args.options.map((option) => ({
+            label: option.label,
+            description: option.description ?? option.label,
+          })),
+          multiSelect: args.allowMultiple === true,
+        },
+      ],
+    }),
+    rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
+      structuredQuestionRuling(result, asked.question),
+    formFallback: true,
+  };
 
   override gatewayToolsHint(serverName: string): string {
     return `In Claude Desktop, open Settings → Connectors, select "${serverName}", and complete sign-in if needed. In your conversation, open + → Connectors and enable "${serverName}" if it is off. If it is not listed, connect Claude Desktop again and start a new session. Then send your message again.`;
@@ -461,7 +501,8 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
     return (
       isClaudeDesktopSignal(context) &&
       (context.trustedContext !== undefined ||
-        this.extractSessionIdentity(context) !== undefined)
+        this.extractSessionIdentity(context) !== undefined ||
+        isToolFreeDesktopRequest(context.requestBody))
     );
   }
 
@@ -497,6 +538,38 @@ function isClaudeDesktopSignal(context: AppaMatchContext): boolean {
     userAgent.includes("claudedesktop") ||
     hasClaudeDesktopBillingEntrypoint(context.requestBody)
   );
+}
+
+/**
+ * Claude Desktop's main process and older connection installers send one-shot
+ * tool-free Messages requests (gateway probes, session title generation)
+ * without a conversation or session identifier. Because they declare no tools
+ * and carry no tool calls/results or provider thread state, OpenAPPA never
+ * opens a governed session for them; matching them avoids blocking Desktop
+ * startup or connection setup when unrecognized clients are blocked.
+ */
+function isToolFreeDesktopRequest(requestBody: unknown): boolean {
+  const body = asRecord(requestBody);
+  if (
+    !body ||
+    !Array.isArray(body.messages) ||
+    body.thread !== undefined ||
+    body.container !== undefined ||
+    declaredToolEntries(requestBody).length > 0
+  ) {
+    return false;
+  }
+  for (const message of body.messages) {
+    const content = asRecord(message)?.content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      const type = asRecord(part)?.type;
+      if (type === "tool_use" || type === "tool_result") {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 function hasClaudeDesktopBillingEntrypoint(requestBody: unknown): boolean {
@@ -584,6 +657,25 @@ const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/;
 function shownQuestion(args: AskUserArguments): string {
   return showsCallPreview(args) ? args.shortQuestion : args.question;
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Claude Desktop's Code tab omits `option.preview` from AskUserQuestion cards,
+ * and its Cowork tab sanitizes HTML-like substrings inside `option.preview` and
+ * hides the preview pane on narrow widths. Combining the inspectable card's
+ * title and bounded plain-text preview into `question` shows the call and
+ * policy scope verbatim across both tabs.
+ */
+export function claudeDesktopReviewQuestion(card: AskUserArguments): string {
+  const title = card.shortQuestion ?? card.question;
+  const preview =
+    card.options.find((option) => option.label === "Allow")?.preview ??
+    card.callPreview;
+  return preview ? `${title}\n\n${preview}` : title;
+}
+// SPDX-SnippetEnd
 
 function parentSessionId(context: AppaMatchContext): string | undefined {
   const metadata = claudeUserMetadata(context);

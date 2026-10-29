@@ -3,6 +3,7 @@ import logger from "@/logging";
 import LlmThroughputModel, {
   type ThroughputReceipt,
 } from "@/models/llm-throughput";
+import { reportLimitStorageError } from "@/observability/metrics/limit";
 import type { Limit, LimitEntityType } from "@/types/limit";
 import type { UsageView } from "@/types/llm-provider";
 
@@ -66,6 +67,7 @@ export class LlmThroughput {
       this.admitted = true;
     } catch (error) {
       if (error instanceof ThroughputError) throw error;
+      reportLimitStorageError("admission");
       logger.error({ err: error }, "Unable to admit LLM throughput");
       throw new ThroughputError({
         status: 503,
@@ -89,6 +91,7 @@ export class LlmThroughput {
         billingMode,
       });
     } catch (error) {
+      reportLimitStorageError("settlement");
       logger.error({ err: error }, "Unable to settle minute spend");
       throw error;
     }
@@ -107,6 +110,7 @@ export class LlmThroughput {
         { err: error },
         "Unable to release unsent request allowance",
       );
+      reportLimitStorageError("cancellation");
     }
   }
 
@@ -147,6 +151,7 @@ export class LlmThroughput {
         tokens,
       });
     } catch (error) {
+      reportLimitStorageError("settlement");
       logger.error({ err: error }, "Unable to record reported token usage");
       throw new ThroughputError({
         status: 503,

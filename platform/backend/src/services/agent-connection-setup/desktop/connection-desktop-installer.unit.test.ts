@@ -74,6 +74,7 @@ test.each([
   const module = { exports: null };
   let verifier: string | undefined;
   let challenge: string | null = null;
+  let cachedQuotaFailure = false;
   const network = async (url: string, options: RequestInit) => {
     if (url.includes("/api/connection-setups/script/")) {
       expect(options.headers).toEqual({
@@ -127,11 +128,12 @@ test.each([
     expect(url).toBe("https://proxy.example/v1/anthropic/v1/messages");
     expect(options.headers).toMatchObject({
       Authorization: `Bearer ${token}`,
+      "X-Claude-Code-Session-Id": expect.stringMatching(/^[0-9a-f-]{36}$/i),
       "X-Archestra-Virtual-Key": "test-user-key",
       "anthropic-beta": "oauth-2025-04-20",
     });
     expect(body.messages).toHaveLength(1);
-    return quotaFailure
+    return quotaFailure || cachedQuotaFailure
       ? new Response("quota", { status: 429 })
       : Response.json({
           type: "message",
@@ -276,6 +278,9 @@ test.each([
       expect(profile.inferenceGatewayBaseUrl).toBe(
         withProxy ? "https://proxy.example/v1/anthropic" : undefined,
       );
+      expect(
+        profile.inferenceCustomHeaders?.["X-Claude-Code-Session-Id"],
+      ).toBeUndefined();
       // Third-party mode keeps its own history, so proxy setups enable the
       // Claude.ai import. Tools-only setups stay in standard mode.
       expect(profile.coworkEgressAllowedHosts).toEqual(
@@ -392,6 +397,24 @@ test.each([
         );
       } finally {
         repeated.close();
+      }
+      if (withProxy) {
+        // A rate-limited cached subscription token falls back to fresh sign-in instead of failing setup.
+        cachedQuotaFailure = true;
+        const rateLimitedCached = new Installer({
+          origin: "https://proxy.example",
+          rawToken: "third-ticket",
+        });
+        try {
+          await rateLimitedCached.start();
+          const thirdPage = opened.at(-1);
+          expect(
+            (await (await fetch(`${thirdPage}/status`)).json()).phase,
+          ).toBe("signin");
+        } finally {
+          rateLimitedCached.close();
+          cachedQuotaFailure = false;
+        }
       }
     }
   } finally {

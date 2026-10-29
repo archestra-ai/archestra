@@ -155,23 +155,32 @@ export class GitHostClient {
    */
   async listRepositories(search?: string): Promise<GitRepositorySummary[]> {
     if (this.host.provider === "github") {
-      const data = await this.json<{
-        repositories: {
-          full_name: string;
-          private: boolean;
-          default_branch?: string;
-        }[];
-      }>(`${this.host.apiUrl}/installation/repositories?per_page=100`);
+      const repositories: GitRepositorySummary[] = [];
+      // The picker searches this list, so fetch every installation page before
+      // filtering; searching only the first page hides accessible repositories.
+      for (let page = 1; ; page++) {
+        const data = await this.json<{
+          repositories: {
+            full_name: string;
+            private: boolean;
+            default_branch?: string;
+          }[];
+        }>(
+          `${this.host.apiUrl}/installation/repositories?per_page=100&page=${page}`,
+        );
+        repositories.push(
+          ...data.repositories.map((repo) => ({
+            path: repo.full_name,
+            private: repo.private,
+            defaultBranch: repo.default_branch ?? null,
+          })),
+        );
+        if (data.repositories.length < 100) break;
+      }
       const needle = search?.toLowerCase();
-      return data.repositories
-        .filter(
-          (repo) => !needle || repo.full_name.toLowerCase().includes(needle),
-        )
-        .map((repo) => ({
-          path: repo.full_name,
-          private: repo.private,
-          defaultBranch: repo.default_branch ?? null,
-        }));
+      return repositories.filter(
+        (repo) => !needle || repo.path.toLowerCase().includes(needle),
+      );
     }
     const params = new URLSearchParams({
       membership: "true",

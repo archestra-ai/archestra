@@ -4250,6 +4250,27 @@
       "when": 1793185488614,
       "tag": "0606_concerned_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 607,
+      "version": "7",
+      "when": 1793202129954,
+      "tag": "0607_awesome_red_ghost",
+      "breakpoints": true
+    },
+    {
+      "idx": 608,
+      "version": "7",
+      "when": 1793220651428,
+      "tag": "0608_vengeful_leech",
+      "breakpoints": true
+    },
+    {
+      "idx": 609,
+      "version": "7",
+      "when": 1793228884954,
+      "tag": "0609_absent_scourge",
+      "breakpoints": true
     }
   ]
 }

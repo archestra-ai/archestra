@@ -44,6 +44,9 @@ function pool(benchedUntil: string | null): ModelPool {
     id: "pool",
     organizationId: "org",
     name: "glm-5",
+    streamTimeoutSeconds: null,
+    timeoutSeconds: null,
+    cooldownSeconds: null,
     createdAt: new Date(NOW).toISOString(),
     updatedAt: new Date(NOW).toISOString(),
     virtualApiKeyIds: [],
@@ -118,5 +121,66 @@ describe("PoolDialog", () => {
     await user.type(input, "1001");
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  });
+
+  it("takes a pool's timeouts in whole seconds, within the API's limits", async () => {
+    const user = userEvent.setup();
+    const saved = pool(null);
+    vi.mocked(useModelPools).mockReturnValue({
+      data: [saved],
+    } as unknown as ReturnType<typeof useModelPools>);
+    render(<PoolDialog pool={saved} onOpenChange={() => {}} />);
+    const input = screen.getByLabelText("Stream timeout");
+    await user.type(input, "1.5");
+    expect(input).toHaveValue("15");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+    await user.type(input, "000");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  });
+
+  it("opens a big pool with the orders after the first folded", async () => {
+    const user = userEvent.setup();
+    const saved = pool(null);
+    const big = {
+      ...saved,
+      members: ["a", "b", "c", "d", "e"].map((modelId, index) => ({
+        ...saved.members[0],
+        id: modelId,
+        modelId,
+        priority: index < 2 ? 1 : 2,
+        benchedUntil:
+          modelId === "e" ? new Date(NOW + 20_000).toISOString() : null,
+      })),
+    } as ModelPool;
+    vi.mocked(useModelPools).mockReturnValue({
+      data: [big],
+    } as unknown as ReturnType<typeof useModelPools>);
+    render(<PoolDialog pool={big} onOpenChange={() => {}} />);
+    const fold = screen.getByRole("button", { name: "Expand order 2" });
+    expect(fold).toHaveAttribute("aria-expanded", "false");
+    // Its rows are hidden, so the header says a member is cooling down.
+    expect(screen.getByText("1 cooling down")).toBeInTheDocument();
+    expect(screen.getAllByRole("spinbutton", { name: /Weight/ })).toHaveLength(
+      2,
+    );
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    expect(screen.getAllByRole("spinbutton", { name: /Weight/ })).toHaveLength(
+      5,
+    );
+
+    // An order holding a value that keeps Save off won't fold away.
+    const lastWeight = screen.getAllByRole("spinbutton", { name: /Weight/ })[4];
+    await user.clear(lastWeight);
+    await user.click(screen.getByRole("button", { name: "Collapse all" }));
+    expect(screen.getAllByRole("spinbutton", { name: /Weight/ })).toHaveLength(
+      3,
+    );
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    // Fixed, it stays open until folded again.
+    await user.type(lastWeight, "2");
+    expect(screen.getAllByRole("spinbutton", { name: /Weight/ })).toHaveLength(
+      3,
+    );
   });
 });

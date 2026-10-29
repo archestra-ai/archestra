@@ -55,6 +55,7 @@ import {
   AppaClaudeDesktopAdapter,
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
 import {
@@ -3548,30 +3549,49 @@ describe("asking through the client's own question tool", () => {
   /**
    * A Claude Code session whose review rides the client's native card with an
    * Inspect option, on a transport that can place the complete review
-   * text before the card. `askCard` re-asks exactly as the model would: only
-   * the offer ID decides what is shown.
+   * text before the card. OpenCode, Kilo Code and Kimi Code carry the review
+   * in the question itself. `askCard` re-asks exactly as the model would:
+   * only the offer ID decides what is shown.
    */
   function inspectableClaudeReview(params: {
     sessionId: string;
     offerId: string;
-    client?: "opencode" | "kilo";
+    client?: "opencode" | "kilo" | "kimi-code" | "claude-desktop";
   }) {
+    const isOpenCodeFamily =
+      params.client === "opencode" || params.client === "kilo";
     const adapter =
-      params.client === "kilo"
-        ? new AppaKiloAdapter()
-        : params.client === "opencode"
-          ? new AppaOpenCodeAdapter()
-          : new AppaClaudeCodeAdapter();
-    const nativeName = params.client ? "question" : "AskUserQuestion";
+      params.client === "kimi-code"
+        ? new AppaKimiCodeAdapter()
+        : params.client === "kilo"
+          ? new AppaKiloAdapter()
+          : params.client === "opencode"
+            ? new AppaOpenCodeAdapter()
+            : params.client === "claude-desktop"
+              ? new AppaClaudeDesktopAdapter()
+              : new AppaClaudeCodeAdapter();
+    const kimi = params.client === "kimi-code";
+    // Claude Code and Claude Desktop show the review before the card; the
+    // other clients carry it in the question itself.
+    const showsReview = !isOpenCodeFamily && !kimi;
+    const nativeName = isOpenCodeFamily ? "question" : "AskUserQuestion";
     const plugin = new AppaPluginArchestra([adapter]);
     const context = requestContext({ sessionId: params.sessionId });
-    context.headers = params.client
-      ? {
-          "user-agent": `${params.client}/1`,
-          "x-opencode-session": params.sessionId,
-          "x-archestra-question-cards": "1",
-        }
-      : { "user-agent": "claude-code/1" };
+    context.headers = kimi
+      ? { "user-agent": "kimi-code-cli/2.3.3" }
+      : isOpenCodeFamily
+        ? {
+            "user-agent": `${params.client}/1`,
+            "x-opencode-session": params.sessionId,
+            "x-archestra-question-cards": "1",
+          }
+        : params.client === "claude-desktop"
+          ? {
+              "user-agent": "claude-cli/2.1.312 (external, cli)",
+              "x-archestra-agent-id": "anthropic_claude_desktop",
+            }
+          : { "user-agent": "claude-code/1" };
+    if (kimi) context.requestBody = { prompt_cache_key: params.sessionId };
     const trusted = context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
     ) as AppaTrustedContext;
@@ -3602,20 +3622,23 @@ describe("asking through the client's own question tool", () => {
             }),
           },
         ],
-        canShowToolCallReview: !params.client,
+        canShowToolCallReview: showsReview,
       });
       if (prepared?.decision !== "allow")
         throw new Error("expected the review card");
       const released = await plugin.onToolCalls({
         ...context,
         toolCalls: prepared.toolCalls,
-        canShowToolCallReview: !params.client,
+        canShowToolCallReview: showsReview,
       });
       if (released?.decision !== "allow")
         throw new Error("expected the released review card");
       const [call] = released.toolCalls;
+      // Kimi Code cuts tool-call IDs, so no trajectory stamp wraps the native
+      // question id: the answer comes back under that id as issued.
       const stamp = parseTrajectoryStamp(call.wireId ?? "");
-      if (!stamp) throw new Error("expected a trajectory stamp");
+      if (!kimi && !stamp) throw new Error("expected a trajectory stamp");
+      if (kimi && stamp) throw new Error("expected no trajectory stamp");
       const args = JSON.parse(call.arguments as string) as {
         questions: Array<{
           question: string;
@@ -3630,7 +3653,7 @@ describe("asking through the client's own question tool", () => {
       };
       return {
         call,
-        answerId: stamp.callId,
+        answerId: stamp ? stamp.callId : (call.wireId ?? call.id),
         card: args.questions[0],
         reviewDetails: (call as { reviewDetails?: string }).reviewDetails,
       };
@@ -3647,11 +3670,18 @@ describe("asking through the client's own question tool", () => {
             id: answerId,
             name: nativeName,
             content: JSON.stringify(
-              label === ""
-                ? params.client
-                  ? "User dismissed the question."
-                  : "The user did not answer the questions."
-                : `${params.client ? "User has answered your questions" : "Your questions have been answered"}: "${question}"="${label}". You can now continue with these answers in mind.`,
+              kimi
+                ? label === ""
+                  ? {
+                      answers: {},
+                      note: "User dismissed the question without answering.",
+                    }
+                  : { answers: { [question]: label } }
+                : label === ""
+                  ? isOpenCodeFamily
+                    ? "User dismissed the question."
+                    : "The user did not answer the questions."
+                  : `${isOpenCodeFamily ? "User has answered your questions" : "Your questions have been answered"}: "${question}"="${label}". You can now continue with these answers in mind.`,
             ),
             isError: false,
           },
@@ -3670,6 +3700,7 @@ describe("asking through the client's own question tool", () => {
   test.each([
     "opencode",
     "kilo",
+    "kimi-code",
   ] as const)("%s connection cards bind previews, deliver full review in native input, and consume explicit answers once", async (client) => {
     const offerId = `offer-${client}-cards`;
     const f = inspectableClaudeReview({
@@ -3721,6 +3752,7 @@ describe("asking through the client's own question tool", () => {
   test.each([
     "opencode",
     "kilo",
+    "kimi-code",
   ] as const)("%s rejects cross-session and altered-question answers without consuming the rightful card", async (client) => {
     const offerId = `offer-${client}-scope`;
     const owner = inspectableClaudeReview({
@@ -3773,6 +3805,7 @@ describe("asking through the client's own question tool", () => {
   test.each([
     "opencode",
     "kilo",
+    "kimi-code",
   ] as const)("%s dismisses without denial and refuses a stale payload", async (client) => {
     const results = vi
       .spyOn(appaService, "processProxyResults")
@@ -4511,6 +4544,122 @@ describe("asking through the client's own question tool", () => {
         getHitlReview({ session: trusted.session, offerId }),
       ).resolves.toBeUndefined();
     } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("Claude Desktop inspectable cards carry the call and policy scope in question without option previews, place Inspect reviewDetails before the card, and seal Skip/Dismiss sentinel answers", async () => {
+    const offerId = "offer-claude-desktop-inspectable";
+    const command =
+      "python3 -c \"print('<script>alert(1)</script><a href=https://example.com>link</a>')\"";
+    const { plugin, context, trusted, askCard, answer } =
+      inspectableClaudeReview({
+        client: "claude-desktop",
+        sessionId: "user:user|claude-desktop-inspectable",
+        offerId,
+      });
+    await stageInspectableReview(trusted.session, offerId, command);
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+
+    try {
+      await plugin.onSessionInit(context);
+      const first = await askCard();
+      expect(first.call.name).toBe("AskUserQuestion");
+      expect(first.card.question).toContain("Run Bash?\n\n");
+      expect(first.card.question.replace(/\n\s+/g, "")).toContain(
+        "<script>alert(1)</script>",
+      );
+      expect(first.card.question.replace(/\s+/g, " ")).toContain(
+        "the readers must be the public audience",
+      );
+      expect(first.card.options.map((option) => option.label)).toEqual([
+        "Allow",
+        "Deny",
+        "Inspect",
+      ]);
+      expect(first.card.options.some((option) => "preview" in option)).toBe(
+        false,
+      );
+      expect(first.reviewDetails).toBeUndefined();
+
+      await answer(first.answerId, first.card.question, "Inspect");
+      const inspected = await askCard();
+      expect(inspected.reviewDetails).toContain("## Approval review");
+      expect(inspected.reviewDetails).toContain(command);
+      expect(inspected.card.question).toBe(first.card.question);
+      expect(inspected.card.options.some((option) => "preview" in option)).toBe(
+        false,
+      );
+
+      const approved = await answer(
+        inspected.answerId,
+        inspected.card.question,
+        "Allow",
+      );
+      expect(approved.guidance).toContain("approved OpenAPPA offer IDs");
+      await expect(
+        consumeHitlRuling({ session: trusted.session, offerId }),
+      ).resolves.toBe("approve");
+
+      for (const [suffix, sentinel, closure] of [
+        ["skip", "[No preference]", "unanswered"],
+        [
+          "dismiss",
+          "[User dismissed \u2014 do not proceed, wait for next instruction]",
+          "declined",
+        ],
+      ] as const) {
+        const sentinelOfferId = `offer-claude-desktop-${suffix}`;
+        const sentinelFixture = inspectableClaudeReview({
+          client: "claude-desktop",
+          sessionId: `user:user|claude-desktop-${suffix}`,
+          offerId: sentinelOfferId,
+        });
+        await stageInspectableReview(
+          sentinelFixture.trusted.session,
+          sentinelOfferId,
+          "pwd",
+        );
+        await sentinelFixture.plugin.onSessionInit(sentinelFixture.context);
+        try {
+          const card = await sentinelFixture.askCard();
+          await sentinelFixture.plugin.onToolResults({
+            ...sentinelFixture.context,
+            toolResults: [
+              {
+                id: card.answerId,
+                name: "AskUserQuestion",
+                content: JSON.stringify(
+                  `The user answered: "${card.card.question}"="${sentinel}". Read the answers carefully \u2014 they may request clarification, changes, or that you not proceed \u2014 and follow what they actually say.`,
+                ),
+                isError: false,
+              },
+            ],
+          });
+          await expect(
+            hitlReview.peekHitlDecision({
+              session: sentinelFixture.trusted.session,
+              offerId: sentinelOfferId,
+            }),
+          ).resolves.toEqual({ ruling: "none", closure });
+          await expect(
+            consumeHitlRuling({
+              session: sentinelFixture.trusted.session,
+              offerId: sentinelOfferId,
+            }),
+          ).resolves.toBe("none");
+        } finally {
+          await sentinelFixture.plugin.onCleanup(sentinelFixture.context);
+        }
+      }
+    } finally {
+      evaluateToolCalls.mockRestore();
       processResults.mockRestore();
       await plugin.onCleanup(context);
     }
@@ -6593,6 +6742,173 @@ describe("rendering runtime text for this client", () => {
       evaluateToolCalls.mockRestore();
       endChild.mockRestore();
       config.openappa.offerSigningSecret = priorSecret;
+    }
+  });
+
+  test("converts a withheld SubagentHandback (crossed=false) into a denied tool notice instead of throwing 409", async ({
+    makeOrganization,
+  }) => {
+    const priorSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = DELEGATION_SECRET;
+    const organization = await makeOrganization();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    trusted.request.turnEndOperationId = "turn_end:withheld-handback";
+    const marker = mintDelegationMarker({
+      organizationId: organization.id,
+      callerId: "user:user",
+      parentId: "s1",
+      spawnerNativeId: "s1",
+      prompt: "task",
+      spawnCallId: "spawn-call",
+    });
+    if (!marker) throw new Error("expected delegation marker");
+    trusted.request.delegation = {
+      markers: collectDelegationMarkers({
+        family: "anthropic:messages",
+        body: {
+          messages: [{ role: "user", content: `task\n\n${marker}` }],
+        },
+      }),
+    };
+    const feedback =
+      "[appa] Return value does not satisfy the declared JSON schema.";
+    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+      decision: "replace",
+      content: feedback,
+      crossed: false,
+    });
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "handback-invalid",
+            name: "SubagentHandback",
+            arguments: { message: "not valid json" },
+          },
+        ],
+      });
+      expect(outcome).toMatchObject({
+        decision: "allow",
+        blocked: [{ id: "handback-invalid", name: "SubagentHandback" }],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected allow");
+      const [notice] = outcome.toolCalls;
+      expect(notice?.name).toBe("archestra__get_remedy_plans");
+      expect(carriedNotice(outcome, "handback-invalid")).toMatchObject({
+        tool: "SubagentHandback",
+        result: feedback,
+      });
+    } finally {
+      endChild.mockRestore();
+      config.openappa.offerSigningSecret = priorSecret;
+    }
+  });
+
+  test("holds conflicting sibling execute_remedy_plan calls in a single batch as unstamped notices before any offer is spent", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    await db.insert(schema.openappaSessionsTable).values({
+      actor: openappaActor("user:user|s1"),
+      root: openappaActor("user:user|s1"),
+      organizationId: organization.id,
+      callerId: "user:user",
+      sessionId: "user:user|s1",
+      parentId: null,
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: organization.id,
+      callerId: "user:user",
+      sessionId: "user:user|s1",
+      operationId: "call:denied-agent-spawn",
+      root: openappaActor("user:user|s1"),
+      status: "complete",
+      input: { semantic: { event: "tool_call", tool: "Agent", spawn: true } },
+      decision: {
+        decision: "deny_call",
+        offers: [{ offer_id: "offer-bare" }, { offer_id: "offer-schema" }],
+      },
+    });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "control" }, { kind: "control" }]);
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "remedy-1",
+            name: "archestra__execute_remedy_plan",
+            arguments: {
+              offer_id: "offer-bare",
+              label: { trust: "trusted", audience: ["public"] },
+              plan: "Declare the return label",
+            },
+          },
+          {
+            id: "remedy-2",
+            name: "archestra__execute_remedy_plan",
+            arguments: {
+              offer_id: "offer-schema",
+              label: { audience: ["public"] },
+              return_schema: {
+                type: "object",
+                properties: { online: { type: "boolean" } },
+                required: ["online"],
+              },
+              plan: "Declare the return label and JSON schema",
+            },
+          },
+        ],
+      });
+      expect(outcome).toMatchObject({
+        decision: "allow",
+        blocked: [
+          { id: "remedy-1", name: "archestra__execute_remedy_plan" },
+          { id: "remedy-2", name: "archestra__execute_remedy_plan" },
+        ],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected allow");
+      for (const id of ["remedy-1", "remedy-2"]) {
+        const notice = carriedNotice(outcome, id);
+        expect(notice.tool).toBe("archestra__execute_remedy_plan");
+        expect(notice.result).toContain("mutually exclusive offers");
+        expect(notice.original).toMatchObject({ kind: "function" });
+        if (notice.original.kind !== "function")
+          throw new Error("expected function");
+        expect(notice.original.arguments).not.toHaveProperty("execution");
+        expect(notice.original.arguments).not.toHaveProperty("trajectory");
+      }
+    } finally {
+      evaluateToolCalls.mockRestore();
     }
   });
 

@@ -7,8 +7,10 @@ import {
   isCodexUserAgent,
   isCursorUserAgent,
   isKiloUserAgent,
+  isKimiCodeUserAgent,
   isOpenCodeUserAgent,
   KILO_CLIENT_ID,
+  KIMI_CODE_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
 import { getHeaderValue } from "./meta-header";
@@ -127,6 +129,18 @@ export function detectKiloClientId(
     return KILO_CLIENT_ID;
   }
   return undefined;
+}
+
+/**
+ * Kimi Code auto-discovery from its `kimi-code-cli/<version>` User-Agent.
+ * Returns {@link KIMI_CODE_CLIENT_ID}.
+ */
+export function detectKimiCodeClientId(
+  headers: Record<string, string | string[] | undefined>,
+): typeof KIMI_CODE_CLIENT_ID | undefined {
+  return isKimiCodeUserAgent(getHeaderValue(headers, "user-agent"))
+    ? KIMI_CODE_CLIENT_ID
+    : undefined;
 }
 
 // Anthropic `cc_entrypoint` values for in-scope Claude clients are e.g.

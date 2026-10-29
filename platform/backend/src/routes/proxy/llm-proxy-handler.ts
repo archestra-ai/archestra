@@ -22,7 +22,9 @@ import {
   type InteractionSource,
   InteractionSourceSchema,
   isCodexOriginator,
+  isKimiCodeUserAgent,
   isProviderApiKeyOptional,
+  KIMI_CODE_CLIENT_HEADERS,
   MODEL_POOL_ID_HEADER,
   openCodeFamilySource,
   PROVIDER_BASE_URL_HEADER,
@@ -1607,6 +1609,16 @@ export async function handleLLMProxy<
     // and only Anthropic has the anthropic-beta header in its type definition
     const headersToForward: Record<string, string> = {};
     const headersObj = headers as Record<string, unknown>;
+    if (providerName === "gemini") {
+      for (const name of [
+        "x-vertex-ai-llm-request-type",
+        "x-vertex-ai-llm-shared-request-type",
+      ]) {
+        if (typeof headersObj[name] === "string") {
+          headersToForward[name] = headersObj[name];
+        }
+      }
+    }
     if (typeof headersObj["anthropic-beta"] === "string") {
       const baseUrlOverridden = Boolean(perKeyBaseUrl || providerBaseUrlHeader);
       if (
@@ -1618,6 +1630,22 @@ export async function handleLLMProxy<
           { model: requestAdapter.getModel() },
           `[${providerName}Proxy] stripping anthropic-beta for non-Claude custom upstream`,
         );
+      }
+    }
+
+    // Kimi Code identifies itself with its User-Agent and X-Msh-* headers, as
+    // it does when it calls the Kimi Code API directly. Relay those headers as
+    // sent, so the API sees the real client behind a Kimi Code sign-in token.
+    // Only the headers Kimi Code itself sends travel; any other x-msh-* header
+    // on the request does not.
+    if (
+      providerName === "kimi-code" &&
+      typeof headersObj["user-agent"] === "string" &&
+      isKimiCodeUserAgent(headersObj["user-agent"])
+    ) {
+      for (const name of KIMI_CODE_CLIENT_HEADERS) {
+        const value = headersObj[name];
+        if (typeof value === "string") headersToForward[name] = value;
       }
     }
 
@@ -2687,7 +2715,9 @@ async function handleStreaming<
             withFirstChunk(
               (await transport.executeStream(request)) as AsyncIterable<TChunk>,
             ),
-          memberTimeoutMs: MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
+          memberTimeoutMs:
+            ctx.modelPool?.plan.streamTimeoutMs ??
+            MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
           // Gemini's SDK loses the HTTP status when an error body is cut off;
           // that is indistinguishable from a transport failure, so don't retry.
           isRetryable: (error) =>
@@ -3425,7 +3455,8 @@ async function handleNonStreaming<
             (await llmProxyTiming.upstream(reply, () =>
               transport.execute(request),
             )) as TResponse,
-          memberTimeoutMs: poolResponseTimeoutMs(request),
+          memberTimeoutMs:
+            ctx.modelPool?.plan.timeoutMs ?? poolResponseTimeoutMs(request),
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
             providerName !== "gemini" &&

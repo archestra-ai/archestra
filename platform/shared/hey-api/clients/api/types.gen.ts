@@ -1399,6 +1399,10 @@ export type GeminiGenerateContentResponseInput = {
      * Metadata on the generation requests' token usage
      */
     usageMetadata?: {
+        /**
+         * Traffic tier that served the request.
+         */
+        trafficType?: string;
         promptTokenCount?: number;
         cachedContentTokenCount?: number;
         candidatesTokenCount?: number;
@@ -9074,6 +9078,10 @@ export type GeminiGenerateContentResponse = {
      * Metadata on the generation requests' token usage
      */
     usageMetadata?: {
+        /**
+         * Traffic tier that served the request.
+         */
+        trafficType?: string;
         promptTokenCount?: number;
         cachedContentTokenCount?: number;
         candidatesTokenCount?: number;
@@ -24988,6 +24996,7 @@ export type GetAgentRunsResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         initiatorName: string | null;
+        canAttach?: boolean;
         shareVisibility: 'organization' | 'team' | 'user' | null;
         /**
          * Share recipient teams; null unless the viewer owns the run
@@ -25463,6 +25472,7 @@ export type GetMyAgentRunResponses = {
             } | null;
         } | null;
         viewerRole: 'owner' | 'shared';
+        canAttach?: boolean;
         startupProgress?: {
             phase: 'queued' | 'scheduling' | 'pulling' | 'starting' | 'attaching';
             message: string;
@@ -50310,7 +50320,7 @@ export type GetClientConnectionInstallerResponses = {
 
 export type StartClientConnectionData = {
     body: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         platform: 'macos' | 'linux' | 'windows';
         exclude?: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
         gateway?: string;
@@ -50576,7 +50586,7 @@ export type GetClientConnectionResponses = {
      * Default Response
      */
     200: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         platform: 'macos' | 'linux' | 'windows';
         exclude: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
         gateway: string | null;
@@ -50677,7 +50687,7 @@ export type DecideClientConnectionResponses = {
      */
     200: {
         status: 'approved' | 'denied';
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         platform: 'macos' | 'linux' | 'windows';
     };
 };
@@ -51566,7 +51576,7 @@ export type DisconnectConnectedClientResponse = DisconnectConnectedClientRespons
 
 export type RenderStartupGuardData = {
     body: {
-        clientId: 'claude-code' | 'codex' | 'copilot-cli' | 'opencode' | 'kilo';
+        clientId: 'claude-code' | 'codex' | 'copilot-cli' | 'opencode' | 'kilo' | 'kimi-code';
         platform: 'bash' | 'windows';
         context: {
             appName: string;
@@ -51674,7 +51684,7 @@ export type RenderStartupGuardResponses = {
     200: {
         format: 1;
         version: number;
-        clientId: 'claude-code' | 'codex' | 'copilot-cli' | 'opencode' | 'kilo';
+        clientId: 'claude-code' | 'codex' | 'copilot-cli' | 'opencode' | 'kilo' | 'kimi-code';
         platform: 'bash' | 'windows';
         source: string;
         sha256: string;
@@ -51957,7 +51967,7 @@ export type GetConnectionHealthResponse = GetConnectionHealthResponses[keyof Get
 
 export type CreateConnectionSetupData = {
     body: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         platform?: 'macos' | 'linux' | 'windows';
         baseUrl: string;
         mcpGatewayId?: string;
@@ -52063,7 +52073,7 @@ export type CreateConnectionSetupResponses = {
             id: string;
             pluginSlug: string;
             displayName: string;
-            clientType: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi';
+            clientType: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         }>;
     };
 };
@@ -55395,6 +55405,8 @@ export type GeminiEmbeddingsWithAgentResponse = GeminiEmbeddingsWithAgentRespons
 export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
     body: GeminiGenerateContentRequestInput;
     headers?: {
+        'x-vertex-ai-llm-request-type'?: string;
+        'x-vertex-ai-llm-shared-request-type'?: string;
         /**
          * OAuth access token as a Bearer credential.
          */
@@ -55506,6 +55518,8 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentResponse = PostV1Gemin
 export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentData = {
     body: GeminiGenerateContentRequestInput;
     headers?: {
+        'x-vertex-ai-llm-request-type'?: string;
+        'x-vertex-ai-llm-shared-request-type'?: string;
         /**
          * OAuth access token as a Bearer credential.
          */
@@ -55608,6 +55622,8 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentError = PostV1Ge
 export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData = {
     body: GeminiGenerateContentRequestInput;
     headers?: {
+        'x-vertex-ai-llm-request-type'?: string;
+        'x-vertex-ai-llm-shared-request-type'?: string;
         /**
          * OAuth access token as a Bearer credential.
          */
@@ -55720,6 +55736,8 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponse = Po
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData = {
     body: GeminiGenerateContentRequestInput;
     headers?: {
+        'x-vertex-ai-llm-request-type'?: string;
+        'x-vertex-ai-llm-shared-request-type'?: string;
         /**
          * OAuth access token as a Bearer credential.
          */
@@ -72094,7 +72112,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by client app (queries external_agent_id; e.g. claude)
          */
-        client?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi';
+        client?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         /**
          * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
          */
@@ -96654,6 +96672,7 @@ export type GetLimitsResponses = {
         entityId: string;
         limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
+        behavior: 'hard' | 'soft';
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
@@ -96695,6 +96714,7 @@ export type CreateLimitData = {
         entityId: string;
         limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
+        behavior?: 'hard' | 'soft';
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
@@ -96791,6 +96811,7 @@ export type CreateLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
+        behavior: 'hard' | 'soft';
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
@@ -96979,6 +97000,7 @@ export type GetLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
+        behavior: 'hard' | 'soft';
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
@@ -97018,6 +97040,7 @@ export type UpdateLimitData = {
     body: {
         limitType?: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue?: number;
+        behavior?: 'hard' | 'soft';
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
@@ -97116,6 +97139,7 @@ export type UpdateLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
+        behavior: 'hard' | 'soft';
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
@@ -106791,6 +106815,9 @@ export type GetModelPoolsResponses = {
         id: string;
         organizationId: string;
         name: string;
+        streamTimeoutSeconds: number | null;
+        timeoutSeconds: number | null;
+        cooldownSeconds: number | null;
         createdAt: string;
         updatedAt: string;
         members: Array<{
@@ -106823,6 +106850,9 @@ export type CreateModelPoolData = {
             weight?: number;
             enabled?: boolean;
         }>;
+        streamTimeoutSeconds?: number | null;
+        timeoutSeconds?: number | null;
+        cooldownSeconds?: number | null;
     };
     path?: never;
     query?: never;
@@ -106905,6 +106935,9 @@ export type CreateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
+        streamTimeoutSeconds: number | null;
+        timeoutSeconds: number | null;
+        cooldownSeconds: number | null;
         createdAt: string;
         updatedAt: string;
         members: Array<{
@@ -107111,6 +107144,9 @@ export type UpdateModelPoolData = {
             weight?: number;
             enabled?: boolean;
         }>;
+        streamTimeoutSeconds?: number | null;
+        timeoutSeconds?: number | null;
+        cooldownSeconds?: number | null;
     };
     path: {
         id: string;
@@ -107195,6 +107231,9 @@ export type UpdateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
+        streamTimeoutSeconds: number | null;
+        timeoutSeconds: number | null;
+        cooldownSeconds: number | null;
         createdAt: string;
         updatedAt: string;
         members: Array<{
@@ -120658,6 +120697,10 @@ export type UpdateIntegrationSettingsData = {
                 hidden?: boolean;
                 position?: number;
             };
+            copilot?: {
+                hidden?: boolean;
+                position?: number;
+            };
         } | null;
         modelProviderOverrides?: {
             [key: string]: {
@@ -127787,6 +127830,7 @@ export type GetProjectRunsResponses = {
             } | null;
         } | null;
         viewerRole: 'owner' | 'shared';
+        canAttach?: boolean;
         startupProgress?: {
             phase: 'queued' | 'scheduling' | 'pulling' | 'starting' | 'attaching';
             message: string;
@@ -140152,7 +140196,7 @@ export type GetToolsWithAssignmentsData = {
         /**
          * Only tools observed from this client app family (e.g. claude, codex)
          */
-        observedByClient?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi';
+        observedByClient?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo' | 'pi' | 'kimi-code';
         /**
          * Hide built-in Archestra tools
          */

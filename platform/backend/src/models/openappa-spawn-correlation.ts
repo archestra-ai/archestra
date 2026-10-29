@@ -229,7 +229,7 @@ class OpenAppaSpawnCorrelationModel {
           params.callerId
             ? eq(operations.callerId, params.callerId)
             : isNull(operations.callerId),
-          sql`COALESCE(${operations.input}->'semantic'->>'event', ${operations.input}->>'event') IN ('prompt', 'tool_call')`,
+          sql`COALESCE(${operations.input}->'semantic'->>'event', ${operations.input}->>'event') IN ('session_start', 'prompt', 'tool_call')`,
           sql`${storedCallId} IS NOT NULL`,
         ),
       )

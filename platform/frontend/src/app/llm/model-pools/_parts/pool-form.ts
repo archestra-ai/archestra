@@ -19,7 +19,29 @@ import { isPoolableModel, poolModelName } from "./model-name";
 export type PoolFormValues = {
   name: string;
   members: PoolFormMember[];
-};
+} & Record<PoolTiming, string>;
+
+/**
+ * The pool's failover timing, in seconds as typed. Blank keeps the default.
+ * The values are the API's limits.
+ */
+export const MAX_SECONDS = {
+  streamTimeoutSeconds: 1800,
+  timeoutSeconds: 1800,
+  cooldownSeconds: 3600,
+} as const;
+
+export type PoolTiming = keyof typeof MAX_SECONDS;
+
+const TIMINGS = Object.keys(MAX_SECONDS) as PoolTiming[];
+
+export function isValidSeconds(timing: PoolTiming, value: string): boolean {
+  if (value === "") return true;
+  const seconds = Number(value);
+  return (
+    Number.isInteger(seconds) && seconds >= 1 && seconds <= MAX_SECONDS[timing]
+  );
+}
 
 export type PoolFormMember = {
   providerApiKeyId: string;
@@ -55,6 +77,9 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
   const priorities = denseOrders(members);
   return {
     name: pool?.name ?? "",
+    streamTimeoutSeconds: String(pool?.streamTimeoutSeconds ?? ""),
+    timeoutSeconds: String(pool?.timeoutSeconds ?? ""),
+    cooldownSeconds: String(pool?.cooldownSeconds ?? ""),
     members: members.map((member, index) => ({
       providerApiKeyId: member.providerApiKeyId,
       modelId: member.modelId,
@@ -68,6 +93,9 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
 export function toPoolInput(values: PoolFormValues): ModelPoolInput {
   return {
     name: values.name.trim(),
+    streamTimeoutSeconds: toSeconds(values.streamTimeoutSeconds),
+    timeoutSeconds: toSeconds(values.timeoutSeconds),
+    cooldownSeconds: toSeconds(values.cooldownSeconds),
     members: values.members.map((member) => ({
       providerApiKeyId: member.providerApiKeyId,
       modelId: member.modelId.trim(),
@@ -76,6 +104,10 @@ export function toPoolInput(values: PoolFormValues): ModelPoolInput {
       enabled: member.enabled,
     })),
   };
+}
+
+function toSeconds(value: string): number | null {
+  return value === "" ? null : Number(value);
 }
 
 /** Each member's order once the orders are renumbered 1, 2, 3. */
@@ -188,9 +220,10 @@ export type PoolOptions = ReturnType<typeof usePoolOptions>;
 export function usePoolProblem(
   form: PoolForm,
   poolId: string | null,
-): "name" | "taken" | "members" | "numbers" | "repeated" | null {
+): "name" | "taken" | "members" | "numbers" | "repeated" | "timing" | null {
   const name = form.watch("name").trim();
   const members = form.watch("members");
+  const timing = form.watch(TIMINGS);
   const { data: pools = [] } = useModelPools({ toastOnError: false });
   if (!name) return "name";
   if (pools.some((other) => other.id !== poolId && other.name === name))
@@ -202,6 +235,8 @@ export function usePoolProblem(
     return "members";
   if (members.some((member) => !isValidWeight(member.weight))) return "numbers";
   if (hasRepeatedMember(members)) return "repeated";
+  if (TIMINGS.some((key, index) => !isValidSeconds(key, timing[index] ?? "")))
+    return "timing";
   return null;
 }
 

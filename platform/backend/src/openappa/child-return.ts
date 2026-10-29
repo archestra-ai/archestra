@@ -137,6 +137,8 @@ export function collectAndStripChildReturns(
         isCompleteTaskResultFraming(value)
       ) {
         rewritten = replaceTaskResults(value, context, collected);
+      } else if (context.nativeResultSite && isKimiCodeAgentResult(value)) {
+        rewritten = replaceKimiCodeAgentResult(value, context, collected);
       } else if (context.nativeResultSite) {
         rewritten = replaceAgentReport(value, context, collected);
       }
@@ -548,6 +550,37 @@ function replaceSubagentNotifications(
   return canonical.join("\n");
 }
 
+/**
+ * Kimi Code's result of a foreground Agent call: an optional `Wall time` line,
+ * the subagent's id, type and stop, then the subagent's last message under
+ * `[summary]`, then a resume hint and an optional next step.
+ */
+function isKimiCodeAgentResult(value: string): boolean {
+  return KIMI_CODE_AGENT_RESULT.test(value) && value.includes(KIMI_SUMMARY);
+}
+
+/**
+ * Reads the returned message out of Kimi Code's Agent result. The parent
+ * receives only the admitted message; Kimi Code's framing names a subagent the
+ * parent cannot resume under Guardrails.
+ */
+function replaceKimiCodeAgentResult(
+  value: string,
+  context: WalkContext,
+  collected: CollectedChildReturns,
+): string {
+  if (!hasMarker(value)) return value;
+  // Stripping the child's trajectory receipt can take the line break after
+  // the heading with it.
+  let start = value.indexOf(KIMI_SUMMARY) + KIMI_SUMMARY.length;
+  if (value[start] === "\n") start += 1;
+  const end = value.lastIndexOf(KIMI_RESUME_HINT);
+  const report = value.slice(start, end > start ? end : value.length);
+  const parsed = stripMarker(report, context, true);
+  recordCompletion(parsed, context, collected);
+  return parsed.value;
+}
+
 function replaceAgentReport(
   value: string,
   context: WalkContext,
@@ -933,6 +966,10 @@ function collectCodexMailboxMessage(
   });
 }
 
+const KIMI_CODE_AGENT_RESULT =
+  /^(?:Wall time: \d+(?:\.\d+)? seconds\n)?agent_id: agent-[A-Za-z0-9_-]{1,64}\nactual_subagent_type: [^\n]{1,128}\nstatus: completed\nstop_reason: [a-z_]{1,64}\n/;
+const KIMI_SUMMARY = "\n\n[summary]";
+const KIMI_RESUME_HINT = "\n\nresume_hint: ";
 const NATIVE_COMPLETION_TOOLS = new Set([
   "Agent",
   "Task",

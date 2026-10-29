@@ -487,7 +487,9 @@ class AgentRunModel {
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
-        initiatorName: schema.usersTable.name,
+        initiatorName: sql<
+          string | null
+        >`coalesce(${schema.usersTable.name}, ${schema.serviceAccountsTable.name})`,
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -516,6 +518,17 @@ class AgentRunModel {
         schema.usersTable,
         eq(schema.agentRunsTable.actorUserId, schema.usersTable.id),
       )
+      .leftJoin(
+        schema.serviceAccountsTable,
+        and(
+          eq(schema.agentRunsTable.actorKind, "serviceAccount"),
+          sql`${schema.agentRunsTable.actorId} = ${schema.serviceAccountsTable.id}::text`,
+          eq(
+            schema.agentRunsTable.organizationId,
+            schema.serviceAccountsTable.organizationId,
+          ),
+        ),
+      )
       .where(
         and(
           eq(schema.agentRunsTable.agentId, params.agentId),
@@ -531,6 +544,7 @@ class AgentRunModel {
     organizationId: string;
     limit: number;
     state?: A2ATaskState;
+    failedSince?: Date;
     thread?: { bindingId: string; threadId: string };
   }) {
     if (params.agentIds.length === 0) return [];
@@ -616,17 +630,34 @@ class AgentRunModel {
           params.state
             ? eq(schema.a2aTasksTable.state, params.state)
             : undefined,
-          // One row per run: its current turn.
-          or(
-            isNull(schema.agentWorkspacesTable.id),
-            eq(
-              schema.agentWorkspacesTable.lastTaskId,
-              schema.agentRunsTable.taskId,
-            ),
-          ),
+          params.failedSince
+            ? and(
+                eq(schema.a2aTasksTable.state, "TASK_STATE_FAILED"),
+                // Bind UTC wall time explicitly for the timezone-less column.
+                sql`${schema.a2aTasksTable.stateChangedAt} >= ${params.failedSince.toISOString()}`,
+              )
+            : undefined,
+          // Alert correlation needs historical failed turns; normal lists keep
+          // one current turn per workspace.
+          params.failedSince
+            ? undefined
+            : or(
+                isNull(schema.agentWorkspacesTable.id),
+                eq(
+                  schema.agentWorkspacesTable.lastTaskId,
+                  schema.agentRunsTable.taskId,
+                ),
+              ),
         ),
       )
-      .orderBy(desc(schema.agentRunsTable.startedAt))
+      .orderBy(
+        desc(
+          params.failedSince
+            ? schema.a2aTasksTable.stateChangedAt
+            : schema.agentRunsTable.startedAt,
+        ),
+        desc(schema.agentRunsTable.id),
+      )
       .limit(params.limit);
 
     const prompts = await A2AMessageModel.findFirstUserPartsByTaskIds(

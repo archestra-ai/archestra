@@ -66,6 +66,48 @@ as an error and non-concurrent `CREATE INDEX` as a warning for exactly this
 reason. If it fires on an `interactions` migration, stop and rework the change —
 do not just add the `allow-breaking` marker.
 
+Even `CREATE INDEX IF NOT EXISTS` on an index that already exists takes the
+write-blocking `SHARE` lock, and Drizzle holds it until the whole migration
+batch commits. Building the index out of band does not make a plain statement
+in the migration harmless.
+
+### Concurrent index builds in a migration
+
+For a large, write-hot table whose concurrent build finishes well within the
+migration Job's deadline (`archestra.migrationJob.activeDeadlineSeconds`,
+600 s), a migration can build the index itself without blocking writes.
+`0609_absent_scourge.sql` (`agents`, `conversations`) is the reference. Every
+part is needed:
+
+1. `COMMIT;` first. drizzle-kit runs all pending migrations in one transaction,
+   where `CONCURRENTLY` is refused. After the `COMMIT`, each statement runs on
+   its own. The migrations before this one commit at that point.
+2. `SET lock_timeout = '5min';`. The Job sets `lock_timeout=5s`. A concurrent
+   build waits for older transactions and fails at 5 s, leaving an invalid
+   index. Its waits block no one, so the longer timeout is safe.
+3. `CREATE INDEX CONCURRENTLY IF NOT EXISTS "<name>" ...` for each index.
+4. A `DO` block that raises when any of the indexes is missing or invalid.
+   Before a rerun, `scripts/migrate-with-lock.mjs` drops the invalid leftovers
+   of indexes that migrations build concurrently (`DROP INDEX CONCURRENTLY`
+   needs a condition, which a migration cannot express).
+5. `RESET lock_timeout;` to give later migrations the Job's value back, then
+   `BEGIN;` to give them their transaction back. drizzle-kit commits it.
+
+PGlite cannot build an index concurrently, so the test harnesses
+(`src/test/migrations-helper.ts`, `scripts/migration-tag-upgrades.test.mjs`)
+run these statements in their plain form.
+
+Verify such a migration with the production command
+(`node ./scripts/migrate-with-lock.mjs` with `PGOPTIONS=-c lock_timeout=5s`)
+on the PostgreSQL major version that production runs:
+- with realistic table sizes and concurrent writes;
+- with a transaction held open longer than 5 s;
+- with the build interrupted and then rerun;
+- with a later migration in the same batch.
+
+`interactions` itself stays out-of-band: its builds can exceed the Job's
+deadline.
+
 ## Audit the table on staging before you ship
 
 Before merging a migration that touches `interactions`, size the real table on

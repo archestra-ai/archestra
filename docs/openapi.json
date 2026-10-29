@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "v1.5.0-rc.12"
+    "version": "v1.5.0-rc.13"
   },
   "components": {
     "schemas": {
@@ -3784,6 +3784,10 @@
             "description": "Metadata on the generation requests' token usage",
             "type": "object",
             "properties": {
+              "trafficType": {
+                "description": "Traffic tier that served the request.",
+                "type": "string"
+              },
               "promptTokenCount": {
                 "type": "number"
               },
@@ -31251,6 +31255,10 @@
             "description": "Metadata on the generation requests' token usage",
             "type": "object",
             "properties": {
+              "trafficType": {
+                "description": "Traffic tier that served the request.",
+                "type": "string"
+              },
               "promptTokenCount": {
                 "type": "number"
               },
@@ -92608,6 +92616,9 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "canAttach": {
+                        "type": "boolean"
+                      },
                       "shareVisibility": {
                         "anyOf": [
                           {
@@ -94182,6 +94193,9 @@
                         "owner",
                         "shared"
                       ]
+                    },
+                    "canAttach": {
+                      "type": "boolean"
                     },
                     "startupProgress": {
                       "nullable": true,
@@ -188048,7 +188062,8 @@
                       "copilot-cli",
                       "opencode",
                       "kilo",
-                      "pi"
+                      "pi",
+                      "kimi-code"
                     ]
                   },
                   "platform": {
@@ -188706,7 +188721,8 @@
                         "copilot-cli",
                         "opencode",
                         "kilo",
-                        "pi"
+                        "pi",
+                        "kimi-code"
                       ]
                     },
                     "platform": {
@@ -189094,7 +189110,8 @@
                         "copilot-cli",
                         "opencode",
                         "kilo",
-                        "pi"
+                        "pi",
+                        "kimi-code"
                       ]
                     },
                     "platform": {
@@ -192371,7 +192388,8 @@
                       "codex",
                       "copilot-cli",
                       "opencode",
-                      "kilo"
+                      "kilo",
+                      "kimi-code"
                     ]
                   },
                   "platform": {
@@ -192579,7 +192597,8 @@
                         "codex",
                         "copilot-cli",
                         "opencode",
-                        "kilo"
+                        "kilo",
+                        "kimi-code"
                       ]
                     },
                     "platform": {
@@ -193746,7 +193765,8 @@
                       "copilot-cli",
                       "opencode",
                       "kilo",
-                      "pi"
+                      "pi",
+                      "kimi-code"
                     ]
                   },
                   "platform": {
@@ -193938,7 +193958,8 @@
                               "copilot-cli",
                               "opencode",
                               "kilo",
-                              "pi"
+                              "pi",
+                              "kimi-code"
                             ]
                           }
                         },
@@ -205749,6 +205770,22 @@
               "type": "string"
             },
             "in": "header",
+            "name": "x-vertex-ai-llm-request-type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-vertex-ai-llm-shared-request-type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "authorization",
             "required": false,
             "description": "OAuth access token as a Bearer credential."
@@ -206068,6 +206105,22 @@
               "type": "string"
             },
             "in": "header",
+            "name": "x-vertex-ai-llm-request-type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-vertex-ai-llm-shared-request-type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
             "name": "authorization",
             "required": false,
             "description": "OAuth access token as a Bearer credential."
@@ -206381,6 +206434,22 @@
             "name": "model",
             "required": true,
             "description": "The model to use"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-vertex-ai-llm-request-type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-vertex-ai-llm-shared-request-type",
+            "required": false
           },
           {
             "schema": {
@@ -206710,6 +206779,22 @@
             "name": "model",
             "required": true,
             "description": "The model to use"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-vertex-ai-llm-request-type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-vertex-ai-llm-shared-request-type",
+            "required": false
           },
           {
             "schema": {
@@ -278243,7 +278328,8 @@
                 "cursor",
                 "opencode",
                 "kilo",
-                "pi"
+                "pi",
+                "kimi-code"
               ]
             },
             "in": "query",
@@ -383021,6 +383107,13 @@
                         "minimum": -2147483648,
                         "maximum": 2147483647
                       },
+                      "behavior": {
+                        "type": "string",
+                        "enum": [
+                          "hard",
+                          "soft"
+                        ]
+                      },
                       "mcpServerName": {
                         "nullable": true,
                         "type": "string",
@@ -383153,6 +383246,7 @@
                       "entityId",
                       "limitType",
                       "limitValue",
+                      "behavior",
                       "mcpServerName",
                       "toolName",
                       "lastCleanup",
@@ -383451,6 +383545,13 @@
                     "minimum": -2147483648,
                     "maximum": 2147483647
                   },
+                  "behavior": {
+                    "type": "string",
+                    "enum": [
+                      "hard",
+                      "soft"
+                    ]
+                  },
                   "mcpServerName": {
                     "nullable": true,
                     "type": "string",
@@ -383577,6 +383678,13 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "behavior": {
+                      "type": "string",
+                      "enum": [
+                        "hard",
+                        "soft"
+                      ]
+                    },
                     "mcpServerName": {
                       "nullable": true,
                       "type": "string",
@@ -383633,6 +383741,7 @@
                     "entityId",
                     "limitType",
                     "limitValue",
+                    "behavior",
                     "mcpServerName",
                     "toolName",
                     "lastCleanup",
@@ -383949,6 +384058,13 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "behavior": {
+                      "type": "string",
+                      "enum": [
+                        "hard",
+                        "soft"
+                      ]
+                    },
                     "mcpServerName": {
                       "nullable": true,
                       "type": "string",
@@ -384081,6 +384197,7 @@
                     "entityId",
                     "limitType",
                     "limitValue",
+                    "behavior",
                     "mcpServerName",
                     "toolName",
                     "lastCleanup",
@@ -384363,6 +384480,13 @@
                     "minimum": -2147483648,
                     "maximum": 2147483647
                   },
+                  "behavior": {
+                    "type": "string",
+                    "enum": [
+                      "hard",
+                      "soft"
+                    ]
+                  },
                   "mcpServerName": {
                     "nullable": true,
                     "type": "string",
@@ -384495,6 +384619,13 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "behavior": {
+                      "type": "string",
+                      "enum": [
+                        "hard",
+                        "soft"
+                      ]
+                    },
                     "mcpServerName": {
                       "nullable": true,
                       "type": "string",
@@ -384551,6 +384682,7 @@
                     "entityId",
                     "limitType",
                     "limitValue",
+                    "behavior",
                     "mcpServerName",
                     "toolName",
                     "lastCleanup",
@@ -420096,6 +420228,24 @@
                       "name": {
                         "type": "string"
                       },
+                      "streamTimeoutSeconds": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
+                      "timeoutSeconds": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
+                      "cooldownSeconds": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -420216,6 +420366,9 @@
                       "id",
                       "organizationId",
                       "name",
+                      "streamTimeoutSeconds",
+                      "timeoutSeconds",
+                      "cooldownSeconds",
                       "createdAt",
                       "updatedAt",
                       "members",
@@ -420524,6 +420677,24 @@
                         "modelId"
                       ]
                     }
+                  },
+                  "streamTimeoutSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1800
+                  },
+                  "timeoutSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1800
+                  },
+                  "cooldownSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3600
                   }
                 },
                 "required": [
@@ -420552,6 +420723,24 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "streamTimeoutSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "timeoutSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "cooldownSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
                     },
                     "createdAt": {
                       "type": "string",
@@ -420661,6 +420850,9 @@
                     "id",
                     "organizationId",
                     "name",
+                    "streamTimeoutSeconds",
+                    "timeoutSeconds",
+                    "cooldownSeconds",
                     "createdAt",
                     "updatedAt",
                     "members",
@@ -421281,6 +421473,24 @@
                         "modelId"
                       ]
                     }
+                  },
+                  "streamTimeoutSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1800
+                  },
+                  "timeoutSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1800
+                  },
+                  "cooldownSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3600
                   }
                 },
                 "required": [
@@ -421321,6 +421531,24 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "streamTimeoutSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "timeoutSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "cooldownSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
                     },
                     "createdAt": {
                       "type": "string",
@@ -421430,6 +421658,9 @@
                     "id",
                     "organizationId",
                     "name",
+                    "streamTimeoutSeconds",
+                    "timeoutSeconds",
+                    "cooldownSeconds",
                     "createdAt",
                     "updatedAt",
                     "members",
@@ -472005,6 +472236,20 @@
                           }
                         },
                         "additionalProperties": false
+                      },
+                      "copilot": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "additionalProperties": false
@@ -499743,6 +499988,9 @@
                           "owner",
                           "shared"
                         ]
+                      },
+                      "canAttach": {
+                        "type": "boolean"
                       },
                       "startupProgress": {
                         "nullable": true,
@@ -544175,7 +544423,8 @@
                 "cursor",
                 "opencode",
                 "kilo",
-                "pi"
+                "pi",
+                "kimi-code"
               ]
             },
             "in": "query",

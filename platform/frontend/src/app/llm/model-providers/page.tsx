@@ -371,7 +371,11 @@ export default function ApiKeysPage() {
     try {
       await deleteMutation.mutateAsync({
         id: selectedApiKey.id,
-        subscription: deletingSubscription,
+        kind: selectedApiKey.isGithubAppKey
+          ? "plan"
+          : deletingSubscription
+            ? "subscription"
+            : "key",
       });
       setIsDeleteDialogOpen(false);
       setSelectedApiKey(null);

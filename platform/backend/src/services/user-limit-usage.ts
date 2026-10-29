@@ -20,7 +20,7 @@ import { limitReadCleanup } from "./limit";
 /**
  * Every organization member's spend against the limit that applies to them,
  * ranked by how close they are to it. Mirrors enforcement
- * (`LimitValidationService.checkDefaultUserLimit`): a custom per-user limit
+ * (`LimitValidationService.checkDefaultUserLimit`): a hard custom per-user limit
  * wins; otherwise each environment override caps spend in its environment and
  * the organization default caps spend everywhere. Without an environment
  * filter a user is shown against whichever of those is closest to blocking
@@ -53,7 +53,10 @@ export async function listUserLimitUsage(params: {
   // Minute spend limits are throughput caps, not custom user limits (the
   // default-limit check ignores them too).
   const customByUser = groupBy(
-    customLimits.filter((limit) => limit.cleanupInterval !== "minute"),
+    customLimits.filter(
+      (limit) =>
+        limit.cleanupInterval !== "minute" && limit.behavior !== "soft",
+    ),
     (limit) => limit.entityId,
   );
   const filterOverride = query.environmentId

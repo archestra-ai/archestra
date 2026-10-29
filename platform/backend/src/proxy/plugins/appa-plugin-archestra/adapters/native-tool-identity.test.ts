@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { AskUserArguments } from "../types";
-import { AppaClaudeCodeAdapter } from "./claude-code";
+import { AppaClaudeCodeAdapter, AppaClaudeDesktopAdapter } from "./claude-code";
 import { AppaCodexAdapter } from "./codex";
 import { AppaOpenCodeAdapter } from "./opencode";
 
@@ -114,6 +114,7 @@ describe("native local tool identities", () => {
 
   test("other native question tools ask the full review text", () => {
     for (const converted of [
+      new AppaClaudeDesktopAdapter().nativeQuestion.fromAskUser(shownReview),
       new AppaCodexAdapter().nativeQuestion.fromAskUser(shownReview),
       new AppaOpenCodeAdapter().nativeQuestion.fromAskUser(shownReview),
     ]) {

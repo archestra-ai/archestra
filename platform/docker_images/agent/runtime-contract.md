@@ -75,9 +75,11 @@ In the default TUI mode, the maintained images wait for their native client's ga
 
 The real-client tests in `docker_images/agent/tests/mcp-startup.py` run during image builds. They hold discovery behind a barrier, execute all three OpenAPPA recovery tools, resume a saved conversation, and check discovery errors and timeouts. The MCP and model endpoints are synthetic; the pinned clients, wrappers, tmux sessions, and tool execution paths are real.
 
+Copilot CLI exposes its native TUI unchanged in interactive runs and uses prompt-mode JSON events for delegated work. The pod workspace is pre-trusted and local tools use `--allow-all`; hooks, IDE auto-connect, and in-pod updates are disabled. Interactive steering uses tmux input; delegated terminal and pipe steering apply between prompts. Its inference relay requires a nonempty gateway catalog, and the native path additionally verifies the gateway tool names and attested descriptions in the actual inference payload. Discovery fails after thirty seconds. `tests/copilot.py` exercises native terminal input/rendering, recovery tools, idle resume, and failed discovery with the real pinned executable. Both modes preserve native sessions and export readable transcripts; native background work is outside this wrapper's completion contract.
+
 ## Readable Transcript
 
-The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok Build, and Kimi Code images export their native message and tool history as a readable transcript. A custom image can provide the same completed-run experience by writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally `/var/run/archestra/readable-transcript.json`) before its process exits.
+The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok Build, Kimi Code, and GitHub Copilot CLI images export their native message and tool history as a readable transcript. A custom image can provide the same completed-run experience by writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally `/var/run/archestra/readable-transcript.json`) before its process exits.
 
 The file must be a JSON object using version 1 of this contract:
 

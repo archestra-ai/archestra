@@ -16,4 +16,5 @@
 export { CLAUDE_CODE_GUARD_CLIENT } from "./claude-code";
 export { CODEX_GUARD_CLIENT } from "./codex";
 export { COPILOT_GUARD_CLIENT } from "./copilot-cli";
+export { KIMI_CODE_GUARD_CLIENT } from "./kimi-code";
 export { KILO_GUARD_CLIENT, OPENCODE_GUARD_CLIENT } from "./opencode";

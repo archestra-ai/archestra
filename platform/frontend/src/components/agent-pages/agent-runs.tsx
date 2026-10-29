@@ -1,34 +1,26 @@
 "use client";
-
-import { formatDistance, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import {
-  Info,
-  Maximize2,
-  MoreHorizontal,
+  ChevronLeft,
+  ChevronRight,
   Search,
-  Share2,
-  Square,
   TerminalSquare,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { AgentRunLiveness } from "@/components/agent-run-liveness";
-import { AgentRunLogs } from "@/components/agent-run-logs";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { AgentRunChatSession } from "@/components/agent-run-session";
 import { AgentRunState } from "@/components/agent-run-state";
-import { AgentRunTerminal } from "@/components/agent-run-terminal";
-import { ShareAgentRunDialog } from "@/components/chat/share-agent-run-dialog";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -36,19 +28,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  type AgentRunListItem,
-  useAgentRuns,
-  useCancelAgentRun,
-} from "@/lib/agent-runtime.query";
-import { useRuntimeClock } from "@/lib/agent-runtime-time";
-import { useScopedCapabilities, useSession } from "@/lib/auth/auth.query";
-import { cn } from "@/lib/utils/tailwind";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { type AgentRunListItem, useAgentRuns } from "@/lib/agent-runtime.query";
+import { useSession } from "@/lib/auth/auth.query";
 
 export function AgentRuns({ agentId }: { agentId: string }) {
   const { data: session } = useSession();
@@ -59,42 +41,52 @@ export function AgentRuns({ agentId }: { agentId: string }) {
     error,
     refetch,
   } = useAgentRuns(agentId);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [starter, setStarter] = useState(ANYONE);
-  const userId = session?.user.id;
-  // Everyone who started a run here, so the filter offers only real choices.
-  const starters = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const run of runs) {
-      const key = starterKey(run);
-      if (key !== userId && !names.has(key)) {
-        names.set(key, initiatorLabel(run));
+  const [starter, setStarter] = useState("anyone");
+  const [highlighted, setHighlighted] = useState(0);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLowerCase() === "k" &&
+        event.shiftKey &&
+        !event.altKey &&
+        !(
+          event.target instanceof HTMLElement &&
+          event.target.closest("input,textarea,[contenteditable=true]")
+        )
+      ) {
+        event.preventDefault();
+        setOpen((v) => !v);
       }
-    }
-    return [...names].sort(([, a], [, b]) => a.localeCompare(b));
-  }, [runs, userId]);
-  const query = search.trim().toLowerCase();
-  const visibleRuns = runs.filter(
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const selected = runs.find((run) => run.taskId === selectedId) ?? runs[0];
+  const index = runs.findIndex((run) => run.taskId === selected?.taskId);
+  const filtered = runs.filter(
     (run) =>
-      (starter === ANYONE ||
-        starterKey(run) === (starter === ME ? userId : starter)) &&
-      (!query ||
-        run.title.toLowerCase().includes(query) ||
-        run.taskId.startsWith(query) ||
-        initiatorLabel(run).toLowerCase().includes(query)),
+      (starter === "anyone" || starterKey(run) === starter) &&
+      `${run.title} ${run.taskId} ${initiatorLabel(run)}`
+        .toLowerCase()
+        .includes(search.trim().toLowerCase()),
   );
-  const filtered = visibleRuns.length !== runs.length;
-  const selected =
-    visibleRuns.find((run) => run.taskId === selectedTaskId) ?? visibleRuns[0];
-  const runCount = filtered
-    ? `${visibleRuns.length} of ${runs.length}`
-    : `${runs.length} run${runs.length === 1 ? "" : "s"}`;
-
-  if (isPending) {
+  const starters = Array.from(
+    new Map(
+      runs.map((run) => [starterKey(run), initiatorLabel(run)]),
+    ).entries(),
+  );
+  const choose = (id: string) => {
+    setSelectedId(id);
+    setOpen(false);
+  };
+  if (isPending)
     return <div className="h-48 animate-pulse rounded-lg border bg-muted/30" />;
-  }
-  if (isError) {
+  if (isError)
     return (
       <QueryLoadError
         className="border"
@@ -103,329 +95,195 @@ export function AgentRuns({ agentId }: { agentId: string }) {
         onRetry={() => refetch()}
       />
     );
-  }
-  if (runs.length === 0) {
+  if (!selected)
     return (
       <EmptyState
         icon={TerminalSquare}
         title="No runs yet"
         description={
-          <>
+          <span>
             Start a run from{" "}
             <Link
               href={`/chat/new?agent_id=${encodeURIComponent(agentId)}`}
-              className="underline underline-offset-4 hover:text-foreground"
+              className="underline underline-offset-4"
             >
               Chat
             </Link>
             .
-          </>
+          </span>
         }
       />
     );
-  }
-
   return (
-    <div className="grid min-h-[520px] grid-cols-1 overflow-hidden rounded-xl border bg-card/30 lg:h-[calc(100dvh-16rem)] lg:grid-cols-[15.5rem_minmax(0,1fr)]">
-      <aside className="flex min-h-0 flex-col border-b bg-muted/10 lg:border-b-0 lg:border-r">
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="text-sm font-medium">History</h2>
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {runCount}
-          </span>
-        </div>
-        <div className="flex flex-col gap-2 border-b p-2">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search runs"
-              aria-label="Search runs"
-              className="h-8 pl-8 text-sm"
-            />
+    <div className="flex h-[calc(100dvh-16rem)] min-h-[520px] min-w-0 flex-col overflow-hidden rounded-xl border bg-card/30">
+      <AgentRunChatSession
+        key={selected.taskId}
+        detailsOpen={detailsOpen}
+        onDetailsOpenChange={setDetailsOpen}
+        taskId={selected.taskId}
+        embedded
+        initiatorName={
+          selected.actorUserId === session?.user.id
+            ? "You"
+            : initiatorLabel(selected)
+        }
+        headerLeading={
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start @3xl:w-auto"
+            aria-label="Switch run"
+            onClick={() => setOpen(true)}
+          >
+            <Search />
+            <span>Switch run</span>
+            <RunSwitcherShortcut />
+          </Button>
+        }
+        drawerFooter={
+          <div className="flex items-center justify-between">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Previous run"
+              disabled={index === 0}
+              onClick={() => setSelectedId(runs[index - 1].taskId)}
+            >
+              <ChevronLeft />
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {index + 1} of {runs.length}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Next run"
+              disabled={index === runs.length - 1}
+              onClick={() => setSelectedId(runs[index + 1].taskId)}
+            >
+              <ChevronRight />
+            </Button>
           </div>
-          <Select value={starter} onValueChange={setStarter}>
-            <SelectTrigger size="sm" className="w-full" aria-label="Started by">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ANYONE}>Started by anyone</SelectItem>
-              <SelectItem value={ME}>Started by me</SelectItem>
-              {starters.map(([key, name]) => (
-                <SelectItem key={key} value={key}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="space-y-0.5 p-2">
-            {visibleRuns.length === 0 && (
-              <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-                No runs match these filters.
+        }
+      />
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Switch run</DialogTitle>
+            <DialogDescription>
+              Find a run by title, ID, or who started it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-2 border-b p-3 sm:grid-cols-[minmax(0,1fr)_11rem]">
+            <Input
+              autoFocus
+              aria-label="Search all runs"
+              placeholder="Search all runs…"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setHighlighted(0);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setHighlighted((v) =>
+                    Math.max(0, Math.min(filtered.length - 1, v + 1)),
+                  );
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setHighlighted((v) => Math.max(0, v - 1));
+                }
+                if (event.key === "Enter" && filtered[highlighted])
+                  choose(filtered[highlighted].taskId);
+              }}
+            />
+            <Select
+              value={starter}
+              onValueChange={(value) => {
+                setStarter(value);
+                setHighlighted(0);
+              }}
+            >
+              <SelectTrigger className="w-full" aria-label="Started by">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="anyone">Started by anyone</SelectItem>
+                {starters.map(([id, name]) => (
+                  <SelectItem key={id} value={id}>
+                    {id === `user:${session?.user.id}` ? "Started by me" : name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="max-h-80 overflow-y-auto p-2">
+            {filtered.map((run, i) => (
+              <UnstyledButton
+                key={run.taskId}
+                onClick={() => choose(run.taskId)}
+                className={`mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left hover:bg-muted ${i === highlighted ? "bg-muted" : ""}`}
+              >
+                <TerminalSquare className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">
+                    {run.title}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {run.actorUserId === session?.user.id
+                      ? "You"
+                      : initiatorLabel(run)}{" "}
+                    ·{" "}
+                    {formatDistanceToNow(new Date(run.startedAt), {
+                      addSuffix: true,
+                    })}
+                  </span>
+                </span>
+                <AgentRunState state={run.state} compact />
+              </UnstyledButton>
+            ))}
+            {!filtered.length && (
+              <p className="p-4 text-sm text-muted-foreground">
+                No matching runs.
               </p>
             )}
-            {visibleRuns.map((run) => {
-              const isSelected = run.taskId === selected?.taskId;
-              return (
-                <Button
-                  key={run.id}
-                  type="button"
-                  variant="ghost"
-                  className={cn(
-                    "h-auto w-full min-w-0 justify-start overflow-hidden rounded-lg px-3 py-2.5 text-left hover:bg-muted/70",
-                    isSelected &&
-                      "bg-muted text-foreground ring-1 ring-inset ring-border hover:bg-muted",
-                  )}
-                  onClick={() => setSelectedTaskId(run.taskId)}
-                >
-                  <span className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
-                    <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_1.25rem] items-center gap-1.5">
-                      <span
-                        className="truncate text-sm font-medium"
-                        title={run.title}
-                      >
-                        {run.title}
-                      </span>
-                      <AgentRunState
-                        state={run.state}
-                        attentionState={run.attentionState}
-                        lastModelActivityAt={run.lastModelActivityAt}
-                        startedAt={run.startedAt}
-                        endedAt={run.endedAt}
-                        hardDeadlineAt={run.hardDeadlineAt}
-                        compact
-                        iconOnly
-                      />
-                    </span>
-                    <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-normal text-muted-foreground">
-                      <span className="min-w-0 truncate">
-                        {starterKey(run) === userId
-                          ? "You"
-                          : initiatorLabel(run)}
-                      </span>
-                      <span aria-hidden>·</span>
-                      <span className="shrink-0">
-                        {formatDistanceToNow(new Date(run.startedAt), {
-                          addSuffix: true,
-                        })}
-                      </span>
-                    </span>
-                  </span>
-                </Button>
-              );
-            })}
           </div>
-        </ScrollArea>
-      </aside>
-
-      {selected && (
-        <RunDetails
-          key={selected.taskId}
-          run={selected}
-          canAttach={selected.actorUserId === session?.user.id}
-          onClosed={() => void refetch()}
-        />
-      )}
+          <div className="border-t px-4 py-2 text-xs text-muted-foreground">
+            {filtered.length} matching {filtered.length === 1 ? "run" : "runs"}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function RunDetails({
-  run,
-  canAttach,
-  onClosed,
-}: {
-  run: AgentRunListItem;
-  canAttach: boolean;
-  onClosed: () => void;
-}) {
-  const active = !run.endedAt;
-  const now = useRuntimeClock(true);
-  const [permissionsOpen, setPermissionsOpen] = useState(false);
-  const [stopDialogOpen, setStopDialogOpen] = useState(false);
-  const cancelRun = useCancelAgentRun();
-  const capabilities = useScopedCapabilities();
-  const canManageAccess =
-    canAttach ||
-    capabilities.data?.some(
-      (grant) =>
-        grant.resource === "agentRun" &&
-        grant.action === "manage-permissions" &&
-        (grant.scope === run.taskId || grant.scope === "*"),
-    );
-
-  return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex flex-shrink-0 flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
-        <div className="min-w-0 flex-1 basis-48 space-y-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <h2 className="truncate text-sm font-medium">{run.title}</h2>
-            <AgentRunState
-              state={run.state}
-              attentionState={run.attentionState}
-              statusReason={run.statusReason}
-              lastModelActivityAt={run.lastModelActivityAt}
-              startedAt={run.startedAt}
-              endedAt={run.endedAt}
-              hardDeadlineAt={run.hardDeadlineAt}
-              compact
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-            <time
-              dateTime={run.startedAt}
-              title={`Started ${new Date(run.startedAt).toLocaleString(
-                undefined,
-                {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                },
-              )}`}
-            >
-              Started{" "}
-              {formatDistance(new Date(run.startedAt), now, {
-                addSuffix: true,
-              })}
-            </time>
-            <span className="min-w-0 break-words">
-              by {canAttach ? "you" : initiatorLabel(run)}
-            </span>
-            {run.projectId && (
-              <>
-                <span aria-hidden>·</span>
-                <span>+ project access</span>
-              </>
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  className="size-5 text-muted-foreground"
-                  aria-label="Who can access this run?"
-                >
-                  <Info className="size-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                <p>
-                  The run owner and Agent administrators can read output.
-                  Sharing grants others read-only access. Only the run owner can
-                  use the live terminal.
-                </p>
-                {run.projectId && (
-                  <p className="mt-1">
-                    People with access to its project and permission to read all
-                    project sessions can also read this run.
-                  </p>
-                )}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" asChild>
-                <Link
-                  href={`/chat/runs/${run.taskId}`}
-                  aria-label="Open full view"
-                >
-                  <Maximize2 />
-                </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Open full view</TooltipContent>
-          </Tooltip>
-          {active && canAttach && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={cancelRun.isPending}
-              onClick={() => setStopDialogOpen(true)}
-            >
-              <Square className="size-4" />
-              <span>Stop</span>
-            </Button>
-          )}
-          {canManageAccess && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="More run actions"
-                >
-                  <MoreHorizontal />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setPermissionsOpen(true)}>
-                  <Share2 />
-                  <span>Share</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
-        {active && <AgentRunLiveness run={run} />}
-        {active && canAttach ? (
-          <AgentRunTerminal
-            taskId={run.taskId}
-            active
-            title="Live terminal"
-            showManualCommand={false}
-            showDisconnectedStatus={false}
-            onError={onClosed}
-            onClosed={onClosed}
-          />
-        ) : (
-          <AgentRunLogs run={run} title="" />
-        )}
-      </div>
-      <ShareAgentRunDialog
-        taskId={run.taskId}
-        open={permissionsOpen}
-        onOpenChange={setPermissionsOpen}
-      />
-      <DeleteConfirmDialog
-        open={stopDialogOpen}
-        onOpenChange={setStopDialogOpen}
-        title="Stop this run?"
-        description="The Agent process will stop. Saved files and run history will be retained so you can continue later."
-        isPending={cancelRun.isPending}
-        confirmLabel="Stop run"
-        pendingLabel="Stopping…"
-        onConfirm={() =>
-          cancelRun.mutate(run.taskId, {
-            onSuccess: () => setStopDialogOpen(false),
-          })
-        }
-      />
-    </section>
-  );
-}
-
-const ANYONE = "__anyone";
-const ME = "__me";
-
-/** Groups runs by who started them: the user, else the kind of actor. */
 function starterKey(run: AgentRunListItem): string {
-  return run.actorUserId ?? `kind:${run.actorKind}`;
+  return `${run.actorKind}:${run.actorId}`;
 }
-
 function initiatorLabel(run: AgentRunListItem): string {
   if (run.initiatorName) return run.initiatorName;
+  if (run.actorKind === "serviceAccount") return "a service account";
   if (run.actorKind === "organization") return "the organization";
   if (run.actorKind === "team") return "a team";
   if (run.actorKind === "system") return "automation";
   return "an unknown user";
+}
+
+function RunSwitcherShortcut() {
+  const modifier = useSyncExternalStore(
+    subscribeToPlatform,
+    () =>
+      navigator.platform.toUpperCase().includes("MAC") ? "⇧⌘" : "Ctrl+Shift+",
+    () => null,
+  );
+  return modifier ? (
+    <kbd className="hidden rounded border px-1 text-[10px] lg:inline">
+      {modifier}K
+    </kbd>
+  ) : null;
+}
+function subscribeToPlatform() {
+  return () => {};
 }

@@ -1032,6 +1032,45 @@ describe("OpenAIStreamAdapter", () => {
     });
   });
 
+  test("sends usage on its own trailing chunk with empty choices when the client set include_usage, as OpenAI does", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter({
+      model: "gpt-x",
+      messages: [{ role: "user", content: "hi" }],
+      stream: true,
+      stream_options: { include_usage: true },
+    } as Parameters<typeof openaiAdapterFactory.createStreamAdapter>[0]);
+    adapter.processChunk({
+      id: "chatcmpl-6",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [{ index: 0, delta: { content: "hi" }, finish_reason: "stop" }],
+    } as Chunk);
+    adapter.processChunk({
+      id: "chatcmpl-6",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [],
+      usage: { prompt_tokens: 100, completion_tokens: 42, total_tokens: 142 },
+    } as Chunk);
+
+    const frames = String(adapter.formatEndSSE()).split("\n\n").filter(Boolean);
+    expect(frames).toHaveLength(3);
+    expect(frames[2]).toBe("data: [DONE]");
+    const [finish, usage] = frames
+      .slice(0, 2)
+      .map((frame) => JSON.parse(frame.replace(/^data: /, "")));
+    expect(finish.choices[0].finish_reason).toBe("stop");
+    expect(finish.usage).toBeUndefined();
+    expect(usage).toMatchObject({
+      id: "chatcmpl-6",
+      object: "chat.completion.chunk",
+      choices: [],
+      usage: { prompt_tokens: 100, completion_tokens: 42, total_tokens: 142 },
+    });
+  });
+
   test("toProviderResponse reports gross prompt_tokens with cache detail (non-streaming path)", () => {
     const adapter = openaiAdapterFactory.createStreamAdapter();
     adapter.processChunk({

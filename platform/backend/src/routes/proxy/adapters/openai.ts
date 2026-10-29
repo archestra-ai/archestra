@@ -1040,6 +1040,11 @@ export class OpenAIResponseAdapter
 // =============================================================================
 
 // Exported for reuse by OpenAI-compatible providers (Mistral, etc.)
+/** The part of a chat-completions request the stream adapter answers to. */
+type OpenAiStreamUsageRequest = {
+  stream_options?: { include_usage?: boolean | null } | null;
+};
+
 export class OpenAIStreamAdapter
   implements LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse>
 {
@@ -1088,8 +1093,18 @@ export class OpenAIStreamAdapter
     return this.replacedText !== null;
   }
 
-  constructor(provider: SupportedProvider = "openai") {
+  // The proxy always asks the provider for usage (see executeStream). A client
+  // that asked for it as well reads it where OpenAI puts it: a trailing chunk
+  // with empty `choices`, after the finish chunk.
+  private readonly clientRequestedUsage: boolean;
+
+  constructor(
+    provider: SupportedProvider = "openai",
+    clientRequest?: OpenAiStreamUsageRequest,
+  ) {
     this.provider = provider;
+    this.clientRequestedUsage =
+      clientRequest?.stream_options?.include_usage === true;
     this.state = {
       responseId: "",
       model: "",
@@ -1370,6 +1385,17 @@ export class OpenAIStreamAdapter
     // cache reads (see processChunk above), so this must recombine them into a gross
     // `prompt_tokens` with `prompt_tokens_details` — mirrors `toProviderResponse()` below.
     const usage = toOpenAiStreamUsageWithCache(this.state.usage);
+    if (usage && this.clientRequestedUsage) {
+      const usageChunk: OpenAiStreamChunk = {
+        id: finalChunk.id,
+        object: "chat.completion.chunk",
+        created: finalChunk.created,
+        model: finalChunk.model,
+        choices: [],
+        usage,
+      };
+      return `data: ${JSON.stringify(finalChunk)}\n\ndata: ${JSON.stringify(usageChunk)}\n\ndata: [DONE]\n\n`;
+    }
     if (usage) {
       finalChunk.usage = usage;
     }
@@ -1505,8 +1531,10 @@ export const openaiAdapterFactory: LLMProvider<
     return new OpenAIResponseAdapter(response);
   },
 
-  createStreamAdapter(): LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse> {
-    return new OpenAIStreamAdapter();
+  createStreamAdapter(
+    request?: OpenAiRequest,
+  ): LLMStreamAdapter<OpenAiStreamChunk, OpenAiResponse> {
+    return new OpenAIStreamAdapter("openai", request);
   },
 
   extractApiKey(headers: OpenAiHeaders): string | undefined {

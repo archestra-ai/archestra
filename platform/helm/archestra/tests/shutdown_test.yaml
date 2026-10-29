@@ -50,4 +50,3 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: requestDrainSeconds must be integer seconds between 1 and 86400
-

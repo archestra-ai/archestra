@@ -116,10 +116,19 @@ export function createAzureImageEditAdapter(
 }
 
 function validImageOutput(item: { b64_json?: string; url?: string }) {
-  if (item.b64_json)
-    return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-      item.b64_json,
+  if (item.b64_json) {
+    const value = item.b64_json;
+    const paddingStart = value.indexOf("=");
+    // Avoid repeated regex groups: multi-megabyte image outputs can exhaust
+    // the regex engine's stack even when the base64 is valid.
+    return (
+      value.length % 4 === 0 &&
+      !/[^A-Za-z0-9+/=]/.test(value) &&
+      (paddingStart === -1 ||
+        paddingStart === value.length - 1 ||
+        (paddingStart === value.length - 2 && value.endsWith("==")))
     );
+  }
   if (item.url) {
     try {
       return new URL(item.url).protocol === "https:";

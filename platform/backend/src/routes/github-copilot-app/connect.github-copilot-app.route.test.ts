@@ -333,6 +333,56 @@ describe("GitHub Copilot organization subscription setup", () => {
     );
   });
 
+  test("takes an organization GitHub hides behind its enterprise's sign-in", async () => {
+    // Anonymous API reads of an Enterprise Managed Users organization get a
+    // 404, as for a missing account; only its web profile tells them apart.
+    const github = githubFake({ appId });
+    const webProfiles: Record<string, Response> = {
+      "https://github.com/managed-org": new Response(null, {
+        status: 302,
+        headers: {
+          location:
+            "https://github.com/enterprises/acme/sso?return_to=https%3A%2F%2Fgithub.com%2Fmanaged-org",
+        },
+      }),
+      "https://github.com/offsite-org": new Response(null, {
+        status: 302,
+        headers: { location: "https://example.com/enterprises/acme/sso" },
+      }),
+      "https://github.com/no-such-org": new Response(null, { status: 404 }),
+    };
+    vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const login = url.match(/\/users\/([^/]+)$/)?.[1];
+      if (login && `https://github.com/${login}` in webProfiles)
+        return Response.json({ message: "Not Found" }, { status: 404 });
+      return webProfiles[url]?.clone() ?? github(input, init);
+    });
+
+    const managed = await post("/api/github-copilot-app/organization/check", {
+      organization: "managed-org",
+    });
+    expect(managed.statusCode, managed.body).toBe(200);
+    expect(managed.json()).toEqual({ organization: "managed-org" });
+    const manifest = await post("/api/github-copilot-app/manifest", {
+      organization: "https://github.com/managed-org",
+    });
+    expect(manifest.statusCode, manifest.body).toBe(200);
+    expect(manifest.json().url).toMatch(
+      /^https:\/\/github\.com\/organizations\/managed-org\/settings\/apps\/new\?state=/,
+    );
+
+    for (const organization of ["no-such-org", "offsite-org"]) {
+      const missing = await post("/api/github-copilot-app/organization/check", {
+        organization,
+      });
+      expect(missing.statusCode, organization).toBe(400);
+      expect(missing.json().error.message).toBe(
+        `GitHub has no account named ${organization}.`,
+      );
+    }
+  });
+
   test("refuses a personal GitHub account", async () => {
     vi.stubGlobal("fetch", githubFake({ appId, accountType: "User" }));
 

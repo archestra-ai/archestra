@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
   GITHUB_ACCOUNT_INPUT_INVALID,
+  getGithubWebOrigin,
   parseGithubAccountInput,
 } from "@archestra/shared";
 import { z } from "zod";
@@ -369,8 +370,11 @@ export async function lookupAccount(params: { api: string; login: string }) {
   // Private Enterprise Server instances need a sign-in to read profiles.
   if (response.status === 401 || response.status === 403)
     return { login, type: "Organization" as const };
-  if (response.status === 404)
+  if (response.status === 404) {
+    if (await isManagedUsersOrganization(params))
+      return { login, type: "Organization" as const };
     throw new ApiError(400, `GitHub has no account named ${login}.`);
+  }
   const account = response.ok
     ? AccountSchema.safeParse(await response.json())
     : null;
@@ -438,6 +442,32 @@ const AccountSchema = z.object({
   login: z.string(),
   type: z.enum(["User", "Organization"]),
 });
+
+/**
+ * Whether a login the API calls missing is an organization of an Enterprise
+ * Managed Users enterprise. GitHub hides those from anonymous API reads, but
+ * their web profile sends visitors to the enterprise's single sign-on, while
+ * a missing account's profile is a 404.
+ */
+async function isManagedUsersOrganization(params: {
+  api: string;
+  login: string;
+}) {
+  const web = getGithubWebOrigin(params.api);
+  const response = await fetch(`${web}/${encodeURIComponent(params.login)}`, {
+    method: "HEAD",
+    redirect: "manual",
+    signal: AbortSignal.timeout(15_000),
+  }).catch(() => null);
+  const location = response?.headers.get("location");
+  if (!response || response.status < 300 || response.status > 399 || !location)
+    return false;
+  const target = URL.canParse(location, web) ? new URL(location, web) : null;
+  return (
+    target?.origin === new URL(web).origin &&
+    /^\/enterprises\/[^/]+\/sso\/?$/.test(target.pathname)
+  );
+}
 
 function toPublic(pending: StoredPendingApp): PendingGithubApp {
   const installUrl = new URL(

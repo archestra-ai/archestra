@@ -134,6 +134,22 @@ it("creates from an empty agent, reuses the created project on retry, and immedi
   expect(await screen.findByText("No scheduled runs yet")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Create schedule" }));
   const dialog = screen.getByRole("dialog", { name: "Create schedule" });
+  expect(within(dialog).queryByLabelText("Agent")).not.toBeInTheDocument();
+  expect(
+    within(dialog).queryByRole("combobox", { name: /agent/i }),
+  ).not.toBeInTheDocument();
+  expect(
+    within(dialog).queryByRole("combobox", { name: "Project" }),
+  ).not.toBeInTheDocument();
+  const advanced = within(dialog).getByRole("button", { name: "Advanced" });
+  expect(advanced).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(advanced);
+  expect(
+    within(dialog).getByRole("combobox", { name: "Project" }),
+  ).toHaveAccessibleDescription(
+    "A project named “Reporter schedules” will be created for this schedule, private to you by default.",
+  );
+  fireEvent.click(advanced);
   const submit = within(dialog).getByRole("button", {
     name: "Create schedule",
   });

@@ -215,6 +215,28 @@ describe("buildUserContent", () => {
     ]);
   });
 
+  test("keeps the original reason for a file no sandbox would accept", async () => {
+    const { rejected } = await buildUserContent(
+      "Read this",
+      [
+        {
+          contentType: "application/zip",
+          contentBase64: "AAAAAAAA",
+          name: "huge.zip",
+        },
+      ],
+      {
+        ...geminiOpts(PDF_AND_IMAGES),
+        sandboxByteLimit: 3,
+        credentialHasNoSandbox: true,
+      },
+    );
+
+    expect(rejected).toEqual([
+      { name: "huge.zip", reason: "unsupported_type" },
+    ]);
+  });
+
   test("keeps images regardless of the readable mime set, including image/jpg", async () => {
     const attachments: A2AAttachment[] = [
       {

@@ -1181,9 +1181,11 @@ export async function buildUserContent(
     if (reason) {
       rejected.push({
         att,
-        reason: opts.credentialHasNoSandbox
-          ? "credential_has_no_sandbox"
-          : reason,
+        reason:
+          opts.credentialHasNoSandbox &&
+          estimateAttachmentBytes(att) <= sandboxByteLimit
+            ? "credential_has_no_sandbox"
+            : reason,
       });
     } else if (canInlineAttachment(att, opts.ingestibleMimeTypes)) {
       inlineNonImage.push(att);

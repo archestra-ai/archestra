@@ -1845,8 +1845,9 @@ describe("run_tool", () => {
       expect(runSpy).toHaveBeenCalledWith(
         expect.objectContaining({ command: "echo hi" }),
       );
-      const text = result.content.map((item) => (item as any).text).join("\n");
-      expect(text).toContain('"command"');
+      expect(result._meta?.["archestra/unwrappedToolArgs"]).toEqual([
+        "command",
+      ]);
     });
 
     test('unwraps {"item": […]} and {"value": […]} around an array-declared built-in param', async ({
@@ -1872,10 +1873,9 @@ describe("run_tool", () => {
           success: true,
           todoCount: 1,
         });
-        const text = result.content
-          .map((item) => (item as any).text)
-          .join("\n");
-        expect(text).toContain("todos");
+        expect(result._meta?.["archestra/unwrappedToolArgs"]).toEqual([
+          "todos",
+        ]);
       }
     });
 
@@ -1920,10 +1920,10 @@ describe("run_tool", () => {
           mockContext.tokenAuth,
           { conversationId: testConversationId },
         );
-        const text = result.content
-          .map((item) => (item as any).text)
-          .join("\n");
-        expect(text).toContain('"query"');
+        expect(result.content).toEqual([{ type: "text", text: "ok" }]);
+        expect(result._meta?.["archestra/unwrappedToolArgs"]).toEqual([
+          "query",
+        ]);
       }
     });
 
@@ -1967,8 +1967,8 @@ describe("run_tool", () => {
         mockContext.tokenAuth,
         { conversationId: testConversationId },
       );
-      const text = result.content.map((item) => (item as any).text).join("\n");
-      expect(text).toContain('"query"');
+      expect(result.content).toEqual([{ type: "text", text: "ok" }]);
+      expect(result._meta?.["archestra/unwrappedToolArgs"]).toEqual(["query"]);
     });
 
     test("unwraps a param-name-keyed wrapper around a primitive-declared param", async ({
@@ -2011,11 +2011,10 @@ describe("run_tool", () => {
         mockContext.tokenAuth,
         { conversationId: testConversationId },
       );
-      // The upstream result is one block; the disclosed repair note is the
-      // extra one.
-      expect(result.content).toHaveLength(2);
-      expect(result.content[0]).toEqual({ type: "text", text: "ok" });
-      expect((result.content[1] as any).type).toBe("text");
+      // A successful repair is disclosed in _meta; content stays exactly what
+      // the tool returned, so clients that join and parse text blocks still can.
+      expect(result.content).toEqual([{ type: "text", text: "ok" }]);
+      expect(result._meta?.["archestra/unwrappedToolArgs"]).toEqual(["appId"]);
     });
 
     test("repairEnvelopedToolArgs reports a param-name-keyed repair as data", () => {

@@ -260,9 +260,7 @@ function responseInputToChatMessages(
             typeof item.call_id === "string" ? item.call_id : "unknown",
           content: preserveContentParts
             ? responseContentToChat(item.output)
-            : typeof item.output === "string"
-              ? item.output
-              : "",
+            : stringifyResponseContent(item.output),
           ...(preserveContentParts
             ? cacheControlFields(item.cache_control)
             : {}),

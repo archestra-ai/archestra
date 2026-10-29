@@ -457,7 +457,7 @@ describe("LimitsPage", () => {
     const orgRow = screen.getByTestId("data-table-row-org-set");
     const teamRow = screen.getByTestId("data-table-row-team-set");
     expect(
-      within(orgRow).getByText("Set by your organization"),
+      within(orgRow).getByRole("img", { name: "Set by your organization" }),
     ).toBeInTheDocument();
     for (const name of [/Edit limit/, /Delete limit/]) {
       expect(within(orgRow).getByRole("button", { name })).toHaveAttribute(
@@ -469,7 +469,9 @@ describe("LimitsPage", () => {
       );
     }
     expect(
-      within(teamRow).queryByText("Set by your organization"),
+      within(teamRow).queryByRole("img", {
+        name: "Set by your organization",
+      }),
     ).not.toBeInTheDocument();
   });
 
@@ -1695,6 +1697,35 @@ describe("LimitsPage", () => {
         entityId: "agent-1",
         limitValue: 1000,
       }),
+    );
+  });
+
+  it("edits a limit's reason, and clears it when emptied", async () => {
+    const limit = {
+      ...limitRow({ id: "with-reason", limitValue: 1000 }),
+      reason: "Keep experiments in check",
+    };
+    mockUseLimits.mockReturnValue({ data: [limit], isPending: false });
+    const params = new URLSearchParams({ edit: limit.id });
+    mockDataTableSearchParams.mockReturnValue(params);
+    vi.mocked(useSearchParams).mockReturnValue(
+      params as unknown as ReturnType<typeof useSearchParams>,
+    );
+    render(<LimitsPage />);
+    await screen.findByText("Save changes");
+    const reason = screen.getByLabelText("Reason (optional)");
+    expect(reason).toHaveValue("Keep experiments in check");
+
+    fireEvent.change(reason, { target: { value: "  Quarterly budget  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(mockUpdateLimit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: limit.id, reason: "Quarterly budget" }),
+    );
+
+    fireEvent.change(reason, { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(mockUpdateLimit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: limit.id, reason: null }),
     );
   });
 

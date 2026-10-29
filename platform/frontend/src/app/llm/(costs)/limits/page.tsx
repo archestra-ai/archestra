@@ -139,6 +139,7 @@ type LimitFormState = {
   models: string[];
   isAllModels: boolean;
   labels: ProfileLabel[];
+  reason: string;
 };
 
 const DEFAULT_FORM_STATE: LimitFormState = {
@@ -152,6 +153,7 @@ const DEFAULT_FORM_STATE: LimitFormState = {
   models: [],
   isAllModels: true,
   labels: [],
+  reason: "",
 };
 
 const LIMITS_ENTITY_SELECTOR_PAGE_SIZE = 100;
@@ -458,6 +460,7 @@ export default function LimitsPage() {
       // A limit read before labels existed carries none; the labels field
       // shows open now, so it needs a list.
       labels: limit.labels ?? [],
+      reason: limit.reason ?? "",
     };
   }, []);
 
@@ -658,8 +661,22 @@ export default function LimitsPage() {
                 {getEntityIcon(limit)}
               </span>
               <div className="min-w-0">
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="flex min-w-0 items-center gap-1.5">
                   <span className="truncate">{getEntityLabel(limit)}</span>
+                  {access.isLocked(limit) && (
+                    <EntityNote
+                      icon={Lock}
+                      label="Set by your organization"
+                      text={ORG_SET_LIMIT_HINT}
+                    />
+                  )}
+                  {limit.reason ? (
+                    <EntityNote
+                      icon={MessageSquareText}
+                      label={`Reason: ${limit.reason}`}
+                      text={limit.reason}
+                    />
+                  ) : null}
                   <LabelTags labels={limit.labels} />
                 </div>
                 {limit.entityType !== "organization" && (
@@ -667,25 +684,6 @@ export default function LimitsPage() {
                     {getEntityScopeLabel(limit)}
                   </div>
                 )}
-                {access.isLocked(limit) && (
-                  <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-                    <Lock aria-hidden className="size-3 shrink-0" />
-                    <span className="truncate">Set by your organization</span>
-                  </div>
-                )}
-                {limit.reason ? (
-                  <div
-                    title={limit.reason}
-                    className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
-                  >
-                    <MessageSquareText
-                      aria-hidden
-                      className="size-3 shrink-0"
-                    />
-                    <span className="sr-only">Reason: </span>
-                    <span className="truncate">{limit.reason}</span>
-                  </div>
-                ) : null}
               </div>
             </div>
           );
@@ -849,6 +847,7 @@ export default function LimitsPage() {
       cleanupInterval: formState.cleanupInterval,
       model: formState.isAllModels ? null : formState.models,
       labels: finalLabels,
+      reason: formState.reason.trim() || null,
     };
 
     if (editingLimit) {
@@ -1527,6 +1526,25 @@ export default function LimitsPage() {
               )}
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="limit-reason">Reason (optional)</Label>
+              <FieldDescription>
+                Shown with the limit so others know why it is there.
+              </FieldDescription>
+              <Input
+                id="limit-reason"
+                placeholder="For example, keep Opus experiments in check"
+                maxLength={500}
+                value={formState.reason}
+                onChange={(event) =>
+                  setFormState((current) => ({
+                    ...current,
+                    reason: event.target.value,
+                  }))
+                }
+              />
+            </div>
+
             <AdvancedSection keepMounted>
               <div className="space-y-2">
                 <Label htmlFor="limit-behavior">Behavior</Label>
@@ -2056,4 +2074,34 @@ function getLimitInterval(limit: LimitData): LimitCleanupInterval {
     return "minute";
   }
   return limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL;
+}
+
+/** A small icon beside a limit's name whose text shows on hover or focus. */
+function EntityNote({
+  icon: Icon,
+  label,
+  text,
+}: {
+  icon: typeof Lock;
+  label: string;
+  text: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="img"
+          aria-label={label}
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: lets keyboard users open the tooltip
+          tabIndex={0}
+          className="inline-flex shrink-0 cursor-default rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <Icon aria-hidden className="size-3.5" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-72">{text}</TooltipContent>
+    </Tooltip>
+  );
 }

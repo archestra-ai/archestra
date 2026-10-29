@@ -17,6 +17,7 @@ import {
   buildAllowAttribute,
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
+import { RefreshCw } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
   useCallback,
@@ -152,8 +153,10 @@ export const McpAppRuntime = function McpAppRuntime({
   appVersion,
   containerDimensions,
   reloadNonce,
+  isReloading,
   inlineInitialHeight,
   onReload,
+  onReloadComplete,
   filesRevision,
   onModelContextUpdate,
   instanceId,
@@ -180,11 +183,15 @@ export const McpAppRuntime = function McpAppRuntime({
   containerDimensions?: { maxHeight?: number };
   /** Bump to remount (reload) the sandboxed iframe — re-runs its creation effect. */
   reloadNonce?: number;
+  /** Whether a user-initiated reload is currently in flight. */
+  isReloading?: boolean;
   /** Last measured inline height; seeds the iframe + loading box so a fresh
    * mount (e.g. returning from the panel) doesn't collapse before the app loads. */
   inlineInitialHeight?: number;
   /** Retry the resource load by rebuilding the runtime. */
   onReload?: () => void;
+  /** Fired once a reload finishes revealing the incoming guest frame (or fails). */
+  onReloadComplete?: () => void;
   /** Per-app count of agent-side file-store writes; threaded to the sandbox so
    * a bump nudges the running app to re-list its files. */
   filesRevision?: number;
@@ -204,6 +211,22 @@ export const McpAppRuntime = function McpAppRuntime({
   const [appResource, setAppResource] = useState<AppResourceMeta | null>(
     preloadedResource ?? null,
   );
+  const [isResourceReady, setIsResourceReady] = useState<boolean>(
+    Boolean(preloadedResource),
+  );
+  const [completedReloadNonce, setCompletedReloadNonce] = useState<number>(
+    reloadNonce ?? 0,
+  );
+  const reloadNonceRef = useRef(reloadNonce ?? 0);
+  reloadNonceRef.current = reloadNonce ?? 0;
+  const onReloadCompleteRef = useRef(onReloadComplete);
+  onReloadCompleteRef.current = onReloadComplete;
+  const handleReloadComplete = useCallback(() => {
+    setCompletedReloadNonce(reloadNonceRef.current);
+    onReloadCompleteRef.current?.();
+  }, []);
+  const activeReload =
+    Boolean(isReloading) || (reloadNonce ?? 0) > completedReloadNonce;
   const [loadError, setLoadError] = useState<string | null>(null);
   // Auth error from the app's most recent proxied tools/call — drives a
   // host-side connect banner above the iframe (see McpAppAuthBanner).
@@ -712,17 +735,20 @@ export const McpAppRuntime = function McpAppRuntime({
     // Skip HTTP fetch when the backend already sent the HTML via SSE.
     if (preloadedResource) {
       if (!cancelled) {
+        const renderable = isRenderableMcpAppHtml(preloadedResource.html);
         setAppResource(preloadedResource);
-        onResourceStateChangeRef.current(
-          isRenderableMcpAppHtml(preloadedResource.html)
-            ? "renderable"
-            : "empty",
-        );
+        setIsResourceReady(true);
+        onResourceStateChangeRef.current(renderable ? "renderable" : "empty");
+        if (!renderable) {
+          handleReloadComplete();
+        }
       }
       return () => {
         cancelled = true;
       };
     }
+
+    setIsResourceReady(false);
 
     // Fallback: fetch UI resource HTML + metadata (CSP, permissions) directly.
     // Only reached when the backend prefetch was skipped (e.g. tool called from
@@ -752,6 +778,7 @@ export const McpAppRuntime = function McpAppRuntime({
         const permissions = content._meta?.ui?.permissions;
 
         if (!cancelled && !fetchCancelledRef.current) {
+          const renderable = isRenderableMcpAppHtml(html);
           setAppResource((prev) => {
             if (
               prev &&
@@ -765,16 +792,20 @@ export const McpAppRuntime = function McpAppRuntime({
             }
             return { html, csp, permissions };
           });
-          onResourceStateChangeRef.current(
-            isRenderableMcpAppHtml(html) ? "renderable" : "empty",
-          );
+          setIsResourceReady(true);
+          onResourceStateChangeRef.current(renderable ? "renderable" : "empty");
+          if (!renderable) {
+            handleReloadComplete();
+          }
         }
       } catch (err) {
         if (!cancelled && !fetchCancelledRef.current) {
           const error = err instanceof Error ? err : new Error(String(err));
           setLoadError(error.message);
+          setIsResourceReady(false);
           onResourceStateChangeRef.current("error");
           onErrorRef.current?.(error);
+          handleReloadComplete();
         }
       }
     })();
@@ -796,12 +827,15 @@ export const McpAppRuntime = function McpAppRuntime({
   useEffect(() => {
     if (preloadedResource && !appResource && !loadError) {
       fetchCancelledRef.current = true;
+      const renderable = isRenderableMcpAppHtml(preloadedResource.html);
       setAppResource(preloadedResource);
-      onResourceStateChangeRef.current(
-        isRenderableMcpAppHtml(preloadedResource.html) ? "renderable" : "empty",
-      );
+      setIsResourceReady(true);
+      onResourceStateChangeRef.current(renderable ? "renderable" : "empty");
+      if (!renderable) {
+        handleReloadComplete();
+      }
     }
-  }, [preloadedResource, appResource, loadError]);
+  }, [preloadedResource, appResource, loadError, handleReloadComplete]);
 
   // Send partial inputs during streaming. The Vercel AI SDK populates part.input
   // progressively during input-streaming state, so toolInput changes on each delta.
@@ -953,6 +987,9 @@ export const McpAppRuntime = function McpAppRuntime({
           restoredState={guestStateRef.current}
           ownedApp={ownedAppId != null}
           filesRevision={filesRevision}
+          resourceReady={isResourceReady}
+          isReloading={activeReload}
+          onReloadComplete={handleReloadComplete}
         />
       )}
     </div>
@@ -994,8 +1031,10 @@ function isSuccessfulMcpToolCallResult(
 const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
 const SANDBOX_READY_TIMEOUT = 10_000;
 // Fallback reveal timeout if a reloaded guest never emits mcp-apps:guest-ready.
-// Matches GUEST_READY_FALLBACK_MS in platform/backend/src/static/mcp-sandbox-proxy.html.
-const SANDBOX_REVEAL_FALLBACK_MS = 900;
+// Slightly exceeds TOGGLE_RPC_GATE_MAX_MS / GUEST_RPC_FLIGHT_MAX_MS (2500ms) in
+// platform/backend/src/static/mcp-sandbox-proxy.html so in-flight startup RPCs
+// can complete before the incoming iframe is revealed.
+const SANDBOX_REVEAL_FALLBACK_MS = 2_600;
 
 // Coalesce a burst of render errors into one early server post.
 const RENDER_DIAGNOSTIC_POST_DEBOUNCE_MS = 400;
@@ -1033,6 +1072,9 @@ function SandboxIframe({
   onContentLoaded,
   ownedApp,
   filesRevision,
+  resourceReady = true,
+  isReloading = false,
+  onReloadComplete,
 }: {
   html: string;
   sandboxUrl: URL;
@@ -1083,6 +1125,12 @@ function SandboxIframe({
    * by the host (chat `copy_file` results). A bump after init sends the guest
    * `notifications/resources/list_changed` so its file UI can re-list. */
   filesRevision?: number;
+  /** True once the current bridge's UI resource HTML has finished fetching. */
+  resourceReady?: boolean;
+  /** True while a reload is in progress and the incoming guest has not yet revealed. */
+  isReloading?: boolean;
+  /** Fired when the incoming guest frame reveals (or when reload settles). */
+  onReloadComplete?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -1092,6 +1140,9 @@ function SandboxIframe({
     transport: PostMessageTransport | null;
   } | null>(null);
   const hasRenderedContentRef = useRef(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const scheduleRevealFallbackRef = useRef<(() => void) | null>(null);
+  const revealIncomingIframeRef = useRef<(() => void) | null>(null);
   // Track WHICH bridge is connected, not just a boolean: a reload swaps in a new
   // bridge instance, and `ready` must read false the instant the identity changes
   // — otherwise the send effects below fire against the not-yet-connected bridge
@@ -1111,6 +1162,7 @@ function SandboxIframe({
   const onConnectedRef = useRef(onConnected);
   const onInitializedRef = useRef(onInitialized);
   const onContentLoadedRef = useRef(onContentLoaded);
+  const onReloadCompleteRef = useRef(onReloadComplete);
   // Read at iframe-creation time only; a ref keeps it out of the effect deps so
   // the iframe never remounts when the height changes.
   const initialHeightRef = useRef(initialHeight);
@@ -1144,6 +1196,7 @@ function SandboxIframe({
     onConnectedRef.current = onConnected;
     onInitializedRef.current = onInitialized;
     onContentLoadedRef.current = onContentLoaded;
+    onReloadCompleteRef.current = onReloadComplete;
     initialHeightRef.current = initialHeight;
     maxHeightRef.current = maxHeight;
   });
@@ -1180,23 +1233,39 @@ function SandboxIframe({
       iframe.style.top = "0";
       iframe.style.left = "0";
       iframe.style.pointerEvents = "none";
+      setIsTransitioning(true);
     }
     let revealed = !previousIframe;
     let revealFallbackTimer: ReturnType<typeof setTimeout> | null = null;
     const revealIncomingIframe = () => {
-      if (revealed) return;
-      revealed = true;
       if (revealFallbackTimer) {
         clearTimeout(revealFallbackTimer);
         revealFallbackTimer = null;
       }
-      iframe.style.opacity = "";
-      iframe.style.position = "";
-      iframe.style.top = "";
-      iframe.style.left = "";
-      iframe.style.pointerEvents = "";
-      disposeOutgoingFrame();
+      if (!revealed) {
+        revealed = true;
+        iframe.style.opacity = "";
+        iframe.style.position = "";
+        iframe.style.top = "";
+        iframe.style.left = "";
+        iframe.style.pointerEvents = "";
+        disposeOutgoingFrame();
+      }
+      setIsTransitioning(false);
+      onReloadCompleteRef.current?.();
     };
+    const scheduleRevealFallback = () => {
+      if (revealed) return;
+      if (revealFallbackTimer) {
+        clearTimeout(revealFallbackTimer);
+      }
+      revealFallbackTimer = setTimeout(
+        revealIncomingIframe,
+        SANDBOX_REVEAL_FALLBACK_MS,
+      );
+    };
+    scheduleRevealFallbackRef.current = scheduleRevealFallback;
+    revealIncomingIframeRef.current = revealIncomingIframe;
     // Propagate the host theme into the sandbox chain: per CSS Color
     // Adjustment, the frame element's used color-scheme sets the embedded
     // document's *preferred* color scheme, and the proxy hands it on to the
@@ -1275,12 +1344,7 @@ function SandboxIframe({
               setError(null);
               setConnectedBridge(appBridge);
               onConnectedRef.current?.();
-              if (!revealed) {
-                revealFallbackTimer = setTimeout(
-                  revealIncomingIframe,
-                  SANDBOX_REVEAL_FALLBACK_MS,
-                );
-              }
+              scheduleRevealFallback();
             }
           })
           .catch((err) => {
@@ -1331,6 +1395,12 @@ function SandboxIframe({
       if (revealFallbackTimer) {
         clearTimeout(revealFallbackTimer);
         revealFallbackTimer = null;
+      }
+      if (scheduleRevealFallbackRef.current === scheduleRevealFallback) {
+        scheduleRevealFallbackRef.current = null;
+      }
+      if (revealIncomingIframeRef.current === revealIncomingIframe) {
+        revealIncomingIframeRef.current = null;
       }
       themeObserver.disconnect();
       window.removeEventListener("message", onMessage);
@@ -1420,11 +1490,15 @@ function SandboxIframe({
     };
   }, [ready, appBridge]);
 
-  // Send HTML to sandbox once connected
+  // Send HTML to sandbox once connected and the current bridge's resource is ready
   useEffect(() => {
-    if (!ready || !html) return;
+    if (!ready || !html || !resourceReady) return;
     hasRenderedContentRef.current = true;
     setInitialized(false);
+    scheduleRevealFallbackRef.current?.();
+    if (!outgoingIframeRef.current) {
+      onReloadCompleteRef.current?.();
+    }
     appBridge
       // `ownedApp` is a trusted host signal: Archestra-owned apps carry the
       // platform CSP in their backend envelope, so the proxy must not add a
@@ -1440,11 +1514,20 @@ function SandboxIframe({
           : {}),
       } as Parameters<typeof appBridge.sendSandboxResourceReady>[0])
       .catch((err) => {
+        revealIncomingIframeRef.current?.();
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         onErrorRef.current?.(error);
       });
-  }, [ready, html, appBridge, stableCsp, stablePermissions, ownedApp]);
+  }, [
+    ready,
+    html,
+    resourceReady,
+    appBridge,
+    stableCsp,
+    stablePermissions,
+    ownedApp,
+  ]);
 
   // Send tool input when available
   useEffect(() => {
@@ -1498,6 +1581,8 @@ function SandboxIframe({
     });
   }, [ready, initialized, filesRevision, appBridge]);
 
+  const showReloadProgress = Boolean(isReloading || isTransitioning);
+
   return (
     <div
       ref={containerRef}
@@ -1509,6 +1594,26 @@ function SandboxIframe({
         flexDirection: "column",
       }}
     >
+      {showReloadProgress && (
+        <output
+          data-testid="mcp-app-reload-indicator"
+          aria-live="polite"
+          aria-label="Reloading app"
+          className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-start bg-background/30 backdrop-blur-[1px] transition-opacity duration-150"
+        >
+          <div
+            role="progressbar"
+            aria-label="Reloading app"
+            className="h-0.5 w-full overflow-hidden bg-primary/20"
+          >
+            <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 rounded-full border border-border/80 bg-background/95 px-3 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm">
+            <RefreshCw className="h-3 w-3 animate-spin text-primary [animation-duration:650ms]" />
+            <span>Reloading app…</span>
+          </div>
+        </output>
+      )}
       {error && (
         <div role="alert" style={{ color: "red", padding: "1rem" }}>
           Error: {error.message}

@@ -3249,4 +3249,186 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
       fetchSpy.mockRestore();
     }
   });
+
+  it("shows immediate button and view reload progress during a delayed reload, waits for resources/read before sending resource ready, and clears progress on mcp-apps:guest-ready", async () => {
+    const user = userEvent.setup();
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    installBridgeCollector(bridgeInstances);
+
+    let resolveReloadFetch: ((response: Response) => void) | null = null;
+    let fetchCallCount = 0;
+    const makeResourceResponse = (html: string) =>
+      Response.json({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          contents: [
+            {
+              uri: defaultProps.uiResourceUri,
+              text: html,
+            },
+          ],
+        },
+      });
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+      fetchCallCount += 1;
+      if (fetchCallCount === 1) {
+        return Promise.resolve(
+          makeResourceResponse("<html><body><div>v1</div></body></html>"),
+        );
+      }
+      return new Promise<Response>((resolve) => {
+        resolveReloadFetch = resolve;
+      });
+    });
+
+    try {
+      await act(async () => {
+        render(<McpAppSection {...defaultProps} surface="panel" />);
+      });
+
+      const firstIframe = document.querySelector("iframe");
+      if (!firstIframe) throw new Error("initial iframe did not mount");
+      await notifySandboxProxyReady(firstIframe);
+
+      await vi.waitFor(() => {
+        expect(
+          bridgeInstances[0].sendSandboxResourceReady,
+        ).toHaveBeenCalledTimes(1);
+      });
+
+      const reloadButton = screen.getByRole("button", { name: /reload app/i });
+      expect(reloadButton).not.toHaveAttribute("aria-busy");
+      expect(
+        screen.queryByTestId("mcp-app-reload-indicator"),
+      ).not.toBeInTheDocument();
+
+      // Click Reload app while the second resources/read request is held pending
+      await act(async () => {
+        await user.click(reloadButton);
+      });
+
+      // Immediately after click, both button and app view show reload progress
+      expect(reloadButton).toHaveAttribute("aria-busy", "true");
+      expect(reloadButton).toHaveAttribute("data-state", "active");
+      expect(reloadButton.querySelector("svg")).toHaveClass("animate-spin");
+      expect(
+        screen.getByTestId("mcp-app-reload-indicator"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("progressbar", { name: /reloading app/i }),
+      ).toBeInTheDocument();
+
+      const iframesDuringReload = Array.from(
+        document.querySelectorAll("iframe"),
+      );
+      expect(iframesDuringReload).toHaveLength(2);
+      const reloadedIframe = iframesDuringReload[0];
+
+      // Even if the incoming sandbox iframe reports proxy-ready before resources/read resolves,
+      // sendSandboxResourceReady must NOT be called with stale HTML while resources/read is pending.
+      await notifySandboxProxyReady(reloadedIframe);
+      expect(
+        bridgeInstances[1].sendSandboxResourceReady,
+      ).not.toHaveBeenCalled();
+      expect(reloadButton).toHaveAttribute("aria-busy", "true");
+      expect(
+        screen.getByTestId("mcp-app-reload-indicator"),
+      ).toBeInTheDocument();
+
+      // Resolve the delayed resources/read fetch
+      await act(async () => {
+        resolveReloadFetch?.(
+          makeResourceResponse("<html><body><div>v2</div></body></html>"),
+        );
+      });
+
+      await vi.waitFor(() => {
+        expect(
+          bridgeInstances[1].sendSandboxResourceReady,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            html: "<html><body><div>v2</div></body></html>",
+          }),
+        );
+      });
+
+      // Progress indicator stays visible until the incoming guest signals ready
+      expect(reloadButton).toHaveAttribute("aria-busy", "true");
+      expect(
+        screen.getByTestId("mcp-app-reload-indicator"),
+      ).toBeInTheDocument();
+
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            source: reloadedIframe.contentWindow,
+            origin: SANDBOX_ORIGIN,
+            data: { type: "mcp-apps:guest-ready" },
+          }),
+        );
+      });
+
+      expect(reloadButton).not.toHaveAttribute("aria-busy");
+      expect(reloadButton).not.toHaveAttribute("data-state");
+      expect(
+        screen.queryByTestId("mcp-app-reload-indicator"),
+      ).not.toBeInTheDocument();
+      expect(reloadedIframe.style.opacity).toBe("");
+      expect(firstIframe.isConnected).toBe(false);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("exposes the Reload app button on the inline surface and shows progress until guest-ready", async () => {
+    const user = userEvent.setup();
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    installBridgeCollector(bridgeInstances);
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="inline"
+          preloadedResource={{ html: "<html><body>Inline App</body></html>" }}
+        />,
+      );
+    });
+
+    const firstIframe = document.querySelector("iframe");
+    if (!firstIframe) throw new Error("initial inline iframe did not mount");
+    await notifySandboxProxyReady(firstIframe);
+
+    const reloadButton = screen.getByRole("button", { name: /reload app/i });
+    expect(reloadButton).toBeInTheDocument();
+
+    await act(async () => {
+      await user.click(reloadButton);
+    });
+
+    expect(reloadButton).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByTestId("mcp-app-reload-indicator")).toBeInTheDocument();
+
+    const reloadedIframe = document.querySelectorAll("iframe")[0];
+    await notifySandboxProxyReady(reloadedIframe);
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: reloadedIframe.contentWindow,
+          origin: SANDBOX_ORIGIN,
+          data: { type: "mcp-apps:guest-ready" },
+        }),
+      );
+    });
+
+    expect(reloadButton).not.toHaveAttribute("aria-busy");
+    expect(
+      screen.queryByTestId("mcp-app-reload-indicator"),
+    ).not.toBeInTheDocument();
+  });
 });

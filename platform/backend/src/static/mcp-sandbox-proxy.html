@@ -1544,12 +1544,22 @@ function guestStateBootstrap(restored) {
         }
       }, 250);
       setTimeout(function () {
+        if (activeRpcCount === 0) {
+          restoreReady = true;
+          if (hasRestoredControls) {
+            runRestoreMicrotask();
+          }
+          notifyGuestReady();
+        }
+      }, GUEST_READY_FALLBACK_MS);
+      setTimeout(function () {
+        toggleGateExpired = true;
         restoreReady = true;
-        if (hasRestoredControls) {
+        if (hasRestoredControls && !userInteracted && restorationActive) {
           runRestoreMicrotask();
         }
         notifyGuestReady();
-      }, GUEST_READY_FALLBACK_MS);
+      }, TOGGLE_RPC_GATE_MAX_MS);
     }
     if (hasRestoredControls) {
       setTimeout(function () {

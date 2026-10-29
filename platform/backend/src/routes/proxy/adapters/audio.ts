@@ -43,6 +43,8 @@ export function makeAudioAdapterFactory(params: {
   operation: AudioOperation;
   parameters: Record<string, unknown>;
   file?: MediaMultipartFile;
+  /** The upload's measured playing time, which prices usage-less responses. */
+  audioSeconds?: number;
 }): LLMProvider<
   AudioAuditRequest,
   AudioAuditResponse,
@@ -50,7 +52,7 @@ export function makeAudioAdapterFactory(params: {
   AudioChunk,
   AudioHeaders
 > {
-  const { provider, operation, parameters, file } = params;
+  const { provider, operation, parameters, file, audioSeconds } = params;
   const base =
     provider === "azure" ? azureAdapterFactory : openaiAdapterFactory;
   const sse = parameters.stream_format === "sse" || parameters.stream === true;
@@ -84,7 +86,7 @@ export function makeAudioAdapterFactory(params: {
     createRequestAdapter: (request) =>
       new AudioRequestAdapter(provider, request),
     createResponseAdapter: (response) =>
-      new AudioResponseAdapter(provider, response, speechInput),
+      new AudioResponseAdapter(provider, response, speechInput, audioSeconds),
     createStreamAdapter: (request) =>
       new AudioStreamAdapter({
         provider,
@@ -93,6 +95,7 @@ export function makeAudioAdapterFactory(params: {
         contentType: expectedContentType(operation, parameters),
         sse,
         speechInput,
+        audioSeconds,
       }),
     mediaTariffCovers: (request) =>
       mediaTariffCovers({
@@ -104,6 +107,7 @@ export function makeAudioAdapterFactory(params: {
           typeof parameters.response_format === "string"
             ? parameters.response_format
             : undefined,
+        audioSeconds,
       }),
     async execute() {
       throw new ApiError(500, "Audio transport requires byte streaming");
@@ -255,6 +259,7 @@ class AudioResponseAdapter implements LLMResponseAdapter<AudioAuditResponse> {
     readonly provider: "azure" | "openai",
     private readonly response: AudioAuditResponse,
     private readonly speechInput?: string,
+    private readonly audioSeconds?: number,
   ) {}
   getId() {
     return this.response.id;
@@ -277,6 +282,7 @@ class AudioResponseAdapter implements LLMResponseAdapter<AudioAuditResponse> {
       model: this.response.model,
       usage: this.response.usage,
       speechInput: this.speechInput,
+      audioSeconds: this.audioSeconds,
     });
   }
   getOriginalResponse() {
@@ -306,6 +312,7 @@ class AudioStreamAdapter
       contentType: string;
       sse: boolean;
       speechInput?: string;
+      audioSeconds?: number;
     },
   ) {
     this.provider = options.provider;
@@ -323,6 +330,7 @@ class AudioStreamAdapter
         model: this.options.model,
         usage: this.usage,
         speechInput: this.options.speechInput,
+        audioSeconds: this.options.audioSeconds,
       });
       this.state.stopReason = "stop";
     }
@@ -492,15 +500,16 @@ function safeUsage(raw: unknown): Record<string, unknown> | undefined {
 }
 
 /**
- * Usage and cost of an audio call. Speech billed per character and
- * transcription billed per minute report no tokens, yet their cost is known:
- * such a call records zero tokens beside its tariff cost.
+ * Usage and cost of an audio call. Speech billed per character and audio
+ * billed per minute report no tokens, yet their cost is known: such a call
+ * records zero tokens beside its tariff cost.
  */
 function audioUsage(params: {
   operation: AudioOperation;
   model: string;
   usage?: Record<string, unknown>;
   speechInput?: string;
+  audioSeconds?: number;
 }): UsageView {
   const { usage } = params;
   const known =
@@ -511,6 +520,7 @@ function audioUsage(params: {
     operation: MEDIA_OPERATION[params.operation],
     input: params.speechInput,
     usage,
+    audioSeconds: params.audioSeconds,
   });
   return {
     inputTokens: known ? Number(usage.input_tokens) : 0,

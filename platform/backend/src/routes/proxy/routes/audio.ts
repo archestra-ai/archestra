@@ -13,6 +13,7 @@ import {
 import { makeAudioAdapterFactory } from "../adapters/audio";
 import { PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { audioDurationSeconds } from "../utils/audio-duration";
 import { getAzureProxyIngress } from "../utils/azure-ingress";
 import {
   type MediaMultipartFile,
@@ -140,6 +141,7 @@ export function handleAudioProxy(params: {
 }) {
   const { body, request, reply, provider, operation } = params;
   const { file, ...parameters } = body;
+  const audioSeconds = file ? audioDurationSeconds(file.data) : undefined;
   const safe: AudioAuditRequest = {
     model: body.model,
     operation,
@@ -158,6 +160,9 @@ export function handleAudioProxy(params: {
             filename: file.filename,
             mimetype: mediaUploadType(file),
             size: file.data.length,
+            ...(audioSeconds !== undefined && {
+              duration_seconds: Number(audioSeconds.toFixed(3)),
+            }),
           },
         }
       : {}),
@@ -167,7 +172,13 @@ export function handleAudioProxy(params: {
     safe,
     request,
     reply,
-    makeAudioAdapterFactory({ provider, operation, parameters, file }),
+    makeAudioAdapterFactory({
+      provider,
+      operation,
+      parameters,
+      file,
+      audioSeconds,
+    }),
   );
 }
 

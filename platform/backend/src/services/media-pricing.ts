@@ -12,9 +12,9 @@
  *   published at.
  * - Google: https://ai.google.dev/gemini-api/docs/pricing (paid tier).
  *
- * All rates are USD per million tokens or characters. A model or response the
- * tables cannot price returns `undefined`: an unknown cost is reported as
- * unknown, never as zero.
+ * All rates are USD per million tokens or characters, or per minute of audio.
+ * A model or response the tables cannot price returns `undefined`: an unknown
+ * cost is reported as unknown, never as zero.
  */
 
 export type MediaOperation =
@@ -33,6 +33,8 @@ export function mediaTariffCovers(params: {
   streamsUsage?: boolean;
   /** Transcription: the requested response format. */
   responseFormat?: string;
+  /** Transcription and translation: the uploaded audio's measured duration. */
+  audioSeconds?: number;
 }): boolean {
   const { provider, model, operation } = params;
   switch (operation) {
@@ -50,15 +52,23 @@ export function mediaTariffCovers(params: {
     }
     case "audio-transcription": {
       const tariff = lookup(OPENAI_TRANSCRIPTION, model);
-      // Only the JSON formats and the stream carry the usage that is billed.
+      // Only the JSON formats and the stream carry the usage that is billed;
+      // any other format is priced from the upload's measured duration.
       const format = params.responseFormat ?? "json";
       return (
-        tariff !== undefined && (format === "json" || format === "verbose_json")
+        tariff !== undefined &&
+        (format === "json" ||
+          format === "verbose_json" ||
+          params.audioSeconds !== undefined)
       );
     }
     case "audio-translation":
-      // Translations report neither tokens nor duration.
-      return false;
+      // Translations report neither tokens nor duration, so only a measured
+      // upload prices them.
+      return (
+        lookup(OPENAI_TRANSCRIPTION, model) !== undefined &&
+        params.audioSeconds !== undefined
+      );
   }
 }
 
@@ -138,8 +148,13 @@ export function priceGeminiImage(params: {
 /**
  * Cost of an OpenAI or Azure OpenAI audio call. Speech is billed per input
  * character, or by text input and audio output tokens for token-priced voices;
- * transcription per minute of audio or by input and output tokens, whichever
- * the model is metered by and the response reports.
+ * transcription and translation per minute of audio or by input and output
+ * tokens, whichever the model is metered by and the response reports.
+ *
+ * A response without usage (text, SRT and VTT transcripts, translations) is
+ * priced from the upload's measured duration, rounded up to the whole second
+ * as OpenAI rounds the `seconds` it reports. A token-metered model is then
+ * priced at the per-minute estimate OpenAI publishes beside its token rates.
  */
 export function priceOpenAiAudio(params: {
   model: string;
@@ -148,6 +163,8 @@ export function priceOpenAiAudio(params: {
   input?: string;
   /** The `usage` object of the response or of its final stream event. */
   usage?: Record<string, unknown>;
+  /** Transcription and translation: the uploaded audio's measured duration. */
+  audioSeconds?: number;
 }): number | undefined {
   const { model, operation, usage } = params;
   if (operation === "audio-speech") {
@@ -162,19 +179,29 @@ export function priceOpenAiAudio(params: {
     if (input === undefined || output === undefined) return;
     return perMillion(input * tariff.textInput + output * tariff.audioOutput);
   }
-  if (operation === "audio-transcription") {
+  if (
+    operation === "audio-transcription" ||
+    operation === "audio-translation"
+  ) {
     const tariff = lookup(OPENAI_TRANSCRIPTION, model);
     if (!tariff) return;
+    const measured =
+      params.audioSeconds === undefined
+        ? undefined
+        : Math.ceil(params.audioSeconds - 1e-6);
     if ("perMinute" in tariff) {
-      const seconds = numberField(usage, "seconds");
+      const seconds = numberField(usage, "seconds") ?? measured;
       return seconds === undefined
         ? undefined
-        : Number(((seconds / 60) * tariff.perMinute).toFixed(10));
+        : perMinute(seconds, tariff.perMinute);
     }
     const input = numberField(usage, "input_tokens");
     const output = numberField(usage, "output_tokens");
-    if (input === undefined || output === undefined) return;
-    return perMillion(input * tariff.input + output * tariff.output);
+    if (input !== undefined && output !== undefined)
+      return perMillion(input * tariff.input + output * tariff.output);
+    return measured === undefined
+      ? undefined
+      : perMinute(measured, tariff.estimatedPerMinute);
   }
   return undefined;
 }
@@ -234,15 +261,28 @@ const OPENAI_SPEECH: Record<
   "gpt-4o-mini-tts": { textInput: 0.6, audioOutput: 12 },
 };
 
+/**
+ * `estimatedPerMinute` is the "Estimated cost" OpenAI lists beside a
+ * token-metered model's rates, used only when a response reports no tokens.
+ */
 const OPENAI_TRANSCRIPTION: Record<
   string,
-  { perMinute: number } | { input: number; output: number }
+  | { perMinute: number }
+  | { input: number; output: number; estimatedPerMinute: number }
 > = {
   "whisper-1": { perMinute: 0.006 },
   "gpt-transcribe": { perMinute: 0.0045 },
-  "gpt-4o-transcribe": { input: 2.5, output: 10 },
-  "gpt-4o-transcribe-diarize": { input: 2.5, output: 10 },
-  "gpt-4o-mini-transcribe": { input: 1.25, output: 5 },
+  "gpt-4o-transcribe": { input: 2.5, output: 10, estimatedPerMinute: 0.006 },
+  "gpt-4o-transcribe-diarize": {
+    input: 2.5,
+    output: 10,
+    estimatedPerMinute: 0.006,
+  },
+  "gpt-4o-mini-transcribe": {
+    input: 1.25,
+    output: 5,
+    estimatedPerMinute: 0.003,
+  },
 };
 
 /**
@@ -265,6 +305,10 @@ function lookup<T>(table: Record<string, T>, model: string): T | undefined {
 
 function perMillion(units: number): number {
   return Number((units / 1_000_000).toFixed(10));
+}
+
+function perMinute(seconds: number, rate: number): number {
+  return Number(((seconds / 60) * rate).toFixed(10));
 }
 
 function sumTokens(

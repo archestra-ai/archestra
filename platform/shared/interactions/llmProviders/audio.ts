@@ -6,10 +6,14 @@ export default class AudioInteraction implements InteractionUtils {
   readonly modelName: string;
   private readonly request: {
     operation?: string;
-    file?: { filename?: string; size?: number };
+    file?: { filename?: string; size?: number; duration_seconds?: number };
     input_characters?: number;
   };
-  private readonly response: { bytes?: number; error?: unknown };
+  private readonly response: {
+    bytes?: number;
+    cost_available?: boolean;
+    error?: unknown;
+  };
   constructor(interaction: Interaction) {
     this.modelName = interaction.model ?? "unknown";
     this.request = interaction.request as typeof this.request;
@@ -28,14 +32,21 @@ export default class AudioInteraction implements InteractionUtils {
     return [];
   }
   getLastUserMessage() {
-    return this.request.file
-      ? `Audio ${this.request.operation}: ${this.request.file.filename} (${this.request.file.size} bytes)`
-      : `Audio speech: ${this.request.input_characters ?? 0} input characters`;
+    const file = this.request.file;
+    if (!file)
+      return `Audio speech: ${this.request.input_characters ?? 0} input characters`;
+    const duration =
+      typeof file.duration_seconds === "number"
+        ? `, ${file.duration_seconds} s`
+        : "";
+    return `Audio ${this.request.operation}: ${file.filename} (${file.size} bytes${duration})`;
   }
   getLastAssistantResponse() {
-    return this.response.error
-      ? "Audio request failed."
-      : `Returned ${this.response.bytes ?? 0} bytes. Audio cost unavailable.`;
+    if (this.response.error) return "Audio request failed.";
+    const returned = `Returned ${this.response.bytes ?? 0} bytes.`;
+    return this.response.cost_available === false
+      ? `${returned} Audio cost unavailable.`
+      : returned;
   }
   mapToUiMessages(): PartialUIMessage[] {
     return [

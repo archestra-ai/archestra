@@ -131,11 +131,47 @@ describe("priceOpenAiAudio", () => {
         usage: { type: "tokens", input_tokens: 12, output_tokens: 7 },
       }),
     ).toBe(0.0001);
+  });
+
+  test("prices a response without usage from the upload's duration, rounded up to the second", () => {
+    // A text transcript of 1.248 s bills as the 2 s OpenAI reports for it.
+    expect(
+      priceOpenAiAudio({
+        model: "whisper-1",
+        operation: "audio-transcription",
+        audioSeconds: 1.248,
+      }),
+    ).toBe(0.0002);
+    // Translations report nothing; whisper-1 bills them per minute too.
     expect(
       priceOpenAiAudio({
         model: "whisper-1",
         operation: "audio-translation",
-        usage: { type: "duration", seconds: 2 },
+        audioSeconds: 3,
+      }),
+    ).toBe(0.0003);
+    // A token-metered model without tokens: OpenAI's per-minute estimate,
+    // $0.003 for gpt-4o-mini-transcribe.
+    expect(
+      priceOpenAiAudio({
+        model: "gpt-4o-mini-transcribe",
+        operation: "audio-transcription",
+        audioSeconds: 60,
+      }),
+    ).toBe(0.003);
+    // Reported usage wins over the measurement.
+    expect(
+      priceOpenAiAudio({
+        model: "gpt-4o-transcribe",
+        operation: "audio-transcription",
+        usage: { input_tokens: 12, output_tokens: 7 },
+        audioSeconds: 60,
+      }),
+    ).toBe(0.0001);
+    expect(
+      priceOpenAiAudio({
+        model: "whisper-1",
+        operation: "audio-translation",
       }),
     ).toBeUndefined();
   });
@@ -186,5 +222,20 @@ describe("mediaTariffCovers", () => {
         operation: "audio-translation",
       }),
     ).toBe(false);
+    // A measured upload covers what the response will not report.
+    for (const operation of [
+      "audio-transcription",
+      "audio-translation",
+    ] as const) {
+      expect(
+        mediaTariffCovers({
+          provider: "openai",
+          model: "whisper-1",
+          operation,
+          responseFormat: "text",
+          audioSeconds: 3,
+        }),
+      ).toBe(true);
+    }
   });
 });

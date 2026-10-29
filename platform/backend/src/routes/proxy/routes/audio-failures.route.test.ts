@@ -19,6 +19,25 @@ const audio = Buffer.from(
   "latin1",
 );
 
+/** A playable WAV of silence: 16-bit mono PCM at 8 kHz. */
+function wav(seconds: number): Buffer {
+  const data = 8000 * 2 * seconds;
+  const file = Buffer.alloc(44 + data);
+  file.write("RIFF", 0, "latin1");
+  file.writeUInt32LE(36 + data, 4);
+  file.write("WAVEfmt ", 8, "latin1");
+  file.writeUInt32LE(16, 16);
+  file.writeUInt16LE(1, 20);
+  file.writeUInt16LE(1, 22);
+  file.writeUInt32LE(8000, 24);
+  file.writeUInt32LE(16000, 28);
+  file.writeUInt16LE(2, 32);
+  file.writeUInt16LE(16, 34);
+  file.write("data", 36, "latin1");
+  file.writeUInt32LE(data, 40);
+  return file;
+}
+
 describe.each([
   "openai",
   "azure",
@@ -294,28 +313,103 @@ describe.each([
       model: "whisper-1",
       file: new File([audio], "synthetic.wav", { type: "audio/wav" }),
     });
-    // A translation reports neither tokens nor duration: it stays unpriced.
+    const rows = async () => {
+      const all = await InteractionModel.getAllInteractionsForProfile(agentId);
+      return all.map((row) => ({
+        operation: (row.request as { operation?: string }).operation,
+        model: row.model,
+        cost: row.cost == null ? null : Number(row.cost),
+      }));
+    };
+    // tts-1: 5 characters at $15 per million.
+    expect(await rows()).toContainEqual({
+      operation: "speech",
+      model: "tts-1",
+      cost: 0.000075,
+    });
+    // whisper-1: 2 seconds at $0.006 per minute.
+    expect(await rows()).toContainEqual({
+      operation: "transcriptions",
+      model: "whisper-1",
+      cost: 0.0002,
+    });
+  });
+  test("prices usage-less transcripts and translations from the upload's duration", async () => {
+    handler = (response) => {
+      response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+      response.end("Synthetic transcript.\n");
+    };
+    const threeSeconds = new File([new Uint8Array(wav(3))], "speech.wav", {
+      type: "audio/wav",
+    });
+    await client.audio.transcriptions.create({
+      model: "whisper-1",
+      file: threeSeconds,
+      response_format: "text",
+    });
+    // A token-metered model reports no tokens in text format either; it is
+    // priced at the per-minute estimate OpenAI publishes for it.
+    await client.audio.transcriptions.create({
+      model: "gpt-4o-transcribe",
+      file: threeSeconds,
+      response_format: "text",
+    });
     handler = (response) => {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({ text: "Synthetic translation." }));
     };
     await client.audio.translations.create({
       model: "whisper-1",
-      file: new File([audio], "synthetic.wav", { type: "audio/wav" }),
+      file: threeSeconds,
     });
-    const rows = await InteractionModel.getAllInteractionsForProfile(agentId);
-    const cost = (operation: string) => {
-      const row = rows.find(
-        (item) =>
-          (item.request as { operation?: string }).operation === operation,
-      );
-      return row?.cost == null ? null : Number(row.cost);
-    };
-    // tts-1: 5 characters at $15 per million.
-    expect(cost("speech")).toBe(0.000075);
-    // whisper-1: 2 seconds at $0.006 per minute.
-    expect(cost("transcriptions")).toBe(0.0002);
-    expect(cost("translations")).toBeNull();
+    // A file whose duration cannot be read leaves the cost unknown.
+    await client.audio.translations.create({
+      model: "whisper-1",
+      file: new File([audio], "unreadable.wav", { type: "audio/wav" }),
+    });
+    const rows = (
+      await InteractionModel.getAllInteractionsForProfile(agentId)
+    ).map((row) => ({
+      operation: (row.request as { operation?: string }).operation,
+      model: row.model,
+      file: (row.request as { file?: { filename?: string } }).file?.filename,
+      duration: (row.request as { file?: { duration_seconds?: number } }).file
+        ?.duration_seconds,
+      cost: row.cost == null ? null : Number(row.cost),
+    }));
+    // 3 seconds at $0.006 per minute, for each of the three.
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        {
+          operation: "transcriptions",
+          model: "whisper-1",
+          file: "speech.wav",
+          duration: 3,
+          cost: 0.0003,
+        },
+        {
+          operation: "transcriptions",
+          model: "gpt-4o-transcribe",
+          file: "speech.wav",
+          duration: 3,
+          cost: 0.0003,
+        },
+        {
+          operation: "translations",
+          model: "whisper-1",
+          file: "speech.wav",
+          duration: 3,
+          cost: 0.0003,
+        },
+        {
+          operation: "translations",
+          model: "whisper-1",
+          file: "unreadable.wav",
+          duration: undefined,
+          cost: null,
+        },
+      ]),
+    );
   });
   test("preserves native text/subtitle responses and converts multipart numeric/array fields", async () => {
     for (const format of ["text", "srt", "vtt"] as const) {

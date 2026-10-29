@@ -83,6 +83,8 @@ export const AudioAuditRequestSchema = z.object({
       filename: z.string(),
       mimetype: z.string(),
       size: z.number().int().nonnegative(),
+      /** Playing time read from the file's headers, when its format allows. */
+      duration_seconds: z.number().nonnegative().optional(),
     })
     .optional(),
 });

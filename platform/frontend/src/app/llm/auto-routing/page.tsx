@@ -41,7 +41,6 @@ export default function AutoRoutingOverviewPage() {
       <PlanStatus settings={settings} />
       <PastSessions
         routingEnabled={settings.enabled}
-        required={settings.status.coldStart.required}
         hasActivePlan={settings.status.activePlan !== null}
         canUpdate={canUpdate}
         scorer={settings.status.scorer}
@@ -73,13 +72,25 @@ function PlanStatus({ settings }: { settings: AutoRoutingSettings }) {
           />
           {activePlan ? (
             <span className="font-medium">Active plan</span>
-          ) : (
+          ) : coldStart.sessions < coldStart.required ? (
             <span>
               <span className="font-medium">Cold start</span>
               <span className="text-muted-foreground">
                 {" "}
-                · {count(Math.min(coldStart.sessions, coldStart.required))} of{" "}
-                {count(coldStart.required)} sessions scored
+                · {count(coldStart.sessions)} of {count(coldStart.required)}{" "}
+                sessions scored
+              </span>
+            </span>
+          ) : (
+            <span>
+              <span className="font-medium">
+                {settings.enabled
+                  ? "Fitting the first plan"
+                  : "Auto routing is off"}
+              </span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {count(coldStart.sessions)} sessions scored, enough for a plan
               </span>
             </span>
           )}

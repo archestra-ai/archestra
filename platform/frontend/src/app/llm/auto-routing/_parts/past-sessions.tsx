@@ -4,7 +4,7 @@ import {
   AUTO_ROUTING_BACKFILL_MAX_COST_USD,
   clientForExternalAgentIds,
 } from "@archestra/shared";
-import { AlertTriangle, Info } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,13 +41,11 @@ type ScoreOffer = NonNullable<AutoRoutingBackfillState["scoreOffer"]>;
  */
 export function PastSessions({
   routingEnabled,
-  required,
   hasActivePlan,
   canUpdate,
   scorer,
 }: {
   routingEnabled: boolean;
-  required: number;
   hasActivePlan: boolean;
   canUpdate: boolean;
   scorer: AutoRoutingScorerState;
@@ -110,9 +108,9 @@ export function PastSessions({
         <h3 className="text-sm font-medium">Past sessions</h3>
         {canUpdate && !running && (
           <Button
-            size="sm"
-            variant="outline"
-            className="ml-auto"
+            size="xs"
+            variant="link"
+            className="ml-auto h-auto p-0 text-sm"
             disabled={scan.isPending}
             onClick={() => scan.mutate()}
           >
@@ -121,9 +119,9 @@ export function PastSessions({
         )}
         {canUpdate && running && (
           <Button
-            size="sm"
-            variant="outline"
-            className="ml-auto"
+            size="xs"
+            variant="link"
+            className="ml-auto h-auto p-0 text-sm"
             disabled={cancel.isPending}
             onClick={() => cancel.mutate()}
           >
@@ -132,11 +130,7 @@ export function PastSessions({
         )}
       </div>
       {backfill ? (
-        <BackfillStatus
-          backfill={backfill}
-          required={required}
-          routingEnabled={routingEnabled}
-        />
+        <BackfillStatus backfill={backfill} routingEnabled={routingEnabled} />
       ) : (
         <p className="text-sm text-muted-foreground">
           Scanning finds the past sessions in the interaction log the plan could
@@ -150,67 +144,56 @@ export function PastSessions({
         ) : (
           canUpdate && <ScoreAction offer={scoreOffer} />
         ))}
-      {backfill && !routingEnabled && (
-        <InlineNotice variant="info">
-          <Info />
-          <span className="font-medium">Auto routing is off</span>
-          <InlineNoticeText>
-            Scored sessions build a plan when you turn it on.
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
     </section>
   );
 }
 
 function BackfillStatus({
   backfill,
-  required,
   routingEnabled,
 }: {
   backfill: Backfill;
-  required: number;
   routingEnabled: boolean;
 }) {
   if (backfill.status === "running" && backfill.phase === "scan") {
     return <p className="text-sm">Scanning past sessions…</p>;
   }
   const { progress } = backfill;
+  const unread = progress
+    ? [
+        ...(progress.noText > 0
+          ? [`${count(progress.noText)} without text`]
+          : []),
+        ...(progress.failed > 0 ? [`${count(progress.failed)} failed`] : []),
+      ]
+    : [];
   return (
     <div className="space-y-3 text-sm">
-      <div className="space-y-1">
-        <p className="text-muted-foreground">
-          {formatDate({
-            date: backfill.windowStart,
-            dateFormat: "MMM d, yyyy",
-          })}{" "}
-          – {formatDate({ date: backfill.cutoff, dateFormat: "MMM d, yyyy" })}
-        </p>
-        <p
-          className="tabular-nums"
-          data-testid="auto-routing-past-sessions-funnel"
-        >
-          <span>{count(backfill.eligibleSessions)} found</span>
-          <span aria-hidden> → </span>
-          <span>
-            {progress
-              ? `${count(progress.scored)} of ${count(progress.sample)} scored`
-              : "0 scored"}
+      <details>
+        <summary className="cursor-pointer select-none tabular-nums">
+          <span data-testid="auto-routing-past-sessions-funnel">
+            {funnel(backfill.eligibleSessions, progress).join(" · ")}
           </span>
-          <span aria-hidden> → </span>
-          <span>plan needs {count(required)}</span>
-        </p>
-        {backfill.phase === "score" && (
-          <p className="text-muted-foreground tabular-nums">
-            {backfill.status === "running" ? "Scoring, spent " : "Spent "}
-            {formatCurrency(backfill.spentCostUsd)}
-            {backfill.maxCostUsd !== null && (
-              <span> of {formatCurrency(backfill.maxCostUsd)}</span>
+        </summary>
+        <div className="mt-2 space-y-3 text-muted-foreground tabular-nums">
+          <div className="space-y-1">
+            <p>
+              {formatDate({ date: backfill.windowStart, dateFormat: "MMM d" })}{" "}
+              –{" "}
+              {formatDate({ date: backfill.cutoff, dateFormat: "MMM d, yyyy" })}
+            </p>
+            {unread.length > 0 && <p>Not scored: {unread.join(", ")}</p>}
+            {backfill.phase === "score" && (
+              <p>
+                Spent {formatCurrency(backfill.spentCostUsd)}
+                {backfill.maxCostUsd !== null &&
+                  ` of ${formatCurrency(backfill.maxCostUsd)}`}
+              </p>
             )}
-          </p>
-        )}
-      </div>
-      <ClientBreakdown breakdown={backfill.breakdown} />
+          </div>
+          <ClientBreakdown breakdown={backfill.breakdown} />
+        </div>
+      </details>
       {backfill.error && (
         <InlineNotice variant={backfill.status === "failed" ? "error" : "info"}>
           <AlertTriangle />
@@ -228,6 +211,18 @@ function BackfillStatus({
       )}
     </div>
   );
+}
+
+/** Found, then scored; unread sessions count against the sample, not as pending. */
+function funnel(found: number, progress: Backfill["progress"]): string[] {
+  if (!progress) return [`${count(found)} found`, "none scored yet"];
+  const attempted = progress.scored + progress.noText + progress.failed;
+  return [
+    `${count(found)} found`,
+    attempted < progress.sample
+      ? `${count(progress.scored)} of ${count(progress.sample)} scored`
+      : `${count(progress.scored)} scored`,
+  ];
 }
 
 /** Sessions per client, largest first; the tail past the top rows folds into "Other". */
@@ -251,7 +246,7 @@ function ClientBreakdown({ breakdown }: { breakdown: Backfill["breakdown"] }) {
   if (rows.length === 0) return null;
   const largest = Math.max(...rows.map(([, sessions]) => sessions));
   return (
-    <table className="w-full max-w-md">
+    <table className="w-full max-w-md text-foreground">
       <tbody>
         {rows.map(([label, sessions]) => (
           <tr key={label}>

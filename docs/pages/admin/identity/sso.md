@@ -70,7 +70,7 @@ The group appears in the team's list. On their next sign-in, its members join th
 
 What to know:
 
-- Each sign-in adds and removes synced members to match their groups, and makes them Admin when a linked group grants it. Sync takes Admin away only if sync gave it. Members added by hand, and roles changed by hand, are never changed.
+- Each sign-in adds and removes synced members to match their groups, and makes them Admin while a linked group grants it. Sync takes Admin away only if sync gave it, so a promotion by hand sticks. Members added by hand are never changed.
 - With more than one identity provider, a link matches only sign-ins through the provider you picked for it.
 - A person in several linked groups of one team gets Admin if any of those links grants it.
 

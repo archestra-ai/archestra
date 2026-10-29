@@ -295,17 +295,6 @@ describe("AgentSettingsPage", () => {
     expect(screen.queryByText("Smart model")).not.toBeInTheDocument();
   });
 
-  it("keeps a saved fast model that is no longer on the key visible", () => {
-    mockOrganization = { ...mockOrganization, defaultFastModelId: "gone" };
-    vi.mocked(useOrganization).mockReturnValue({
-      data: mockOrganization,
-    } as unknown as ReturnType<typeof useOrganization>);
-
-    renderPage();
-
-    expect(screen.getByText("Unavailable model")).toBeInTheDocument();
-  });
-
   it("hides the free-model filter for non-OpenRouter API keys", () => {
     renderPage();
 

@@ -1270,9 +1270,21 @@ describe("OpenAI Responses proxy", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.body).toContain("data: ");
-    expect(response.body).toContain('"type":"response.output_text.delta"');
-    expect(response.body).toContain("data: [DONE]");
+    // Framed as OpenAI frames it: every event named on an `event:` line that
+    // repeats its type, and no `[DONE]` sentinel after `response.completed`.
+    const types = response.body
+      .split("\n\n")
+      .filter(Boolean)
+      .map((frame) => {
+        const [name, data, ...rest] = frame.split("\n");
+        expect(rest).toEqual([]);
+        const event = JSON.parse(data.slice("data: ".length));
+        expect(name).toBe(`event: ${event.type}`);
+        return event.type;
+      });
+    expect(types).toContain("response.output_text.delta");
+    expect(types.at(-1)).toBe("response.completed");
+    expect(response.body).not.toContain("[DONE]");
   });
 
   test("selects the OpenCode OAuth bridge only with a passthrough key and account ID", async ({

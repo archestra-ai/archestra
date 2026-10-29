@@ -275,9 +275,10 @@ describe("LLM proxy buffered model response streaming", () => {
         incomplete_details: { reason: "max_output_tokens" },
         usage: { total_tokens: 3 },
       });
-      expect(response.body.indexOf("data: [DONE]")).toBeGreaterThan(
-        response.body.indexOf('"status":"incomplete"'),
-      );
+      // The terminal ends the stream, as OpenAI's Responses stream does: no
+      // `[DONE]` sentinel follows it.
+      expect(sseFrames(response.body).at(-1)?.type).toBe("response.incomplete");
+      expect(response.body).not.toContain("[DONE]");
       expect(response.body).not.toContain("call_held");
     });
 

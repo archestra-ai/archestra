@@ -5,15 +5,22 @@ import {
   formatResponsesStreamErrorFrame,
 } from "./responses-stream-error-frame";
 
-/** The SSE events a frame string carries, in order. */
+/**
+ * The SSE events a frame string carries, in order. Each is named on an
+ * `event:` line that repeats its `type`, as OpenAI's Responses stream does.
+ */
 const parseEvents = (frame: string) => {
   expect(frame.endsWith("\n\n")).toBe(true);
   return frame
     .split("\n\n")
     .filter(Boolean)
     .map((event) => {
-      expect(event.startsWith("data: ")).toBe(true);
-      return JSON.parse(event.slice("data: ".length));
+      const [name, data, ...rest] = event.split("\n");
+      expect(rest).toEqual([]);
+      expect(data.startsWith("data: ")).toBe(true);
+      const parsed = JSON.parse(data.slice("data: ".length));
+      expect(name).toBe(`event: ${parsed.type}`);
+      return parsed;
     });
 };
 

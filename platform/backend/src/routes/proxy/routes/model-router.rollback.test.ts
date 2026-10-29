@@ -847,7 +847,12 @@ describe("model router proxy routes", () => {
       expect(responsesResponse.headers["content-type"]).toContain(
         "text/event-stream",
       );
-      expect(responsesResponse.body).toContain("data: [DONE]");
+      // Every provider answers in OpenAI's Responses framing: named events,
+      // ending on `response.completed` with no `[DONE]` sentinel after it.
+      expect(responsesResponse.body).toMatch(
+        /event: response\.completed\ndata: [^\n]*\n\n$/,
+      );
+      expect(responsesResponse.body).not.toContain("[DONE]");
       expect(responsesResponse.body).not.toContain(
         "Streaming is not yet available",
       );
@@ -1184,7 +1189,10 @@ describe("model router proxy routes", () => {
 
     expect(response.statusCode, response.body).toBe(200);
     expect(response.headers["content-type"]).toContain("text/event-stream");
-    expect(response.body).toContain("data: [DONE]");
+    expect(response.body).toMatch(
+      /event: response\.completed\ndata: [^\n]*\n\n$/,
+    );
+    expect(response.body).not.toContain("[DONE]");
     expect(
       githubCopilotResponsesAdapterFactory.createClient,
     ).toHaveBeenCalledOnce();

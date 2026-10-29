@@ -1911,6 +1911,7 @@ describe("asking through the client's own question tool", () => {
     const processResults = vi
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({ toolResultUpdates: {} });
+    const cacheSet = vi.spyOn(cacheManager, "set");
     try {
       await plugin.onSessionInit(context);
       await expect(
@@ -1930,6 +1931,12 @@ describe("asking through the client's own question tool", () => {
           ],
         }),
       ).resolves.toBeDefined();
+      const marker = cacheSet.mock.calls.find(([key]) =>
+        key.startsWith(`${CacheKey.OpenAppaHitlQuestionAsked}-`),
+      );
+      expect(marker).toBeDefined();
+      if (!marker) throw new Error("Missing question-asked marker");
+      expect(await cacheManager.get(marker[0])).toBe(true);
     } finally {
       processResults.mockRestore();
       await plugin.onCleanup(context);

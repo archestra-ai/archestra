@@ -78,6 +78,7 @@ original = {'appliedId': 'previous', 'entries': [{'id': 'previous', 'name': 'Exi
 (library / '_meta.json').write_text(json.dumps(original))
 token = '${auth === "virtual-key" ? "archestra-test-key" : "sk-ant-oat01-test-subscription"}'
 calls = []
+reject_cached_once = [False]
 def native(args, **kwargs):
     calls.append(args)
     # Desktop may reject the Apple event while the user quits through its menu.
@@ -86,8 +87,12 @@ def native(args, **kwargs):
         stdout=('Token: ' + token) if 'setup-token' in args else '')
 def upstream(request, **kwargs):
     assert request.get_header('Authorization') == 'Bearer ' + token
+    assert uuid.UUID(request.get_header('X-claude-code-session-id'))
     assert request.get_header('X-archestra-virtual-key') == ${auth === "provider-key" ? "'archestra-test-user'" : "None"}
     assert request.get_header('Anthropic-beta') == ${auth === "provider-key" ? "'oauth-2025-04-20'" : "None"}
+    if reject_cached_once[0]:
+        reject_cached_once[0] = False
+        raise urllib.error.HTTPError(request.full_url, 429, 'quota', {}, None)
     if ${quotaFailure ? "True" : "False"}:
         raise urllib.error.HTTPError(request.full_url, 429, 'quota', {}, None)
     return io.StringIO(json.dumps({'type':'message','content':[{'type':'text','text':'OK'}]}))
@@ -121,6 +126,7 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
             assert profile['coworkEgressAllowedHosts'] == ['*']
             assert profile['claudeAiImport'] == {'enabled': True, 'bannerBehavior': 'show'}
             assert profile['inferenceCustomHeaders'].get('X-Archestra-Virtual-Key') == ${auth === "provider-key" ? "'archestra-test-user'" : "None"}
+            assert 'X-Claude-Code-Session-Id' not in profile['inferenceCustomHeaders']
         else:
             assert 'inferenceProvider' not in profile
             assert 'coworkEgressAllowedHosts' not in profile
@@ -142,6 +148,10 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
         assert profile_path.stat().st_mode & 0o777 == 0o600
         assert json.loads((library / '_meta.json.before-archestra').read_text()) == original
         assert sum('setup-token' in args for args in calls) == ${auth === "provider-key" ? 1 : 0}
+        if ${auth === "provider-key" ? "True" : "False"}:
+            reject_cached_once[0] = True
+            runpy.run_path(str(root / 'installer.py'))
+            assert sum('setup-token' in args for args in calls) == 2
         assert json.loads((library.parent / 'claude_desktop_config.json').read_text()).get('deploymentMode') == ${auth === "none" ? "'1p'" : "'3p'"}
         # Migrate a profile made by the older per-deployment installer.
         legacy_id = str(uuid.uuid5(uuid.NAMESPACE_URL, 'archestra-desktop:https://proxy.example/v1/mcp/test'))
@@ -167,7 +177,7 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
         assert replaced_profile['managedMcpServers'][0]['oauth'] == {'mode': 'dcr'}
         assert replaced_profile['managedMcpServers'][0]['url'] == 'https://replacement.example/v1/mcp/test'
         assert 'proxy.example' not in json.dumps(replaced_profile)
-        assert sum('setup-token' in args for args in calls) == ${auth === "provider-key" ? 1 : 0}
+        assert sum('setup-token' in args for args in calls) == ${auth === "provider-key" ? 2 : 0}
         module['main'].__globals__['SETUP']['runtimeHandoffInstructions'] = 'x' * 3000
         module['main']()
         saved_profile = profile_path.read_bytes()

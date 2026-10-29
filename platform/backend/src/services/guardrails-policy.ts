@@ -445,6 +445,16 @@ delta = {}
 name = "host/archestra/Task"
 delta = {}
 
+# Claude Desktop Code tab's local turn UI tools (the desktop equivalents of
+# EndConversation and TodoWrite) render inside the session's own window.
+[[policy.tool]]
+name = "host/archestra/mcp__ccd_turn__wrap_up"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/mcp__ccd_turn__update_plan"
+delta = {}
+
 [[policy.tool]]
 name = "*"
 annotator = "${UNDECLARED_TOOL_ANNOTATOR}"

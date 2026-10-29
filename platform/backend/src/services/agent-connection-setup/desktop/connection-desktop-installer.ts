@@ -63,7 +63,8 @@ class DesktopInstaller {
     for (const entry of this.metadata.entries) {
       if (!/^[0-9a-f-]{36}$/i.test(entry.id || '')) continue;
       const profile = read(path.join(this.library,entry.id + '.json'),{});
-      const urls = [profile.inferenceGatewayBaseUrl,...(profile.managedMcpServers || []).map(s => s.url),...(profile.allowedPluginMarketplaces || []).map(s => s.url)];
+      if (!isPlainObject(profile)) continue;
+      const urls = [profile.inferenceGatewayBaseUrl,...(Array.isArray(profile.managedMcpServers) ? profile.managedMcpServers : []).map(s => s?.url),...(Array.isArray(profile.allowedPluginMarketplaces) ? profile.allowedPluginMarketplaces : []).map(s => s?.url)];
       if (entry.id === this.profileId || urls.some(url => typeof url === 'string' && entry.id === uuid('archestra-desktop:' + url))) this.managed.set(entry.id,profile);
     }
     const previous = this.managed.get(this.metadata.appliedId) || this.managed.get(this.profileId) || {};
@@ -75,7 +76,7 @@ class DesktopInstaller {
       if (proxy.authMode === 'provider-key') {
         this.headers['anthropic-beta'] = 'oauth-2025-04-20';
         const token = previous.inferenceGatewayApiKey;
-        if (typeof token === 'string' && token.startsWith('sk-ant-oat') && await this.probe(token)) this.credential = token;
+        if (typeof token === 'string' && token.startsWith('sk-ant-oat') && await this.probe(token,true)) this.credential = token;
         else { this.state = {phase:'signin',message:'Sign in with your Claude subscription to connect Desktop.'}; return; }
       } else {
         if (!proxy.virtualKey || !await this.probe(proxy.virtualKey)) throw new Error('The gateway rejected this API key. Return to Connect to choose another key.');
@@ -110,17 +111,20 @@ class DesktopInstaller {
     this.appaPlan = prepareAppaPermissions(mcp,[...this.managed.values(),read(this.profilePath,{})]);
     this.state = {phase:'ready',message:'Your connection is ready. Finish any active Desktop tasks, then restart to apply it.',subscription:proxy?.authMode === 'provider-key'};
   }
-  async probe(token) {
+  async probe(token,cached = false) {
     this.state = {phase:'checking',message:'Checking your connection…'};
     const response = await fetch(this.setup.proxy.url.replace(/\/$/,'') + '/v1/messages',{
-      method:'POST',headers:{...this.headers,Authorization:'Bearer ' + token,'anthropic-version':'2023-06-01','Content-Type':'application/json'},
+      method:'POST',headers:{...this.headers,Authorization:'Bearer ' + token,'X-Claude-Code-Session-Id':crypto.randomUUID(),'anthropic-version':'2023-06-01','Content-Type':'application/json'},
       body:JSON.stringify({model:this.setup.proxy.model || 'claude-haiku-4-5-20251001',max_tokens:8,messages:[{role:'user',content:'Reply with exactly OK.'}]}),
       redirect:'error',signal:AbortSignal.timeout(60000)
     });
-    if (response.status === 401) return false;
+    if (response.status === 401 || (cached && !response.ok)) return false;
     if (!response.ok) throw new Error('The gateway connection check failed (HTTP ' + response.status + '). Check model access and quota. Desktop settings have not changed.');
     const data = await response.json();
-    if (data.type !== 'message' || !data.content?.length) throw new Error('The gateway did not return a completion. Desktop settings have not changed.');
+    if (data.type !== 'message' || !data.content?.length) {
+      if (cached) return false;
+      throw new Error('The gateway did not return a completion. Desktop settings have not changed.');
+    }
     return true;
   }
   async signIn() {

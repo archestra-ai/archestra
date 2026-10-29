@@ -6665,6 +6665,173 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
+  test("converts a withheld SubagentHandback (crossed=false) into a denied tool notice instead of throwing 409", async ({
+    makeOrganization,
+  }) => {
+    const priorSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = DELEGATION_SECRET;
+    const organization = await makeOrganization();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    context.headers = {
+      "user-agent": "claude-code/1",
+      "x-claude-code-session-id": "s1",
+      "x-claude-code-agent-id": "a1",
+    };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    trusted.request.turnEndOperationId = "turn_end:withheld-handback";
+    const marker = mintDelegationMarker({
+      organizationId: organization.id,
+      callerId: "user:user",
+      parentId: "s1",
+      spawnerNativeId: "s1",
+      prompt: "task",
+      spawnCallId: "spawn-call",
+    });
+    if (!marker) throw new Error("expected delegation marker");
+    trusted.request.delegation = {
+      markers: collectDelegationMarkers({
+        family: "anthropic:messages",
+        body: {
+          messages: [{ role: "user", content: `task\n\n${marker}` }],
+        },
+      }),
+    };
+    const feedback =
+      "[appa] Return value does not satisfy the declared JSON schema.";
+    const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+      decision: "replace",
+      content: feedback,
+      crossed: false,
+    });
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "handback-invalid",
+            name: "SubagentHandback",
+            arguments: { message: "not valid json" },
+          },
+        ],
+      });
+      expect(outcome).toMatchObject({
+        decision: "allow",
+        blocked: [{ id: "handback-invalid", name: "SubagentHandback" }],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected allow");
+      const [notice] = outcome.toolCalls;
+      expect(notice?.name).toBe("archestra__get_remedy_plans");
+      expect(carriedNotice(outcome, "handback-invalid")).toMatchObject({
+        tool: "SubagentHandback",
+        result: feedback,
+      });
+    } finally {
+      endChild.mockRestore();
+      config.openappa.offerSigningSecret = priorSecret;
+    }
+  });
+
+  test("holds conflicting sibling execute_remedy_plan calls in a single batch as unstamped notices before any offer is spent", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "user:user|s1",
+      organizationId: organization.id,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request.tools = stubRequestTools();
+    await db.insert(schema.openappaSessionsTable).values({
+      actor: openappaActor("user:user|s1"),
+      root: openappaActor("user:user|s1"),
+      organizationId: organization.id,
+      callerId: "user:user",
+      sessionId: "user:user|s1",
+      parentId: null,
+      startDecision: { decision: "ack" },
+    });
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: organization.id,
+      callerId: "user:user",
+      sessionId: "user:user|s1",
+      operationId: "call:denied-agent-spawn",
+      root: openappaActor("user:user|s1"),
+      status: "complete",
+      input: { semantic: { event: "tool_call", tool: "Agent", spawn: true } },
+      decision: {
+        decision: "deny_call",
+        offers: [{ offer_id: "offer-bare" }, { offer_id: "offer-schema" }],
+      },
+    });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "control" }, { kind: "control" }]);
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "remedy-1",
+            name: "archestra__execute_remedy_plan",
+            arguments: {
+              offer_id: "offer-bare",
+              label: { trust: "trusted", audience: ["public"] },
+              plan: "Declare the return label",
+            },
+          },
+          {
+            id: "remedy-2",
+            name: "archestra__execute_remedy_plan",
+            arguments: {
+              offer_id: "offer-schema",
+              label: { audience: ["public"] },
+              return_schema: {
+                type: "object",
+                properties: { online: { type: "boolean" } },
+                required: ["online"],
+              },
+              plan: "Declare the return label and JSON schema",
+            },
+          },
+        ],
+      });
+      expect(outcome).toMatchObject({
+        decision: "allow",
+        blocked: [
+          { id: "remedy-1", name: "archestra__execute_remedy_plan" },
+          { id: "remedy-2", name: "archestra__execute_remedy_plan" },
+        ],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected allow");
+      for (const id of ["remedy-1", "remedy-2"]) {
+        const notice = carriedNotice(outcome, id);
+        expect(notice.tool).toBe("archestra__execute_remedy_plan");
+        expect(notice.result).toContain("mutually exclusive offers");
+        expect(notice.original).toMatchObject({ kind: "function" });
+        if (notice.original.kind !== "function")
+          throw new Error("expected function");
+        expect(notice.original.arguments).not.toHaveProperty("execution");
+        expect(notice.original.arguments).not.toHaveProperty("trajectory");
+      }
+    } finally {
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
   test("an unattested namespace stays foreign", async () => {
     // Codex declares an MCP server's tools inside a `mcp__<label>` namespace
     // and calls them by bare name, so the label says nothing. What the gateway

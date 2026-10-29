@@ -1,7 +1,7 @@
 import { EXTERNAL_AGENT_ID_HEADER } from "@archestra/shared/consts";
 import { isClaudeDesktopClientAgentId } from "@archestra/shared/interactions/client";
 import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
-import type { AppaSessionIdentity } from "@/openappa/wire";
+import { type AppaSessionIdentity, declaredToolEntries } from "@/openappa/wire";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
 import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
@@ -233,8 +233,13 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
 
   launchIdentity(
     text: string,
-  ): { name: string; childNativeId: string } | undefined {
-    if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) return undefined;
+  ): { name?: string; childNativeId: string } | undefined {
+    if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) {
+      const identifier = childLaunchIdentifier(text);
+      return identifier?.label === "agentId"
+        ? { childNativeId: identifier.value }
+        : undefined;
+    }
     const id = /^agent_id:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
     const name = /^name:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
     if (!id || !name || !isChildId(id) || !isChildId(name)) return undefined;
@@ -245,7 +250,16 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   teammateLaunches(requestBody: unknown): Map<string, AppaTeammateLaunch> {
     const launches = new Map<string, AppaTeammateLaunch>();
     for (const { text, callId, teammate } of spawnResultTexts(requestBody)) {
-      if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) continue;
+      if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) {
+        const identifier = childLaunchIdentifier(text);
+        if (identifier?.label === "agentId" && isChildId(teammate)) {
+          launches.set(teammate, {
+            childNativeId: identifier.value,
+            spawnCallId: callId,
+          });
+        }
+        continue;
+      }
       const id = /^agent_id:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
       const name = /^name:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
       if (id && name === teammate && isChildId(id) && isChildId(name))
@@ -270,13 +284,13 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   }
 
   childHandbackValue(args: unknown): string | undefined {
-    const raw = stringField(args);
+    const raw = typeof args === "string" ? args : undefined;
     const parsed = raw ? parseJson(raw) : undefined;
     const record = asRecord(args) ?? asRecord(parsed);
     if (!record) return raw;
     for (const key of HANDBACK_VALUE_KEYS) {
-      const value = stringField(record[key]);
-      if (value) return value;
+      const value = record[key];
+      if (typeof value === "string") return value;
     }
     return undefined;
   }
@@ -285,13 +299,14 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     args: unknown,
     admitted: string,
   ): string | Record<string, unknown> {
-    const raw = stringField(args);
+    const raw = typeof args === "string" ? args : undefined;
     const parsed = raw ? parseJson(raw) : undefined;
     const record = asRecord(args) ?? asRecord(parsed);
     if (!record) return admitted;
     const key =
-      HANDBACK_VALUE_KEYS.find((candidate) => stringField(record[candidate])) ??
-      "message";
+      HANDBACK_VALUE_KEYS.find(
+        (candidate) => typeof record[candidate] === "string",
+      ) ?? "message";
     const rewritten = { [key]: admitted };
     return typeof args === "string" ? JSON.stringify(rewritten) : rewritten;
   }
@@ -486,7 +501,8 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
     return (
       isClaudeDesktopSignal(context) &&
       (context.trustedContext !== undefined ||
-        this.extractSessionIdentity(context) !== undefined)
+        this.extractSessionIdentity(context) !== undefined ||
+        isToolFreeDesktopRequest(context.requestBody))
     );
   }
 
@@ -522,6 +538,38 @@ function isClaudeDesktopSignal(context: AppaMatchContext): boolean {
     userAgent.includes("claudedesktop") ||
     hasClaudeDesktopBillingEntrypoint(context.requestBody)
   );
+}
+
+/**
+ * Claude Desktop's main process and older connection installers send one-shot
+ * tool-free Messages requests (gateway probes, session title generation)
+ * without a conversation or session identifier. Because they declare no tools
+ * and carry no tool calls/results or provider thread state, OpenAPPA never
+ * opens a governed session for them; matching them avoids blocking Desktop
+ * startup or connection setup when unrecognized clients are blocked.
+ */
+function isToolFreeDesktopRequest(requestBody: unknown): boolean {
+  const body = asRecord(requestBody);
+  if (
+    !body ||
+    !Array.isArray(body.messages) ||
+    body.thread !== undefined ||
+    body.container !== undefined ||
+    declaredToolEntries(requestBody).length > 0
+  ) {
+    return false;
+  }
+  for (const message of body.messages) {
+    const content = asRecord(message)?.content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      const type = asRecord(part)?.type;
+      if (type === "tool_use" || type === "tool_result") {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 function hasClaudeDesktopBillingEntrypoint(requestBody: unknown): boolean {

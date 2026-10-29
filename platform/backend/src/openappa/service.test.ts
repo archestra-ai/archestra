@@ -427,6 +427,64 @@ describe("APPA feature boundary", () => {
     );
   });
 
+  test("forwards signed child lineage on session_start from processProxyResults and startRuntimeChild", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "context",
+        text: "Return contract instructions",
+      }),
+    );
+
+    const childSession = {
+      ...session,
+      session_id: "conversation:child-1",
+      parent_id: "conversation",
+    };
+
+    const processed = await processProxyResults({
+      session: childSession,
+      results: [],
+      canonicalize: (name) => name,
+      lineage: { spawnCallId: "spawn-1", childNativeId: "child-1" },
+    });
+    expect(processed.returnContract).toBe("Return contract instructions");
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: "conversation:child-1",
+        parent_id: "conversation",
+        spawn_call_id: "spawn-1",
+        child_native_id: "child-1",
+      }),
+    );
+
+    native.dispatchHook.mockClear();
+    const otherChildSession = {
+      ...session,
+      session_id: "conversation:child-2",
+      parent_id: "conversation",
+    };
+    const { contract } = await startRuntimeChild({
+      session: otherChildSession,
+      spawnCallId: "spawn-2",
+      childNativeId: "child-2",
+    });
+    expect(contract).toBe("Return contract instructions");
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toContainEqual(
+      expect.objectContaining({
+        event: "session_start",
+        session_id: "conversation:child-2",
+        parent_id: "conversation",
+        spawn_call_id: "spawn-2",
+        child_native_id: "child-2",
+      }),
+    );
+  });
+
   test.each([
     "spawn_agent",
     "collaboration.spawn_agent",
@@ -4410,6 +4468,66 @@ describe("remedy by offer", () => {
         review: [],
       },
     });
+  });
+
+  test("a peer read and its remedy offer strip unscoped output sanitizers and declare mcp/archestra/read_peer_message", async ({
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const policyWithSanitizer = [
+      "[policy]",
+      "version = 2",
+      "",
+      "[[policy.sanitizer]]",
+      'name = "redact-secrets"',
+      'on = ["tool_output"]',
+      "",
+      "[externals.sanitizers.redact-secrets]",
+      'builtin = "redact-secrets"',
+    ].join("\n");
+    await GuardrailsPolicyModel.save({
+      organizationId,
+      updatedBy: user.id,
+      content: policyWithSanitizer,
+      contentHash: "sanitized-peer-read",
+      expectedRevision: 0,
+    });
+    native.readPeerMessage.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "[appa] Blocked: the label narrows.",
+        offers: [{ offer_id: "offer-peer-read-1" }],
+      }),
+    );
+    await readPeerMessage({
+      session,
+      toolCallId: "read-deny-sanitized",
+      args: { message_id: "msg-1" },
+    });
+    const peerReadDispatchedPolicy = native.readPeerMessage.mock.calls[0][1];
+    expect(peerReadDispatchedPolicy.content).toContain(
+      'name = "mcp/archestra/read_peer_message"',
+    );
+    expect(peerReadDispatchedPolicy.content).not.toContain(
+      "[[policy.sanitizer]]",
+    );
+
+    const args = { offer_id: "offer-peer-read-1", label: {} };
+    await executeRemedyByOffer({
+      organizationId,
+      callerId: session.caller_id,
+      sessionId: session.session_id,
+      toolCallId: "remedy-peer-read-1",
+      originalArguments: JSON.stringify(args),
+      args,
+    });
+    const remedyDispatchedPolicy = native.executeRemedyByOffer.mock.calls[0][1];
+    expect(remedyDispatchedPolicy.content).toContain(
+      'name = "mcp/archestra/read_peer_message"',
+    );
+    expect(remedyDispatchedPolicy.content).not.toContain(
+      "[[policy.sanitizer]]",
+    );
   });
 
   test("a peer read returns the retained native result and not a caller label", async () => {

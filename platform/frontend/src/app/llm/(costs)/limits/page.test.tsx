@@ -421,6 +421,58 @@ describe("LimitsPage", () => {
     );
   });
 
+  it("lets a team admin change their own team limits but not one the organization set", () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: Object.keys(permissions).length === 0,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [{ id: "team-a", name: "Platform", myRole: "admin" }],
+      isPending: false,
+    } as unknown as ReturnType<typeof useMyTeams>);
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          ...limitRow({ id: "org-set", limitValue: 500 }),
+          entityType: "team",
+          entityId: "team-a",
+          teamManaged: false,
+        },
+        {
+          ...limitRow({ id: "team-set", limitValue: 100 }),
+          entityType: "team",
+          entityId: "team-a",
+          limitType: "requests",
+          teamManaged: true,
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    const orgRow = screen.getByTestId("data-table-row-org-set");
+    const teamRow = screen.getByTestId("data-table-row-team-set");
+    expect(
+      within(orgRow).getByText("Set by your organization"),
+    ).toBeInTheDocument();
+    for (const name of [/Edit limit/, /Delete limit/]) {
+      expect(within(orgRow).getByRole("button", { name })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+      expect(within(teamRow).getByRole("button", { name })).not.toHaveAttribute(
+        "aria-disabled",
+      );
+    }
+    expect(
+      within(teamRow).queryByText("Set by your organization"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows a model carried from Costs even when it is absent from the provider catalog", () => {
     mockDataTableSearchParams.mockReturnValue(
       new URLSearchParams({ units: "tokens", model: "vendor/retired-model" }),

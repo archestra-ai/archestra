@@ -37,6 +37,19 @@ export async function getLimitAccess(
   return teamIds;
 }
 
+/** Team admins change only the limits they created, not ones the organization set. */
+export function assertCanChangeLimit(
+  teamIds: string[] | undefined,
+  limit: { teamManaged: boolean },
+): void {
+  if (teamIds && !limit.teamManaged) {
+    throw new ApiError(
+      403,
+      "Your organization set this limit. Ask someone who manages organization limits to change it.",
+    );
+  }
+}
+
 export function assertLimitTarget(
   teamIds: string[] | undefined,
   limit: { entityType: string; entityId: string },

@@ -4,7 +4,11 @@ import { z } from "zod";
 import { LimitLabelModel, LimitModel } from "@/models";
 import LlmThroughputModel from "@/models/llm-throughput";
 import { createLimit, limitReadCleanup } from "@/services/limit";
-import { assertLimitTarget, getLimitAccess } from "@/services/limit-access";
+import {
+  assertCanChangeLimit,
+  assertLimitTarget,
+  getLimitAccess,
+} from "@/services/limit-access";
 import {
   ApiError,
   CreateLimitSchema,
@@ -162,7 +166,8 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { body, organizationId } = request;
-      assertLimitTarget(await getLimitAccess(request, "create"), body);
+      const teamIds = await getLimitAccess(request, "create");
+      assertLimitTarget(teamIds, body);
       // Org-scoping: the limit's target entity must belong to the caller's
       // organization (limitsTable has no org column, so this is the tenancy
       // guard for cross-tenant entity IDs).
@@ -175,7 +180,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, `${body.entityType} not found`);
       }
 
-      return reply.send(await createLimit(body));
+      return reply.send(await createLimit({ ...body, teamManaged: !!teamIds }));
     },
   );
 
@@ -260,6 +265,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       assertLimitTarget(teamIds, existing);
+      assertCanChangeLimit(teamIds, existing);
       const limit = await LimitModel.patch(id, body);
 
       if (!limit) {
@@ -285,10 +291,16 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { organizationId } = request;
       const teamIds = await getLimitAccess(request, "delete");
-      const visible = (limit: { entityType: string; entityId: string }) =>
+      const visible = (limit: {
+        entityType: string;
+        entityId: string;
+        teamManaged: boolean;
+      }) =>
         limit.entityType !== "user" &&
         (!teamIds ||
-          (limit.entityType === "team" && teamIds.includes(limit.entityId)));
+          (limit.entityType === "team" &&
+            teamIds.includes(limit.entityId) &&
+            limit.teamManaged));
       const outcome = await runBulk({
         ids: request.body.ids,
         logLabel: "limits bulk delete",
@@ -359,6 +371,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       assertLimitTarget(teamIds, existing);
+      assertCanChangeLimit(teamIds, existing);
       const deleted = await LimitModel.delete(id);
 
       if (!deleted) {

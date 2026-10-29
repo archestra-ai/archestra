@@ -14,6 +14,7 @@ import {
   Info,
   Key,
   KeyRound,
+  Lock,
   type LucideIcon,
   MessageSquareText,
   Plus,
@@ -123,6 +124,9 @@ type UsageSummary = {
 };
 
 const canBulkDeleteLimit = (limit: LimitData) => limit.entityType !== "user";
+
+const ORG_SET_LIMIT_HINT =
+  "Set by your organization. Ask someone who manages organization limits to change it.";
 
 type LimitFormState = {
   behavior: "hard" | "soft";
@@ -616,7 +620,7 @@ export default function LimitsPage() {
   } = useBulkSelection({
     rows: filteredLimits,
     getId: (limit) => limit.id,
-    canSelect: canBulkDeleteLimit,
+    canSelect: (limit) => canBulkDeleteLimit(limit) && !access.isLocked(limit),
     filterSignature: JSON.stringify({
       statusFilter,
       unitsFilter,
@@ -634,9 +638,12 @@ export default function LimitsPage() {
         rowLabel: (limit) =>
           `Select ${getEntityLabel(limit)} ${limitMetricLabel(limit)} rule`,
         allLabel: "Select all limits on this page",
-        canSelect: canBulkDeleteLimit,
-        disabledReason: () =>
-          "User limits must be deleted individually because they can span organizations",
+        canSelect: (limit) =>
+          canBulkDeleteLimit(limit) && !access.isLocked(limit),
+        disabledReason: (limit) =>
+          access.isLocked(limit)
+            ? ORG_SET_LIMIT_HINT
+            : "User limits must be deleted individually because they can span organizations",
       }),
       {
         id: "entityId",
@@ -658,6 +665,12 @@ export default function LimitsPage() {
                 {limit.entityType !== "organization" && (
                   <div className="truncate text-xs text-muted-foreground">
                     {getEntityScopeLabel(limit)}
+                  </div>
+                )}
+                {access.isLocked(limit) && (
+                  <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                    <Lock aria-hidden className="size-3 shrink-0" />
+                    <span className="truncate">Set by your organization</span>
                   </div>
                 )}
                 {limit.reason ? (
@@ -721,31 +734,41 @@ export default function LimitsPage() {
         header: "Actions",
         size: 100,
         minSize: 80,
-        cell: ({ row }) => (
-          <TableRowActions
-            size="sm"
-            itemName={`${getEntityLabel(row.original)} ${limitMetricLabel(row.original)}`}
-            actions={[
-              {
-                icon: <Edit className="h-4 w-4" />,
-                label: "Edit limit",
-                permissions: access.allows("update", row.original)
-                  ? {}
-                  : { llmLimit: ["update"] },
-                onClick: () => openEditDialog(row.original),
-              },
-              {
-                icon: <Trash2 className="h-4 w-4" />,
-                label: "Delete limit",
-                variant: "destructive",
-                permissions: access.allows("delete", row.original)
-                  ? {}
-                  : { llmLimit: ["delete"] },
-                onClick: () => setLimitToDelete(row.original),
-              },
-            ]}
-          />
-        ),
+        cell: ({ row }) => {
+          const locked = access.isLocked(row.original);
+          const lockedState = locked
+            ? { disabled: true, disabledTooltip: ORG_SET_LIMIT_HINT }
+            : {};
+          return (
+            <TableRowActions
+              size="sm"
+              itemName={`${getEntityLabel(row.original)} ${limitMetricLabel(row.original)}`}
+              actions={[
+                {
+                  icon: <Edit className="h-4 w-4" />,
+                  label: "Edit limit",
+                  permissions:
+                    locked || access.allows("update", row.original)
+                      ? {}
+                      : { llmLimit: ["update"] },
+                  ...lockedState,
+                  onClick: () => openEditDialog(row.original),
+                },
+                {
+                  icon: <Trash2 className="h-4 w-4" />,
+                  label: "Delete limit",
+                  variant: "destructive",
+                  permissions:
+                    locked || access.allows("delete", row.original)
+                      ? {}
+                      : { llmLimit: ["delete"] },
+                  ...lockedState,
+                  onClick: () => setLimitToDelete(row.original),
+                },
+              ]}
+            />
+          );
+        },
       },
     ],
     [

@@ -112,6 +112,62 @@ describe("team admin Limits access", () => {
     expect(await LimitModel.findById(hidden.id)).not.toBeNull();
   });
 
+  test("team admins see an organization-set limit on their team but cannot change or delete it", async ({
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id, { role: "admin" });
+    const orgSet = await LimitModel.create({
+      entityType: "team",
+      entityId: team.id,
+      limitType: "token_cost",
+      limitValue: 100,
+    });
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/limits",
+      payload: {
+        entityType: "team",
+        entityId: team.id,
+        limitType: "token_cost",
+        limitValue: 50,
+        teamManaged: false,
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    expect(created.json().teamManaged).toBe(true);
+
+    const listed = await app.inject({ method: "GET", url: "/api/limits" });
+    expect(
+      Object.fromEntries(
+        listed
+          .json()
+          .map((row: { id: string; teamManaged: boolean }) => [
+            row.id,
+            row.teamManaged,
+          ]),
+      ),
+    ).toEqual({ [orgSet.id]: false, [created.json().id]: true });
+    for (const method of ["PATCH", "DELETE"] as const) {
+      const response = await app.inject({
+        method,
+        url: `/api/limits/${orgSet.id}`,
+        ...(method === "PATCH" ? { payload: { limitValue: 1_000_000 } } : {}),
+      });
+      expect(response.statusCode, response.body).toBe(403);
+    }
+    const bulk = await app.inject({
+      method: "DELETE",
+      url: "/api/limits/bulk",
+      payload: { ids: [orgSet.id] },
+    });
+    expect(bulk.json().succeeded).toEqual([]);
+    expect(await LimitModel.findById(orgSet.id)).toMatchObject({
+      limitValue: 100,
+    });
+  });
+
   test("an ordinary member is denied; demotion removes access immediately; another org's admin membership grants nothing", async ({
     makeTeam,
     makeTeamMember,
@@ -126,7 +182,9 @@ describe("team admin Limits access", () => {
       (await app.inject({ method: "GET", url: "/api/limits" })).statusCode,
     ).toBe(200);
     authMethod = "api_key";
-    expect((await app.inject({ method: "GET", url: "/api/limits" })).statusCode).toBe(403);
+    expect(
+      (await app.inject({ method: "GET", url: "/api/limits" })).statusCode,
+    ).toBe(403);
     authMethod = "session";
     await db
       .update(schema.teamMembersTable)

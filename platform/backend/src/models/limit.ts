@@ -147,7 +147,9 @@ class LimitModel {
   /**
    * Create a new limit
    */
-  static async create(data: CreateLimit): Promise<LimitWithLabels> {
+  static async create(
+    data: CreateLimit & { teamManaged?: boolean },
+  ): Promise<LimitWithLabels> {
     if (
       data.limitType === "requests_per_minute" ||
       data.limitType === "tokens_per_minute" ||
@@ -157,7 +159,11 @@ class LimitModel {
       data.cleanupInterval === "minute" ||
       data.behavior === "soft"
     ) {
-      data = CreateLimitSchema.parse(data);
+      // Parsing validates the request fields; the server-set flag is not one.
+      data = {
+        ...CreateLimitSchema.parse(data),
+        teamManaged: data.teamManaged,
+      };
     }
     const { labels, ...columns } = data;
     const [limit] = await db
@@ -1704,7 +1710,13 @@ export class LimitValidationService {
     agent?: { environmentId: string | null; organizationId?: string };
     teamSource?: AgentTeamSource;
     /** Fresh rows from this request's scoped metadata query. */
-    snapshot?: Pick<ProxyRequestState, "scope" | "agentTeamIds" | "limitState">;
+    snapshot?: Pick<ProxyRequestState, "scope" | "limitTeamIds" | "limitState">;
+    /**
+     * Authenticated caller whose team memberships attribute the call to the
+     * agent's teams. Defaults to `userId`; null when no credential proves a
+     * user, so only a billing team's limits apply.
+     */
+    teamMemberUserId?: string | null;
     /** LLM OAuth client the request authenticated as, for its spend cap. */
     llmOauthClientId?: string;
     /**
@@ -1717,6 +1729,10 @@ export class LimitValidationService {
     const { agentId, virtualKeyId, passthroughVirtualKeyId, llmOauthClientId } =
       params;
     const userId = params.billingTeamId ? undefined : params.userId;
+    const teamMemberUserId =
+      params.teamMemberUserId === undefined
+        ? (params.userId ?? null)
+        : params.teamMemberUserId;
 
     try {
       logger.debug(
@@ -1733,18 +1749,22 @@ export class LimitValidationService {
         scope.billingTeamId === params.billingTeamId &&
         scope.virtualKeyId === virtualKeyId &&
         scope.passthroughVirtualKeyId === passthroughVirtualKeyId &&
-        scope.llmOauthClientId === llmOauthClientId
+        scope.llmOauthClientId === llmOauthClientId &&
+        scope.teamMemberUserId === teamMemberUserId
           ? params.snapshot
           : undefined;
 
       // Get the teams to cleanup and check team and organization limits: the
-      // credential's billing team when it has one, otherwise the agent's teams.
+      // credential's billing team when it has one, otherwise the agent's teams
+      // the caller belongs to.
       const agentTeamIds = params.billingTeamId
         ? [params.billingTeamId]
-        : (snapshot?.agentTeamIds ??
-          (params.teamSource
-            ? await params.teamSource.agentTeamIds(agentId)
-            : await AgentTeamModel.getTeamsForAgent(agentId)));
+        : (snapshot?.limitTeamIds ??
+          (await AgentTeamModel.getCallerTeamsForAgent({
+            agentId,
+            userId: teamMemberUserId,
+            teamSource: params.teamSource,
+          })));
       logger.debug(
         `[LimitValidation] Agent ${agentId} belongs to teams: ${agentTeamIds.join(", ")}`,
       );

@@ -96676,6 +96676,10 @@ export type GetLimitsResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
@@ -96815,6 +96819,10 @@ export type CreateLimitResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
@@ -97004,6 +97012,10 @@ export type GetLimitResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
@@ -97143,6 +97155,10 @@ export type UpdateLimitResponses = {
         toolName: string | null;
         model?: Array<string> | null;
         reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;

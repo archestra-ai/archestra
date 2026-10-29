@@ -37,12 +37,15 @@ When more than one rule matches a call, every matching hard rule must allow it:
 - **Every matching scope must allow the request.** A virtual key with remaining allowance is still blocked if its billing team or the organization has reached its cap.
 - **Model-specific and all-models rules both apply.** A call to `claude-sonnet-4-6` checks both any rule targeting `claude-sonnet-4-6` and any rule set to **All models** on the same scope.
 - **Multi-model rules share one pool.** Selecting multiple models on a single rule caps their combined spend, tokens, or requests together.
+- **A team limit counts only that team's calls.** A call counts toward a team when its credential bills that team, or when the signed-in person is in the team, directly or through a sub-team, and the agent is shared with it. Another team's limit on a shared agent never blocks you.
 
 <span id="team-limits-and-spend"></span>
 
 ### Team Limits and Spend
 
 Open **Limits** in the sidebar to view usage against limits and manage spend, token and request limits for teams you administer. Use **Add Limit** and select your team. Without organization cost or limit permissions, this page shows only your administered teams; ordinary team members have no automatic limit-management access. See [team member and admin roles](/docs/admin/access-control#team-roles).
+
+Limits someone with organization limit permissions set on your team show **Set by your organization**: you see their usage, but cannot change or delete them. Your own limits on the team stack with them.
 
 Limits for organization, users, virtual keys, OAuth clients, agents, and environments still require the organization `llmLimit` permissions above. Organization-wide spend requires [`llmCost:read`](/docs/reference/permissions#llmCost:read).
 

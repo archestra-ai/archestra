@@ -19,6 +19,9 @@ export function useTeamLimitAccess() {
     );
     const isTeamAdmin = teams.length > 0;
     const canRead = read?.data || isTeamAdmin;
+    const administers = (target: { entityType: string; entityId: string }) =>
+      target.entityType === "team" &&
+      teams.some((team) => team.id === target.entityId);
     return {
       teams,
       isTeamAdmin,
@@ -26,21 +29,26 @@ export function useTeamLimitAccess() {
       globalCreate,
       globalRead: !!read?.data,
       isPending: read?.isPending || (!read?.data && membership?.isPending),
-      allows(
-        action: "create" | "update" | "delete",
-        target?: { entityType: string; entityId: string },
-      ) {
+      allows(action: "create" | "update" | "delete", target?: LimitTarget) {
         const global = {
           create: globalCreate,
           update: globalUpdate,
           delete: globalDelete,
         }[action];
+        if (global) return true;
+        if (!target) return isTeamAdmin;
         return (
-          !!global ||
-          (target
-            ? target.entityType === "team" &&
-              teams.some((team) => team.id === target.entityId)
-            : isTeamAdmin)
+          administers(target) &&
+          (action === "create" || target.teamManaged !== false)
+        );
+      },
+      /**
+       * A limit on a team this person administers that the organization set:
+       * they see it but cannot change or delete it.
+       */
+      isLocked(target: LimitTarget) {
+        return (
+          !globalUpdate && administers(target) && target.teamManaged === false
         );
       },
     };
@@ -54,3 +62,9 @@ export function useTeamLimitAccess() {
     globalDelete,
   ]);
 }
+
+type LimitTarget = {
+  entityType: string;
+  entityId: string;
+  teamManaged?: boolean;
+};

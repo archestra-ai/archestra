@@ -1,0 +1,1 @@
+ALTER TABLE "limits" ADD COLUMN "team_managed" boolean DEFAULT false NOT NULL;

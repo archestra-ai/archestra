@@ -383142,6 +383142,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "teamManaged": {
+                        "type": "boolean",
+                        "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                      },
                       "cleanupInterval": {
                         "type": "string",
                         "enum": [
@@ -383256,6 +383260,7 @@
                       "behavior",
                       "mcpServerName",
                       "toolName",
+                      "teamManaged",
                       "lastCleanup",
                       "createdAt",
                       "updatedAt",
@@ -383712,6 +383717,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "teamManaged": {
+                      "type": "boolean",
+                      "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                    },
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
@@ -383750,6 +383759,7 @@
                     "behavior",
                     "mcpServerName",
                     "toolName",
+                    "teamManaged",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt"
@@ -384091,6 +384101,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "teamManaged": {
+                      "type": "boolean",
+                      "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                    },
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
@@ -384205,6 +384219,7 @@
                     "behavior",
                     "mcpServerName",
                     "toolName",
+                    "teamManaged",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt",
@@ -384651,6 +384666,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "teamManaged": {
+                      "type": "boolean",
+                      "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                    },
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
@@ -384689,6 +384708,7 @@
                     "behavior",
                     "mcpServerName",
                     "toolName",
+                    "teamManaged",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt"

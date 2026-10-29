@@ -193,6 +193,85 @@ describe("buildAgentRunLaunchSpec", () => {
     }
   });
 
+  test("starts on the Lite tier and tells the run where to ask for the Full tier", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const launch = (fullTier: ResolvedAgentRuntime["fullTier"]) =>
+      buildAgentRunLaunchSpec({
+        runtime: {
+          ...runtime(setup.agent, "openai_responses"),
+          resources: null,
+          fullTier,
+          // An Agent's own environment cannot claim another tier.
+          environment: [
+            { key: "ARCHESTRA_AGENT_RUNTIME_TIER", value: "full" },
+            { key: "ARCHESTRA_AGENT_RUNTIME_TIER_URL", value: "https://x" },
+          ],
+        },
+        taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "one_shot",
+      });
+
+    const tiered = (
+      await launch({
+        image: "registry.example.test/lobster-env-codex:abc",
+        privileged: true,
+        resources: { cpuRequest: "3500m", memoryLimit: "18Gi" },
+      })
+    ).spec;
+    expect(tiered.tier).toBe("light");
+    expect(tiered.fullTier).toEqual({
+      image: "registry.example.test/lobster-env-codex:abc",
+      privileged: true,
+      resources: { cpuRequest: "3500m", memoryLimit: "18Gi" },
+    });
+    expect(tiered.env.ARCHESTRA_AGENT_RUNTIME_TIER_URL).toBe(
+      "https://platform.example.test/api/agent-runtime/self/tier",
+    );
+    // The Pod environment names the tier (manifests), never a turn.
+    expect(tiered.env).not.toHaveProperty("ARCHESTRA_AGENT_RUNTIME_TIER");
+
+    // Omitted Full tier fields keep the primary settings.
+    const inherited = (
+      await launch({ image: "registry.example.test/lobster-env-codex:abc" })
+    ).spec;
+    expect(inherited.fullTier).toEqual({
+      image: "registry.example.test/lobster-env-codex:abc",
+      privileged: inherited.privileged,
+      resources: inherited.resources,
+    });
+
+    const single = (await launch(null)).spec;
+    expect(single.tier).toBeUndefined();
+    expect(single.fullTier).toBeUndefined();
+    expect(single.env).not.toHaveProperty("ARCHESTRA_AGENT_RUNTIME_TIER_URL");
+  });
+
   test("routes the Agent's selected model through its scoped model router", async ({
     makeOrganization,
     makeAdmin,

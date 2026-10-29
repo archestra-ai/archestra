@@ -236,6 +236,51 @@ describe("Authnz", () => {
       expect(mockReply.send).not.toHaveBeenCalled();
     });
 
+    test("lets only a POST to the runtime tier endpoint through without a session", async () => {
+      const mockReply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
+      await authnz.handle(
+        {
+          url: "/api/agent-runtime/self/tier",
+          method: "POST",
+          headers: {},
+        } as FastifyRequest,
+        mockReply,
+      );
+      expect(mockReply.status).not.toHaveBeenCalled();
+
+      for (const url of [
+        "/api/agent-runtime/self/tier/extra",
+        "/api/agent-runtime/self",
+      ])
+        await expect(
+          authnz.handle(
+            {
+              url,
+              method: "POST",
+              headers: {},
+              routeOptions: {
+                schema: { operationId: "SwitchAgentRuntimeTier" },
+              },
+            } as unknown as FastifyRequest,
+            mockReply,
+          ),
+        ).rejects.toThrow("Unauthenticated");
+      await expect(
+        authnz.handle(
+          {
+            url: "/api/agent-runtime/self/tier",
+            method: "GET",
+            headers: {},
+            routeOptions: { schema: { operationId: "SwitchAgentRuntimeTier" } },
+          } as unknown as FastifyRequest,
+          mockReply,
+        ),
+      ).rejects.toThrow("Unauthenticated");
+    });
+
     test("should NOT skip auth for GET requests to full SSO providers endpoint (contains secrets)", async () => {
       const mockRequest = {
         url: "/api/identity-providers",

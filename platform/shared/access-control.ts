@@ -570,6 +570,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // authnz layer exempts them. These entries keep the map exhaustive.
   [RouteId.DownloadAgentWorkspaceTransfer]: {},
   [RouteId.UploadAgentWorkspaceTransfer]: {},
+  // A run's runtime binding, not a session, authorizes its own tier switch.
+  [RouteId.SwitchAgentRuntimeTier]: {},
   [RouteId.DeleteAgentRun]: {},
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.

@@ -5,15 +5,18 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import config, { parseLabelSelector } from "@/config";
 import {
+  AGENT_RUNTIME_CONTAINER_NAME,
   buildAgentRuntimePlatformEgressPolicy,
   buildAgentRuntimeSandbox,
   buildAgentRuntimeSecret,
   buildAgentRuntimeTerminalIntegrationScript,
   buildAgentRuntimeTurnScript,
   type KubernetesAgentRunLaunchSpec,
+  withAgentRuntimeTier,
 } from "./manifests";
 import {
   AGENT_RUNTIME_TASK_LABEL,
+  AGENT_RUNTIME_TIER_ANNOTATION,
   AGENT_RUNTIME_WORKSPACE_LABEL,
 } from "./naming";
 
@@ -327,12 +330,14 @@ describe("buildAgentRuntimeSandbox", () => {
       (entry) => entry.name === "ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT",
     );
 
-    expect(entrypoint?.value).toBe(
-      [
-        "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi",
-        `exec 'claude' '--task' 'it'\\''s a '\\''quoted'\\'' task; rm -rf /'`,
-      ].join("\n"),
-    );
+    expect(
+      entrypoint?.value?.endsWith(
+        [
+          "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi",
+          `exec 'claude' '--task' 'it'\\''s a '\\''quoted'\\'' task; rm -rf /'`,
+        ].join("\n"),
+      ),
+    ).toBe(true);
   });
 
   it("keeps the legacy entrypoint for a saved runtime with no command", () => {
@@ -341,10 +346,12 @@ describe("buildAgentRuntimeSandbox", () => {
     ).spec?.podTemplate.spec?.containers[0]?.env?.find(
       (entry) => entry.name === "ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT",
     );
-    expect(entrypoint?.value).toBe(
-      "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi\n" +
-        "exec archestra-runtime-agent",
-    );
+    expect(
+      entrypoint?.value?.endsWith(
+        "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi\n" +
+          "exec archestra-runtime-agent",
+      ),
+    ).toBe(true);
   });
 
   it("applies resource requests and limits as configured", () => {
@@ -354,6 +361,127 @@ describe("buildAgentRuntimeSandbox", () => {
     expect(resources?.requests).toEqual({ cpu: "500m", memory: "1Gi" });
     // No CPU limit by default: throttling an agent mid-turn reads as a hang.
     expect(resources?.limits).toEqual({ memory: "4Gi" });
+  });
+});
+
+describe("runtime tiers", () => {
+  it("names the tier in the Pod environment and on the Sandbox only when the Agent has tiers", () => {
+    const tiered = buildAgentRuntimeSandbox({ ...SPEC, tier: "light" });
+    expect(tiered.metadata.annotations).toEqual({
+      [AGENT_RUNTIME_TIER_ANNOTATION]: "light",
+    });
+    expect(tiered.spec.podTemplate.spec?.containers[0]?.env).toContainEqual({
+      name: "ARCHESTRA_AGENT_RUNTIME_TIER",
+      value: "light",
+    });
+
+    const single = buildAgentRuntimeSandbox(SPEC);
+    expect(single.metadata.annotations).toBeUndefined();
+    expect(
+      single.spec.podTemplate.spec?.containers[0]?.env?.some(
+        ({ name }) => name === "ARCHESTRA_AGENT_RUNTIME_TIER",
+      ),
+    ).toBe(false);
+  });
+
+  it("moves the image, host access, Docker storage and resources to the Full tier and back", () => {
+    const light = buildAgentRuntimeSandbox({ ...SPEC, tier: "light" }).spec
+      .podTemplate.spec;
+    if (!light) throw new Error("missing Pod template");
+    const fullSettings = {
+      image: "registry.example.test/lobster-env-codex:abc",
+      privileged: true,
+      resources: {
+        cpuRequest: "3500m",
+        memoryRequest: "12Gi",
+        memoryLimit: "18Gi",
+      },
+    };
+    const full = withAgentRuntimeTier({
+      podSpec: light,
+      tier: "full",
+      settings: fullSettings,
+    });
+    const agent = full.containers.find(
+      ({ name }) => name === AGENT_RUNTIME_CONTAINER_NAME,
+    );
+    expect(agent?.image).toBe(fullSettings.image);
+    expect(full.initContainers?.[0]?.image).toBe(fullSettings.image);
+    expect(agent?.securityContext).toEqual({ privileged: true });
+    expect(agent?.resources).toEqual({
+      requests: { cpu: "3500m", memory: "12Gi" },
+      limits: { memory: "18Gi" },
+    });
+    expect(agent?.volumeMounts).toContainEqual({
+      name: "workspace",
+      mountPath: "/var/lib/docker",
+      subPath: "docker",
+    });
+    expect(
+      agent?.env?.filter(({ name }) => name === "ARCHESTRA_AGENT_RUNTIME_TIER"),
+    ).toEqual([{ name: "ARCHESTRA_AGENT_RUNTIME_TIER", value: "full" }]);
+    // The volume, the HOME mount and the turn contract are untouched.
+    expect(agent?.volumeMounts).toEqual(
+      expect.arrayContaining(
+        light.containers[0].volumeMounts?.map((mount) =>
+          expect.objectContaining(mount),
+        ) ?? [],
+      ),
+    );
+    expect(agent?.command).toEqual(light.containers[0].command);
+
+    const back = withAgentRuntimeTier({
+      podSpec: { ...light, ...full },
+      tier: "light",
+      settings: {
+        image: SPEC.image,
+        privileged: false,
+        resources: SPEC.resources,
+      },
+    });
+    expect(back.containers).toEqual(light.containers);
+    expect(back.initContainers).toEqual(light.initContainers);
+  });
+
+  it.each([
+    [true, "1|[Archestra] note about the switch"],
+    [false, "0|the original instruction"],
+  ])("continues the turn natively when a tier switch left a note (note present: %s)", (note, expected) => {
+    const directory = mkdtempSync(path.join(tmpdir(), "runtime-tier-"));
+    const prefix = path.join(directory, "turn");
+    try {
+      if (note)
+        execFileSync("/bin/sh", [
+          "-c",
+          `printf '%s' '[Archestra] note about the switch' > '${prefix}.resume-prompt'`,
+        ]);
+      const script = buildAgentRuntimeTurnScript(
+        {
+          ...SPEC,
+          runtimeScope: SPEC.namespace,
+          secretEnv: {
+            ARCHESTRA_AGENT_RUNTIME_TASK: "the original instruction",
+          },
+          command: [
+            "/bin/sh",
+            "-c",
+            'printf "%s|%s" "$ARCHESTRA_AGENT_RUNTIME_CONTINUE" "$ARCHESTRA_AGENT_RUNTIME_TASK"',
+          ],
+        },
+        { initial: true },
+      );
+      expect(
+        execFileSync("/bin/sh", ["-c", script], {
+          encoding: "utf8",
+          env: {
+            PATH: "/usr/bin:/bin",
+            ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX: prefix,
+          },
+        }),
+      ).toBe(expected);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 

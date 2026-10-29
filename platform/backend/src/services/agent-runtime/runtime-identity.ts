@@ -241,6 +241,22 @@ function readRuntimeBinding(params: {
   return parsed;
 }
 
+/**
+ * Claims of a valid, unexpired turn binding. The bearer acts for exactly this
+ * workspace turn; callers still check that the turn is the current one.
+ * @public — the in-workspace runtime tier route authenticates with it
+ */
+export function verifyRuntimeBinding(params: {
+  token: string;
+  secret: string;
+  now?: number;
+}): Omit<RuntimeBindingClaims, "v"> | null {
+  const claims = readRuntimeBinding(params);
+  if (!claims) return null;
+  const { v: _version, ...rest } = claims;
+  return rest;
+}
+
 async function resolveRuntimeIdentityByVirtualKey(params: {
   virtualKeyId: string;
   organizationId: string;

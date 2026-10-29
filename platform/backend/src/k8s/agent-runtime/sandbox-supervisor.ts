@@ -6,11 +6,37 @@ import { buildRuntimeFailureEnvelopeScript } from "./failure-envelope";
 import { buildTerminalRecorderScript } from "./terminal-recorder";
 
 /**
+ * Pod environment naming the one started turn a planned Pod replacement (a
+ * runtime tier switch) asked the supervisor to continue. Without it, a
+ * started turn is failed as interrupted, as after any other replacement, so
+ * a turn stopped or canceled during the switch is never replayed.
+ */
+export const AGENT_RUNTIME_RESUME_TURN_ENV =
+  "ARCHESTRA_AGENT_RUNTIME_RESUME_TURN";
+
+/**
+ * The lines a request runs just before its agent command. When a planned
+ * replacement continues the turn, they swap the instruction the turn already
+ * handled for the platform's note, as a native continuation.
+ */
+export function buildTurnResumeHook(): string[] {
+  return [
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: POSIX shell parameter expansion.
+    'if [ -n "${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX:-}" ] && [ -f "$ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX.resume-prompt" ]; then',
+    '  ARCHESTRA_AGENT_RUNTIME_TASK="$(cat "$ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX.resume-prompt")"',
+    "  ARCHESTRA_AGENT_RUNTIME_CONTINUE=1",
+    "  export ARCHESTRA_AGENT_RUNTIME_TASK ARCHESTRA_AGENT_RUNTIME_CONTINUE",
+    "fi",
+  ];
+}
+
+/**
  * PID 1 owns the workspace, not the agent command. Requests are published by
  * the control plane using atomic rename. A started request is never replayed
  * after a Pod replacement: its side effects may already have happened.
  */
 export function buildSandboxSupervisorScript(): string {
+  const resumeTurn = `$\{${AGENT_RUNTIME_RESUME_TURN_ENV}:-}`;
   return String.raw`set -eu
 umask 077
 root=/var/run/archestra
@@ -61,8 +87,18 @@ while :; do
     if [ -f "$turn.cancel" ]; then
       printf '130\n' > "$turn.exit.tmp"
       mv "$turn.exit.tmp" "$turn.exit"
-      rm -f "$request" "$turn.session"
+      rm -f "$request" "$turn.session" "$turn.resume" "$turn.resume-prompt"
       continue
+    fi
+    # The control plane replaced the Pod on purpose (a runtime tier switch),
+    # named this turn in the Pod environment and left a note beside it. Rerun
+    # it once as a native continuation: the request's entrypoint reads the
+    # note instead of the instruction it already handled. A request without
+    # that hook fails as interrupted.
+    if [ -f "$turn.started" ] && [ -f "$turn.resume" ] && [ "${resumeTurn}" = "$(basename "$turn")" ] && grep -q 'resume-prompt' "$request"; then
+      mv "$turn.resume" "$turn.resume-prompt"
+      rm -f "$turn.started" "$turn.running" "$turn.result" "$turn.session" \
+        "$turn.recording-input" "$turn.recording-ready" "$turn.recording-client-pid"
     fi
     if [ -f "$turn.started" ]; then
       # A replacement Pod cannot know which external effects completed.
@@ -74,7 +110,7 @@ while :; do
       })}
       printf '75\n' > "$turn.exit.tmp"
       mv "$turn.exit.tmp" "$turn.exit"
-      rm -f "$request" "$turn.session"
+      rm -f "$request" "$turn.session" "$turn.resume" "$turn.resume-prompt"
       continue
     fi
     touch "$turn.started"
@@ -180,7 +216,7 @@ while :; do
     fi
     mv "$turn.result" "$turn.exit"
     # The request can contain turn-scoped credentials; keep only its outcome.
-    rm -f "$request" "$turn.session" "$turn.running"
+    rm -f "$request" "$turn.session" "$turn.running" "$turn.resume" "$turn.resume-prompt"
   done
   sleep 1
 done`;

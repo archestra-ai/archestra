@@ -61719,6 +61719,43 @@
                                         },
                                         "additionalProperties": false
                                       },
+                                      "fullTier": {
+                                        "nullable": true,
+                                        "type": "object",
+                                        "properties": {
+                                          "image": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2000
+                                          },
+                                          "privileged": {
+                                            "type": "boolean"
+                                          },
+                                          "resources": {
+                                            "nullable": true,
+                                            "type": "object",
+                                            "properties": {
+                                              "cpuRequest": {
+                                                "type": "string"
+                                              },
+                                              "memoryRequest": {
+                                                "type": "string"
+                                              },
+                                              "cpuLimit": {
+                                                "type": "string"
+                                              },
+                                              "memoryLimit": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "image"
+                                        ],
+                                        "additionalProperties": false
+                                      },
                                       "ports": {
                                         "maxItems": 20,
                                         "type": "array",
@@ -63466,6 +63503,43 @@
                                 },
                                 "additionalProperties": false
                               },
+                              "fullTier": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "image": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  },
+                                  "privileged": {
+                                    "type": "boolean"
+                                  },
+                                  "resources": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "properties": {
+                                      "cpuRequest": {
+                                        "type": "string"
+                                      },
+                                      "memoryRequest": {
+                                        "type": "string"
+                                      },
+                                      "cpuLimit": {
+                                        "type": "string"
+                                      },
+                                      "memoryLimit": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "image"
+                                ],
+                                "additionalProperties": false
+                              },
                               "ports": {
                                 "maxItems": 20,
                                 "type": "array",
@@ -64567,6 +64641,41 @@
                           }
                         }
                       },
+                      "fullTier": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "image": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "privileged": {
+                            "type": "boolean"
+                          },
+                          "resources": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "cpuRequest": {
+                                "type": "string"
+                              },
+                              "memoryRequest": {
+                                "type": "string"
+                              },
+                              "cpuLimit": {
+                                "type": "string"
+                              },
+                              "memoryLimit": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "required": [
+                          "image"
+                        ]
+                      },
                       "ports": {
                         "maxItems": 20,
                         "type": "array",
@@ -65377,6 +65486,43 @@
                               "type": "string"
                             }
                           },
+                          "additionalProperties": false
+                        },
+                        "fullTier": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "image": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "privileged": {
+                              "type": "boolean"
+                            },
+                            "resources": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "cpuRequest": {
+                                  "type": "string"
+                                },
+                                "memoryRequest": {
+                                  "type": "string"
+                                },
+                                "cpuLimit": {
+                                  "type": "string"
+                                },
+                                "memoryLimit": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "image"
+                          ],
                           "additionalProperties": false
                         },
                         "ports": {
@@ -67021,6 +67167,43 @@
                             },
                             "additionalProperties": false
                           },
+                          "fullTier": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              },
+                              "privileged": {
+                                "type": "boolean"
+                              },
+                              "resources": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "cpuRequest": {
+                                    "type": "string"
+                                  },
+                                  "memoryRequest": {
+                                    "type": "string"
+                                  },
+                                  "cpuLimit": {
+                                    "type": "string"
+                                  },
+                                  "memoryLimit": {
+                                    "type": "string"
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "image"
+                            ],
+                            "additionalProperties": false
+                          },
                           "ports": {
                             "maxItems": 20,
                             "type": "array",
@@ -67666,6 +67849,43 @@
                                     "type": "string"
                                   }
                                 },
+                                "additionalProperties": false
+                              },
+                              "fullTier": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "image": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  },
+                                  "privileged": {
+                                    "type": "boolean"
+                                  },
+                                  "resources": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "properties": {
+                                      "cpuRequest": {
+                                        "type": "string"
+                                      },
+                                      "memoryRequest": {
+                                        "type": "string"
+                                      },
+                                      "cpuLimit": {
+                                        "type": "string"
+                                      },
+                                      "memoryLimit": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "image"
+                                ],
                                 "additionalProperties": false
                               },
                               "ports": {
@@ -68351,6 +68571,43 @@
                                     "type": "string"
                                   }
                                 },
+                                "additionalProperties": false
+                              },
+                              "fullTier": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "image": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  },
+                                  "privileged": {
+                                    "type": "boolean"
+                                  },
+                                  "resources": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "properties": {
+                                      "cpuRequest": {
+                                        "type": "string"
+                                      },
+                                      "memoryRequest": {
+                                        "type": "string"
+                                      },
+                                      "cpuLimit": {
+                                        "type": "string"
+                                      },
+                                      "memoryLimit": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "image"
+                                ],
                                 "additionalProperties": false
                               },
                               "ports": {
@@ -69185,6 +69442,43 @@
                                     "type": "string"
                                   }
                                 },
+                                "additionalProperties": false
+                              },
+                              "fullTier": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "image": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  },
+                                  "privileged": {
+                                    "type": "boolean"
+                                  },
+                                  "resources": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "properties": {
+                                      "cpuRequest": {
+                                        "type": "string"
+                                      },
+                                      "memoryRequest": {
+                                        "type": "string"
+                                      },
+                                      "cpuLimit": {
+                                        "type": "string"
+                                      },
+                                      "memoryLimit": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "image"
+                                ],
                                 "additionalProperties": false
                               },
                               "ports": {
@@ -70654,6 +70948,43 @@
                           },
                           "additionalProperties": false
                         },
+                        "fullTier": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "image": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "privileged": {
+                              "type": "boolean"
+                            },
+                            "resources": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "cpuRequest": {
+                                  "type": "string"
+                                },
+                                "memoryRequest": {
+                                  "type": "string"
+                                },
+                                "cpuLimit": {
+                                  "type": "string"
+                                },
+                                "memoryLimit": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "image"
+                          ],
+                          "additionalProperties": false
+                        },
                         "ports": {
                           "maxItems": 20,
                           "type": "array",
@@ -72090,6 +72421,43 @@
                               },
                               "additionalProperties": false
                             },
+                            "fullTier": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "image": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2000
+                                },
+                                "privileged": {
+                                  "type": "boolean"
+                                },
+                                "resources": {
+                                  "nullable": true,
+                                  "type": "object",
+                                  "properties": {
+                                    "cpuRequest": {
+                                      "type": "string"
+                                    },
+                                    "memoryRequest": {
+                                      "type": "string"
+                                    },
+                                    "cpuLimit": {
+                                      "type": "string"
+                                    },
+                                    "memoryLimit": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "image"
+                              ],
+                              "additionalProperties": false
+                            },
                             "ports": {
                               "maxItems": 20,
                               "type": "array",
@@ -73199,6 +73567,43 @@
                           },
                           "additionalProperties": false
                         },
+                        "fullTier": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "image": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "privileged": {
+                              "type": "boolean"
+                            },
+                            "resources": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "cpuRequest": {
+                                  "type": "string"
+                                },
+                                "memoryRequest": {
+                                  "type": "string"
+                                },
+                                "cpuLimit": {
+                                  "type": "string"
+                                },
+                                "memoryLimit": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "image"
+                          ],
+                          "additionalProperties": false
+                        },
                         "ports": {
                           "maxItems": 20,
                           "type": "array",
@@ -74232,6 +74637,41 @@
                           }
                         }
                       },
+                      "fullTier": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "image": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "privileged": {
+                            "type": "boolean"
+                          },
+                          "resources": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "cpuRequest": {
+                                "type": "string"
+                              },
+                              "memoryRequest": {
+                                "type": "string"
+                              },
+                              "cpuLimit": {
+                                "type": "string"
+                              },
+                              "memoryLimit": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "required": [
+                          "image"
+                        ]
+                      },
                       "ports": {
                         "maxItems": 20,
                         "type": "array",
@@ -74777,6 +75217,43 @@
                               "type": "string"
                             }
                           },
+                          "additionalProperties": false
+                        },
+                        "fullTier": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "image": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "privileged": {
+                              "type": "boolean"
+                            },
+                            "resources": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "cpuRequest": {
+                                  "type": "string"
+                                },
+                                "memoryRequest": {
+                                  "type": "string"
+                                },
+                                "cpuLimit": {
+                                  "type": "string"
+                                },
+                                "memoryLimit": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "image"
+                          ],
                           "additionalProperties": false
                         },
                         "ports": {
@@ -77519,6 +77996,43 @@
                           },
                           "additionalProperties": false
                         },
+                        "fullTier": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "image": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "privileged": {
+                              "type": "boolean"
+                            },
+                            "resources": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "cpuRequest": {
+                                  "type": "string"
+                                },
+                                "memoryRequest": {
+                                  "type": "string"
+                                },
+                                "cpuLimit": {
+                                  "type": "string"
+                                },
+                                "memoryLimit": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "image"
+                          ],
+                          "additionalProperties": false
+                        },
                         "ports": {
                           "maxItems": 20,
                           "type": "array",
@@ -78743,6 +79257,43 @@
                               "type": "string"
                             }
                           },
+                          "additionalProperties": false
+                        },
+                        "fullTier": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "image": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "privileged": {
+                              "type": "boolean"
+                            },
+                            "resources": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "cpuRequest": {
+                                  "type": "string"
+                                },
+                                "memoryRequest": {
+                                  "type": "string"
+                                },
+                                "cpuLimit": {
+                                  "type": "string"
+                                },
+                                "memoryLimit": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "image"
+                          ],
                           "additionalProperties": false
                         },
                         "ports": {
@@ -86780,6 +87331,43 @@
                               "type": "string"
                             }
                           },
+                          "additionalProperties": false
+                        },
+                        "fullTier": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "image": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "privileged": {
+                              "type": "boolean"
+                            },
+                            "resources": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "cpuRequest": {
+                                  "type": "string"
+                                },
+                                "memoryRequest": {
+                                  "type": "string"
+                                },
+                                "cpuLimit": {
+                                  "type": "string"
+                                },
+                                "memoryLimit": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "image"
+                          ],
                           "additionalProperties": false
                         },
                         "ports": {
@@ -96421,6 +97009,330 @@
                     "path",
                     "size",
                     "sha256"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/agent-runtime/self/tier": {
+      "post": {
+        "operationId": "switchAgentRuntimeTier",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Called by a run inside its workspace to move the workspace to another compute tier. Authorized by the run's runtime binding header, not a session. 202 means the Pod is being replaced and the turn continues there.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "light",
+                      "full"
+                    ]
+                  }
+                },
+                "required": [
+                  "tier"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tier": {
+                      "type": "string",
+                      "enum": [
+                        "light",
+                        "full"
+                      ]
+                    },
+                    "switching": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "tier",
+                    "switching"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tier": {
+                      "type": "string",
+                      "enum": [
+                        "light",
+                        "full"
+                      ]
+                    },
+                    "switching": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "tier",
+                    "switching"
                   ],
                   "additionalProperties": false
                 }
@@ -153803,6 +154715,43 @@
                                 },
                                 "additionalProperties": false
                               },
+                              "fullTier": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "image": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  },
+                                  "privileged": {
+                                    "type": "boolean"
+                                  },
+                                  "resources": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "properties": {
+                                      "cpuRequest": {
+                                        "type": "string"
+                                      },
+                                      "memoryRequest": {
+                                        "type": "string"
+                                      },
+                                      "cpuLimit": {
+                                        "type": "string"
+                                      },
+                                      "memoryLimit": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "image"
+                                ],
+                                "additionalProperties": false
+                              },
                               "ports": {
                                 "maxItems": 20,
                                 "type": "array",
@@ -154818,6 +155767,43 @@
                                       "type": "string"
                                     }
                                   },
+                                  "additionalProperties": false
+                                },
+                                "fullTier": {
+                                  "nullable": true,
+                                  "type": "object",
+                                  "properties": {
+                                    "image": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2000
+                                    },
+                                    "privileged": {
+                                      "type": "boolean"
+                                    },
+                                    "resources": {
+                                      "nullable": true,
+                                      "type": "object",
+                                      "properties": {
+                                        "cpuRequest": {
+                                          "type": "string"
+                                        },
+                                        "memoryRequest": {
+                                          "type": "string"
+                                        },
+                                        "cpuLimit": {
+                                          "type": "string"
+                                        },
+                                        "memoryLimit": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "image"
+                                  ],
                                   "additionalProperties": false
                                 },
                                 "ports": {
@@ -156887,6 +157873,43 @@
                                     },
                                     "additionalProperties": false
                                   },
+                                  "fullTier": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "properties": {
+                                      "image": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 2000
+                                      },
+                                      "privileged": {
+                                        "type": "boolean"
+                                      },
+                                      "resources": {
+                                        "nullable": true,
+                                        "type": "object",
+                                        "properties": {
+                                          "cpuRequest": {
+                                            "type": "string"
+                                          },
+                                          "memoryRequest": {
+                                            "type": "string"
+                                          },
+                                          "cpuLimit": {
+                                            "type": "string"
+                                          },
+                                          "memoryLimit": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "image"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "ports": {
                                     "maxItems": 20,
                                     "type": "array",
@@ -157902,6 +158925,43 @@
                                           "type": "string"
                                         }
                                       },
+                                      "additionalProperties": false
+                                    },
+                                    "fullTier": {
+                                      "nullable": true,
+                                      "type": "object",
+                                      "properties": {
+                                        "image": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 2000
+                                        },
+                                        "privileged": {
+                                          "type": "boolean"
+                                        },
+                                        "resources": {
+                                          "nullable": true,
+                                          "type": "object",
+                                          "properties": {
+                                            "cpuRequest": {
+                                              "type": "string"
+                                            },
+                                            "memoryRequest": {
+                                              "type": "string"
+                                            },
+                                            "cpuLimit": {
+                                              "type": "string"
+                                            },
+                                            "memoryLimit": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "image"
+                                      ],
                                       "additionalProperties": false
                                     },
                                     "ports": {

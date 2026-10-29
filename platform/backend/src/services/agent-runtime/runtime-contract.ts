@@ -31,6 +31,15 @@ export const AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_END =
 export const AGENT_RUNTIME_READABLE_TRANSCRIPT_MAX_BYTES = 16 * 1024 * 1024;
 
 /**
+ * Compute tier of the current Pod (`light` or `full`), set only when the Agent
+ * defines a Full tier. A Pod environment value, so it always describes the
+ * Pod a turn runs in, also after the workspace moved to another tier.
+ */
+export const AGENT_RUNTIME_TIER_ENV = "ARCHESTRA_AGENT_RUNTIME_TIER";
+/** Endpoint a run posts `{"tier": "light" | "full"}` to, with its binding. */
+export const AGENT_RUNTIME_TIER_URL_ENV = "ARCHESTRA_AGENT_RUNTIME_TIER_URL";
+
+/**
  * Stable, portable run name: `agent-run-<slug40>-<id8>`.
  *
  * It is frozen before launch so a display-name change cannot orphan a live

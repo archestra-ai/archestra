@@ -67,6 +67,28 @@ export const AgentRuntimeResourcesSchema = z.object({
 });
 export type AgentRuntimeResources = z.infer<typeof AgentRuntimeResourcesSchema>;
 
+/**
+ * Compute tier a retained workspace runs on. `light` (the Lite tier) is the
+ * Agent's primary runtime settings; `full` is its optional `fullTier`. A run
+ * inside the workspace switches between them on the same volume.
+ */
+export const AgentRuntimeTierSchema = z.enum(["light", "full"]);
+export type AgentRuntimeTier = z.infer<typeof AgentRuntimeTierSchema>;
+
+/**
+ * Heavier settings a workspace moves to when its run asks for the Full tier,
+ * for example a privileged image that runs Docker and Kubernetes. Omitted
+ * fields keep the Agent's primary value.
+ */
+export const AgentRuntimeTierOverrideSchema = z.object({
+  image: z.string().trim().min(1).max(2_000),
+  privileged: z.boolean().optional(),
+  resources: AgentRuntimeResourcesSchema.nullable().optional(),
+});
+export type AgentRuntimeTierOverride = z.infer<
+  typeof AgentRuntimeTierOverrideSchema
+>;
+
 /** Where a detached run delivers its terminal result. */
 export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
   z.object({
@@ -224,6 +246,11 @@ export const AgentRuntimeSchema = z.object({
   steerMode: AgentRuntimeSteerModeSchema,
   privileged: z.boolean(),
   resources: AgentRuntimeResourcesSchema.nullable(),
+  /**
+   * Optional Full tier. Runs start on the primary settings (the Lite tier)
+   * and a run may move its own workspace to these settings and back.
+   */
+  fullTier: AgentRuntimeTierOverrideSchema.nullable().optional(),
   /** Container ports users can forward from an active workspace. */
   ports: z.array(z.number().int().min(1).max(65_535)).max(20).optional(),
   environment: z.array(AgentRuntimeEnvironmentEntrySchema).nullable(),

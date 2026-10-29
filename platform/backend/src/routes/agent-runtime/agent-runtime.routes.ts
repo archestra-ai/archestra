@@ -25,7 +25,10 @@ import {
   ProjectModel,
 } from "@/models";
 import ResourcePermissionAccessModel from "@/models/resource-permission-access";
-import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
+import {
+  AGENT_RUNTIME_SELF_TIER_PATH,
+  AGENT_WORKSPACE_TRANSFER_PREFIX,
+} from "@/routes/route-paths";
 import {
   isAnyAgentRuntimeBackendDriverEnabled,
   resolveAgentRuntimeBackendDriver,
@@ -43,6 +46,8 @@ import {
   createAgentRunAccessChecker,
   mayAttachAgentRun,
 } from "@/services/agent-runtime/run-access";
+import { RUNTIME_BINDING_HEADER } from "@/services/agent-runtime/runtime-identity";
+import { requestAgentRuntimeTierSwitch } from "@/services/agent-runtime/runtime-tier-switch";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
@@ -60,6 +65,7 @@ import {
   type AgentRunSession,
   AgentRunSessionResponseSchema,
   type AgentRunStartupProgress,
+  AgentRuntimeTierSchema,
   ApiError,
   constructResponseSchema,
   GetAgentRunResponseSchema,
@@ -1168,9 +1174,40 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
     },
   );
+
+  fastify.post(
+    AGENT_RUNTIME_SELF_TIER_PATH,
+    {
+      schema: {
+        operationId: RouteId.SwitchAgentRuntimeTier,
+        tags: ["Agents"],
+        description:
+          "Called by a run inside its workspace to move the workspace to another compute tier. Authorized by the run's runtime binding header, not a session. 202 means the Pod is being replaced and the turn continues there.",
+        body: z.object({ tier: AgentRuntimeTierSchema }),
+        response: {
+          ...constructResponseSchema(AgentRuntimeTierSwitchResultSchema),
+          202: AgentRuntimeTierSwitchResultSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const header = request.headers[RUNTIME_BINDING_HEADER.toLowerCase()];
+      const result = await requestAgentRuntimeTierSwitch({
+        bindingToken: typeof header === "string" ? header : undefined,
+        tier: request.body.tier,
+      });
+      return reply.code(result.switching ? 202 : 200).send(result);
+    },
+  );
 };
 
 export default agentRuntimeRoutes;
+
+const AgentRuntimeTierSwitchResultSchema = z.object({
+  tier: AgentRuntimeTierSchema,
+  /** True when the Pod is being replaced; the turn continues in the new one. */
+  switching: z.boolean(),
+});
 
 // ===================== internals =====================
 

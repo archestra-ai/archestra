@@ -35,7 +35,10 @@ import McpDeploymentLeaseModel, {
 } from "@/models/mcp-deployment-lease";
 import ServiceAccountModel from "@/models/service-account";
 import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
-import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import type {
+  AgentRunLaunchSpec,
+  AgentRuntimeTierSettings,
+} from "@/services/agent-runtime/backends";
 import {
   agentRuntimeFailureReason,
   agentRuntimeTurnFailure,
@@ -49,6 +52,7 @@ import {
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
   AGENT_RUNTIME_CREDENTIALS_SECRET_KEY,
   AGENT_RUNTIME_INPUTS_READY_FILE,
+  AGENT_RUNTIME_TIER_ENV,
 } from "@/services/agent-runtime/runtime-contract";
 import { resolveCredential } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
@@ -56,6 +60,7 @@ import type {
   AgentRunInput,
   AgentRunRecord,
   AgentRuntimeSteerMode,
+  AgentRuntimeTier,
 } from "@/types";
 import { ApiError } from "@/types";
 import type { A2ATaskFailure } from "@/types/a2a-task";
@@ -82,11 +87,16 @@ import {
   buildAgentRuntimeSecret,
   buildAgentRuntimeTerminalIntegrationScript,
   buildAgentRuntimeTurnScript,
+  buildResourceRequirements,
   type KubernetesAgentRunLaunchSpec,
+  withAgentRuntimeTier,
+  withTurnResume,
 } from "./manifests";
 import {
   AGENT_RUNTIME_LEASE_SCOPE,
   AGENT_RUNTIME_TASK_LABEL,
+  AGENT_RUNTIME_TIER_ANNOTATION,
+  AGENT_RUNTIME_TIER_SWITCH_ANNOTATION,
   AGENT_RUNTIME_WORKSPACE_LABEL,
   agentRuntimeNames,
 } from "./naming";
@@ -444,6 +454,15 @@ class AgentRuntimeManager {
       name: params.session.workloadName,
     });
     let container = findAgentRuntimeContainer(sandbox);
+    // A workspace an earlier turn moved to the Full tier stays there: the
+    // follow-up continues on the compute its checkout was last prepared on.
+    if (
+      params.spec.fullTier &&
+      runsTierSettings(container, params.spec.fullTier) &&
+      !runsTierSettings(container, params.spec)
+    ) {
+      Object.assign(params.spec, params.spec.fullTier, { tier: "full" });
+    }
     // A platform upgrade moves the maintained image tag under a retained
     // workspace. Its old wrapper may no longer speak to this backend, so the
     // next turn starts on the current image rather than refusing the workspace.
@@ -511,7 +530,10 @@ class AgentRuntimeManager {
         })
       : null;
     const inheritedVariableNames = [
-      ...(container.env ?? []).map(({ name }) => name),
+      // The tier describes the Pod, not the turn: keep the Pod's own value.
+      ...(container.env ?? [])
+        .map(({ name }) => name)
+        .filter((name) => name !== AGENT_RUNTIME_TIER_ENV),
       ...Object.keys(initialSecret?.data ?? {}),
     ];
     await clients.coreApi
@@ -587,9 +609,15 @@ class AgentRuntimeManager {
         "run.resume_refused",
       );
     }
+    // A tier switch stopped this turn's Sandbox and its process ended before
+    // the replacement ran. Wake it here; the supervisor continues the turn.
+    const interruptedTierSwitch =
+      sandbox.metadata.annotations?.[AGENT_RUNTIME_TIER_SWITCH_ANNOTATION] ===
+      session.taskId;
     // The initial turn is already part of the Sandbox's bootstrap contract.
     if (
       !pending &&
+      !interruptedTierSwitch &&
       sandbox.metadata.labels?.[AGENT_RUNTIME_TASK_LABEL] === session.taskId
     )
       return;
@@ -608,6 +636,11 @@ class AgentRuntimeManager {
     });
     if (!podName) throw new Error("The Agent is not running");
     await this.projectWarmCredentials(session, podName);
+    if (interruptedTierSwitch)
+      await this.clearTierSwitchMark(
+        session,
+        sandbox.metadata.name ?? session.workloadName,
+      );
     const script = pending?.data?.request;
     if (!script) {
       const published = await this.execInPod({
@@ -1414,6 +1447,150 @@ class AgentRuntimeManager {
       throw new AggregateError(errors, "Saved file cleanup did not complete");
   }
 
+  /** Whether the workspace's Pod template already runs these tier settings. */
+  async workspaceRunsTierSettings(params: {
+    session: AgentRunRecord;
+    settings: AgentRuntimeTierSettings;
+  }): Promise<boolean> {
+    const sandbox = await readWorkspaceSandbox({
+      api: this.requireClients().customObjectsApi,
+      namespace: params.session.runtimeScope,
+      name: params.session.workloadName,
+    });
+    return runsTierSettings(
+      findAgentRuntimeContainer(sandbox),
+      params.settings,
+      {
+        resources: true,
+      },
+    );
+  }
+
+  /**
+   * Move a workspace to another tier on the same volume, as
+   * `moveWorkspaceToImage` does for a maintained image upgrade: stop the Pod,
+   * change the template, start it again. A turn that is running is not
+   * failed as interrupted: the note written beside it tells the replacement
+   * Pod's supervisor to continue it as a native continuation. When the new
+   * tier cannot start (no capacity, image pull), the previous template comes
+   * back so the turn continues where it was. Callers serialize switches of
+   * one run; a later request finds the workspace already moved.
+   */
+  async switchWorkspaceTier(params: {
+    session: AgentRunRecord;
+    tier: AgentRuntimeTier;
+    settings: AgentRuntimeTierSettings;
+    resumePrompt: string;
+    shouldResume: () => Promise<boolean>;
+  }): Promise<boolean> {
+    const { session } = params;
+    const sandbox = await readWorkspaceSandbox({
+      api: this.requireClients().customObjectsApi,
+      namespace: session.runtimeScope,
+      name: session.workloadName,
+    });
+    const podSpec = sandbox.spec.podTemplate.spec;
+    const container = findAgentRuntimeContainer(sandbox);
+    if (!podSpec || !container)
+      throw new Error("This workspace has no Agent Runtime container");
+    if (runsTierSettings(container, params.settings, { resources: true }))
+      return false;
+    const previousTier =
+      sandbox.metadata.annotations?.[AGENT_RUNTIME_TIER_ANNOTATION] ?? null;
+    // A Sandbox claimed from the warm pool keeps the pool's name.
+    const sandboxName = sandbox.metadata.name ?? session.workloadName;
+    logger.info(
+      {
+        taskId: session.taskId,
+        workloadName: session.workloadName,
+        previousImage: container.image,
+        image: params.settings.image,
+        tier: params.tier,
+      },
+      "Moving an Agent Runtime workspace to another runtime tier",
+    );
+    const podName = await this.findPodName(session);
+    if (podName)
+      await this.execInPod({
+        session,
+        podName,
+        command: [
+          "/bin/sh",
+          "-c",
+          [
+            'set -eu; umask 077; base="/var/run/archestra/turns/$1"',
+            '[ -f "$base.started" ] && [ ! -f "$base.exit" ] || exit 0',
+            'cat > "$base.resume.tmp"',
+            'mv "$base.resume.tmp" "$base.resume"',
+          ].join("\n"),
+          "plan-turn-resume",
+          session.taskId,
+        ],
+        stdin: NodeReadable.from([params.resumePrompt]),
+      });
+    await this.patchSandbox(session, sandboxName, {
+      metadata: {
+        annotations: { [AGENT_RUNTIME_TIER_SWITCH_ANNOTATION]: session.taskId },
+      },
+    });
+    const previous = {
+      containers: podSpec.containers,
+      ...(podSpec.initContainers
+        ? { initContainers: podSpec.initContainers }
+        : {}),
+    };
+    // Every template this switch starts names the running turn, so the
+    // replacement continues it on whichever tier it lands. A turn canceled
+    // meanwhile is never named, and fails as interrupted instead of replaying.
+    const applyTemplate = (
+      spec: Pick<k8s.V1PodSpec, "containers" | "initContainers">,
+      tier: string | null,
+    ) =>
+      this.patchSandbox(session, sandboxName, {
+        metadata: {
+          annotations: { [AGENT_RUNTIME_TIER_ANNOTATION]: tier },
+        },
+        // A merge patch replaces arrays whole, so send every container back.
+        spec: { podTemplate: { spec: withTurnResume(spec, session.taskId) } },
+      });
+    const restorePreviousTier = async () => {
+      await this.suspendWorkspace(session);
+      await this.waitForPodRemoval(session);
+      await applyTemplate(previous, previousTier);
+      await this.wakeAfterTierSwitch(session, sandboxName);
+    };
+    try {
+      await this.suspendWorkspace(session);
+      await this.waitForPodRemoval(session);
+    } catch (error) {
+      await restorePreviousTier();
+      throw error;
+    }
+    if (!(await params.shouldResume())) {
+      await this.clearTierSwitchMark(session, sandboxName);
+      return true;
+    }
+    try {
+      await applyTemplate(
+        withAgentRuntimeTier({
+          podSpec,
+          tier: params.tier,
+          settings: params.settings,
+        }),
+        params.tier,
+      );
+      await this.wakeAfterTierSwitch(session, sandboxName);
+    } catch (error) {
+      logger.warn(
+        { error, taskId: session.taskId, tier: params.tier },
+        "The workspace did not start on its new runtime tier; restoring the previous tier",
+      );
+      await restorePreviousTier();
+      throw error;
+    }
+    return true;
+  }
+
   /**
    * Serialize a session's cluster mutations across replicas. A lease held
    * elsewhere means another replica is doing this work, so we skip rather than
@@ -1524,6 +1701,52 @@ class AgentRuntimeManager {
     }
     throw new Error(
       "The Agent did not stop in time to update its software image",
+    );
+  }
+
+  private async wakeAfterTierSwitch(
+    session: AgentRunRecord,
+    sandboxName: string,
+  ): Promise<void> {
+    await this.patchSandbox(session, sandboxName, {
+      spec: { operatingMode: "Running" },
+    });
+    const podName = await this.waitForRunningPod({
+      session,
+      timeoutMessage: "The workspace did not start on its new runtime tier",
+    });
+    if (podName) await this.projectWarmCredentials(session, podName);
+    await this.clearTierSwitchMark(session, sandboxName);
+  }
+
+  private async clearTierSwitchMark(
+    session: AgentRunRecord,
+    sandboxName: string,
+  ): Promise<void> {
+    await this.patchSandbox(session, sandboxName, {
+      metadata: {
+        annotations: { [AGENT_RUNTIME_TIER_SWITCH_ANNOTATION]: null },
+      },
+    });
+  }
+
+  /** JSON merge patch; a null annotation value removes the annotation. */
+  private async patchSandbox(
+    session: Pick<AgentRunRecord, "runtimeScope">,
+    name: string,
+    body: {
+      metadata?: { annotations: Record<string, string | null> };
+      spec?: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    await this.requireClients().customObjectsApi.patchNamespacedCustomObject(
+      {
+        ...AGENT_SANDBOX_API,
+        namespace: session.runtimeScope,
+        name,
+        body,
+      },
+      setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
     );
   }
 
@@ -2015,6 +2238,39 @@ function findAgentRuntimeContainer(
   return sandbox.spec.podTemplate.spec?.containers.find(
     (entry) => entry.name === AGENT_RUNTIME_CONTAINER_NAME,
   );
+}
+
+/**
+ * Whether a container runs a tier's image and host access, and, when asked,
+ * its resources. Resources only separate tiers that share an image.
+ */
+function runsTierSettings(
+  container: k8s.V1Container | undefined,
+  settings: AgentRuntimeTierSettings,
+  options: { resources?: boolean } = {},
+): boolean {
+  if (!container) return false;
+  if (container.image !== settings.image) return false;
+  if (Boolean(container.securityContext?.privileged) !== settings.privileged)
+    return false;
+  if (!options.resources) return true;
+  return (
+    JSON.stringify(sortedResources(container.resources)) ===
+    JSON.stringify(
+      sortedResources(buildResourceRequirements(settings.resources)),
+    )
+  );
+}
+
+function sortedResources(resources: k8s.V1ResourceRequirements | undefined) {
+  const sorted = (entries: Record<string, string> | undefined) =>
+    Object.fromEntries(
+      Object.entries(entries ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+    );
+  return {
+    requests: sorted(resources?.requests),
+    limits: sorted(resources?.limits),
+  };
 }
 
 function pendingTurnSecretName(

@@ -18,6 +18,7 @@ import {
 } from "@/models";
 import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
+  AGENT_RUNTIME_SELF_TIER_PATH,
   AGENT_WORKSPACE_TRANSFER_PREFIX,
   ARCHESTRA_CATALOG_PROXY_PREFIX,
   AUTH_STATE_PATH,
@@ -262,7 +263,11 @@ export class Authnz {
       // re-runs the owner-only workspace gate before any byte moves. The
       // trailing slash keeps this exemption to the transfer endpoints, so a
       // later sibling path cannot inherit it by name alone.
-      url.startsWith(`${AGENT_WORKSPACE_TRANSFER_PREFIX}/`)
+      url.startsWith(`${AGENT_WORKSPACE_TRANSFER_PREFIX}/`) ||
+      // A run inside its workspace asks for another compute tier. It holds
+      // no session: its server-signed runtime binding is verified in-route,
+      // together with the turn it names still being the current one.
+      (method === "POST" && url === AGENT_RUNTIME_SELF_TIER_PATH)
     ) {
       return true;
     }

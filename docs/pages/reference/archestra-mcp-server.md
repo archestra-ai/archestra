@@ -1887,6 +1887,7 @@ Required RBAC permission: [`agent:create`](/docs/reference/permissions#agent:cre
 | `runtime.steerMode` | `"pipe" \| "tmux_keys"` | No |  |
 | `runtime.privileged` | `boolean` | No |  |
 | `runtime.resources` | `object \| null` | No |  |
+| `runtime.fullTier` | `object \| null` | No |  |
 | `runtime.ports` | `integer[]` | No |  |
 | `runtime.environment` | `object[] \| null` | No |  |
 | `runtime.credentials` | `object[] \| null` | No |  |
@@ -1958,6 +1959,14 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `runtime.resources.memoryRequest` | `string` | No |  |
 | `runtime.resources.cpuLimit` | `string` | No |  |
 | `runtime.resources.memoryLimit` | `string` | No |  |
+| `runtime.fullTier` | `object \| null` | No |  |
+| `runtime.fullTier.image` | `string` | Yes |  |
+| `runtime.fullTier.privileged` | `boolean` | No |  |
+| `runtime.fullTier.resources` | `object \| null` | No |  |
+| `runtime.fullTier.resources.cpuRequest` | `string` | No |  |
+| `runtime.fullTier.resources.memoryRequest` | `string` | No |  |
+| `runtime.fullTier.resources.cpuLimit` | `string` | No |  |
+| `runtime.fullTier.resources.memoryLimit` | `string` | No |  |
 | `runtime.ports` | `integer[]` | No |  |
 | `runtime.environment` | `object[] \| null` | Yes |  |
 | `runtime.environment[].key` | `string` | Yes |  |

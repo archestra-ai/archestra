@@ -18,7 +18,14 @@ import {
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { useTheme } from "next-themes";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
 import { normalizeMcpAppExternalUrl } from "@/components/mcp-app/external-link";
 import { withGenericFontFallback } from "@/components/mcp-app/font-stack";
@@ -149,6 +156,7 @@ export const McpAppRuntime = function McpAppRuntime({
   onReload,
   filesRevision,
   onModelContextUpdate,
+  instanceId,
 }: {
   toolResourceUri: string;
   endpoint: McpAppEndpoint;
@@ -183,6 +191,10 @@ export const McpAppRuntime = function McpAppRuntime({
   /** Called when the app reports what it is showing (ui/update-model-context);
    * the chat stamps the latest report onto outgoing message metadata. */
   onModelContextUpdate?: (text: string) => void;
+  /** Logical instance identifier (e.g. appId ?? toolCallId) so distinct
+   * tool-call renders of the same resource keep isolated UI state while reload
+   * and inline <-> panel transitions of the same instance share it. */
+  instanceId?: string;
 }) {
   const { resolvedTheme } = useTheme();
   // The host only ever caps height (width is unbounded); unpack the SEP-shaped
@@ -247,8 +259,13 @@ export const McpAppRuntime = function McpAppRuntime({
   const lastReportedHeightRef = useRef<number | null>(null);
   // Last UI filter/parameter snapshot reported by the guest. Preserved across
   // reloads and surface transitions (inline <-> right panel) for the same app
-  // resource so reloading an app keeps user-selected filters and parameters.
-  const instanceKey = `${endpointKey}::${toolResourceUri}`;
+  // instance so reloading an app keeps user-selected filters and parameters
+  // without leaking state across distinct tool-call instances.
+  const fallbackInstanceId = useId();
+  const effectiveInstanceId =
+    instanceId ??
+    (endpoint.kind === "app" ? endpoint.appId : fallbackInstanceId);
+  const instanceKey = `${endpointKey}::${toolResourceUri}::${effectiveInstanceId}`;
   const guestStateRef = useRef<Record<string, unknown> | null>(
     guestStateByInstanceKey.get(instanceKey) ?? null,
   );

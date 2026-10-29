@@ -2150,17 +2150,29 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
     );
   });
 
-  it("preserves guest filter state across remounts of the same app resource without leaking to other resources", async () => {
+  it("preserves guest filter state across remounts of the same app instance without leaking to other tool-call instances or resources", async () => {
     // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
     const bridgeInstances: any[] = [];
     installBridgeCollector(bridgeInstances);
 
     const { unmount } = render(
-      <McpAppSection
-        {...defaultProps}
-        surface="inline"
-        preloadedResource={preloadedResource}
-      />,
+      <AppsProvider
+        apps={[
+          {
+            toolCallId: "tc-1",
+            label: "First Instance",
+            uiResourceUri: defaultProps.uiResourceUri,
+            createdAt: 0,
+          },
+        ]}
+      >
+        <McpAppSection
+          {...defaultProps}
+          toolCallId="tc-1"
+          surface="inline"
+          preloadedResource={preloadedResource}
+        />
+      </AppsProvider>,
     );
 
     const inlineIframe = document.querySelector("iframe");
@@ -2193,10 +2205,11 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
 
     unmount();
 
-    // Mounting the same app resource on the panel surface restores the state
+    // Mounting the same toolCallId on the panel surface restores the state
     const { unmount: unmountPanel } = render(
       <McpAppSection
         {...defaultProps}
+        toolCallId="tc-1"
         surface="panel"
         preloadedResource={preloadedResource}
       />,
@@ -2213,10 +2226,33 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
 
     unmountPanel();
 
+    // A separate tool-call render (tc-2) of the SAME resource URI does not inherit tc-1's state
+    const { unmount: unmountSecondInstance } = render(
+      <McpAppSection
+        {...defaultProps}
+        toolCallId="tc-2"
+        surface="panel"
+        preloadedResource={preloadedResource}
+      />,
+    );
+    const secondInstanceIframe = document.querySelector("iframe");
+    if (!secondInstanceIframe)
+      throw new Error("second instance iframe did not mount");
+    await notifySandboxProxyReady(secondInstanceIframe);
+
+    expect(bridgeInstances[2].sendSandboxResourceReady).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        restoredState: expect.anything(),
+      }),
+    );
+
+    unmountSecondInstance();
+
     // Mounting a different app resource URI does not inherit the first app's state
     render(
       <McpAppSection
         {...defaultProps}
+        toolCallId="tc-1"
         uiResourceUri="resource://test-server/other-ui"
         surface="panel"
         preloadedResource={preloadedResource}
@@ -2226,7 +2262,7 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
     if (!otherIframe) throw new Error("other iframe did not mount");
     await notifySandboxProxyReady(otherIframe);
 
-    expect(bridgeInstances[2].sendSandboxResourceReady).toHaveBeenCalledWith(
+    expect(bridgeInstances[3].sendSandboxResourceReady).toHaveBeenCalledWith(
       expect.not.objectContaining({
         restoredState: expect.anything(),
       }),
@@ -2464,6 +2500,284 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
     } finally {
       window.removeEventListener("message", onParentMessage);
       hostFrame.remove();
+    }
+  });
+
+  it("guestStateBootstrap handles controlled React inputs, async toggle mutations, multi-pass select resets, sibling independent toggles, and batched multi-select options", async () => {
+    const proxyHtml = readFileSync(
+      join(__dirname, "../../../../backend/src/static/mcp-sandbox-proxy.html"),
+      "utf-8",
+    );
+    const bootstrapStart = proxyHtml.indexOf(
+      "function guestStateBootstrap(restored)",
+    );
+    const bootstrapEnd = proxyHtml.indexOf(
+      "function buildStatePreservationScript(restoredState)",
+    );
+    const bootstrapFnSource = `(${proxyHtml.slice(bootstrapStart, bootstrapEnd).trim()})`;
+
+    const syncedPayloads: Record<string, unknown>[] = [];
+    const onParentMessage = (event: MessageEvent) => {
+      const data = event.data as {
+        type?: unknown;
+        state?: Record<string, unknown>;
+      } | null;
+      if (data?.type === "mcp-apps:state-sync" && data.state) {
+        syncedPayloads.push(data.state);
+      }
+    };
+    window.addEventListener("message", onParentMessage);
+
+    // 1. Verify async toggle capture (aria-pressed updated 50ms after click) +
+    // sibling independent [aria-pressed] toggles where one defaults to "true"
+    const captureFrame = document.createElement("iframe");
+    document.body.appendChild(captureFrame);
+    const captureWin = captureFrame.contentWindow as Window & typeof globalThis;
+    const captureDoc = captureFrame.contentDocument as Document;
+
+    try {
+      captureDoc.body.innerHTML = `
+        <div class="subbar">
+          <button id="toggle-default-on" aria-pressed="true">Hide archive</button>
+          <button id="toggle-async" aria-pressed="false">Async filter</button>
+        </div>
+      `;
+      const defaultOnBtn = captureDoc.getElementById(
+        "toggle-default-on",
+      ) as HTMLButtonElement;
+      defaultOnBtn.addEventListener("click", () => {
+        const next = defaultOnBtn.getAttribute("aria-pressed") !== "true";
+        defaultOnBtn.setAttribute("aria-pressed", String(next));
+      });
+      const asyncBtn = captureDoc.getElementById(
+        "toggle-async",
+      ) as HTMLButtonElement;
+      asyncBtn.addEventListener("click", () => {
+        captureWin.setTimeout(() => {
+          asyncBtn.setAttribute("aria-pressed", "true");
+        }, 50);
+      });
+
+      vm.runInNewContext(`(${bootstrapFnSource})(null)`, {
+        window: captureWin,
+        document: captureDoc,
+        Element: captureWin.Element,
+        MutationObserver: captureWin.MutationObserver,
+        Event: captureWin.Event,
+        setTimeout: captureWin.setTimeout.bind(captureWin),
+        clearTimeout: captureWin.clearTimeout.bind(captureWin),
+        Object,
+        Array,
+        String,
+        Number,
+        JSON,
+        CSS: captureWin.CSS,
+      });
+
+      // Turn off #toggle-default-on (now false) and click #toggle-async (turns true after 50ms)
+      defaultOnBtn.click();
+      asyncBtn.click();
+
+      await new Promise((r) => setTimeout(r, 100));
+      expect(syncedPayloads.length).toBeGreaterThan(0);
+      const captured = syncedPayloads[syncedPayloads.length - 1];
+      const capturedControls = captured.controls as Record<
+        string,
+        Record<string, unknown>
+      >;
+      expect(capturedControls["#toggle-default-on"]).toMatchObject({
+        kind: "toggle",
+        active: false,
+      });
+      expect(capturedControls["#toggle-async"]).toMatchObject({
+        kind: "toggle",
+        active: true,
+      });
+
+      // 2. Restore in a fresh iframe with:
+      // - #toggle-default-on defaulting to aria-pressed="true" (must restore to "false")
+      // - controlled React-like input #search-input with _valueTracker + custom value setter
+      // - #single-select that gets rebuilt and reset to "" 50ms after initial restoration
+      // - #multi-select whose options ["a", "b"] arrive in two async batches
+      const restoreState = {
+        controls: {
+          "#toggle-default-on": capturedControls["#toggle-default-on"],
+          "#toggle-async": {
+            kind: "toggle",
+            selector: "#toggle-async",
+            mode: "aria-pressed",
+            active: false,
+            isGroup: false,
+            label: "Async filter",
+          },
+          "#search-input": {
+            kind: "form",
+            selector: "#search-input",
+            tag: "input",
+            type: "text",
+            value: "blue",
+          },
+          "#single-select": {
+            kind: "form",
+            selector: "#single-select",
+            tag: "select",
+            type: "select-one",
+            value: "Blue",
+            selectedText: "Blue",
+          },
+          "#multi-select": {
+            kind: "form",
+            selector: "#multi-select",
+            tag: "select",
+            type: "select-multiple",
+            value: "a",
+            selectedValues: ["a", "b"],
+          },
+        },
+      };
+
+      const reloadFrame = document.createElement("iframe");
+      document.body.appendChild(reloadFrame);
+      const reloadWin = reloadFrame.contentWindow as Window & typeof globalThis;
+      const reloadDoc = reloadFrame.contentDocument as Document;
+
+      try {
+        reloadDoc.body.innerHTML = `
+          <div class="subbar">
+            <button id="toggle-default-on" aria-pressed="true">Hide archive</button>
+            <button id="toggle-async" aria-pressed="false">Async filter</button>
+            <input id="search-input" type="text" value="" />
+            <select id="single-select">
+              <option value="">All</option>
+              <option value="Blue">Blue</option>
+            </select>
+            <select id="multi-select" multiple></select>
+          </div>
+        `;
+
+        const reloadDefaultOn = reloadDoc.getElementById(
+          "toggle-default-on",
+        ) as HTMLButtonElement;
+        reloadDefaultOn.addEventListener("click", () => {
+          const next = reloadDefaultOn.getAttribute("aria-pressed") !== "true";
+          reloadDefaultOn.setAttribute("aria-pressed", String(next));
+        });
+
+        // Emulate React's controlled input _valueTracker and custom instance setter
+        const searchInput = reloadDoc.getElementById(
+          "search-input",
+        ) as HTMLInputElement & {
+          _valueTracker?: {
+            getValue: () => string;
+            setValue: (v: string) => void;
+          };
+        };
+        const nativeInputDesc = Object.getOwnPropertyDescriptor(
+          Object.getPrototypeOf(searchInput),
+          "value",
+        );
+        let trackedValue = "";
+        let reactStateValue = "";
+        searchInput._valueTracker = {
+          getValue: () => trackedValue,
+          setValue: (v: string) => {
+            trackedValue = String(v);
+          },
+        };
+        Object.defineProperty(searchInput, "value", {
+          configurable: true,
+          enumerable: true,
+          get() {
+            return nativeInputDesc?.get ? nativeInputDesc.get.call(this) : "";
+          },
+          set(v: string) {
+            trackedValue = String(v);
+            nativeInputDesc?.set?.call(this, v);
+          },
+        });
+        searchInput.addEventListener("input", () => {
+          const currentDomValue = nativeInputDesc?.get
+            ? String(nativeInputDesc.get.call(searchInput))
+            : "";
+          if (searchInput._valueTracker?.getValue() !== currentDomValue) {
+            searchInput._valueTracker?.setValue(currentDomValue);
+            reactStateValue = currentDomValue;
+          }
+        });
+
+        vm.runInNewContext(
+          `(${bootstrapFnSource})(${JSON.stringify(restoreState)})`,
+          {
+            window: reloadWin,
+            document: reloadDoc,
+            Element: reloadWin.Element,
+            MutationObserver: reloadWin.MutationObserver,
+            Event: reloadWin.Event,
+            setTimeout: reloadWin.setTimeout.bind(reloadWin),
+            clearTimeout: reloadWin.clearTimeout.bind(reloadWin),
+            Object,
+            Array,
+            String,
+            Number,
+            JSON,
+            CSS: reloadWin.CSS,
+          },
+        );
+
+        // Trigger initial restore on tool-result
+        reloadWin.dispatchEvent(
+          new reloadWin.MessageEvent("message", {
+            data: {
+              jsonrpc: "2.0",
+              method: "ui/notifications/tool-result",
+              params: {},
+            },
+          }),
+        );
+
+        // Batch 1 for multi-select: only option "a" arrives initially
+        const multiSelect = reloadDoc.getElementById(
+          "multi-select",
+        ) as HTMLSelectElement;
+        multiSelect.innerHTML = '<option value="a">A</option>';
+
+        await new Promise((r) => setTimeout(r, 30));
+
+        // Controlled React state updated on initial restore, and survives a React re-render
+        expect(reactStateValue).toBe("blue");
+        searchInput.value = reactStateValue;
+        expect(searchInput.value).toBe("blue");
+
+        // Independent sibling toggle that defaulted to "true" was turned off
+        expect(reloadDefaultOn.getAttribute("aria-pressed")).toBe("false");
+
+        // Multi-pass initialization: 50ms later, app rebuilds #single-select (resetting to "")
+        // and delivers option "b" to #multi-select
+        const singleSelect = reloadDoc.getElementById(
+          "single-select",
+        ) as HTMLSelectElement;
+        singleSelect.innerHTML =
+          '<option value="">All</option><option value="Blue">Blue</option>';
+        singleSelect.value = "";
+
+        const optB = reloadDoc.createElement("option");
+        optB.value = "b";
+        optB.textContent = "B";
+        multiSelect.appendChild(optB);
+
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(singleSelect.value).toBe("Blue");
+        const selectedMultiValues = Array.from(multiSelect.options)
+          .filter((o) => o.selected)
+          .map((o) => o.value);
+        expect(selectedMultiValues).toEqual(["a", "b"]);
+      } finally {
+        reloadFrame.remove();
+      }
+    } finally {
+      window.removeEventListener("message", onParentMessage);
+      captureFrame.remove();
     }
   });
 });

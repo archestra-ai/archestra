@@ -639,20 +639,15 @@ function guestStateBootstrap(restored) {
   function readToggleState(el) {
     if (!el || el.nodeType !== 1) return null;
     var parent = el.parentElement;
+    var role = el.getAttribute("role");
     if (el.hasAttribute("aria-pressed")) {
-      var pressedSiblings = parent
-        ? parent.querySelectorAll(":scope > [aria-pressed]")
-        : [];
       return {
         mode: "aria-pressed",
         active: el.getAttribute("aria-pressed") === "true",
-        isGroup: pressedSiblings.length > 1,
+        isGroup: role === "tab" || role === "radio",
       };
     }
-    if (
-      el.hasAttribute("aria-selected") ||
-      el.getAttribute("role") === "tab"
-    ) {
+    if (el.hasAttribute("aria-selected") || role === "tab") {
       var selectedActive =
         el.getAttribute("aria-selected") === "true" ||
         el.classList.contains("active") ||
@@ -666,19 +661,13 @@ function guestStateBootstrap(restored) {
     }
     if (
       el.hasAttribute("aria-checked") ||
-      el.getAttribute("role") === "switch" ||
-      el.getAttribute("role") === "radio"
+      role === "switch" ||
+      role === "radio"
     ) {
-      var checkedSiblings = parent
-        ? parent.querySelectorAll(
-            ':scope > [aria-checked], :scope > [role="radio"]',
-          )
-        : [];
       return {
         mode: "aria-checked",
         active: el.getAttribute("aria-checked") === "true",
-        isGroup:
-          el.getAttribute("role") === "radio" || checkedSiblings.length > 1,
+        isGroup: role === "radio",
       };
     }
     if (el.hasAttribute("data-state")) {
@@ -691,13 +680,10 @@ function guestStateBootstrap(restored) {
         ds === "checked" ||
         ds === "unchecked"
       ) {
-        var dsSiblings = parent
-          ? parent.querySelectorAll(":scope > [data-state]")
-          : [];
         return {
           mode: "data-state",
           active: ds === "active" || ds === "on" || ds === "checked",
-          isGroup: dsSiblings.length > 1,
+          isGroup: role === "tab" || role === "radio",
         };
       }
     }
@@ -930,12 +916,8 @@ function guestStateBootstrap(restored) {
     postSync();
   }
 
-  function scheduleCapture() {
+  function scheduleMutationCapture() {
     if (isRestoringNow) return;
-    captureAndSync();
-    if (typeof queueMicrotask === "function") {
-      queueMicrotask(captureAndSync);
-    }
     if (syncTimer) clearTimeout(syncTimer);
     syncTimer = setTimeout(function () {
       syncTimer = null;
@@ -943,16 +925,28 @@ function guestStateBootstrap(restored) {
     }, 0);
   }
 
+  function scheduleCapture() {
+    if (isRestoringNow) return;
+    captureAndSync();
+    if (typeof queueMicrotask === "function") {
+      queueMicrotask(captureAndSync);
+    }
+    scheduleMutationCapture();
+  }
+
   function restoreTogglesPass(keys) {
     var clickedAny = false;
+    // Phase 1A: Click toggles saved as active=true first. In mutually exclusive
+    // toolbars, activating the selected toggle automatically deactivates its
+    // siblings so Phase 1B sees them already inactive.
     for (var idx = 0; idx < keys.length; idx++) {
       var key = keys[idx];
-      if (!pendingToggleKeys[key]) continue;
       var saved = restored.controls[key];
       if (!saved || saved.kind !== "toggle") {
         delete pendingToggleKeys[key];
         continue;
       }
+      if (!saved.active) continue;
       if ((restoreAttempts[key] || 0) >= MAX_RESTORE_ATTEMPTS_PER_CONTROL) {
         delete pendingToggleKeys[key];
         continue;
@@ -962,39 +956,78 @@ function guestStateBootstrap(restored) {
       var current = readToggleState(el);
       if (!current) continue;
 
-      if (saved.isGroup) {
-        if (saved.active) {
-          if (!current.active) {
-            restoreAttempts[key] = (restoreAttempts[key] || 0) + 1;
-            clickedAny = true;
-            try {
-              el.click();
-            } catch (e) {}
-          }
-          var updatedEl = findControlElement(key, saved) || el;
-          var afterClick = readToggleState(updatedEl);
-          if (afterClick && afterClick.active) {
-            delete pendingToggleKeys[key];
-          }
-        } else {
-          delete pendingToggleKeys[key];
-        }
-      } else {
-        if (current.active !== saved.active) {
-          restoreAttempts[key] = (restoreAttempts[key] || 0) + 1;
-          clickedAny = true;
-          try {
-            el.click();
-          } catch (e) {}
-        }
-        var updatedStandalone = findControlElement(key, saved) || el;
-        var afterStandalone = readToggleState(updatedStandalone);
-        if (afterStandalone && afterStandalone.active === saved.active) {
-          delete pendingToggleKeys[key];
-        }
+      if (!current.active) {
+        restoreAttempts[key] = (restoreAttempts[key] || 0) + 1;
+        clickedAny = true;
+        try {
+          el.click();
+        } catch (e) {}
+      }
+      var updatedEl = findControlElement(key, saved) || el;
+      var afterClick = readToggleState(updatedEl);
+      if (afterClick && afterClick.active) {
+        delete pendingToggleKeys[key];
+      }
+    }
+
+    // Phase 1B: Handle toggles saved as active=false. Exclusive tab/radio
+    // groups are deactivated by Phase 1A; independent toggles that defaulted
+    // to active=true on load are clicked here to turn them off.
+    for (var idxB = 0; idxB < keys.length; idxB++) {
+      var keyB = keys[idxB];
+      var savedB = restored.controls[keyB];
+      if (!savedB || savedB.kind !== "toggle" || savedB.active) continue;
+      if (savedB.isGroup) {
+        delete pendingToggleKeys[keyB];
+        continue;
+      }
+      if ((restoreAttempts[keyB] || 0) >= MAX_RESTORE_ATTEMPTS_PER_CONTROL) {
+        delete pendingToggleKeys[keyB];
+        continue;
+      }
+      var elB = findControlElement(keyB, savedB);
+      if (!elB) continue;
+      var currentB = readToggleState(elB);
+      if (!currentB) continue;
+
+      if (currentB.active !== false) {
+        restoreAttempts[keyB] = (restoreAttempts[keyB] || 0) + 1;
+        clickedAny = true;
+        try {
+          elB.click();
+        } catch (e) {}
+      }
+      var updatedStandalone = findControlElement(keyB, savedB) || elB;
+      var afterStandalone = readToggleState(updatedStandalone);
+      if (afterStandalone && afterStandalone.active === false) {
+        delete pendingToggleKeys[keyB];
       }
     }
     return clickedAny;
+  }
+
+  function setNativeFormValue(el, newValue) {
+    var prevValue = el.value;
+    var proto = null;
+    try {
+      proto = Object.getPrototypeOf(el);
+    } catch (e) {
+      proto = null;
+    }
+    var descriptor = proto
+      ? Object.getOwnPropertyDescriptor(proto, "value")
+      : null;
+    if (descriptor && typeof descriptor.set === "function") {
+      descriptor.set.call(el, newValue);
+    } else {
+      el.value = newValue;
+    }
+    var tracker = el._valueTracker;
+    if (tracker && typeof tracker.setValue === "function") {
+      try {
+        tracker.setValue(String(prevValue));
+      } catch (e) {}
+    }
   }
 
   function runRestorePass() {
@@ -1030,7 +1063,6 @@ function guestStateBootstrap(restored) {
 
       for (var j = 0; j < keys.length; j++) {
         var fKey = keys[j];
-        if (!pendingFormKeys[fKey]) continue;
         var fSaved = restored.controls[fKey];
         if (!fSaved || fSaved.kind !== "form") {
           delete pendingFormKeys[fKey];
@@ -1051,18 +1083,27 @@ function guestStateBootstrap(restored) {
             for (var sv = 0; sv < fSaved.selectedValues.length; sv++) {
               targetSet[fSaved.selectedValues[sv]] = true;
             }
-            var anyMatched = fSaved.selectedValues.length === 0;
+            var matchedValueMap = {};
+            var matchedCount = 0;
             var needsMultiChange = false;
             for (var moi = 0; moi < fEl.options.length; moi++) {
               var opt = fEl.options[moi];
               var shouldSelect = !!targetSet[opt.value];
-              if (shouldSelect) anyMatched = true;
+              if (shouldSelect && !matchedValueMap[opt.value]) {
+                matchedValueMap[opt.value] = true;
+                matchedCount++;
+              }
               if (opt.selected !== shouldSelect) {
                 needsMultiChange = true;
               }
             }
+            var anyMatched =
+              fSaved.selectedValues.length === 0 || matchedCount > 0;
+            var allMatched = matchedCount >= fSaved.selectedValues.length;
             if (!anyMatched) continue;
-            delete pendingFormKeys[fKey];
+            if (allMatched) {
+              delete pendingFormKeys[fKey];
+            }
             if (needsMultiChange) {
               for (var moi2 = 0; moi2 < fEl.options.length; moi2++) {
                 fEl.options[moi2].selected =
@@ -1095,7 +1136,7 @@ function guestStateBootstrap(restored) {
             }
             delete pendingFormKeys[fKey];
             if (fEl.value !== matchedOption.value) {
-              fEl.value = matchedOption.value;
+              setNativeFormValue(fEl, matchedOption.value);
               restoreAttempts[fKey] = (restoreAttempts[fKey] || 0) + 1;
               dispatchFormEvents(fEl);
             }
@@ -1116,18 +1157,11 @@ function guestStateBootstrap(restored) {
         } else if (tag === "input" || tag === "textarea") {
           delete pendingFormKeys[fKey];
           if (typeof fSaved.value === "string" && fEl.value !== fSaved.value) {
-            fEl.value = fSaved.value;
+            setNativeFormValue(fEl, fSaved.value);
             restoreAttempts[fKey] = (restoreAttempts[fKey] || 0) + 1;
             dispatchFormEvents(fEl);
           }
         }
-      }
-
-      if (
-        Object.keys(pendingFormKeys).length === 0 &&
-        Object.keys(pendingToggleKeys).length === 0
-      ) {
-        restorationActive = false;
       }
     } finally {
       isRestoringNow = false;
@@ -1197,59 +1231,69 @@ function guestStateBootstrap(restored) {
         }
       }
     });
+  }
 
-    var observer = null;
-    function startObserver() {
-      if (!document.documentElement || observer) return;
-      observer = new MutationObserver(function () {
-        if (userInteracted || !restorationActive) {
-          if (observer) {
-            observer.disconnect();
-            observer = null;
-          }
-          return;
-        }
-        if (restoreReady) {
-          scheduleRestore();
-        }
-      });
-      observer.observe(document.documentElement, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ["aria-pressed", "aria-selected", "class", "hidden"],
-      });
-    }
+  var observer = null;
+  function startObserver() {
+    if (!document.documentElement || observer) return;
+    observer = new MutationObserver(function () {
+      if (isRestoringNow) return;
+      if (
+        hasRestoredControls &&
+        !userInteracted &&
+        restorationActive &&
+        restoreReady
+      ) {
+        scheduleRestore();
+      }
+      if (userInteracted || !hasRestoredControls || !restorationActive) {
+        scheduleMutationCapture();
+      }
+    });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: [
+        "aria-pressed",
+        "aria-selected",
+        "aria-checked",
+        "data-state",
+        "class",
+        "hidden",
+        "value",
+        "selected",
+        "checked",
+      ],
+    });
+  }
 
-    function onDomReady() {
-      startObserver();
-      var isSdkApp = !!(
-        window.__ARCHESTRA_APP_CONTEXT__ ||
-        window.__ARCHESTRA_APP_SDK_URL__ ||
-        window.MCP_EXTAPPS ||
-        window.archestra
-      );
-      setTimeout(
-        function () {
-          restoreReady = true;
-          runRestorePass();
-        },
-        isSdkApp ? 250 : 0,
-      );
-      setTimeout(function () {
-        restorationActive = false;
-        if (observer) {
-          observer.disconnect();
-          observer = null;
-        }
-      }, RESTORE_WINDOW_MS);
-    }
+  function onDomReady() {
+    startObserver();
+    if (!hasRestoredControls) return;
+    var isSdkApp = !!(
+      window.__ARCHESTRA_APP_CONTEXT__ ||
+      window.__ARCHESTRA_APP_SDK_URL__ ||
+      window.MCP_EXTAPPS ||
+      window.archestra
+    );
+    setTimeout(
+      function () {
+        restoreReady = true;
+        runRestorePass();
+      },
+      isSdkApp ? 250 : 0,
+    );
+    setTimeout(function () {
+      restorationActive = false;
+      scheduleMutationCapture();
+    }, RESTORE_WINDOW_MS);
+  }
 
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", onDomReady);
-    } else {
-      onDomReady();
-    }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", onDomReady);
+  } else {
+    onDomReady();
   }
 }
 

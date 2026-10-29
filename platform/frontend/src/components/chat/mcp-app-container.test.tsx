@@ -3148,7 +3148,7 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
         ).toHaveBeenCalledTimes(1);
       });
 
-      // Click Reload app
+      // Click Reload app (#1)
       const reloadButton = screen.getByRole("button", { name: /reload app/i });
       await act(async () => {
         await user.click(reloadButton);
@@ -3160,10 +3160,38 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
         document.querySelectorAll("iframe"),
       );
       expect(allIframesDuringReload).toHaveLength(2);
-      const reloadedIframe = allIframesDuringReload[0];
-      expect(reloadedIframe).not.toBe(firstIframe);
-      expect(reloadedIframe.style.opacity).toBe("0");
+      const intermediateIframe = allIframesDuringReload[0];
+      expect(intermediateIframe).not.toBe(firstIframe);
+      expect(intermediateIframe.style.opacity).toBe("0");
       expect(firstIframe.isConnected).toBe(true);
+      // Outgoing bridge handlers reject calls immediately so the retained frame
+      // cannot run tools during overlap, and teardownResource waits until removal.
+      await expect(
+        bridgeInstances[0].oncalltool(
+          { name: "board_state", arguments: {} },
+          {},
+        ),
+      ).rejects.toThrow("MCP App bridge is closed");
+      expect(bridgeInstances[0].teardownResource).not.toHaveBeenCalled();
+
+      // Click Reload app (#2) before intermediateIframe reveals -> firstIframe
+      // stays visible and intermediateIframe is discarded without flashing blank.
+      await act(async () => {
+        await user.click(reloadButton);
+      });
+
+      const allIframesAfterSecondReload = Array.from(
+        document.querySelectorAll("iframe"),
+      );
+      expect(allIframesAfterSecondReload).toHaveLength(2);
+      const reloadedIframe = allIframesAfterSecondReload[0];
+      expect(reloadedIframe).not.toBe(firstIframe);
+      expect(reloadedIframe).not.toBe(intermediateIframe);
+      expect(intermediateIframe.isConnected).toBe(false);
+      expect(firstIframe.isConnected).toBe(true);
+      expect(firstIframe.style.opacity).toBe("");
+      expect(reloadedIframe.style.opacity).toBe("0");
+      expect(bridgeInstances[0].teardownResource).not.toHaveBeenCalled();
 
       await notifySandboxProxyReady(reloadedIframe);
       await act(async () => {
@@ -3172,12 +3200,12 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
 
       // Must only call sendSandboxResourceReady ONCE on the reloaded bridge even
       // though resources/read returned a fresh csp/permissions object reference.
-      expect(bridgeInstances[1].sendSandboxResourceReady).toHaveBeenCalledTimes(
+      expect(bridgeInstances[2].sendSandboxResourceReady).toHaveBeenCalledTimes(
         1,
       );
 
       // Signal guest-ready from the reloaded iframe -> incoming iframe is revealed
-      // and outgoing iframe is removed cleanly.
+      // and outgoing iframe is torn down and removed cleanly.
       await act(async () => {
         window.dispatchEvent(
           new MessageEvent("message", {
@@ -3190,6 +3218,7 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
 
       expect(reloadedIframe.style.opacity).toBe("");
       expect(firstIframe.isConnected).toBe(false);
+      expect(bridgeInstances[0].teardownResource).toHaveBeenCalledTimes(1);
       expect(document.querySelectorAll("iframe")).toHaveLength(1);
     } finally {
       fetchSpy.mockRestore();

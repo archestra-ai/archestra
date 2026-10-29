@@ -218,6 +218,9 @@ function safeJsonForInlineScript(value) {
 function guestStateBootstrap(restored) {
   var STATE_SYNC_TYPE = "mcp-apps:state-sync";
   var RESTORE_WINDOW_MS = 8000;
+  var TOGGLE_RPC_GATE_MAX_MS = 2500;
+  // Matches SANDBOX_REVEAL_FALLBACK_MS in platform/frontend/src/components/mcp-app/mcp-app-view.tsx
+  var GUEST_READY_FALLBACK_MS = 900;
   var MAX_RESTORE_ATTEMPTS_PER_CONTROL = 4;
 
   var DATA_KEY_ATTRS = [
@@ -298,6 +301,7 @@ function guestStateBootstrap(restored) {
   var isRestoringNow = false;
   var restoreReady = false;
   var activeRpcCount = 0;
+  var toggleGateExpired = false;
   var guestReadySent = false;
   var guestReadyRetryCount = 0;
   var lastSentJson = "";
@@ -650,23 +654,11 @@ function guestStateBootstrap(restored) {
     if (!el || el.nodeType !== 1) return null;
     var parent = el.parentElement;
     var role = el.getAttribute("role");
-    var isTabOrRadioGroup = !!(
-      role === "tab" ||
-      role === "radio" ||
-      (el.classList && el.classList.contains("tab")) ||
-      el.hasAttribute("data-tab") ||
-      el.hasAttribute("data-list") ||
-      el.hasAttribute("data-view") ||
-      (parent &&
-        (parent.getAttribute("role") === "tablist" ||
-          parent.getAttribute("role") === "radiogroup" ||
-          (parent.classList && parent.classList.contains("tabs"))))
-    );
     if (el.hasAttribute("aria-pressed")) {
       return {
         mode: "aria-pressed",
         active: el.getAttribute("aria-pressed") === "true",
-        isGroup: isTabOrRadioGroup,
+        isGroup: role === "tab" || role === "radio",
       };
     }
     if (el.hasAttribute("aria-selected") || role === "tab") {
@@ -705,7 +697,7 @@ function guestStateBootstrap(restored) {
         return {
           mode: "data-state",
           active: ds === "active" || ds === "on" || ds === "checked",
-          isGroup: isTabOrRadioGroup,
+          isGroup: role === "tab" || role === "radio",
         };
       }
     }
@@ -1144,10 +1136,11 @@ function guestStateBootstrap(restored) {
       var keys = Object.keys(restored.controls);
 
       // Pass 1: Restore active tabs/toggles/chips only after in-flight startup
-      // RPCs settle so we never click toggles before initial state is loaded.
+      // RPCs settle (or after TOGGLE_RPC_GATE_MAX_MS if a startup RPC is slow)
+      // so we never click toggles before initial state is loaded.
       // If switching a tab renders nested filter chips, run one follow-up
       // toggle pass immediately.
-      if (activeRpcCount === 0) {
+      if (activeRpcCount === 0 || toggleGateExpired) {
         if (restoreTogglesPass(keys)) {
           restoreTogglesPass(keys);
         }
@@ -1292,7 +1285,7 @@ function guestStateBootstrap(restored) {
       if (
         !guestReadySent &&
         restoreReady &&
-        activeRpcCount === 0 &&
+        (activeRpcCount === 0 || toggleGateExpired) &&
         !hasPendingRestorations()
       ) {
         scheduleGuestReady(16);
@@ -1330,7 +1323,7 @@ function guestStateBootstrap(restored) {
     guestReadyTimer = setTimeout(
       function () {
         guestReadyTimer = null;
-        if (activeRpcCount > 0) return;
+        if (activeRpcCount > 0 && !toggleGateExpired) return;
         if (
           hasRestoredControls &&
           !userInteracted &&
@@ -1556,9 +1549,17 @@ function guestStateBootstrap(restored) {
           runRestoreMicrotask();
         }
         notifyGuestReady();
-      }, 900);
+      }, GUEST_READY_FALLBACK_MS);
     }
     if (hasRestoredControls) {
+      setTimeout(function () {
+        toggleGateExpired = true;
+        restoreReady = true;
+        if (!userInteracted && restorationActive) {
+          runRestoreMicrotask();
+        }
+        scheduleGuestReady(16);
+      }, TOGGLE_RPC_GATE_MAX_MS);
       setTimeout(function () {
         restorationActive = false;
         scheduleMutationCapture();
@@ -1707,7 +1708,37 @@ const RESOURCE_READY_NOTIFICATION =
   "ui/notifications/sandbox-resource-ready";
 const PROXY_READY_NOTIFICATION =
   "ui/notifications/sandbox-proxy-ready";
-const pendingGuestRpcIds = new Set();
+const GUEST_RPC_FLIGHT_MAX_MS = 2500;
+const pendingGuestRpcTimers = new Map();
+
+function postGuestRpcFlightCount() {
+  if (inner && inner.contentWindow) {
+    inner.contentWindow.postMessage(
+      { type: "mcp-apps:rpc-flight", count: pendingGuestRpcTimers.size },
+      IS_OPAQUE_ORIGIN ? "*" : OWN_ORIGIN,
+    );
+  }
+}
+
+function clearPendingGuestRpc(id, notify) {
+  const timer = pendingGuestRpcTimers.get(id);
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    pendingGuestRpcTimers.delete(id);
+    if (notify) {
+      postGuestRpcFlightCount();
+    }
+    return true;
+  }
+  return false;
+}
+
+function clearAllPendingGuestRpcs() {
+  for (const timer of pendingGuestRpcTimers.values()) {
+    clearTimeout(timer);
+  }
+  pendingGuestRpcTimers.clear();
+}
 
 
 // Message relay: This Sandbox (outer iframe) acts as a bidirectional bridge,
@@ -1736,7 +1767,7 @@ window.addEventListener("message", async (event) => {
     }
 
     if (event.data && event.data.method === RESOURCE_READY_NOTIFICATION) {
-      pendingGuestRpcIds.clear();
+      clearAllPendingGuestRpcs();
       // `ownedApp` is set by the trusted host (origin-validated above) only for
       // Archestra-owned apps, whose envelope already carries the platform CSP.
       const { html, sandbox, csp, permissions, ownedApp, restoredState } = event.data.params;
@@ -1785,20 +1816,16 @@ window.addEventListener("message", async (event) => {
           event.data &&
           typeof event.data === "object" &&
           event.data.jsonrpc === "2.0" &&
+          event.data.method === undefined &&
+          (event.data.result !== undefined || event.data.error !== undefined) &&
           event.data.id !== undefined &&
-          pendingGuestRpcIds.has(event.data.id);
-        if (wasPendingRpc) {
-          pendingGuestRpcIds.delete(event.data.id);
-        }
+          clearPendingGuestRpc(event.data.id, false);
         // With opaque origin, postMessage targetOrigin cannot be a specific origin.
         // Use "*" — safe because the inner iframe is sandboxed.
         const targetOrigin = IS_OPAQUE_ORIGIN ? "*" : OWN_ORIGIN;
         inner.contentWindow.postMessage(event.data, targetOrigin);
         if (wasPendingRpc) {
-          inner.contentWindow.postMessage(
-            { type: "mcp-apps:rpc-flight", count: pendingGuestRpcIds.size },
-            targetOrigin,
-          );
+          postGuestRpcFlightCount();
         }
       }
     }
@@ -1816,13 +1843,13 @@ window.addEventListener("message", async (event) => {
           data.method === "resources/read" ||
           data.method === "prompts/get")
       ) {
-        pendingGuestRpcIds.add(data.id);
-        if (inner && inner.contentWindow) {
-          inner.contentWindow.postMessage(
-            { type: "mcp-apps:rpc-flight", count: pendingGuestRpcIds.size },
-            IS_OPAQUE_ORIGIN ? "*" : OWN_ORIGIN,
-          );
-        }
+        clearPendingGuestRpc(data.id, false);
+        const rpcId = data.id;
+        const expiryTimer = setTimeout(() => {
+          clearPendingGuestRpc(rpcId, true);
+        }, GUEST_RPC_FLIGHT_MAX_MS);
+        pendingGuestRpcTimers.set(rpcId, expiryTimer);
+        postGuestRpcFlightCount();
       }
       if (
         data.jsonrpc === "2.0" ||

@@ -396,7 +396,7 @@ describe("AutoRoutingOverviewPage", () => {
     );
   });
 
-  it("caps cold-start progress at the minimum while the first fit is pending", async () => {
+  it("leaves cold start once enough sessions are scored, while the first fit is pending", async () => {
     const base = makeSettings();
     settings = makeSettings({
       status: {
@@ -407,7 +407,23 @@ describe("AutoRoutingOverviewPage", () => {
     renderPage();
 
     expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
-      "Cold start · 1,000 of 1,000 sessions scored",
+      "Fitting the first plan · 1,064 sessions scored, enough for a plan",
+    );
+  });
+
+  it("does not claim a fit is coming after the last one failed", async () => {
+    const base = makeSettings();
+    settings = makeSettings({
+      status: {
+        ...base.status,
+        coldStart: { ...base.status.coldStart, sessions: 1064, required: 1000 },
+        lastFitError: "fit exploded",
+      },
+    });
+    renderPage();
+
+    expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
+      "No plan yet · 1,064 sessions scored",
     );
   });
 
@@ -881,26 +897,35 @@ describe("past sessions", () => {
     await waitFor(() => expect(scans).toBe(1));
   });
 
-  it("says routing is off beside past sessions, and drops it once enabled", async () => {
-    settings = makeSettings({ enabled: false });
+  it("says routing is off once enough sessions are scored, and fits once enabled", async () => {
+    const base = makeSettings();
+    const status = {
+      ...base.status,
+      coldStart: { ...base.status.coldStart, sessions: 1064, required: 1000 },
+    };
+    settings = makeSettings({ enabled: false, status });
     serveBackfill({ backfill: scanned({ status: "done" }), scoreOffer: null });
     server.use(
       http.put(`${API_ORIGIN}/api/auto-routing/settings`, () =>
         HttpResponse.json({
-          ...makeSettings({ enabled: true }),
+          ...makeSettings({ enabled: true, status }),
           fit: null,
         } satisfies AutoRoutingSettingsChange),
       ),
     );
     const user = userEvent.setup();
     renderPage();
-    expect(await screen.findByText("Auto routing is off")).toBeInTheDocument();
+    expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
+      "Auto routing is off · 1,064 sessions scored, enough for a plan",
+    );
 
     await user.click(screen.getByRole("switch", { name: "Disabled" }));
     await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
 
     await waitFor(() =>
-      expect(screen.queryByText("Auto routing is off")).not.toBeInTheDocument(),
+      expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
+        "Fitting the first plan",
+      ),
     );
   });
 
@@ -938,7 +963,7 @@ describe("past sessions", () => {
     );
   });
 
-  it("shows how far past sessions got: found, scored, and what the plan needs", async () => {
+  it("shows how far past sessions got: found and scored", async () => {
     serveBackfill({
       backfill: scanned({
         status: "running",
@@ -951,7 +976,45 @@ describe("past sessions", () => {
 
     expect(
       await screen.findByTestId("auto-routing-past-sessions-funnel"),
-    ).toHaveTextContent("240 found → 30 of 240 scored → plan needs 100");
+    ).toHaveTextContent("240 found · 30 of 240 scored");
+  });
+
+  it("keeps a running scoring run's spend on the summary line", async () => {
+    serveBackfill({
+      backfill: scanned({
+        status: "running",
+        phase: "score",
+        spentCostUsd: 0.5,
+        maxCostUsd: 2,
+        progress: { sample: 240, scored: 30, noText: 0, failed: 0 },
+      }),
+      scoreOffer: null,
+    });
+    renderPage();
+
+    expect(
+      await screen.findByTestId("auto-routing-past-sessions-funnel"),
+    ).toHaveTextContent(
+      "240 found · 30 of 240 scored · scoring, $0.50 of $2.00",
+    );
+  });
+
+  it("counts unreadable and failed sessions as done, not pending", async () => {
+    serveBackfill({
+      backfill: scanned({
+        phase: "score",
+        progress: { sample: 240, scored: 200, noText: 30, failed: 10 },
+      }),
+      scoreOffer: null,
+    });
+    renderPage();
+
+    expect(
+      await screen.findByTestId("auto-routing-past-sessions-funnel"),
+    ).toHaveTextContent("240 found · 200 scored");
+    expect(
+      screen.getByText("Not scored: 30 without text, 10 failed"),
+    ).toBeInTheDocument();
   });
 
   it("totals sessions per client, folding agents and the tail", async () => {

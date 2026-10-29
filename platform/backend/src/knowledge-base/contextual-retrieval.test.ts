@@ -186,7 +186,10 @@ describe("buildContextualHeaders", () => {
   it.each([
     ["eu.amazon.nova-2-lite-v1:0", true],
     ["us.anthropic.claude-haiku-4-5-20251001-v1:0", true],
-    ["amazon.nova-lite-v1:0", false],
+    ["amazon.nova-micro-v1:0", true],
+    ["amazon.nova-lite-v1:0", true],
+    ["us.amazon.nova-pro-v1:0", true],
+    ["amazon.nova-premier-v1:0", false],
     ["meta.llama3-70b-instruct-v1:0", false],
   ])("Bedrock %s gets a document cache point: %s", async (modelName, cached) => {
     mockResolveContextualRetrievalConfig.mockResolvedValue({

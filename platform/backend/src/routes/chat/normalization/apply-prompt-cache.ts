@@ -14,19 +14,11 @@ const CLAUDE_45_AND_NEWER_ONE_HOUR_CACHE_MODEL =
 // https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
 const CLAUDE_45_ONE_HOUR_CACHE_MODEL = /claude-(?:sonnet|haiku|opus)-4-5(?!\d)/;
 
-// Bedrock fronts many model families, and only Anthropic Claude and Amazon Nova
-// 2 support explicit prompt caching. Legacy Nova v1 uses automatic prompt
-// caching but rejects Converse `cachePoint` blocks. Sending a cachePoint to a
-// model without explicit-cache support does not
-// degrade gracefully — AWS rejects the whole request with a 403 "You invoked an
-// unsupported model or your request did not allow prompt caching", so an
-// uncacheable model is unusable rather than merely uncached.
-//
-// This matches conservatively and fails closed: an id this does not recognize
-// gets no breakpoints, costing a cache hit rather than breaking the request.
-// Widen it when AWS documents caching for another Bedrock family.
+// Bedrock supports explicit cache points for Claude, Nova Micro/Lite/Pro v1,
+// and Nova 2. Unknown families remain unmarked because unsupported cache points
+// can reject the request instead of simply disabling caching.
 // https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
-const BEDROCK_PROMPT_CACHE_MODEL = /claude|nova-2-/;
+const BEDROCK_PROMPT_CACHE_MODEL = /claude|nova-(?:micro|lite|pro)-v1:|nova-2-/;
 
 // OpenRouter honors explicit `cache_control` breakpoints only on Anthropic
 // models; the other families it serves cache automatically.
@@ -108,9 +100,9 @@ export function supportsBedrockCachePoint(model: string): boolean {
 
 /**
  * Adds provider cache breakpoints so the chat request's stable prefix is
- * prompt-cached across turns. Without a breakpoint Anthropic and Bedrock cache
- * nothing, re-billing the full system prompt + tool definitions + history on
- * every turn.
+ * prompt-cached across turns. Explicit breakpoints make the intended cache
+ * boundary available to the provider, including models that also support
+ * automatic caching.
  *
  * A breakpoint caches everything rendered before it — the prefix is
  * `tools → system → messages` — so placing the markers on messages also caches

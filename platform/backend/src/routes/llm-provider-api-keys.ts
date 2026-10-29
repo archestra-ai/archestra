@@ -1414,7 +1414,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Model links cascade with the keys. Sweep once after the whole batch,
       // rather than re-scanning global models after each successful row.
-      if (outcome.succeeded.length > 0) await cleanupOrphanedModels();
+      if (outcome.succeeded.length > 0) await cleanupOrphanedModels("bulk");
       if (outcome.succeeded.length === 0) request.auditSkip = true;
 
       return reply.send(outcome);
@@ -1462,7 +1462,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         headers,
       });
-      await cleanupOrphanedModels();
+      await cleanupOrphanedModels("single");
 
       return reply.send({ success: true });
     },
@@ -1773,18 +1773,21 @@ async function deleteProviderApiKeyInPglite(params: {
  * that completed deletion into an error response: the client would keep
  * showing the key, and its retry would find nothing to delete.
  */
-async function cleanupOrphanedModels(): Promise<void> {
+async function cleanupOrphanedModels(
+  // Which delete triggered the sweep, so its log lines can be told apart.
+  route: "single" | "bulk",
+): Promise<void> {
   try {
     const deletedCount = await ModelModel.deleteOrphanedModels();
     if (deletedCount > 0) {
       logger.info(
-        { deletedCount },
+        { deletedCount, route },
         "Cleaned up orphaned models after API key deletion",
       );
     }
   } catch (error) {
     logger.error(
-      { error },
+      { error, route },
       "Failed to clean up orphaned models after API key deletion",
     );
   }

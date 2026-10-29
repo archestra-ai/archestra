@@ -67,6 +67,9 @@ const routingDecisionsTable = pgTable(
       table.organizationId,
       table.planId,
     ),
+    // Deleting a model deletes its decisions through the foreign key; without
+    // this each deleted model reads the whole table.
+    index("routing_decisions_model_id_idx").on(table.modelId),
     check(
       "routing_decisions_reason_check",
       sql`${table.reason} IN ('planned', 'cold_start', 'scorer_error', 'plan_stale')`,

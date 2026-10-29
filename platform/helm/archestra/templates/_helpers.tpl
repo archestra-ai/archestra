@@ -260,13 +260,15 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   valueFrom:
     secretKeyRef:
       name: {{ include "archestra-platform.authSecretName" . }}
-      key: {{ include "archestra-platform.authSecretKey" . }}
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSecretKey" "default" "auth-secret") | quote }}
 {{- end }}
 
 {{/*
 Inject the session-signing and secret-encryption secrets from the auth Secret
-(Helm-managed or authSecret.existingSecretName) under the fixed session-secret
-and secrets-encryption-secret keys — an external Secret must provide both keys.
+(Helm-managed or authSecret.existingSecretName) — an external Secret must
+provide both keys. The keys default to session-secret and
+secrets-encryption-secret; an external Secret can name them through
+authSecret.existingSessionSecretKey and existingSecretsEncryptionSecretKey.
 An explicit archestra.env value overrides the injection.
 */}}
 {{- $authSecretName := include "archestra-platform.authSecretName" . }}
@@ -275,7 +277,7 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     secretKeyRef:
       name: {{ $authSecretName }}
-      key: session-secret
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSessionSecretKey" "default" "session-secret") | quote }}
       # optional so pods still start when the key is absent (the pre-upgrade
       # migration Job runs before the Secret is updated; config.ts then falls
       # back to ARCHESTRA_AUTH_SECRET).
@@ -286,7 +288,7 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     secretKeyRef:
       name: {{ $authSecretName }}
-      key: secrets-encryption-secret
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSecretsEncryptionSecretKey" "default" "secrets-encryption-secret") | quote }}
       optional: true
 {{- end }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET") }}
@@ -294,7 +296,7 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     secretKeyRef:
       name: {{ $authSecretName }}
-      key: offer-signing-secret
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingOfferSigningSecretKey" "default" "offer-signing-secret") | quote }}
       # optional so pods still start when the key is absent (pre-upgrade
       # migration Job ordering, or an external Secret without this key;
       # config.ts then falls back to a key derived from the auth secret).
@@ -374,7 +376,7 @@ An explicit archestra.env value overrides the injection.
 {{- end }}
 {{/* This binary is copied into arbitrary MCP images and must be static: the
      generic init-container busybox can use a libc the target image lacks. */}}
-{{- $prepullBootstrapImage := .bootstrapImage | default "docker.io/library/busybox:1.36-musl" }}
+{{- $prepullBootstrapImage := include "archestra-platform.imageRegistry" (dict "image" (.bootstrapImage | default "docker.io/library/busybox:1.36-musl") "registry" .bootstrapImageRegistry) }}
 {{- if $prepullBootstrapImage }}
 - name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
   value: {{ $prepullBootstrapImage | quote }}
@@ -499,6 +501,21 @@ genuinely missing key loudly at startup.
   valueFrom:
     {{- toYaml .valueFrom | nindent 4 }}
 {{- end }}
+{{- if and (not (hasKey .Values.archestra.env "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS")) (hasKey (.Values.archestra.shutdown | default dict) "requestDrainSeconds") (ne (toString (get (.Values.archestra.shutdown | default dict) "requestDrainSeconds")) "<nil>") }}
+- name: ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS
+  value: {{ include "archestra-platform.shutdownDrain" . | quote }}
+{{- end }}
+{{- if and (not (hasKey .Values.archestra.env "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS")) (hasKey (.Values.archestra.shutdown | default dict) "cleanupSeconds") (ne (toString (get (.Values.archestra.shutdown | default dict) "cleanupSeconds")) "<nil>") }}
+- name: ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS
+  value: {{ include "archestra-platform.shutdownCleanup" . | quote }}
+{{- end }}
+{{- if and (not (hasKey .Values.archestra.env "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS")) (hasKey (.Values.archestra.shutdown | default dict) "workerTaskTimeoutSeconds") (ne (toString (get (.Values.archestra.shutdown | default dict) "workerTaskTimeoutSeconds")) "<nil>") }}
+- name: ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS
+  value: {{ include "archestra-platform.shutdownWorker" . | quote }}
+{{- end }}
+- name: ARCHESTRA_SERVER_POD_GRACE_SECONDS
+  value: {{ include "archestra-platform.shutdownPodGrace" . | quote }}
+
 {{- end }}
 
 {{/*
@@ -552,13 +569,19 @@ Hook-only auth secret name for the database migration Job.
 {{- end }}
 
 {{/*
-Auth secret key for the Archestra Platform
+Key within the auth Secret for one of its values. Takes a dict with the root
+context ("root"), the authSecret value naming the key ("value"), and the key
+the Helm-managed Secret uses ("default"). A custom key only makes sense with
+authSecret.existingSecretName, because the Helm-managed Secret always writes
+the default keys.
 */}}
-{{- define "archestra-platform.authSecretKey" -}}
-{{- if and (not .Values.archestra.authSecret.existingSecretName) (ne .Values.archestra.authSecret.existingSecretKey "auth-secret") -}}
-{{- fail "archestra.authSecret.existingSecretKey requires archestra.authSecret.existingSecretName to also be set." -}}
+{{- define "archestra-platform.authSecretKeyFor" -}}
+{{- $authSecret := .root.Values.archestra.authSecret -}}
+{{- $key := default .default (get $authSecret .value) -}}
+{{- if and (not $authSecret.existingSecretName) (ne $key .default) -}}
+{{- fail (printf "archestra.authSecret.%s requires archestra.authSecret.existingSecretName to also be set." .value) -}}
 {{- end -}}
-{{- default "auth-secret" .Values.archestra.authSecret.existingSecretKey -}}
+{{- $key -}}
 {{- end }}
 
 {{/*
@@ -935,7 +958,7 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
       psql -h {{ include "archestra-platform.fullname" . }}-postgresql -U postgres -d {{ .Values.postgresql.auth.database }} -c "CREATE EXTENSION IF NOT EXISTS vector;"
 {{- end }}
 - name: wait-for-postgres
-  image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
+  image: {{ include "archestra-platform.busyboxImage" . }}
   {{- with .Values.archestra.initContainers.resources }}
   resources:
     {{- toYaml . | nindent 4 }}
@@ -1009,7 +1032,7 @@ are covered by the pre-upgrade migration Job.
 {{- define "archestra-platform.waitForMigrationsInitContainer" -}}
 {{- if .Values.archestra.initContainers.waitForMigrations.enabled }}
 - name: wait-for-migrations
-  image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
+  image: {{ include "archestra-platform.busyboxImage" . }}
   {{- with .Values.archestra.initContainers.resources }}
   resources:
     {{- toYaml . | nindent 4 }}
@@ -1165,4 +1188,114 @@ it treats empty collections as unset and would restore global constraints.
   {{- toYaml . | nindent 2 }}
   {{- end -}}
 {{- end -}}
+{{- end -}}
+
+{{/* Imported durations are preserved and checked against pod grace at startup. */}}
+{{- define "archestra-platform.shutdownDuration" -}}
+{{- $value := toString .value -}}
+{{- if or (not (regexMatch "^[0-9]+$" $value)) (lt (int $value) .minimum) (gt (int $value) 86400) -}}
+{{- fail (printf "%s must be integer seconds between %d and 86400" .name .minimum) -}}
+{{- end -}}
+{{- $value -}}
+{{- end -}}
+
+{{- define "archestra-platform.shutdownDrain" -}}
+{{- $settings := .Values.archestra.shutdown | default dict -}}
+{{- $value := 60 -}}
+{{- if and (hasKey $settings "requestDrainSeconds") (ne (toString (get $settings "requestDrainSeconds")) "<nil>") -}}
+{{- $value = get $settings "requestDrainSeconds" -}}
+{{- end -}}
+{{- if hasKey .Values.archestra.env "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS" -}}
+{{- $value = get .Values.archestra.env "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS" -}}
+{{- end -}}
+{{- include "archestra-platform.shutdownDuration" (dict "name" "requestDrainSeconds" "minimum" 1 "value" $value) -}}
+{{- end -}}
+{{- define "archestra-platform.shutdownCleanup" -}}
+{{- $settings := .Values.archestra.shutdown | default dict -}}
+{{- $value := 20 -}}
+{{- if and (hasKey $settings "cleanupSeconds") (ne (toString (get $settings "cleanupSeconds")) "<nil>") -}}
+{{- $value = get $settings "cleanupSeconds" -}}
+{{- end -}}
+{{- if hasKey .Values.archestra.env "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS" -}}
+{{- $value = get .Values.archestra.env "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS" -}}
+{{- end -}}
+{{- include "archestra-platform.shutdownDuration" (dict "name" "cleanupSeconds" "minimum" 5 "value" $value) -}}
+{{- end -}}
+{{- define "archestra-platform.shutdownWorker" -}}
+{{- $settings := .Values.archestra.shutdown | default dict -}}
+{{- $value := 30 -}}
+{{- if and (hasKey $settings "workerTaskTimeoutSeconds") (ne (toString (get $settings "workerTaskTimeoutSeconds")) "<nil>") -}}
+{{- $value = get $settings "workerTaskTimeoutSeconds" -}}
+{{- end -}}
+{{- if hasKey .Values.archestra.env "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS" -}}
+{{- $value = toString (get .Values.archestra.env "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS") -}}
+{{- end -}}
+{{- include "archestra-platform.shutdownDuration" (dict "name" "worker shutdown timeout" "minimum" 1 "value" $value) -}}
+{{- end -}}
+{{/* A template cannot read values inside unprefixed envFrom or per-key references. */}}
+{{- define "archestra-platform.shutdownUnknown" -}}
+{{- $settings := .root.Values.archestra.shutdown | default dict -}}
+{{- $chartValue := get $settings .field -}}
+{{- $unknown := false -}}
+{{- $literal := hasKey .root.Values.archestra.env .name -}}
+{{- $chartExplicit := and (hasKey $settings .field) (ne (toString $chartValue) "<nil>") -}}
+{{- if and (not $literal) (not $chartExplicit) -}}
+{{- range .root.Values.archestra.envFrom -}}
+{{- if not .prefix -}}{{- $unknown = true -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{/* Per-key references follow literal env; only an explicit chart injection overrides them. */}}
+{{- if not (and (not $literal) $chartExplicit) -}}
+{{- range concat (.root.Values.archestra.envFromSecrets | default list) (.root.Values.archestra.envWithValueFrom | default list) -}}
+{{- if eq .name $.name -}}{{- $unknown = true -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $unknown -}}
+{{- end -}}
+
+{{- define "archestra-platform.shutdownPodGrace" -}}
+{{- $minimum := add (max (int (include "archestra-platform.shutdownDrain" .)) (int (include "archestra-platform.shutdownWorker" .))) (int (include "archestra-platform.shutdownCleanup" .)) 40 -}}
+{{- $provided := .Values.archestra.terminationGracePeriodSeconds -}}
+{{- if ne (toString $provided) "<nil>" -}}
+{{- $provided = include "archestra-platform.shutdownDuration" (dict "name" "terminationGracePeriodSeconds" "minimum" 1 "value" $provided) -}}
+{{- $knownDrain := int (include "archestra-platform.shutdownDrain" .) -}}
+{{- $knownCleanup := int (include "archestra-platform.shutdownCleanup" .) -}}
+{{- $knownWorker := int (include "archestra-platform.shutdownWorker" .) -}}
+{{- if eq (include "archestra-platform.shutdownUnknown" (dict "root" . "field" "requestDrainSeconds" "name" "ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS")) "true" -}}{{- $knownDrain = 1 -}}{{- end -}}
+{{- if eq (include "archestra-platform.shutdownUnknown" (dict "root" . "field" "cleanupSeconds" "name" "ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS")) "true" -}}{{- $knownCleanup = 5 -}}{{- end -}}
+{{- if eq (include "archestra-platform.shutdownUnknown" (dict "root" . "field" "workerTaskTimeoutSeconds" "name" "ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS")) "true" -}}{{- $knownWorker = 1 -}}{{- end -}}
+{{- $minimum = add (max $knownDrain $knownWorker) $knownCleanup 40 -}}
+{{- if lt (int $provided) (int $minimum) -}}
+{{- fail (printf "terminationGracePeriodSeconds must be at least %d for the configured shutdown budgets" $minimum) -}}
+{{- end -}}
+{{- $provided -}}
+{{- else -}}
+{{- $minimum -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Replace only an image's registry, retaining the repository and tag/digest.
+A first path component containing a dot/port, or localhost, is a registry.
+Unqualified image names keep their complete repository path. Registry overrides
+may include a mirror path prefix; ignore trailing slashes when joining.
+*/}}
+{{- define "archestra-platform.imageRegistry" -}}
+{{- $image := .image -}}
+{{- $registry := .registry | default "" | trimSuffix "/" -}}
+{{- if $registry -}}
+{{- $parts := splitList "/" $image -}}
+{{- $first := first $parts -}}
+{{- if and (gt (len $parts) 1) (or (contains "." $first) (contains ":" $first) (eq "localhost" $first)) -}}
+{{- $image = join "/" (rest $parts) -}}
+{{- end -}}
+{{- printf "%s/%s" $registry $image -}}
+{{- else -}}
+{{- $image -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Shared by startup checks in web, migration, and worker pods. */}}
+{{- define "archestra-platform.busyboxImage" -}}
+{{- include "archestra-platform.imageRegistry" (dict "image" (.Values.archestra.initContainers.busyboxImage | default "busybox:1.36") "registry" .Values.archestra.initContainers.busyboxImageRegistry) -}}
 {{- end -}}

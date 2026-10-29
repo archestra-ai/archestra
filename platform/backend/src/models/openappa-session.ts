@@ -322,7 +322,10 @@ class OpenAppaSessionModel {
             : isNull(table.parentId),
           inArray(
             operations.operationId,
-            params.toolCallIds.map((id) => `call:${id}`),
+            params.toolCallIds.flatMap((id) => [
+              `call:${id}`,
+              `peer-read-call:${id}`,
+            ]),
           ),
           eq(operations.status, "complete"),
           sql`COALESCE(${operations.input}->'semantic'->>'event', ${operations.input}->>'event') = 'tool_call'`,
@@ -330,10 +333,72 @@ class OpenAppaSessionModel {
       );
     return new Map(
       rows.map((row) => [
-        row.operationId.slice("call:".length),
+        row.operationId.replace(/^(?:peer-read-)?call:/, ""),
         openPlainJson(row.decision),
       ]),
     );
+  }
+
+  /**
+   * Maps each requested offer id to the operation id of the denied call that
+   * issued it in this session. Sibling offers of one denied call share the
+   * same operation id.
+   */
+  static async deniedCallOperationsByOfferId(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId?: string;
+    parentId?: string;
+    offerIds: readonly string[];
+  }): Promise<Map<string, string>> {
+    if (params.offerIds.length === 0) return new Map();
+    const wanted = new Set(params.offerIds);
+    const operations = schema.openappaOperationsTable;
+    const rows = await db
+      .select({
+        operationId: operations.operationId,
+        decision: operations.decision,
+      })
+      .from(operations)
+      .innerJoin(
+        table,
+        and(
+          eq(table.organizationId, operations.organizationId),
+          eq(table.sessionId, operations.sessionId),
+          eq(table.root, operations.root),
+        ),
+      )
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          eq(operations.sessionId, params.sessionId),
+          params.callerId
+            ? and(
+                eq(operations.callerId, params.callerId),
+                eq(table.callerId, params.callerId),
+              )
+            : and(isNull(operations.callerId), isNull(table.callerId)),
+          params.parentId
+            ? eq(table.parentId, params.parentId)
+            : isNull(table.parentId),
+          eq(operations.status, "complete"),
+        ),
+      );
+    const result = new Map<string, string>();
+    for (const row of rows) {
+      const decision = openPlainJson(row.decision);
+      if (!decision || typeof decision !== "object") continue;
+      const offers = (decision as { offers?: unknown }).offers;
+      if (!Array.isArray(offers)) continue;
+      for (const offer of offers) {
+        if (!offer || typeof offer !== "object") continue;
+        const offerId = (offer as { offer_id?: unknown }).offer_id;
+        if (typeof offerId === "string" && wanted.has(offerId)) {
+          result.set(offerId, row.operationId);
+        }
+      }
+    }
+    return result;
   }
 
   /**

@@ -2,12 +2,25 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Archestra reads these environment variables at startup. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. The Docker quickstart and the Helm chart run with none set. See [Helm](/docs/admin/deployment/helm) for Kubernetes installation.
+
+## Shutdown
+
+Give long model requests and MCP tool calls time to finish when a replica stops.
+
+- **`ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS`** — Seconds after a stop signal for admitted requests, handlers and background persistence to finish. Default `60`; integer `1`–`86400`.
+- **`ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS`** — Extra time for persistence, dependency cleanup and telemetry. Default `20`; integer `5`–`86400`. The backend deadline is `max(request drain, worker task shutdown timeout) + cleanup`. The unified container gives the backend another 10 seconds before forcing it to stop.
+
+- **`ARCHESTRA_SERVER_POD_GRACE_SECONDS`** — Injected by Helm from the rendered pod grace period. At server startup, checks the resolved environment values, including Secret and ConfigMap imports, against `max(drain, worker timeout) + cleanup + 40`. Insufficient grace prevents startup. Leave unset outside Helm unless you want this validation.
+
+The Helm chart derives web and worker pod grace periods from settings it can read, reserving 40 seconds beyond the backend deadline. The `archestra.shutdown` values default to `null`, preserving existing `envFrom`, `envFromSecrets` and `envWithValueFrom` settings. Explicit chart settings override imported values; literal `archestra.env` values take precedence over the chart settings.
+
+Helm cannot read timeout values inside a Secret or ConfigMap. When importing longer durations, set `archestra.terminationGracePeriodSeconds` high enough for the resolved values. For example, an imported worker timeout of 90 seconds with default drain and cleanup requires at least 150 seconds of pod grace. Both servers validate that budget before accepting requests.
 
 ## Database
 
@@ -1090,7 +1103,7 @@ Embedding, reranking, and OCR models for the [Knowledge Base](/docs/knowledge) a
 - **`ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED`** - In the built-in chat, asks the model to back claims with verbatim quotes and logs each quote that does not match the cited chunk.
   - Default: `true`
   - Values: `true`, `false`
-  - Log-only: it never blocks or changes an answer. Misses are counted in the [`rag_quote_verification_total`](/docs/admin/observability/metrics#rag_quote_verification_total) metric.
+  - Log-only: it never blocks or changes an answer. Misses are counted in the [`rag_quote_verification_total`](/docs/admin/observability/metrics/knowledge-base#rag_quote_verification_total) metric.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`** - Token budget for one chunk, including its title and metadata.
   - Default: `512`
@@ -1406,7 +1419,7 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
   - Default: unset (no authentication)
   - Clients send `Authorization: Bearer <token>`.
 
-- **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often the [`llm_active_users`](/docs/admin/observability/metrics#llm_active_users) gauge is recomputed.
+- **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often the [`llm_active_users`](/docs/admin/observability/metrics/llm#llm_active_users) gauge is recomputed.
   - Default: `300000` (5 minutes)
   - Values: `0` (off), or `30000` and above
 
@@ -1472,6 +1485,8 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 
 - **`ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS`** - Days without a new message before a conversation is deleted with its messages, attachments, files, and code sandboxes.
   - Default: `0` (keep forever)
+
+- **`ARCHESTRA_AUDIT_LOG_OTEL_ENABLED`** - Set to `true` to export persisted administrative audit event metadata as OTLP logs through the configured OpenTelemetry endpoint. Default: `false`. Delivery is best-effort; see [Audit log export](/docs/admin/observability/audit-logs).
 
 - **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Days to keep audit log records.
   - Default: `0` (keep forever)

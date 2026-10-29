@@ -152,6 +152,7 @@ describe("AgentCreatePage", () => {
       "OpenClaw",
       "Grok Build",
       "Kimi Code",
+      "GitHub Copilot CLI",
     ]) {
       const card = screen.getByRole("button", { name: new RegExp(name, "i") });
       expect(card).toBeDisabled();
@@ -222,6 +223,7 @@ describe("AgentCreatePage", () => {
       "OpenClaw",
       "Grok Build",
       "Kimi Code",
+      "GitHub Copilot CLI",
     ]) {
       expect(
         screen.getByRole("button", { name: new RegExp(name, "i") }),
@@ -243,6 +245,7 @@ describe("AgentCreatePage", () => {
       "OpenClaw",
       "Grok Build",
       "Kimi Code",
+      "GitHub Copilot CLI",
       "Custom image",
     ]);
     expect(formProps).not.toHaveBeenCalled();

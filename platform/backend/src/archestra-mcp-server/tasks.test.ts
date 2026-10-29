@@ -19,6 +19,7 @@ import {
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_AGENT_RUN_FULL_NAME,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import { settleFailedA2ATask } from "@/agents/a2a/a2a-task-settlement";
@@ -198,7 +199,7 @@ describe("run tools", () => {
       "Run not found",
     );
     expect((result.content[0] as { text: string }).text).not.toContain(
-      "not assigned",
+      "is not available through",
     );
   });
 
@@ -230,7 +231,9 @@ describe("run tools", () => {
       gatewayContext,
     );
     expect(everyone.isError).toBe(true);
-    expect(JSON.stringify(everyone.content)).toContain("not assigned");
+    expect(JSON.stringify(everyone.content)).toContain(
+      "is not available through",
+    );
 
     const mine = await executeArchestraTool(
       TOOL_LIST_AGENT_RUNS_FULL_NAME,
@@ -938,6 +941,124 @@ describe("run tools", () => {
       expect(result.structuredContent).toMatchObject({
         runs: [{ run_id: workspace.id, llm_session_id: expected }],
       });
+    }
+  });
+
+  test("failure history finds a failed earlier turn after a newer turn succeeds", async () => {
+    const first = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    const firstRun = await AgentRunModel.findByTaskId(first.id);
+    if (!firstRun) throw new Error("Run fixture missing");
+    const failureTime = new Date("2026-01-02T12:00:00Z");
+    await A2ATaskModel.updateState(first.id, "TASK_STATE_FAILED");
+    await db
+      .update(schema.a2aTasksTable)
+      .set({ stateChangedAt: failureTime })
+      .where(eq(schema.a2aTasksTable.id, first.id));
+    await AgentRunModel.close({ id: firstRun.id, logs: "" });
+    const next = await A2ATaskModel.create({
+      contextId: first.contextId,
+      agentId: callingAgent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: next.id,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      actorUserId: actorId,
+      workloadName: firstRun.workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
+    await AgentWorkspaceModel.create({
+      id: first.id,
+      organizationId,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      workloadName: firstRun.workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      state: "idle",
+      lastTaskId: next.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const newerStart = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    await A2ATaskModel.updateState(newerStart.id, "TASK_STATE_FAILED");
+    await db
+      .update(schema.a2aTasksTable)
+      .set({ stateChangedAt: new Date("2026-01-02T11:50:00Z") })
+      .where(eq(schema.a2aTasksTable.id, newerStart.id));
+    const normal = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [callingAgent.id], state: "failed" },
+      context,
+    );
+    expect(normal.structuredContent).toMatchObject({
+      runs: [{ run_id: newerStart.id }],
+    });
+    const args = {
+      agent_ids: [callingAgent.id],
+      state: "failed",
+      failed_since: "2026-01-02T11:45:00+00:00",
+      limit: 1,
+    };
+    const history = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      args,
+      context,
+    );
+    expect(history.isError).toBeFalsy();
+    expect(history.structuredContent).toMatchObject({
+      runs: [
+        {
+          run_id: first.id,
+          state: "failed",
+          state_changed_at: failureTime.toISOString(),
+        },
+      ],
+    });
+    const base = {
+      agentIds: [callingAgent.id],
+      organizationId,
+      limit: 1,
+      failedSince: new Date(args.failed_since),
+    };
+    expect(
+      (await AgentRunModel.listDashboard(base)).map((row) => row.taskId),
+    ).toEqual([first.id]);
+    expect(
+      await AgentRunModel.listDashboard({
+        ...base,
+        organizationId: crypto.randomUUID(),
+      }),
+    ).toEqual([]);
+    expect(
+      await AgentRunModel.listDashboard({
+        ...base,
+        agentIds: [crypto.randomUUID()],
+      }),
+    ).toEqual([]);
+    const tooLate = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { ...args, failed_since: "2026-01-02T12:00:01Z" },
+      context,
+    );
+    expect(tooLate.structuredContent).toMatchObject({ runs: [] });
+    for (const changes of [{ state: "working" }, { mine_only: true }]) {
+      const rejected = await executeArchestraTool(
+        TOOL_LIST_AGENT_RUNS_FULL_NAME,
+        { ...args, ...changes },
+        context,
+      );
+      expect(rejected.isError).toBe(true);
     }
   });
 

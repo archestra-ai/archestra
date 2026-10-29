@@ -60,6 +60,7 @@ import {
   getComposerAnswer,
   takesComposerAnswer,
 } from "@/components/chat/mcp-elicitation-fields";
+import { ProviderAuthRequiredCard } from "@/components/chat/provider-auth-required-card";
 import type { RightPanelTab } from "@/components/chat/right-side-panel";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
@@ -185,6 +186,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useStableCallback } from "@/lib/hooks/use-stable-callback";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   type SupportedProvider,
@@ -452,6 +454,7 @@ export function ChatPageContent({
     useConversation(conversationId);
   const { data: defaultAgentId } = useDefaultAgentId();
   const runtimeEnabled = useFeature("agentRuntime") === true;
+  const providerCatalog = useModelProviderCatalog();
   const startAgentRunMutation = useStartAgentRun();
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
@@ -3829,6 +3832,21 @@ export function ChatPageContent({
                                 notice: what stops Send sits where the
                                 reader looks before typing. */}
                             <div className="mb-3 empty:hidden">
+                              {isInitialRuntimeMode &&
+                                initialPerUserConnect.needsConnect &&
+                                initialPerUserConnect.provider && (
+                                  <ProviderAuthRequiredCard
+                                    provider={initialPerUserConnect.provider}
+                                    providerLabel={providerCatalog.label(
+                                      initialPerUserConnect.provider,
+                                    )}
+                                    agentName={initialPerUserConnect.agentName}
+                                    variant="preflight"
+                                    onConnected={() => {
+                                      void runtimePreflight.refetch();
+                                    }}
+                                  />
+                                )}
                               {isInitialRuntimeMode &&
                                 runtimePreflight.data?.ready === false && (
                                   <AgentRuntimeCredentialPrompt

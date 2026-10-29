@@ -11,6 +11,7 @@ import {
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_LIST_LLM_MODELS_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { type MockInstance, vi } from "vitest";
@@ -566,6 +567,22 @@ describe("agent tool execution", () => {
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed).toHaveProperty("total");
     expect(parsed).toHaveProperty("agents");
+  });
+
+  // A gateway session read another agent's tools here and called one of them.
+  test("list_agents says each agent's tools are not the caller's", async () => {
+    const result = await executeArchestraTool(
+      archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME),
+      {},
+      mockContext,
+    );
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    // Ahead of the agents, so a model reads it before their tool lists.
+    expect(Object.keys(parsed)).toEqual(["total", "hint", "agents"]);
+    expect(parsed.hint).toContain("not tools you can call");
+    expect(parsed.hint).toContain(
+      archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME),
+    );
   });
 
   test("list_agents identifies agents that can retain and steer runtime work", async ({

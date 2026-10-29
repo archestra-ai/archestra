@@ -2,7 +2,7 @@
 title: Single Sign-On
 description: Add workplace sign-in and map directory claims to access
 order: 1
-lastUpdated: 2026-10-22
+lastUpdated: 2026-10-29
 ---
 
 Let people sign in with their workplace accounts. Test one sign-in before requiring SSO for everyone. This is an [Enterprise feature](/docs/get-started/pricing-model).
@@ -59,12 +59,20 @@ For OIDC, ensure the ID token includes the group claim; your provider may requir
 
 ## Team Sync
 
-Sync adds and removes directory-managed team memberships while preserving members added manually in Archestra.
+Put people in the right teams, with the right team role, straight from their directory groups. Link the group `platform-leads` to a team as Admin, and everyone in it joins that team as a team admin when they sign in.
 
 1. In the provider's **Team Sync** tab, verify **Enable Team Sync** is on.
 2. If your IdP uses custom group claim paths, set **Groups Handlebars Template** (e.g. `{{#each groups}}{{this}},{{/each}}`). Otherwise, Archestra checks `groups`, `group`, `memberOf`, `roles`, and `teams` in order.
-3. Go to **Settings → Teams**, click **Edit** on target team, and open **External Group Sync**.
-4. Enter the external group identifier (such as an Entra group object ID or Okta group name) and click **Add**.
+3. Go to **Settings → Teams**, click **Edit** on the team, and open **Team Sync**.
+4. Click **Link a group**, enter the group identifier (such as an Entra group object ID or Okta group name), pick a **Team role**, and press Enter.
+
+The group appears in the team's list. On their next sign-in, its members join the team with that role.
+
+What to know:
+
+- Each sign-in adds and removes synced members to match their groups, and makes them Admin while a linked group grants it. Sync takes Admin away only if sync gave it, so a promotion by hand sticks. Members added by hand are never changed.
+- With more than one identity provider, a link matches only sign-ins through the provider you picked for it.
+- A person in several linked groups of one team gets Admin if any of those links grants it.
 
 ## Enforcing SSO
 

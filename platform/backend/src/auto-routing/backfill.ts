@@ -139,13 +139,14 @@ export async function describeBackfill(
     activeSourceVersion(),
     AutoRoutingSettingsModel.find(organizationId),
   ]);
+  const offerable = latest?.status === "running" ? null : scan;
+  const scanned = offerable && (await scanSample(offerable, scorer.id));
   const progress =
-    latest?.phase === "score" && latest.scorerVersionId && latest.maxSessions
-      ? await RoutingHistoryModel.sampleProgress({
-          ...sampleOf(latest, latest.maxSessions),
-          scorerVersionId: latest.scorerVersionId,
-        })
-      : null;
+    latest?.phase === "score"
+      ? await scoringProgress(latest)
+      : latest?.id === offerable?.id
+        ? (scanned?.progress ?? null)
+        : null;
   return {
     backfill: latest && {
       id: latest.id,
@@ -168,9 +169,14 @@ export async function describeBackfill(
       ...(await fitState(latest, settings)),
     },
     scoreOffer:
-      latest?.status === "running" || !scan
-        ? null
-        : await scoreOffer(scan, scorer.id, latest),
+      offerable && scanned
+        ? scoreOffer({
+            scan: offerable,
+            scorerVersionId: scorer.id,
+            scanned,
+            latest,
+          })
+        : null,
   };
 }
 
@@ -256,16 +262,37 @@ function sampleOf(backfill: RoutingBackfill, maxSessions: number) {
   };
 }
 
-async function scoreOffer(
-  scan: RoutingBackfill,
-  scorerVersionId: string,
-  latest: RoutingBackfill | null,
-): Promise<AutoRoutingBackfillResponse["scoreOffer"]> {
-  const sessions = Math.min(scan.populationSessions, DEFAULT_BACKFILL_SESSIONS);
-  const done = await RoutingHistoryModel.sampleProgress({
-    ...sampleOf(scan, sessions),
-    scorerVersionId,
+/** How much of a scoring run's own sample its scorer has read. */
+async function scoringProgress(
+  backfill: RoutingBackfill,
+): Promise<SampleProgress | null> {
+  if (!backfill.scorerVersionId || !backfill.maxSessions) return null;
+  return RoutingHistoryModel.sampleProgress({
+    ...sampleOf(backfill, backfill.maxSessions),
+    scorerVersionId: backfill.scorerVersionId,
   });
+}
+
+/** The sample a score of `scan` would take, and how much of it `scorerVersionId` already read. */
+async function scanSample(scan: RoutingBackfill, scorerVersionId: string) {
+  const sessions = Math.min(scan.populationSessions, DEFAULT_BACKFILL_SESSIONS);
+  return {
+    sessions,
+    progress: await RoutingHistoryModel.sampleProgress({
+      ...sampleOf(scan, sessions),
+      scorerVersionId,
+    }),
+  };
+}
+
+function scoreOffer(params: {
+  scan: RoutingBackfill;
+  scorerVersionId: string;
+  scanned: { sessions: number; progress: SampleProgress };
+  latest: RoutingBackfill | null;
+}): AutoRoutingBackfillResponse["scoreOffer"] {
+  const { scan, scorerVersionId, latest } = params;
+  const { sessions, progress: done } = params.scanned;
   const remaining = sessions - attempted(done);
   if (remaining <= 0) return null;
   const estimatedCostUsd = remaining * SCORER_CALL_RESERVATION_USD;

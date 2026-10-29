@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,14 +15,14 @@ Connect your AI client once, and Archestra governs everything it does. It gets A
 
 Open **Connect** in the Archestra sidebar and choose how to connect:
 
-- **Coding agents:** for [Claude Code](/docs/integrations/claude-code), Codex, Cursor, Copilot CLI, OpenCode, and Kilo Code, you run one command in a terminal and approve the connection in your browser.
+- **Coding agents:** for [Claude Code](/docs/integrations/claude-code), Codex, Cursor, Copilot CLI, OpenCode, Kilo Code, and Kimi Code, you run one command in a terminal and approve the connection in your browser.
 - **[Claude Desktop](/docs/integrations/claude-desktop#setup):** a downloadable installer sets up Desktop.
 - **[n8n](/docs/integrations/web-ui-and-automation#n8n):** you enter the gateway URL and model settings in your workflow.
 - **Any Client:** any tool that supports MCP or an OpenAI-compatible API. Copy the gateway URL, the proxy base URL, a key, and a Git URL for the shared skills.
 
 To leave out the proxy, skills, or plugins, open **Setup options** on the approval page before you approve. Your admin decides which provider keys the proxy uses for each client.
 
-Guardrails recognize Archestra Chat, Claude Code, Codex CLI, OpenCode, and Kilo Code automatically. Custom clients and workflows need a [session header](/docs/agents/guardrails/clients#session-headers) so Guardrails can track their conversations.
+Guardrails recognize Archestra Chat, Claude Code, Codex CLI, OpenCode, Kilo Code, and Kimi Code automatically. Custom clients and workflows need a [session header](/docs/agents/guardrails/clients#session-headers) so Guardrails can track their conversations.
 
 ![Connect with Codex selected and its setup command](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
@@ -34,13 +34,14 @@ Guardrails recognize Archestra Chat, Claude Code, Codex CLI, OpenCode, and Kilo 
 <span id="copilot-cli"></span>
 <span id="opencode"></span>
 <span id="kilo"></span>
+<span id="kimi-code"></span>
 
 ## Before You Start
 
-For Claude Code, Codex, Cursor, Copilot CLI, OpenCode, and Kilo Code:
+For Claude Code, Codex, Cursor, Copilot CLI, OpenCode, Kilo Code, and Kimi Code:
 
 - Node.js 18 or newer, and a terminal on the computer where you use the client.
-- The client's CLI on your `PATH`: `claude`, `codex`, `copilot`, `opencode`, or `kilo`. OpenCode must be 1.17 or newer. Copilot CLI proxy setup requires 1.0.95 or newer.
+- The client's CLI on your `PATH`: `claude`, `codex`, `copilot`, `opencode`, `kilo`, or `kimi`. OpenCode must be 1.17 or newer. Copilot CLI proxy setup requires 1.0.95 or newer. Kimi Code must be 2.3.3 or newer.
 - Python 3 for Claude Code and for Cursor's models. Git for Cursor, OpenCode, and Kilo Code skills.
 - An Archestra URL on HTTPS. Plain HTTP works only on `localhost`.
 
@@ -66,6 +67,7 @@ Some clients need one more step. The installer prints any other steps under **Go
 - **Cursor:** quit and reopen Cursor, then sign in to the gateway under **Customize → MCPs**. Setup points Cursor's OpenAI API key settings at the [Model Router](/docs/llm-proxy/model-router) with a virtual key for your model providers. Cursor's model picker then lists only the models the Model Router offers you, such as `anthropic:claude-sonnet-4-6`. Setup switches off Cursor's built-in models. Switch one back on under **Settings → Models**.
 - **Copilot CLI:** setup saves your provider settings and available key in `providers.json` and selects the model in `settings.json`. If setup reports a missing key, add it to `providers.json`. The environment variables printed at the end are optional.
 - **OpenCode:** if you skipped the sign-in, run `opencode mcp auth <gateway>`. While connected, OpenCode lists only the providers and models Archestra serves you, under their usual names. A `model`, `small_model` or agent `model` setting that Archestra does not serve is ignored, and setup names it. Providers you sign in to from OpenCode itself, such as a ChatGPT or Claude subscription or your own key, also go through Archestra. Restart OpenCode after signing in to one.
+- **Kimi Code:** if you skipped the sign-in, start `kimi` and run `/mcp-config login <gateway>`. With your own key, the `archestra` model uses your Kimi Code sign-in, so run `kimi login` before setup, or set `KIMI_API_KEY` (`MOONSHOT_API_KEY` for a Moonshot key). New sessions use the `archestra` model; models from your other Kimi Code providers do not go through Archestra. Setup starts Kimi Code in Ask When Needed mode, so gateway calls run without asking; disconnecting restores your previous mode.
 - **Kilo Code:** if you skipped the sign-in, run `kilo mcp auth <gateway>`. Setup writes its settings to `~/.config/kilo/kilo.json`. If your `kilo.jsonc` already registers the same gateway under another name, setup disables that duplicate and preserves its comments and connection settings. Providers and models work as for OpenCode, and providers that do not go through Archestra, such as the Kilo Gateway, are turned off while connected.
 
 <span id="startup-guard"></span>
@@ -74,7 +76,7 @@ Some clients need one more step. The installer prints any other steps under **Go
 
 ## After Setup
 
-- **Launch check:** setup adds a block to your shell profile. Each time Claude Code, Codex, Copilot CLI, OpenCode, or Kilo Code starts, it checks the connection. Press `C` there to disconnect. To turn it off, set `ARCHESTRA_CLAUDE_GUARD=0`, `ARCHESTRA_CODEX_GUARD=0`, `ARCHESTRA_COPILOT_GUARD=0`, `ARCHESTRA_OPENCODE_GUARD=0`, or `ARCHESTRA_KILO_GUARD=0`.
+- **Launch check:** setup adds a block to your shell profile. Each time Claude Code, Codex, Copilot CLI, OpenCode, Kilo Code, or Kimi Code starts, it checks the connection. Press `C` there to disconnect. To turn it off, set `ARCHESTRA_CLAUDE_GUARD=0`, `ARCHESTRA_CODEX_GUARD=0`, `ARCHESTRA_COPILOT_GUARD=0`, `ARCHESTRA_OPENCODE_GUARD=0`, `ARCHESTRA_KILO_GUARD=0`, or `ARCHESTRA_KIMI_CODE_GUARD=0`.
 - **Startup check updates:** each launch checks for a newer startup check, installs it automatically, and runs it during the same launch. Requires Node.js 18 or newer. A launch hands off at most once; any skip, reconfigure, or disconnect choice made during the initial health probe takes precedence. Failed downloads keep the installed copy and retry next launch; a failed handoff restores the cached check. Customized scripts stay untouched. Updates preserve your client settings, credentials, permissions, and disconnected resources.
 - **Backups:** setup saves each config file it changes as a `.archestra-backup` file next to the original.
 - **Automatic client helpers:** approved OpenCode and Kilo Code setup installs an update loader for the managed launcher helper and routing plugin, using Node.js 18 or newer. Before launch or plugin activation, it refreshes verified code from your connected Archestra deployment over HTTPS and loads that code in the same process. Concurrent starts share a download check for 30 seconds. Failed or offline downloads keep the verified cached code. These updates do not upgrade the client CLI, rerun installation, issue new provider keys, or replace your original backups.

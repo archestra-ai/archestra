@@ -36,6 +36,9 @@ export const LimitTypeSchema = z.enum([
 ]);
 export type LimitType = z.infer<typeof LimitTypeSchema>;
 
+export const LimitBehaviorSchema = z.enum(["hard", "soft"]);
+export type LimitBehavior = z.infer<typeof LimitBehaviorSchema>;
+
 export const LimitCleanupIntervalSchema = z.enum([
   "minute",
   "1h",
@@ -61,6 +64,11 @@ const LimitReasonSchema = z.string().trim().max(500).nullable().optional();
  * Base database schema derived from Drizzle
  */
 export const SelectLimitSchema = createSelectSchema(schema.limitsTable, {
+  teamManaged: (schema) =>
+    schema.describe(
+      "Whether a team admin created this team limit. Team admins can change or delete only these.",
+    ),
+  behavior: LimitBehaviorSchema,
   reason: z.string().nullable().optional(),
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
@@ -68,6 +76,7 @@ export const SelectLimitSchema = createSelectSchema(schema.limitsTable, {
   cleanupInterval: LimitCleanupIntervalSchema.optional(),
 });
 export const InsertLimitSchema = createInsertSchema(schema.limitsTable, {
+  behavior: LimitBehaviorSchema.optional(),
   reason: LimitReasonSchema,
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
@@ -75,6 +84,7 @@ export const InsertLimitSchema = createInsertSchema(schema.limitsTable, {
   cleanupInterval: LimitCleanupIntervalSchema.optional(),
 });
 export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
+  behavior: LimitBehaviorSchema.optional(),
   reason: LimitReasonSchema,
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
@@ -85,6 +95,7 @@ export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
     id: true,
     createdAt: true,
     updatedAt: true,
+    teamManaged: true,
   })
   .extend({ labels: z.array(LabelWithDetailsSchema).optional() });
 
@@ -95,10 +106,17 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  teamManaged: true,
 })
   .extend({ labels: z.array(LabelWithDetailsSchema).optional() })
   .refine(
     (data) => {
+      if (
+        data.behavior === "soft" &&
+        (data.limitType === "mcp_server_calls" ||
+          data.limitType === "tool_calls")
+      )
+        return false;
       // Normalization is intentional: callers persist this parsed object with
       // empty model lists cleared and legacy rate intervals set to minute.
       // Validation: mcp_server_calls requires mcpServerName and should not have model

@@ -37,8 +37,8 @@ export function TeamSyncConfigForm({
   const content = (
     <>
       <IdentityProviderSectionHeader title="Team Sync">
-        Sync team membership from sign-in groups. Set each team’s external group
-        IDs in External Group Sync.
+        Sync team membership from sign-in groups. Link groups to a team in its
+        Team Sync settings.
       </IdentityProviderSectionHeader>
       {showEnabledField && (
         <FormField

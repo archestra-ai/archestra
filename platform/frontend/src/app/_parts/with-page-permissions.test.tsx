@@ -1,3 +1,4 @@
+import "@/lib/limits-access";
 import type { Permissions } from "@archestra/shared";
 import { predefinedPermissionsMap } from "@archestra/shared/access-control";
 import { render, screen } from "@testing-library/react";
@@ -9,6 +10,7 @@ import { WithPagePermissions } from "./with-page-permissions";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/limits-access");
 // Read only when a grant on one credential might open Settings.
 vi.mock("@/lib/runtime-credentials.query", () => ({
   useRuntimeCredentials: () => ({ data: [], isPending: false }),

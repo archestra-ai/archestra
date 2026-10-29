@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -8,7 +9,12 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { LimitCleanupInterval, LimitEntityType, LimitType } from "@/types";
+import type {
+  LimitBehavior,
+  LimitCleanupInterval,
+  LimitEntityType,
+  LimitType,
+} from "@/types";
 
 const limitsTable = pgTable(
   "limits",
@@ -18,6 +24,10 @@ const limitsTable = pgTable(
     entityId: text("entity_id").notNull(),
     limitType: varchar("limit_type").$type<LimitType>().notNull(),
     limitValue: integer("limit_value").notNull(),
+    behavior: varchar("behavior")
+      .$type<LimitBehavior>()
+      .notNull()
+      .default("hard"),
     mcpServerName: varchar("mcp_server_name", { length: 255 }),
     toolName: varchar("tool_name", { length: 255 }),
     // JSONB array stores multiple models for a single limit (e.g., ["gpt-4o", "claude-3-5-sonnet"])
@@ -28,6 +38,12 @@ const limitsTable = pgTable(
     model: jsonb("model").$type<string[] | null>(),
     /** Why an admin set this limit, e.g. for a custom per-user limit. */
     reason: text("reason"),
+    /**
+     * Set when a team admin created this team limit for their own team. Team
+     * admins may change or delete only these; a limit an organization limit
+     * manager set stays binding on the team it caps.
+     */
+    teamManaged: boolean("team_managed").notNull().default(false),
     cleanupInterval: varchar("cleanup_interval")
       .$type<LimitCleanupInterval>()
       .notNull()

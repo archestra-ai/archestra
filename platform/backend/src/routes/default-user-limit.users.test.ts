@@ -21,7 +21,8 @@ describe("user limit usage routes", () => {
 
   beforeEach(async ({ makeOrganization, makeAdmin, makeMember, makeAgent }) => {
     organizationId = (await makeOrganization()).id;
-    admin = await makeAdmin({ name: "Admin" });
+    // Also matches the reset test's "bea" search by email.
+    admin = await makeAdmin({ name: "Admin", email: "bea-admin@example.test" });
     await makeMember(admin.id, organizationId, { role: "admin" });
     agentId = (await makeAgent({ organizationId })).id;
 
@@ -52,6 +53,37 @@ describe("user limit usage routes", () => {
       summary: Record<string, number>;
     };
   };
+
+  test("a soft custom budget does not hide the enforced default in the user summary", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId,
+      environmentId: null,
+      limitValue: 10,
+      cleanupInterval: "calendar_month",
+    });
+    const user = await member({ makeUser, makeMember }, "Soft budget user");
+    await makeInteraction(agentId, { userId: user.id, cost: "12" });
+    await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      cleanupInterval: "calendar_month",
+      behavior: "soft",
+    });
+    const body = await list();
+    expect(body.data.find((row) => row.userId === user.id)).toMatchObject({
+      source: "organization_default",
+      limitValue: 10,
+      spent: 12,
+      status: "at",
+    });
+    expect(body.summary.custom).toBe(0);
+  });
 
   test("ranks users by how close they are to the limit that applies to them", async ({
     makeUser,
@@ -329,10 +361,16 @@ describe("user limit usage routes", () => {
         userId: user.id,
       }),
     ).toBeNull();
-    const [row] = (await list("?search=bea")).data;
-    expect(row).toMatchObject({ spent: 0, status: "ok" });
-    expect(row.lastResetAt).not.toBeNull();
-    expect(row.lastResetByName).toBe("Admin");
+    const row = (await list("?search=bea")).data.find(
+      (result) => result.userId === user.id,
+    );
+    expect(row).toBeDefined();
+    expect(row).toMatchObject({
+      spent: 0,
+      status: "ok",
+      lastResetAt: expect.any(String),
+      lastResetByName: "Admin",
+    });
 
     const audit = await AuditLogModel.findPaginated({
       organizationId,

@@ -2,7 +2,10 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { dump as dumpYaml } from "js-yaml";
-import { isCommandExecutionTool } from "./command-normalization";
+import {
+  isCommandExecutionTool,
+  withoutArgumentCopies,
+} from "./command-normalization";
 import { parseReviewedArguments, reviewedToolLabel } from "./review-display";
 
 /**
@@ -368,8 +371,9 @@ function cardLayout(
 }
 
 /**
- * The reviewed arguments: an object without the proxy's `cmd` copy of a
- * command, the raw text when it is not a JSON object, or undefined.
+ * The reviewed arguments: an object without the copies the proxy evaluates a
+ * call with (`cmd` for a command, `file_path` for Kimi Code's `path`), the raw
+ * text when it is not a JSON object, or undefined.
  */
 function cardArguments(
   review: HitlInspectableReview,
@@ -377,9 +381,7 @@ function cardArguments(
   if (!review.tool) return undefined;
   const args = parseReviewedArguments(review.arguments);
   if (!args) return review.arguments;
-  return isCommandExecutionTool(review.tool) && args.cmd === args.command
-    ? without(args, ["cmd"])
-    : args;
+  return withoutArgumentCopies(review.tool, args);
 }
 
 /**
@@ -736,6 +738,13 @@ function argumentsFullText(review: HitlInspectableReview): string {
       // The proxy mirrors a command tool's value under both names; show it
       // once, naming both.
       if (key === "cmd" && typeof value === "string" && args.command === value)
+        return undefined;
+      // Kimi Code's `path` is evaluated as `file_path` too; show the path once.
+      if (
+        key === "file_path" &&
+        review.tool &&
+        !Object.hasOwn(withoutArgumentCopies(review.tool, args), "file_path")
+      )
         return undefined;
       const label =
         key === "command" && typeof value === "string" && args.cmd === value

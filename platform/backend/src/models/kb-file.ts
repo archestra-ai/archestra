@@ -330,6 +330,67 @@ class KbFileModel {
     return byFile;
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /** Upload sources with an indexed public file in the supplied knowledge bases. */
+  static async findPublishedUploadConnectorIds(params: {
+    organizationId: string;
+    knowledgeBaseIds: string[];
+  }): Promise<string[]> {
+    if (params.knowledgeBaseIds.length === 0) return [];
+    const rows = await db
+      .selectDistinct({
+        connectorId: schema.kbUploadConnectorsTable.connectorId,
+      })
+      .from(schema.kbUploadConnectorsTable)
+      .innerJoin(
+        schema.knowledgeBasesTable,
+        eq(
+          schema.knowledgeBasesTable.id,
+          schema.kbUploadConnectorsTable.knowledgeBaseId,
+        ),
+      )
+      .innerJoin(
+        schema.kbDocumentsTable,
+        eq(
+          schema.kbDocumentsTable.connectorId,
+          schema.kbUploadConnectorsTable.connectorId,
+        ),
+      )
+      .innerJoin(
+        schema.kbFileDocumentsTable,
+        eq(
+          schema.kbFileDocumentsTable.kbDocumentId,
+          schema.kbDocumentsTable.id,
+        ),
+      )
+      .innerJoin(
+        schema.kbFilesTable,
+        eq(schema.kbFilesTable.id, schema.kbFileDocumentsTable.kbFileId),
+      )
+      .where(
+        and(
+          inArray(
+            schema.kbUploadConnectorsTable.knowledgeBaseId,
+            params.knowledgeBaseIds,
+          ),
+          eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
+          isNull(schema.knowledgeBasesTable.deletedAt),
+          eq(schema.kbDocumentsTable.organizationId, params.organizationId),
+          eq(schema.kbFilesTable.organizationId, params.organizationId),
+          ResourcePermissionPolicyModel.organizationAccessCondition({
+            organizationId: params.organizationId,
+            resource: "knowledgeFile",
+            scopeColumn: schema.kbFilesTable.id,
+            action: "use",
+          }),
+        ),
+      );
+    return rows.map((row) => row.connectorId);
+  }
+  // SPDX-SnippetEnd
+
   /** Knowledge bases a file is currently indexed into, batched for a listing. */
   static async findKnowledgeBasesForFiles(
     kbFileIds: string[],
@@ -515,6 +576,15 @@ class KbFileModel {
         )
         .returning({ id: schema.kbFilesTable.id });
       if (!deleted) return false;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["knowledgeFile"],
+        scope: params.id,
+      });
+      // SPDX-SnippetEnd
       if (documentIds.length > 0) {
         await tx
           .delete(schema.kbDocumentsTable)

@@ -225,18 +225,43 @@ describe("sanitizeGeminiToolSchema", () => {
     });
   });
 
-  it("keeps the values of a map of anything unconstrained (z.record(z.string(), z.unknown()))", () => {
+  it("keeps a value of any type free, with every node typed, for schemas any model may receive", () => {
+    const anyValue = [
+      { type: "string" },
+      { type: "number" },
+      { type: "boolean" },
+      { type: "object" },
+      {
+        type: "array",
+        items: {
+          anyOf: [
+            { type: "string" },
+            { type: "number" },
+            { type: "boolean" },
+            { type: "object" },
+          ],
+        },
+      },
+    ];
     expect(
-      sanitizeGeminiToolSchema({
-        type: "object",
-        properties: {
-          tool_args: {
-            type: "object",
-            propertyNames: { type: "string" },
-            additionalProperties: {},
+      sanitizeGeminiToolSchema(
+        {
+          type: "object",
+          properties: {
+            // run_tool's tool_args: z.record(z.string(), z.unknown())
+            tool_args: {
+              type: "object",
+              propertyNames: { type: "string" },
+              additionalProperties: {},
+            },
+            value: { description: "Any JSON value." },
+            results: { type: "array", items: {} },
+            query: { anyOf: [{}, { type: "null" }] },
+            typed: { type: "object", additionalProperties: { type: "string" } },
           },
         },
-      }),
+        { anyValue: "any" },
+      ),
     ).toEqual({
       type: "object",
       properties: {
@@ -244,6 +269,39 @@ describe("sanitizeGeminiToolSchema", () => {
           type: "object",
           propertyNames: { type: "string" },
           additionalProperties: true,
+        },
+        value: { description: "Any JSON value.", anyOf: anyValue },
+        results: { type: "array", items: { anyOf: anyValue } },
+        query: { anyOf: [{ anyOf: anyValue }, { type: "null" }] },
+        typed: { type: "object", additionalProperties: { type: "string" } },
+      },
+    });
+  });
+
+  it("infers string, number and array types from their keywords", () => {
+    expect(
+      sanitizeGeminiToolSchema({
+        type: "object",
+        properties: {
+          name: { minLength: 1 },
+          size: { exclusiveMinimum: 0 },
+          tags: { maxItems: 3 },
+          names: { propertyNames: { pattern: "^[a-z]+$" } },
+        },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        name: { type: "string", minLength: 1 },
+        size: {
+          type: "number",
+          minimum: 0,
+          description: "Value must be greater than `0`.",
+        },
+        tags: { type: "array", maxItems: 3 },
+        names: {
+          type: "object",
+          propertyNames: { type: "string", pattern: "^[a-z]+$" },
         },
       },
     });

@@ -3,7 +3,7 @@ title: Gateway Access for Apps
 sidebarTitle: Apps and Services
 description: Let your own app or service call an MCP Gateway with an OAuth client
 order: 2
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -32,6 +32,8 @@ The client's allowed agents and gateways still limit OAuth access, and the servi
 For LLM Proxy access, enable **LLM Proxy** on the same client and select provider keys on **Access**. Its service-account binding covers all enabled APIs. Spend from that client and runtime virtual keys is attributed to the account. Binding does not supply upstream credentials.
 
 No person signs in, so the app uses the gateway's shared accounts. Give its tools a shared service account in [Choose Its Tools](/docs/mcp/gateway#choose-its-tools).
+
+For [knowledge search](/docs/knowledge#permissions), an app without a service-account binding can search assigned sources published to everyone. A bound app uses the service account’s knowledge permissions. This applies to both MCP and A2A.
 
 1. Create an OAuth client. Under **What can it access?**, select **MCP Gateway** for tools, **A2A** for agent calls, or both. Pick **As itself**. On **Access**, select the gateways and agents it may reach and optionally open **Advanced** to select a service account.
 2. Save the client ID and secret in your secret store. The secret shows only once.

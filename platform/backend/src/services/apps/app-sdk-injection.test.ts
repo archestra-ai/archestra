@@ -171,6 +171,24 @@ describe("the sandbox proxy CSP violation filter", () => {
       "e.sourceFile === window.__ARCHESTRA_APP_SDK_URL__",
     );
   });
+
+  test("injects guest UI state preservation for both owned and external apps and stays eval-free", () => {
+    expect(proxy).toContain("function guestStateBootstrap(restored)");
+    expect(proxy).toContain(
+      "function buildStatePreservationScript(restoredState)",
+    );
+    expect(proxy).toContain('type === "mcp-apps:state-sync"');
+    expect(proxy).toContain(
+      "const { html, sandbox, csp, permissions, ownedApp, restoredState } = event.data.params;",
+    );
+    const bootstrapBody = proxy.slice(
+      proxy.indexOf("function guestStateBootstrap(restored)"),
+      proxy.indexOf("function buildStatePreservationScript(restoredState)"),
+    );
+    expect(bootstrapBody.length).toBeGreaterThan(100);
+    expect(bootstrapBody).not.toMatch(/\beval\s*\(/);
+    expect(bootstrapBody).not.toContain("new Function");
+  });
 });
 
 describe("buildPlatformCspContent", () => {

@@ -66,7 +66,7 @@ Run these from `platform/`:
 
 The pre-commit hook runs the type check, Biome, and Knip (unused exports) in each workspace, plus the migration checks in the backend. It blocks the commit when one fails.
 
-Tilt also starts Drizzle Studio at <https://local.drizzle.studio> to browse the development database. To use `psql` instead:
+`tilt trigger database-gui` starts Drizzle Studio at <https://local.drizzle.studio> to browse the development database. To use `psql` instead:
 
 ```bash
 kubectl exec -n archestra-dev postgresql-0 -- env PGPASSWORD=archestra_dev_password psql -U archestra -d archestra_dev

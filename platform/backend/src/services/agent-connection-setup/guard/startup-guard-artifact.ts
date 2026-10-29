@@ -10,6 +10,7 @@ import {
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
   KILO_GUARD_CLIENT,
+  KIMI_CODE_GUARD_CLIENT,
   OPENCODE_GUARD_CLIENT,
 } from "./clients";
 import { renderStartupGuardScript } from "./startup-guard";
@@ -39,7 +40,14 @@ const publicUrl = z
 
 /** Public render parameters only. Secret fields are literal local substitution slots. */
 export const StartupGuardArtifactRequestSchema = z.strictObject({
-  clientId: z.enum(["claude-code", "codex", "copilot-cli", "opencode", "kilo"]),
+  clientId: z.enum([
+    "claude-code",
+    "codex",
+    "copilot-cli",
+    "opencode",
+    "kilo",
+    "kimi-code",
+  ]),
   platform: z.enum(["bash", "windows"]),
   context: z.strictObject({
     appName: text,
@@ -89,6 +97,7 @@ export function startupGuardArtifact(
     "claude-code": CLAUDE_CODE_GUARD_CLIENT,
     codex: CODEX_GUARD_CLIENT,
     "copilot-cli": COPILOT_GUARD_CLIENT,
+    "kimi-code": KIMI_CODE_GUARD_CLIENT,
     opencode: OPENCODE_GUARD_CLIENT,
     kilo: KILO_GUARD_CLIENT,
   };

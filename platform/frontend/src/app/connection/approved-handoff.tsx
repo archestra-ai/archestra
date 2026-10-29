@@ -219,6 +219,7 @@ function terminalLines(params: {
 const SIGNS_IN_FROM_INSTALLER: ReadonlySet<string> = new Set([
   "claude-code",
   "codex",
+  "kimi-code",
   "opencode",
   "kilo",
 ]);
@@ -228,6 +229,7 @@ const LAUNCHED_BINARIES: Record<string, string> = {
   "claude-code": "claude",
   codex: "codex",
   "copilot-cli": "copilot",
+  "kimi-code": "kimi",
   opencode: "opencode",
   kilo: "kilo",
 };

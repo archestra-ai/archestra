@@ -351,7 +351,10 @@ ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
 [aliases.host]
 ${CLAUDE_CODE_BATTERY} = ["archestra"]
 
-# The coding battery's tools under Codex's, OpenCode's, and Claude Desktop Cowork's spellings.
+# The coding battery's tools under Codex's, OpenCode's, Claude Desktop
+# Cowork's and Kimi Code's spellings. Kimi Code shares Claude Code's other tool
+# names; the proxy also evaluates its Read, Write and Edit \`path\` as
+# \`file_path\`.
 [aliases.tool.${CODING_BATTERY}]
 shell = [
   { name = "host/archestra/exec_command", args = { command = "cmd" } },
@@ -366,6 +369,7 @@ edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }
 fetch_url = [
   { name = "host/archestra/webfetch", args = { url = "url" } },
   { name = "host/archestra/mcp__workspace__web_fetch", args = { url = "url" } },
+  { name = "host/archestra/FetchURL", args = { url = "url" } },
 ]
 
 [policy]
@@ -443,6 +447,16 @@ delta = {}
 # \`Task\` is the earlier name of \`Agent\`.
 [[policy.tool]]
 name = "host/archestra/Task"
+delta = {}
+
+# Claude Desktop Code tab's local turn UI tools (the desktop equivalents of
+# EndConversation and TodoWrite) render inside the session's own window.
+[[policy.tool]]
+name = "host/archestra/mcp__ccd_turn__wrap_up"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/mcp__ccd_turn__update_plan"
 delta = {}
 
 [[policy.tool]]

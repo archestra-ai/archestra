@@ -547,6 +547,7 @@ function admitBody(params: {
   enveloped: ReadonlySet<string>;
 }): Admission {
   const { body, records, enveloped } = params;
+  if (isEmptyHandbackReport(body)) return { text: body, withheld: false };
   const crossed = (text: string) =>
     records.exact.has(text) || enveloped.has(text);
   if (crossed(body)) return { text: body, withheld: false };
@@ -687,9 +688,16 @@ function containsPeerFraming(text: string): boolean {
   );
 }
 
+const TRAILING_HARNESS_SYSTEM_NOTES =
+  /(?:\n*\[SYSTEM NOTIFICATION - NOT USER INPUT\][\s\S]*?(?=\n*<total_tokens>\d+ tokens left<\/total_tokens>\s*$|$))?(?:\n*<total_tokens>\d+ tokens left<\/total_tokens>\s*)?$/;
+
 function peerFramingResidue(text: string): boolean {
   if (!containsPeerFraming(text)) return false;
-  let residue = withinRelayFraming(text.trim()) ?? text;
+  const withoutTrailingNotes = text
+    .replace(TRAILING_HARNESS_SYSTEM_NOTES, "")
+    .trim();
+  let residue =
+    withinRelayFraming(withoutTrailingNotes) ?? withoutTrailingNotes;
   for (const envelope of ENVELOPES) {
     residue = residue.replace(new RegExp(envelope.pattern.source, "g"), "");
   }
@@ -713,7 +721,17 @@ function withinRelayFraming(trimmed: string): string | undefined {
   return trimmed.slice(preface.length, trimmed.length - closing.length);
 }
 
+function isEmptyHandbackReport(body: string): boolean {
+  const report = handbackReport(body);
+  if (report !== undefined && withoutChildReturnMarker(report).trim() === "") {
+    return true;
+  }
+  const unmarked = withoutChildReturnMarker(body);
+  return unmarked !== body && unmarked.trim() === "";
+}
+
 function harnessOnlyBody(body: string): boolean {
+  if (isEmptyHandbackReport(body)) return true;
   if (!isStructuredRelayBody(body)) return false;
   const admitted = admitTeamProtocol(body, recordLookups([]));
   return admitted !== undefined && !admitted.withheld;
@@ -724,6 +742,7 @@ function recordedBody(params: {
   records: RecordLookups;
   enveloped: ReadonlySet<string>;
 }): boolean {
+  if (isEmptyHandbackReport(params.body)) return true;
   const crossed = (text: string) =>
     params.records.exact.has(text) || params.enveloped.has(text);
   if (crossed(params.body)) return true;

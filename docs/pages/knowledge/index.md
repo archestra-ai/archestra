@@ -2,7 +2,7 @@
 title: Knowledge (RAG)
 description: Give agents and MCP clients cited answers from connected sources and uploaded documents
 order: 5
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -86,7 +86,7 @@ If an answer is wrong or missing, find the cause here:
 | "I could not find that" | The agent or gateway does not have the source, or the person has no **Can use** on it | Add the source under **Tools & Knowledge**. Check [permissions](#permissions). |
 | An old answer | The index is only as current as the last sync | Check the connector's status. See [Troubleshoot Sync](/docs/knowledge/connectors#troubleshoot-sync). |
 | An answer from the wrong space or project | Search covers every source the agent has | Name the place in the question: "In the DEV space, how do we roll back?" Or put it in the agent's instructions. |
-| A quote that is not in the source | The model changed the quote | In built-in chat, Archestra logs each quote it cannot find and counts it in the [`rag_quote_verification_total`](/docs/admin/observability/metrics#rag_quote_verification_total) metric. The person sees no warning. |
+| A quote that is not in the source | The model changed the quote | In built-in chat, Archestra logs each quote it cannot find and counts it in the [`rag_quote_verification_total`](/docs/admin/observability/metrics/knowledge-base#rag_quote_verification_total) metric. The person sees no warning. |
 
 Naming a place only narrows the results. It never shows a document the person cannot open.
 
@@ -96,7 +96,7 @@ Search results count as sensitive data. [Guardrails](/docs/agents/guardrails) ca
 
 ## Permissions
 
-Search always runs as the person who asks. An agent or MCP client never finds a document that person could not find without it.
+Search uses the identity behind the request. Personal credentials use the person’s access; service-account credentials use that account’s access.
 
 Who may read each document depends on where it comes from:
 
@@ -112,6 +112,7 @@ Set **Can use** in the permissions of each connector, file, or Knowledge Base. S
 
 - Sharing a Knowledge Base does not share its connectors or files. Each one needs its own grant.
 - Grant changes apply at once. Source permission changes apply at the connector's next permission sync.
-- A team or organization token has no person behind it. It finds only sources shared with everyone in the organization.
+- An [OAuth application](/docs/mcp/authentication/applications#oauth-client-credentials-applications) without a service-account binding searches only explicitly assigned sources shared with **Everyone in the organization** at **Can use**, through MCP or A2A. The Knowledge Base and each connector or uploaded file need that grant; directly assigned connectors need it too. Source permissions still exclude private documents.
+- Applications without a service-account binding do not inherit the client creator’s personal or team access. Bind a service account when the application needs access granted to a particular account.
 
 Granular access and permission sync are Enterprise features. See [Pricing Model](/docs/get-started/pricing-model).

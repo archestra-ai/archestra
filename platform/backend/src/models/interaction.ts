@@ -1526,10 +1526,14 @@ class InteractionModel {
         );
         return;
       }
-      // A credential's billing team takes the place of the agent's teams.
+      // A credential's billing team takes the place of the agent's teams the
+      // caller belongs to.
       const teamIds = interaction.billingTeamId
         ? [interaction.billingTeamId]
-        : await AgentTeamModel.getTeamsForAgent(interaction.profileId);
+        : await AgentTeamModel.getCallerTeamsForAgent({
+            agentId: interaction.profileId,
+            userId: interaction.userId,
+          });
       if (teamIds.length === 0) {
         logger.warn(
           `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,

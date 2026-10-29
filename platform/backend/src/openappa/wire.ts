@@ -62,6 +62,7 @@ export type AppaSessionIdentity = {
     | "kilo-session-header"
     | "kilo-hosted-header"
     | "pi-session-header"
+    | "kimi-code-cache-key"
     | "prompt-cache-key"
     | "metadata-session-id"
     | "conversation"

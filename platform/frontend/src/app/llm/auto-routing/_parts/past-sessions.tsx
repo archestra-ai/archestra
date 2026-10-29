@@ -2,7 +2,6 @@
 
 import {
   AUTO_ROUTING_BACKFILL_MAX_COST_USD,
-  AUTO_ROUTING_BACKFILL_SCORER_CALLS,
   clientForExternalAgentIds,
 } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
@@ -19,7 +18,6 @@ import {
 } from "@/components/ui/dialog";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   type AutoRoutingBackfillState,
   type AutoRoutingScorerState,
@@ -28,18 +26,13 @@ import {
   useScanAutoRoutingBackfill,
   useScoreAutoRoutingBackfill,
 } from "@/lib/auto-routing.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { formatDate } from "@/lib/utils/date-time";
 import { formatCurrency } from "@/lib/utils/format-currency";
 import { AddJevKeyLink } from "./add-jev-key";
 
 type Backfill = NonNullable<AutoRoutingBackfillState["backfill"]>;
 type ScoreOffer = NonNullable<AutoRoutingBackfillState["scoreOffer"]>;
-
-const API_SHAPES: Record<Backfill["breakdown"][number]["apiShape"], string> = {
-  chat_completions: "Chat Completions",
-  responses: "Responses",
-  messages: "Messages",
-};
 
 /**
  * Past sessions from the interaction log the plan can learn from: a free scan
@@ -48,13 +41,11 @@ const API_SHAPES: Record<Backfill["breakdown"][number]["apiShape"], string> = {
  */
 export function PastSessions({
   routingEnabled,
-  required,
   hasActivePlan,
   canUpdate,
   scorer,
 }: {
   routingEnabled: boolean;
-  required: number;
   hasActivePlan: boolean;
   canUpdate: boolean;
   scorer: AutoRoutingScorerState;
@@ -67,40 +58,41 @@ export function PastSessions({
   const { backfill, scoreOffer } = data;
   const running = backfill?.status === "running";
   if (hasActivePlan && !running && !opened) {
+    if (!scoreOffer) {
+      return canUpdate ? (
+        <Button
+          size="xs"
+          variant="link"
+          className="h-auto p-0 text-sm text-muted-foreground"
+          disabled={scan.isPending}
+          onClick={() => scan.mutate()}
+        >
+          Scan past sessions
+        </Button>
+      ) : null;
+    }
     return (
       <p
         className="flex items-center gap-2 text-sm text-muted-foreground"
         data-testid="auto-routing-past-traffic"
       >
         <span className="tabular-nums">
-          Past traffic:{" "}
-          {(backfill?.progress?.scored ?? 0).toLocaleString("en-US")} scored
+          {scoreOffer.rescore
+            ? `The scorer changed: ${count(scoreOffer.remaining)} past sessions to re-score`
+            : `${count(scoreOffer.remaining)} past sessions to score`}
         </span>
         {scorer === "no_jev_key" ? (
-          <>
-            <span aria-hidden>·</span>
-            <AddJevKeyLink />
-          </>
+          <AddJevKeyLink />
         ) : (
           canUpdate && (
-            <>
-              <span aria-hidden>·</span>
-              <Button
-                size="xs"
-                variant="link"
-                className="h-auto p-0 text-sm"
-                disabled={scan.isPending}
-                onClick={() => (scoreOffer ? setOpened(true) : scan.mutate())}
-              >
-                {scoreOffer
-                  ? scoreOffer.rescore
-                    ? "Re-score"
-                    : "Score"
-                  : backfill
-                    ? "Scan again"
-                    : "Scan"}
-              </Button>
-            </>
+            <Button
+              size="xs"
+              variant="link"
+              className="h-auto p-0 text-sm"
+              onClick={() => setOpened(true)}
+            >
+              {scoreOffer.rescore ? "Re-score" : "Score"}
+            </Button>
           )
         )}
       </p>
@@ -116,9 +108,9 @@ export function PastSessions({
         <h3 className="text-sm font-medium">Past sessions</h3>
         {canUpdate && !running && (
           <Button
-            size="sm"
-            variant="outline"
-            className="ml-auto"
+            size="xs"
+            variant="link"
+            className="ml-auto h-auto p-0 text-sm"
             disabled={scan.isPending}
             onClick={() => scan.mutate()}
           >
@@ -127,9 +119,9 @@ export function PastSessions({
         )}
         {canUpdate && running && (
           <Button
-            size="sm"
-            variant="outline"
-            className="ml-auto"
+            size="xs"
+            variant="link"
+            className="ml-auto h-auto p-0 text-sm"
             disabled={cancel.isPending}
             onClick={() => cancel.mutate()}
           >
@@ -137,17 +129,12 @@ export function PastSessions({
           </Button>
         )}
       </div>
-      {!routingEnabled && (
-        <p className="text-sm text-muted-foreground">
-          Scored sessions are fitted into a plan once auto routing is turned on.
-        </p>
-      )}
       {backfill ? (
-        <BackfillStatus backfill={backfill} required={required} />
+        <BackfillStatus backfill={backfill} routingEnabled={routingEnabled} />
       ) : (
         <p className="text-sm text-muted-foreground">
-          Scanning counts the past sessions in the interaction log the plan
-          could learn from. It reads the database only and costs nothing.
+          Scanning finds the past sessions in the interaction log the plan could
+          learn from. It reads the database only and costs nothing.
         </p>
       )}
       {backfill &&
@@ -163,54 +150,63 @@ export function PastSessions({
 
 function BackfillStatus({
   backfill,
-  required,
+  routingEnabled,
 }: {
   backfill: Backfill;
-  required: number;
+  routingEnabled: boolean;
 }) {
   if (backfill.status === "running" && backfill.phase === "scan") {
     return <p className="text-sm">Scanning past sessions…</p>;
   }
-  const eligible = backfill.eligibleSessions;
+  const { progress } = backfill;
+  const unread = progress
+    ? [
+        ...(progress.noText > 0
+          ? [`${count(progress.noText)} without text`]
+          : []),
+        ...(progress.failed > 0 ? [`${count(progress.failed)} failed`] : []),
+      ]
+    : [];
   return (
-    <div className="space-y-2 text-sm">
-      <p data-testid="auto-routing-past-sessions-eligible">
-        {eligible.toLocaleString("en-US")} eligible sessions since{" "}
-        {formatDate({ date: backfill.windowStart })}.{" "}
-        {eligible < required
-          ? `The plan needs ${required.toLocaleString("en-US")}; live auto traffic fills the rest.`
-          : "Enough for a first plan."}
-      </p>
-      {backfill.breakdown.length > 0 && (
-        <ul className="text-muted-foreground">
-          {backfill.breakdown.map((row) => (
-            <li key={`${row.apiShape}-${row.client}`}>
-              {API_SHAPES[row.apiShape]},{" "}
-              {clientForExternalAgentIds([row.client])?.label ?? row.client}:{" "}
-              {row.sessions.toLocaleString("en-US")}
-            </li>
-          ))}
-        </ul>
-      )}
-      {backfill.progress && (
-        <p data-testid="auto-routing-past-sessions-progress">
-          {backfill.status === "running" ? "Scoring: " : "Scored "}
-          {backfill.progress.scored.toLocaleString("en-US")} of{" "}
-          {backfill.progress.sample.toLocaleString("en-US")} sessions, spent{" "}
-          {formatCurrency(backfill.spentCostUsd)}
-          {backfill.maxCostUsd !== null && (
-            <span> of {formatCurrency(backfill.maxCostUsd)}</span>
-          )}
-          .
-        </p>
-      )}
+    <div className="space-y-3 text-sm">
+      <details>
+        <summary className="cursor-pointer select-none tabular-nums">
+          <span data-testid="auto-routing-past-sessions-funnel">
+            {[
+              ...funnel(backfill.eligibleSessions, progress),
+              ...(backfill.status === "running" && backfill.phase === "score"
+                ? [`scoring, ${spend(backfill)}`]
+                : []),
+            ].join(" · ")}
+          </span>
+        </summary>
+        <div className="mt-2 space-y-3 text-muted-foreground tabular-nums">
+          <div className="space-y-1">
+            <p>
+              {formatDate({
+                date: backfill.windowStart,
+                dateFormat:
+                  new Date(backfill.windowStart).getFullYear() ===
+                  new Date(backfill.cutoff).getFullYear()
+                    ? "MMM d"
+                    : "MMM d, yyyy",
+              })}{" "}
+              –{" "}
+              {formatDate({ date: backfill.cutoff, dateFormat: "MMM d, yyyy" })}
+            </p>
+            {unread.length > 0 && <p>Not scored: {unread.join(", ")}</p>}
+            {backfill.phase === "score" && <p>Spent {spend(backfill)}</p>}
+          </div>
+          <ClientBreakdown breakdown={backfill.breakdown} />
+        </div>
+      </details>
       {backfill.error && (
         <InlineNotice variant={backfill.status === "failed" ? "error" : "info"}>
           <AlertTriangle />
           <InlineNoticeText>{backfill.error}</InlineNoticeText>
         </InlineNotice>
       )}
-      {backfill.fitBlockedReason && (
+      {routingEnabled && backfill.fitBlockedReason && (
         <InlineNotice>
           <AlertTriangle />
           <span className="font-medium">
@@ -223,13 +219,74 @@ function BackfillStatus({
   );
 }
 
+function spend(backfill: Backfill): string {
+  const spent = formatCurrency(backfill.spentCostUsd);
+  return backfill.maxCostUsd === null
+    ? spent
+    : `${spent} of ${formatCurrency(backfill.maxCostUsd)}`;
+}
+
+/** Found, then scored; unread sessions count against the sample, not as pending. */
+function funnel(found: number, progress: Backfill["progress"]): string[] {
+  if (!progress) return [`${count(found)} found`, "none scored yet"];
+  const attempted = progress.scored + progress.noText + progress.failed;
+  return [
+    `${count(found)} found`,
+    attempted < progress.sample
+      ? `${count(progress.scored)} of ${count(progress.sample)} scored`
+      : `${count(progress.scored)} scored`,
+  ];
+}
+
+/** Sessions per client, largest first; the tail past the top rows folds into "Other". */
+function ClientBreakdown({ breakdown }: { breakdown: Backfill["breakdown"] }) {
+  const appName = useAppName();
+  const totals = new Map<string, number>();
+  for (const row of breakdown) {
+    const label = clientLabel(row.client, appName);
+    totals.set(label, (totals.get(label) ?? 0) + row.sessions);
+  }
+  const ranked = [...totals]
+    .filter(([label]) => label !== OTHER_CLIENTS)
+    .sort(([, a], [, b]) => b - a);
+  const other =
+    (totals.get(OTHER_CLIENTS) ?? 0) +
+    ranked.slice(TOP_CLIENTS).reduce((sum, [, sessions]) => sum + sessions, 0);
+  const rows = [
+    ...ranked.slice(0, TOP_CLIENTS),
+    ...(other > 0 ? [[OTHER_CLIENTS, other] as const] : []),
+  ];
+  if (rows.length === 0) return null;
+  const largest = Math.max(...rows.map(([, sessions]) => sessions));
+  return (
+    <table className="w-full max-w-md text-foreground">
+      <tbody>
+        {rows.map(([label, sessions]) => (
+          <tr key={label}>
+            <td className="py-0.5 pr-3 whitespace-nowrap">{label}</td>
+            <td className="py-0.5 pr-3 text-right tabular-nums">
+              {count(sessions)}
+            </td>
+            <td className="w-full py-0.5" aria-hidden>
+              <div
+                className="h-2 rounded-sm bg-primary/60"
+                style={{ width: `${(sessions / largest) * 100}%` }}
+              />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function ScoreAction({ offer }: { offer: ScoreOffer }) {
   // What the admin confirms, frozen while the dialog is open.
   const [confirming, setConfirming] = useState<{
     offer: ScoreOffer;
     maxCostUsd: number;
   } | null>(null);
-  const [ceiling, setCeiling] = useState(String(offer.suggestedMaxCostUsd));
+  const [ceiling, setCeiling] = useState(offer.suggestedMaxCostUsd.toFixed(2));
   const score = useScoreAutoRoutingBackfill();
   const maxCostUsd = Number(ceiling);
   const ceilingError =
@@ -247,47 +304,41 @@ function ScoreAction({ offer }: { offer: ScoreOffer }) {
           The session scorer changed since these sessions were scored.
         </p>
       )}
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <Label htmlFor="auto-routing-backfill-ceiling">
-            Spending limit (USD)
-          </Label>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          size="sm"
+          disabled={ceilingError !== null}
+          onClick={() => setConfirming({ offer, maxCostUsd })}
+        >
+          {verb} {count(offer.remaining)} sessions · ~
+          {formatCurrency(offer.estimatedCostUsd)}
+        </Button>
+        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <span>limit $</span>
           <Input
-            id="auto-routing-backfill-ceiling"
+            aria-label="Spending limit (USD)"
             type="number"
             min={0}
             max={AUTO_ROUTING_BACKFILL_MAX_COST_USD}
             step="0.01"
             value={ceiling}
             aria-invalid={ceilingError !== null}
-            aria-describedby="auto-routing-backfill-ceiling-hint"
+            aria-describedby={
+              ceilingError ? "auto-routing-backfill-ceiling-error" : undefined
+            }
             onChange={(event) => setCeiling(event.target.value)}
-            className="w-32"
+            className="h-8 w-20"
           />
-        </div>
-        <Button
-          size="sm"
-          disabled={ceilingError !== null}
-          onClick={() => setConfirming({ offer, maxCostUsd })}
-        >
-          {verb} {offer.remaining.toLocaleString("en-US")} sessions (≤{" "}
-          {ceilingError === null ? formatCurrency(maxCostUsd) : "?"})
-        </Button>
-        <span className="text-sm text-muted-foreground">
-          Estimated {formatCurrency(offer.estimatedCostUsd)}
         </span>
       </div>
-      <p
-        id="auto-routing-backfill-ceiling-hint"
-        className={
-          ceilingError
-            ? "text-sm text-destructive"
-            : "text-sm text-muted-foreground"
-        }
-      >
-        {ceilingError ??
-          `May be exceeded by at most ${AUTO_ROUTING_BACKFILL_SCORER_CALLS} × the per-call cost of calls in flight.`}
-      </p>
+      {ceilingError && (
+        <p
+          id="auto-routing-backfill-ceiling-error"
+          className="text-sm text-destructive"
+        >
+          {ceilingError}
+        </p>
+      )}
       <Dialog
         open={confirming !== null}
         onOpenChange={(open) => !open && setConfirming(null)}
@@ -340,4 +391,20 @@ function ScoreAction({ offer }: { offer: ScoreOffer }) {
       </Dialog>
     </div>
   );
+}
+
+const TOP_CLIENTS = 5;
+const OTHER_CLIENTS = "Other";
+/** Archestra agents record their delegation chain, agent ids joined by ":", as the client. */
+const DELEGATION_CHAIN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})*$/;
+
+function clientLabel(client: string, appName: string): string {
+  const family = clientForExternalAgentIds([client]);
+  if (family) return family.label;
+  return DELEGATION_CHAIN.test(client) ? `${appName} agents` : OTHER_CLIENTS;
+}
+
+function count(value: number): string {
+  return value.toLocaleString("en-US");
 }

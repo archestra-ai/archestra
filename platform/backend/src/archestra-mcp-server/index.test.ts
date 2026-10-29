@@ -417,7 +417,9 @@ describe("preflightArchestraToolCall", () => {
     expect(refused).toEqual(
       await executeArchestraTool(todoWrite, { todos: [todo] }, context),
     );
-    expect((refused?.content[0] as any).text).toContain("is not assigned");
+    expect((refused?.content[0] as any).text).toContain(
+      "is not available through",
+    );
   });
 
   test("passes an argument that run_tool unwraps, since run_tool runs it", async () => {

@@ -204,8 +204,11 @@ local_resource(
 local_resource(
   'app-runtime-rs-build',
   # build:dev = the release-fast profile (no LTO, incremental) for fast in-loop
-  # rebuilds; CI/Docker still build the optimized --release binary.
-  cmd='pnpm --filter @archestra/app-runtime-rs build:dev',
+  # rebuilds; CI/Docker still build the optimized --release binary. On linux
+  # x64, scripts/napi-prebuilt.mjs first installs the addon CI built for this
+  # exact archestra-rs tree and skips cargo; a modified tree, a tree CI has not
+  # published, another platform or ARCHESTRA_DEV_NAPI_PREBUILT=false builds.
+  cmd='node ../scripts/napi-prebuilt.mjs app-runtime-rs || pnpm --filter @archestra/app-runtime-rs build:dev',
   deps=[
     '../archestra-rs/app-runtime-rs/src',
     '../archestra-rs/app-runtime-core/src',
@@ -223,7 +226,7 @@ local_resource(
 # app-runtime-rs-build.
 local_resource(
   'router-rs-build',
-  cmd='pnpm --filter @archestra/router-rs build:dev',
+  cmd='node ../scripts/napi-prebuilt.mjs router-rs || pnpm --filter @archestra/router-rs build:dev',
   deps=[
     '../archestra-rs/router-rs/src',
     '../archestra-rs/router-core/src',
@@ -256,7 +259,7 @@ else:
     # Build before starting/restarting Node: native modules stay cached in a
     # running process. resource_deps alone only orders the initial startup.
     # A failed build leaves the previous backend running and surfaces in Tilt.
-    backend_build_cmd = 'pnpm --filter @archestra/openappa-rs build:dev && pnpm --filter @archestra/openappa-rs smoke:load'
+    backend_build_cmd = '(node ../scripts/napi-prebuilt.mjs openappa-rs || pnpm --filter @archestra/openappa-rs build:dev) && pnpm --filter @archestra/openappa-rs smoke:load'
     backend_watch_deps.extend([
       '../archestra-rs/openappa-rs/src',
       '../archestra-rs/openappa-rs/build.rs',
@@ -267,7 +270,10 @@ else:
       '../archestra-rs/Cargo.lock',
     ])
 
-  # Backend dev server
+  # Backend dev server. ARCHESTRA_DEV_BACKEND_WATCH=false (in .env) runs it
+  # without the tsdown watcher; `tilt trigger pnpm-dev-backend` rebuilds and
+  # restarts it on demand. See run-backend-dev.sh. The Windows serve command
+  # keeps `pnpm dev`.
   local_resource(
     dev_resource_name + '-backend',
     cmd=backend_build_cmd,
@@ -294,10 +300,15 @@ else:
   frontend_serve_env = dict(frontend_env_vars)
   frontend_serve_env['PORT'] = frontend_port
   frontend_serve_env['ARCHESTRA_DEV_BUNDLER'] = dev_bundler
+  # Launch scripts/dev.mjs directly, as the int-tests resource below does. The
+  # `pnpm dev --filter` route adds pnpm, turbo, pnpm and sh wrappers around the
+  # same command: four extra Node processes and about 0.35 GB of RSS per dev
+  # server that only forward signals. Tilt already loaded .env into the
+  # environment the serve command inherits.
   local_resource(
     dev_resource_name + '-frontend',
-    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; pnpm dev --filter @frontend & wait $!',
-    serve_cmd_bat='pnpm dev --filter @frontend',
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; (cd ../frontend && exec node ./scripts/dev.mjs) & wait $!',
+    serve_cmd_bat='cd ..\\frontend && node .\\scripts\\dev.mjs',
     labels=['dev'],
     resource_deps=[dev_resource_name + '-backend'],
     deps=['../.env'],
@@ -311,13 +322,21 @@ else:
   # server's `.next/dev/lock`. Pointing the SDK base URL at an unreachable
   # port surfaces any escaped (un-mocked) request as ECONNREFUSED instead of
   # silently hitting the real backend.
+  #
+  # Manual: frontend/playwright.config.ts declares this server as its
+  # `webServer` and starts it on demand when nothing listens on :3010, so a
+  # second Next dev server (about 0.6 GB idle, a second watcher over the
+  # frontend tree) only exists once the integration tests run. Keep a
+  # persistent one across runs with: tilt trigger pnpm-dev-frontend-int-tests
   local_resource(
     dev_resource_name + '-frontend-int-tests',
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False,
     # Route through scripts/dev.mjs so the int-tests frontend gets the same
     # bundler handling as `pnpm dev` (ARCHESTRA_DEV_BUNDLER validation plus the
     # platform-aware fallback outside Tilt — see the "//dev" comment in
     # frontend/package.json). The script adds `-H 127.0.0.1`.
-    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../frontend && node ./scripts/dev.mjs -p ' + frontend_int_tests_port + ' & wait $!',
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; (cd ../frontend && exec node ./scripts/dev.mjs -p ' + frontend_int_tests_port + ') & wait $!',
     serve_cmd_bat='cd ..\\frontend && node .\\scripts\\dev.mjs -p ' + frontend_int_tests_port,
     labels=['dev'],
     deps=['../.env'],

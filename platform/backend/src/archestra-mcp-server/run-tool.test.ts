@@ -226,6 +226,7 @@ describe("run_tool", () => {
     // Fresh agent with no Archestra tools assigned.
     const unassignedAgent = await makeAgent({
       name: "Unassigned Agent",
+      agentType: "agent",
       organizationId: mockContext.organizationId,
     });
 
@@ -241,12 +242,44 @@ describe("run_tool", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "is not assigned to this agent",
+      'is not available through the "Unassigned Agent" agent',
     );
     expect((result._meta?.archestraError as any)?.code).toBe(
       "tool_not_assigned",
     );
     expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+  });
+
+  // A model took a tool name from another agent's tool list and called it
+  // through its gateway; the refusal said "this agent" and nothing more.
+  test("names the gateway and says whose tools a refused name belongs to", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      name: "My Gateway",
+      agentType: "mcp_gateway",
+      organizationId: mockContext.organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      { tool_name: "create_agent", tool_args: { name: "some-agent" } },
+      {
+        ...mockContext,
+        agent: { id: gateway.id, name: gateway.name },
+        agentId: gateway.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain(
+      'is not available through the "My Gateway" MCP gateway',
+    );
+    expect(text).toContain("Tools listed for other agents");
+    expect(text).toContain(
+      'it can be added to the tools of the "My Gateway" MCP gateway',
+    );
   });
 
   test("routes agent delegation tool names through the built-in dispatcher", async ({
@@ -1004,7 +1037,7 @@ describe("run_tool", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "not assigned to this agent",
+        "is not available through",
       );
       expect(runSpy).not.toHaveBeenCalled();
     });
@@ -1106,7 +1139,7 @@ describe("run_tool", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "not assigned to this agent",
+        "is not available through",
       );
     });
 
@@ -1167,7 +1200,7 @@ describe("run_tool", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "not assigned to this agent",
+        "is not available through",
       );
       const assignedNames = await ToolModel.getAssignedToolNames(
         dynamicAgent.id,

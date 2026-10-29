@@ -18,6 +18,10 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
+import {
+  observeLimitCheck,
+  reportLimitStorageError,
+} from "@/observability/metrics/limit";
 import type {
   CreateLimit,
   CredentialSpendCap,
@@ -143,16 +147,23 @@ class LimitModel {
   /**
    * Create a new limit
    */
-  static async create(data: CreateLimit): Promise<LimitWithLabels> {
+  static async create(
+    data: CreateLimit & { teamManaged?: boolean },
+  ): Promise<LimitWithLabels> {
     if (
       data.limitType === "requests_per_minute" ||
       data.limitType === "tokens_per_minute" ||
       data.limitType === "requests" ||
       data.limitType === "tokens" ||
       data.limitType === "token_cost" ||
-      data.cleanupInterval === "minute"
+      data.cleanupInterval === "minute" ||
+      data.behavior === "soft"
     ) {
-      data = CreateLimitSchema.parse(data);
+      // Parsing validates the request fields; the server-set flag is not one.
+      data = {
+        ...CreateLimitSchema.parse(data),
+        teamManaged: data.teamManaged,
+      };
     }
     const { labels, ...columns } = data;
     const [limit] = await db
@@ -214,6 +225,7 @@ class LimitModel {
     limitType?: LimitType,
     organizationId?: string,
     labels?: Record<string, string[]>,
+    teamIds?: string[],
   ): Promise<LimitWithLabels[]> {
     const labelFilteredIds = labels
       ? await LimitLabelModel.getIdsMatchingLabels(labels)
@@ -223,6 +235,13 @@ class LimitModel {
     }
 
     const whereConditions: SQL[] = [];
+    if (teamIds) {
+      if (!teamIds.length) return [];
+      whereConditions.push(
+        eq(schema.limitsTable.entityType, "team"),
+        inArray(schema.limitsTable.entityId, teamIds),
+      );
+    }
 
     if (labelFilteredIds) {
       whereConditions.push(inArray(schema.limitsTable.id, labelFilteredIds));
@@ -662,7 +681,8 @@ class LimitModel {
         ) ||
         patchData.cleanupInterval === "minute" ||
         existingLimit.cleanupInterval === "minute" ||
-        existingLimit.limitType === "token_cost"
+        existingLimit.limitType === "token_cost" ||
+        patchData.behavior !== undefined
       ) {
         const validated = CreateLimitSchema.safeParse({
           ...existingLimit,
@@ -1437,6 +1457,7 @@ class LimitModel {
       entityId: row.entityId,
       limitType: row.limitType,
       limitValue: row.limitValue,
+      behavior: row.behavior,
       mcpServerName: row.mcpServerName ?? null,
       toolName: row.toolName ?? null,
       model: row.model ?? null,
@@ -1689,7 +1710,13 @@ export class LimitValidationService {
     agent?: { environmentId: string | null; organizationId?: string };
     teamSource?: AgentTeamSource;
     /** Fresh rows from this request's scoped metadata query. */
-    snapshot?: Pick<ProxyRequestState, "scope" | "agentTeamIds" | "limitState">;
+    snapshot?: Pick<ProxyRequestState, "scope" | "limitTeamIds" | "limitState">;
+    /**
+     * Authenticated caller whose team memberships attribute the call to the
+     * agent's teams. Defaults to `userId`; null when no credential proves a
+     * user, so only a billing team's limits apply.
+     */
+    teamMemberUserId?: string | null;
     /** LLM OAuth client the request authenticated as, for its spend cap. */
     llmOauthClientId?: string;
     /**
@@ -1702,6 +1729,10 @@ export class LimitValidationService {
     const { agentId, virtualKeyId, passthroughVirtualKeyId, llmOauthClientId } =
       params;
     const userId = params.billingTeamId ? undefined : params.userId;
+    const teamMemberUserId =
+      params.teamMemberUserId === undefined
+        ? (params.userId ?? null)
+        : params.teamMemberUserId;
 
     try {
       logger.debug(
@@ -1718,18 +1749,22 @@ export class LimitValidationService {
         scope.billingTeamId === params.billingTeamId &&
         scope.virtualKeyId === virtualKeyId &&
         scope.passthroughVirtualKeyId === passthroughVirtualKeyId &&
-        scope.llmOauthClientId === llmOauthClientId
+        scope.llmOauthClientId === llmOauthClientId &&
+        scope.teamMemberUserId === teamMemberUserId
           ? params.snapshot
           : undefined;
 
       // Get the teams to cleanup and check team and organization limits: the
-      // credential's billing team when it has one, otherwise the agent's teams.
+      // credential's billing team when it has one, otherwise the agent's teams
+      // the caller belongs to.
       const agentTeamIds = params.billingTeamId
         ? [params.billingTeamId]
-        : (snapshot?.agentTeamIds ??
-          (params.teamSource
-            ? await params.teamSource.agentTeamIds(agentId)
-            : await AgentTeamModel.getTeamsForAgent(agentId)));
+        : (snapshot?.limitTeamIds ??
+          (await AgentTeamModel.getCallerTeamsForAgent({
+            agentId,
+            userId: teamMemberUserId,
+            teamSource: params.teamSource,
+          })));
       logger.debug(
         `[LimitValidation] Agent ${agentId} belongs to teams: ${agentTeamIds.join(", ")}`,
       );
@@ -1871,11 +1906,17 @@ export class LimitValidationService {
         const applies = (models?: string[] | null) =>
           !models?.length || models.includes(params.unpricedMediaModel ?? "");
         const limits = [...prefetch.limitsByEntity.values()].flat();
-        let budgeted = limits.some((limit) => applies(limit.model));
+        let budgeted = limits.some(
+          (limit) => limit.behavior !== "soft" && applies(limit.model),
+        );
         const customUserLimits = userId
           ? prefetch.limitsByEntity.get(`user:${userId}`)
           : undefined;
-        if (userId && organizationId && !customUserLimits?.length) {
+        if (
+          userId &&
+          organizationId &&
+          !customUserLimits?.some((limit) => limit.behavior !== "soft")
+        ) {
           const defaultLimit = defaultUserLimit;
           budgeted ||= !!defaultLimit && applies(defaultLimit.model);
         }
@@ -2077,6 +2118,7 @@ export class LimitValidationService {
       logger.error(
         `[LimitValidation] Error checking limits before request: ${error}`,
       );
+      reportLimitStorageError("validation");
       if (
         config.llmProxy.usageAccountingMode === "enforce" ||
         params.unpricedMediaModel
@@ -2199,7 +2241,15 @@ export class LimitValidationService {
         }
       }
 
-      if (comparisonValue >= limit.limitValue) {
+      const exceeded = comparisonValue >= limit.limitValue;
+      if (
+        observeLimitCheck(
+          limit,
+          exceeded,
+          !Number.isFinite(comparisonValue),
+          comparisonValue,
+        )
+      ) {
         logger.info(
           `[LimitValidation] LIMIT EXCEEDED for ${entityType} ${entityId}: ${comparisonValue} ${limitDescription} >= ${limit.limitValue}`,
         );
@@ -2239,8 +2289,8 @@ export class LimitValidationService {
     defaultLimit?: EnvironmentDefaultUserLimit | null;
   }): Promise<null | LimitViolationResponse> {
     try {
-      // A custom per-user limit always wins and disables every default
-      // (org-wide and per-environment) for that user.
+      // Only an enforcing custom budget replaces the default allowance.
+      // Observe-only budgets must not remove the user's hard spend cap.
       const customUserLimits =
         params.customUserLimits ??
         (await LimitModel.findLimitsForValidation(
@@ -2248,9 +2298,9 @@ export class LimitValidationService {
           params.userId,
           "token_cost",
         ));
-      if (customUserLimits.length > 0) {
+      if (customUserLimits.some((limit) => limit.behavior !== "soft")) {
         logger.debug(
-          `[LimitValidation] Skipping default user limit for ${params.userId}: custom user limit exists`,
+          `[LimitValidation] Skipping default user limit for ${params.userId}: custom hard user limit exists`,
         );
         return null;
       }
@@ -2277,7 +2327,23 @@ export class LimitValidationService {
         models: normalizeLimitModels(defaultLimit.model),
         cleanupInterval: defaultLimit.cleanupInterval,
       });
-      if (usage.cost < defaultLimit.limitValue) return null;
+      if (
+        !observeLimitCheck(
+          {
+            id: defaultLimit.id,
+            entityType: "user",
+            entityId: params.userId,
+            limitType: "token_cost",
+            limitValue: defaultLimit.limitValue,
+            cleanupInterval: defaultLimit.cleanupInterval,
+            source: "default_user",
+          },
+          usage.cost >= defaultLimit.limitValue,
+          !Number.isFinite(usage.cost),
+          usage.cost,
+        )
+      )
+        return null;
       return buildLimitViolationResponse({
         source: "default_user",
         entityType: environmentId ? "environment" : "user",

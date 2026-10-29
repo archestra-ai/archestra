@@ -1,26 +1,27 @@
+import { LockKeyhole } from "lucide-react";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+
 interface EnterpriseLicenseRequiredProps {
   /** The name of the feature that requires the enterprise license */
   featureName: string;
 }
 
-/**
- * A reusable component that displays a message when an enterprise feature
- * requires the license to be activated.
- */
 export function EnterpriseLicenseRequired({
   featureName,
 }: EnterpriseLicenseRequiredProps) {
   return (
-    <p className="text-muted-foreground mt-2">
-      {featureName} is an enterprise feature that requires the enterprise
-      license to be activated. Please reach out to{" "}
+    <InlineNotice variant="neutral">
+      <LockKeyhole aria-hidden="true" />
+      <span className="font-medium">Enterprise license required</span>
+      <InlineNoticeText>
+        Activate an Enterprise license to use {featureName}.
+      </InlineNoticeText>
       <a
         href="mailto:sales@archestra.ai"
-        className="text-primary hover:underline"
+        className="ml-auto underline underline-offset-4"
       >
-        sales@archestra.ai
-      </a>{" "}
-      for more info.
-    </p>
+        Contact sales
+      </a>
+    </InlineNotice>
   );
 }

@@ -4,6 +4,7 @@ import { renderClaudeDesktopSetupScript } from "./agents/claude-desktop";
 import { codexSetup } from "./agents/codex";
 import { copilotCliSetup } from "./agents/copilot-cli";
 import { cursorSetup } from "./agents/cursor";
+import { kimiCodeSetup } from "./agents/kimi-code";
 import { kiloSetup, opencodeSetup } from "./agents/opencode";
 import { piSetup } from "./agents/pi";
 import { buildEnding } from "./steps/ending";
@@ -61,6 +62,7 @@ const SHELL_AGENTS: Record<
   opencode: opencodeSetup,
   kilo: kiloSetup,
   pi: piSetup,
+  "kimi-code": kimiCodeSetup,
 };
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {

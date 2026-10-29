@@ -1724,6 +1724,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `agent_ids` | `string[]` | Yes |  |
 | `mine_only` | `boolean` | No | Only runs you started. |
 | `state` | `"submitted" \| "working" \| "input-required" \| "completed" \| "canceled" \| "failed"` | No | Only runs in this state. |
+| `failed_since` | `string` | No | With state=failed, include failed earlier turns since this UTC timestamp, ordered by failure time. Keeps the same Agent access checks and limit; cannot be combined with mine_only. |
 | `current_thread_only` | `boolean` | No | Only runs originating in the current messaging thread. Requires messaging context; never falls back to an unfiltered list. |
 | `limit` | `integer` | No |  |
 

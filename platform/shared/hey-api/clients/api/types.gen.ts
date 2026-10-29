@@ -16958,8 +16958,7 @@ export type GetAgentCatalogResponses = {
                 llmModel: string | null;
                 modelId: string | null;
                 modelPoolId: string | null;
-                fastModelId: string | null;
-                smartModelId: string | null;
+                autoRouted: boolean;
                 identityProviderId: string | null;
                 environmentId: string | null;
                 runtime: {
@@ -17347,8 +17346,7 @@ export type GetAgentsResponses = {
             llmModel: string | null;
             modelId: string | null;
             modelPoolId: string | null;
-            fastModelId: string | null;
-            smartModelId: string | null;
+            autoRouted: boolean;
             identityProviderId: string | null;
             environmentId: string | null;
             runtime: {
@@ -17503,8 +17501,7 @@ export type CreateAgentData = {
         llmModel?: string | null;
         modelId?: string | null;
         modelPoolId?: string | null;
-        fastModelId?: string | null;
-        smartModelId?: string | null;
+        autoRouted?: boolean;
         identityProviderId?: string | null;
         environmentId?: string | null;
         runtime?: {
@@ -17771,8 +17768,7 @@ export type CreateAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
+        autoRouted: boolean;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -18207,6 +18203,7 @@ export type GetChatAgentRosterResponses = {
         modelId: string | null;
         llmApiKeyId: string | null;
         modelPoolId: string | null;
+        autoRouted: boolean;
     }>;
 };
 
@@ -18354,6 +18351,7 @@ export type GetChatAgentRosterPageResponses = {
             modelId: string | null;
             llmApiKeyId: string | null;
             modelPoolId: string | null;
+            autoRouted: boolean;
         }>;
         pagination: {
             limit: number;
@@ -19045,8 +19043,7 @@ export type GetDefaultMcpGatewayResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
+        autoRouted: boolean;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -19353,8 +19350,7 @@ export type ImportAgentResponses = {
             llmModel: string | null;
             modelId: string | null;
             modelPoolId: string | null;
-            fastModelId: string | null;
-            smartModelId: string | null;
+            autoRouted: boolean;
             identityProviderId: string | null;
             environmentId: string | null;
             runtime: {
@@ -19670,8 +19666,7 @@ export type GetAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
+        autoRouted: boolean;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -19808,8 +19803,7 @@ export type UpdateAgentData = {
         llmModel?: string | null;
         modelId?: string | null;
         modelPoolId?: string | null;
-        fastModelId?: string | null;
-        smartModelId?: string | null;
+        autoRouted?: boolean;
         identityProviderId?: string | null;
         environmentId?: string | null;
         runtime?: {
@@ -19985,8 +19979,7 @@ export type UpdateAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
+        autoRouted: boolean;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -20406,14 +20399,6 @@ export type GetAgentVersionResponses = {
                 id: string;
                 externalId: string;
             } | null;
-            fastModel: {
-                id: string;
-                externalId: string;
-            } | null;
-            smartModel: {
-                id: string;
-                externalId: string;
-            } | null;
             llmApiKey: {
                 id: string;
                 name: string;
@@ -20576,8 +20561,7 @@ export type RestoreAgentVersionResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
+        autoRouted: boolean;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -20822,8 +20806,7 @@ export type CloneAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
+        autoRouted: boolean;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -23307,8 +23290,7 @@ export type RestoreAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
+        autoRouted: boolean;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -32611,9 +32593,6 @@ export type UpdateAutoRoutingSettingsData = {
     body: {
         enabled?: boolean;
         budgetUsdPerDay?: number;
-        fastModelId?: string;
-        normalModelId?: string;
-        smartModelId?: string;
     };
     path?: never;
     query?: never;
@@ -41494,6 +41473,7 @@ export type GetNewChatBootstrapResponses = {
             modelId: string | null;
             llmApiKeyId: string | null;
             modelPoolId: string | null;
+            autoRouted: boolean;
         }>;
         apiKeys: Array<{
             id: string;
@@ -41628,8 +41608,7 @@ export type GetNewChatBootstrapResponses = {
                 llmModel: string | null;
                 modelId: string | null;
                 modelPoolId: string | null;
-                fastModelId: string | null;
-                smartModelId: string | null;
+                autoRouted: boolean;
                 identityProviderId: string | null;
                 environmentId: string | null;
                 runtime: {
@@ -41924,6 +41903,7 @@ export type GetConversationBootstrapResponses = {
             selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             modelId: string | null;
             modelPoolId: string | null;
+            autoRouted: boolean;
             thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
             hooksDebugEnabled: boolean;
@@ -42055,6 +42035,7 @@ export type GetConversationBootstrapResponses = {
                 modelId: string | null;
                 llmApiKeyId: string | null;
                 modelPoolId: string | null;
+                autoRouted: boolean;
             }>;
             apiKeys: Array<{
                 id: string;
@@ -42189,8 +42170,7 @@ export type GetConversationBootstrapResponses = {
                     llmModel: string | null;
                     modelId: string | null;
                     modelPoolId: string | null;
-                    fastModelId: string | null;
-                    smartModelId: string | null;
+                    autoRouted: boolean;
                     identityProviderId: string | null;
                     environmentId: string | null;
                     runtime: {
@@ -43313,6 +43293,7 @@ export type GetChatConversationsResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouted: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -43404,6 +43385,7 @@ export type CreateChatConversationData = {
         modelId?: string | null;
         chatApiKeyId?: string | null;
         modelPoolId?: string | null;
+        autoRouted?: boolean;
         projectId?: string | null;
         encryptedChat?: boolean;
         thinkingEffort?: 'low' | 'medium' | 'high';
@@ -43496,6 +43478,7 @@ export type CreateChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouted: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -43663,6 +43646,7 @@ export type GetDeletedChatConversationsResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouted: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -43925,6 +43909,7 @@ export type GetChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouted: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -44008,6 +43993,7 @@ export type UpdateChatConversationData = {
         modelId?: string | null;
         chatApiKeyId?: string | null;
         modelPoolId?: string | null;
+        autoRouted?: boolean;
         agentId?: string;
         artifact?: string | null;
         projectId?: string | null;
@@ -44104,6 +44090,7 @@ export type UpdateChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouted: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -44818,6 +44805,7 @@ export type ForkChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouted: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -45080,6 +45068,7 @@ export type RestoreChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouted: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -45352,6 +45341,7 @@ export type CompactChatConversationResponses = {
             selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             modelId: string | null;
             modelPoolId: string | null;
+            autoRouted: boolean;
             thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
             hooksDebugEnabled: boolean;
@@ -45527,6 +45517,7 @@ export type GenerateChatConversationTitleResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouted: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -45701,6 +45692,7 @@ export type UpdateChatMessageResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouted: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -130584,6 +130576,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         modelPoolId: string | null;
+        autoRouted: boolean;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;

@@ -1715,10 +1715,7 @@ export function AgentForm({
             llmApiKeyId: agentData.llmApiKeyId,
             llmModel: agentData.modelId,
             modelPoolId: agentData.modelPoolId ?? null,
-            modelTiers: {
-              fast: agentData.fastModelId ?? null,
-              smart: agentData.smartModelId ?? null,
-            },
+            modelTiers: { fast: null, smart: null },
             identityProviderId: agentData.identityProviderId ?? undefined,
             environmentId: agentData.environmentId ?? undefined,
             knowledgeBaseIds: agentData.knowledgeBaseIds,
@@ -2196,9 +2193,7 @@ export function AgentForm({
     !!persistedAgent &&
     ((llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
       (llmModel ?? null) !== (persistedAgent.modelId ?? null) ||
-      agentModelPoolId !== (persistedAgent.modelPoolId ?? null) ||
-      modelTiers.fast !== (persistedAgent.fastModelId ?? null) ||
-      modelTiers.smart !== (persistedAgent.smartModelId ?? null));
+      agentModelPoolId !== (persistedAgent.modelPoolId ?? null));
   const hasCompleteLlmSelection = Boolean(llmApiKeyId) === Boolean(llmModel);
   const needsClaudeProviderKey =
     !agent &&

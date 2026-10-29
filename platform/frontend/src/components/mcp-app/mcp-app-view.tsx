@@ -71,6 +71,46 @@ const AVAILABLE_DISPLAY_MODES: McpUiDisplayMode[] = ["inline", "fullscreen"];
 const MAX_SCREENSHOT_DATA_URL_LENGTH = 2_000_000;
 const SCREENSHOT_DATA_URL_PREFIX = /^data:image\/(png|jpeg|webp);base64,/;
 
+// Guest UI filter/parameter state snapshots forwarded from the sandbox proxy.
+// Bounded in size and entry count so an untrusted guest cannot grow host memory.
+const MAX_GUEST_STATE_JSON_LENGTH = 256_000;
+const MAX_CACHED_GUEST_STATES = 200;
+const guestStateByInstanceKey = new Map<string, Record<string, unknown>>();
+
+function setCachedGuestState(
+  instanceKey: string,
+  state: Record<string, unknown>,
+) {
+  if (guestStateByInstanceKey.has(instanceKey)) {
+    guestStateByInstanceKey.delete(instanceKey);
+  } else if (guestStateByInstanceKey.size >= MAX_CACHED_GUEST_STATES) {
+    const oldestKey = guestStateByInstanceKey.keys().next().value;
+    if (oldestKey !== undefined) {
+      guestStateByInstanceKey.delete(oldestKey);
+    }
+  }
+  guestStateByInstanceKey.set(instanceKey, state);
+}
+
+function parseGuestStateSync(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== "object") return null;
+  const state = (data as { state?: unknown }).state;
+  if (!state || typeof state !== "object" || Array.isArray(state)) {
+    return null;
+  }
+  try {
+    if (JSON.stringify(state).length > MAX_GUEST_STATE_JSON_LENGTH) return null;
+  } catch {
+    return null;
+  }
+  return state as Record<string, unknown>;
+}
+
+/** Clear cached MCP App guest UI state snapshots (used by tests). */
+export function clearMcpAppGuestState(): void {
+  guestStateByInstanceKey.clear();
+}
+
 /** Default pre-report iframe height on surfaces that supply no inline ceiling
  * (standalone run page, app preview) — those fill their own layout instead. */
 const UNCAPPED_INITIAL_HEIGHT = 600;
@@ -205,6 +245,28 @@ export const McpAppRuntime = function McpAppRuntime({
   // this height (instead of the default) avoids a collapse-then-grow jump while
   // the reloaded app re-reports its size.
   const lastReportedHeightRef = useRef<number | null>(null);
+  // Last UI filter/parameter snapshot reported by the guest. Preserved across
+  // reloads and surface transitions (inline <-> right panel) for the same app
+  // resource so reloading an app keeps user-selected filters and parameters.
+  const instanceKey = `${endpointKey}::${toolResourceUri}`;
+  const guestStateRef = useRef<Record<string, unknown> | null>(
+    guestStateByInstanceKey.get(instanceKey) ?? null,
+  );
+  const lastInstanceKeyRef = useRef(instanceKey);
+  if (lastInstanceKeyRef.current !== instanceKey) {
+    lastInstanceKeyRef.current = instanceKey;
+    guestStateRef.current = guestStateByInstanceKey.get(instanceKey) ?? null;
+  }
+
+  const handleStateSync = useCallback(
+    (data: unknown) => {
+      const state = parseGuestStateSync(data);
+      if (!state) return;
+      guestStateRef.current = state;
+      setCachedGuestState(instanceKey, state);
+    },
+    [instanceKey],
+  );
 
   // Render-loop diagnostics (owned apps only): runtime errors / CSP violations
   // forwarded by the sandbox proxy are validated and collected per
@@ -839,6 +901,8 @@ export const McpAppRuntime = function McpAppRuntime({
           maxHeight={containerMaxHeight}
           onDiagnostic={ownedAppId ? handleDiagnostic : undefined}
           onScreenshot={ownedAppId ? handleScreenshot : undefined}
+          onStateSync={handleStateSync}
+          restoredState={guestStateRef.current}
           ownedApp={ownedAppId != null}
           filesRevision={filesRevision}
         />
@@ -911,6 +975,8 @@ function SandboxIframe({
   maxHeight,
   onDiagnostic,
   onScreenshot,
+  onStateSync,
+  restoredState,
   onConnected,
   onInitialized,
   onContentLoaded,
@@ -942,6 +1008,10 @@ function SandboxIframe({
   onDiagnostic?: (data: unknown) => void;
   /** Raw screenshot payload forwarded by the sandbox proxy. */
   onScreenshot?: (data: unknown) => void;
+  /** Raw UI filter/parameter state snapshot forwarded by the sandbox proxy. */
+  onStateSync?: (data: unknown) => void;
+  /** Previously captured UI filter/parameter state to restore on reload/remount. */
+  restoredState?: Record<string, unknown> | null;
   /** Fired when the guest bridge connects. A PROXY-level signal: it can
    * resolve while the inner app document is still being written, so it says
    * nothing about the app being on screen — gate on `onInitialized` (or the
@@ -979,6 +1049,8 @@ function SandboxIframe({
   const onErrorRef = useRef(onError);
   const onDiagnosticRef = useRef(onDiagnostic);
   const onScreenshotRef = useRef(onScreenshot);
+  const onStateSyncRef = useRef(onStateSync);
+  const restoredStateRef = useRef(restoredState);
   const onConnectedRef = useRef(onConnected);
   const onInitializedRef = useRef(onInitialized);
   const onContentLoadedRef = useRef(onContentLoaded);
@@ -1004,6 +1076,8 @@ function SandboxIframe({
     onErrorRef.current = onError;
     onDiagnosticRef.current = onDiagnostic;
     onScreenshotRef.current = onScreenshot;
+    onStateSyncRef.current = onStateSync;
+    restoredStateRef.current = restoredState;
     onConnectedRef.current = onConnected;
     onInitializedRef.current = onInitialized;
     onContentLoadedRef.current = onContentLoaded;
@@ -1128,6 +1202,8 @@ function SandboxIframe({
         onDiagnosticRef.current?.(event.data);
       } else if (type === "mcp-apps:screenshot") {
         onScreenshotRef.current?.(event.data);
+      } else if (type === "mcp-apps:state-sync") {
+        onStateSyncRef.current?.(event.data);
       } else if (type === "mcp-apps:sandbox-content-loaded") {
         onContentLoadedRef.current?.();
       }
@@ -1203,6 +1279,9 @@ function SandboxIframe({
         csp,
         permissions,
         ...(ownedApp ? { ownedApp: true } : {}),
+        ...(restoredStateRef.current
+          ? { restoredState: restoredStateRef.current }
+          : {}),
       } as Parameters<typeof appBridge.sendSandboxResourceReady>[0])
       .catch((err) => {
         const error = err instanceof Error ? err : new Error(String(err));

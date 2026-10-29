@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import vm from "node:vm";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ReactNode, useEffect } from "react";
@@ -109,7 +112,10 @@ vi.mock("@/components/mcp-app/app-settings-form", () => ({
 // ── Import component under test after mocks ───────────────────────────────────
 
 import { AppBridge } from "@modelcontextprotocol/ext-apps/app-bridge";
-import { McpAppRuntime } from "@/components/mcp-app/mcp-app-view";
+import {
+  clearMcpAppGuestState,
+  McpAppRuntime,
+} from "@/components/mcp-app/mcp-app-view";
 import { useApp } from "@/lib/app.query";
 import { useAppAccess } from "@/lib/apps/use-app-access";
 import {
@@ -128,6 +134,7 @@ const mockUseAppAccess = vi.mocked(useAppAccess);
 // (a name, a fullscreen-by-default flag) must not leak into the next.
 beforeEach(() => {
   authPermissionState.granted = false;
+  clearMcpAppGuestState();
   mockUseApp.mockReturnValue({ data: undefined } as ReturnType<typeof useApp>);
   mockUseAppAccess.mockReturnValue({
     canEdit: true,
@@ -1995,5 +2002,468 @@ describe("McpAppSection error handling", () => {
     });
 
     fetchSpy.mockRestore();
+  });
+});
+
+describe("McpAppSection filter and parameter state preservation on reload", () => {
+  const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
+  const SANDBOX_ORIGIN = "http://127.0.0.1:9000";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearMcpAppGuestState();
+  });
+
+  // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+  function installBridgeCollector(bridgeInstances: any[]) {
+    (AppBridge as ReturnType<typeof vi.fn>).mockImplementation(function (
+      this: Record<string, unknown>,
+    ) {
+      this.onrequestdisplaymode = null;
+      this.onopenlink = null;
+      this.oncalltool = null;
+      this.onreadresource = null;
+      this.onlistresources = null;
+      this.onlistresourcetemplates = null;
+      this.onlistprompts = null;
+      this.onloggingmessage = null;
+      this.onmessage = null;
+      this.onsizechange = null;
+      this.oninitialized = null;
+      this.onsandboxready = null;
+      this.connect = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendSandboxResourceReady = vi
+        .fn()
+        .mockReturnValue(Promise.resolve());
+      this.sendToolInput = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolInputPartial = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolResult = vi.fn().mockReturnValue(Promise.resolve());
+      this.setHostContext = vi.fn();
+      this.teardownResource = vi.fn().mockReturnValue(Promise.resolve());
+      bridgeInstances.push(this);
+    });
+  }
+
+  async function notifySandboxProxyReady(iframe: HTMLIFrameElement) {
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: iframe.contentWindow,
+          origin: SANDBOX_ORIGIN,
+          data: { method: SANDBOX_PROXY_READY },
+        }),
+      );
+    });
+  }
+
+  it("forwards captured guest filter/parameter state to the new sandbox on top-left Reload app click", async () => {
+    const user = userEvent.setup();
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    installBridgeCollector(bridgeInstances);
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="panel"
+          preloadedResource={preloadedResource}
+        />,
+      );
+    });
+
+    const firstIframe = document.querySelector("iframe");
+    if (!firstIframe) throw new Error("initial iframe did not mount");
+    await notifySandboxProxyReady(firstIframe);
+
+    expect(bridgeInstances).toHaveLength(1);
+    expect(bridgeInstances[0].sendSandboxResourceReady).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        restoredState: expect.anything(),
+      }),
+    );
+
+    const capturedState = {
+      controls: {
+        "#filter-user": {
+          kind: "form",
+          tag: "select",
+          type: "select-one",
+          value: "alice",
+          selectedIndex: 2,
+          selectedText: "@Alice",
+        },
+        "#filter-client": {
+          kind: "form",
+          tag: "select",
+          type: "select-one",
+          value: "acme",
+          selectedIndex: 1,
+          selectedText: "acme (4)",
+        },
+        "#btn-hide-done": {
+          kind: "toggle",
+          active: true,
+        },
+      },
+      groups: {
+        "button.tab|.toolbar": "2|todo|Todo 71",
+      },
+      localStorage: {
+        "archestra-pm-board:hide-done": "1",
+      },
+      sessionStorage: {},
+      urlHash: "#sprint",
+      urlSearch: "",
+      historyState: null,
+    };
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: firstIframe.contentWindow,
+          origin: SANDBOX_ORIGIN,
+          data: {
+            type: "mcp-apps:state-sync",
+            state: capturedState,
+          },
+        }),
+      );
+    });
+
+    // Click the top-left reload icon button in the panel header
+    const reloadButton = screen.getByRole("button", { name: /reload app/i });
+    await act(async () => {
+      await user.click(reloadButton);
+    });
+
+    const reloadedIframe = document.querySelector("iframe");
+    if (!reloadedIframe) throw new Error("reloaded iframe did not mount");
+    await notifySandboxProxyReady(reloadedIframe);
+
+    expect(bridgeInstances).toHaveLength(2);
+    expect(bridgeInstances[1].sendSandboxResourceReady).toHaveBeenCalledWith(
+      expect.objectContaining({
+        html: preloadedResource.html,
+        restoredState: capturedState,
+      }),
+    );
+  });
+
+  it("preserves guest filter state across remounts of the same app resource without leaking to other resources", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    installBridgeCollector(bridgeInstances);
+
+    const { unmount } = render(
+      <McpAppSection
+        {...defaultProps}
+        surface="inline"
+        preloadedResource={preloadedResource}
+      />,
+    );
+
+    const inlineIframe = document.querySelector("iframe");
+    if (!inlineIframe) throw new Error("inline iframe did not mount");
+    await notifySandboxProxyReady(inlineIframe);
+
+    const syncedState = {
+      controls: {
+        "#filter-user": {
+          kind: "form",
+          tag: "select",
+          type: "select-one",
+          value: "user-1",
+        },
+      },
+    };
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: inlineIframe.contentWindow,
+          origin: SANDBOX_ORIGIN,
+          data: {
+            type: "mcp-apps:state-sync",
+            state: syncedState,
+          },
+        }),
+      );
+    });
+
+    unmount();
+
+    // Mounting the same app resource on the panel surface restores the state
+    const { unmount: unmountPanel } = render(
+      <McpAppSection
+        {...defaultProps}
+        surface="panel"
+        preloadedResource={preloadedResource}
+      />,
+    );
+    const panelIframe = document.querySelector("iframe");
+    if (!panelIframe) throw new Error("panel iframe did not mount");
+    await notifySandboxProxyReady(panelIframe);
+
+    expect(bridgeInstances[1].sendSandboxResourceReady).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restoredState: syncedState,
+      }),
+    );
+
+    unmountPanel();
+
+    // Mounting a different app resource URI does not inherit the first app's state
+    render(
+      <McpAppSection
+        {...defaultProps}
+        uiResourceUri="resource://test-server/other-ui"
+        surface="panel"
+        preloadedResource={preloadedResource}
+      />,
+    );
+    const otherIframe = document.querySelector("iframe");
+    if (!otherIframe) throw new Error("other iframe did not mount");
+    await notifySandboxProxyReady(otherIframe);
+
+    expect(bridgeInstances[2].sendSandboxResourceReady).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        restoredState: expect.anything(),
+      }),
+    );
+  });
+
+  it("guestStateBootstrap captures and restores asynchronously populated select filters, tabs, toggles, and storage while ignoring modal inputs", async () => {
+    const proxyHtml = readFileSync(
+      join(__dirname, "../../../../backend/src/static/mcp-sandbox-proxy.html"),
+      "utf-8",
+    );
+    const bootstrapStart = proxyHtml.indexOf(
+      "function guestStateBootstrap(restored)",
+    );
+    const bootstrapEnd = proxyHtml.indexOf(
+      "function buildStatePreservationScript(restoredState)",
+    );
+    const bootstrapFnSource = `(${proxyHtml.slice(bootstrapStart, bootstrapEnd).trim()})`;
+    const runBootstrap = vm.runInThisContext(bootstrapFnSource) as (
+      restored: Record<string, unknown> | null,
+    ) => void;
+
+    // 1. Mount an embedded iframe to isolate window/document listeners
+    const hostFrame = document.createElement("iframe");
+    document.body.appendChild(hostFrame);
+    const guestWin = hostFrame.contentWindow as Window & typeof globalThis;
+    const guestDoc = hostFrame.contentDocument as Document;
+
+    const syncedPayloads: Record<string, unknown>[] = [];
+    const onParentMessage = (event: MessageEvent) => {
+      const data = event.data as {
+        type?: unknown;
+        state?: Record<string, unknown>;
+      } | null;
+      if (data?.type === "mcp-apps:state-sync" && data.state) {
+        syncedPayloads.push(data.state);
+      }
+    };
+    window.addEventListener("message", onParentMessage);
+
+    try {
+      const renderBoardMarkup = (doc: Document) => {
+        doc.body.innerHTML = `
+          <div class="toolbar">
+            <button class="tab" data-list="archive">Archive</button>
+            <button class="tab active" data-list="sprint">Sprint</button>
+            <button class="tab" data-list="todo">Todo</button>
+          </div>
+          <div class="subbar">
+            <select id="filter-user" class="filter-select"><option value="">All</option></select>
+            <select id="filter-client" class="filter-select"><option value="">All clients</option></select>
+            <button id="btn-hide-done" class="filter-toggle" aria-pressed="false">Hide done</button>
+          </div>
+          <div class="modal-backdrop" id="modal-task">
+            <input id="task-title" value="draft title that must not persist" />
+          </div>
+        `;
+      };
+
+      const wireBoardEvents = (doc: Document) => {
+        const tabs = Array.from(doc.querySelectorAll(".tab[data-list]"));
+        for (const tab of tabs) {
+          tab.addEventListener("click", () => {
+            for (const other of tabs) other.classList.remove("active");
+            tab.classList.add("active");
+          });
+        }
+        const hideDoneBtn = doc.getElementById("btn-hide-done");
+        hideDoneBtn?.addEventListener("click", () => {
+          const next = hideDoneBtn.getAttribute("aria-pressed") !== "true";
+          hideDoneBtn.setAttribute("aria-pressed", String(next));
+          hideDoneBtn.classList.toggle("active", next);
+        });
+      };
+
+      const populateAsyncSelects = (doc: Document) => {
+        const userSelect = doc.getElementById(
+          "filter-user",
+        ) as HTMLSelectElement;
+        userSelect.innerHTML =
+          '<option value="">All</option><option value="__unassigned__">Unassigned</option><option value="alice">@Alice</option><option value="bob">@Bob</option>';
+        const clientSelect = doc.getElementById(
+          "filter-client",
+        ) as HTMLSelectElement;
+        clientSelect.innerHTML =
+          '<option value="">All clients</option><option value="acme">acme (4)</option>';
+      };
+
+      // Run initial mount in guest context
+      renderBoardMarkup(guestDoc);
+      wireBoardEvents(guestDoc);
+      vm.runInNewContext(`(${bootstrapFnSource})(null)`, {
+        window: guestWin,
+        document: guestDoc,
+        Element: guestWin.Element,
+        MutationObserver: guestWin.MutationObserver,
+        Event: guestWin.Event,
+        setTimeout: guestWin.setTimeout.bind(guestWin),
+        clearTimeout: guestWin.clearTimeout.bind(guestWin),
+        Object,
+        Array,
+        String,
+        Number,
+        JSON,
+        CSS: guestWin.CSS,
+      });
+
+      populateAsyncSelects(guestDoc);
+
+      // User selects @Alice in #filter-user, acme in #filter-client, clicks Todo tab & Hide done
+      const userSelect = guestDoc.getElementById(
+        "filter-user",
+      ) as HTMLSelectElement;
+      userSelect.value = "alice";
+      userSelect.dispatchEvent(new guestWin.Event("change", { bubbles: true }));
+
+      const clientSelect = guestDoc.getElementById(
+        "filter-client",
+      ) as HTMLSelectElement;
+      clientSelect.value = "acme";
+      clientSelect.dispatchEvent(
+        new guestWin.Event("change", { bubbles: true }),
+      );
+
+      const todoTab = guestDoc.querySelector(
+        '.tab[data-list="todo"]',
+      ) as HTMLButtonElement;
+      todoTab.click();
+
+      const hideDoneBtn = guestDoc.getElementById(
+        "btn-hide-done",
+      ) as HTMLButtonElement;
+      hideDoneBtn.click();
+
+      guestWin.localStorage.setItem("archestra-pm-board:hide-done", "1");
+
+      // Wait for debounced state-sync postMessage
+      await new Promise((r) => setTimeout(r, 80));
+      expect(syncedPayloads.length).toBeGreaterThan(0);
+      const latestSnapshot = syncedPayloads[syncedPayloads.length - 1];
+      const controls = latestSnapshot.controls as Record<
+        string,
+        Record<string, unknown>
+      >;
+      expect(controls["#filter-user"]).toMatchObject({
+        kind: "form",
+        tag: "select",
+        value: "alice",
+      });
+      expect(controls["#filter-client"]).toMatchObject({
+        kind: "form",
+        tag: "select",
+        value: "acme",
+      });
+      expect(controls["#task-title"]).toBeUndefined();
+
+      // 2. Simulate reload in a fresh iframe with only initial <option value="">All</option>
+      const reloadFrame = document.createElement("iframe");
+      document.body.appendChild(reloadFrame);
+      const reloadWin = reloadFrame.contentWindow as Window & typeof globalThis;
+      const reloadDoc = reloadFrame.contentDocument as Document;
+
+      try {
+        renderBoardMarkup(reloadDoc);
+        wireBoardEvents(reloadDoc);
+
+        let filterUserChangedValue = "";
+        reloadDoc
+          .getElementById("filter-user")
+          ?.addEventListener("change", (e) => {
+            filterUserChangedValue = (e.target as HTMLSelectElement).value;
+          });
+
+        vm.runInNewContext(
+          `(${bootstrapFnSource})(${JSON.stringify(latestSnapshot)})`,
+          {
+            window: reloadWin,
+            document: reloadDoc,
+            Element: reloadWin.Element,
+            MutationObserver: reloadWin.MutationObserver,
+            Event: reloadWin.Event,
+            setTimeout: reloadWin.setTimeout.bind(reloadWin),
+            clearTimeout: reloadWin.clearTimeout.bind(reloadWin),
+            Object,
+            Array,
+            String,
+            Number,
+            JSON,
+            CSS: reloadWin.CSS,
+          },
+        );
+
+        // Storage is restored synchronously before any guest script runs
+        expect(
+          reloadWin.localStorage.getItem("archestra-pm-board:hide-done"),
+        ).toBe("1");
+
+        // Simulate MCP App handshake / initial tool-result arriving, then async option population
+        reloadWin.dispatchEvent(
+          new reloadWin.MessageEvent("message", {
+            data: {
+              jsonrpc: "2.0",
+              method: "ui/notifications/tool-result",
+              params: {},
+            },
+          }),
+        );
+
+        // Populate #filter-user and #filter-client asynchronously (as pm-board.ts does after connect)
+        populateAsyncSelects(reloadDoc);
+        await new Promise((r) => setTimeout(r, 80));
+
+        expect(
+          (reloadDoc.getElementById("filter-user") as HTMLSelectElement).value,
+        ).toBe("alice");
+        expect(filterUserChangedValue).toBe("alice");
+        expect(
+          (reloadDoc.getElementById("filter-client") as HTMLSelectElement)
+            .value,
+        ).toBe("acme");
+        expect(
+          reloadDoc
+            .querySelector('.tab[data-list="todo"]')
+            ?.classList.contains("active"),
+        ).toBe(true);
+        expect(
+          reloadDoc
+            .getElementById("btn-hide-done")
+            ?.getAttribute("aria-pressed"),
+        ).toBe("true");
+      } finally {
+        reloadFrame.remove();
+      }
+      void runBootstrap;
+    } finally {
+      window.removeEventListener("message", onParentMessage);
+      hostFrame.remove();
+    }
   });
 });

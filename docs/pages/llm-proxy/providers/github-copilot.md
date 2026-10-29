@@ -12,7 +12,7 @@ GitHub Copilot gives you models from OpenAI, Anthropic, and Google, but GitHub d
 Connect in one of two ways:
 
 - **[Personal sign-in](#personal-sign-in):** sign in with your GitHub account to bring your own Copilot seat. The connection stays private to you.
-- **[Enterprise plan](#enterprise-plans):** connect your organization's Copilot Business or Enterprise plan through a GitHub App. Your whole team and CI pipelines share models billed to the organization's Copilot AI credits, without buying individual seats for everyone.
+- **[Enterprise plan](#enterprise-plans):** connect your organization's Copilot Business or Enterprise plan through a GitHub App. Your whole team and CI pipelines share models without buying individual seats for everyone.
 
 Archestra handles the token exchange and refreshes credentials automatically.
 
@@ -30,7 +30,7 @@ Your sign-in belongs only to you and is never shared across your organization. I
 
 ## Enterprise Plans
 
-Share your organization's Copilot Business or Enterprise models across teams, agents, and CI pipelines without purchasing per-user seats. Requests draw directly from your organization's Copilot AI credits.
+Share your organization's Copilot Business or Enterprise models across teams, agents, and CI pipelines without purchasing per-user seats.
 
 To connect a plan, your Archestra account needs permission to create provider keys and credentials ([`llmProviderApiKey:create`](/docs/reference/permissions#llmProviderApiKey:create) and [`credential:create`](/docs/reference/permissions#credential:create)).
 

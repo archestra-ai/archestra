@@ -333,16 +333,17 @@ describe("GitHub Copilot organization subscription setup", () => {
     );
   });
 
-  test("takes an organization GitHub hides behind its enterprise's sign-in", async () => {
+  test("connects an organization GitHub hides behind its enterprise's sign-in", async () => {
     // Anonymous API reads of an Enterprise Managed Users organization get a
     // 404, as for a missing account; only its web profile tells them apart.
+    // The App's own calls see the organization, as GitHub spells it.
     const github = githubFake({ appId });
     const webProfiles: Record<string, Response> = {
-      "https://github.com/managed-org": new Response(null, {
+      "https://github.com/My-Org": new Response(null, {
         status: 302,
         headers: {
           location:
-            "https://github.com/enterprises/acme/sso?return_to=https%3A%2F%2Fgithub.com%2Fmanaged-org",
+            "https://github.com/enterprises/acme/sso?return_to=https%3A%2F%2Fgithub.com%2FMy-Org",
         },
       }),
       "https://github.com/offsite-org": new Response(null, {
@@ -353,24 +354,47 @@ describe("GitHub Copilot organization subscription setup", () => {
     };
     vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
       const url = String(input);
-      const login = url.match(/\/users\/([^/]+)$/)?.[1];
-      if (login && `https://github.com/${login}` in webProfiles)
+      if (/\/users\/[^/]+$/.test(url))
         return Response.json({ message: "Not Found" }, { status: 404 });
       return webProfiles[url]?.clone() ?? github(input, init);
     });
 
-    const managed = await post("/api/github-copilot-app/organization/check", {
-      organization: "managed-org",
+    const checked = await post("/api/github-copilot-app/organization/check", {
+      organization: "My-Org",
     });
-    expect(managed.statusCode, managed.body).toBe(200);
-    expect(managed.json()).toEqual({ organization: "managed-org" });
-    const manifest = await post("/api/github-copilot-app/manifest", {
-      organization: "https://github.com/managed-org",
+    expect(checked.statusCode, checked.body).toBe(200);
+    expect(checked.json()).toEqual({ organization: "My-Org" });
+
+    const started = await post("/api/github-copilot-app/manifest", {
+      organization: "https://github.com/My-Org",
     });
-    expect(manifest.statusCode, manifest.body).toBe(200);
-    expect(manifest.json().url).toMatch(
-      /^https:\/\/github\.com\/organizations\/managed-org\/settings\/apps\/new\?state=/,
-    );
+    expect(started.statusCode, started.body).toBe(200);
+    const url = new URL(started.json().url);
+    expect(url.pathname).toBe("/organizations/My-Org/settings/apps/new");
+    const completed = await post("/api/github-copilot-app/manifest/complete", {
+      code: "one-time-code",
+      state: url.searchParams.get("state"),
+    });
+    expect(completed.statusCode, completed.body).toBe(200);
+    expect(completed.json()).toMatchObject({ account: "my-org" });
+    const installed = await post("/api/github-copilot-app/install");
+    expect(installed.statusCode, installed.body).toBe(200);
+    expect(installed.json()).toMatchObject({
+      status: "installed",
+      organization: "my-org",
+    });
+
+    // Reconnecting reads the stored organization, never the public profile.
+    const reconnected = await post("/api/github-copilot-app/existing", {
+      appId,
+      privateKey,
+      replaceKeyId: installed.json().id,
+    });
+    expect(reconnected.statusCode, reconnected.body).toBe(200);
+    expect(reconnected.json()).toMatchObject({
+      status: "installed",
+      id: installed.json().id,
+    });
 
     for (const organization of ["no-such-org", "offsite-org"]) {
       const missing = await post("/api/github-copilot-app/organization/check", {

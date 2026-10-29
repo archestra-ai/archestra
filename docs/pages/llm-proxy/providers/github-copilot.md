@@ -2,7 +2,7 @@
 title: GitHub Copilot
 description: Use the models in your own GitHub Copilot subscription, or in your organization's Copilot plan through a GitHub App.
 order: 7
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -54,7 +54,7 @@ What to know:
 
 - The App needs only the organization permission **Copilot Requests**, set to **Read-only**. Read-only still spends AI credits.
 - GitHub cannot cap a single App. Set a limit in [Costs & Limits](/docs/llm-proxy/costs-and-limits), or turn on **Stop usage when budget limit is reached** in your GitHub billing settings.
-- The App works only on an organization installation. A personal account cannot use it.
+- The App works only when installed on the organization, including one in an Enterprise Managed Users enterprise. A personal account or an installation on the enterprise cannot use it.
 
 ### Manage or Reconnect a Plan
 

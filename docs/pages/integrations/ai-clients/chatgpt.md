@@ -1,7 +1,7 @@
 ---
 title: ChatGPT
 description: Download a ChatGPT plugin with your gateway and portable skills
-order: 15
+order: 4
 lastUpdated: 2026-10-30
 ---
 

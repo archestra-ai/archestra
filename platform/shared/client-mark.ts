@@ -5,6 +5,8 @@
  * client looks alike everywhere.
  */
 export interface ClientMark {
+  /** Official product artwork rendered instead of the flat glyph. */
+  imageSrc?: string;
   /** viewBox of `path` and `accent.path`. */
   viewBox: string;
   /** The glyph. */

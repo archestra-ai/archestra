@@ -193,7 +193,11 @@ const organizationsTable = pgTable("organization", {
    */
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
 
-  /** Optional `fast` / `smart` tiers of the default trio, on `defaultLlmApiKeyId`. */
+  /**
+   * Optional `fast` / `smart` tiers of the default trio, on any provider.
+   * With `defaultModelId` as the normal tier, the trio is what forked
+   * subagents pick tiers from and what auto routing routes across.
+   */
   defaultFastModelId: uuid("default_fast_model_id").references(
     () => modelsTable.id,
     { onDelete: "set null" },

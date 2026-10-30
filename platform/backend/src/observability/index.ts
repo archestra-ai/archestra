@@ -11,6 +11,7 @@ export async function initializeObservabilityMetrics(params?: {
   const labelKeys = await AgentLabelModel.getAllKeys();
 
   metrics.llm.initializeMetrics(labelKeys);
+  metrics.llmProxy.initializeLlmProxyMetrics();
 
   if (includeMcpMetrics) {
     metrics.mcp.initializeMcpMetrics(labelKeys);

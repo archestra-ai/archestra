@@ -254,35 +254,30 @@ export async function classifyRuntimeCaller(params: {
 }): Promise<
   | { kind: "producer"; child: OpenAppaSession }
   | { kind: "parent"; child: OpenAppaSession }
-  | { kind: "refused"; reason: string }
+  | RuntimeCallerRefusal
 > {
-  const report = {
-    workspaceId: params.workspaceId,
-    parentSessionId: params.crossing.source.session_id,
-  };
+  const refuse = (
+    cause: RuntimeCallerRefusal["cause"],
+    message: string,
+  ): RuntimeCallerRefusal => ({
+    kind: "refused",
+    cause,
+    reason: reportCrossingRefusal({
+      reason: cause,
+      message,
+      workspaceId: params.workspaceId,
+      parentSessionId: params.crossing.source.session_id,
+    }),
+  });
   if (params.crossing.source.organization_id !== params.organizationId) {
-    return {
-      kind: "refused",
-      reason: reportCrossingRefusal({
-        reason: "other_organization",
-        message: OTHER_ORGANIZATION,
-        ...report,
-      }),
-    };
+    return refuse("other_organization", OTHER_ORGANIZATION);
   }
   const resolved = await resolveRuntimeSessionForWorkspace({
     organizationId: params.organizationId,
     workspaceId: params.workspaceId,
   });
   if (!resolved) {
-    return {
-      kind: "refused",
-      reason: reportCrossingRefusal({
-        reason: "unverified_session",
-        message: UNVERIFIED_RUNTIME_SESSION,
-        ...report,
-      }),
-    };
+    return refuse("unverified_session", UNVERIFIED_RUNTIME_SESSION);
   }
   if (
     params.crossing.source.session_id === resolved.session.session_id &&
@@ -291,27 +286,26 @@ export async function classifyRuntimeCaller(params: {
     return { kind: "producer", child: resolved.session };
   }
   if (!resolved.session.parent_id) {
-    return {
-      kind: "refused",
-      reason: reportCrossingRefusal({
-        reason: "unparented",
-        message: `This run was started outside any Guardrails session, so this conversation cannot read its output or send it input; nothing from the run was returned. A person can read the output on the run page: ${config.frontendBaseUrl}/chat/runs/${params.workspaceId}. To get a run's output here, start a new run from this conversation.`,
-        ...report,
-      }),
-    };
+    return refuse(
+      "unparented",
+      `This run was started outside any Guardrails session, so this conversation cannot read its output or send it input; nothing from the run was returned. A person can read the output on the run page: ${config.frontendBaseUrl}/chat/runs/${params.workspaceId}. To get a run's output here, start a new run from this conversation.`,
+    );
   }
   if (resolved.session.parent_id !== params.crossing.source.session_id) {
-    return {
-      kind: "refused",
-      reason: reportCrossingRefusal({
-        reason: "different_session",
-        message: BOUND_TO_ANOTHER_SESSION,
-        ...report,
-      }),
-    };
+    return refuse("different_session", BOUND_TO_ANOTHER_SESSION);
   }
   return { kind: "parent", child: resolved.session };
 }
+
+type RuntimeCallerRefusal = {
+  kind: "refused";
+  cause:
+    | "other_organization"
+    | "unverified_session"
+    | "unparented"
+    | "different_session";
+  reason: string;
+};
 
 export async function crossRuntimeOutput(params: {
   crossing: RuntimeCrossing;
@@ -322,7 +316,7 @@ export async function crossRuntimeOutput(params: {
   | { kind: "producer" }
   | { kind: "admitted"; value: string }
   | { kind: "withheld"; reason: string }
-  | { kind: "refused"; reason: string }
+  | RuntimeCallerRefusal
 > {
   const relation = await classifyRuntimeCaller(params);
   if (relation.kind === "refused") return relation;

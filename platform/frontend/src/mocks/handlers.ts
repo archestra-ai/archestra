@@ -43,6 +43,7 @@ import {
 import { findMcpToolCall, mcpToolCallsSeed } from "./data/mcp-tool-calls";
 import {
   appearanceSettingsSeed,
+  organizationDefaultModelSeed,
   organizationSeed,
   teamsSeed,
 } from "./data/organization";
@@ -683,6 +684,8 @@ export const handlers: HttpHandler[] = [
     modelId: null,
     chatApiKeyId: null,
   }),
+  // Agent forms and the chat model menu name the organization default.
+  ...getJson("/api/organization/default-model", organizationDefaultModelSeed),
   ...postJson("/api/agents", makeAgent()),
   ...postJson(
     "/api/agents/:id/clone",

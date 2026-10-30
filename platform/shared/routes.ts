@@ -688,6 +688,7 @@ export const RouteId = {
 
   // Organization Routes
   GetOrganization: "getOrganization",
+  GetOrganizationDefaultModel: "getOrganizationDefaultModel",
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
   GetOrganizationMemberOptions: "getOrganizationMemberOptions",

@@ -156,7 +156,7 @@ async function traceCompletionDelivery(params: {
         await params.callback();
         span.setStatus({ code: SpanStatusCode.OK });
       } catch (error) {
-        setSpanError(span, error);
+        setSpanError({ span, error });
         throw error;
       } finally {
         span.end();

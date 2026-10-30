@@ -5,8 +5,10 @@ import { type Trio, tiersFingerprint } from "@/auto-routing/tiers";
 import AgentModel from "@/models/agent";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
 import RoutingPlanModel from "@/models/routing-plan";
 import RoutingScorerVersionModel from "@/models/routing-scorer-version";
+import type { Model } from "@/types";
 import {
   FEATURES_SCHEMA_VERSION,
   type InsertRoutingDecision,
@@ -175,12 +177,31 @@ export async function configureAutoRouting(organizationId: string) {
     await priced("normal", "3.00", "15.00"),
     await priced("smart", "15.00", "75.00"),
   ] as const satisfies Trio;
+  await setOrganizationTrio(organizationId, {
+    fast: trio[0],
+    normal: trio[1],
+    smart: trio[2],
+  });
   await AutoRoutingSettingsModel.update(organizationId, {
     enabled: true,
     budgetUsdPerDay: "50.00",
-    fastModelId: trio[0].id,
-    normalModelId: trio[1].id,
-    smartModelId: trio[2].id,
   });
   return trio;
+}
+
+/** Makes `trio` the organization's default model trio, which auto routing routes across. */
+export async function setOrganizationTrio(
+  organizationId: string,
+  trio: {
+    fast?: Pick<Model, "id"> | null;
+    normal?: Pick<Model, "id"> | null;
+    smart?: Pick<Model, "id"> | null;
+  },
+) {
+  const { fast, normal, smart } = trio;
+  await OrganizationModel.patch(organizationId, {
+    ...(fast !== undefined && { defaultFastModelId: fast?.id ?? null }),
+    ...(normal !== undefined && { defaultModelId: normal?.id ?? null }),
+    ...(smart !== undefined && { defaultSmartModelId: smart?.id ?? null }),
+  });
 }

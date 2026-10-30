@@ -14,6 +14,7 @@ export function ClientIcon({ client, size = 36 }: ClientIconProps) {
     return (
       <ClientMarkTile
         mark={{
+          imageSrc: client.iconSrc,
           viewBox: client.svgViewBox ?? "0 0 24 24",
           path: client.svg,
           fillRule: client.svgFillRule,

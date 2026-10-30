@@ -295,6 +295,8 @@ test("a cold new-chat load renders a ready composer from the server's one read",
     "/api/llm-provider-api-keys",
     "/api/llm-provider-api-keys/available",
     "/api/llm-models/available",
+    // Only the open model menu names the organization default.
+    "/api/organization/default-model",
   ]) {
     expect(requests.count(`GET ${path}`), path).toBe(0);
   }

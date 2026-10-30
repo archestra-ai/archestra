@@ -17,6 +17,7 @@ import {
 } from "@archestra/shared";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import type { Anthropic, Bedrock, LLMProvider, OpenAi } from "@/types";
+import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 import {
   anthropicAdapterFactory,
   azureAdapterFactory,
@@ -56,7 +57,11 @@ export type PoolWire = "openai-chat" | "anthropic" | "bedrock-converse";
 /** Sends a request in the client's shapes to one member, and answers in them. */
 export interface MemberTransport {
   execute(request: unknown): Promise<unknown>;
-  executeStream(request: unknown): Promise<AsyncIterable<unknown>>;
+  /** `onAccepted` fires once the member's provider accepted the request. */
+  executeStream(
+    request: unknown,
+    onAccepted?: () => void,
+  ): Promise<AsyncIterable<unknown>>;
 }
 
 /** Whether a pool can send requests to a key on this provider. */
@@ -123,8 +128,8 @@ export function memberTransport(params: {
         : { ...(request as object), model: modelId };
     return {
       execute: (request) => adapter.execute(client, withModel(request)),
-      executeStream: (request) =>
-        adapter.executeStream(client, withModel(request)),
+      executeStream: (request, onAccepted) =>
+        adapter.executeStream(client, withModel(request), onAccepted),
     };
   }
 
@@ -143,15 +148,15 @@ export function memberTransport(params: {
           openaiContext,
         );
       },
-      async executeStream(request) {
+      async executeStream(request, onAccepted) {
         const { anthropicBody, openaiContext } = openaiToAnthropic(
           request as OpenAi.Types.ChatCompletionsRequest,
         );
-        const events = await adapter.executeStream(client, {
-          ...anthropicBody,
-          model: modelId,
-          stream: true,
-        });
+        const events = await adapter.executeStream(
+          client,
+          { ...anthropicBody, model: modelId, stream: true },
+          onAccepted,
+        );
         const translator = anthropicEventsToOpenAiChunks(openaiContext);
         return mapStream(events, translator.translate, translator.finish);
       },
@@ -177,9 +182,9 @@ export function memberTransport(params: {
           openaiContext,
         );
       },
-      async executeStream(request) {
+      async executeStream(request, onAccepted) {
         const { body, openaiContext } = translate(request);
-        const events = await adapter.executeStream(client, body);
+        const events = await adapter.executeStream(client, body, onAccepted);
         const encoder = createConverseToOpenaiSseEncoder(openaiContext);
         return mapStream(
           events,
@@ -214,14 +219,14 @@ export function memberTransport(params: {
           anthropicContext,
         );
       },
-      async executeStream(request) {
+      async executeStream(request, onAccepted) {
         const { openaiBody, anthropicContext } = anthropicToOpenai(
           request as Anthropic.Types.MessagesRequest,
         );
-        const chunks = await viaOpenai.executeStream({
-          ...openaiBody,
-          stream: true,
-        });
+        const chunks = await viaOpenai.executeStream(
+          { ...openaiBody, stream: true },
+          onAccepted,
+        );
         const translator =
           createOpenaiToAnthropicStreamTranslator(anthropicContext);
         return mapStream(
@@ -413,7 +418,9 @@ function anthropicEventsToOpenAiChunks(ctx: {
     finish() {
       // Without a stop reason the stream was cut off, not finished.
       if (finishReason === null) {
-        throw new Error("The upstream stream ended before it finished");
+        throw new UpstreamStreamIncompleteError(
+          "The upstream stream ended before it finished",
+        );
       }
       const prompt = inputTokens + cacheRead + cacheWrite;
       return [

@@ -685,8 +685,8 @@ describe("ModelModel", () => {
         "openai",
         "custom-priced",
       );
-      expect(after?.customPricePerMillionInput).toBe("12.00");
-      expect(after?.customPricePerMillionOutput).toBe("36.00");
+      expect(after?.customPricePerMillionInput).toBe("12.00000000");
+      expect(after?.customPricePerMillionOutput).toBe("36.00000000");
     });
   });
 
@@ -940,7 +940,7 @@ describe("ModelModel", () => {
         "repeat-model",
       );
       expect(after?.id).toBe(first?.id);
-      expect(after?.customPricePerMillionInput).toBe("4.00");
+      expect(after?.customPricePerMillionInput).toBe("4.00000000");
     });
   });
 
@@ -1402,8 +1402,8 @@ describe("ModelModel", () => {
       const updated = await ModelModel.findById(model.id);
 
       const pricing = ModelModel.getEffectivePricing(updated);
-      expect(pricing.pricePerMillionCacheRead).toBe("0.50");
-      expect(pricing.pricePerMillionCacheWrite).toBe("4.00");
+      expect(pricing.pricePerMillionCacheRead).toBe("0.50000000");
+      expect(pricing.pricePerMillionCacheWrite).toBe("4.00000000");
       expect(pricing.cacheSource).toBe("custom");
     });
 

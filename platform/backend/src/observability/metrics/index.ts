@@ -7,6 +7,7 @@ export * as database from "./database";
 export * as fileStorage from "./file-storage";
 export * as limit from "./limit";
 export * as llm from "./llm";
+export * as llmProxy from "./llm-proxy";
 export * as mcp from "./mcp";
 export * as rag from "./rag";
 export * as sandbox from "./sandbox";

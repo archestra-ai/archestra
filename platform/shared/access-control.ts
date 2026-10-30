@@ -531,6 +531,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped create/update check in the handler.
   [RouteId.GetRuntimeTemplateSettings]: { organizationSettings: ["update"] },
   [RouteId.SaveRuntimeTemplateSettings]: { organizationSettings: ["update"] },
+  /** Names the default model for every member, so "Organization default" reads the same for all. */
+  [RouteId.GetOrganizationDefaultModel]: {},
 
   // Agent Runtime belongs to Agents. Read access is enough to view
   // runs and manage one's own declared credentials; shared credential writes

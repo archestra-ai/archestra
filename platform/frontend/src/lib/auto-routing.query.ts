@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { organizationKeys } from "@/lib/organization.query";
 import { getApiErrorType, throwOnApiError } from "@/lib/utils/api";
 
 const {
@@ -144,6 +145,9 @@ async function applyFit(
     queryClient.invalidateQueries({ queryKey: autoRoutingKeys.planDetails() }),
     queryClient.invalidateQueries({ queryKey: autoRoutingKeys.simulations() }),
     queryClient.invalidateQueries({ queryKey: autoRoutingKeys.backfill() }),
+    queryClient.invalidateQueries({
+      queryKey: organizationKeys.defaultModel(),
+    }),
   ]);
   switch (data.fit?.status) {
     case undefined:

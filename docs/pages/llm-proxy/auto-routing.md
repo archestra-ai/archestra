@@ -57,7 +57,7 @@ Archestra uses the normal model, the organization's default model, when it canno
 - **Cold start:** fewer than the minimum number of finished sessions exist. See [`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS).
 - **No plan yet**, or the plan is stale because the three models or their prices changed.
 - **Scorer error or timeout.** See [`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS).
-- **No user text** in the request to score.
+- **No user text** in the request to score, as in Bedrock Converse requests.
 
 The session keeps that fallback until it ends. An agent or chat on the organization default also runs on the normal model, without being routed, while auto routing is off, a tier is unset or on a per-user provider such as GitHub Copilot, or the person has no key for one of the tiers.
 

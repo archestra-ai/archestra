@@ -31,7 +31,9 @@ archestra:
     # Sessions use the existing isolated node pool; each installation supplies
     # its own in-cluster URL.
     ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE: "1"
-    ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS: "4"
+    # One pool per distinct runtime setup that ran in the last 7 days, most
+    # recent first: the four Lobster workers plus their four review twins.
+    ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS: "8"
     ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED: "true"
     ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR: "archestra-agent-runtime=true"
     # Each workspace volume counts against the region's SSD quota for 72 hours.

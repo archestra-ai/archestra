@@ -7,7 +7,11 @@ import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import ModelModel from "@/models/model";
 import RoutingPlanModel from "@/models/routing-plan";
 import { beforeEach, describe, expect, test } from "@/test";
-import { configureAutoRouting, makeRoutingModel } from "@/test/auto-routing";
+import {
+  configureAutoRouting,
+  makeRoutingModel,
+  setOrganizationTrio,
+} from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useRouteTestApp } from "@/test/route-test-app";
 import autoRoutingRoutes from "./auto-routing.routes";
@@ -26,19 +30,18 @@ describe("PUT /api/auto-routing/settings", () => {
       payload,
     });
 
-  test("stores the trio and budget and records a cold start without history", async () => {
+  test("enables over the organization trio, stores the budget and records a cold start without history", async () => {
     const [fast, normal, smart] = await Promise.all([
       makeRoutingModel(),
       makeRoutingModel(),
       makeRoutingModel(),
     ]);
 
+    await setOrganizationTrio(ctx.organizationId, { fast, normal, smart });
+
     const response = await putSettings({
       enabled: true,
       budgetUsdPerDay: 12.5,
-      fastModelId: fast.id,
-      normalModelId: normal.id,
-      smartModelId: smart.id,
     });
 
     expect(response.statusCode, response.body).toBe(200);
@@ -182,56 +185,24 @@ describe("PUT /api/auto-routing/settings", () => {
     ).toBe(1);
   });
 
-  test("rejects a tier model that does not exist", async () => {
-    await configureAutoRouting(ctx.organizationId);
+  test("rejects tier fields in the body", async () => {
+    const trio = await configureAutoRouting(ctx.organizationId);
 
     const response = await putSettings({ normalModelId: randomUUID() });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toBe(
-      "The normal tier model does not exist.",
-    );
-  });
-
-  test.each([
-    {
-      label: "without tool calling",
-      overrides: { supportsToolCalling: false },
-    },
-    {
-      label: "an embedding model",
-      overrides: { embeddingDimensions: 1536 as const, outputModalities: [] },
-    },
-  ])("rejects a tier model $label", async ({ overrides }) => {
-    const trio = await configureAutoRouting(ctx.organizationId);
-    const modelId = `unfit-${randomUUID()}`;
-    const unfit = await ModelModel.create({
-      externalId: `openai/${modelId}`,
-      provider: "openai",
-      modelId,
-      inputModalities: ["text"],
-      outputModalities: ["text"],
-      ...overrides,
-    });
-
-    const response = await putSettings({ smartModelId: unfit.id });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toBe(
-      `The smart tier model "openai/${modelId}" is not a tool-capable chat model.`,
-    );
     expect(
-      (await AutoRoutingSettingsModel.find(ctx.organizationId))?.smartModelId,
-    ).toBe(trio[2].id);
+      (await AutoRoutingSettingsModel.find(ctx.organizationId))?.normalModelId,
+    ).toBe(trio[1].id);
   });
 
   test("enabling needs a complete trio", async () => {
     const fast = await makeRoutingModel();
+    await setOrganizationTrio(ctx.organizationId, { fast });
 
     const response = await putSettings({
       enabled: true,
       budgetUsdPerDay: 10,
-      fastModelId: fast.id,
     });
 
     expect(response.statusCode).toBe(400);
@@ -259,8 +230,7 @@ describe("PUT /api/auto-routing/settings", () => {
     });
   });
 
-  test("rejects tiers with different long-context thresholds", async () => {
-    const trio = await configureAutoRouting(ctx.organizationId);
+  test("enabling is refused when the organization trio has different long-context thresholds", async () => {
     const withThreshold = (threshold: number) =>
       ModelModel.create({
         externalId: `openai/long-${randomUUID()}`,
@@ -274,23 +244,27 @@ describe("PUT /api/auto-routing/settings", () => {
         longContextPricePerMillionCacheRead: "0.6",
         longContextPricePerMillionCacheWrite: "7.5",
       });
-    const fast = await withThreshold(128_000);
-    const normal = await withThreshold(200_000);
+    const [fast, normal, smart] = [
+      await withThreshold(128_000),
+      await withThreshold(200_000),
+      await withThreshold(128_000),
+    ];
+    await setOrganizationTrio(ctx.organizationId, { fast, normal, smart });
 
     const response = await putSettings({
-      fastModelId: fast.id,
-      normalModelId: normal.id,
+      enabled: true,
+      budgetUsdPerDay: 10,
     });
 
     expect(response.statusCode).toBe(400);
     expect(
-      await AutoRoutingSettingsModel.find(ctx.organizationId),
-    ).toMatchObject({ fastModelId: trio[0].id, normalModelId: trio[1].id });
+      (await AutoRoutingSettingsModel.find(ctx.organizationId))?.enabled,
+    ).toBe(false);
 
-    const shared = await withThreshold(128_000);
+    await setOrganizationTrio(ctx.organizationId, { normal: fast });
     const accepted = await putSettings({
-      fastModelId: fast.id,
-      normalModelId: shared.id,
+      enabled: true,
+      budgetUsdPerDay: 10,
     });
     expect(accepted.statusCode, accepted.body).toBe(200);
   });

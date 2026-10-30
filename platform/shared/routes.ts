@@ -1,4 +1,8 @@
 export const RouteId = {
+  ListAgentRuntimeTemplates: "listAgentRuntimeTemplates",
+  GetAgentRuntimeTemplate: "getAgentRuntimeTemplate",
+  GetRuntimeTemplateSettings: "getRuntimeTemplateSettings",
+  SaveRuntimeTemplateSettings: "saveRuntimeTemplateSettings",
   AzureAudioSpeechWithDefaultAgent: "azureAudioSpeechWithDefaultAgent",
   AzureAudioSpeechWithAgent: "azureAudioSpeechWithAgent",
   AzureAudioTranscriptionsWithDefaultAgent:
@@ -684,6 +688,7 @@ export const RouteId = {
 
   // Organization Routes
   GetOrganization: "getOrganization",
+  GetOrganizationDefaultModel: "getOrganizationDefaultModel",
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
   GetOrganizationMemberOptions: "getOrganizationMemberOptions",

@@ -22,6 +22,7 @@ export const useInvitationsList = vi.fn();
 export const useCancelInvitation = vi.fn();
 export const useCreateInvitation = vi.fn();
 export const useOrganization = vi.fn();
+export const useOrganizationDefaultModelSummary = vi.fn();
 export const useOrganizationOnboardingStatus = vi.fn();
 export const useUpdateAppearanceSettings = vi.fn();
 export const useUpdateSecuritySettings = vi.fn();

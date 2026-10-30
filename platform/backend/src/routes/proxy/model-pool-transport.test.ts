@@ -91,13 +91,17 @@ describe("memberTransport", () => {
       modelId: "glm-5",
       client: "client",
     });
+    const onAccepted = () => {};
     const events = await collect(
-      await transport.executeStream({
-        model: "glm-5",
-        max_tokens: 100,
-        stream: true,
-        messages: [{ role: "user", content: "hello" }],
-      }),
+      await transport.executeStream(
+        {
+          model: "glm-5",
+          max_tokens: 100,
+          stream: true,
+          messages: [{ role: "user", content: "hello" }],
+        },
+        onAccepted,
+      ),
     );
 
     expect(executeStream).toHaveBeenCalledWith(
@@ -107,6 +111,7 @@ describe("memberTransport", () => {
         stream: true,
         messages: [{ role: "user", content: "hello" }],
       }),
+      onAccepted,
     );
     expect(events).toEqual([
       expect.objectContaining({ type: "message_start" }),
@@ -197,13 +202,17 @@ describe("memberTransport", () => {
       client: "client",
     });
 
+    const onAccepted = () => {};
     const events = await collect(
-      await transport.executeStream({
-        model: "glm-5",
-        max_tokens: 100,
-        stream: true,
-        messages: [{ role: "user", content: "hello" }],
-      }),
+      await transport.executeStream(
+        {
+          model: "glm-5",
+          max_tokens: 100,
+          stream: true,
+          messages: [{ role: "user", content: "hello" }],
+        },
+        onAccepted,
+      ),
     );
 
     expect(executeStream).toHaveBeenCalledWith(
@@ -212,6 +221,7 @@ describe("memberTransport", () => {
         modelId: "us.zai.glm-5",
         messages: [{ role: "user", content: [{ text: "hello" }] }],
       }),
+      onAccepted,
     );
     expect(events).toContainEqual({
       type: "content_block_delta",

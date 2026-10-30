@@ -3,19 +3,26 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
   AutoRoutingSettings,
+  AutoRoutingTrio,
   UpdateAutoRoutingSettings,
 } from "@/types/auto-routing";
 
 const agents = schema.agentsTable;
+const organizations = schema.organizationsTable;
 
-/** Auto-routing settings live on the organization's LLM Proxy row. */
+/**
+ * Auto-routing settings live on the organization's LLM Proxy row; its tiers
+ * are the organization's default model trio.
+ */
 class AutoRoutingSettingsModel {
   static async find(
     organizationId: string,
+    tx?: Transaction,
   ): Promise<AutoRoutingSettings | null> {
-    const [row] = await db
+    const [row] = await (tx ?? db)
       .select(settingsColumns)
       .from(agents)
+      .innerJoin(organizations, eq(organizations.id, agents.organizationId))
       .where(organizationLlmProxy(organizationId));
     return row ?? null;
   }
@@ -40,26 +47,65 @@ class AutoRoutingSettingsModel {
     return withDbTransaction(async (tx) => {
       await lockRoutingPlan(tx, organizationId);
       if (validate) {
-        const [current] = await tx
-          .select(settingsColumns)
-          .from(agents)
-          .where(organizationLlmProxy(organizationId));
+        const current = await AutoRoutingSettingsModel.find(organizationId, tx);
         if (!current) return null;
         await validate(mergeSettings(current, update), tx, current);
       }
-      const [row] = await tx
+      const updated = await tx
         .update(agents)
         .set({
           autoRoutingEnabled: update.enabled,
           autoRoutingBudgetUsdPerDay: update.budgetUsdPerDay,
-          autoRoutingFastModelId: update.fastModelId,
-          autoRoutingNormalModelId: update.normalModelId,
-          autoRoutingSmartModelId: update.smartModelId,
           autoRoutingGeneration: sql`${agents.autoRoutingGeneration} + 1`,
         })
         .where(organizationLlmProxy(organizationId))
-        .returning(settingsColumns);
-      return row ?? null;
+        .returning({ id: agents.id });
+      if (updated.length === 0) return null;
+      return AutoRoutingSettingsModel.find(organizationId, tx);
+    });
+  }
+
+  /**
+   * Runs `write`, a change of the organization's model trio, under the
+   * routing-plan lock and bumps the generation, so the plan is re-fitted for
+   * the new tiers. `validate` sees the settings over the next trio and throws
+   * to abort.
+   */
+  static async updateTrio<T>(params: {
+    organizationId: string;
+    /** The tiers the write sets; the others keep their current models. */
+    patch: Partial<AutoRoutingTrio>;
+    validate: (
+      next: AutoRoutingSettings,
+      tx: Transaction,
+      current: AutoRoutingSettings,
+    ) => Promise<void>;
+    write: (tx: Transaction) => Promise<T>;
+  }): Promise<T> {
+    return withDbTransaction(async (tx) => {
+      await lockRoutingPlan(tx, params.organizationId);
+      const current = await AutoRoutingSettingsModel.find(
+        params.organizationId,
+        tx,
+      );
+      const next = current ? { ...current, ...params.patch } : null;
+      const changed =
+        current !== null &&
+        next !== null &&
+        (next.fastModelId !== current.fastModelId ||
+          next.normalModelId !== current.normalModelId ||
+          next.smartModelId !== current.smartModelId);
+      if (changed) await params.validate(next, tx, current);
+      const written = await params.write(tx);
+      if (changed) {
+        await tx
+          .update(agents)
+          .set({
+            autoRoutingGeneration: sql`${agents.autoRoutingGeneration} + 1`,
+          })
+          .where(organizationLlmProxy(params.organizationId));
+      }
+      return written;
     });
   }
 
@@ -147,27 +193,15 @@ export function mergeSettings(
       update.budgetUsdPerDay === undefined
         ? current.budgetUsdPerDay
         : update.budgetUsdPerDay,
-    fastModelId:
-      update.fastModelId === undefined
-        ? current.fastModelId
-        : update.fastModelId,
-    normalModelId:
-      update.normalModelId === undefined
-        ? current.normalModelId
-        : update.normalModelId,
-    smartModelId:
-      update.smartModelId === undefined
-        ? current.smartModelId
-        : update.smartModelId,
   };
 }
 
 const settingsColumns = {
   enabled: agents.autoRoutingEnabled,
   budgetUsdPerDay: agents.autoRoutingBudgetUsdPerDay,
-  fastModelId: agents.autoRoutingFastModelId,
-  normalModelId: agents.autoRoutingNormalModelId,
-  smartModelId: agents.autoRoutingSmartModelId,
+  fastModelId: organizations.defaultFastModelId,
+  normalModelId: organizations.defaultModelId,
+  smartModelId: organizations.defaultSmartModelId,
   scorerVersionId: agents.autoRoutingScorerVersionId,
   generation: agents.autoRoutingGeneration,
   plannedGeneration: agents.autoRoutingPlannedGeneration,

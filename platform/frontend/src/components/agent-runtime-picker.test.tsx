@@ -19,7 +19,10 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { makeOrganization } from "@/mocks/data/organization";
-import { getAgentCatalogTemplates } from "./agent-pages/agent-catalog";
+import {
+  AgentCatalog,
+  getAgentCatalogTemplates,
+} from "./agent-pages/agent-catalog";
 import {
   type AgentRuntimeConfig,
   defaultAgentRuntime,
@@ -419,3 +422,83 @@ function Harness({
     </>
   );
 }
+
+describe("custom runtime catalog permission integration", () => {
+  it.each([
+    false,
+    true,
+  ])("gates custom template selection on Configure runtime (%s)", async (allowed) => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: allowed,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    const id = "00000000-0000-4000-8000-000000000001";
+    const runtime = {
+      ...defaultAgentRuntime(),
+      image: "registry.example.com/team-agent:v2",
+      environment: [{ key: "TEAM_MODE", value: "review" }],
+    };
+    const summary = {
+      id,
+      name: "Team workspace",
+      description: "Team tools",
+      icon: null,
+      hidden: false,
+      position: 0,
+      image: runtime.image,
+    };
+    let resolutions = 0;
+    server.use(
+      http.get("http://localhost:9000/api/agent-runtime-templates", () =>
+        HttpResponse.json([summary]),
+      ),
+      http.get(
+        `http://localhost:9000/api/agent-runtime-templates/${id}`,
+        () => {
+          resolutions++;
+          return HttpResponse.json({ ...summary, runtime });
+        },
+      ),
+    );
+    const onSelect = vi.fn();
+    render(
+      <AgentCatalog
+        canCreateAgent
+        runtimeAvailable
+        onStartFromScratch={vi.fn()}
+        onStartFromImage={vi.fn()}
+        onAddExternalAgent={vi.fn()}
+        onSelect={onSelect}
+      />,
+      { wrapper: QueryWrapper },
+    );
+    const choice = await screen.findByRole("button", {
+      name: /Team workspace/,
+    });
+    const user = userEvent.setup();
+    if (allowed) {
+      expect(choice).toBeEnabled();
+      await user.click(choice);
+      await waitFor(() =>
+        expect(onSelect).toHaveBeenCalledWith(
+          expect.objectContaining({
+            customTemplateId: id,
+            initialValues: expect.objectContaining({ runtime }),
+          }),
+        ),
+      );
+      expect(resolutions).toBe(1);
+    } else {
+      expect(choice).toBeDisabled();
+      expect(choice).toHaveAccessibleDescription(
+        "Requires Configure runtime permission.",
+      );
+      await user.click(choice);
+      expect(resolutions).toBe(0);
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: /New Test Platform agent/ }),
+      ).toBeEnabled();
+    }
+  });
+});

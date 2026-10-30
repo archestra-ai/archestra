@@ -97,10 +97,18 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "update",
         ),
       ]);
-      if (!allowed.some(Boolean))
+      if (
+        !allowed.some(Boolean) ||
+        !(await userHasPermission(
+          user.id,
+          organizationId,
+          "agent",
+          "configure-runtime",
+        ))
+      )
         throw new ApiError(
           403,
-          "Permission to create or update agents is required",
+          "Permission to configure runtime and create or update agents is required",
         );
       const settings =
         await AgentRuntimeTemplateModel.getSettings(organizationId);

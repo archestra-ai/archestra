@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import {
   LlmProviderApiKeyModel,
@@ -14,11 +16,37 @@ import { getResolvedAgentRuntimeModelCompatibility } from "./model-compatibility
 // agents REST routes and the create_agent/edit_agent MCP tools both call these,
 // so neither can store a runtime or model pairing the other would refuse.
 
-export function requireAgentRuntimePermission(params: {
+export async function requireAgentRuntimePermission(params: {
   agentType: AgentType;
   runtime?: AgentRuntime | null;
   isAdmin: boolean;
-}): void {
+  userId: string;
+  organizationId: string;
+  previous?: AgentRuntime | null;
+}): Promise<void> {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Omitted and unchanged values preserve existing configuration, including
+  // on ordinary edits after a role loses permission. Null removes a runtime.
+  const changesRuntime =
+    params.runtime !== undefined &&
+    !isDeepStrictEqual(params.runtime, params.previous ?? null);
+  if (
+    changesRuntime &&
+    !(await userHasPermission(
+      params.userId,
+      params.organizationId,
+      "agent",
+      "configure-runtime",
+    ))
+  ) {
+    throw new ApiError(
+      403,
+      "Configure runtime permission is required to change an agent runtime",
+    );
+  }
+  // SPDX-SnippetEnd
   if (params.runtime == null) return;
   if (!isAnyAgentRuntimeBackendDriverEnabled()) {
     throw new ApiError(

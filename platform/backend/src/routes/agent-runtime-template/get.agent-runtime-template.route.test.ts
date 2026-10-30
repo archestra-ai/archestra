@@ -10,6 +10,8 @@ describe("GET /api/agent-runtime-templates/:id", () => {
   test("requires agent create/update permission and refuses hidden or cross-organization templates", async ({
     makeOrganization,
     makeMember,
+    makeCustomRole,
+    makeUser,
   }) => {
     const template = makeTemplate();
     const hidden = makeTemplate({ name: "Hidden workspace", hidden: true });
@@ -27,6 +29,19 @@ describe("GET /api/agent-runtime-templates/:id", () => {
       ).statusCode,
     ).toBe(403);
     ctx.caller = ctx.member;
+    expect(
+      (
+        await ctx.app.inject({
+          url: `/api/agent-runtime-templates/${template.id}`,
+        })
+      ).statusCode,
+    ).toBe(403);
+    ctx.member = await makeUser();
+    ctx.caller = ctx.member;
+    const role = await makeCustomRole(ctx.organizationId, {
+      permission: { agent: ["create", "configure-runtime"] },
+    });
+    await makeMember(ctx.member.id, ctx.organizationId, { role: role.role });
     const resolved = await ctx.app.inject({
       url: `/api/agent-runtime-templates/${template.id}`,
     });
@@ -40,7 +55,7 @@ describe("GET /api/agent-runtime-templates/:id", () => {
       ).statusCode,
     ).toBe(404);
     ctx.organizationId = (await makeOrganization()).id;
-    await makeMember(ctx.member.id, ctx.organizationId, { role: "member" });
+    await makeMember(ctx.member.id, ctx.organizationId, { role: "admin" });
     expect(
       (
         await ctx.app.inject({

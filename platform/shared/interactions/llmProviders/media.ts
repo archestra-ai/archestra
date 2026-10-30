@@ -1,3 +1,4 @@
+import { isMediaNotKept, MEDIA_NOT_KEPT_REASON } from "../../log-media";
 import type { PartialUIMessage } from "../types";
 
 type Part = PartialUIMessage["parts"][number];
@@ -12,6 +13,7 @@ export function inlineMediaPart(params: {
   data: string;
   caption?: string;
 }): Part {
+  if (isMediaNotKept(params.data)) return notKeptPart(params);
   return {
     type: "file",
     mediaType: params.mediaType,
@@ -26,6 +28,7 @@ export function linkedMediaPart(params: {
   url: string;
   caption?: string;
 }): Part {
+  if (isMediaNotKept(params.url)) return notKeptPart(params);
   return {
     type: "file",
     mediaType: params.mediaType,
@@ -36,11 +39,35 @@ export function linkedMediaPart(params: {
 
 /** Media the call carried that the log did not keep: what it was, and why. */
 export function missingMediaPart(params: {
-  kind: "audio" | "image";
+  kind: MediaKind;
   label: string;
   reason: string;
 }): Part {
   return { type: "data-missing-media", data: params } as Part;
+}
+
+type MediaKind = "audio" | "image" | "video" | "file";
+
+/** The kind of media a media type names, for its placeholder's icon. */
+function mediaKind(mediaType: string): MediaKind {
+  const [type] = mediaType.split("/");
+  return type === "audio" || type === "image" || type === "video"
+    ? type
+    : "file";
+}
+
+/** A placeholder for media the organization keeps out of its logs. */
+function notKeptPart(params: { mediaType: string; caption?: string }): Part {
+  const kind = mediaKind(params.mediaType);
+  return missingMediaPart({
+    kind,
+    label:
+      params.caption ??
+      (params.mediaType.endsWith("/*")
+        ? { audio: "Audio", image: "Image", video: "Video", file: "File" }[kind]
+        : mediaFormatLabel(params.mediaType)),
+    reason: MEDIA_NOT_KEPT_REASON,
+  });
 }
 
 /** Why the log holds no copy of a clip: too large, or not kept at all. */
@@ -95,6 +122,8 @@ export function mediaFormatLabel(mediaType: string): string {
  * sessions send) as a WAV a browser can play, base64.
  */
 export function pcm16ToWav(base64: string, sampleRate = 24_000): string {
+  // Nothing to wrap: the log did not keep the clip.
+  if (isMediaNotKept(base64)) return base64;
   const pcm = atob(base64);
   const header = new DataView(new ArrayBuffer(44));
   const ascii = (offset: number, text: string) => {

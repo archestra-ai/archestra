@@ -5,12 +5,16 @@ import {
   type BlockedToolPart,
   extractMcpToolError,
   foldCitationSources,
+  isMediaNotKept,
+  MEDIA_NOT_KEPT_REASON,
   type PartialUIMessage,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
 import {
   Check,
   FileAudio,
+  FileVideo2,
+  FileX,
   ImageOff,
   Paperclip,
   RefreshCcwIcon,
@@ -749,10 +753,17 @@ function isPendingToolState(state: string | undefined): boolean {
 // ============================================================================
 
 type MissingMediaData = {
-  kind: "audio" | "image";
+  kind: "audio" | "image" | "video" | "file";
   label: string;
   reason: string;
 };
+
+const MISSING_MEDIA_ICON = {
+  audio: FileAudio,
+  image: ImageOff,
+  video: FileVideo2,
+  file: FileX,
+} as const;
 
 /**
  * A file a logged call carried: an image shown inline, audio in the chat's
@@ -770,6 +781,31 @@ function LoggedFilePart({
 }) {
   const isImage = part.mediaType?.startsWith("image/");
   const isAudio = part.mediaType?.startsWith("audio/");
+  // A renderer that builds its own link around stripped bytes still lands
+  // here; say what was there instead of showing a broken image or player.
+  if (isMediaNotKept(part.url)) {
+    const kind = isImage
+      ? "image"
+      : isAudio
+        ? "audio"
+        : part.mediaType?.startsWith("video/")
+          ? "video"
+          : "file";
+    return (
+      <MissingMedia
+        media={{
+          kind,
+          label:
+            part.filename ||
+            { image: "Image", audio: "Audio", video: "Video", file: "File" }[
+              kind
+            ],
+          reason: MEDIA_NOT_KEPT_REASON,
+        }}
+        fromUser={fromUser}
+      />
+    );
+  }
   if (!isImage && !isAudio) {
     return (
       <div
@@ -840,7 +876,7 @@ function MissingMedia({
   media: MissingMediaData;
   fromUser: boolean;
 }) {
-  const Icon = media.kind === "audio" ? FileAudio : ImageOff;
+  const Icon = MISSING_MEDIA_ICON[media.kind] ?? FileX;
   return (
     <div
       className={cn("flex py-1", fromUser ? "justify-end" : "justify-start")}

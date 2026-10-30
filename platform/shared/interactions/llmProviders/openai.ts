@@ -5,6 +5,7 @@ import { tryParseJson } from "./json";
 import {
   audioMediaType,
   inlineMediaPart,
+  linkedMediaPart,
   mediaFormatLabel,
   missingAudioReason,
   missingMediaPart,
@@ -222,11 +223,12 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
           if (part.type === "text") {
             parts.push({ type: "text", text: part.text });
           } else if (part.type === "image_url") {
-            parts.push({
-              type: "file",
-              mediaType: "image/*",
-              url: part.image_url.url,
-            });
+            parts.push(
+              linkedMediaPart({
+                mediaType: "image/*",
+                url: part.image_url.url,
+              }),
+            );
           } else if (part.type === "input_audio") {
             const { data, format } = (
               part as { input_audio?: { data?: unknown; format?: string } }

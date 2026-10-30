@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MEDIA_NOT_KEPT_REASON, withoutLoggedMedia } from "../../log-media";
 import { DynamicInteraction } from "../interaction.utils";
 import type { Interaction } from "./common";
 
@@ -333,5 +334,144 @@ describe("media and embeddings in the conversation view", () => {
       "user",
       "assistant",
     ]);
+  });
+
+  it("says media logging is off where a stripped row's media stood, for every kind", () => {
+    const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAE=";
+    const PCM = "AAECAwQF";
+    const notKept = (kind: string, label: string) => ({
+      type: "data-missing-media",
+      data: { kind, label, reason: MEDIA_NOT_KEPT_REASON },
+    });
+    // Each row as the log stores it with "Keep media in logs" off.
+    const stripped = (row: Parameters<typeof conversation>[0]) =>
+      conversation(withoutLoggedMedia(row));
+
+    const chat = stripped({
+      type: "openai:chatCompletions",
+      model: "gpt-audio",
+      request: {
+        model: "gpt-audio",
+        audio: { voice: "alloy", format: "pcm16" },
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Describe it" },
+              {
+                type: "image_url",
+                image_url: { url: `data:image/png;base64,${PNG}` },
+              },
+              {
+                type: "input_audio",
+                input_audio: { data: PCM, format: "wav" },
+              },
+            ],
+          },
+        ],
+      },
+      response: {
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: null,
+              audio: { id: "a1", data: PCM, transcript: "A circle." },
+            },
+          },
+        ],
+      },
+    });
+    expect(chat.messages[0].parts).toEqual([
+      { type: "text", text: "Describe it" },
+      notKept("image", "Image"),
+      notKept("audio", "Audio, WAV"),
+    ]);
+    expect(JSON.stringify(chat.messages[1].parts)).toContain(
+      MEDIA_NOT_KEPT_REASON,
+    );
+    expect(JSON.stringify(chat.messages[1].parts)).toContain("A circle.");
+
+    const edit = stripped({
+      type: "openai:images",
+      model: "gpt-image-1-mini",
+      request: {
+        prompt: "Make it red",
+        input_files: {
+          images: [
+            {
+              filename: "circle.png",
+              mime_type: "image/png",
+              width: 1024,
+              height: 1024,
+              data: PNG,
+            },
+          ],
+        },
+      },
+      response: { data: [{ b64_json: PNG }], size: "1024x1024" },
+    });
+    expect(edit.messages[0].parts).toEqual([
+      { type: "text", text: "Make it red" },
+      notKept("image", "circle.png · 1024 × 1024"),
+    ]);
+    expect(edit.messages[1].parts).toEqual([
+      notKept("image", "PNG, 1024 × 1024"),
+    ]);
+
+    const speech = stripped({
+      type: "openai:audio",
+      model: "tts-1",
+      request: { model: "tts-1", operation: "speech", input_characters: 5 },
+      response: {
+        speech_input: "Hello",
+        audio: { content_type: "audio/pcm", data: PCM },
+      },
+    });
+    expect(speech.title).toBe("Hello");
+    expect(speech.messages[1].parts).toEqual([notKept("audio", "Speech, PCM")]);
+
+    const realtime = stripped({
+      type: "openai:realtime",
+      model: "gpt-realtime-2.1",
+      request: { model: "gpt-realtime-2.1", input_text: "Say hi" },
+      response: {
+        output_transcript: "Hi!",
+        output_audio: { format: "pcm16", sample_rate: 24000, data: PCM },
+      },
+    });
+    expect(JSON.stringify(realtime.messages[1].parts)).toContain(
+      MEDIA_NOT_KEPT_REASON,
+    );
+
+    const gemini = stripped({
+      type: "gemini:generateContent",
+      model: "gemini-2.5-flash-image",
+      request: {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: "Make it red" },
+              { inlineData: { mimeType: "image/png", data: PNG } },
+            ],
+          },
+        ],
+      },
+      response: {
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [{ inlineData: { mimeType: "image/png", data: PNG } }],
+            },
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(gemini.messages)).not.toContain(PNG);
+    expect(gemini.messages.flatMap((message) => message.parts)).toContainEqual(
+      notKept("image", "PNG"),
+    );
   });
 });

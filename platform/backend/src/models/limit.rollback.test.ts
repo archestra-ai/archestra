@@ -1336,9 +1336,10 @@ describe("LimitModel", () => {
 
 describe("LimitValidationService", () => {
   describe("checkLimitsBeforeRequest", () => {
-    test("should return null when no limits are set", async () => {
+    test("should return null when no limits are set", async ({ makeAgent }) => {
+      const agent = await makeAgent();
       const result = await LimitValidationService.checkLimitsBeforeRequest({
-        agentId: "agent-123",
+        agentId: agent.id,
       });
       expect(result).toBeNull();
     });
@@ -1696,17 +1697,21 @@ describe("LimitValidationService", () => {
       expect(contentMessage).toContain("Limit:");
     });
 
-    test("should handle errors gracefully and allow requests", async () => {
-      const result = await LimitValidationService.checkLimitsBeforeRequest({
-        agentId: "invalid-agent-id",
-      });
-
-      expect(result).toBeNull();
+    test("fails closed when the budgets cannot be read", async () => {
+      // A request whose budgets cannot be read could spend past them unseen.
+      await expect(
+        LimitValidationService.checkLimitsBeforeRequest({
+          agentId: "not-a-uuid",
+        }),
+      ).rejects.toThrow();
     });
 
-    test("should handle agents with no team assignments", async () => {
+    test("should handle agents with no team assignments", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
       const result = await LimitValidationService.checkLimitsBeforeRequest({
-        agentId: "orphan-agent-123",
+        agentId: agent.id,
       });
       expect(result).toBeNull();
     });

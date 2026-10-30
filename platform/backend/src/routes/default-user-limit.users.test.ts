@@ -198,7 +198,7 @@ describe("user limit usage routes", () => {
 
   // Enforcement treats unpriced media as exhausting the limit, so the listing
   // must too, but only for such calls inside the current window.
-  test("a call whose media cost is unavailable puts the user at the limit", async ({
+  test("a call whose media cost is unavailable flags the user's spend as estimated without exhausting the limit", async ({
     makeUser,
     makeMember,
     makeInteraction,
@@ -229,14 +229,17 @@ describe("user limit usage routes", () => {
     const body = await list();
 
     expect(body.data.find((row) => row.name === "Media Mo")).toMatchObject({
-      status: "at",
-      percent: 100,
+      status: "ok",
+      percent: 2,
       // The unpriced call's recorded cost is not counted as spend.
       spent: 2,
+      estimatedUsage: true,
     });
+    // Outside the window, the unpriced call no longer marks the spend.
     expect(body.data.find((row) => row.name === "Earlier Eli")).toMatchObject({
       status: "ok",
       spent: 1,
+      estimatedUsage: false,
     });
   });
 

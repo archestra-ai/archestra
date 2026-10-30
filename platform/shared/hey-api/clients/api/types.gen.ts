@@ -52768,6 +52768,7 @@ export type ListUserLimitUsageResponses = {
             cleanupInterval: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             models: Array<string> | null;
             spent: number;
+            estimatedUsage: boolean;
             percent: number | null;
             status: 'ok' | 'near' | 'at';
             customLimitId: string | null;
@@ -96700,6 +96701,10 @@ export type GetLimitsResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        /**
+         * Spend limits only: part of the spend is estimated because a model had no price for some of the tokens a request used.
+         */
+        estimatedUsage?: boolean;
         modelUsage?: Array<{
             model: string;
             tokensIn: number;
@@ -97036,6 +97041,10 @@ export type GetLimitResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        /**
+         * Spend limits only: part of the spend is estimated because a model had no price for some of the tokens a request used.
+         */
+        estimatedUsage?: boolean;
         modelUsage?: Array<{
             model: string;
             tokensIn: number;
@@ -97057,13 +97066,13 @@ export type UpdateLimitData = {
         model?: Array<string> | null;
         reason?: string | null;
         cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
-        lastCleanup?: unknown;
         labels?: Array<{
             key: string;
             value: string;
             keyId?: string;
             valueId?: string;
         }>;
+        lastCleanup?: null;
     };
     path: {
         id: string;
@@ -97167,6 +97176,111 @@ export type UpdateLimitResponses = {
 };
 
 export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
+
+export type ResetLimitUsageData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}/reset';
+};
+
+export type ResetLimitUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ResetLimitUsageError = ResetLimitUsageErrors[keyof ResetLimitUsageErrors];
+
+export type ResetLimitUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
+        entityId: string;
+        limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        behavior: 'hard' | 'soft';
+        mcpServerName: string | null;
+        toolName: string | null;
+        model?: Array<string> | null;
+        reason?: string | null;
+        /**
+         * Whether a team admin created this team limit. Team admins can change or delete only these.
+         */
+        teamManaged: boolean;
+        cleanupInterval?: 'minute' | '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type ResetLimitUsageResponse = ResetLimitUsageResponses[keyof ResetLimitUsageResponses];
 
 export type BulkDeleteLimitsData = {
     body: {
@@ -98395,7 +98509,6 @@ export type PreviewModelCostBackfillResponses = {
             users: number;
             recordedCost: number;
             recomputedCost: number;
-            settledRequests: number;
         } | null;
     };
 };
@@ -98923,6 +99036,7 @@ export type GetLlmOauthClientsResponses = {
                 cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
                 limitId: string;
                 currentUsage: number;
+                estimatedUsage: boolean;
             } | null;
         }>;
         pagination: {
@@ -99107,6 +99221,7 @@ export type CreateLlmOauthClientResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
         clientSecret: string;
     };
@@ -99351,6 +99466,7 @@ export type UpdateLlmOauthClientResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
     };
 };
@@ -99477,6 +99593,7 @@ export type RotateLlmOauthClientSecretResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
         clientSecret: string;
     };
@@ -109581,6 +109698,7 @@ export type GetOauthClientsResponses = {
                 cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
                 limitId: string;
                 currentUsage: number;
+                estimatedUsage: boolean;
             } | null;
             scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
             allowedGatewayIds: Array<string>;
@@ -109779,6 +109897,7 @@ export type CreateOauthClientResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
@@ -110037,6 +110156,7 @@ export type UpdateOauthClientResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
@@ -110167,6 +110287,7 @@ export type RotateOauthClientSecretResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
@@ -141251,6 +141372,7 @@ export type GetAllVirtualApiKeysResponses = {
                 cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
                 limitId: string;
                 currentUsage: number;
+                estimatedUsage: boolean;
             } | null;
         }>;
         pagination: {
@@ -141433,6 +141555,7 @@ export type CreateVirtualApiKeyResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
     };
 };
@@ -141654,6 +141777,7 @@ export type GetVirtualApiKeyResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
     };
 };
@@ -141808,6 +141932,7 @@ export type UpdateVirtualApiKeyResponses = {
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
             limitId: string;
             currentUsage: number;
+            estimatedUsage: boolean;
         } | null;
     };
 };

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
@@ -375,20 +376,26 @@ function bridge(params: {
   // The budget check before a response is asynchronous; frames still reach
   // OpenAI in the order the client sent them.
   let forwarding = Promise.resolve();
-  const refuseResponse = (message: string) => {
+  const refuse = (params: {
+    code: string;
+    message: string;
+    reason: string;
+  }) => {
     if (client.readyState === WebSocket.OPEN)
       client.send(
         JSON.stringify({
           type: "error",
           error: {
             type: "invalid_request_error",
-            code: "budget_exceeded",
-            message,
+            code: params.code,
+            message: params.message,
           },
         }),
       );
-    close(1008, "Budget exhausted");
+    close(1008, params.reason);
   };
+  const refuseResponse = (message: string) =>
+    refuse({ code: "budget_exceeded", message, reason: "Budget exhausted" });
   session.onBudgetSpent = refuseResponse;
   const enqueue = (step: () => Promise<void> | void) => {
     forwarding = forwarding.then(step).catch((error: unknown) => {
@@ -397,11 +404,11 @@ function bridge(params: {
     });
   };
   // Gated sessions: what the client's turn detection asks for, whether the
-  // client set it itself, and the replies owed to the proxy's own update.
+  // client set it itself, and the proxy's own update awaiting its reply.
   let autoResponse = false;
   let clientSetTurnDetection = false;
   let spokenTurn = false;
-  let ownUpdates = 0;
+  let ownUpdate: string | undefined;
   const forward = async (data: RawData, isBinary: boolean) => {
     let frame: RawData | string = data;
     if (!isBinary) {
@@ -441,17 +448,40 @@ function bridge(params: {
       const found = turnDetectionOf(event.session);
       if (isRecord(found?.value) && found.value.create_response !== false) {
         autoResponse = true;
-        ownUpdates += 1;
-        const update = autoResponseOffUpdate(event.session, found);
+        ownUpdate = `gateway_${randomUUID()}`;
+        const update = {
+          event_id: ownUpdate,
+          ...autoResponseOffUpdate(event.session, found),
+        };
         enqueue(() => {
           if (upstream.readyState === WebSocket.OPEN)
             upstream.send(JSON.stringify(update));
         });
       }
     }
-    // The reply to the proxy's own update is not the client's.
-    if (event.type === "session.updated" && ownUpdates > 0) {
-      ownUpdates -= 1;
+    // The reply to the proxy's own update is not the client's. Rejected, the
+    // update leaves OpenAI's own responses on, so the session cannot go on.
+    if (ownUpdate && event.type === "session.updated") {
+      ownUpdate = undefined;
+      return false;
+    }
+    if (
+      ownUpdate &&
+      event.type === "error" &&
+      isRecord(event.error) &&
+      event.error.event_id === ownUpdate
+    ) {
+      ownUpdate = undefined;
+      logger.warn(
+        { error: event.error },
+        "OpenAI rejected turning off a realtime session's own responses",
+      );
+      refuse({
+        code: "budget_check_unavailable",
+        message:
+          "OpenAI did not turn off its automatic responses, so the gateway cannot check the budget before each one.",
+        reason: "Budget check unavailable",
+      });
       return false;
     }
     if (event.type === "input_audio_buffer.speech_stopped") spokenTurn = true;

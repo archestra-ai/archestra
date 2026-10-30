@@ -45,9 +45,12 @@ describe("OpenAI realtime sessions through the Model Router", () => {
     /** Whether server voice detection would start a response itself. */
     createResponse: boolean;
   }>;
+  /** Whether OpenAI rejects every `session.update`, as some sessions do. */
+  let rejectSessionUpdates: boolean;
 
   beforeEach(async () => {
     upstreamConnections = [];
+    rejectSessionUpdates = false;
     upstream = new WebSocketServer({ port: 0, host: "127.0.0.1" });
     upstream.on("connection", (socket, request) => {
       const connection = {
@@ -71,9 +74,24 @@ describe("OpenAI realtime sessions through the Model Router", () => {
       socket.on("message", (data) => {
         const event = JSON.parse(data.toString()) as {
           type: string;
+          event_id?: string;
           session?: { turn_detection?: { create_response?: boolean } | null };
         };
         connection.received.push(event.type);
+        if (event.type === "session.update" && rejectSessionUpdates) {
+          socket.send(
+            JSON.stringify({
+              type: "error",
+              error: {
+                type: "invalid_request_error",
+                code: "unknown_parameter",
+                message: "Unknown parameter.",
+                event_id: event.event_id,
+              },
+            }),
+          );
+          return;
+        }
         if (event.type === "session.update") {
           const turnDetection = event.session?.turn_detection;
           if (turnDetection === null) connection.createResponse = false;
@@ -640,6 +658,42 @@ describe("OpenAI realtime sessions through the Model Router", () => {
         (type) => type === "response.create",
       ),
     ).toHaveLength(1);
+  });
+
+  test("ends a budgeted session whose own responses OpenAI does not turn off", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const key = await mappedKey({
+      organizationId: agent.organizationId,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    await LimitModel.create({
+      entityType: "virtual_key",
+      entityId: key.virtualKey.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      lastCleanup: new Date(),
+    });
+    rejectSessionUpdates = true;
+
+    const session = await connect(
+      `${origin}/v1/model-router/${agent.id}/realtime?model=openai:gpt-realtime-2.1`,
+      key.value,
+    );
+    if (!("socket" in session)) throw new Error(`Refused: ${session.body}`);
+    const [code] = await once(session.socket, "close");
+    expect(code).toBe(1008);
+    // The client hears why, not OpenAI's reply to an update it never sent.
+    const errors = events
+      .get(session.socket)
+      ?.filter((event) => event.type === "error")
+      .map((event) => (event.error as { code: string }).code);
+    expect(errors).toEqual(["budget_check_unavailable"]);
+    expect(upstreamConnections[0].received).toEqual(["session.update"]);
   });
 
   test("logs every output item of a long reply, however many there are", async ({

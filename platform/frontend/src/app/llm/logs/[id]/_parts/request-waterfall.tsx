@@ -13,6 +13,7 @@ import {
   formatCompactNumber,
   formatRequestCost,
   formatUsageCost,
+  passThroughProvider,
   shortModelName,
 } from "@/app/llm/logs/_parts/logs-table-format";
 import { MakerDisc } from "@/app/llm/logs/_parts/maker-disc";
@@ -1028,7 +1029,11 @@ function RequestRow({
   const origin = row.model
     ? describeModelOrigin({ model: row.model, interactionType: row.type })
     : null;
-  const modelName = row.model ? shortModelName(row.model) : "Unknown model";
+  const modelName = row.model
+    ? shortModelName(row.model)
+    : passThroughProvider(row.type)
+      ? "No model"
+      : "Unknown model";
   const onPlan = row.billingMode === "subscription";
   const latency = formatLatency(row.durationMs);
   // A model pool writes one row per attempt; a failed one was retried on the

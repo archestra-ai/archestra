@@ -7,6 +7,7 @@ import {
   describeModelOrigin,
   formatCompactNumber,
   formatRequestCost,
+  passThroughProvider,
   shortModelName,
   sourceLabel,
 } from "@/app/llm/logs/_parts/logs-table-format";
@@ -215,14 +216,24 @@ function RequestOverview({
   const modelOrigin = row.model
     ? describeModelOrigin({ model: row.model, interactionType: row.type })
     : null;
+  // A pass-through call such as a file listing names no model.
+  const passThrough = row.model ? null : passThroughProvider(row.type);
   const provider =
-    modelOrigin && modelOrigin.kind !== "unknown" ? modelOrigin.provider : null;
-  const vendor = !modelOrigin
-    ? "Unknown"
-    : modelOrigin.kind === "aggregator"
-      ? providerLabel(modelOrigin.provider)
-      : modelOrigin.name;
-  const modelName = row.model ? shortModelName(row.model) : "Unknown model";
+    modelOrigin && modelOrigin.kind !== "unknown"
+      ? modelOrigin.provider
+      : passThrough;
+  const vendor = passThrough
+    ? `${providerLabel(passThrough)} · pass-through`
+    : !modelOrigin
+      ? "Unknown"
+      : modelOrigin.kind === "aggregator"
+        ? providerLabel(modelOrigin.provider)
+        : modelOrigin.name;
+  const modelName = row.model
+    ? shortModelName(row.model)
+    : passThrough
+      ? "No model"
+      : "Unknown model";
   const gapBefore = previous ? span.start - previous.end : null;
   const prompt = kind === "main" ? requestPrompt(row) : null;
 

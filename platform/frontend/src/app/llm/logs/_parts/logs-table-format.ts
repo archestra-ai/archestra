@@ -2,6 +2,7 @@ import {
   type archestraApiTypes,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
+  isSupportedProvider,
   type SupportedProvider,
 } from "@archestra/shared";
 import { formatCompactNumber } from "@/lib/utils/format-compact-number";
@@ -86,6 +87,20 @@ export function describeModelOrigin(params: {
     };
   }
   return { kind: "unknown", name: "Self-hosted" };
+}
+
+/**
+ * The provider a pass-through request went to, when the row is one. Such a
+ * call (a file listing, a batch, a token count) often names no model: it is
+ * labelled "No model" with this provider, not "Unknown model".
+ */
+export function passThroughProvider(
+  interactionType: string | null | undefined,
+): SupportedProvider | null {
+  const [provider, kind] = interactionType?.split(":") ?? [];
+  return kind === "passthrough" && isSupportedProvider(provider)
+    ? provider
+    : null;
 }
 
 /**

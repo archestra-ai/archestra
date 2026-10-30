@@ -8,6 +8,7 @@ import {
   identiconHue,
   initialsOf,
   isFreeTierModel,
+  passThroughProvider,
   sessionTitleOf,
   shortModelName,
 } from "./logs-table-format";
@@ -123,6 +124,15 @@ describe("describeModelOrigin", () => {
       kind: "unknown",
       name,
     });
+  });
+});
+
+describe("passThroughProvider", () => {
+  it("names the provider of a pass-through call, which may name no model", () => {
+    expect(passThroughProvider("openai:passthrough")).toBe("openai");
+    expect(passThroughProvider("anthropic:passthrough")).toBe("anthropic");
+    expect(passThroughProvider("openai:chatCompletions")).toBeNull();
+    expect(passThroughProvider(null)).toBeNull();
   });
 });
 

@@ -162,7 +162,7 @@ export function PermissionExplorer({
             {visible.map((group) => (
               <section key={group.name} aria-label={`${group.name} resources`}>
                 <div
-                  className="hidden grid-cols-[minmax(8rem,1fr)_repeat(5,4.5rem)_minmax(9rem,1fr)] items-center gap-1 border-b pb-2 text-[11px] text-muted-foreground lg:grid"
+                  className="hidden grid-cols-[minmax(8rem,1fr)_repeat(5,5rem)_minmax(9rem,1fr)] items-center gap-1 border-b pb-2 text-[11px] text-muted-foreground lg:grid"
                   aria-hidden="true"
                 >
                   <span>Resource</span>
@@ -184,7 +184,7 @@ export function PermissionExplorer({
                     return (
                       <fieldset
                         key={resource}
-                        className="grid min-w-0 gap-y-2 py-3 lg:grid-cols-[minmax(8rem,1fr)_repeat(5,4.5rem)_minmax(9rem,1fr)] lg:items-center lg:gap-x-1 lg:py-1"
+                        className="grid min-w-0 gap-y-2 py-3 lg:grid-cols-[minmax(8rem,1fr)_repeat(5,5rem)_minmax(9rem,1fr)] lg:items-center lg:gap-x-1 lg:py-1"
                         aria-label={`${label} actions`}
                       >
                         <div className="flex min-w-0 items-center gap-2">

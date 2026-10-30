@@ -2990,6 +2990,34 @@ describe("POST /api/chat handler composition", () => {
     expect(JSON.stringify(persistedUser?.content)).toContain("hello empty");
   });
 
+  test("surfaces an output-limit error without retrying and persists the user message", async ({
+    expect,
+  }) => {
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult([
+        { type: "start" },
+        {
+          type: "finish",
+          finishReason: "length",
+          rawFinishReason: "max_tokens",
+        },
+      ]),
+    );
+
+    const response = await postMessage(plainUserMessage("convert one section"));
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(capturedOuterErrorPayload ?? "{}");
+    expect(payload.code).toBe("incomplete_response");
+    expect(payload.isRetryable).toBe(false);
+    expect(payload.message).toContain("output limit before producing a reply");
+    expect(writerEvents.filter((e) => e.kind === "merge")).toHaveLength(0);
+    const persisted = await MessageModel.findByConversation(conversationId);
+    expect(persisted.some((m) => m.role === "user")).toBe(true);
+  });
+
   test("reuses the trimmed payload when a trimmed attempt then returns empty", async ({
     expect,
   }) => {

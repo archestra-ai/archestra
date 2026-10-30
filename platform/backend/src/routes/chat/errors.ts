@@ -87,8 +87,8 @@ export class SubagentProviderError extends ProviderError {
  * but produces no renderable content, after the empty-response auto-retries are
  * exhausted (or immediately for a non-retryable finishReason). Carries the last
  * finishReason for diagnostics. mapProviderError turns it into a structured
- * error card: a content-filter finish becomes the non-retryable ContentFiltered
- * card, everything else the retryable EmptyResponse card.
+ * error card: length and content-filter finishes become non-retryable
+ * IncompleteResponse and ContentFiltered cards; other finishes remain retryable.
  */
 export class EmptyModelResponseError extends Error {
   public readonly finishReason: string;
@@ -1785,30 +1785,34 @@ export function mapProviderError(
     }
   }
 
-  // Handle EmptyModelResponseError — the provider finished cleanly but gave no
-  // content, and the empty-response retries were exhausted. Surface it as a
-  // structured, retryable EmptyResponse error.
+  // Empty turns can be transient, but exhausting the output budget or hitting a
+  // content filter needs a changed request rather than another unchanged retry.
   if (error instanceof EmptyModelResponseError) {
-    // A content-filter finish is a deterministic block, not a transient empty
-    // turn — surface it as the non-retryable ContentFiltered card so the UI
-    // doesn't offer a pointless retry. Every other exhausted finish stays the
-    // retryable EmptyResponse.
-    const code =
-      error.finishReason === "content-filter"
-        ? ChatErrorCode.ContentFiltered
-        : ChatErrorCode.EmptyResponse;
-    return createErrorResponse(
-      code,
-      provider,
-      undefined,
-      archestraMcpBranding.brandBuiltInText(ChatErrorMessages[code]),
-      "EmptyModelResponseError",
-      {
-        finishReason: error.finishReason,
-        rawFinishReason: error.rawFinishReason,
-        attempts: error.attempts,
-      },
-    );
+    let code = ChatErrorCode.EmptyResponse;
+    if (error.finishReason === "content-filter") {
+      code = ChatErrorCode.ContentFiltered;
+    } else if (error.finishReason === "length") {
+      code = ChatErrorCode.IncompleteResponse;
+    }
+    const message =
+      error.finishReason === "length"
+        ? "The model reached its output limit before producing a reply. Try a smaller task, lower the reasoning effort, or ask an administrator to increase the output-token limit."
+        : ChatErrorMessages[code];
+    return {
+      ...createErrorResponse(
+        code,
+        provider,
+        undefined,
+        archestraMcpBranding.brandBuiltInText(message),
+        "EmptyModelResponseError",
+        {
+          finishReason: error.finishReason,
+          rawFinishReason: error.rawFinishReason,
+          attempts: error.attempts,
+        },
+      ),
+      message: archestraMcpBranding.brandBuiltInText(message),
+    };
   }
 
   if (error instanceof ModelStreamStalledError) {

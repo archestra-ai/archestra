@@ -226,6 +226,26 @@ test("disconnect during failover supersedes the member failure", async () => {
   ]);
 });
 
+test("a server-aborted binary response retains the provider failure", async () => {
+  const telemetry = new LlmProxyRequestTelemetry({
+    provider: "openai",
+    operation: "chat",
+    stream: true,
+  });
+  telemetry.fail({ statusCode: 502, origin: "provider", outcome: "error" });
+  telemetry.markServerAbort();
+  telemetry.finish({ statusCode: 200, headersSent: true, disconnected: true });
+  expect(await counts()).toEqual([
+    expect.objectContaining({
+      value: 1,
+      labels: expect.objectContaining({
+        outcome: "error",
+        error_origin: "provider",
+      }),
+    }),
+  ]);
+});
+
 test("a settlement failure supersedes an earlier policy denial", async () => {
   const telemetry = new LlmProxyRequestTelemetry({
     provider: "openai",

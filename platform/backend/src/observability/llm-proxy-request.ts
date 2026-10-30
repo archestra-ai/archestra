@@ -39,6 +39,7 @@ export class LlmProxyRequestTelemetry {
   private traceContext = context.active();
   private failure?: ProxyRequestFailure;
   private incomplete = false;
+  private serverAborted = false;
   private finished = false;
   // An explicit metadata allowlist, never request bodies, headers or error messages.
   metadata: {
@@ -76,6 +77,10 @@ export class LlmProxyRequestTelemetry {
     this.incomplete = true;
   }
 
+  markServerAbort(): void {
+    this.serverAborted = true;
+  }
+
   fail(failure: ProxyRequestFailure): void {
     // Preserve the original failure if a response mapper rethrows a generic ApiError.
     // A later operational failure does supersede a policy denial while settling the response.
@@ -94,7 +99,7 @@ export class LlmProxyRequestTelemetry {
   }): void {
     if (this.finished) return;
     this.finished = true;
-    if (params.disconnected)
+    if (params.disconnected && !this.serverAborted)
       this.failure = {
         statusCode: 499,
         origin: "client",

@@ -3401,6 +3401,7 @@ async function handleStreaming<
       streamError = settlementError;
     }
     if (provider.binaryStream && reply.raw.headersSent) {
+      ctx.telemetry?.markServerAbort();
       reply.raw.destroy();
       return reply;
     }

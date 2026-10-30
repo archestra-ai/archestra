@@ -1,6 +1,6 @@
 import { archestraApiClient, getAgentCatalogImages } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -19,7 +19,10 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { makeOrganization } from "@/mocks/data/organization";
-import { getAgentCatalogTemplates } from "./agent-pages/agent-catalog";
+import {
+  AgentCatalog,
+  getAgentCatalogTemplates,
+} from "./agent-pages/agent-catalog";
 import {
   type AgentRuntimeConfig,
   defaultAgentRuntime,
@@ -42,6 +45,9 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 } as typeof ResizeObserver;
 const server = setupServer(
+  http.get("http://localhost:9000/api/agent-runtime-templates", () =>
+    HttpResponse.json([]),
+  ),
   http.get("http://localhost:9000/api/organization", () =>
     HttpResponse.json(makeOrganization()),
   ),
@@ -78,6 +84,55 @@ beforeEach(() => {
 });
 
 describe("AgentRuntimePicker", () => {
+  it("keeps a custom template's icon in its summary and editing choices", async () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    const runtime = {
+      ...defaultAgentRuntime(),
+      image: "registry.example.com/team:v1",
+    };
+    server.use(
+      http.get("http://localhost:9000/api/agent-runtime-templates", () =>
+        HttpResponse.json([
+          {
+            id,
+            name: "Team workspace",
+            description: "Team tools",
+            icon: "🧰",
+            hidden: false,
+            position: 0,
+            image: runtime.image,
+          },
+        ]),
+      ),
+    );
+    server.use(
+      http.get("http://localhost:9000/api/teams", () =>
+        HttpResponse.json({
+          data: [],
+          pagination: { currentPage: 1, limit: 100, total: 0, totalPages: 0 },
+        }),
+      ),
+    );
+    const props = {
+      selectedId: id,
+      value: runtime,
+      onSelect: vi.fn(),
+      onChange: vi.fn(),
+      modelBlock: <div>Model settings</div>,
+      modelSummary: "Model settings",
+    };
+    const view = render(
+      <AgentRuntimePicker {...props} onChangeTemplate={vi.fn()} />,
+      { wrapper: QueryWrapper },
+    );
+    expect(await screen.findByText("🧰")).toBeVisible();
+    view.rerender(<AgentRuntimePicker {...props} />);
+    expect(
+      await screen.findByRole("radio", { name: "Team workspace" }),
+    ).toBeChecked();
+    expect(screen.getByText("🧰")).toBeVisible();
+  });
+
   it("replaces the complete runtime when switching harnesses and removes it for the native platform agent", async () => {
     const user = userEvent.setup();
     await renderPicker("claude-code", {
@@ -220,6 +275,40 @@ describe("AgentRuntimePicker", () => {
       target: { value: "custom-command" },
     });
     expect(savedRuntime().inferenceProtocol).toBe("openai_chat");
+  });
+
+  it("resolves a custom template on selection without putting environment values in the catalog list", async () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    const runtime = {
+      ...defaultAgentRuntime(),
+      image: "registry.example.com/team-agent:v2",
+      command: ["team-agent", "--serve"],
+      environment: [{ key: "TEAM_MODE", value: "review" }],
+    };
+    const summary = {
+      id,
+      name: "Team workspace",
+      description: "Team tools",
+      icon: null,
+      hidden: false,
+      position: 0,
+      image: runtime.image,
+    };
+    server.use(
+      http.get("http://localhost:9000/api/agent-runtime-templates", () =>
+        HttpResponse.json([summary]),
+      ),
+      http.get(`http://localhost:9000/api/agent-runtime-templates/${id}`, () =>
+        HttpResponse.json({ ...summary, runtime }),
+      ),
+    );
+    await renderPicker("chat");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("radio", { name: "Team workspace" }));
+    await waitFor(() => expect(savedRuntime()).toEqual(runtime));
+    expect(screen.getByRole("radio", { name: "Team workspace" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "Test Platform" }));
+    expect(savedRuntime()).toBeNull();
   });
 
   it("opens Custom image setup and preserves edits through disclosure changes", async () => {
@@ -382,3 +471,83 @@ function Harness({
     </>
   );
 }
+
+describe("custom runtime catalog permission integration", () => {
+  it.each([
+    false,
+    true,
+  ])("gates custom template selection on Configure runtime (%s)", async (allowed) => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: allowed,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    const id = "00000000-0000-4000-8000-000000000001";
+    const runtime = {
+      ...defaultAgentRuntime(),
+      image: "registry.example.com/team-agent:v2",
+      environment: [{ key: "TEAM_MODE", value: "review" }],
+    };
+    const summary = {
+      id,
+      name: "Team workspace",
+      description: "Team tools",
+      icon: null,
+      hidden: false,
+      position: 0,
+      image: runtime.image,
+    };
+    let resolutions = 0;
+    server.use(
+      http.get("http://localhost:9000/api/agent-runtime-templates", () =>
+        HttpResponse.json([summary]),
+      ),
+      http.get(
+        `http://localhost:9000/api/agent-runtime-templates/${id}`,
+        () => {
+          resolutions++;
+          return HttpResponse.json({ ...summary, runtime });
+        },
+      ),
+    );
+    const onSelect = vi.fn();
+    render(
+      <AgentCatalog
+        canCreateAgent
+        runtimeAvailable
+        onStartFromScratch={vi.fn()}
+        onStartFromImage={vi.fn()}
+        onAddExternalAgent={vi.fn()}
+        onSelect={onSelect}
+      />,
+      { wrapper: QueryWrapper },
+    );
+    const choice = await screen.findByRole("button", {
+      name: /Team workspace/,
+    });
+    const user = userEvent.setup();
+    if (allowed) {
+      expect(choice).toBeEnabled();
+      await user.click(choice);
+      await waitFor(() =>
+        expect(onSelect).toHaveBeenCalledWith(
+          expect.objectContaining({
+            customTemplateId: id,
+            initialValues: expect.objectContaining({ runtime }),
+          }),
+        ),
+      );
+      expect(resolutions).toBe(1);
+    } else {
+      expect(choice).toBeDisabled();
+      expect(choice).toHaveAccessibleDescription(
+        "Requires Configure runtime permission.",
+      );
+      await user.click(choice);
+      expect(resolutions).toBe(0);
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: /New Test Platform agent/ }),
+      ).toBeEnabled();
+    }
+  });
+});

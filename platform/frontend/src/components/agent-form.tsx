@@ -2385,7 +2385,9 @@ export function AgentForm({
               ...(showGitHubActionsAccess &&
                 githubActionsAccessChanged && { githubActionsAccess }),
             }),
-            ...(showRuntimeSection && runtimeEditable && { runtime }),
+            ...(showRuntimeSection &&
+              runtimeEditable &&
+              canConfigureRuntime === true && { runtime }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -2728,6 +2730,7 @@ export function AgentForm({
     supportsSubagents,
     agentRuntimeEnabled,
     runtimeEditable,
+    canConfigureRuntime,
     runtime,
     channelAssignmentsDirty,
     isClaudeCodeRuntime,

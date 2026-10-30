@@ -3055,6 +3055,28 @@ describe("AgentForm save payload and failure handling", () => {
     ).toBeInTheDocument();
   });
 
+  it("omits the saved runtime when an ordinary editor changes an agent name", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.agent?.includes("configure-runtime"),
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    const runtime = {
+      ...defaultAgentRuntime(),
+      image: "example.test/worker:v1",
+    };
+    render(<AgentForm agentType="agent" agent={{ ...baseAgent, runtime }} />);
+    await user.type(
+      await screen.findByDisplayValue("Existing Agent"),
+      " renamed",
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(updateAgent.mock.calls[0][0].data).not.toHaveProperty("runtime");
+  });
+
   it("hides existing runtime settings when another form panel is active", () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const { rerender } = render(

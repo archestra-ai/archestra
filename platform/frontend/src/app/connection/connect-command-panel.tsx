@@ -10,6 +10,7 @@ import {
 } from "@archestra/shared";
 import {
   CONNECTION_SETUP_MAX_SKILLS,
+  CONNECTION_SETUP_TOKEN_TTL_MS,
   type ConnectSetupPart,
   defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
@@ -18,7 +19,14 @@ import {
   PLUGIN_DELIVERY_MAX_COUNT,
 } from "@archestra/shared/connection-setup";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
+import {
+  Download,
+  KeyRound,
+  Loader2,
+  RotateCcw,
+  TimerOff,
+  TriangleAlert,
+} from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -100,6 +108,7 @@ import {
   FINISH_OAUTH_FLOW_TITLE,
   type InstallerClientId,
 } from "./clients";
+import { ScriptBlock, useCopy } from "./connect-page-parts";
 import {
   ConnectionConsentOptions,
   type ConsentProxyMode,
@@ -203,6 +212,33 @@ interface ConnectCommandPanelProps {
    * page's band. The full review flow is what the approval page shows.
    */
   variant?: "full" | "download";
+  /** The download band's installer started downloading, or its command was copied. */
+  onStarted?: () => void;
+  /** The download band shows its terminal command instead of the installer. */
+  terminal?: boolean;
+  /** The Connect page's OS choice; overrides the OS detected here. */
+  platform?: ConnectPlatformOption;
+  /** The download band's setups, kept by the page across remounts. */
+  setupCache?: DesktopSetupCache;
+}
+
+/** Setups the download band made, to reuse each until it expires. */
+export interface DesktopSetupCache {
+  /** The latest setup for each payload. */
+  byKey: Map<string, CreateConnectionSetupResult>;
+  /** When each setup arrived, by setup id. */
+  arrivedAt: Map<string, number>;
+}
+
+function newDesktopSetupCache(): DesktopSetupCache {
+  return { byKey: new Map(), arrivedAt: new Map() };
+}
+
+/** Timed from arrival: this computer's clock may differ from the server's. */
+function setupExpired(cache: DesktopSetupCache, id: string): boolean {
+  return (
+    (cache.arrivedAt.get(id) ?? 0) + CONNECTION_SETUP_TOKEN_TTL_MS <= Date.now()
+  );
 }
 
 /**
@@ -228,6 +264,10 @@ export function ConnectCommandPanel({
   exclude,
   pluginSlugs,
   variant = "full",
+  onStarted,
+  terminal = false,
+  platform: platformChoice,
+  setupCache,
 }: ConnectCommandPanelProps) {
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
@@ -236,7 +276,14 @@ export function ConnectCommandPanel({
   // the options to change it go away.
   const [connectRequestDecided, setConnectRequestDecided] = useState(false);
   const [downloadRequested, setDownloadRequested] = useState(false);
-  const preparationEnabled = variant !== "download" || downloadRequested;
+  // A download click still waiting for its setup.
+  const [downloadPending, setDownloadPending] = useState(false);
+  // The terminal command needs a prepared setup too, but no download. Once
+  // shown, its setup stays prepared across switches until it expires.
+  const [terminalRequested, setTerminalRequested] = useState(terminal);
+  if (terminal && !terminalRequested) setTerminalRequested(true);
+  const requested = downloadRequested || terminalRequested;
+  const preparationEnabled = variant !== "download" || requested;
   // Optional portions start from the Connect page choices and remain editable.
   const [includeProxy, setIncludeProxy] = useState(true);
   const activeLlmProxyId = includeProxy ? llmProxyId : null;
@@ -331,7 +378,7 @@ export function ConnectCommandPanel({
   // user can override it in the review step.
   // A platform the URL names (the installer's request) is known on the
   // server too, so it starts selected and the first render already matches.
-  const [platform, setPlatform] = useState<ConnectPlatformOption>(() =>
+  const [detectedPlatform, setPlatform] = useState<ConnectPlatformOption>(() =>
     requestedPlatform === "windows" ||
     requestedPlatform === "linux" ||
     requestedPlatform === "macos"
@@ -347,6 +394,7 @@ export function ConnectCommandPanel({
         : toPlatformOption(detectPlatform()),
     );
   }, [requestedPlatform]);
+  const platform = platformChoice ?? detectedPlatform;
   // Exclusions seed the optional choices; they do not restrict customization.
   // Legacy tools exclusions cannot remove the required gateway.
   const { data: connection } = useClientConnection(connectRequest ?? "");
@@ -822,6 +870,11 @@ export function ConnectCommandPanel({
       ? seededSetupId
       : null;
 
+  // Every setup made here, by payload, and when each arrived. A setup works
+  // for a fixed time from its creation, so switching back to earlier choices
+  // (another OS, say) reuses its setup until then.
+  const setupCacheRef = useRef(setupCache ?? newDesktopSetupCache());
+
   const runGeneration = useCallback(
     async (key: string) => {
       const body = connectionSetupBody(key);
@@ -830,7 +883,12 @@ export function ConnectCommandPanel({
       setFailure(null);
       refusalRef.current = null;
       const created = await createSetup(body);
+      if (created) {
+        setupCacheRef.current.arrivedAt.set(created.id, Date.now());
+        setupCacheRef.current.byKey.set(key, created);
+      }
       if (latestKeyRef.current !== key) return; // stale response
+      setDownloadPending(false);
       preparedKeyRef.current = created ? key : null;
       setResult(created);
       setFailure(
@@ -868,6 +926,24 @@ export function ConnectCommandPanel({
       preparedKeyRef.current = inputsKey;
       return;
     }
+    // Back to choices made earlier on the download band: their setup is
+    // still good until it expires. A download always gets a new one.
+    const earlier = setupCacheRef.current.byKey.get(inputsKey);
+    if (
+      variant === "download" &&
+      !downloadPending &&
+      earlier &&
+      !setupExpired(setupCacheRef.current, earlier.id)
+    ) {
+      preparationStartedRef.current = true;
+      preparedKeyRef.current = inputsKey;
+      setResult(earlier);
+      setFailure(null);
+      return;
+    }
+    // The download band prepares a setup only for what it shows: the
+    // terminal command, or an installer someone clicked for.
+    if (variant === "download" && !terminal && !downloadPending) return;
     preparedKeyRef.current = null;
     setResult(null);
     setFailure(null);
@@ -880,6 +956,9 @@ export function ConnectCommandPanel({
     );
     return () => clearTimeout(timer);
   }, [
+    variant,
+    terminal,
+    downloadPending,
     seededApproval,
     inputsKey,
     preparationEnabled,
@@ -893,6 +972,58 @@ export function ConnectCommandPanel({
     runGeneration,
     seededSetupId,
   ]);
+
+  // A setup works for a fixed time, so the band marks it expired on time
+  // instead of offering a command that would fail. The time runs from when
+  // the setup arrives: this computer's clock may differ from the server's.
+  const [expiredSetupId, setExpiredSetupId] = useState<string | null>(null);
+  useEffect(() => {
+    if (variant !== "download" || !result) return;
+    const id = result.id;
+    const expiresAt =
+      (setupCacheRef.current.arrivedAt.get(id) ?? Date.now()) +
+      CONNECTION_SETUP_TOKEN_TTL_MS;
+    const expire = () => setExpiredSetupId(id);
+    const timer = setTimeout(expire, Math.max(0, expiresAt - Date.now()));
+    // A timer can pause while the computer sleeps, and background tabs slow
+    // it down, so the clock is checked again whenever the page comes back.
+    const recheck = () => {
+      if (Date.now() >= expiresAt) expire();
+    };
+    document.addEventListener("visibilitychange", recheck);
+    window.addEventListener("focus", recheck);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", recheck);
+      window.removeEventListener("focus", recheck);
+    };
+  }, [variant, result]);
+  const expired = !!result && expiredSetupId === result.id;
+  const resultRef = useRef(result);
+  resultRef.current = result;
+  // Each download makes a new setup: installing one uses it up, so a second
+  // download must not hand back the same one.
+  const prepareFresh = () => {
+    setDownloadPending(true);
+    if (preparedKeyRef.current === inputsKey) void runGeneration(inputsKey);
+    else setDownloadRequested(true);
+  };
+  // Switching to the terminal command keeps the current setup until it
+  // expires. The clock decides: the expiry timer may not have fired yet.
+  const wasTerminalRef = useRef(terminal);
+  useEffect(() => {
+    const shown = resultRef.current;
+    if (
+      terminal &&
+      !wasTerminalRef.current &&
+      shown &&
+      setupExpired(setupCacheRef.current, shown.id) &&
+      preparedKeyRef.current === latestKeyRef.current
+    ) {
+      void runGeneration(latestKeyRef.current);
+    }
+    wasTerminalRef.current = terminal;
+  }, [terminal, runGeneration]);
 
   // Each summary line owns its inline editor. A line is editable only when it
   // has a real choice (e.g. more than one gateway); otherwise no "Change".
@@ -1243,14 +1374,16 @@ export function ConnectCommandPanel({
       <DesktopDownload
         installerUrl={result?.installerUrl ?? null}
         command={result?.command ?? null}
-        pending={downloadRequested && !result && !failed}
+        pending={downloadPending}
         failed={failed}
-        requested={downloadRequested}
-        onPrepare={() => setDownloadRequested(true)}
+        expired={expired}
+        onPrepare={prepareFresh}
         onRetry={() => runGeneration(inputsKey)}
-        proxyActive={proxyActive}
+        onStarted={onStarted}
+        terminal={terminal}
+        sizingCommand={desktopSizingCommand(baseUrl, platform)}
         gate={
-          !downloadRequested || skillsLoading
+          !requested || skillsLoading
             ? null
             : !hasRunnableAnything
               ? "Everything is left out. Choose at least one thing to include."
@@ -1435,10 +1568,7 @@ export function ConnectCommandPanel({
               >
                 {compatiblePlugins.length === 0 ? (
                   <span>
-                    No compatible plugins for{" "}
-                    {client.id === "claude-desktop"
-                      ? "macOS"
-                      : platformLabels[platform]}
+                    No compatible plugins for {platformLabels[platform]}
                   </span>
                 ) : selectedPlugins.length === 0 ? (
                   <span>Plugins not installed</span>
@@ -1751,13 +1881,14 @@ export function ConnectCommandPanel({
                   </a>
                 </Button>
                 <p className="text-sm leading-relaxed text-muted-foreground">
-                  Open in Claude Desktop and confirm Install. Your browser
-                  guides you through subscription sign-in and restarting
-                  Desktop.
+                  Open Claude Desktop Settings → Extensions and install the
+                  downloaded .MCPB file. Your browser guides you through
+                  sign-in, then setup closes and reopens Desktop.
                 </p>
                 <details className="text-xs text-muted-foreground">
                   <summary className="cursor-pointer">
-                    Advanced: terminal setup
+                    Terminal setup, for Claude Desktop already in third-party
+                    mode
                   </summary>
                   <p className="mt-2">
                     The terminal option requires Python 3.9+ and Claude Code for
@@ -1798,12 +1929,10 @@ export function ConnectCommandPanel({
                     The command downloads a one-time setup script (expires in 15
                     minutes) and pipes it straight to{" "}
                     {platform === "windows" ? "PowerShell" : "Bash"} on{" "}
-                    {client.id === "claude-desktop"
-                      ? "macOS"
-                      : platformLabels[platform]}
-                    . The script applies the setup reviewed above by editing
-                    your client config in place — it isn&apos;t undone
-                    automatically, so revert manually if you need to.
+                    {platformLabels[platform]}. The script applies the setup
+                    reviewed above by editing your client config in place — it
+                    isn&apos;t undone automatically, so revert manually if you
+                    need to.
                   </span>
                 )}
               </span>
@@ -1879,59 +2008,120 @@ export function ConnectCommandPanel({
 // Internal pieces
 // ===================================================================
 
-/** The Connect page's Claude Desktop band: one installer download. */
+/**
+ * The Connect page's Claude Desktop band action: one installer download, or
+ * the terminal command for a Desktop in third-party mode. The page around it
+ * says what to do before and after.
+ */
 function DesktopDownload({
   installerUrl,
   command,
   pending,
   failed,
+  expired,
   onRetry,
-  requested,
   onPrepare,
-  proxyActive,
+  onStarted,
+  terminal,
+  sizingCommand,
   gate,
 }: {
   installerUrl: string | null;
   command: string | null;
   pending: boolean;
   failed: boolean;
+  /** The shown setup's ticket has expired. */
+  expired: boolean;
   onRetry: () => void;
-  requested: boolean;
+  /** Prepare a new setup; a download follows when it was asked for. */
   onPrepare: () => void;
-  proxyActive: boolean;
+  onStarted?: () => void;
+  /** Show the terminal command instead of the installer download. */
+  terminal: boolean;
+  /** A command as long as this setup's, to size the box before one exists. */
+  sizingCommand: string;
   /** Why no installer can be made here; null when one can. */
   gate: string | null;
 }) {
   const downloadLinkRef = useRef<HTMLAnchorElement>(null);
   const downloadOnReadyRef = useRef(false);
+  const [downloadedUrl, setDownloadedUrl] = useState<string | null>(null);
+  const { copied, copy } = useCopy();
   useEffect(() => {
-    if (failed) downloadOnReadyRef.current = false;
+    // Switching to the terminal command cancels a download still preparing.
+    if (failed || terminal) downloadOnReadyRef.current = false;
     if (!installerUrl || !downloadOnReadyRef.current) return;
-    // Only the explicit download (or retry) click starts a download. Later
-    // setup changes may prepare a new ticket without downloading it again.
+    // Only a download click starts a download; the terminal command prepares
+    // setups too.
     downloadOnReadyRef.current = false;
     downloadLinkRef.current?.click();
-  }, [installerUrl, failed]);
+  }, [installerUrl, failed, terminal]);
 
   if (gate)
     return <p className="mt-2 px-1 text-sm text-muted-foreground">{gate}</p>;
-  // Same shape as the Connect page's prompt row, so picking Claude Desktop
-  // doesn't make the page taller.
+  if (terminal && command && !failed && !expired) {
+    const shown = wrappedCommand(command);
+    return (
+      // The command box every agent uses.
+      <ActionArea sizingCommand={command}>
+        <ScriptBlock
+          command={shown}
+          copied={copied}
+          disabled={false}
+          onCopy={async () => {
+            if (await copy(shown)) onStarted?.();
+          }}
+          onSelectionCopy={onStarted}
+          // Copy sits beside the short first line, so the lines below,
+          // with the link, may use the full width.
+          className="mt-0 pb-1.5 [&_pre]:pr-5 [&_pre]:[scrollbar-width:thin]"
+        />
+      </ActionArea>
+    );
+  }
+  if (terminal)
+    return (
+      <ActionArea sizingCommand={sizingCommand}>
+        <ActionRow>
+          {failed ? (
+            <>
+              <span role="alert" className="min-w-0 flex-1 truncate text-sm">
+                Could not prepare the command.
+              </span>
+              <Button variant="outline" size="lg" onClick={onRetry}>
+                <span>Try again</span>
+              </Button>
+            </>
+          ) : expired ? (
+            <>
+              <TimerOff className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                This command expired. Each command works for 15 minutes.
+              </span>
+              <Button
+                size="lg"
+                onClick={onRetry}
+                className="h-12 rounded-xl px-6"
+              >
+                <RotateCcw />
+                <span>Regenerate</span>
+              </Button>
+            </>
+          ) : (
+            <>
+              <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                Generating command…
+              </span>
+            </>
+          )}
+        </ActionRow>
+      </ActionArea>
+    );
+  const downloaded = !!installerUrl && downloadedUrl === installerUrl;
   return (
-    <div className="mt-2">
-      <p className="px-1 text-xs text-muted-foreground">
-        Open it in Claude Desktop and confirm Install; your browser guides you
-        through sign-in and the restart. Finish active Desktop tasks first.
-        {proxyActive && (
-          <span>
-            {" "}
-            With the LLM proxy, Desktop switches to third-party mode with its
-            own history; Settings, Import brings your Claude.ai conversations
-            over.
-          </span>
-        )}
-      </p>
-      <div className="mt-2 flex h-16 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
+    <ActionArea sizingCommand={sizingCommand}>
+      <ActionRow>
         <Download className="size-4 shrink-0 text-muted-foreground" />
         {failed ? (
           <span role="alert" className="min-w-0 flex-1 truncate text-sm">
@@ -1941,10 +2131,25 @@ function DesktopDownload({
           <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
             {pending
               ? "Preparing your installer"
-              : requested
-                ? "Your installer, ready for 15 minutes"
+              : downloaded && !expired
+                ? "Downloaded. Install it within 15 minutes."
                 : "Download an installer for this setup"}
           </span>
+        )}
+        {installerUrl && (
+          // Each click downloads a new setup, through this link once it is ready.
+          <a
+            ref={downloadLinkRef}
+            href={installerUrl}
+            download
+            hidden
+            onClick={() => {
+              setDownloadedUrl(installerUrl);
+              onStarted?.();
+            }}
+          >
+            Installer download
+          </a>
         )}
         {failed ? (
           <Button
@@ -1952,22 +2157,15 @@ function DesktopDownload({
             size="lg"
             onClick={() => {
               downloadOnReadyRef.current = true;
-              onRetry();
+              onPrepare();
             }}
           >
             <span>Try again</span>
           </Button>
-        ) : installerUrl ? (
-          <Button asChild size="lg" className="h-12 rounded-xl px-6">
-            <a ref={downloadLinkRef} href={installerUrl} download>
-              <Download />
-              <span>Download installer</span>
-            </a>
-          </Button>
         ) : (
           <Button
             size="lg"
-            disabled={requested}
+            disabled={pending}
             onClick={() => {
               downloadOnReadyRef.current = true;
               onPrepare();
@@ -1980,29 +2178,80 @@ function DesktopDownload({
             </span>
           </Button>
         )}
+      </ActionRow>
+    </ActionArea>
+  );
+}
+
+/**
+ * Where the Desktop band's download box and command box sit. An invisible
+ * command box under them sets the height: as tall as the command, wrapped at
+ * this width, so switching between the two, or a command arriving, moves
+ * nothing.
+ */
+function ActionArea({
+  sizingCommand,
+  children,
+}: {
+  sizingCommand: string;
+  children: React.ReactNode;
+}) {
+  return (
+    // minmax(0, 1fr): the column follows the card's width, not the command's
+    // longest line, which scrolls inside its box on a narrow window.
+    <div className="mt-2 grid grid-cols-[minmax(0,1fr)]">
+      <div aria-hidden data-sizer className="invisible min-w-0 [grid-area:1/1]">
+        <ScriptBlock
+          command={wrappedCommand(sizingCommand)}
+          copied={false}
+          disabled
+          onCopy={() => {}}
+          className="mt-0 pb-1.5 [&_pre]:pr-5 [&_pre]:[scrollbar-width:thin]"
+        />
       </div>
-      {command && (
-        <details className="mt-2 px-1 text-xs text-muted-foreground">
-          <summary className="cursor-pointer">
-            Advanced: terminal setup, for a Desktop already on a third-party
-            profile
-          </summary>
-          <p className="mt-2">
-            The terminal option requires Python 3.9+ and Claude Code for
-            subscription sign-in.
-          </p>
-          <TerminalCard className="mt-2">
-            <SetupCommandLine
-              command={command}
-              pending={false}
-              failed={false}
-              onRetry={onRetry}
-            />
-          </TerminalCard>
-        </details>
-      )}
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] [grid-area:1/1]">
+        {children}
+      </div>
     </div>
   );
+}
+
+/** The download box: the command box's surface, filling the action area. */
+function ActionRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-20 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * A command shaped like the server's Desktop setup command, for sizing: the
+ * same origin, path and token length, before a setup exists.
+ */
+function desktopSizingCommand(
+  baseUrl: string,
+  platform: ConnectPlatformOption,
+): string {
+  // As the server builds it: the base URL without its /v1.
+  const origin = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const url = `'${origin}/api/connection-setups/script/archestra_con_${"x".repeat(32)}'`;
+  return platform === "windows"
+    ? `irm ${url} | iex`
+    : `curl -fsSL ${url} | bash`;
+}
+
+/**
+ * A setup command on two lines, broken at a shell continuation (a backtick
+ * in PowerShell): the download command, then its link and the pipe. The link
+ * starts a line of its own, and the pasted text stays one command.
+ */
+function wrappedCommand(command: string): string {
+  const quote = command.indexOf(" '");
+  if (quote < 0) return command;
+  const fetch = command.slice(0, quote);
+  const next = fetch.startsWith("irm") ? "`" : "\\";
+  return `${fetch} ${next}\n  ${command.slice(quote + 1)}`;
 }
 
 /**
@@ -2152,8 +2401,7 @@ function PluginsDetail({
       )}
       {incompatiblePlugins.length > 0 && (
         <p>
-          Not compatible with{" "}
-          {clientId === "claude-desktop" ? "macOS" : platformLabels[platform]}:{" "}
+          Not compatible with {platformLabels[platform]}:{" "}
           {incompatiblePlugins.map((plugin) => plugin.displayName).join(", ")}.
         </p>
       )}

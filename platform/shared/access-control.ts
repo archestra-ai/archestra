@@ -69,7 +69,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   oauthClient: ["read", "create"],
   serviceAccount: ["read", "create"],
   auditLog: ["read", "admin"],
-  accessPolicies: ["read", "update"],
+  accessPolicies: ["read", "update", "share-across-teams"],
   member: ["read", "create", "update", "delete", "impersonate"],
   // Never granted directly: Better Auth checks it when inviting or
   // cancelling, and `withDerivedPermissions` fills it in from member:create.
@@ -441,6 +441,8 @@ export const permissionDescriptions: Record<string, string> = {
   "sre:read":
     "Use the SRE agent and its Kubernetes tools, which read this installation's pods, logs, and specs",
   "accessPolicies:read": "View access policies for all resource types",
+  "accessPolicies:share-across-teams":
+    "Share resources you manage with teams you do not belong to in your organization",
   "accessPolicies:update":
     "Edit access policies and grant access across all resource types",
   "organizationSettings:read":

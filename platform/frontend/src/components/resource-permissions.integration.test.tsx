@@ -658,6 +658,62 @@ it("lets someone who cannot make an entry org-wide lower an everyone grant, but 
   );
 });
 
+it("saves cross-team picker results without org-wide authority and preserves existing grants after reopening", async () => {
+  policy.canShareOrganizationWide = false;
+  const existing = policy.grants.map(({ subject, actions }) => ({
+    subject,
+    actions,
+  }));
+  const subject = { type: "team", id: "unrelated-team" };
+  let saved: unknown;
+  server.use(
+    http.get(`${origin}/api/resource-permissions`, () => HttpResponse.json([])),
+    http.get(`${endpoint}/subjects`, () =>
+      HttpResponse.json([{ subject, name: "Collaboration team" }]),
+    ),
+    http.put(endpoint, async ({ request }) => {
+      const body = (await request.json()) as {
+        revision: number;
+        grants: Policy["grants"];
+      };
+      saved = body.grants;
+      policy = {
+        ...policy,
+        revision: body.revision + 1,
+        grants: body.grants.map((grant) => ({
+          ...grant,
+          name:
+            grant.subject.type === "team"
+              ? "Collaboration team"
+              : "Build automation",
+        })),
+      };
+      return HttpResponse.json(policy);
+    }),
+  );
+  const user = userEvent.setup();
+  const view = renderEditor();
+  await screen.findByText("Build automation");
+  await pick(user, "Collaboration team");
+  expect(
+    screen.getByRole("combobox", { name: "Permission for Collaboration team" }),
+  ).toHaveTextContent("Can use");
+  view.unmount();
+  renderEditor();
+  await screen.findByText("Build automation");
+  expect(
+    screen.queryByRole("combobox", {
+      name: "Permission for Collaboration team",
+    }),
+  ).not.toBeInTheDocument();
+  expect(saved).toBeUndefined();
+  await pick(user, "Collaboration team");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() =>
+    expect(saved).toEqual([...existing, { subject, actions: ["read", "use"] }]),
+  );
+});
+
 async function pick(user: ReturnType<typeof userEvent.setup>, name: string) {
   await user.click(screen.getByRole("combobox", { name: "Add access" }));
   await user.click(await screen.findByRole("option", { name }));

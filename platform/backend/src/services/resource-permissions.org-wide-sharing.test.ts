@@ -204,7 +204,7 @@ describe("making an object org-wide", () => {
       expect.objectContaining({
         statusCode: 403,
         message:
-          "Only someone with Full access to every MCP registry entry can share it with a team they are not in.",
+          "Sharing with a team you are not in requires Share across teams or Full access to every resource of this kind.",
       }),
     );
     // A member cannot see service accounts, so cannot pick one either.
@@ -227,6 +227,71 @@ describe("making an object org-wide", () => {
       }),
     );
     expect((await policyOf(context))?.grants).toEqual(grants);
+  });
+
+  test("cross-team permission permits creation recipients without widening to everyone or foreign teams", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: {
+        agent: ["read", "create"],
+        accessPolicies: ["share-across-teams"],
+      },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+    // More than one picker page: searching must still find a late-sorted team.
+    for (let i = 0; i < 31; i++)
+      await makeTeam(org.id, user.id, { name: `A team ${i}` });
+    const team = await makeTeam(org.id, user.id, { name: "Z collaboration" });
+    const foreignOrg = await makeOrganization();
+    const foreign = await makeTeam(foreignOrg.id, user.id, {
+      name: "Z foreign",
+    });
+    const context = {
+      organizationId: org.id,
+      userId: user.id,
+      resource: "agent" as const,
+    };
+    const found = await ResourcePermissions.searchInitialSubjects({
+      ...context,
+      query: "Z",
+    });
+    expect(found).toContainEqual(
+      expect.objectContaining({ subject: { type: "team", id: team.id } }),
+    );
+    expect(
+      found.some(
+        ({ subject }) =>
+          subject.id === foreign.id ||
+          subject.type === "role" ||
+          subject.type === "organization",
+      ),
+    ).toBe(false);
+    const validate = (subject: ResourcePermissionGrant["subject"]) =>
+      ResourcePermissions.validateInitialGrants({
+        ...context,
+        target: {
+          id: crypto.randomUUID(),
+          name: "New agent",
+          authorId: user.id,
+        },
+        grants: [{ subject, actions: ["read", "use"] }],
+      });
+    await expect(
+      validate({ type: "team", id: team.id }),
+    ).resolves.toBeUndefined();
+    await expect(validate({ type: "team", id: foreign.id })).rejects.toThrow(
+      "does not exist in this organization",
+    );
+    await expect(validate(EVERYONE)).rejects.toThrow(
+      "everyone in the organization or with a role",
+    );
   });
 
   test("an admin may make every kind of object org-wide, their own personal provider key included", async ({

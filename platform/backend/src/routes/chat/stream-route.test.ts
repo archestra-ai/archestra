@@ -2123,7 +2123,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     // the turn runs on a resolved stored credential, not the agent's own key
     mockCreateLLMModelForAgent.mockResolvedValueOnce({
       model: "mock-model",
-      chatApiKeyId: "credential-1",
+      chatApiKeyId: "00000000-0000-4000-8000-000000000123",
     });
     mockStreamText.mockClear();
     mockMarkOpenAiReasoningSummaryUnsupported.mockClear();
@@ -2177,7 +2177,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     // the verdict is keyed by the credential the turn ran on
     expect(mockMarkOpenAiReasoningSummaryUnsupported).toHaveBeenCalledTimes(1);
     expect(mockMarkOpenAiReasoningSummaryUnsupported).toHaveBeenCalledWith(
-      `openai-reasoning-summary-unsupported-${organizationId}:credential-1`,
+      `openai-reasoning-summary-unsupported-${organizationId}:00000000-0000-4000-8000-000000000123`,
     );
   });
 
@@ -2988,6 +2988,34 @@ describe("POST /api/chat handler composition", () => {
     const persistedUser = persisted.find((m) => m.role === "user");
     expect(persistedUser).toBeDefined();
     expect(JSON.stringify(persistedUser?.content)).toContain("hello empty");
+  });
+
+  test("surfaces an output-limit error without retrying and persists the user message", async ({
+    expect,
+  }) => {
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult([
+        { type: "start" },
+        {
+          type: "finish",
+          finishReason: "length",
+          rawFinishReason: "max_tokens",
+        },
+      ]),
+    );
+
+    const response = await postMessage(plainUserMessage("convert one section"));
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(capturedOuterErrorPayload ?? "{}");
+    expect(payload.code).toBe("incomplete_response");
+    expect(payload.isRetryable).toBe(false);
+    expect(payload.message).toContain("output limit before producing a reply");
+    expect(writerEvents.filter((e) => e.kind === "merge")).toHaveLength(0);
+    const persisted = await MessageModel.findByConversation(conversationId);
+    expect(persisted.some((m) => m.role === "user")).toBe(true);
   });
 
   test("reuses the trimmed payload when a trimmed attempt then returns empty", async ({

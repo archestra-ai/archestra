@@ -30,10 +30,13 @@ export function modelFetchError(
  * Capabilities a fetcher can read straight from a provider's models endpoint.
  * Kept minimal and separate from the API-facing `ModelCapabilities`: a fetcher
  * only reports raw provider facts, not computed/price-source fields. Fed into
- * `resolveModelCapabilities` as the highest-priority tier during model sync.
+ * `resolveModelCapabilities` as the highest-priority tier during model sync,
+ * except output limits, which are resolved separately for each connection.
  */
 export interface FetchedModelCapabilities {
   contextLength?: number | null;
+  /** Maximum generation length published by the serving endpoint. */
+  outputLength?: number | null;
   supportsToolCalling?: boolean | null;
   /**
    * What the model accepts / emits, when the provider publishes it per model

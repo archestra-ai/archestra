@@ -14,7 +14,9 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, withDbTransaction } from "@/database";
+import { resolveGatewayOutputLimit } from "@/services/gateway-output-limits";
 import type { LinkedApiKey, LlmProviderApiKey, Model } from "@/types";
 import ModelModel from "./model";
 
@@ -23,6 +25,32 @@ import ModelModel from "./model";
  * Manages the many-to-many relationship between chat_api_keys and models.
  */
 class LlmProviderApiKeyModelLinkModel {
+  /** Resolve the selected connection's cap without borrowing another key's metadata. */
+  static async resolveOutputLength(
+    model: Model | null,
+    apiKeyId?: string | null,
+  ): Promise<number | null> {
+    if (!model) return null;
+    if (!apiKeyId) return ModelModel.resolveEffectiveOutputLength(model);
+    const links = schema.llmProviderApiKeyModelsTable;
+    const [link] = await db
+      .select({ key: schema.llmProviderApiKeysTable })
+      .from(links)
+      .innerJoin(
+        schema.llmProviderApiKeysTable,
+        eq(links.apiKeyId, schema.llmProviderApiKeysTable.id),
+      )
+      .where(and(eq(links.apiKeyId, apiKeyId), eq(links.modelId, model.id)))
+      .limit(1);
+    const endpoint = link
+      ? await resolveGatewayOutputLimit(link.key, model.modelId)
+      : null;
+    if (endpoint === null)
+      return ModelModel.resolveEffectiveOutputLength(model);
+    const custom = sanitizeOutputLimit(model.customOutputLength);
+    return custom === null ? endpoint : Math.min(custom, endpoint);
+  }
+
   /**
    * Link multiple models to an API key.
    * This performs a bulk insert, ignoring duplicates.

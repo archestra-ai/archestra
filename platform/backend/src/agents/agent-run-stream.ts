@@ -413,12 +413,12 @@ const PENDING_TOOL_INPUT_EVENT_TYPES: ReadonlySet<string> = new Set([
 // parts (or thrown stream errors) before any finish. Gemini's frequent
 // MALFORMED_FUNCTION_CALL maps to "error" and OTHER/FINISH_REASON_UNSPECIFIED to
 // "other"; some "other" raws may be deterministic, but with the hard attempt cap the
-// worst case is two wasted calls before the same error card. Excludes "content-filter"
-// (deterministic block) and "tool-calls" (which only finishes that way when tool
+// worst case is two wasted calls before the same error card. Excludes "length"
+// (retrying with the same output budget cannot fix its exhaustion), "content-filter"
+// (deterministic block), and "tool-calls" (which only finishes that way when tool
 // calls — renderable — exist).
 const RETRYABLE_EMPTY_FINISH_REASONS: ReadonlySet<string> = new Set([
   "stop",
-  "length",
   "unknown",
   "error",
   "other",

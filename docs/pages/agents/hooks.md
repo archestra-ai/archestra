@@ -3,14 +3,14 @@ title: Hooks
 beta: "Hooks are on whenever the [code sandbox](/docs/agents#code-sandbox) is on, which is the default."
 description: Scripts that run in the sandbox when an agent lifecycle event fires
 order: 6
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Run your own script at key moments in a chat. A hook is a short Python or shell script. It can add context when a chat starts, or check each tool call before and after it runs. Hooks use the same payload shape as Claude Code hooks, so many port with small changes.
 
-Hooks run in the chat's [code sandbox](/docs/agents#code-sandbox).
+Hooks run in the agent's [code sandbox](/docs/agents#code-sandbox). Tool hooks also run when the agent works outside chat, such as from A2A, ChatOps, a schedule, or email. **Session start** fires only in chat.
 
 ![The Hooks editor on an agent](/docs/automated_screenshots/agents-hooks_hooks-editor.webp)
 

@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { isIP } from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,7 +49,6 @@ import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
-import { parseUsageAccountingMode } from "@/utils/billable-usage";
 import { isValidCidr } from "@/utils/network";
 
 type ProcessType = "web" | "worker" | "all";
@@ -93,6 +93,13 @@ const appVersion = getAppVersion();
 const devAutoAuthenticateEmail = isProduction
   ? undefined
   : process.env.ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL?.trim() || undefined;
+
+// Settlement is no longer optional; an old deployment may still set the mode.
+if (process.env.ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE !== undefined) {
+  logger.warn(
+    "[config] ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE is no longer used: every request is settled and charged to its budgets. Remove it from your configuration.",
+  );
+}
 
 if (devAutoAuthenticateEmail) {
   logger.warn(
@@ -1857,6 +1864,25 @@ export const parseSreApiServerCidrs = (
 };
 
 /**
+ * Parses `ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`: the cluster resolver
+ * address(es) MCP, agent and sandbox egress policies allow DNS to. Each entry
+ * becomes a single-host ipBlock on port 53, so anything that is not one IP
+ * address (a CIDR, a hostname) is dropped loudly rather than widening the rule.
+ *
+ * @public — exported for testability
+ */
+export const parseClusterDnsIps = (envValue: string | undefined): string[] => {
+  const entries = parseCommaSeparatedList(envValue ?? "");
+  const invalid = entries.filter((entry) => isIP(entry) === 0);
+  if (invalid.length > 0) {
+    logger.error(
+      `ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS ignoring entries that are not IP addresses: ${invalid.join(", ")}`,
+    );
+  }
+  return entries.filter((entry) => isIP(entry) !== 0);
+};
+
+/**
  * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
  * undefined when it is not one.
  *
@@ -3242,6 +3268,11 @@ const config = {
       clusterDomain:
         process.env.ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN ||
         "cluster.local",
+      // Cluster resolver IP(s) for egress-policy DNS rules. When set, they are
+      // used instead of discovering the kube-dns Service.
+      clusterDnsIps: parseClusterDnsIps(
+        process.env.ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS,
+      ),
       // Namespaces the platform ServiceAccount is granted RBAC in (Helm
       // rbac.environmentNamespaces). Surfaced to the UI so the environment
       // editor can offer a namespace dropdown instead of free text.
@@ -3547,9 +3578,6 @@ const config = {
     // (see betaFeatureEnabled).
     modelPoolsEnabled: betaFeatureEnabled(
       process.env.ARCHESTRA_LLM_MODEL_POOLS_ENABLED,
-    ),
-    usageAccountingMode: parseUsageAccountingMode(
-      process.env.ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE,
     ),
     plugins: llmProxyPlugins,
     maxVirtualKeysPerApiKey: parsePositiveInt(

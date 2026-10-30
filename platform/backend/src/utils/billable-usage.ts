@@ -1,4 +1,7 @@
-import type { SupportedProvider } from "@archestra/shared/model-constants";
+import {
+  CACHE_PRICE_MULTIPLIERS,
+  type SupportedProvider,
+} from "@archestra/shared/model-constants";
 import type { UsageView } from "@/types/llm-provider";
 
 export interface BillingAttribution {
@@ -54,6 +57,11 @@ export interface QuotedPrices {
   cacheSource: import("@/types/model").PriceSource | null;
   /** A selected provider instance published this model's rates; rates it omits stay unknown. */
   instancePriced: boolean;
+  /**
+   * The model's own catalog rates, set when an instance price applies: they
+   * estimate an input or output rate that the instance did not publish.
+   */
+  catalog?: Pick<TokenPrices, "input" | "output">;
 }
 
 /** Request-scoped quote shared by cost, cache cost, savings and billable usage. */
@@ -82,23 +90,16 @@ export function promptTokens(usage: {
 
 export interface PricedBillingUsage {
   version: 1;
+  /**
+   * Every new receipt is `enforce`: it is charged to its budgets. Receipts
+   * from releases where settlement was optional can also read `shadow`
+   * (recorded, never charged) or `off`; readers count only `enforce`.
+   */
   mode: "off" | "shadow" | "enforce";
   status: "complete" | "incomplete";
   issues: string[];
   components: PricedComponent[];
   cost: string;
-}
-
-export function parseUsageAccountingMode(
-  value: string | undefined,
-): PricedBillingUsage["mode"] {
-  const mode = value ?? "off";
-  if (mode !== "off" && mode !== "shadow" && mode !== "enforce") {
-    throw new Error(
-      "ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE must be off, shadow, or enforce",
-    );
-  }
-  return mode;
 }
 
 export function scalePrice(
@@ -244,6 +245,95 @@ export function sumMoney(values: string[]): string {
   );
 }
 
+/**
+ * Receipt findings that only describe the prices a charge was made at.
+ * `unpriced_usage` is what older releases recorded for a missing price.
+ */
+export const PRICE_ISSUES = new Set([
+  "estimated_model_price",
+  "estimated_cache_price",
+  "unpriced_usage",
+]);
+
+/**
+ * Whether part of a receipt's charge was estimated for a missing price. Other
+ * findings, such as a stream the client cut short, do not mark a budget: no
+ * price would change them.
+ */
+export function hasEstimatedPrice(usage: { issues: string[] }): boolean {
+  return usage.issues.some((issue) => PRICE_ISSUES.has(issue));
+}
+
+/**
+ * Cache rates, as multiples of input, for a provider without its own: a read
+ * at half the input rate, between the cheapest published discount (0.1) and
+ * none (1), and writes at the input rate, since write surcharges are an
+ * Anthropic and Bedrock rule.
+ */
+const DEFAULT_CACHE_ESTIMATE = { read: 0.5, write: 1, write1h: 1 };
+
+/**
+ * Fill every rate that a billed token count needs but the quote lacks, so a
+ * request is always charged and never blocks a budget for being unpriced.
+ *
+ * - Input and output take the model's own catalog rate (`fallback`), which a
+ *   per-key provider price can leave unpublished.
+ * - Cache rates derive from the input rate: by the provider's own cache
+ *   multipliers when it has them, otherwise by `DEFAULT_CACHE_ESTIMATE`. A
+ *   model whose input is free stays free.
+ *
+ * `model` and `cache` report which kind of rate was estimated for tokens the
+ * request used. A free rate derived from a free one is exact and not
+ * reported; a rate missing everywhere is charged at zero and reported.
+ */
+export function estimateMissingPrices(params: {
+  usage: UsageTokens;
+  prices: TokenPrices;
+  provider: SupportedProvider;
+  fallback?: Pick<TokenPrices, "input" | "output"> | null;
+}): { prices: TokenPrices; model: boolean; cache: boolean } {
+  const { usage, fallback } = params;
+  const multiplier =
+    CACHE_PRICE_MULTIPLIERS[params.provider] ?? DEFAULT_CACHE_ESTIMATE;
+  const prices = { ...params.prices };
+  let model = false;
+  let cache = false;
+  const positive = (value: string | null) =>
+    value !== null && moneyUnits(value) > 0n;
+  for (const [key, count] of [
+    ["input", usage.inputTokens],
+    ["output", usage.outputTokens],
+  ] as const) {
+    if (prices[key] !== null) continue;
+    // No rate anywhere: charge nothing rather than invent one, and say so.
+    prices[key] = fallback?.[key] ?? "0";
+    if (count > 0 && (fallback?.[key] == null || positive(prices[key])))
+      model = true;
+  }
+  const inputKnown = params.prices.input !== null || fallback?.input != null;
+  const input = prices.input ?? "0";
+  for (const [key, count, factor] of [
+    ["cacheRead", usage.cacheReadTokens, multiplier.read],
+    [
+      "cacheWrite",
+      usage.cacheWriteTokens - usage.cacheWrite1hTokens,
+      multiplier.write,
+    ],
+    [
+      "cacheWrite1h",
+      usage.cacheWrite1hTokens,
+      multiplier.write1h ?? multiplier.write,
+    ],
+  ] as const) {
+    if (prices[key] !== null) continue;
+    prices[key] = scalePrice(input, BigInt(Math.round(factor * 100)), 100n);
+    if (count <= 0) continue;
+    if (!inputKnown) model = true;
+    else if (positive(input)) cache = true;
+  }
+  return { prices, model, cache };
+}
+
 /** Round once per component, half up, after summing all token categories. */
 export function priceTokens(usage: UsageTokens, prices: TokenPrices): string {
   const counts = [
@@ -278,64 +368,72 @@ export function priceTokens(usage: UsageTokens, prices: TokenPrices): string {
 /**
  * Cache charges and avoided uncached-input charges, from the same quote.
  * Savings can be negative when cache writes cost more than uncached input.
+ *
+ * A direction counts only when its rate is known: an unpriced direction, even
+ * one the request was charged an estimate for, adds no cache cost and no
+ * savings, so the figures never claim more than the prices say.
  */
 export function componentCacheCosts(component: PricedComponent) {
-  const prices = {
-    ...component.prices,
-    input: component.prices.input ?? "0",
-    output: component.prices.output ?? "0",
-    cacheRead: component.prices.cacheRead ?? "0",
-    cacheWrite: component.prices.cacheWrite ?? "0",
-    cacheWrite1h: component.prices.cacheWrite1h ?? "0",
+  const { prices } = component;
+  // Token counts that cannot be priced have no cache figures either.
+  const counts = [
+    component.cacheReadTokens,
+    component.cacheWriteTokens - component.cacheWrite1hTokens,
+    component.cacheWrite1hTokens,
+  ];
+  if (counts.some((count) => !Number.isSafeInteger(count) || count < 0))
+    return { cacheCost: 0, cacheSavings: 0, cacheReadSavings: 0 };
+  const none: UsageTokens = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    cacheWrite1hTokens: 0,
   };
-  const cacheCost = priceTokens(
-    { ...component, inputTokens: 0, outputTokens: 0 },
-    prices,
-  );
-  const baseline = priceTokens(
-    {
-      inputTokens: component.cacheReadTokens + component.cacheWriteTokens,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      cacheWrite1hTokens: 0,
-    },
-    prices,
-  );
-  const readBaseline = priceTokens(
-    {
-      inputTokens: component.cacheReadTokens,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      cacheWrite1hTokens: 0,
-    },
-    prices,
-  );
-  const readCost = priceTokens(
-    {
-      ...component,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheWriteTokens: 0,
-      cacheWrite1hTokens: 0,
-    },
-    prices,
-  );
-  if (component.prices.input === null)
+  const free: TokenPrices = {
+    input: "0",
+    output: "0",
+    cacheRead: "0",
+    cacheWrite: "0",
+    cacheWrite1h: "0",
+    source: prices.source,
+  };
+  const units = (usage: Partial<UsageTokens>, rates: Partial<TokenPrices>) =>
+    moneyUnits(priceTokens({ ...none, ...usage }, { ...free, ...rates }));
+  const read = component.cacheReadTokens;
+  const writes = component.cacheWriteTokens;
+  const readCost =
+    prices.cacheRead === null
+      ? null
+      : units({ cacheReadTokens: read }, { cacheRead: prices.cacheRead });
+  const writeCost =
+    prices.cacheWrite === null
+      ? null
+      : units(
+          {
+            cacheWriteTokens: writes,
+            cacheWrite1hTokens: component.cacheWrite1hTokens,
+          },
+          {
+            cacheWrite: prices.cacheWrite,
+            cacheWrite1h: prices.cacheWrite1h ?? "0",
+          },
+        );
+  const cacheCost = (readCost ?? 0n) + (writeCost ?? 0n);
+  if (prices.input === null)
     return {
-      cacheCost: Number(cacheCost),
+      cacheCost: Number(formatMoney(cacheCost)),
       cacheSavings: 0,
       cacheReadSavings: 0,
     };
+  const uncached = (tokens: number) =>
+    units({ inputTokens: tokens }, { input: prices.input });
+  const readSavings = readCost === null ? 0n : uncached(read) - readCost;
+  const writeSurcharge = writeCost === null ? 0n : writeCost - uncached(writes);
   return {
-    cacheCost: Number(cacheCost),
-    cacheSavings: Number(
-      formatMoney(moneyUnits(baseline) - moneyUnits(cacheCost)),
-    ),
-    cacheReadSavings: Number(
-      formatMoney(moneyUnits(readBaseline) - moneyUnits(readCost)),
-    ),
+    cacheCost: Number(formatMoney(cacheCost)),
+    cacheSavings: Number(formatMoney(readSavings - writeSurcharge)),
+    cacheReadSavings: Number(formatMoney(readSavings)),
   };
 }
 

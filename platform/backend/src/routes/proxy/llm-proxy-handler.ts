@@ -1,9 +1,6 @@
 import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
 import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
-import type {
-  BillingAttribution,
-  PricedBillingUsage,
-} from "@/utils/billable-usage";
+import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 /**
@@ -237,7 +234,6 @@ export interface LLMProxyContext<TRequest> {
   authorizeA2AOAuthAttempt?: () => Promise<unknown>;
   attributionLabels?: AttributionLabels;
   throughput?: LlmThroughput;
-  usageAccountingMode?: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
   autoRouting?: AutoRoutingRequestContext;
   /**
@@ -1236,13 +1232,11 @@ export async function handleLLMProxy<
       );
     }
     // A media operation the published media tariff prices settles its cost
-    // like any other request. One it cannot price has no cost to settle, and
-    // the legacy token ledger cannot hold a media cost at all: such media is
-    // refused only where a spend budget applies to it.
+    // like any other request. One it cannot price has no cost to settle, so
+    // it is refused only where a spend budget applies to it.
     const mediaPricedForBudget =
-      config.llmProxy.usageAccountingMode === "enforce" &&
       provider.mediaTariffCovers?.(requestAdapter.getOriginalRequest()) ===
-        true;
+      true;
     // Check usage limits
     logger.debug(
       { resolvedAgentId },
@@ -2047,7 +2041,6 @@ export async function handleLLMProxy<
         subscription: billingMode === "subscription",
         rules: requestContext.throughputRules,
       }),
-      usageAccountingMode: config.llmProxy.usageAccountingMode,
       providerApiKeyId: perKeyChatApiKeyId,
       upstreamAttempt,
       ...(modelPool ? { modelPool } : {}),
@@ -2534,7 +2527,7 @@ async function handleStreaming<
     }
 
     let usage = streamAdapter.state.usage;
-    if (usage && !upstreamFinished && ctx.usageAccountingMode !== "off") {
+    if (usage && !upstreamFinished) {
       const breakdown =
         usage.billingUsage ?? primaryBillingUsage(usage, actualModel);
       usage = {
@@ -2549,20 +2542,6 @@ async function handleStreaming<
     }
     if (usage) {
       withSessionContext(sessionId, () => {
-        if (ctx.usageAccountingMode !== "enforce" && !usage.usageUnavailable)
-          metrics.llm.reportLLMTokens(
-            providerName,
-            agent,
-            {
-              input: usage.inputTokens,
-              output: usage.outputTokens,
-              cacheRead: usage.cacheReadTokens,
-              cacheWrite: usage.cacheWriteTokens,
-            },
-            actualModel,
-            source,
-          );
-
         if (usage.outputTokens && firstChunkTime) {
           const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
           metrics.llm.reportTokensPerSecond(
@@ -2578,7 +2557,6 @@ async function handleStreaming<
 
       const costs = await calculateInteractionCosts({
         autoRouting: ctx.autoRouting,
-        usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
         actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
@@ -2586,7 +2564,7 @@ async function handleStreaming<
       });
 
       withSessionContext(sessionId, () => {
-        if (costs.billingUsage?.mode === "enforce") {
+        if (costs.billingUsage) {
           reportBillableUsageMetrics({
             usage: costs.billingUsage,
             agent,
@@ -2597,6 +2575,20 @@ async function handleStreaming<
           });
           return;
         }
+        // Usage with no billable cost, such as unpriced media.
+        if (!usage.usageUnavailable)
+          metrics.llm.reportLLMTokens(
+            providerName,
+            agent,
+            {
+              input: usage.inputTokens,
+              output: usage.outputTokens,
+              cacheRead: usage.cacheReadTokens,
+              cacheWrite: usage.cacheWriteTokens,
+            },
+            actualModel,
+            source,
+          );
         metrics.llm.reportLLMCost({
           provider: providerName,
           profile: agent,
@@ -2664,8 +2656,7 @@ async function handleStreaming<
           { err: interactionError, profileId: agent.id },
           "Failed to create interaction record (agent may have been deleted)",
         );
-        if (ctx.usageAccountingMode === "enforce")
-          throw new ApiError(503, "Unable to settle LLM usage");
+        throw new ApiError(503, "Unable to settle LLM usage");
       }
     } else {
       // No usage ever arrived. On the error path the catch has already recorded
@@ -2869,7 +2860,6 @@ async function handleStreaming<
             );
           }
           const cost = await calculateUsageCost({
-            usageAccountingMode: ctx.usageAccountingMode,
             providerApiKeyId: ctx.providerApiKeyId,
             model: ctx.upstreamAttempt.modelId ?? actualModel,
             usage: state.usage,
@@ -2897,7 +2887,7 @@ async function handleStreaming<
 
     // Anthropic requires message_stop; its beta usage arrives before that frame.
     upstreamFinished = providerName !== "anthropic" || providerTerminalSeen;
-    if (!upstreamFinished && ctx.usageAccountingMode === "enforce")
+    if (!upstreamFinished)
       throw new ApiError(
         502,
         "Provider stream ended before final usage was confirmed",
@@ -3499,7 +3489,6 @@ async function handleNonStreaming<
             actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
             usage: error.usage,
             providerName: ctx.upstreamAttempt.provider ?? providerName,
-            usageAccountingMode: ctx.usageAccountingMode,
             providerApiKeyId: ctx.providerApiKeyId,
           });
           const record = buildInteractionRecord({
@@ -3536,10 +3525,11 @@ async function handleNonStreaming<
             autoRouting: ctx.autoRouting,
             upstreamAttempt: ctx.upstreamAttempt,
           });
-          if (costs.billingUsage?.mode === "enforce")
+          const billingUsage = costs.billingUsage;
+          if (billingUsage)
             withSessionContext(sessionId, () =>
               reportBillableUsageMetrics({
-                usage: costs.billingUsage as PricedBillingUsage,
+                usage: billingUsage,
                 agent,
                 source,
                 billingMode: getBillingMode(),
@@ -3647,7 +3637,6 @@ async function handleNonStreaming<
         );
       }
       const cost = await calculateUsageCost({
-        usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
         model: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
@@ -3835,7 +3824,6 @@ async function handleNonStreaming<
       // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
         autoRouting: ctx.autoRouting,
-        usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
         actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
@@ -3843,7 +3831,7 @@ async function handleNonStreaming<
       });
 
       withSessionContext(sessionId, () => {
-        if (costs.billingUsage?.mode === "enforce") {
+        if (costs.billingUsage) {
           reportBillableUsageMetrics({
             usage: costs.billingUsage,
             agent,
@@ -4012,7 +4000,6 @@ async function handleNonStreaming<
   // its HTTP wrapper records duration only. Other providers own HTTP tokens.
   const costs = await calculateInteractionCosts({
     autoRouting: ctx.autoRouting,
-    usageAccountingMode: ctx.usageAccountingMode,
     providerApiKeyId: ctx.providerApiKeyId,
     actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
     usage,
@@ -4020,7 +4007,7 @@ async function handleNonStreaming<
   });
 
   withSessionContext(sessionId, () => {
-    if (costs.billingUsage?.mode === "enforce") {
+    if (costs.billingUsage) {
       reportBillableUsageMetrics({
         usage: costs.billingUsage,
         agent,
@@ -4120,8 +4107,7 @@ async function handleNonStreaming<
       { err: interactionError, profileId: agent.id },
       "Failed to create interaction record (agent may have been deleted)",
     );
-    if (ctx.usageAccountingMode === "enforce")
-      throw new ApiError(503, "Unable to settle LLM usage");
+    throw new ApiError(503, "Unable to settle LLM usage");
   }
   if (tokenAccountingError) {
     if (tokenAccountingError instanceof ThroughputError)
@@ -4615,10 +4601,17 @@ async function persistProxyInteraction({
       : record,
     encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
   );
-  await throughput?.settleSpend(
-    record.cost,
-    record.billingMode === "subscription" ? "subscription" : "metered",
-  );
+  try {
+    await throughput?.settleSpend(
+      record.cost,
+      record.billingMode === "subscription" ? "subscription" : "metered",
+    );
+  } catch (error) {
+    // The request's charge is already settled. Failing it now would invite a
+    // retry that pays for the inference twice; the next admission reads the
+    // per-minute meter and fails closed if it is still unavailable.
+    logger.error({ err: error }, "Unable to record per-minute spend");
+  }
 }
 
 /**

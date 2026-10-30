@@ -2,7 +2,7 @@
 title: Networking
 description: Configure public endpoints, streaming, and workload network isolation
 order: 4
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-29
 ---
 
 Give users and clients an HTTPS endpoint, then configure the routes and public URLs to match it.
@@ -56,9 +56,9 @@ Domain rules need an FQDN policy provider; plain Kubernetes `NetworkPolicy` supp
 | GKE | Kubernetes NetworkPolicy, when enabled | FQDNNetworkPolicy with Dataplane V2 and FQDN policy enabled. |
 | Cilium clusters | Kubernetes or Cilium policy | CiliumNetworkPolicy. |
 
-Check your provider's setup: [Kubernetes](https://kubernetes.io/docs/concepts/services-networking/network-policies/), [Cilium](https://docs.cilium.io/en/latest/security/dns/), [GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/fqdn-network-policies), or [EKS Auto Mode](https://docs.aws.amazon.com/eks/latest/userguide/auto-net-pol.html). Archestra adds the cluster-DNS bootstrap rule required by Auto Mode policies.
+Check your provider's setup: [Kubernetes](https://kubernetes.io/docs/concepts/services-networking/network-policies/), [Cilium](https://docs.cilium.io/en/latest/security/dns/), [GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/fqdn-network-policies), or [EKS Auto Mode](https://docs.aws.amazon.com/eks/latest/userguide/auto-net-pol.html). Archestra allows DNS bootstrap traffic only to the discovered cluster resolver. If discovery fails, Auto Mode policies omit that exception; domain lookups can fail until you restore discovery or configure the resolver. The Helm chart grants `get` on the `kube-system/kube-dns` Service. Installers without permission to create that grant can set `rbac.kubeDnsServiceRead: false` and configure [`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS).
 
-Public internet mode blocks private, metadata, loopback, and reserved destinations. Add only the private ranges a workload needs under **Additional allowed CIDRs**, or use an allowlist to restrict all outbound access. DNS to the cluster resolver remains allowed.
+Public internet mode blocks private, metadata, loopback, and reserved destinations. Add only the private ranges a workload needs under **Additional allowed CIDRs**, or use an allowlist to restrict all outbound access. DNS to a known cluster resolver remains allowed.
 
 ## Code Sandbox Requirements
 

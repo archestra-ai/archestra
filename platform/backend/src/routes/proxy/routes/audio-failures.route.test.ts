@@ -56,7 +56,6 @@ describe.each([
   ) => void;
   beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
     config.llmProxy.upstreamTimeoutMs = 600_000;
-    config.llmProxy.usageAccountingMode = "off";
     calls = 0;
     closed = false;
     handler = (response) => {

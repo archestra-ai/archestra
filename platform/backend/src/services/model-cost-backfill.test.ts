@@ -1,6 +1,9 @@
 import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { createInteractionsIndexes } from "@/database/index-maintenance";
+import InteractionModel from "@/models/interaction";
+import InteractionBillingModel from "@/models/interaction-billing";
+import LimitModel from "@/models/limit";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import ModelCostBackfillModel from "@/models/model-cost-backfill";
@@ -9,9 +12,10 @@ import {
   calculateCacheCost,
   calculateCost,
 } from "@/routes/proxy/utils/cost-optimization";
+import { priceBillingUsage } from "@/services/billable-usage";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Model } from "@/types";
-import type { PricedBillingUsage } from "@/utils/billable-usage";
+import { uuidv7 } from "@/utils/uuid";
 import { modelCostBackfillService } from "./model-cost-backfill";
 
 const indexOptions = {
@@ -98,8 +102,6 @@ describe("recomputing past costs", () => {
       cacheSavings: null,
     });
     const unpriced = await row({ cost: null, baselineCost: null });
-    const settled = await row();
-    await settleUnderEnforcedLimit({ interactionId: settled.id });
     const untouched = await Promise.all([
       row({ createdAt: new Date(since.getTime() - DAY_MS) }),
       row({ createdAt: new Date(Date.now() + DAY_MS) }),
@@ -149,7 +151,6 @@ describe("recomputing past costs", () => {
       cacheSavings: null,
     });
     expect((await costsOf(unpriced.id)).cost).toBe(cost);
-    expect(await costsOf(settled.id)).toEqual(UNCHANGED);
     for (const other of untouched) {
       expect((await costsOf(other.id)).cost).toBe(UNCHANGED.cost);
     }
@@ -228,6 +229,395 @@ describe("recomputing past costs", () => {
     expect((await costsOf(chat.id)).cost).not.toBe("9.0000000000");
     expect((await costsOf(images.id)).cost).toBe("9.0000000000");
     expect((await costsOf(marked.id)).cost).toBe("9.0000000000");
+  });
+
+  test("re-prices settled requests from their receipts and corrects the budgets still holding their charge", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    // A self-hosted model priced by hand, with no cache price yet.
+    const model = await ModelModel.create({
+      externalId: "vllm/fireworks-backfill",
+      provider: "vllm",
+      modelId: "fireworks-backfill",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      customPricePerMillionInput: "1",
+      customPricePerMillionOutput: "2",
+    });
+    const budget = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: null,
+    });
+    const settle = async () => {
+      const usage = {
+        inputTokens: 1000,
+        outputTokens: 1000,
+        cacheReadTokens: 1_000_000,
+      };
+      const billingUsage = await priceBillingUsage({
+        model: model.modelId,
+        provider: "vllm",
+        usage,
+        mode: "enforce",
+      });
+      const id = uuidv7();
+      await InteractionModel.create({
+        id,
+        profileId: agent.id,
+        type: "vllm:chatCompletions",
+        model: model.modelId,
+        ...usage,
+        cost: billingUsage.cost,
+        billingMode: "metered",
+        billingUsage,
+        billingAttribution: {
+          organizationId: org.id,
+          environmentId: agent.environmentId,
+          entities: [
+            { entityType: "organization", entityId: org.id },
+            { entityType: "agent", entityId: agent.id },
+          ],
+        },
+        request: { model: model.modelId, messages: [] },
+        response: {
+          id: "chatcmpl-backfill",
+          object: "chat.completion",
+          created: 1,
+          model: model.modelId,
+          choices: [],
+        },
+      });
+      return id;
+    };
+    const spend = async () =>
+      (await LimitModel.getSpendUsage([budget.id])).get(budget.id);
+
+    // Cache reads were estimated at half the input rate: 0.001 + 0.002 + 0.5.
+    const beforeReset = await settle();
+    expect((await costsOf(beforeReset)).cost).toBe("0.5030000000");
+    // The budget's window starts over; only the next charge is still in it.
+    await LimitModel.resetLimitsUsage([budget.id]);
+    const afterReset = await settle();
+    expect(await spend()).toMatchObject({ estimatedUsage: true });
+    expect((await spend())?.modelUsage[0].cost).toBeCloseTo(0.503, 10);
+
+    const priced = await ModelModel.update(model.id, {
+      customPricePerMillionCacheRead: "0.1",
+    });
+    await modelCostBackfillService.start({
+      model: priced ?? model,
+      since: new Date(Date.now() - DAY_MS),
+      organizationId: org.id,
+      userId: user.id,
+    });
+    await modelCostBackfillService.runNext();
+
+    // 0.001 + 0.002 + 1000000 * 0.1 per million
+    for (const id of [beforeReset, afterReset]) {
+      expect((await costsOf(id)).cost).toBe("0.1030000000");
+      const [receipt] = await InteractionBillingModel.findMany([id]);
+      expect(receipt.usage).toMatchObject({
+        status: "complete",
+        issues: [],
+        cost: "0.1030000000",
+      });
+    }
+    // Only the charge made since the reset moves, and it is no longer estimated.
+    expect(await spend()).toMatchObject({ estimatedUsage: false });
+    expect((await spend())?.modelUsage[0].cost).toBeCloseTo(0.103, 10);
+    expect(await modelCostBackfillService.getLatest(model.id)).toMatchObject({
+      status: "completed",
+      rowsUpdated: 2,
+    });
+  });
+
+  test("redoes a receipt's price findings across its models, flags budgets only for prices, and leaves invalid token counts as charged", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const makeVllmModel = (modelId: string, cacheless: boolean) =>
+      ModelModel.create({
+        externalId: `vllm/${modelId}`,
+        provider: "vllm",
+        modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        customPricePerMillionInput: "1",
+        customPricePerMillionOutput: "2",
+        ...(cacheless
+          ? {}
+          : {
+              customPricePerMillionCacheRead: "0.1",
+              customPricePerMillionCacheWrite: "1.25",
+            }),
+      });
+    const executor = await makeVllmModel("router-executor", true);
+    const advisor = await makeVllmModel("router-advisor", false);
+    const [orgBudget, userBudget] = await Promise.all(
+      [
+        { entityType: "organization" as const, entityId: org.id },
+        { entityType: "user" as const, entityId: user.id },
+      ].map((entity) =>
+        LimitModel.create({
+          ...entity,
+          limitType: "token_cost",
+          limitValue: 100,
+          model: null,
+        }),
+      ),
+    );
+    const charge = async (
+      billingUsage: Awaited<ReturnType<typeof priceBillingUsage>>,
+      entity: { entityType: "organization" | "user"; entityId: string },
+    ) => {
+      const id = uuidv7();
+      await InteractionModel.create({
+        id,
+        profileId: agent.id,
+        type: "vllm:chatCompletions",
+        model: billingUsage.components[0].model,
+        inputTokens: 1000,
+        outputTokens: 1000,
+        cost: billingUsage.cost,
+        billingMode: "metered",
+        billingUsage,
+        billingAttribution: {
+          organizationId: org.id,
+          environmentId: agent.environmentId,
+          entities: [entity],
+        },
+        request: { model: billingUsage.components[0].model, messages: [] },
+        response: {
+          id: "chatcmpl-findings",
+          object: "chat.completion",
+          created: 1,
+          model: billingUsage.components[0].model,
+          choices: [],
+        },
+      });
+      return id;
+    };
+    const component = (model: string, cacheReadTokens: number) => ({
+      model,
+      inputTokens: 1000,
+      outputTokens: 1000,
+      cacheReadTokens,
+      cacheWriteTokens: 0,
+      cacheWrite1hTokens: 0,
+    });
+    const orgEntity = { entityType: "organization" as const, entityId: org.id };
+
+    // The executor's cache read has no price; the advisor's call is priced.
+    const mixed = await priceBillingUsage({
+      model: executor.modelId,
+      provider: "vllm",
+      mode: "enforce",
+      usage: {
+        inputTokens: 1000,
+        outputTokens: 1000,
+        cacheReadTokens: 1_000_000,
+        billingUsage: {
+          version: 1,
+          status: "complete",
+          issues: [],
+          components: [
+            {
+              id: "primary",
+              kind: "message",
+              ...component(executor.modelId, 1_000_000),
+            },
+            {
+              id: "advisor",
+              kind: "advisor_message",
+              ...component(advisor.modelId, 0),
+            },
+          ],
+        },
+      },
+    });
+    expect(mixed.issues).toEqual(["estimated_cache_price"]);
+    const mixedId = await charge(mixed, orgEntity);
+    // A stored component whose cache split cannot be priced.
+    const priced = await priceBillingUsage({
+      model: executor.modelId,
+      provider: "vllm",
+      mode: "enforce",
+      usage: { inputTokens: 1000, outputTokens: 1000 },
+    });
+    const invalidId = await charge(
+      {
+        ...priced,
+        status: "incomplete",
+        issues: ["invalid_token_count"],
+        components: [
+          {
+            ...priced.components[0],
+            cacheWriteTokens: 0,
+            cacheWrite1hTokens: 5,
+          },
+        ],
+      },
+      orgEntity,
+    );
+    // A stream the client cut short is charged but is no price estimate.
+    const cutShort = await priceBillingUsage({
+      model: advisor.modelId,
+      provider: "vllm",
+      mode: "enforce",
+      usage: { inputTokens: 1000, outputTokens: 1000 },
+    });
+    await charge(
+      { ...cutShort, status: "incomplete", issues: ["partial_stream"] },
+      { entityType: "user", entityId: user.id },
+    );
+
+    const spend = async (id: string) =>
+      (await LimitModel.getSpendUsage([id])).get(id);
+    expect(await spend(orgBudget.id)).toMatchObject({ estimatedUsage: true });
+    expect(await spend(userBudget.id)).toMatchObject({ estimatedUsage: false });
+    expect((await spend(userBudget.id))?.modelUsage[0].cost).toBeCloseTo(
+      0.003,
+      10,
+    );
+
+    const repriced = await ModelModel.update(executor.id, {
+      customPricePerMillionCacheRead: "0.1",
+      customPricePerMillionCacheWrite: "1.25",
+    });
+    await modelCostBackfillService.start({
+      model: repriced ?? executor,
+      since: new Date(Date.now() - DAY_MS),
+      organizationId: org.id,
+      userId: user.id,
+    });
+    await modelCostBackfillService.runNext();
+    expect(await modelCostBackfillService.getLatest(executor.id)).toMatchObject(
+      { status: "completed" },
+    );
+
+    const [mixedAfter, invalidAfter] = await InteractionBillingModel.findMany([
+      mixedId,
+      invalidId,
+    ]).then((rows) =>
+      [mixedId, invalidId].map(
+        (id) => rows.find((row) => row.interactionId === id)?.usage,
+      ),
+    );
+    // 0.001 + 0.002 + 1,000,000 cache reads at 0.1, plus the advisor's 0.003.
+    expect(mixedAfter).toMatchObject({
+      status: "complete",
+      issues: [],
+      cost: "0.1060000000",
+    });
+    expect(invalidAfter).toMatchObject({
+      issues: ["invalid_token_count"],
+      cost: priced.cost,
+    });
+    expect(await spend(orgBudget.id)).toMatchObject({ estimatedUsage: false });
+  });
+
+  test("re-prices a request priced from its provider key's list at the custom price", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const model = await ModelModel.create({
+      externalId: "openai/gateway-chat",
+      provider: "openai",
+      modelId: "gateway-chat",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    const secret = await makeSecret({ secret: { apiKey: "fixture-key" } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      key.id,
+      [
+        {
+          id: model.id,
+          modelId: model.modelId,
+          providerPricing: {
+            promptPricePerToken: "0.000002",
+            completionPricePerToken: "0.000008",
+            cacheReadPricePerToken: null,
+            cacheWritePricePerToken: null,
+          },
+        },
+      ],
+      "openai",
+    );
+    const billingUsage = await priceBillingUsage({
+      model: model.modelId,
+      provider: "openai",
+      mode: "enforce",
+      providerApiKeyId: key.id,
+      usage: { inputTokens: 1_000_000, outputTokens: 1_000_000 },
+    });
+    expect(billingUsage).toMatchObject({
+      cost: "10.0000000000",
+      components: [{ prices: { source: "provider" } }],
+    });
+    const id = uuidv7();
+    await InteractionModel.create({
+      id,
+      profileId: agent.id,
+      type: "openai:chatCompletions",
+      model: model.modelId,
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      cost: billingUsage.cost,
+      billingMode: "metered",
+      billingUsage,
+      billingAttribution: {
+        organizationId: org.id,
+        environmentId: agent.environmentId,
+        entities: [{ entityType: "organization", entityId: org.id }],
+      },
+      request: { model: model.modelId, messages: [] },
+      response: {
+        id: "chatcmpl-gateway",
+        object: "chat.completion",
+        created: 1,
+        model: model.modelId,
+        choices: [],
+      },
+    });
+
+    const custom = await ModelModel.update(model.id, {
+      customPricePerMillionInput: "1",
+      customPricePerMillionOutput: "4",
+    });
+    await modelCostBackfillService.start({
+      model: custom ?? model,
+      since: new Date(Date.now() - DAY_MS),
+      organizationId: org.id,
+      userId: user.id,
+    });
+    await modelCostBackfillService.runNext();
+    const [receipt] = await InteractionBillingModel.findMany([id]);
+    expect(receipt.usage).toMatchObject({
+      cost: "5.0000000000",
+      components: [{ prices: { source: "custom" } }],
+    });
   });
 
   test("reprices each request at its prompt's price tier, as the proxy does, and the preview totals what it writes", async ({
@@ -620,8 +1010,7 @@ describe("previewing a recompute", () => {
     // 02:00 UTC on Oct 2 is still Oct 1 in New York.
     await row("2026-10-02T02:00:00Z", "18.0000000000");
     await row("2026-10-03T15:00:00Z", "0.0000000000");
-    const settled = await row("2026-10-03T16:00:00Z", "18.0000000000");
-    await settleUnderEnforcedLimit({ interactionId: settled.id });
+    await row("2026-10-03T16:00:00Z", "18.0000000000");
 
     const preview = await modelCostBackfillService.getPreview({
       model,
@@ -635,15 +1024,14 @@ describe("previewing a recompute", () => {
       instancePriced: false,
       days: [
         { day: "2026-10-01", requests: 1, recordedCost: 18, recomputedCost: 3 },
-        { day: "2026-10-03", requests: 1, recordedCost: 0, recomputedCost: 3 },
+        { day: "2026-10-03", requests: 2, recordedCost: 18, recomputedCost: 6 },
       ],
       window: {
-        requests: 1,
+        requests: 2,
         subscriptionRequests: 0,
         users: 0,
-        recordedCost: 0,
-        recomputedCost: 3,
-        settledRequests: 1,
+        recordedCost: 18,
+        recomputedCost: 6,
       },
     });
 
@@ -659,7 +1047,7 @@ describe("previewing a recompute", () => {
       timeZone: "UTC",
       since: null,
     });
-    expect(rounded.days.map((day) => day.recomputedCost)).toEqual([1.01, 1.01]);
+    expect(rounded.days.map((day) => day.recomputedCost)).toEqual([1.01, 2.02]);
   });
 
   test("says why a model's past costs cannot be recomputed", async ({
@@ -847,11 +1235,3 @@ async function costsOf(id: string) {
 }
 
 /** The receipt the proxy writes when an enforced cost limit settles a request. */
-async function settleUnderEnforcedLimit(params: { interactionId: string }) {
-  await db.insert(schema.interactionBillingTable).values({
-    interactionId: params.interactionId,
-    fingerprint: "f".repeat(64),
-    usage: { mode: "enforce", cost: "9.0000000000" } as PricedBillingUsage,
-    billingMode: "metered",
-  });
-}

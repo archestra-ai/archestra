@@ -345,10 +345,10 @@ test("missing provider usage stays null rather than becoming zero tokens or free
   });
 });
 
-test("blocks image edits before dispatch under an applicable financial budget", async ({
+test("counts a priced image edit against a financial budget, and a spent one blocks it before dispatch", async ({
   media,
 }) => {
-  await LimitModel.create({
+  const budget = await LimitModel.create({
     entityType: "agent",
     entityId: media.agentId,
     limitType: "token_cost",
@@ -356,14 +356,18 @@ test("blocks image edits before dispatch under an applicable financial budget", 
     model: ["gpt-image-1"],
     lastCleanup: new Date(),
   });
-  await expect(
+  const edit = async () =>
     media.client.images.edit({
       model: "gpt-image-1",
       prompt: "A circle.",
       image: await toFile(media.image, "one.png"),
-    }),
-  ).rejects.toMatchObject({ status: 422 });
-  expect(media.requests).toHaveLength(0);
+    });
+  expect((await edit()).data).toHaveLength(1);
+  expect(media.requests).toHaveLength(1);
+
+  await LimitModel.patch(budget.id, { limitValue: 0 });
+  await expect(edit()).rejects.toMatchObject({ status: 402 });
+  expect(media.requests).toHaveLength(1);
 });
 
 test("native Azure SDK deployment path overrides form model and preserves api-version", async ({
@@ -448,8 +452,7 @@ test("rejects unauthenticated calls before any upstream request", async ({
   expect(media.requests).toHaveLength(0);
 });
 
-test("settles a priced edit under enforced accounting", async ({ media }) => {
-  config.llmProxy.usageAccountingMode = "enforce";
+test("settles a priced edit", async ({ media }) => {
   const priced = await media.client.images.edit({
     model: "gpt-image-1",
     prompt: "A circle.",

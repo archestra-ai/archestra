@@ -8,6 +8,7 @@ describe("enrichOpenApiWithRbac", () => {
     RouteId.GetLimit,
     RouteId.CreateLimit,
     RouteId.UpdateLimit,
+    RouteId.ResetLimitUsage,
     RouteId.DeleteLimit,
   ])("documents %s as dynamically authorized for team admins", (operationId) => {
     const spec = { paths: { "/api/example": { get: { operationId } } } };

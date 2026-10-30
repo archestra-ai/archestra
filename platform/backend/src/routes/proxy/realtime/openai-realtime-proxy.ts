@@ -138,15 +138,13 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
     virtualKeyId: identity.virtualKeyId,
     oauthClientId: identity.authenticatedApp?.id,
   });
-  // A priced session settles each response like a chat completion; under the
-  // legacy ledger media has no cost to settle, so a budget refuses it.
-  const priced =
-    config.llmProxy.usageAccountingMode === "enforce" &&
-    mediaTariffCovers({
-      provider: "openai",
-      model: resolution.modelId,
-      operation: "realtime",
-    });
+  // A priced session settles each response like a chat completion. One the
+  // media tariff cannot price has no cost to settle, so a budget refuses it.
+  const priced = mediaTariffCovers({
+    provider: "openai",
+    model: resolution.modelId,
+    operation: "realtime",
+  });
   const violation = await LimitValidationService.checkLimitsBeforeRequest({
     unpricedMediaModel: priced ? undefined : resolution.modelId,
     agentId: agent.id,
@@ -469,7 +467,6 @@ class RealtimeSession {
       actualModel: modelId,
       usage: view,
       providerName: "openai",
-      usageAccountingMode: config.llmProxy.usageAccountingMode,
       providerApiKeyId,
     });
     const output = Array.isArray(response.output)

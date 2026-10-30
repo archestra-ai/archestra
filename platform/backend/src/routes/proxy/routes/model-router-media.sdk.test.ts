@@ -618,31 +618,29 @@ describe.each([
       expect(JSON.stringify(interactions)).not.toContain(
         "synthetic-gemini-secret",
       );
-      const beforeEnforced = upstream.calls.length;
-      config.llmProxy.usageAccountingMode = "enforce";
-      // Priced from its published media tariff, so enforced accounting
-      // settles it like any other request.
+      // Priced from its published media tariff, so a spend limit counts it
+      // like any other request instead of refusing it.
+      const beforeBudget = upstream.calls.length;
+      const budget = await LimitModel.create({
+        entityType: "virtual_key",
+        entityId: key.virtualKey.id,
+        limitType: "token_cost",
+        limitValue: 5,
+      });
       await client.images.generate({
         model: imageModels[1],
         prompt: "Draw a circle.",
       });
-      expect(upstream.calls).toHaveLength(beforeEnforced + 1);
-      config.llmProxy.usageAccountingMode = "off";
-      await LimitModel.create({
-        entityType: "virtual_key",
-        entityId: key.virtualKey.id,
-        limitType: "token_cost",
-        limitValue: 0,
-      });
+      expect(upstream.calls).toHaveLength(beforeBudget + 1);
+      // A spent budget refuses it before any upstream call.
+      await LimitModel.patch(budget.id, { limitValue: 0 });
       await expect(
         client.images.generate({
           model: imageModels[1],
           prompt: "Draw a circle.",
         }),
-      ).rejects.toMatchObject({ status: 422 });
-      // The legacy token ledger cannot hold a media cost, so a budget there
-      // still refuses media before any upstream call.
-      expect(upstream.calls).toHaveLength(beforeEnforced + 1);
+      ).rejects.toMatchObject({ status: 402 });
+      expect(upstream.calls).toHaveLength(beforeBudget + 1);
     } finally {
       app.server.closeAllConnections();
       await app.close();

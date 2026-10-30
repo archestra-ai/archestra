@@ -36,7 +36,6 @@ describe("OpenAI realtime sessions through the Model Router", () => {
     beta: string | undefined;
     socket: ServerSocket;
   }>;
-  const accountingMode = config.llmProxy.usageAccountingMode;
 
   beforeEach(async () => {
     upstreamConnections = [];
@@ -87,7 +86,6 @@ describe("OpenAI realtime sessions through the Model Router", () => {
   });
 
   afterEach(async () => {
-    config.llmProxy.usageAccountingMode = accountingMode;
     for (const socket of upstream.clients) socket.terminate();
     await new Promise<void>((resolve) => upstream.close(() => resolve()));
     server.closeAllConnections();
@@ -113,17 +111,22 @@ describe("OpenAI realtime sessions through the Model Router", () => {
       secret.id,
       { provider: "openai" },
     );
-    const model = await ModelModel.upsert({
-      externalId: "openai/gpt-realtime-2.1",
-      provider: "openai",
-      modelId: "gpt-realtime-2.1",
-      inputModalities: ["text", "audio"],
-      outputModalities: ["audio"],
-      lastSyncedAt: new Date(),
-    });
-    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
-      model.id,
-    ]);
+    const models = await Promise.all(
+      ["gpt-realtime-2.1", "gpt-realtime-translate"].map((modelId) =>
+        ModelModel.upsert({
+          externalId: `openai/${modelId}`,
+          provider: "openai",
+          modelId,
+          inputModalities: ["text", "audio"],
+          outputModalities: ["audio"],
+          lastSyncedAt: new Date(),
+        }),
+      ),
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+      providerKey.id,
+      models.map((model) => model.id),
+    );
     return VirtualApiKeyModel.create({
       organizationId: params.organizationId,
       name: "realtime",
@@ -195,7 +198,6 @@ describe("OpenAI realtime sessions through the Model Router", () => {
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    config.llmProxy.usageAccountingMode = "enforce";
     const admin = await makeAdmin();
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
     const key = await mappedKey({
@@ -322,12 +324,11 @@ describe("OpenAI realtime sessions through the Model Router", () => {
     opened.socket.close();
   });
 
-  test("refuses a bad key, an unmapped provider, a missing model, and a budget that cannot hold media", async ({
+  test("refuses a bad key, an unmapped provider, a missing model, and a budget over a session it cannot price", async ({
     makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    config.llmProxy.usageAccountingMode = "off";
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
     const key = await mappedKey({
       organizationId: agent.organizationId,
@@ -347,8 +348,9 @@ describe("OpenAI realtime sessions through the Model Router", () => {
       body: expect.stringContaining("model query parameter"),
     });
 
-    // The legacy token ledger cannot hold a media cost, so a budget refuses
-    // the session before OpenAI sees it, as the HTTP media routes do (422).
+    // OpenAI bills gpt-realtime-translate per minute, which no event reports,
+    // so a budget refuses the session before OpenAI sees it, as the HTTP media
+    // routes do (422).
     await LimitModel.create({
       entityType: "virtual_key",
       entityId: key.virtualKey.id,
@@ -356,7 +358,7 @@ describe("OpenAI realtime sessions through the Model Router", () => {
       limitValue: 5,
     });
     expect(
-      await connect(`${base}?model=openai:gpt-realtime-2.1`, key.value),
+      await connect(`${base}?model=openai:gpt-realtime-translate`, key.value),
     ).toMatchObject({ status: 422 });
     expect(upstreamConnections).toHaveLength(0);
   });

@@ -1,6 +1,10 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { type SQL, sql } from "drizzle-orm";
 import db, { type Transaction } from "@/database";
+import type {
+  BillingAttribution,
+  PricedBillingUsage,
+} from "@/utils/billable-usage";
 
 /**
  * The reads and writes of a model cost backfill over `interactions`.
@@ -42,11 +46,7 @@ class InteractionCostBackfillModel {
     });
   }
 
-  /**
-   * Totals for the requests a backfill over [since, until) would recompute,
-   * plus how many in that window are excluded because an enforced cost limit
-   * already settled them.
-   */
+  /** Totals for the requests a backfill over [since, until) would recompute. */
   static async getWindowTotals(params: {
     scope: BackfillScope;
     since: Date;
@@ -54,22 +54,16 @@ class InteractionCostBackfillModel {
     longContextThreshold: number | null;
   }): Promise<CostWindowTotals> {
     return withStatementTimeout(PREVIEW_STATEMENT_TIMEOUT_MS, async (tx) => {
-      // One pass over the model's window: each row probes its own receipt,
-      // instead of a second query reading every receipt of every model.
-      const open = sql`b.interaction_id is null`;
       const result = await tx.execute<CostWindowRow>(sql`
         select
-          count(*) filter (where ${open})::integer as requests,
-          count(*) filter (where ${open} and i.billing_mode = 'subscription')::integer as subscription_requests,
-          count(distinct i.user_id) filter (where ${open})::integer as users,
-          ${tieredTokenSums(params.longContextThreshold, open)},
-          coalesce(sum(i.cost) filter (where ${open}), 0)::text as recorded_cost,
-          count(*) filter (where not ${open})::integer as settled_requests,
-          ${tieredMaxTokens(params.longContextThreshold, open)}
+          count(*)::integer as requests,
+          count(*) filter (where i.billing_mode = 'subscription')::integer as subscription_requests,
+          count(distinct i.user_id)::integer as users,
+          ${tieredTokenSums(params.longContextThreshold)},
+          coalesce(sum(i.cost), 0)::text as recorded_cost,
+          ${tieredMaxTokens(params.longContextThreshold, sql`true`)}
         from interactions i
-        left join interaction_billing b
-          on b.interaction_id = i.id and ${ENFORCE_RECEIPT}
-        where ${matches(params.scope)}
+        where ${eligible(params.scope)}
           and i.created_at >= ${toUtcTimestamp(params.since)}::timestamp
           and i.created_at < ${toUtcTimestamp(params.until)}::timestamp`);
       const row = result.rows[0];
@@ -79,7 +73,6 @@ class InteractionCostBackfillModel {
         users: row.users,
         recordedCost: Number(row.recorded_cost),
         tokens: toTieredTokenSums(row),
-        settledRequests: row.settled_requests,
         // Each count's largest value per tier, from whichever request:
         // together they bound what any one request of that tier is charged.
         largestRequestBound: {
@@ -108,11 +101,18 @@ class InteractionCostBackfillModel {
     // Aliased created_at_text, not created_at: an output column named
     // created_at would capture the ORDER BY and turn the index walk into a
     // sort of the whole range.
+    // A settled request is recomputed from its receipt, which holds every
+    // billed component and the budgets it was charged to.
     const result = await db.execute<CostBackfillDbRow>(sql`
       select i.id, i.created_at::text as created_at_text,
         i.input_tokens, i.output_tokens, i.cache_read_tokens,
-        i.cache_write_tokens, i.cache_write_1h_tokens
+        i.cache_write_tokens, i.cache_write_1h_tokens,
+        b.usage as receipt_usage, b.entities as receipt_entities,
+        b.billing_mode as receipt_billing_mode,
+        b.created_at::text as receipt_created_at
       from interactions i
+      left join interaction_billing b
+        on b.interaction_id = i.id and ${ENFORCE_RECEIPT}
       where ${eligible(scope)}
         and ${start}
         and i.created_at < ${toUtcTimestamp(until)}::timestamp
@@ -126,6 +126,14 @@ class InteractionCostBackfillModel {
       cacheReadTokens: row.cache_read_tokens,
       cacheWriteTokens: row.cache_write_tokens,
       cacheWrite1hTokens: row.cache_write_1h_tokens,
+      receipt: row.receipt_usage
+        ? {
+            usage: row.receipt_usage,
+            entities: row.receipt_entities,
+            billingMode: row.receipt_billing_mode ?? "metered",
+            createdAt: row.receipt_created_at ?? row.created_at_text,
+          }
+        : null,
     }));
   }
 
@@ -176,8 +184,82 @@ class InteractionCostBackfillModel {
           ))
         )
       returning i.id`);
-    return result.rows.length;
+    const changed = new Set(result.rows.map((row) => row.id));
+
+    const receipts = rows.flatMap((row) =>
+      row.receipt ? [{ id: row.id, ...row.receipt }] : [],
+    );
+    if (receipts.length > 0) {
+      const receiptValues = sql.join(
+        receipts.map(
+          (receipt) =>
+            sql`(${receipt.id}::uuid, ${JSON.stringify(receipt.usage)}::jsonb)`,
+        ),
+        sql`, `,
+      );
+      const updated = await tx.execute<{ id: string }>(sql`
+        update interaction_billing b set usage = v.usage
+        from (values ${receiptValues}) as v(id, usage)
+        where b.interaction_id = v.id and b.usage is distinct from v.usage
+        returning b.interaction_id as id`);
+      for (const row of updated.rows) changed.add(row.id);
+      await applyBudgetCorrections(
+        receipts.flatMap((receipt) => receipt.budgetChanges),
+        tx,
+      );
+    }
+    return changed.size;
   }
+}
+
+/**
+ * Move each corrected charge into the spend limits the request was charged
+ * to, while the window it was charged in is still current. A limit whose
+ * window has since reset no longer holds the charge, so it is left alone.
+ * Limits are locked in id order, like settlement and resets.
+ */
+async function applyBudgetCorrections(
+  changes: BudgetCorrection[],
+  tx: Transaction,
+): Promise<void> {
+  if (changes.length === 0) return;
+  const values = sql.join(
+    changes.map(
+      (change) =>
+        sql`(${change.chargedAt}::timestamp, ${JSON.stringify(change.entities)}::jsonb, ${change.model}::text, ${change.costDelta}::numeric, ${change.estimatedDelta}::integer)`,
+    ),
+    sql`, `,
+  );
+  const matched = sql`
+    changes(charged_at, entities, model, cost_delta, estimated_delta) as (values ${values}),
+    matched as (
+      select l.id as limit_id, c.model,
+        sum(c.cost_delta) as cost_delta,
+        sum(c.estimated_delta)::integer as estimated_delta
+      from changes c
+      cross join lateral jsonb_to_recordset(c.entities)
+        as e("entityType" text, "entityId" text)
+      join limits l
+        on l.entity_type = e."entityType" and l.entity_id = e."entityId"
+      where l.limit_type = 'token_cost'
+        and l.cleanup_interval <> 'minute'
+        and (l.model is null or l.model = '[]'::jsonb or l.model @> to_jsonb(c.model))
+        and c.charged_at >= coalesce(l.last_cleanup, l.created_at)
+      group by l.id, c.model
+    )`;
+  await tx.execute(sql`
+    with ${matched}
+    select l.id from limits l
+    where l.id in (select limit_id from matched)
+    order by l.id
+    for no key update`);
+  await tx.execute(sql`
+    with ${matched}
+    update limit_billing_usage u set
+      cost = greatest(u.cost + m.cost_delta, 0),
+      incomplete = greatest(u.incomplete + m.estimated_delta, 0)
+    from matched m
+    where u.limit_id = m.limit_id and u.model = m.model`);
 }
 
 export default InteractionCostBackfillModel;
@@ -220,7 +302,6 @@ export interface CostWindowTotals {
   users: number;
   recordedCost: number;
   tokens: TieredTokenSums;
-  settledRequests: number;
   /** Token counts no single request of each tier in the window exceeds. */
   largestRequestBound: TieredTokenSums;
 }
@@ -237,6 +318,17 @@ export interface CostBackfillRow extends BatchCursor {
   cacheReadTokens: number | null;
   cacheWriteTokens: number | null;
   cacheWrite1hTokens: number | null;
+  /** The settlement receipt of a request charged to its budgets. */
+  receipt: SettledReceipt | null;
+}
+
+export interface SettledReceipt {
+  usage: PricedBillingUsage;
+  /** Null on receipts settled before the charged budgets were recorded. */
+  entities: BillingAttribution["entities"] | null;
+  billingMode: string;
+  /** `created_at::text`: when the request was charged. */
+  createdAt: string;
 }
 
 export interface RecomputedCost {
@@ -245,6 +337,22 @@ export interface RecomputedCost {
   cost: string;
   cacheCost: string | null;
   cacheSavings: string | null;
+  /** The re-priced receipt and the corrections to the budgets it charged. */
+  receipt?: {
+    usage: PricedBillingUsage;
+    budgetChanges: BudgetCorrection[];
+  };
+}
+
+/** One model's change in a charge, for the budgets that hold it. */
+export interface BudgetCorrection {
+  chargedAt: string;
+  entities: BillingAttribution["entities"];
+  model: string;
+  /** Signed decimal string with 10 places. */
+  costDelta: string;
+  /** -1 when the charge stops being estimated, +1 when it starts. */
+  estimatedDelta: number;
 }
 
 // ===
@@ -318,20 +426,9 @@ const TIERS: Tier[] = ["base", "long"];
  * - this model, from this provider (the interaction type's prefix);
  * - not media requests (images, audio): their cost comes from the media
  *   tariffs, never from this model's per-token prices;
- * - with some recorded usage, since there is nothing to price otherwise;
- * - not settled by an enforced cost limit: that receipt is the authoritative
- *   charge, and limit balances and statistics read it instead of the row.
+ * - with some recorded usage, since there is nothing to price otherwise.
  */
 function eligible(scope: BackfillScope): SQL {
-  return sql`${matches(scope)}
-    and not exists (
-      select 1 from interaction_billing b
-      where b.interaction_id = i.id and ${ENFORCE_RECEIPT}
-    )`;
-}
-
-/** {@link eligible} without the settled-receipt check. */
-function matches(scope: BackfillScope): SQL {
   return sql`i.model = ${scope.modelId}
     and split_part(i.type, ':', 1) = ${scope.provider}
     and i.type not like '%:audio'
@@ -408,7 +505,6 @@ type CostWindowRow = TokenSumColumns &
     subscription_requests: number;
     users: number;
     recorded_cost: string;
-    settled_requests: number;
   };
 
 interface CostBackfillDbRow extends Record<string, unknown> {
@@ -419,4 +515,8 @@ interface CostBackfillDbRow extends Record<string, unknown> {
   cache_read_tokens: number | null;
   cache_write_tokens: number | null;
   cache_write_1h_tokens: number | null;
+  receipt_usage: PricedBillingUsage | null;
+  receipt_entities: BillingAttribution["entities"] | null;
+  receipt_billing_mode: string | null;
+  receipt_created_at: string | null;
 }

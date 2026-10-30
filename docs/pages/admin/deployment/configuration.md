@@ -581,11 +581,6 @@ These variables set each provider's deployment-wide endpoint and authentication.
 
 ## LLM Proxy
 
-- **`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE`** - Controls settlement of provider billing components, including advisor and compaction inference.
-  - Default: `off`
-  - Values: `off` (legacy accounting), `shadow` (record candidate charges while applying legacy usage), `enforce` (apply settled charges to budgets and reports)
-  - Set it on both web and worker pods. Requests retain their starting mode.
-
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual keys per provider API key.
   - Default: `10`
   - See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
@@ -795,6 +790,11 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: unset (the editor takes free text)
   - Values: comma-separated namespaces, for example `staging,production`
 
+- **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`** - Cluster resolver addresses that [environment](/docs/admin/environments) egress policies allow DNS to.
+  - Default: unset (Archestra reads the `kube-system/kube-dns` Service, which the Helm chart grants access to)
+  - Values: comma-separated IP addresses, for example `172.20.0.10`
+  - Set it when the resolver is not the `kube-dns` Service, such as NodeLocal DNSCache, or when Archestra cannot read that Service.
+
 - **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN`** - Cluster DNS domain used to build in-cluster Service addresses.
   - Default: `cluster.local`
 
@@ -985,7 +985,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Default: `52428800` (50 MiB), equal to the [`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`](/docs/admin/deployment/configuration#ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT) default
   - Chat still stores a larger attachment; it is not staged in the sandbox.
 
-- **`ARCHESTRA_SKILLS_SANDBOX_HEADLESS_RETENTION_DAYS`** - Days a sandbox from a run without a conversation, such as an A2A task, is kept after its last activity before it is deleted. Files it exported are kept. `0` keeps them forever.
+- **`ARCHESTRA_SKILLS_SANDBOX_HEADLESS_RETENTION_DAYS`** - Days a sandbox from a run without a conversation, such as an A2A task, is kept after its last command, upload or skill mount before it is deleted. Files it exported are kept. `0` keeps them forever.
   - Default: `7`
 
 - **`ARCHESTRA_DAGGER_RUNTIME_CLI_BIN`** - Path to the Dagger CLI executable used by the sandbox.

@@ -92,31 +92,9 @@ describe("calculateInteractionCosts pricing quote", () => {
     });
   });
 
-  test("ordinary and enforce modes record the same amounts", async () => {
-    await makeModel("long-model", { ...BASE_PRICES, ...LONG_PRICES });
-    for (const inputTokens of [600, 601]) {
-      const ordinary = await costs(mixedUsage(inputTokens), "long-model");
-      const enforced = await costs(mixedUsage(inputTokens), "long-model", {
-        usageAccountingMode: "enforce",
-      });
-      expect(enforced.billingUsage?.status).toBe("complete");
-      expectAmounts(enforced, {
-        actualCost: ordinary.actualCost ?? Number.NaN,
-        cacheCost: ordinary.cacheCost ?? Number.NaN,
-        cacheSavings: ordinary.cacheSavings ?? Number.NaN,
-      });
-      expect(enforced.cacheReadSavings).toBeCloseTo(
-        ordinary.cacheReadSavings ?? Number.NaN,
-        10,
-      );
-    }
-  });
-
   test("configured long prices over a default base are not an estimate", async () => {
     await makeModel("long-only", LONG_PRICES);
-    const result = await costs(mixedUsage(601), "long-only", {
-      usageAccountingMode: "enforce",
-    });
+    const result = await costs(mixedUsage(601), "long-only");
     expect(result.billingUsage?.components[0].prices.source).toBe("custom");
     expect(result.billingUsage?.issues).toEqual([]);
     expect(result.actualCost).toBeCloseTo(0.006966, 10);
@@ -129,9 +107,7 @@ describe("calculateInteractionCosts pricing quote", () => {
       promptPricePerToken: "0.000001",
       completionPricePerToken: "0.000002",
     });
-    const result = await costs(mixedUsage(601), "custom-long", {
-      usageAccountingMode: "enforce",
-    });
+    const result = await costs(mixedUsage(601), "custom-long");
     expect(result.billingUsage?.components[0].prices).toEqual({
       input: "6.00",
       output: "22.50",
@@ -161,9 +137,7 @@ describe("calculateInteractionCosts pricing quote", () => {
       },
       "executor",
     );
-    const result = await costs(usage, "executor", {
-      usageAccountingMode: "enforce",
-    });
+    const result = await costs(usage, "executor");
     const [executor, advisor] = result.billingUsage?.components ?? [];
     expect([executor.prices.input, advisor.prices.input]).toEqual([
       "3.00",
@@ -236,15 +210,19 @@ describe("calculateInteractionCosts pricing quote", () => {
       usage,
       providerName: "openrouter",
     });
-    expect(result).toEqual({
-      billingUsage: undefined,
+    expect(result).toMatchObject({
       actualCost: 0.0123,
       cacheCost: undefined,
       cacheSavings: undefined,
       cacheReadSavings: undefined,
     });
-    // Nothing needed a local price, so no pricing quote was resolved.
-    expect(usage.billingQuote).toBeUndefined();
+    // The provider's charge is authoritative: settled as reported, not estimated.
+    expect(result.billingUsage).toMatchObject({
+      status: "complete",
+      issues: [],
+      cost: "0.0123000000",
+      components: [{ prices: { source: "provider" } }],
+    });
   });
 
   test("records no costs when the provider reported no usage", async () => {
@@ -328,41 +306,35 @@ describe("smart-tier baseline", () => {
       ],
       "openai",
     );
-    for (const usageAccountingMode of [undefined, "enforce"] as const) {
-      const usage: UsageView = { inputTokens: 1000, outputTokens: 0 };
-      const result = await calculateInteractionCosts({
-        actualModel: "instance-smart",
-        usage,
-        providerName: "openai",
+    const usage: UsageView = { inputTokens: 1000, outputTokens: 0 };
+    const result = await calculateInteractionCosts({
+      actualModel: "instance-smart",
+      usage,
+      providerName: "openai",
+      providerApiKeyId: key.id,
+      autoRouting: autoRouting("instance-smart", {
+        provider: "openai",
         providerApiKeyId: key.id,
-        usageAccountingMode,
-        autoRouting: autoRouting("instance-smart", {
-          provider: "openai",
-          providerApiKeyId: key.id,
-        }),
-      });
-      expect(result.actualCost).toBeCloseTo(0.004, 10);
-      expect(Number(result.baseline?.cost)).toBeCloseTo(0.004, 10);
-    }
+      }),
+    });
+    expect(result.actualCost).toBeCloseTo(0.004, 10);
+    expect(Number(result.baseline?.cost)).toBeCloseTo(0.004, 10);
   });
 
   test("a smart model priced only by its long-context group is a known baseline above the threshold", async () => {
     await makeModel("cheap", BASE_PRICES);
     await makeModel("long-only-smart", LONG_PRICES);
-    for (const usageAccountingMode of [undefined, "enforce"] as const) {
-      const usage = mixedUsage(601);
-      const result = await costs(usage, "cheap", {
-        usageAccountingMode,
-        autoRouting: autoRouting("long-only-smart"),
-      });
-      const row = record(usage, "cheap", result);
-      expect(row.baselineModel).toBe("long-only-smart");
-      // 601*6 + 100*22.5 + 300*0.6 + 60*7.5 + 40*12
-      expect(Number(row.baselineCost)).toBeCloseTo(0.006966, 10);
-    }
+    const usage = mixedUsage(601);
+    const result = await costs(usage, "cheap", {
+      autoRouting: autoRouting("long-only-smart"),
+    });
+    const row = record(usage, "cheap", result);
+    expect(row.baselineModel).toBe("long-only-smart");
+    // 601*6 + 100*22.5 + 300*0.6 + 60*7.5 + 40*12
+    expect(Number(row.baselineCost)).toBeCloseTo(0.006966, 10);
   });
 
-  test("prices the smart model with its own quote on the same usage in both modes", async () => {
+  test("prices the smart model with its own quote on the same usage", async () => {
     await makeModel("cheap", {
       customPricePerMillionInput: "1",
       customPricePerMillionOutput: "2",
@@ -370,22 +342,19 @@ describe("smart-tier baseline", () => {
       customPricePerMillionCacheWrite: "1.25",
     });
     await makeModel("smart", { ...BASE_PRICES, ...LONG_PRICES });
-    for (const usageAccountingMode of [undefined, "enforce"] as const) {
-      const usage = mixedUsage(601);
-      const result = await costs(usage, "cheap", {
-        usageAccountingMode,
-        autoRouting: autoRouting("smart"),
-      });
-      const row = record(usage, "cheap", result);
-      expect(row.baselineModel).toBe("smart");
-      // The smart model's long-context quote: see the threshold test.
-      expect(Number(row.baselineCost)).toBeCloseTo(0.006966, 10);
-      // 601*1 + 100*2 + 300*0.1 + 60*1.25 + 40*2
-      expect(Number(row.cost)).toBeCloseTo(0.000986, 10);
-    }
+    const usage = mixedUsage(601);
+    const result = await costs(usage, "cheap", {
+      autoRouting: autoRouting("smart"),
+    });
+    const row = record(usage, "cheap", result);
+    expect(row.baselineModel).toBe("smart");
+    // The smart model's long-context quote: see the threshold test.
+    expect(Number(row.baselineCost)).toBeCloseTo(0.006966, 10);
+    // 601*1 + 100*2 + 300*0.1 + 60*1.25 + 40*2
+    expect(Number(row.cost)).toBeCloseTo(0.000986, 10);
   });
 
-  test("in enforce mode reprices executor components reported under a dated model id and keeps advisor prices", async () => {
+  test("reprices executor components reported under a dated model id and keeps advisor prices", async () => {
     const cheap = {
       customPricePerMillionInput: "1",
       customPricePerMillionOutput: "2",
@@ -415,7 +384,6 @@ describe("smart-tier baseline", () => {
     );
 
     const result = await costs(usage, "cheap", {
-      usageAccountingMode: "enforce",
       autoRouting: autoRouting("smart"),
     });
 
@@ -427,16 +395,13 @@ describe("smart-tier baseline", () => {
 
   test("falls back to the actual model when the smart model has no price", async () => {
     await makeModel("cheap", BASE_PRICES);
-    for (const usageAccountingMode of [undefined, "enforce"] as const) {
-      const usage = mixedUsage(600);
-      const result = await costs(usage, "cheap", {
-        usageAccountingMode,
-        autoRouting: autoRouting("unpriced-smart"),
-      });
-      const row = record(usage, "cheap", result);
-      expect(row.baselineModel).toBe("cheap");
-      expect(row.baselineCost).toBe(row.cost);
-    }
+    const usage = mixedUsage(600);
+    const result = await costs(usage, "cheap", {
+      autoRouting: autoRouting("unpriced-smart"),
+    });
+    const row = record(usage, "cheap", result);
+    expect(row.baselineModel).toBe("cheap");
+    expect(row.baselineCost).toBe(row.cost);
   });
 
   test("without routing context the baseline is the model actually used", async () => {

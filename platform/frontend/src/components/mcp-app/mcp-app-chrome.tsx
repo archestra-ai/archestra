@@ -59,25 +59,39 @@ const iconClasses = (size: McpAppButtonSize) =>
 function McpAppIconButton({
   icon: Icon,
   label,
+  title = label,
   onClick,
   size = "sm",
+  active = false,
+  ariaBusy = false,
+  iconClassName,
 }: {
   icon: LucideIcon;
   label: string;
+  title?: string;
   onClick: () => void;
   size?: McpAppButtonSize;
+  active?: boolean;
+  ariaBusy?: boolean;
+  iconClassName?: string;
 }) {
   return (
     <Button
       type="button"
       onClick={onClick}
       aria-label={label}
-      title={label}
+      aria-busy={ariaBusy || undefined}
+      data-state={active ? "active" : undefined}
+      title={title}
       variant="ghost"
       size={size === "bar" ? "icon-sm" : "icon-xs"}
-      className="text-muted-foreground"
+      className={cn(
+        "text-muted-foreground transition-all duration-150 active:scale-90",
+        active &&
+          "bg-accent text-foreground ring-1 ring-border/80 hover:bg-accent",
+      )}
     >
-      <Icon className={iconClasses(size)} />
+      <Icon className={cn(iconClasses(size), iconClassName)} />
     </Button>
   );
 }
@@ -85,16 +99,26 @@ function McpAppIconButton({
 export function McpAppRefreshButton({
   onClick,
   size = "sm",
+  isReloading = false,
 }: {
   onClick: () => void;
   size?: McpAppButtonSize;
+  isReloading?: boolean;
 }) {
   return (
     <McpAppIconButton
       icon={RefreshCw}
       label="Reload app"
+      title={isReloading ? "Reloading app…" : "Reload app"}
       onClick={onClick}
       size={size}
+      active={isReloading}
+      ariaBusy={isReloading}
+      iconClassName={
+        isReloading
+          ? "animate-spin text-foreground [animation-duration:650ms]"
+          : undefined
+      }
     />
   );
 }

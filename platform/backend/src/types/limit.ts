@@ -240,6 +240,12 @@ export const LimitWithUsageSchema = SelectLimitSchema.extend({
     })
     .optional(),
   labels: z.array(LabelWithDetailsSchema),
+  estimatedUsage: z
+    .boolean()
+    .optional()
+    .describe(
+      "Spend limits only: part of the spend is estimated because a model had no price for some of the tokens a request used.",
+    ),
   modelUsage: z
     .array(
       z.object({

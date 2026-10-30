@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "v1.5.0-rc.13"
+    "version": "v1.5.0-rc.15"
   },
   "components": {
     "schemas": {
@@ -116498,6 +116498,7 @@
                 "knowledgeFile.bulk_deleted",
                 "limit.created",
                 "limit.updated",
+                "limit.reset",
                 "limit.deleted",
                 "limit.bulk_deleted",
                 "llmModel.updated",
@@ -116846,6 +116847,7 @@
                                   "knowledgeFile.bulk_deleted",
                                   "limit.created",
                                   "limit.updated",
+                                  "limit.reset",
                                   "limit.deleted",
                                   "limit.bulk_deleted",
                                   "llmModel.updated",
@@ -117830,6 +117832,7 @@
                             "knowledgeFile.bulk_deleted",
                             "limit.created",
                             "limit.updated",
+                            "limit.reset",
                             "limit.deleted",
                             "limit.bulk_deleted",
                             "llmModel.updated",
@@ -196581,6 +196584,9 @@
                           "spent": {
                             "type": "number"
                           },
+                          "estimatedUsage": {
+                            "type": "boolean"
+                          },
                           "percent": {
                             "nullable": true,
                             "type": "number"
@@ -196634,6 +196640,7 @@
                           "cleanupInterval",
                           "models",
                           "spent",
+                          "estimatedUsage",
                           "percent",
                           "status",
                           "customLimitId",
@@ -386683,6 +386690,10 @@
                           "additionalProperties": false
                         }
                       },
+                      "estimatedUsage": {
+                        "description": "Spend limits only: part of the spend is estimated because a model had no price for some of the tokens a request used.",
+                        "type": "boolean"
+                      },
                       "modelUsage": {
                         "type": "array",
                         "items": {
@@ -387642,6 +387653,10 @@
                         "additionalProperties": false
                       }
                     },
+                    "estimatedUsage": {
+                      "description": "Spend limits only: part of the spend is estimated because a model had no price for some of the tokens a request used.",
+                      "type": "boolean"
+                    },
                     "modelUsage": {
                       "type": "array",
                       "items": {
@@ -388003,9 +388018,6 @@
                       "calendar_month"
                     ]
                   },
-                  "lastCleanup": {
-                    "nullable": true
-                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -388035,6 +388047,13 @@
                         "value"
                       ]
                     }
+                  },
+                  "lastCleanup": {
+                    "type": "string",
+                    "nullable": true,
+                    "enum": [
+                      null
+                    ]
                   }
                 }
               }
@@ -388691,6 +388710,390 @@
         "x-required-permissions": {
           "kind": "dynamic",
           "note": "Requires `llmLimit:delete`, or a session-authenticated team admin deleting a limit on their own team.",
+          "permissions": []
+        }
+      }
+    },
+    "/api/limits/{id}/reset": {
+      "post": {
+        "operationId": "resetLimitUsage",
+        "tags": [
+          "Limits"
+        ],
+        "description": "Reset a spend limit's current window to $0, so the requests it blocks run again. Cost reports keep the past spend. A calendar interval keeps its schedule. A rolling interval next resets one interval from now.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:update`, or a session-authenticated team admin resetting a limit on their own team.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "entityType": {
+                      "type": "string",
+                      "enum": [
+                        "organization",
+                        "team",
+                        "agent",
+                        "user",
+                        "virtual_key",
+                        "environment",
+                        "llm_oauth_client"
+                      ]
+                    },
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "limitType": {
+                      "type": "string",
+                      "enum": [
+                        "token_cost",
+                        "requests",
+                        "tokens",
+                        "requests_per_minute",
+                        "tokens_per_minute",
+                        "mcp_server_calls",
+                        "tool_calls"
+                      ]
+                    },
+                    "limitValue": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "behavior": {
+                      "type": "string",
+                      "enum": [
+                        "hard",
+                        "soft"
+                      ]
+                    },
+                    "mcpServerName": {
+                      "nullable": true,
+                      "type": "string",
+                      "maxLength": 255
+                    },
+                    "toolName": {
+                      "nullable": true,
+                      "type": "string",
+                      "maxLength": 255
+                    },
+                    "model": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reason": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teamManaged": {
+                      "type": "boolean",
+                      "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                    },
+                    "cleanupInterval": {
+                      "type": "string",
+                      "enum": [
+                        "minute",
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
+                      ]
+                    },
+                    "lastCleanup": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "entityType",
+                    "entityId",
+                    "limitType",
+                    "limitValue",
+                    "behavior",
+                    "mcpServerName",
+                    "toolName",
+                    "teamManaged",
+                    "lastCleanup",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:update`, or a session-authenticated team admin resetting a limit on their own team.",
           "permissions": []
         }
       }
@@ -393262,11 +393665,6 @@
                         },
                         "recomputedCost": {
                           "type": "number"
-                        },
-                        "settledRequests": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991
                         }
                       },
                       "required": [
@@ -393274,8 +393672,7 @@
                         "subscriptionRequests",
                         "users",
                         "recordedCost",
-                        "recomputedCost",
-                        "settledRequests"
+                        "recomputedCost"
                       ],
                       "additionalProperties": false
                     }
@@ -393537,7 +393934,7 @@
         "tags": [
           "LLM Models"
         ],
-        "description": "Recompute the recorded cost of a model's past requests from `since` (all of them when null) at its current prices. Runs in the background; poll the GET endpoint for progress. Requests settled under an enforced cost limit keep their cost.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Recompute the recorded cost of a model's past requests from `since` (all of them when null) at its current prices. Runs in the background; poll the GET endpoint for progress. It also re-prices each request's settled receipt and corrects the spend limits whose current window holds the charge.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -395134,13 +395531,17 @@
                               },
                               "currentUsage": {
                                 "type": "number"
+                              },
+                              "estimatedUsage": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
                               "limitValue",
                               "cleanupInterval",
                               "limitId",
-                              "currentUsage"
+                              "currentUsage",
+                              "estimatedUsage"
                             ],
                             "additionalProperties": false
                           }
@@ -395965,13 +396366,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     },
@@ -396633,13 +397038,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     }
@@ -397415,13 +397824,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     },
@@ -436566,13 +436979,17 @@
                               },
                               "currentUsage": {
                                 "type": "number"
+                              },
+                              "estimatedUsage": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
                               "limitValue",
                               "cleanupInterval",
                               "limitId",
-                              "currentUsage"
+                              "currentUsage",
+                              "estimatedUsage"
                             ],
                             "additionalProperties": false
                           },
@@ -437467,13 +437884,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     },
@@ -438205,13 +438626,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     },
@@ -439021,13 +439446,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     },
@@ -556081,13 +556510,17 @@
                               },
                               "currentUsage": {
                                 "type": "number"
+                              },
+                              "estimatedUsage": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
                               "limitValue",
                               "cleanupInterval",
                               "limitId",
-                              "currentUsage"
+                              "currentUsage",
+                              "estimatedUsage"
                             ],
                             "additionalProperties": false
                           }
@@ -556963,13 +557396,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     }
@@ -557520,13 +557957,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     }
@@ -558228,13 +558669,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     }

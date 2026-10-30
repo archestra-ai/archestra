@@ -36,7 +36,6 @@ test("nonstream media failures persist unknown usage instead of inventing zero c
     throw new Error("Missing upstream port");
   config.llm.azure.baseUrl = `http://127.0.0.1:${address.port}/openai/v1`;
   config.llmProxy.plugins = [];
-  config.llmProxy.usageAccountingMode = "off";
   const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
   const user = await makeUser();
   await makeMember(user.id, agent.organizationId);

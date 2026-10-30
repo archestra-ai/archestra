@@ -112,6 +112,17 @@ let modelRequests = 0;
 const routerPush = vi.fn();
 
 const server = setupServer(
+  http.get(`${API_ORIGIN}/api/llm-models/:modelId/cost-backfill`, () =>
+    HttpResponse.json(null),
+  ),
+  http.post(`${API_ORIGIN}/api/llm-models/:modelId/cost-backfill/preview`, () =>
+    HttpResponse.json({
+      availability: "available",
+      instancePriced: false,
+      days: [],
+      window: null,
+    } satisfies archestraApiTypes.PreviewModelCostBackfillResponses["200"]),
+  ),
   http.get(`${API_ORIGIN}/api/llm-models`, () => {
     modelRequests += 1;
     return HttpResponse.json(keyCreated ? [model] : []);

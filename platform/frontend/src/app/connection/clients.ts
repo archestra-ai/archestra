@@ -575,7 +575,7 @@ claude`,
     proxy: {
       kind: "unsupported",
       reason:
-        "ChatGPT uses OpenAI's model service and does not expose a custom LLM proxy endpoint. This connection provides MCP tools only; Codex setup is separate.",
+        "Plugin archives do not configure inference. Local ChatGPT Work supports separate native model-gateway configuration; cloud chats and dots do not inherit that local setting.",
     },
   },
   {

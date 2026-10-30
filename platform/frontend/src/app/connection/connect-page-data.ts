@@ -476,10 +476,13 @@ export function useConnectPageData({
   }, [listedTools, preview?.tokenCount]);
   const partsFor = (client: ConnectClient): ConnectChoices => ({
     tools: toolsAvailable,
-    skills: skillsAvailable && client.id !== "chatgpt",
+    skills: skillsAvailable,
     proxy: proxyAvailable && client.proxy.kind !== "unsupported",
     // Plugins come with the installer; other agents set themselves up.
-    plugins: !usesGenericInstructions(client) && pluginsFor(client).length > 0,
+    plugins:
+      client.id !== "chatgpt" &&
+      !usesGenericInstructions(client) &&
+      pluginsFor(client).length > 0,
   });
 
   const [origin, setOrigin] = useState("");

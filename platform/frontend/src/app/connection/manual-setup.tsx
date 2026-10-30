@@ -57,6 +57,7 @@ export interface ManualStep {
 export function useManualSteps(
   client: ConnectClient | null,
   data: ConnectPageData,
+  includeSkills = true,
 ): ManualStep[] {
   const marketplaceVisible = useSkillsMarketplaceVisible(client);
   const skillsVisible = data.skillsEnabled && marketplaceVisible;
@@ -68,10 +69,10 @@ export function useManualSteps(
     return [
       {
         key: "mcp",
-        title: "Connect ChatGPT's tools",
+        title: "Install the ChatGPT plugin",
         content: (
           <ChatgptGatewaySetup
-            client={client}
+            includeSkills={data.skillsEnabled && includeSkills}
             gateway={data.partsFor(client).tools ? gateway : null}
             baseUrl={baseUrl}
           />

@@ -1,32 +1,46 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { ChatgptGatewaySetup } from "./chatgpt-gateway-setup";
-import { CONNECT_CLIENTS } from "./clients";
 
 vi.mock("@/lib/hooks/use-app-name");
-
-const client = CONNECT_CLIENTS.find((candidate) => candidate.id === "chatgpt");
-if (!client) throw new Error("ChatGPT client missing");
+vi.mock("@/lib/auth/auth.query");
 const props = {
-  client,
   gateway: { id: "gateway-id", slug: "team-gateway", name: "Team gateway" },
   baseUrl: "https://gateway.example.test/v1",
 };
 
-beforeEach(() => vi.mocked(useAppName).mockReturnValue("Example Platform"));
+function wrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <QueryClientProvider client={new QueryClient()}>
+      {children}
+    </QueryClientProvider>
+  );
+}
 
-it("copies the selected gateway without credentials and updates after a gateway change", async () => {
+beforeEach(() => {
+  vi.mocked(useAppName).mockReturnValue("Example Platform");
+  vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+    typeof useHasPermissions
+  >);
+});
+
+it("updates the packaged endpoint after changing gateways and keeps advanced copy collapsed", async () => {
   const user = userEvent.setup();
-  const write = vi.spyOn(navigator.clipboard, "writeText");
-  const { rerender } = render(<ChatgptGatewaySetup {...props} />);
+  const { rerender } = render(<ChatgptGatewaySetup {...props} />, { wrapper });
   expect(
-    screen.getByText(/Connect Example Platform's MCP tools/),
+    screen.getByRole("button", { name: "Download ChatGPT plugin" }),
   ).toBeVisible();
-  expect(screen.queryByRole("tab", { name: "Static token" })).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Copy to clipboard" }));
-  expect(write).toHaveBeenLastCalledWith(
+  expect(screen.queryByLabelText("Gateway HTTPS URL")).toBeNull();
+  await user.click(
+    screen.getByRole("button", {
+      name: "Connection options and model routing",
+    }),
+  );
+  expect(screen.getByLabelText("Gateway HTTPS URL")).toHaveValue(
     "https://gateway.example.test/v1/mcp/team-gateway",
   );
   rerender(
@@ -35,24 +49,19 @@ it("copies the selected gateway without credentials and updates after a gateway 
       gateway={{ id: "other-id", name: "Other gateway" }}
     />,
   );
-  expect(screen.queryByText(/\/mcp\/team-gateway/)).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Copy to clipboard" }));
-  await user.click(screen.getByRole("button", { name: "Copy to clipboard" }));
-  expect(write).toHaveBeenLastCalledWith(
+  expect(screen.getByLabelText("Gateway HTTPS URL")).toHaveValue(
     "https://gateway.example.test/v1/mcp/other-id",
   );
-  expect(write).toHaveBeenCalledTimes(3);
 });
 
-it("removes setup actions when the gateway becomes unavailable", () => {
-  const { rerender } = render(<ChatgptGatewaySetup {...props} />);
+it("removes download actions when the gateway becomes unavailable", () => {
+  const { rerender } = render(<ChatgptGatewaySetup {...props} />, { wrapper });
   rerender(<ChatgptGatewaySetup {...props} gateway={null} />);
   expect(screen.getByText("No MCP gateway available")).toBeVisible();
   expect(
-    screen.queryByRole("button", { name: "Copy to clipboard" }),
+    screen.queryByRole("button", { name: "Download ChatGPT plugin" }),
   ).toBeNull();
   expect(
     screen.queryByRole("link", { name: "Open ChatGPT Plugins" }),
   ).toBeNull();
-  expect(screen.queryByText(/\/mcp\/team-gateway/)).toBeNull();
 });

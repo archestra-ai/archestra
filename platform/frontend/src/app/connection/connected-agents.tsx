@@ -469,8 +469,9 @@ function DisconnectSteps(props: DisconnectStepsProps) {
         <h3 className="font-medium">Remove the plugin connection in ChatGPT</h3>
         <p className="text-muted-foreground">
           Open ChatGPT Plugins and remove the gateway's plugin connection. Also
-          remove it from any dot that uses it. This setup added no local
-          configuration, shared skills, or startup scripts to this computer.
+          remove it from any dot that uses it. Remove the uploaded plugin to
+          remove its bundled skills too. This setup added no local provider
+          configuration or startup scripts.
         </p>
         {props.revoke}
       </DialogBody>

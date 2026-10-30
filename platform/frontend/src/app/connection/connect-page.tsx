@@ -194,8 +194,7 @@ export function ConnectPage() {
   const routed = parts.proxy && choices.proxy;
   const servers = choices.tools ? data.servers : [];
   const tools = choices.tools ? data.totalTools : 0;
-  const skills =
-    data.skillsEnabled && client.id !== "chatgpt" ? skillsSorted : [];
+  const skills = data.skillsEnabled ? skillsSorted : [];
   const plugins = parts.plugins
     ? data.keptPlugins(client, picks.pluginIds)
     : [];
@@ -766,7 +765,11 @@ function ConnectArea({
                 : `Copy each block into ${nameOf(client)}, top to bottom.`}
             </span>
           </div>
-          <ManualSteps client={client} data={data} />
+          <ManualSteps
+            client={client}
+            data={data}
+            includeSkills={choices.skills}
+          />
         </div>
       ) : (
         <>
@@ -988,7 +991,9 @@ function currentStep(client: ConnectClient, setup: SetupMode): string {
   const name = nameOf(client);
   switch (setup) {
     case "manual":
-      return `Follow the steps for ${name}`;
+      return client.id === "chatgpt"
+        ? "Install the ChatGPT plugin"
+        : `Follow the steps for ${name}`;
     case "script":
       return "Run the command in your terminal";
     case "download":
@@ -1045,11 +1050,19 @@ function StepHeading({ step }: { step: string }) {
 function ManualSteps({
   client,
   data,
+  includeSkills,
 }: {
   client: ConnectClient;
   data: ConnectPageData;
+  includeSkills: boolean;
 }) {
-  const steps = useManualSteps(client, data);
+  const steps = useManualSteps(client, data, includeSkills);
+  if (client.id === "chatgpt")
+    return (
+      <div className="mt-4 rounded-2xl border bg-background p-6">
+        {steps[0]?.content}
+      </div>
+    );
   if (steps.length === 0)
     return (
       <p className="mt-4 rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">
@@ -1123,9 +1136,11 @@ function guardrailsStatus(
       tone: "warn",
       label: "Not enforced",
       detail:
-        client.proxy.kind === "unsupported"
-          ? `Guardrails work through the LLM proxy, and ${client.label} sends its model requests to its own service, so its tool calls aren't checked against the policy.`
-          : `Guardrails work through the LLM proxy, and it's off for ${client.label}, so its tool calls aren't checked against the policy.`,
+        client.id === "chatgpt"
+          ? "This plugin does not configure model routing, so it cannot establish LLM proxy guardrail enforcement. Local Work needs separate provider configuration."
+          : client.proxy.kind === "unsupported"
+            ? `Guardrails work through the LLM proxy, and ${client.label} sends its model requests to its own service, so its tool calls aren't checked against the policy.`
+            : `Guardrails work through the LLM proxy, and it's off for ${client.label}, so its tool calls aren't checked against the policy.`,
     };
   if (GUARDRAILS_NATIVE.has(client.id))
     return {
@@ -1214,7 +1229,7 @@ function ProfileCard({
   // Servers and skills show whenever the org offers them, even empty, so
   // the card keeps its shape; then they say so in place of a list. Plugins
   // only show once this agent has one.
-  const skillsOn = data.skillsEnabled && client.id !== "chatgpt";
+  const skillsOn = data.skillsEnabled;
   const pluginsOn = data.partsFor(client).plugins;
   const proxyOn = data.partsFor(client).proxy;
   const guardrailsDocsUrl = getFrontendDocsUrl(
@@ -1233,13 +1248,16 @@ function ProfileCard({
   const status: StatusItem[] = [];
   // The LLM proxy's real state for this agent: the admin setting, whether
   // the agent can use a custom model endpoint, then the user's choice.
-  const proxyReason = !data.llmProxyEnabled
-    ? `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`
-    : client.proxy.kind === "unsupported"
-      ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
-      : !routed
-        ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
-        : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
+  const proxyReason =
+    client.id === "chatgpt" && client.proxy.kind === "unsupported"
+      ? client.proxy.reason
+      : !data.llmProxyEnabled
+        ? `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`
+        : client.proxy.kind === "unsupported"
+          ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
+          : !routed
+            ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
+            : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
   status.push({
     id: "routing",
     icon: (
@@ -1254,7 +1272,9 @@ function ProfileCard({
     state: !data.llmProxyEnabled
       ? "Not active"
       : !proxyOn
-        ? "Not supported"
+        ? client.id === "chatgpt"
+          ? "Separate setup"
+          : "Not supported"
         : choices.proxy
           ? "On"
           : "Off",

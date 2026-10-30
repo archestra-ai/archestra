@@ -117,6 +117,17 @@ function mount() {
 }
 
 describe("RuntimeTemplateSection", () => {
+  it("keeps sparse legacy saved positions ahead of unpositioned built-ins", async () => {
+    settings.popularAgentOverrides = { codex: { position: 3 } };
+    mount();
+    const list = await screen.findByRole("list", { name: "Agent Runtimes" });
+    await waitFor(() =>
+      expect(within(list).getAllByRole("listitem")[0]).toHaveTextContent(
+        "Codex",
+      ),
+    );
+  });
+
   it("refreshes after a conflict and lets Cancel start the next edit from the latest revision", async () => {
     mount();
     const user = userEvent.setup();

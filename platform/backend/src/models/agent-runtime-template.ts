@@ -1,7 +1,7 @@
 import type { PopularAgentOverrides } from "@archestra/shared";
 import { ApiError } from "@archestra/shared";
 import { eq } from "drizzle-orm";
-import { schema, type Transaction, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { Organization } from "@/types";
 import type {
   RuntimeTemplateEditorSettings,
@@ -12,36 +12,6 @@ import OrganizationModel from "./organization";
 import SecretModel from "./secret";
 
 class AgentRuntimeTemplateModel {
-  // Private platform configuration uses the same encrypted database store as
-  // ChatOps configuration. The organization row serializes first writes too.
-  private static secretName(organizationId: string) {
-    return `agent-runtime-templates:${organizationId}`;
-  }
-
-  private static async readStoredSettings(
-    organizationId: string,
-    tx: Transaction,
-  ) {
-    const row = await SecretModel.findByName(
-      AgentRuntimeTemplateModel.secretName(organizationId),
-      tx,
-    );
-    return row
-      ? RuntimeTemplateSettingsSchema.parse(row.secret)
-      : { revision: 0, templates: [] };
-  }
-
-  private static async writeStoredSettings(
-    organizationId: string,
-    settings: RuntimeTemplateSettings,
-    tx: Transaction,
-  ) {
-    const name = AgentRuntimeTemplateModel.secretName(organizationId);
-    const row = await SecretModel.findByName(name, tx);
-    if (row) await SecretModel.update(row.id, { secret: settings }, tx);
-    else await SecretModel.create({ name, secret: settings }, tx);
-  }
-
   static async getSettings(
     organizationId: string,
   ): Promise<RuntimeTemplateEditorSettings> {
@@ -152,6 +122,18 @@ class AgentRuntimeTemplateModel {
     return organization;
   }
 
+  /** Delete ciphertext directly; cleanup must also work when an encryption key is unavailable. */
+  static async deleteForOrganization(organizationId: string): Promise<void> {
+    await db
+      .delete(schema.secretsTable)
+      .where(
+        eq(
+          schema.secretsTable.name,
+          AgentRuntimeTemplateModel.secretName(organizationId),
+        ),
+      );
+  }
+
   static async findByIdForAudit(organizationId: string) {
     const settings =
       await AgentRuntimeTemplateModel.getSettings(organizationId);
@@ -171,6 +153,36 @@ class AgentRuntimeTemplateModel {
         },
       })),
     };
+  }
+
+  // Private platform configuration uses the same encrypted database store as
+  // ChatOps configuration. The organization row serializes first writes too.
+  private static secretName(organizationId: string) {
+    return `agent-runtime-templates:${organizationId}`;
+  }
+
+  private static async readStoredSettings(
+    organizationId: string,
+    tx: Transaction,
+  ) {
+    const row = await SecretModel.findByName(
+      AgentRuntimeTemplateModel.secretName(organizationId),
+      tx,
+    );
+    return row
+      ? RuntimeTemplateSettingsSchema.parse(row.secret)
+      : { revision: 0, templates: [] };
+  }
+
+  private static async writeStoredSettings(
+    organizationId: string,
+    settings: RuntimeTemplateSettings,
+    tx: Transaction,
+  ) {
+    const name = AgentRuntimeTemplateModel.secretName(organizationId);
+    const row = await SecretModel.findByName(name, tx);
+    if (row) await SecretModel.update(row.id, { secret: settings }, tx);
+    else await SecretModel.create({ name, secret: settings }, tx);
   }
 }
 

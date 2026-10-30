@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  runtimeTemplatePosition,
   useResolveRuntimeTemplate,
   useRuntimeTemplateCatalog,
 } from "@/lib/agent-runtime-templates.query";
@@ -176,10 +177,11 @@ export function useAvailableAgentCatalogTemplates() {
             ),
         ].sort((a, b) => {
           const position = (id: string) =>
-            custom.data?.find((item) => item.id === id)?.position ??
-            organization.popularAgentOverrides?.[id as AgentCatalogId]
-              ?.position ??
-            AGENT_CATALOG_IDS.indexOf(id as AgentCatalogId);
+            runtimeTemplatePosition(
+              id,
+              custom.data ?? [],
+              organization.popularAgentOverrides,
+            );
           return position(a.id) - position(b.id);
         })
       : [];

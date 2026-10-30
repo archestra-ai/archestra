@@ -191,6 +191,20 @@ async function ready() {
 }
 
 describe("popular agent configuration", () => {
+  it("preserves sparse saved positions in the creation catalog and runtime picker", async () => {
+    organization.popularAgentOverrides = { codex: { position: 3 } };
+    renderFlow();
+    await screen.findByRole("button", { name: /Claude Code / });
+    const section = screen
+      .getByRole("heading", { name: "Agent Runtimes Beta" })
+      .closest("section");
+    if (!section) throw new Error("Missing catalog section");
+    expect(within(section).getAllByRole("button")[0]).toHaveTextContent(
+      "Codex",
+    );
+    expect(screen.getAllByRole("radio")[1]).toHaveAccessibleName("Codex");
+  });
+
   it("revalidates restored settings without relying on a catalog elsewhere on the page", async () => {
     const previousClient = new QueryClient();
     previousClient.setQueryData(organizationKeys.details(), organization);

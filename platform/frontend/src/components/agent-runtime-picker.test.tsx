@@ -84,6 +84,55 @@ beforeEach(() => {
 });
 
 describe("AgentRuntimePicker", () => {
+  it("keeps a custom template's icon in its summary and editing choices", async () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    const runtime = {
+      ...defaultAgentRuntime(),
+      image: "registry.example.com/team:v1",
+    };
+    server.use(
+      http.get("http://localhost:9000/api/agent-runtime-templates", () =>
+        HttpResponse.json([
+          {
+            id,
+            name: "Team workspace",
+            description: "Team tools",
+            icon: "🧰",
+            hidden: false,
+            position: 0,
+            image: runtime.image,
+          },
+        ]),
+      ),
+    );
+    server.use(
+      http.get("http://localhost:9000/api/teams", () =>
+        HttpResponse.json({
+          data: [],
+          pagination: { currentPage: 1, limit: 100, total: 0, totalPages: 0 },
+        }),
+      ),
+    );
+    const props = {
+      selectedId: id,
+      value: runtime,
+      onSelect: vi.fn(),
+      onChange: vi.fn(),
+      modelBlock: <div>Model settings</div>,
+      modelSummary: "Model settings",
+    };
+    const view = render(
+      <AgentRuntimePicker {...props} onChangeTemplate={vi.fn()} />,
+      { wrapper: QueryWrapper },
+    );
+    expect(await screen.findByText("🧰")).toBeVisible();
+    view.rerender(<AgentRuntimePicker {...props} />);
+    expect(
+      await screen.findByRole("radio", { name: "Team workspace" }),
+    ).toBeChecked();
+    expect(screen.getByText("🧰")).toBeVisible();
+  });
+
   it("replaces the complete runtime when switching harnesses and removes it for the native platform agent", async () => {
     const user = userEvent.setup();
     await renderPicker("claude-code", {

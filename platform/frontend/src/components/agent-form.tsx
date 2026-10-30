@@ -3749,7 +3749,12 @@ export function AgentForm({
             agentType === "agent" &&
             runtimeEditable &&
             !isBuiltIn && (
-              <div className={cn(!isActiveSection("runtime") && "hidden")}>
+              <div
+                className={cn(
+                  "space-y-6",
+                  !isActiveSection("runtime") && "hidden",
+                )}
+              >
                 {!canConfigureRuntime && (
                   <InlineNotice variant="info">
                     <InfoIcon className="size-4 shrink-0" />

@@ -18,6 +18,7 @@ import {
   type LucideIcon,
   MessageSquareText,
   Plus,
+  RotateCcw,
   ShieldCheck,
   Trash2,
   User,
@@ -35,6 +36,7 @@ import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { EnvironmentSelector } from "@/components/environment-selector";
+import { EstimatedSpendBadge } from "@/components/estimated-spend-badge";
 import {
   CollectionFilters,
   FilterBar,
@@ -100,6 +102,7 @@ import {
   useCreateLimit,
   useDeleteLimit,
   useLimits,
+  useResetLimitUsage,
   useUpdateLimit,
 } from "@/lib/limits.query";
 import { useTeamLimitAccess } from "@/lib/limits-access";
@@ -307,6 +310,7 @@ export default function LimitsPage() {
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
   const deleteLimit = useDeleteLimit();
+  const resetLimitUsage = useResetLimitUsage();
   const bulkDeleteLimits = useBulkDeleteLimits();
 
   const {
@@ -336,6 +340,7 @@ export default function LimitsPage() {
   const labelsFilter = searchParams.get("labels") || "";
   const selectedLabels = useSelectedLabels();
   const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
+  const [limitToReset, setLimitToReset] = useState<LimitData | null>(null);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [formState, setFormState] =
@@ -730,8 +735,8 @@ export default function LimitsPage() {
       {
         id: "actions",
         header: "Actions",
-        size: 100,
-        minSize: 80,
+        size: 130,
+        minSize: 110,
         cell: ({ row }) => {
           const locked = access.isLocked(row.original);
           const lockedState = locked
@@ -752,6 +757,20 @@ export default function LimitsPage() {
                   ...lockedState,
                   onClick: () => openEditDialog(row.original),
                 },
+                ...(isResettableLimit(row.original)
+                  ? [
+                      {
+                        icon: <RotateCcw className="h-4 w-4" />,
+                        label: "Reset usage",
+                        permissions:
+                          locked || access.allows("update", row.original)
+                            ? {}
+                            : { llmLimit: ["update"] },
+                        ...lockedState,
+                        onClick: () => setLimitToReset(row.original),
+                      },
+                    ]
+                  : []),
                 {
                   icon: <Trash2 className="h-4 w-4" />,
                   label: "Delete limit",
@@ -871,6 +890,15 @@ export default function LimitsPage() {
     if (!limitToDelete) return;
     await deleteLimit.mutateAsync({ id: limitToDelete.id });
     setLimitToDelete(null);
+  }
+
+  function handleReset() {
+    if (!limitToReset) return;
+    // A failed reset keeps the dialog open so it can be retried.
+    resetLimitUsage.mutate(
+      { id: limitToReset.id },
+      { onSuccess: () => setLimitToReset(null) },
+    );
   }
 
   const validAmount =
@@ -1626,6 +1654,35 @@ export default function LimitsPage() {
       </FormDialog>
 
       <DeleteConfirmDialog
+        open={!!limitToReset}
+        onOpenChange={(open) => !open && setLimitToReset(null)}
+        title={
+          limitToReset
+            ? `Reset usage for ${getEntityLabel(limitToReset)}?`
+            : "Reset usage?"
+        }
+        description={
+          <span className="block space-y-2">
+            {limitToReset && (
+              <span className="block">
+                {`Spend goes from ${formatLimitAmount(limitToReset, getUsageStatus(limitToReset).actualUsage, 2)} back to $0, so requests this limit blocks run again. Cost reports keep the past usage.`}
+              </span>
+            )}
+            <span className="block">
+              {limitToReset &&
+              isCalendarCleanupInterval(getLimitInterval(limitToReset))
+                ? "The next automatic reset stays on schedule."
+                : "The next automatic reset is one interval from now."}
+            </span>
+          </span>
+        }
+        isPending={resetLimitUsage.isPending}
+        onConfirm={handleReset}
+        confirmVariant="default"
+        confirmLabel="Reset usage"
+        pendingLabel="Resetting..."
+      />
+      <DeleteConfirmDialog
         open={!!limitToDelete}
         onOpenChange={(open) => !open && setLimitToDelete(null)}
         title="Delete limit"
@@ -1731,6 +1788,13 @@ function addCleanupInterval(
     case "calendar_month":
       return getNextCalendarResetDate(next, cleanupInterval);
   }
+}
+
+/** Spend limits on an hourly or longer window can be started over by hand. */
+function isResettableLimit(limit: LimitData): boolean {
+  return (
+    limit.limitType === "token_cost" && getLimitInterval(limit) !== "minute"
+  );
 }
 
 function isCalendarCleanupInterval(
@@ -2010,6 +2074,7 @@ function LimitUsage({
             {status}
           </p>
         )}
+        {limit.estimatedUsage && <EstimatedSpendBadge />}
       </div>
       <p className="truncate text-xs text-muted-foreground">
         {CLEANUP_INTERVAL_LABELS[cleanupInterval]}

@@ -257,6 +257,7 @@ export function EditManagedOAuthClientDialog({
             }
             capLocked={!!oauthClient.spendCap && !canManageLimits}
             currentUsage={oauthClient.spendCap?.currentUsage ?? null}
+            estimatedUsage={oauthClient.spendCap?.estimatedUsage ?? false}
           />
         </div>
       )}

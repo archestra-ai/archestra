@@ -17,7 +17,6 @@ import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import OpenAI from "openai";
 import { afterEach, beforeEach, vi } from "vitest";
-import config from "@/config";
 import db from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
@@ -257,9 +256,8 @@ describe("Responses upstream failures", () => {
     makeUser,
   }) => {
     // A text-only turn releases `response.completed` as it arrives; usage
-    // settles only afterwards, and in enforce mode its failure still ends the
-    // stream with an error.
-    config.llmProxy.usageAccountingMode = "enforce";
+    // settles only afterwards, and its failure still ends the stream with an
+    // error.
     upstreamEvents = [...STREAM_START, COMPLETED_TERMINAL];
     await db.execute(
       sql`ALTER TABLE interaction_billing ADD CONSTRAINT reject_test_settlement CHECK (false)`,

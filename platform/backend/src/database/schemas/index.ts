@@ -228,6 +228,7 @@ export {
   openappaPolicyTestSuitesTable,
 } from "./openappa-policy-tests";
 export { openappaYellsTable } from "./openappa-yell";
+export { default as orgTrioPendingNormalTierTable } from "./org-trio-pending-normal-tier";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as pluginsTable } from "./plugin";

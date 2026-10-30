@@ -306,7 +306,6 @@ export default function AgentSettingsPage() {
                     onSelectKey={(value) => {
                       setSelectedApiKeyId(value);
                       setDefaultModel("");
-                      setTiers(EMPTY_MODEL_TIERS);
                       setApiKeySelectorOpen(false);
                     }}
                     triggerVariant="select"
@@ -336,8 +335,6 @@ export default function AgentSettingsPage() {
                   />
                   {selectedApiKey && defaultModel && (
                     <ModelTierPickers
-                      apiKeyId={selectedApiKey.id}
-                      provider={selectedApiKey.provider}
                       value={tiers}
                       onChange={setTiers}
                       disabled={isSaving || !hasPermission}

@@ -12,6 +12,7 @@ import { createXai } from "@ai-sdk/xai";
 import type { InteractionSource } from "@archestra/shared";
 import {
   APP_ID_HEADER,
+  AUTO_ROUTABLE_HEADER,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
@@ -218,6 +219,8 @@ export function createLLMModel(params: {
   chatApiKeyId?: string;
   /** The model pool the chat was set to; see MODEL_POOL_ID_HEADER. */
   modelPoolId?: string | null;
+  /** The call may be auto routed; see AUTO_ROUTABLE_HEADER. */
+  autoRoutable?: boolean;
   /**
    * Encrypted chat key. Forwarded so the proxy can store this
    * interaction's content encrypted under it instead of redacting it. The
@@ -296,6 +299,9 @@ export function createLLMModel(params: {
   if (params.modelPoolId) {
     clientHeaders[MODEL_POOL_ID_HEADER] = params.modelPoolId;
   }
+  if (params.autoRoutable) {
+    clientHeaders[AUTO_ROUTABLE_HEADER] = "true";
+  }
   // App runtime completions attribute their spend to the calling app; the proxy
   // re-validates this against the executing agent's organization.
   if (appId) {
@@ -350,6 +356,8 @@ export async function createLLMModelForAgent(params: {
   agentLlmApiKeyId?: string | null;
   /** The conversation's model pool; its turns go to the pool's members. */
   modelPoolId?: string | null;
+  /** No pool or explicit tier: the call may be auto routed. */
+  autoRoutable?: boolean;
   /**
    * Encrypted chat key, forwarded to the proxy so this turn's
    * interaction content is stored encrypted rather than redacted.
@@ -508,6 +516,7 @@ export async function createLLMModelForAgent(params: {
     baseUrl,
     chatApiKeyId,
     modelPoolId: params.modelPoolId,
+    autoRoutable: params.autoRoutable,
     encryptedChatKey: params.encryptedChatKey,
     appaSubagentToken: params.appaSubagentToken,
     supportedEndpoints,

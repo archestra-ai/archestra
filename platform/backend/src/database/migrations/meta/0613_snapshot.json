@@ -1,5 +1,5 @@
 {
-  "id": "4e3d0e4c-51f3-4682-9d8a-642357055ddf",
+  "id": "ff571b73-9331-41b8-9af2-6ce99b4b8be3",
   "prevId": "fb9b5ce8-a94a-4526-856c-43f085c7477c",
   "version": "7",
   "dialect": "postgresql",
@@ -3555,12 +3555,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "runtime_limits": {
-          "name": "runtime_limits",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "attention_state": {
           "name": "attention_state",
           "type": "text",
@@ -4640,18 +4634,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "fast_model_id": {
-          "name": "fast_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "smart_model_id": {
-          "name": "smart_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "auto_routing_enabled": {
           "name": "auto_routing_enabled",
           "type": "boolean",
@@ -4662,24 +4644,6 @@
         "auto_routing_budget_usd_per_day": {
           "name": "auto_routing_budget_usd_per_day",
           "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "auto_routing_fast_model_id": {
-          "name": "auto_routing_fast_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "auto_routing_normal_model_id": {
-          "name": "auto_routing_normal_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "auto_routing_smart_model_id": {
-          "name": "auto_routing_smart_model_id",
-          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -4963,86 +4927,6 @@
           ],
           "isUnique": false,
           "where": "\"agents\".\"model_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agents_fast_model_id_idx": {
-          "name": "agents_fast_model_id_idx",
-          "columns": [
-            {
-              "expression": "fast_model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"agents\".\"fast_model_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agents_smart_model_id_idx": {
-          "name": "agents_smart_model_id_idx",
-          "columns": [
-            {
-              "expression": "smart_model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"agents\".\"smart_model_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agents_auto_routing_fast_model_id_idx": {
-          "name": "agents_auto_routing_fast_model_id_idx",
-          "columns": [
-            {
-              "expression": "auto_routing_fast_model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"agents\".\"auto_routing_fast_model_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agents_auto_routing_normal_model_id_idx": {
-          "name": "agents_auto_routing_normal_model_id_idx",
-          "columns": [
-            {
-              "expression": "auto_routing_normal_model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"agents\".\"auto_routing_normal_model_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agents_auto_routing_smart_model_id_idx": {
-          "name": "agents_auto_routing_smart_model_id_idx",
-          "columns": [
-            {
-              "expression": "auto_routing_smart_model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"agents\".\"auto_routing_smart_model_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -5410,71 +5294,6 @@
           "tableTo": "model_pools",
           "columnsFrom": [
             "model_pool_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_fast_model_id_models_id_fk": {
-          "name": "agents_fast_model_id_models_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "models",
-          "columnsFrom": [
-            "fast_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_smart_model_id_models_id_fk": {
-          "name": "agents_smart_model_id_models_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "models",
-          "columnsFrom": [
-            "smart_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_auto_routing_fast_model_id_models_id_fk": {
-          "name": "agents_auto_routing_fast_model_id_models_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "models",
-          "columnsFrom": [
-            "auto_routing_fast_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_auto_routing_normal_model_id_models_id_fk": {
-          "name": "agents_auto_routing_normal_model_id_models_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "models",
-          "columnsFrom": [
-            "auto_routing_normal_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_auto_routing_smart_model_id_models_id_fk": {
-          "name": "agents_auto_routing_smart_model_id_models_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "models",
-          "columnsFrom": [
-            "auto_routing_smart_model_id"
           ],
           "columnsTo": [
             "id"
@@ -21143,6 +20962,76 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.org_trio_pending_normal_tier": {
+      "name": "org_trio_pending_normal_tier",
+      "schema": "",
+      "columns": {
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "normal_model_id": {
+          "name": "normal_model_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "api_key_id": {
+          "name": "api_key_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "auto_routing_was_enabled": {
+          "name": "auto_routing_was_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expected_default_model_id": {
+          "name": "expected_default_model_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expected_default_llm_api_key_id": {
+          "name": "expected_default_llm_api_key_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "moved": {
+          "name": "moved",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "org_trio_pending_normal_tier_organization_id_organization_id_fk": {
+          "name": "org_trio_pending_normal_tier_organization_id_organization_id_fk",
+          "tableFrom": "org_trio_pending_normal_tier",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.organization_role": {
       "name": "organization_role",
       "schema": "",
@@ -21752,12 +21641,6 @@
         },
         "default_network_policy": {
           "name": "default_network_policy",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "agent_runtime_tiers": {
-          "name": "agent_runtime_tiers",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

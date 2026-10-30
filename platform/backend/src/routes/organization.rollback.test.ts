@@ -465,14 +465,14 @@ describe("organization routes", () => {
       });
     });
 
-    test("rejects a tier the default key does not serve", async ({
+    test("accepts tiers on other providers than the default key's", async ({
       makeLlmProviderApiKey,
     }) => {
       const { key, normal } = await setupKey(makeLlmProviderApiKey);
-      const unlinked = await ModelModel.create({
-        externalId: "anthropic/trio-test-unlinked",
-        provider: "anthropic",
-        modelId: "trio-test-unlinked",
+      const otherProvider = await ModelModel.create({
+        externalId: "openai/trio-test-fast",
+        provider: "openai",
+        modelId: "trio-test-fast",
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: true,
@@ -485,11 +485,14 @@ describe("organization routes", () => {
         payload: {
           defaultLlmApiKeyId: key.id,
           defaultModelId: normal.id,
-          defaultFastModelId: unlinked.id,
+          defaultFastModelId: otherProvider.id,
         },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        defaultFastModelId: otherProvider.id,
+      });
     });
 
     test("rejects a tier that cannot call tools", async ({
@@ -510,7 +513,7 @@ describe("organization routes", () => {
       expect(response.statusCode).toBe(400);
     });
 
-    test("rejects tiers without a default key", async ({
+    test("accepts tiers without a default key", async ({
       makeLlmProviderApiKey,
     }) => {
       const { fast } = await setupKey(makeLlmProviderApiKey);
@@ -519,6 +522,16 @@ describe("organization routes", () => {
         method: "PATCH",
         url: "/api/organization/agent-settings",
         payload: { defaultFastModelId: fast.id },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    test("rejects a tier that does not exist", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultSmartModelId: crypto.randomUUID() },
       });
 
       expect(response.statusCode).toBe(400);

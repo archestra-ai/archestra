@@ -1,6 +1,6 @@
 "use client";
 
-import { type UIMessage, useChat } from "@ai-sdk/react";
+import type { UIMessage } from "@ai-sdk/react";
 import {
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
@@ -58,6 +58,7 @@ import { encryptedChatRequestHeaders } from "@/lib/chat/encrypted-chat";
 import { getQueueInterruptBlockedReason } from "@/lib/chat/queue-interrupt";
 import { ResumableChatTransport } from "@/lib/chat/resumable-chat-transport";
 import { readThinkingEffort } from "@/lib/chat/thinking-effort-cache";
+import { useOffStreamChat } from "@/lib/chat/use-off-stream-chat";
 import { useStreamStall } from "@/lib/chat/use-stream-stall";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -215,7 +216,9 @@ export default function ChatSessionHook({
   // Ref to hold sendMessage for use in onFinish callback
   const sendMessageRef = useRef<
     | ((
-        message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0],
+        message: Parameters<
+          ReturnType<typeof useOffStreamChat>["sendMessage"]
+        >[0],
       ) => void)
     | null
   >(null);
@@ -408,7 +411,7 @@ export default function ChatSessionHook({
     clearError,
     addToolResult,
     addToolApprovalResponse,
-  } = useChat({
+  } = useOffStreamChat({
     messages: initialMessages,
     transport,
 
@@ -914,7 +917,7 @@ export default function ChatSessionHook({
       lastAssistantMessageIsCompleteWithApprovalResponses({
         messages: msgs,
       }),
-  } as Parameters<typeof useChat>[0]);
+  } as Parameters<typeof useOffStreamChat>[0]);
 
   latestMessagesRef.current = messages;
   latestStatusRef.current = status;

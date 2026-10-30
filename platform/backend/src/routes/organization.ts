@@ -5,7 +5,6 @@ import {
   agentRuntimeTierProblems,
   CursorQuerySchema,
   createCursorPaginatedResponseSchema,
-  getAgentRuntimeModelCompatibility,
   getArchestraMcpServerName,
   isModelSelectionComplete,
   providerHasEndpointLocalModels,
@@ -25,6 +24,8 @@ import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
 import { getPermissionsForUserContext, isGlobalAdmin } from "@/auth/utils";
+import { describeOrganizationDefaultModel } from "@/auto-routing/organization-default";
+import { writeOrganizationTrio } from "@/auto-routing/settings";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
@@ -51,13 +52,13 @@ import {
   McpServerModel,
   McpToolCallModel,
   MemberModel,
-  ModelModel,
   OrganizationModel,
   OrganizationRoleModel,
   SessionModel,
   ToolModel,
 } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { assertRuntimeAgentsSupportOrganizationDefault } from "@/services/agent-runtime/model-compatibility";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { removeMemberTarget } from "@/services/member-removal";
@@ -71,6 +72,7 @@ import {
   constructResponseSchema,
   KeywordRankingStatusSchema,
   type NetworkPolicy,
+  OrganizationDefaultModelSchema,
   type OrganizationRole,
   SelectOrganizationSchema,
   type TrustedImageRegistries,
@@ -107,6 +109,21 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send(organization);
     },
+  );
+
+  fastify.get(
+    "/api/organization/default-model",
+    {
+      schema: {
+        operationId: RouteId.GetOrganizationDefaultModel,
+        description:
+          "Get the model agents and chats on the organization default run on, and the tiers auto routing routes them across",
+        tags: ["Organization"],
+        response: constructResponseSchema(OrganizationDefaultModelSchema),
+      },
+    },
+    async ({ organizationId }, reply) =>
+      reply.send(await describeOrganizationDefaultModel(organizationId)),
   );
 
   fastify.patch(
@@ -395,7 +412,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (
-        body.defaultLlmApiKeyId !== undefined ||
         body.defaultFastModelId !== undefined ||
         body.defaultSmartModelId !== undefined
       ) {
@@ -409,7 +425,34 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const organization = await OrganizationModel.patch(organizationId, body);
+      // The trio is also auto routing's tiers: a change must keep it routable
+      // and re-plans it, merged and checked against the row under the lock.
+      const trioPatch = {
+        ...(body.defaultFastModelId !== undefined && {
+          fastModelId: body.defaultFastModelId,
+        }),
+        ...(body.defaultModelId !== undefined && {
+          normalModelId: body.defaultModelId,
+        }),
+        ...(body.defaultSmartModelId !== undefined && {
+          smartModelId: body.defaultSmartModelId,
+        }),
+      };
+      const organization =
+        Object.keys(trioPatch).length > 0
+          ? await writeOrganizationTrio({
+              organizationId,
+              patch: trioPatch,
+              write: (tx) =>
+                OrganizationModel.patchInTransaction({
+                  id: organizationId,
+                  data: body,
+                  tx,
+                }),
+            }).finally(() =>
+              OrganizationModel.invalidateSettingsCaches(organizationId),
+            )
+          : await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
@@ -1472,38 +1515,6 @@ async function assertOrganizationDefaultModelSelection(params: {
   ).some(({ model }) => model.id === params.modelId);
   if (!modelIsLinked) {
     throw new ApiError(400, "The default model and API key must be linked");
-  }
-}
-
-async function assertRuntimeAgentsSupportOrganizationDefault(params: {
-  organizationId: string;
-  modelId: string | null;
-}): Promise<void> {
-  if (!params.modelId) return;
-  const [model, agents] = await Promise.all([
-    ModelModel.findById(params.modelId),
-    AgentModel.findRuntimeAgentsInheritingOrganizationDefault(
-      params.organizationId,
-    ),
-  ]);
-  if (!model) {
-    throw new ApiError(404, "Default model not found");
-  }
-  const incompatible = agents.find((agent) => {
-    if (!agent.runtime) return false;
-    return !getAgentRuntimeModelCompatibility({
-      inferenceProtocol: agent.runtime.inferenceProtocol,
-      runtimeCommand: agent.runtime.command,
-      provider: model.provider,
-      modelId: model.modelId,
-      supportedEndpoints: model.supportedEndpoints,
-    }).compatible;
-  });
-  if (incompatible) {
-    throw new ApiError(
-      409,
-      `The proposed default model is incompatible with Agent Runtime Agent "${incompatible.name}". Update that Agent's runtime or choose a compatible default model.`,
-    );
   }
 }
 

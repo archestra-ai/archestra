@@ -1459,6 +1459,27 @@ class AgentModel {
       );
   }
 
+  /** Agents auto routing applies to: no model, key, pool or runtime of their own. */
+  static async countFollowingOrganizationRouting(
+    organizationId: string,
+  ): Promise<number> {
+    const [row] = await db
+      .select({ total: count() })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          isNull(schema.agentsTable.llmApiKeyId),
+          isNull(schema.agentsTable.modelId),
+          isNull(schema.agentsTable.modelPoolId),
+          isNull(schema.agentsTable.runtime),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+    return row?.total ?? 0;
+  }
+
   static async findRuntimeTargets(organizationId: string) {
     return db
       .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
@@ -3359,13 +3380,7 @@ class AgentModel {
     tx?: Transaction,
   ): Promise<Pick<
     Agent,
-    | "id"
-    | "name"
-    | "agentType"
-    | "llmApiKeyId"
-    | "modelId"
-    | "fastModelId"
-    | "smartModelId"
+    "id" | "name" | "agentType" | "llmApiKeyId" | "modelId"
   > | null> {
     const [targetAgent] = await (tx ?? db)
       .select({
@@ -3374,8 +3389,6 @@ class AgentModel {
         agentType: schema.agentsTable.agentType,
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
-        fastModelId: schema.agentsTable.fastModelId,
-        smartModelId: schema.agentsTable.smartModelId,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))

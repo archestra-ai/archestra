@@ -95,6 +95,36 @@ describe("InlineChatError", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps output-limit guidance in slim mode without offering an unchanged retry", () => {
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "incomplete_response",
+              message:
+                "The model reached its output limit before producing a reply.",
+              isRetryable: false,
+            }),
+          )
+        }
+        onRetry={vi.fn()}
+        slimChatErrorUi
+      />,
+    );
+
+    expect(
+      screen.getByText(/stopped before completing a reply/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/try a smaller task/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/increase the output-token limit/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /try again/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows curated error copy in slim mode without a support message", () => {
     render(
       <InlineChatError

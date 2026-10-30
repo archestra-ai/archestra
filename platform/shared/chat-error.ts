@@ -454,7 +454,7 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.UpstreamStalled]:
     "The model stopped sending its reply and timed out. Retrying may help.",
   [ChatErrorCode.IncompleteResponse]:
-    "The model stopped before finishing this reply, so it may be incomplete.",
+    "The model stopped before completing a reply. If it ran out of output space, try a smaller task, lower the reasoning effort, or ask an administrator to increase the output-token limit.",
   [ChatErrorCode.ProviderAuthRequired]:
     "Connect your account to use this model.",
   [ChatErrorCode.ToolsUnsupported]:

@@ -56,8 +56,16 @@ describe("ChatGPT plugin archive", () => {
     const body = await requiredFile(zip, `skills/${skill.name}/SKILL.md`).async(
       "string",
     );
-    expect(body).toContain(`name: ${skill.name}`);
-    expect(body).toContain(skill.content);
+    expect(body).toBe(
+      [
+        "---",
+        `name: ${JSON.stringify(skill.name)}`,
+        `description: ${JSON.stringify(skill.description)}`,
+        "---",
+        "",
+        "Do the thing, carefully.",
+      ].join("\n"),
+    );
     expect(
       await requiredFile(zip, `skills/${skill.name}/assets/example.bin`).async(
         "uint8array",
@@ -75,6 +83,57 @@ describe("ChatGPT plugin archive", () => {
     ).toBe(false);
     expect(body).not.toContain(skill.organizationId);
     expect(result.skillCount).toBe(1);
+  });
+
+  it.each([
+    { description: "", field: "description" },
+    { description: "x".repeat(1025), field: "description" },
+    { compatibility: "x".repeat(501), field: "compatibility" },
+  ])("rejects a nonportable $field without changing the skill", async (fields) => {
+    const { field, ...overrides } = fields;
+    const skill = { ...makeSkillDetail("example"), ...overrides };
+    const original = structuredClone(skill);
+    await expect(
+      buildChatgptPlugin({ ...params, skills: [skill] }),
+    ).rejects.toThrow(new RegExp(`Skill ${skill.name}.*${field}`));
+    expect(skill).toEqual(original);
+  });
+
+  it.each([
+    { label: "absent", compatibility: null, description: "😀" },
+    { label: "empty", compatibility: "", description: "😀".repeat(1024) },
+    {
+      label: "maximum length",
+      compatibility: "😀".repeat(500),
+      description: "😀".repeat(1024),
+    },
+  ])("preserves boundary-length fields with $label compatibility", async ({
+    compatibility,
+    description,
+  }) => {
+    const skill = {
+      ...makeSkillDetail("example"),
+      description,
+      compatibility,
+    };
+    const result = await buildChatgptPlugin({ ...params, skills: [skill] });
+    const zip = await JSZip.loadAsync(result.bytes);
+    const body = await requiredFile(zip, `skills/${skill.name}/SKILL.md`).async(
+      "string",
+    );
+    expect(body).toBe(
+      [
+        "---",
+        `name: ${JSON.stringify(skill.name)}`,
+        `description: ${JSON.stringify(skill.description)}`,
+        ...(compatibility
+          ? [`compatibility: ${JSON.stringify(compatibility)}`]
+          : []),
+        "---",
+        "",
+        skill.content,
+      ].join("\n"),
+    );
   });
 
   it("keeps long deployment names valid and rejects file/directory collisions", async () => {

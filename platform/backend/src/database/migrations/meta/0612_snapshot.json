@@ -1,5 +1,5 @@
 {
-  "id": "d4c306cc-7e0b-4f68-88ae-bee423c00969",
+  "id": "fb9b5ce8-a94a-4526-856c-43f085c7477c",
   "prevId": "ef3e1aee-9459-4fa9-8cf9-c7443e4e5b76",
   "version": "7",
   "dialect": "postgresql",
@@ -19803,25 +19803,25 @@
         },
         "custom_price_per_million_input": {
           "name": "custom_price_per_million_input",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
         "custom_price_per_million_output": {
           "name": "custom_price_per_million_output",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
         "custom_price_per_million_cache_read": {
           "name": "custom_price_per_million_cache_read",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
         "custom_price_per_million_cache_write": {
           "name": "custom_price_per_million_cache_write",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
@@ -19833,55 +19833,25 @@
         },
         "long_context_price_per_million_input": {
           "name": "long_context_price_per_million_input",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
         "long_context_price_per_million_output": {
           "name": "long_context_price_per_million_output",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
         "long_context_price_per_million_cache_read": {
           "name": "long_context_price_per_million_cache_read",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
         "long_context_price_per_million_cache_write": {
           "name": "long_context_price_per_million_cache_write",
-          "type": "numeric(10, 2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "synced_long_context_threshold": {
-          "name": "synced_long_context_threshold",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "synced_long_context_prompt_price_per_token": {
-          "name": "synced_long_context_prompt_price_per_token",
-          "type": "numeric(20, 12)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "synced_long_context_completion_price_per_token": {
-          "name": "synced_long_context_completion_price_per_token",
-          "type": "numeric(20, 12)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "synced_long_context_cache_read_price_per_token": {
-          "name": "synced_long_context_cache_read_price_per_token",
-          "type": "numeric(20, 12)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "synced_long_context_cache_write_price_per_token": {
-          "name": "synced_long_context_cache_write_price_per_token",
-          "type": "numeric(20, 12)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
@@ -19991,10 +19961,6 @@
       },
       "policies": {},
       "checkConstraints": {
-        "models_synced_long_context_pricing_check": {
-          "name": "models_synced_long_context_pricing_check",
-          "value": "(\"models\".\"synced_long_context_threshold\" IS NULL AND num_nonnulls(\"models\".\"synced_long_context_prompt_price_per_token\", \"models\".\"synced_long_context_completion_price_per_token\", \"models\".\"synced_long_context_cache_read_price_per_token\", \"models\".\"synced_long_context_cache_write_price_per_token\") = 0) OR (\"models\".\"synced_long_context_threshold\" IS NOT NULL AND \"models\".\"synced_long_context_threshold\" > 0 AND \"models\".\"synced_long_context_prompt_price_per_token\" IS NOT NULL AND \"models\".\"synced_long_context_completion_price_per_token\" IS NOT NULL)"
-        },
         "models_long_context_pricing_check": {
           "name": "models_long_context_pricing_check",
           "value": "num_nonnulls(\"models\".\"long_context_threshold\", \"models\".\"long_context_price_per_million_input\", \"models\".\"long_context_price_per_million_output\", \"models\".\"long_context_price_per_million_cache_read\", \"models\".\"long_context_price_per_million_cache_write\") IN (0, 5) AND (\"models\".\"long_context_threshold\" IS NULL OR \"models\".\"long_context_threshold\" > 0)"

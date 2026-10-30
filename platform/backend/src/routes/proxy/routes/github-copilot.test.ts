@@ -1200,7 +1200,7 @@ describe("GitHub Copilot long-context accounting", () => {
     expect(Number(refreshed?.syncedLongContextPromptPricePerToken)).toBe(
       0.0000007,
     );
-    expect(refreshed?.customPricePerMillionInput).toBe("0.03");
+    expect(Number(refreshed?.customPricePerMillionInput)).toBe(0.03);
     expect(refreshed?.discoveredViaLlmProxy).toBe(true);
     expect(
       (

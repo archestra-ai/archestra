@@ -110,7 +110,8 @@ function makeSkillListItem(
     scope: "org",
     icon: null,
     description: "",
-    content: `---\nname: ${overrides.name}\ndescription: A demo skill.\n---\n\nDo the thing, carefully.`,
+    // The API returns frontmatter as fields and only the markdown body here.
+    content: "Do the thing, carefully.",
     digest: null,
     latestVersion: 3,
     license: null,

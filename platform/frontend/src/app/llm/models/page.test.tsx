@@ -205,7 +205,7 @@ afterAll(() => {
 });
 
 describe("ModelsPage", () => {
-  it("lets users set, view, and reset cache prices when no cache price is known", async () => {
+  it("round-trips precise price defaults while setting and resetting unknown cache prices", async () => {
     keyCreated = true;
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -216,7 +216,17 @@ describe("ModelsPage", () => {
       archestraApiTypes.GetModelsWithApiKeysResponses["200"][number];
     let currentModel: Omit<PricingModel, "cachePriceSource"> & {
       cachePriceSource: PricingModel["cachePriceSource"] | null;
-    } = { ...model, cachePriceSource: null };
+    } = {
+      ...model,
+      cachePriceSource: null,
+      customPricePerMillionInput: "2.50000000",
+      customPricePerMillionOutput: "0.00600000",
+      longContextThreshold: 200_000,
+      longContextPricePerMillionInput: "10.00000000",
+      longContextPricePerMillionOutput: "99999999.98999998",
+      longContextPricePerMillionCacheRead: "0.00000001",
+      longContextPricePerMillionCacheWrite: "0.00000000",
+    };
     const updates: archestraApiTypes.UpdateModelData["body"][] = [];
     server.use(
       http.get(`${API_ORIGIN}/api/llm-models`, () =>
@@ -250,6 +260,15 @@ describe("ModelsPage", () => {
           currentModel = {
             ...currentModel,
             ...body,
+            // The API returns custom rates padded to the database scale.
+            customPricePerMillionCacheRead:
+              body.customPricePerMillionCacheRead === null
+                ? null
+                : "0.25000000",
+            customPricePerMillionCacheWrite:
+              body.customPricePerMillionCacheWrite === null
+                ? null
+                : "0.00000000",
             cachePriceSource:
               body.customPricePerMillionCacheRead !== null ||
               body.customPricePerMillionCacheWrite !== null
@@ -271,6 +290,15 @@ describe("ModelsPage", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: "Pricing" }));
+    expect(screen.getByLabelText("Input")).toHaveValue("2.50");
+    expect(screen.getByLabelText("Output")).toHaveValue("0.006");
+    expect(screen.getByLabelText("Long input")).toHaveValue("10.00");
+    expect(screen.getByLabelText("Long output")).toHaveValue(
+      "99999999.98999998",
+    );
+    expect(screen.getByLabelText("Long cache read")).toHaveValue("0.00000001");
+    expect(screen.getByLabelText("Long cache write")).toHaveValue("0.00");
+    expect(updates).toHaveLength(0);
     expect(screen.getByLabelText("Cache read")).toHaveValue("");
     expect(screen.getByLabelText("Cache write")).toHaveValue("");
     await user.type(screen.getByLabelText("Cache read"), "0,25");
@@ -288,8 +316,14 @@ describe("ModelsPage", () => {
     await waitFor(() =>
       expect(updates).toEqual([
         expect.objectContaining({
+          customPricePerMillionInput: "2.50",
+          customPricePerMillionOutput: "0.006",
           customPricePerMillionCacheRead: "0.25",
           customPricePerMillionCacheWrite: "0",
+          longContextPricePerMillionInput: "10.00",
+          longContextPricePerMillionOutput: "99999999.98999998",
+          longContextPricePerMillionCacheRead: "0.00000001",
+          longContextPricePerMillionCacheWrite: "0.00",
         }),
       ]),
     );
@@ -305,7 +339,7 @@ describe("ModelsPage", () => {
     );
     await user.click(screen.getByRole("button", { name: "Pricing" }));
     expect(screen.getByLabelText("Cache read")).toHaveValue("0.25");
-    expect(screen.getByLabelText("Cache write")).toHaveValue("0");
+    expect(screen.getByLabelText("Cache write")).toHaveValue("0.00");
     await user.click(screen.getByRole("button", { name: "Reset" }));
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(updates).toHaveLength(2));

@@ -365,8 +365,8 @@ describe("ModelSyncService", () => {
       "openai",
       "gpt-4o",
     );
-    expect(afterNormalSync?.customPricePerMillionInput).toBe("1.00");
-    expect(afterNormalSync?.customPricePerMillionOutput).toBe("2.00");
+    expect(afterNormalSync?.customPricePerMillionInput).toBe("1.00000000");
+    expect(afterNormalSync?.customPricePerMillionOutput).toBe("2.00000000");
     expect(afterNormalSync?.inputModalities).toEqual(["text", "image"]);
     expect(afterNormalSync?.outputModalities).toEqual(["text"]);
 
@@ -1719,7 +1719,7 @@ describe("Copilot registry pricing sync", () => {
     });
     await sync();
     let updated = await ModelModel.findById(row.id);
-    expect(updated?.customPricePerMillionInput).toBe("0.03");
+    expect(Number(updated?.customPricePerMillionInput)).toBe(0.03);
     let prices = ModelModel.getEffectivePricing(
       updated,
       id,

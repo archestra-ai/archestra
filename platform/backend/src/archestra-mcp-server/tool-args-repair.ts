@@ -30,7 +30,7 @@ export function repairStringifiedToolCallArgs<
   };
   let changed = false;
   const repaired = toolCalls.map((call) => {
-    const args = parseJsonRecord(call.arguments);
+    const args = readRunToolArgs(call.arguments);
     if (!args) return call;
     const toolName = params.canonicalize(call.name, call.namespace);
     const dispatch = resolveRunToolDispatch({ toolName, args });
@@ -100,18 +100,5 @@ function expectsParsedValue(issue: z.core.$ZodIssue, value: object): boolean {
       );
     default:
       return false;
-  }
-}
-
-function parseJsonRecord(text: string): Record<string, unknown> | undefined {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return typeof parsed === "object" &&
-      parsed !== null &&
-      !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : undefined;
-  } catch {
-    return undefined;
   }
 }

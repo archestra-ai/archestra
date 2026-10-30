@@ -1412,7 +1412,7 @@ describe("an answer that ruled nothing", () => {
     await recordHitlAnswerNotRecorded({
       session: active,
       offerId: review.offerId,
-      reason: "unidentifiable_answer",
+      reason: "review_expired",
     });
     await renewHitlReview({ session: active, offerId: review.offerId });
     expect(await stageHitlReview({ session: active, review })).toEqual({

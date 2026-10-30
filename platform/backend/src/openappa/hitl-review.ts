@@ -49,7 +49,6 @@ export type ClosedHitlReviewOutcome = Exclude<
 /** Why the answer to the last approval question ruled nothing. */
 export type HitlAnswerNotRecordedReason =
   | "question_not_issued"
-  | "unidentifiable_answer"
   | "stale_card"
   | "review_expired"
   | "record_failed";
@@ -57,8 +56,6 @@ export type HitlAnswerNotRecordedReason =
 const HITL_ANSWER_NOT_RECORDED_CAUSES = {
   question_not_issued:
     "No approval card was issued for this offer since the last review result: a question tool called directly, or ask_user without this offer ID in remedy_offer_ids, records nothing.",
-  unidentifiable_answer:
-    "The answer to the approval card came back without its call id, so it could not be bound to this review.",
   stale_card:
     "The answer came from an approval card that no longer matched the review.",
   review_expired: "The answer arrived after the review expired.",

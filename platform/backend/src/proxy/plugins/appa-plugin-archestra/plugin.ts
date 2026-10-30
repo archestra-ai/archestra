@@ -262,6 +262,8 @@ type AppaPluginObserver = {
 };
 
 type NativeQuestionClaim = {
+  /** The answer's own result id; answers without one are never claimed. */
+  resultId: string;
   /** Exact server-issued native question, never recovered from client history. */
   askedQuestion?: string;
   offerIds?: string[];
@@ -5530,6 +5532,7 @@ async function claimNativeQuestionResults(params: {
           )
         : undefined;
       verified.set(candidate.result, {
+        resultId: candidate.result.id,
         ...(offerIds && offerIds.length > 0 ? { offerIds } : {}),
         ...(entry.inspectable === true ? { inspectable: true } : {}),
         ...(entry.reviewText === true ? { reviewText: true } : {}),
@@ -5577,13 +5580,13 @@ async function recordNativeHitlRulings(params: {
       const outcome = await recordInspectableHitlAnswer({
         binding: params.binding,
         answer,
+        resultId: claim.resultId,
         offerId: claim.offerIds[0],
         carriedReviewText: claim.reviewText === true,
         // An inspectable claim without its payload digest matches nothing.
         claimDigest: claim.digest ?? "",
         askedQuestion: claim.askedQuestion,
       });
-      // A dropped answer records nothing and advances nothing.
       switch (outcome.kind) {
         case "ruling":
           recorded.push(outcome.ruling);
@@ -5596,13 +5599,6 @@ async function recordNativeHitlRulings(params: {
               claim.offerIds,
               "stale_card",
             );
-          break;
-        case "drop":
-          await noteAnswerNotRecorded(
-            params.binding,
-            claim.offerIds,
-            "unidentifiable_answer",
-          );
           break;
       }
       continue;
@@ -5772,8 +5768,7 @@ type HitlReviewContinuation = {
 
 type InspectableHitlAnswerOutcome =
   | { kind: "ruling"; ruling: RecordedNativeHitlRuling }
-  | { kind: "continued"; continuation: HitlReviewContinuation }
-  | { kind: "drop" };
+  | { kind: "continued"; continuation: HitlReviewContinuation };
 
 /**
  * Reads the answer to a card that offered Inspect. Allow and Deny record the
@@ -5782,31 +5777,20 @@ type InspectableHitlAnswerOutcome =
  * shows the current card again. A known no-answer seals the review as
  * before; an unreadable answer fails closed without the form. A stale
  * answer — a card superseded before its inspection text was delivered, a
- * forged marker — changes nothing. An
- * answer without its own string id is dropped: it rules nothing, and no
- * placeholder id may stand in for it.
+ * forged marker — changes nothing.
  */
 async function recordInspectableHitlAnswer(params: {
   askedQuestion?: string;
   binding: AppaPluginBinding;
   answer: Record<string, unknown>;
+  resultId: string;
   offerId: string;
   carriedReviewText: boolean;
   claimDigest: string;
 }): Promise<InspectableHitlAnswerOutcome> {
   const { binding, offerId } = params;
   const session = binding.session;
-  if (typeof params.answer.id !== "string" || params.answer.id.length === 0) {
-    // An unidentifiable answer claims nothing: no ruling, no continuation,
-    // and nothing cached under a placeholder id it would share with every
-    // other unidentifiable answer.
-    logger.warn(
-      { client: binding.adapter?.id, offerId },
-      "OpenAPPA dropped an unidentifiable answer to a review card",
-    );
-    return { kind: "drop" };
-  }
-  const resultId = params.answer.id;
+  const { resultId } = params;
   const stale: InspectableHitlAnswerOutcome = {
     kind: "continued",
     continuation: { offerId, resultId, selection: "stale" },

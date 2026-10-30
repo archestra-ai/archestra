@@ -9,6 +9,12 @@ archestra:
     kubernetes:
       networkPolicy:
         create: true
+      rbac:
+        # The CI deployer can only write the release namespaces (infra
+        # gke/access-lockdown.tf), so it cannot create the kube-system Role.
+        # GKE does not need it: the backend falls back to the pod's resolv.conf,
+        # and the NetworkPolicy floor allows DNS by kube-dns selector.
+        kubeDnsServiceRead: false
       serviceAccount:
         annotations:
           iam.gke.io/gcp-service-account: archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com

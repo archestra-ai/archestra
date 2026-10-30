@@ -753,6 +753,27 @@ describe("OpenAI realtime sessions through the Model Router", () => {
         .map((event) => (event.error as { code: string }).code),
     ).toEqual(["budget_check_unavailable"]);
     expect(upstreamConnections[1].received).toEqual(["session.update"]);
+
+    // What waits is bounded: past one frame's worth, the session ends and
+    // the held audio goes nowhere.
+    rejectTurnDetectionUpdates = false;
+    sessionCreatedDelayMs = 1_000;
+    const flooded = await open();
+    const floodedClosed = once(flooded, "close");
+    const append = JSON.stringify({
+      type: "input_audio_buffer.append",
+      audio: "A".repeat(9 * 1024 * 1024),
+    });
+    flooded.send(append);
+    flooded.send(append);
+    expect((await floodedClosed)[0]).toBe(1008);
+    expect(events.get(flooded)).toContainEqual(
+      expect.objectContaining({
+        type: "error",
+        error: expect.objectContaining({ code: "session_not_ready" }),
+      }),
+    );
+    expect(upstreamConnections[2].received).toEqual([]);
   });
 
   test("logs every output item of a long reply, however many there are", async ({

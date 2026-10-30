@@ -63,6 +63,8 @@ const HANDSHAKE_TIMEOUT_MS = 15_000;
 const IDLE_TIMEOUT_MS = 30 * 60_000;
 /** How long a budgeted session waits for OpenAI to turn its own responses off. */
 const AUTO_RESPONSE_OFF_TIMEOUT_MS = 15_000;
+/** What a budgeted session holds of the client's frames while it waits. */
+const MAX_HELD_BYTES = MAX_FRAME_BYTES;
 /** The typed text one logged response keeps; longer input is cut and marked. */
 const MAX_LOGGED_INPUT_CHARS = 64 * 1024;
 const INPUT_TRUNCATED = "\n[input truncated]";
@@ -364,10 +366,16 @@ function bridge(params: {
     clearTimeout(idle);
     idle = setTimeout(() => close(1001, "Idle session"), IDLE_TIMEOUT_MS);
   };
+  // Held frames: their size while held, and what lets them go. Once the
+  // session closes they are dropped, not sent.
   let held: NodeJS.Timeout | undefined;
+  let heldBytes: number | undefined;
+  let release = () => {};
+  let closed = false;
   const close = (code: number, reason: string) => {
     clearTimeout(idle);
-    clearTimeout(held);
+    closed = true;
+    release();
     const safeCode =
       code === 1000 || code === 1008 || (code >= 3000 && code <= 4999)
         ? code
@@ -422,11 +430,12 @@ function bridge(params: {
     });
   // Until OpenAI has answered the proxy's update, no client frame goes out:
   // none can start a response unchecked or take that update's reply.
-  let release = () => {};
   if (gated) {
+    heldBytes = 0;
     const ready = new Promise<void>((resolve) => {
       release = () => {
         clearTimeout(held);
+        heldBytes = undefined;
         resolve();
       };
     });
@@ -434,6 +443,7 @@ function bridge(params: {
     enqueue(() => ready);
   }
   const forward = async (data: RawData, isBinary: boolean) => {
+    if (closed) return;
     let frame: RawData | string = data;
     if (!isBinary) {
       const text = data.toString();
@@ -455,6 +465,15 @@ function bridge(params: {
   };
   client.on("message", (data, isBinary) => {
     touch();
+    if (heldBytes !== undefined) {
+      heldBytes += rawDataBytes(data);
+      if (heldBytes > MAX_HELD_BYTES)
+        return refuse({
+          code: "session_not_ready",
+          message: `The session received more than ${MAX_HELD_BYTES / 1024 / 1024} MiB before it could forward any of it.`,
+          reason: "Too much input before the session was ready",
+        });
+    }
     enqueue(() => forward(data, isBinary));
   });
   /** The response OpenAI would have started for a finished spoken turn. */
@@ -941,6 +960,12 @@ function autoResponseOffUpdate(
         },
       }
     : { type: "session.update", session: { turn_detection: turnDetection } };
+}
+
+function rawDataBytes(data: RawData): number {
+  if (Array.isArray(data))
+    return data.reduce((total, part) => total + part.length, 0);
+  return data instanceof ArrayBuffer ? data.byteLength : data.length;
 }
 
 /**

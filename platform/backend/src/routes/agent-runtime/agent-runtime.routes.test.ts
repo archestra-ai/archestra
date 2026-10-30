@@ -1336,6 +1336,150 @@ describe("Agent Runtime routes", () => {
     );
   });
 
+  test("deleting a finished run frees its saved files, and leaves a busy workspace to expire", async () => {
+    const remove = vi
+      .spyOn(agentRuntimeManager, "deleteWorkspace")
+      .mockResolvedValue(undefined);
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(undefined);
+    const idle = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+    });
+    await AgentRunModel.close({ id: idle.id });
+    await createWorkspace({ run: idle, state: "suspended" });
+    const busy = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+    });
+    await AgentRunModel.close({ id: busy.id });
+    await createWorkspace({ run: busy, state: "suspending" });
+
+    for (const run of [idle, busy]) {
+      const deleted = await app.inject({
+        method: "DELETE",
+        url: `/api/agent-runs/${run.taskId}`,
+      });
+      expect(deleted.statusCode).toBe(200);
+      expect(await A2ATaskModel.findById(run.taskId)).toBeNull();
+    }
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(idle.workloadName))?.state,
+    ).toBe("deleted");
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(busy.workloadName))?.state,
+    ).toBe("suspending");
+  });
+
+  test("bulk deletes saved files of the caller's finished runs, keeps their history, and audits the batch", async ({
+    makeAdmin,
+    makeMember,
+  }) => {
+    const remove = vi
+      .spyOn(agentRuntimeManager, "deleteWorkspace")
+      .mockResolvedValue(undefined);
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(undefined);
+    const saved = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Saved review",
+    });
+    await AgentRunModel.close({ id: saved.id, logs: "review transcript" });
+    await createWorkspace({ run: saved, state: "suspended" });
+    const noFiles = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Run without files",
+    });
+    await AgentRunModel.close({ id: noFiles.id });
+    const live = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Live review",
+    });
+    await createWorkspace({ run: live, state: "active", activeTaskId: true });
+    const colleague = await makeAdmin();
+    await makeMember(colleague.id, organizationId, { role: "admin" });
+    const colleagueRun = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: colleague.id,
+    });
+    await AgentRunModel.close({ id: colleagueRun.id });
+    await createWorkspace({
+      run: colleagueRun,
+      state: "suspended",
+      actorId: colleague.id,
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/agent-runs/bulk/workspace",
+      payload: {
+        ids: [saved.taskId, noFiles.taskId, live.taskId, colleagueRun.taskId],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      succeeded: [{ id: saved.taskId, name: "Saved review" }],
+      failed: [
+        {
+          id: noFiles.taskId,
+          name: "Run without files",
+          error: "This run has no saved files",
+        },
+        {
+          id: live.taskId,
+          name: "Live review",
+          error:
+            "Stop the active run and wait for its history to be saved before deleting its files",
+        },
+        { id: colleagueRun.taskId, name: null, error: "Run not found" },
+      ],
+    });
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(saved.workloadName))?.state,
+    ).toBe("deleted");
+    expect((await AgentRunModel.findByTaskId(saved.taskId))?.logs).toBe(
+      "review transcript",
+    );
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(colleagueRun.workloadName))
+        ?.state,
+    ).toBe("suspended");
+
+    const [audit] = await db
+      .select({
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.action, "agentRun.bulk_files_deleted"));
+    const entry = (run: typeof saved, workspaceState: string | null) => ({
+      taskId: run.taskId,
+      title: run.title,
+      workspaceState,
+    });
+    const byTask = (a: { taskId: string }, b: { taskId: string }) =>
+      a.taskId.localeCompare(b.taskId);
+    expect(audit).toEqual({
+      before: {
+        runs: [
+          entry(saved, "suspended"),
+          entry(noFiles, null),
+          entry(live, "active"),
+        ].sort(byTask),
+      },
+      after: {
+        runs: [
+          entry(saved, "deleted"),
+          entry(noFiles, null),
+          entry(live, "active"),
+        ].sort(byTask),
+      },
+    });
+  });
+
   test("preflight distinguishes missing personal credentials from missing shared configuration", async () => {
     const response = await app.inject({
       method: "GET",
@@ -2773,6 +2917,27 @@ describe("Agent Runtime routes", () => {
       agentId,
       state: "TASK_STATE_SUBMITTED",
       stateChangedAt,
+    });
+  }
+
+  async function createWorkspace(params: {
+    run: { taskId: string; workloadName: string; runtimeScope: string };
+    state: "active" | "idle" | "suspending" | "suspended";
+    activeTaskId?: boolean;
+    actorId?: string;
+  }) {
+    return await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: params.actorId ?? user.id,
+      backend: "kubernetes",
+      runtimeScope: params.run.runtimeScope,
+      workloadName: params.run.workloadName,
+      state: params.state,
+      activeTaskId: params.activeTaskId ? params.run.taskId : null,
+      lastTaskId: params.run.taskId,
+      expiresAt: new Date(Date.now() + 3600_000),
     });
   }
 

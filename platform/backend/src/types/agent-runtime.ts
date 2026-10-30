@@ -328,6 +328,10 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
 /** Run metadata shown to Agent managers alongside the runtime state. */
 export const SelectAgentRunListItemSchema = SelectAgentRunSchema.extend({
   initiatorName: z.string().nullable(),
+  /** The run's saved files; null for a run that never had a workspace. */
+  workspace: z
+    .object({ state: AgentWorkspaceStateSchema, expiresAt: z.date() })
+    .nullable(),
   canAttach: z.boolean().optional(),
   /** Who the run is shared with, derived from its permission policy. */
   shareVisibility: z.union([

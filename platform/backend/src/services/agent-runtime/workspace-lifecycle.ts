@@ -5,6 +5,30 @@ import { ApiError } from "@/types";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
 import { cleanupAgentRun } from "./pod-run";
 
+/**
+ * Deletes a finished run's saved files ahead of the run itself, so deleting a
+ * run frees its volume now rather than at its retention deadline. A workspace
+ * a turn still holds, or one changing state, is left to expire as before.
+ */
+export async function deleteFinishedRunWorkspace(params: {
+  actor: A2AActor;
+  run: { taskId: string; workloadName: string };
+}) {
+  const workspace = await AgentWorkspaceModel.findByWorkloadName(
+    params.run.workloadName,
+  );
+  if (
+    !workspace ||
+    workspace.activeTaskId ||
+    !DELETABLE_WORKSPACE_STATES.includes(workspace.state)
+  )
+    return;
+  await deleteAgentWorkspace({
+    actor: params.actor,
+    taskId: params.run.taskId,
+  });
+}
+
 /** Deletion is intentionally separate from cancellation: files are not recoverable. */
 export async function deleteAgentWorkspace(params: {
   actor: A2AActor;
@@ -27,7 +51,7 @@ export async function deleteAgentWorkspace(params: {
   // An old task ID must not tear down a newer turn in the same workspace.
   if (
     workspace.activeTaskId ||
-    !["idle", "suspended", "deleting"].includes(workspace.state)
+    !DELETABLE_WORKSPACE_STATES.includes(workspace.state)
   ) {
     throw new ApiError(
       409,
@@ -74,3 +98,9 @@ export async function deleteAgentWorkspace(params: {
   }
   return { previousState: workspace.state, state: "deleted" as const };
 }
+
+const DELETABLE_WORKSPACE_STATES: readonly string[] = [
+  "idle",
+  "suspended",
+  "deleting",
+];

@@ -54,7 +54,10 @@ import {
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
 import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
-import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
+import {
+  deleteAgentWorkspace,
+  deleteFinishedRunWorkspace,
+} from "@/services/agent-runtime/workspace-lifecycle";
 import {
   ticketPath,
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
@@ -1012,7 +1015,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.DeleteAgentRun,
         description:
-          "Delete one finished Agent Runtime session started by this user",
+          "Delete one finished Agent Runtime session started by this user, with its saved files",
         tags: ["Agents"],
         params: z.object({ taskId: z.string().uuid() }),
         response: constructResponseSchema(
@@ -1032,6 +1035,13 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         title: run.title,
         state: run.state,
       };
+      await deleteFinishedRunWorkspace({
+        actor: {
+          ...actorFromUserId(request.user.id),
+          organizationId: request.organizationId,
+        },
+        run,
+      });
       await A2ATaskModel.delete(run.taskId);
       request.auditAfter = { deleted: true };
       return reply.send({ deleted: true as const });
@@ -1045,7 +1055,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.BulkDeleteAgentRuns,
         description:
           "Delete several finished Agent Runtime sessions started by this " +
-          "user. A run that is still active, or that this user did not " +
+          "user, with their saved files. A run that is still active, or that this user did not " +
           "start, is reported in `failed` and leaves the rest of the batch " +
           "applied.",
         tags: ["Agents"],
@@ -1054,6 +1064,10 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      const actor = {
+        ...actorFromUserId(request.user.id),
+        organizationId: request.organizationId,
+      };
       const outcome = await runBulk({
         ids: request.body.ids,
         logLabel: "agent runs bulk delete",
@@ -1068,11 +1082,61 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         },
         applyEach: async (run) => {
+          await deleteFinishedRunWorkspace({ actor, run });
           await A2ATaskModel.delete(run.taskId);
         },
         audit: {
           target: request,
           snapshot: (ids) => snapshotOwnedRuns(request, ids),
+        },
+      });
+      return reply.send(outcome);
+    },
+  );
+
+  fastify.delete(
+    "/api/agent-runs/bulk/workspace",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteAgentWorkspaces,
+        description:
+          "Permanently delete the saved files of several finished Agent " +
+          "Runtime sessions started by this user; their transcripts remain " +
+          "available. A run with no saved files, one still running, or one " +
+          "this user did not start is reported in `failed` and leaves the " +
+          "rest of the batch applied.",
+        tags: ["Agents"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const actor = {
+        ...actorFromUserId(request.user.id),
+        organizationId: request.organizationId,
+      };
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "agent run workspaces bulk delete",
+        notFoundMessage: "Run not found",
+        unexpectedMessage: "Could not delete this run's saved files",
+        load: (ids) => loadOwnedRuns(request, ids),
+        describe: (run) => run.title,
+        authorize: async (run) => {
+          const workspace = await AgentWorkspaceModel.findByWorkloadName(
+            run.workloadName,
+          );
+          if (!workspace) {
+            throw new ApiError(404, "This run has no saved files");
+          }
+        },
+        // The single-run route's checks: owner, idle, then delete with retry.
+        applyEach: async (run) => {
+          await deleteAgentWorkspace({ actor, taskId: run.taskId });
+        },
+        audit: {
+          target: request,
+          snapshot: (ids) => snapshotOwnedRunWorkspaces(request, ids),
         },
       });
       return reply.send(outcome);
@@ -1329,6 +1393,27 @@ async function loadOwnedRuns(
     if (run) runs.set(taskId, run);
   }
   return runs;
+}
+
+/** The saved-files state of a batch's runs, safe to store in the audit log. */
+async function snapshotOwnedRunWorkspaces(
+  request: { user: { id: string }; organizationId: string },
+  ids: string[],
+) {
+  const runs = await loadOwnedRuns(request, ids);
+  const entries = [];
+  for (const run of runs.values()) {
+    const workspace = await AgentWorkspaceModel.findByWorkloadName(
+      run.workloadName,
+    );
+    entries.push({
+      taskId: run.taskId,
+      title: run.title,
+      workspaceState: workspace?.state ?? null,
+    });
+  }
+  // Sorted so an unchanged batch snapshots identically on both sides.
+  return { runs: entries.sort((a, b) => a.taskId.localeCompare(b.taskId)) };
 }
 
 /** What a bulk run action changes, safe to store in the audit log. */

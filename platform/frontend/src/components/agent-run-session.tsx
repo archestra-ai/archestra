@@ -654,7 +654,7 @@ export function AgentRunChatSession({
         open={deleteRunDialogOpen}
         onOpenChange={setDeleteRunDialogOpen}
         title="Delete run?"
-        description="This removes the session and its retained output. This action cannot be undone."
+        description="This removes the session, its retained output, and its saved files. This action cannot be undone."
         confirmLabel="Delete run"
         pendingLabel="Deleting…"
         isPending={deleteRun.isPending}

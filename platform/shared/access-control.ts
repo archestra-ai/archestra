@@ -574,6 +574,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Like the single-run routes: each run is checked against its owner.
   [RouteId.BulkDeleteAgentRuns]: {},
   [RouteId.BulkCancelAgentRuns]: {},
+  [RouteId.BulkDeleteAgentWorkspaces]: {},
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },

@@ -220,6 +220,59 @@ describe("AgentRuns", () => {
       { action: "stop", ids: ["live-run"] },
     ]);
   });
+  it("deletes saved files only for finished runs that still have them", async () => {
+    const ended = (taskId: string, title: string) => ({
+      ...createRun("2026-09-03T20:05:00.000Z"),
+      taskId,
+      title,
+    });
+    state.runs = [
+      {
+        ...ended("kept", "Review with files"),
+        workspace: { state: "suspended", expiresAt: "2026-09-06T20:00:00Z" },
+      },
+      ended("never", "Review without files"),
+      {
+        ...ended("gone", "Review already cleaned"),
+        workspace: { state: "deleted", expiresAt: "2026-09-06T20:00:00Z" },
+      },
+    ];
+    let sent: string[] = [];
+    server.use(
+      http.delete(
+        "http://localhost:9000/api/agent-runs/bulk/workspace",
+        async ({ request }) => {
+          sent = ((await request.json()) as { ids: string[] }).ids;
+          return HttpResponse.json({
+            succeeded: [{ id: "kept", name: "Review with files" }],
+            failed: [],
+          });
+        },
+      ),
+    );
+    renderRuns("agent-1", false, "section=runs");
+    const user = userEvent.setup();
+    expect(await screen.findByText(/workspace removed/)).toBeVisible();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select all runs on this page" }),
+    );
+    // Delete reaches every selected run; the files action only one of them.
+    expect(screen.getByRole("button", { name: "Delete" })).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: /Delete saved files 1/ }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Delete saved files of 1 run?",
+    });
+    expect(
+      within(dialog).getByText(/Run history remains available/),
+    ).toBeVisible();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Delete saved files" }),
+    );
+    expect(toast.success).toHaveBeenCalledWith("Deleted 1 run's saved files");
+    expect(sent).toEqual(["kept"]);
+  });
   it("offers no selection to a viewer who started none of the runs", async () => {
     state.runs = [
       {
@@ -573,6 +626,7 @@ function createRun(endedAt: string | null): AgentRunListItem {
     failure: null,
     stateChangedAt: "2026-09-03T20:00:05.000Z",
     initiatorName: "Alex Rivera",
+    workspace: null,
     shareVisibility: null,
     shareTeamNames: [],
     shareUserNames: [],

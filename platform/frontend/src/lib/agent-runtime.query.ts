@@ -27,6 +27,7 @@ import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 const {
   bulkCancelAgentRuns,
   bulkDeleteAgentRuns,
+  bulkDeleteAgentWorkspaces,
   cancelAgentRun,
   continueAgentRun,
   deleteAgentRun,
@@ -46,7 +47,11 @@ export type AgentRunListItem =
   archestraApiTypes.GetAgentRunsResponses["200"][number];
 export type AgentRun = Omit<
   AgentRunListItem,
-  "initiatorName" | "shareVisibility" | "shareTeamNames" | "shareUserNames"
+  | "initiatorName"
+  | "shareVisibility"
+  | "shareTeamNames"
+  | "shareUserNames"
+  | "workspace"
 >;
 export type AgentRunSession =
   archestraApiTypes.GetMyAgentRunsResponses["200"]["data"][number];
@@ -439,6 +444,29 @@ export function useBulkDeleteAgentRuns() {
       }),
     onSettled: (_outcome, _error, taskIds) =>
       invalidateRunLists(queryClient, taskIds),
+  });
+}
+
+/** Delete the saved files of several finished runs; their history stays. */
+export function useBulkDeleteAgentWorkspaces() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (taskIds: string[]) => {
+      const { data, error } = await bulkDeleteAgentWorkspaces({
+        body: { ids: taskIds },
+      });
+      if (error) throw reportApiError(error);
+      return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+    },
+    onSuccess: (outcome) =>
+      reportBulkOutcome({
+        outcome,
+        verb: "Deleted",
+        failureVerb: "delete",
+        noun: "run's saved files",
+        plural: "runs' saved files",
+      }),
+    onSettled: () => invalidateRunLists(queryClient),
   });
 }
 

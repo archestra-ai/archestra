@@ -1,7 +1,14 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Square, TerminalSquare, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  FolderX,
+  type LucideIcon,
+  Square,
+  TerminalSquare,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import {
@@ -23,9 +30,16 @@ import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   type AgentRunListItem,
   useBulkCancelAgentRuns,
   useBulkDeleteAgentRuns,
+  useBulkDeleteAgentWorkspaces,
 } from "@/lib/agent-runtime.query";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
@@ -51,7 +65,10 @@ export function AgentRunList({
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
   const bulkCancel = useBulkCancelAgentRuns();
   const bulkDelete = useBulkDeleteAgentRuns();
-  const [confirming, setConfirming] = useState<"stop" | "delete" | null>(null);
+  const bulkDeleteFiles = useBulkDeleteAgentWorkspaces();
+  const [confirming, setConfirming] = useState<
+    "stop" | "delete" | "files" | null
+  >(null);
 
   const isOwn = (run: AgentRunListItem) =>
     !!viewerId && run.actorUserId === viewerId;
@@ -86,6 +103,12 @@ export function AgentRunList({
   });
   const active = selected.filter((run) => run.endedAt === null);
   const ended = selected.filter((run) => run.endedAt !== null);
+  // The run page offers "Delete saved files" in the same workspace states.
+  const withFiles = ended.filter(
+    (run) =>
+      run.workspace &&
+      ["idle", "suspended", "deleting"].includes(run.workspace.state),
+  );
   // Only runs the viewer started can be stopped or deleted, so a viewer who
   // started none of these gets no selection column at all.
   const canSelectAny = runs.some(isOwn);
@@ -194,9 +217,48 @@ export function AgentRunList({
 
   const deleteCount = ended.length;
   const stopCount = active.length;
-  // A mixed selection names how many each action reaches, so Delete never
-  // looks like it will take the runs that are still going.
-  const mixed = deleteCount > 0 && stopCount > 0;
+  const filesCount = withFiles.length;
+  // An action that reaches only part of the selection says how many it
+  // reaches, so Delete never looks like it will take the runs still going.
+  const reach = (count: number) => (count < selected.length ? ` ${count}` : "");
+  const actions: {
+    key: "stop" | "files" | "delete";
+    label: string;
+    icon: LucideIcon;
+    iconClassName?: string;
+    destructive?: boolean;
+  }[] = [
+    ...(stopCount > 0
+      ? [
+          {
+            key: "stop" as const,
+            label: `Stop${reach(stopCount)}`,
+            icon: Square,
+            // Filled, so it reads as stop beside the selection checkboxes.
+            iconClassName: "fill-current",
+          },
+        ]
+      : []),
+    ...(filesCount > 0
+      ? [
+          {
+            key: "files" as const,
+            label: `Delete saved files${reach(filesCount)}`,
+            icon: FolderX,
+          },
+        ]
+      : []),
+    ...(deleteCount > 0
+      ? [
+          {
+            key: "delete" as const,
+            label: `Delete${reach(deleteCount)}`,
+            icon: Trash2,
+            destructive: true,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <BulkActionsScope>
@@ -251,28 +313,47 @@ export function AgentRunList({
           noun="run"
           onClear={clearSelection}
           selectAllMatching={selectAllMatching}
-          busy={bulkCancel.isPending || bulkDelete.isPending}
+          busy={
+            bulkCancel.isPending ||
+            bulkDelete.isPending ||
+            bulkDeleteFiles.isPending
+          }
         >
-          {stopCount > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setConfirming("stop")}
-            >
-              <Square className="fill-current max-sm:hidden" />
-              <span>{mixed ? `Stop ${stopCount}` : "Stop"}</span>
-            </Button>
+          {/* A phone has room for one action; more fold into a menu. */}
+          {actions.length > 1 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="sm:hidden">
+                  <span>Actions</span>
+                  <ChevronDown />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {actions.map((action) => (
+                  <DropdownMenuItem
+                    key={action.key}
+                    variant={action.destructive ? "destructive" : "default"}
+                    onSelect={() => setConfirming(action.key)}
+                  >
+                    <action.icon className={action.iconClassName} />
+                    <span>{action.label}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
-          {deleteCount > 0 && (
+          {actions.map((action) => (
             <Button
-              variant="destructive"
+              key={action.key}
+              variant={action.destructive ? "destructive" : "outline"}
               size="sm"
-              onClick={() => setConfirming("delete")}
+              className={actions.length > 1 ? "max-sm:hidden" : undefined}
+              onClick={() => setConfirming(action.key)}
             >
-              <Trash2 className="max-sm:hidden" />
-              <span>{mixed ? `Delete ${deleteCount}` : "Delete"}</span>
+              <action.icon className={action.iconClassName} />
+              <span>{action.label}</span>
             </Button>
-          )}
+          ))}
         </BulkActions>
       )}
 
@@ -327,8 +408,10 @@ export function AgentRunList({
         onOpenChange={(open) => !open && setConfirming(null)}
         title={`Delete ${countOf(deleteCount)}?`}
         description={`This removes ${
-          deleteCount === 1 ? "the session and its" : "their sessions and"
-        } retained output. This action cannot be undone.${
+          deleteCount === 1
+            ? "the session, its retained output, and its"
+            : "their sessions, retained output, and"
+        } saved files. This action cannot be undone.${
           stopCount === 1
             ? " The run that is still running is not deleted."
             : stopCount > 1
@@ -345,6 +428,35 @@ export function AgentRunList({
               onSuccess: (outcome) => {
                 setConfirming(null);
                 if (outcome.failed.length === 0 && stopCount === 0) {
+                  clearSelection();
+                }
+              },
+            },
+          )
+        }
+      />
+      <DeleteConfirmDialog
+        open={confirming === "files"}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title={`Delete saved files of ${countOf(filesCount)}?`}
+        description={`This permanently removes ${
+          filesCount === 1
+            ? "the run's saved files. You cannot resume the run"
+            : "their saved files. You cannot resume these runs"
+        } afterward. Run history remains available.`}
+        confirmLabel="Delete saved files"
+        pendingLabel="Deleting…"
+        isPending={bulkDeleteFiles.isPending}
+        onConfirm={() =>
+          bulkDeleteFiles.mutate(
+            withFiles.map((run) => run.taskId),
+            {
+              onSuccess: (outcome) => {
+                setConfirming(null);
+                if (
+                  outcome.failed.length === 0 &&
+                  filesCount === selected.length
+                ) {
                   clearSelection();
                 }
               },
@@ -378,6 +490,7 @@ function RunStatus({ run }: { run: AgentRunListItem }) {
       endedAt={run.endedAt}
       hardDeadlineAt={run.hardDeadlineAt}
       lastModelActivityAt={run.lastModelActivityAt}
+      workspace={run.workspace}
       compact
     />
   );

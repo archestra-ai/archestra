@@ -478,9 +478,11 @@ class AgentRunModel {
       scopeColumn: schema.agentRunsTable.taskId,
       ownerColumn: schema.agentRunsTable.actorUserId,
     };
-    return db
+    const rows = await db
       .select({
         ...runColumns,
+        workspaceState: schema.agentWorkspacesTable.state,
+        workspaceExpiresAt: schema.agentWorkspacesTable.expiresAt,
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
         failure: failureExpression(),
@@ -515,6 +517,13 @@ class AgentRunModel {
         eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
       )
       .leftJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentWorkspacesTable.workloadName,
+          schema.agentRunsTable.workloadName,
+        ),
+      )
+      .leftJoin(
         schema.usersTable,
         eq(schema.agentRunsTable.actorUserId, schema.usersTable.id),
       )
@@ -536,6 +545,13 @@ class AgentRunModel {
         ),
       )
       .orderBy(desc(schema.agentRunsTable.startedAt));
+    return rows.map(({ workspaceState, workspaceExpiresAt, ...run }) => ({
+      ...run,
+      workspace:
+        workspaceState && workspaceExpiresAt
+          ? { state: workspaceState, expiresAt: workspaceExpiresAt }
+          : null,
+    }));
   }
 
   /** Read-only fleet rows for run dashboards, newest first. */

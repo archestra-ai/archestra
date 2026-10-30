@@ -35,10 +35,12 @@ const runs = [
     title: "Nightly dependency audit",
     state: "TASK_STATE_FAILED",
     statusReason: "The runtime image could not be pulled",
+    workspace: { state: "suspended", expiresAt: "2026-11-01T12:00:00.000Z" },
   }),
   makeRun({
     taskId: "00000000-0000-4000-8000-000000000003",
     title: "Release notes draft",
+    workspace: { state: "suspended", expiresAt: "2026-11-01T12:00:00.000Z" },
   }),
   makeRun({
     taskId: "00000000-0000-4000-8000-000000000004",
@@ -90,13 +92,17 @@ test("keeps the runs list and its bulk actions inside a phone viewport", async (
   await page
     .getByRole("checkbox", { name: "Select all runs on this page" })
     .click();
-  for (const control of [
-    title,
-    page.getByRole("button", { name: "Stop 1", exact: true }),
-    page.getByRole("button", { name: "Delete 2", exact: true }),
-  ]) {
+  // Three actions fold into one menu on a phone.
+  const menu = page.getByRole("button", { name: "Actions", exact: true });
+  for (const control of [title, menu]) {
     await expect(control).toBeVisible();
     await expectInsideViewport(control, 390);
+  }
+  await menu.click();
+  for (const name of ["Stop 1", "Delete saved files 2", "Delete 2"]) {
+    const item = page.getByRole("menuitem", { name, exact: true });
+    await expect(item).toBeVisible();
+    await expectInsideViewport(item, 390);
   }
 });
 
@@ -229,6 +235,7 @@ function makeRun(overrides: Partial<AgentRunListItem>): AgentRunListItem {
     failure: null,
     stateChangedAt: "2026-10-29T12:20:00.000Z",
     initiatorName: "Admin User",
+    workspace: null,
     shareVisibility: null,
     shareTeamNames: null,
     shareUserNames: null,

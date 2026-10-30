@@ -1,1 +1,0 @@
-ALTER TABLE "organization" ADD COLUMN "runtime_template_settings" jsonb;

@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import AuditLogModel from "@/models/audit-log";
@@ -42,6 +43,9 @@ describe("PUT /api/agent-runtime-templates/settings", () => {
       templates: [template],
       popularAgentOverrides: overrides,
     });
+    const stored = await db.select().from(schema.secretsTable);
+    expect(stored.some((row) => "__encrypted" in row.secret)).toBe(true);
+    expect(JSON.stringify(stored)).not.toContain("test-private-setting");
     expect(
       await OrganizationModel.getById(ctx.organizationId),
     ).not.toHaveProperty("runtimeTemplateSettings");

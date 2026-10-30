@@ -365,3 +365,53 @@ tests:
           path: spec.template.spec.volumes
       - notExists:
           path: spec.template.spec.containers[0].volumeMounts
+
+  - it: passes RDS IAM authentication settings from archestra.database.iamAuth to the migration Job
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+      archestra.database.iamAuth.enabled: true
+      archestra.database.iamAuth.awsRegion: eu-west-1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_IAM_AUTH_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_AWS_REGION
+            value: eu-west-1
+
+  - it: forwards RDS IAM and TLS environment variables from archestra.env to the migration Job
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: null
+      archestra.env:
+        ARCHESTRA_DATABASE_URL: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+        ARCHESTRA_DATABASE_IAM_AUTH_ENABLED: "true"
+        ARCHESTRA_DATABASE_AWS_REGION: eu-west-1
+        AWS_REGION: eu-west-1
+        NODE_EXTRA_CA_CERTS: /etc/ssl/db/rds-ca.pem
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_IAM_AUTH_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_AWS_REGION
+            value: eu-west-1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_REGION
+            value: eu-west-1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_EXTRA_CA_CERTS
+            value: /etc/ssl/db/rds-ca.pem

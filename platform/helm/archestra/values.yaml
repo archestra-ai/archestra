@@ -51,6 +51,16 @@ archestra:
     # true explicitly uses the bulk pool value; false uses chart sizing when
     # connectionBudget is set.
     poolMaxFromEnvFrom: null
+    # Amazon RDS / Aurora IAM database authentication.
+    # Generates a fresh 15-minute IAM token per new connection in the query
+    # pool, cache pool, LISTEN/NOTIFY client, and migration Job, using the pod's
+    # AWS credentials (IRSA or EKS Pod Identity) and verifying the RDS TLS
+    # certificate with the bundled cloud database CA certificates.
+    iamAuth:
+      enabled: false
+      # Optional AWS region for RDS IAM token signing. Derived from the RDS
+      # endpoint hostname or AWS_REGION / AWS_DEFAULT_REGION when left empty.
+      awsRegion: ""
 
   # Annotations to add to the web and worker pods (the worker always points
   # prometheus.io/port and prometheus.io/path at its own metrics endpoint)

@@ -7,7 +7,7 @@ schema is applied before web and worker Deployments roll. Fresh installs are
 covered by the web pod running migrations on startup plus the worker
 wait-for-migrations init container.
 */}}
-{{- $migrationContext := merge (dict "initContainerExtraEnvFrom" .Values.archestra.migrationJob.envFrom) . -}}
+{{- $migrationContext := merge (dict "initContainerExtraEnvFrom" .Values.archestra.migrationJob.envFrom "migrationJobEnvOverride" .Values.archestra.migrationJob.env) . -}}
 {{- if and .Values.postgresql.external_database_url (ne (toString .Values.postgresql.external_database_url) "from_vault") -}}
 {{- $migrationContext = merge (dict "migrationDatabaseSecretNameOverride" (include "archestra-platform.migrationJobAuthSecretName" .)) $migrationContext -}}
 {{- end }}
@@ -107,6 +107,12 @@ spec:
             {{- if and (hasKey .Values.archestra.env "ARCHESTRA_DATABASE_URL") (not .Values.postgresql.external_database_url) }}
             - name: ARCHESTRA_DATABASE_URL
               value: {{ index .Values.archestra.env "ARCHESTRA_DATABASE_URL" | quote }}
+            {{- end }}
+            {{- range $dbEnvKey := list "ARCHESTRA_DATABASE_IAM_AUTH_ENABLED" "ARCHESTRA_DATABASE_AWS_REGION" "AWS_REGION" "AWS_DEFAULT_REGION" "PGSSLMODE" "PGSSLROOTCERT" "NODE_EXTRA_CA_CERTS" }}
+            {{- if and (hasKey $.Values.archestra.env $dbEnvKey) (not (hasKey $.Values.archestra.migrationJob.env $dbEnvKey)) }}
+            - name: {{ $dbEnvKey }}
+              value: {{ index $.Values.archestra.env $dbEnvKey | quote }}
+            {{- end }}
             {{- end }}
             {{- /*
             Fail-fast lock acquisition for migration DDL: the hook overlaps

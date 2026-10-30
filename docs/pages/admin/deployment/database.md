@@ -2,7 +2,7 @@
 title: PostgreSQL
 description: Connect an external database and size its connection pools
 order: 3
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-30
 ---
 
 <span id="large-log-histories"></span><span id="docker-persistence"></span>
@@ -49,6 +49,25 @@ archestra:
 ```
 
 The chart applies these mounts to web pods, worker pods, and the migration Job. Use a Secret or ConfigMap for the CA; the migration Job skips persistent-volume claims.
+
+## Amazon RDS IAM Authentication
+
+On Amazon RDS or Aurora PostgreSQL, enable IAM database authentication so each new connection in the query pool, cache pool, LISTEN/NOTIFY client, and migration Job signs a fresh 15-minute IAM token instead of using a static password:
+
+```yaml
+postgresql:
+  enabled: false
+archestra:
+  database:
+    iamAuth:
+      enabled: true
+      # Optional when connecting through a custom DNS name instead of *.rds.amazonaws.com:
+      # awsRegion: eu-west-1
+  env:
+    ARCHESTRA_DATABASE_URL: postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full
+```
+
+Grant `rds_iam` to the PostgreSQL user and allow `rds-db:connect` on the pod's IAM role (via IRSA or EKS Pod Identity). The platform image includes the AWS RDS global CA bundle at `/etc/ssl/certs/cloud-database-ca-bundle.pem` and verifies the server certificate and hostname on every connection.
 
 ## Connection Capacity
 

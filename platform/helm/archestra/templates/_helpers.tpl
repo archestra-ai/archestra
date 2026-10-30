@@ -101,6 +101,16 @@ The Bitnami chart auto-generates a strong password and persists it across helm u
 - name: ARCHESTRA_DATABASE_URL
   value: postgresql://{{ .Values.postgresql.auth.username }}:$(PGPASSWORD)@{{ include "archestra-platform.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}
 {{- end }}
+{{- $iamAuth := (.Values.archestra.database).iamAuth | default dict }}
+{{- $migrationEnv := .migrationJobEnvOverride | default dict }}
+{{- if and $iamAuth.enabled (not (hasKey .Values.archestra.env "ARCHESTRA_DATABASE_IAM_AUTH_ENABLED")) (not (hasKey $migrationEnv "ARCHESTRA_DATABASE_IAM_AUTH_ENABLED")) }}
+- name: ARCHESTRA_DATABASE_IAM_AUTH_ENABLED
+  value: "true"
+{{- end }}
+{{- if and $iamAuth.awsRegion (not (hasKey .Values.archestra.env "ARCHESTRA_DATABASE_AWS_REGION")) (not (hasKey $migrationEnv "ARCHESTRA_DATABASE_AWS_REGION")) }}
+- name: ARCHESTRA_DATABASE_AWS_REGION
+  value: {{ $iamAuth.awsRegion | quote }}
+{{- end }}
 {{- end }}
 
 {{/*

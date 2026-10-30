@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-29
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -42,6 +42,15 @@ Helm cannot read timeout values inside a Secret or ConfigMap. When importing lon
   - Default: `30000`
   - Values: `0` disables the timeout.
   - Raise it if you run legitimate long queries.
+
+- **`ARCHESTRA_DATABASE_IAM_AUTH_ENABLED`** - Signs a fresh 15-minute Amazon RDS or Aurora IAM token for each new PostgreSQL connection in the query pool, cache pool, LISTEN/NOTIFY client, and migration Job, keeping TLS certificate and hostname verification with the RDS CA bundle.
+  - Default: `false`
+  - Values: `true`, `false`
+  - In Helm, set `archestra.database.iamAuth.enabled: true`. See [Amazon RDS IAM Authentication](/docs/admin/deployment/database#amazon-rds-iam-authentication).
+
+- **`ARCHESTRA_DATABASE_AWS_REGION`** - AWS region used to sign RDS IAM database authentication tokens.
+  - Default: derived from an `*.rds.amazonaws.com` database hostname, falling back to `AWS_REGION` or `AWS_DEFAULT_REGION`
+  - Set it when connecting to RDS or Aurora through a custom DNS name without `AWS_REGION` set.
 
 ## Server and Network
 

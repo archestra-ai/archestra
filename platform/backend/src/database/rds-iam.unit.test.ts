@@ -1,0 +1,367 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import pg from "pg";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import {
+  buildPgConnectionConfig,
+  configurePgDefaultsForRdsIam,
+  createRdsIamPasswordCallback,
+  generateRdsIamAuthToken,
+  isRdsIamAuthEnabled,
+  rdsRegionFromHostname,
+  resolveDatabaseAwsRegion,
+  resolvePgSslConfig,
+} from "./rds-iam";
+
+const TEST_CREDENTIALS = {
+  accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+  secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+  sessionToken: "AQoDYXdzEJr1234567890",
+};
+
+describe("rds-iam", () => {
+  const originalPgDefaultPassword = pg.defaults.password;
+  const originalPgDefaultSsl = pg.defaults.ssl;
+
+  afterEach(() => {
+    pg.defaults.password = originalPgDefaultPassword;
+    pg.defaults.ssl = originalPgDefaultSsl;
+  });
+
+  test("rdsRegionFromHostname extracts regions from RDS, Aurora, Proxy, GovCloud, and China endpoints", () => {
+    expect(
+      rdsRegionFromHostname("mydb.123456789012.eu-west-1.rds.amazonaws.com"),
+    ).toBe("eu-west-1");
+    expect(
+      rdsRegionFromHostname(
+        "myaurora.cluster-123456789012.us-east-2.rds.amazonaws.com.",
+      ),
+    ).toBe("us-east-2");
+    expect(
+      rdsRegionFromHostname(
+        "myproxy.proxy-123456789012.ap-southeast-1.rds.amazonaws.com",
+      ),
+    ).toBe("ap-southeast-1");
+    expect(
+      rdsRegionFromHostname(
+        "govdb.123456789012.us-gov-west-1.rds.amazonaws.com",
+      ),
+    ).toBe("us-gov-west-1");
+    expect(
+      rdsRegionFromHostname(
+        "cndb.123456789012.cn-north-1.rds.amazonaws.com.cn",
+      ),
+    ).toBe("cn-north-1");
+    expect(rdsRegionFromHostname("postgres.internal.example.com")).toBeNull();
+    expect(rdsRegionFromHostname("localhost")).toBeNull();
+    expect(rdsRegionFromHostname("")).toBeNull();
+  });
+
+  test("resolveDatabaseAwsRegion follows precedence and throws when no region can be resolved", () => {
+    expect(
+      resolveDatabaseAwsRegion({
+        hostname: "mydb.123456789012.eu-west-1.rds.amazonaws.com",
+        awsRegion: "ap-northeast-1",
+        env: {
+          ARCHESTRA_DATABASE_AWS_REGION: "us-west-2",
+          AWS_REGION: "us-east-1",
+        },
+      }),
+    ).toBe("ap-northeast-1");
+
+    expect(
+      resolveDatabaseAwsRegion({
+        hostname: "mydb.123456789012.eu-west-1.rds.amazonaws.com",
+        env: {
+          ARCHESTRA_DATABASE_AWS_REGION: "us-west-2",
+          AWS_REGION: "us-east-1",
+        },
+      }),
+    ).toBe("us-west-2");
+
+    expect(
+      resolveDatabaseAwsRegion({
+        hostname: "mydb.123456789012.eu-west-1.rds.amazonaws.com",
+        env: {
+          AWS_REGION: "us-east-1",
+        },
+      }),
+    ).toBe("eu-west-1");
+
+    expect(
+      resolveDatabaseAwsRegion({
+        hostname: "pg.internal.example.com",
+        env: {
+          AWS_DEFAULT_REGION: "eu-central-1",
+        },
+      }),
+    ).toBe("eu-central-1");
+
+    expect(() =>
+      resolveDatabaseAwsRegion({
+        hostname: "pg.internal.example.com",
+        env: {},
+      }),
+    ).toThrow(/Cannot determine AWS region/);
+  });
+
+  test("isRdsIamAuthEnabled checks ARCHESTRA_DATABASE_IAM_AUTH_ENABLED", () => {
+    expect(isRdsIamAuthEnabled({})).toBe(false);
+    expect(
+      isRdsIamAuthEnabled({ ARCHESTRA_DATABASE_IAM_AUTH_ENABLED: "false" }),
+    ).toBe(false);
+    expect(
+      isRdsIamAuthEnabled({ ARCHESTRA_DATABASE_IAM_AUTH_ENABLED: "true" }),
+    ).toBe(true);
+  });
+
+  test("generateRdsIamAuthToken produces a 15-minute presigned rds-db connect token without scheme", async () => {
+    const token = await generateRdsIamAuthToken({
+      hostname: "mydb.123456789012.eu-west-1.rds.amazonaws.com",
+      port: 5432,
+      username: "archestra_iam",
+      region: "eu-west-1",
+      credentials: TEST_CREDENTIALS,
+    });
+
+    expect(token.startsWith("https://")).toBe(false);
+    expect(
+      token.startsWith("mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/?"),
+    ).toBe(true);
+
+    const parsed = new URL(`https://${token}`);
+    expect(parsed.searchParams.get("Action")).toBe("connect");
+    expect(parsed.searchParams.get("DBUser")).toBe("archestra_iam");
+    expect(parsed.searchParams.get("X-Amz-Algorithm")).toBe("AWS4-HMAC-SHA256");
+    expect(parsed.searchParams.get("X-Amz-Expires")).toBe("900");
+    expect(parsed.searchParams.get("X-Amz-SignedHeaders")).toBe("host");
+    expect(parsed.searchParams.get("X-Amz-Security-Token")).toBe(
+      TEST_CREDENTIALS.sessionToken,
+    );
+    expect(parsed.searchParams.get("X-Amz-Credential")).toContain(
+      "/eu-west-1/rds-db/aws4_request",
+    );
+    expect(parsed.searchParams.get("X-Amz-Signature")).toMatch(
+      /^[0-9a-f]{64}$/,
+    );
+  });
+
+  test("buildPgConnectionConfig leaves non-IAM config untouched", () => {
+    const url = "postgresql://archestra:secret@localhost:5432/archestra_dev";
+    const result = buildPgConnectionConfig(
+      url,
+      { max: 25, idleTimeoutMillis: 30_000 },
+      { iamAuthEnabled: false },
+    );
+
+    expect(result).toEqual({
+      connectionString: url,
+      max: 25,
+      idleTimeoutMillis: 30_000,
+    });
+  });
+
+  test("buildPgConnectionConfig generates a fresh RDS IAM token per new pg.Pool and pg.Client connection", async () => {
+    let callCount = 0;
+    const credentialsProvider = vi.fn(async () => {
+      callCount += 1;
+      return {
+        accessKeyId: `AKIAEXAMPLE${callCount}`,
+        secretAccessKey: `secretKeyExample${callCount}`,
+        sessionToken: `session-token-${callCount}`,
+      };
+    });
+
+    const url =
+      "postgresql://archestra_iam:stale_static_password@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full&application_name=archestra-web";
+
+    const poolConfig = buildPgConnectionConfig(
+      url,
+      { max: 10, connectionTimeoutMillis: 10_000 },
+      {
+        iamAuthEnabled: true,
+        credentials: credentialsProvider,
+        env: {},
+      },
+    );
+
+    expect(poolConfig.connectionString).toBeUndefined();
+    expect(poolConfig.host).toBe(
+      "mydb.123456789012.eu-west-1.rds.amazonaws.com",
+    );
+    expect(poolConfig.port).toBe(5432);
+    expect(poolConfig.user).toBe("archestra_iam");
+    expect(poolConfig.database).toBe("archestra");
+    expect(poolConfig.application_name).toBe("archestra-web");
+    expect(typeof poolConfig.password).toBe("function");
+
+    const pool = new pg.Pool(poolConfig);
+    try {
+      // Simulate two separate connections opened by pg.Pool over time
+      const poolOptions = (pool as unknown as { options: pg.ClientConfig })
+        .options;
+      const client1 = new pg.Client(poolOptions) as unknown as {
+        password: () => Promise<string>;
+      };
+      const client2 = new pg.Client(poolOptions) as unknown as {
+        password: () => Promise<string>;
+      };
+
+      expect(typeof client1.password).toBe("function");
+      expect(typeof client2.password).toBe("function");
+
+      const token1 = await client1.password();
+      const token2 = await client2.password();
+
+      expect(credentialsProvider).toHaveBeenCalledTimes(2);
+      expect(token1).toContain("session-token-1");
+      expect(token2).toContain("session-token-2");
+      expect(token1).not.toBe(token2);
+    } finally {
+      await pool.end();
+    }
+
+    // Also verify standalone pg.Client (used by LISTEN/NOTIFY in pg-notify-hub.ts)
+    const notifyClientConfig = buildPgConnectionConfig(
+      url,
+      { connectionTimeoutMillis: 1_000, keepAlive: true },
+      {
+        iamAuthEnabled: true,
+        credentials: credentialsProvider,
+        env: {},
+      },
+    );
+    const notifyClient = new pg.Client(notifyClientConfig) as unknown as {
+      password: () => Promise<string>;
+    };
+    const token3 = await notifyClient.password();
+    expect(credentialsProvider).toHaveBeenCalledTimes(3);
+    expect(token3).toContain("session-token-3");
+  });
+
+  test("resolvePgSslConfig keeps TLS certificate and hostname verification with the RDS CA bundle", () => {
+    const rdsUrl =
+      "postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?uselibpqcompat=true&sslmode=require";
+
+    const ssl = resolvePgSslConfig(rdsUrl, {
+      iamAuthEnabled: true,
+      env: {},
+    });
+
+    expect(ssl).toBeDefined();
+    expect(typeof ssl).toBe("object");
+    if (ssl && typeof ssl === "object") {
+      expect(ssl.rejectUnauthorized).toBe(true);
+      // Must not override checkServerIdentity with a no-op so Node's default
+      // tls.checkServerIdentity verifies the RDS endpoint hostname.
+      expect(ssl.checkServerIdentity).toBeUndefined();
+      expect(Array.isArray(ssl.ca)).toBe(true);
+      const caList = ssl.ca as string[];
+      expect(caList.some((cert) => cert.includes("BEGIN CERTIFICATE"))).toBe(
+        true,
+      );
+    }
+  });
+
+  test("resolvePgSslConfig loads custom sslrootcert when provided and respects sslmode=disable", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "rds-ca-test-"));
+    const caFile = path.join(tempDir, "custom-rds-ca.pem");
+    const customPem =
+      "-----BEGIN CERTIFICATE-----\nMIIB...custom-rds-ca\n-----END CERTIFICATE-----\n";
+    fs.writeFileSync(caFile, customPem, "utf8");
+
+    try {
+      const urlWithRootCert = `postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full&sslrootcert=${encodeURIComponent(caFile)}`;
+      const ssl = resolvePgSslConfig(urlWithRootCert, {
+        iamAuthEnabled: true,
+        env: {},
+      });
+
+      expect(ssl).toEqual({
+        rejectUnauthorized: true,
+        ca: customPem,
+      });
+
+      const disabledSsl = resolvePgSslConfig(
+        "postgresql://archestra_iam@localhost:5432/archestra?sslmode=disable",
+        { iamAuthEnabled: true, env: {} },
+      );
+      expect(disabledSsl).toBe(false);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("configurePgDefaultsForRdsIam configures pg.defaults for drizzle-kit Pool connections", async () => {
+    let seq = 0;
+    const env: NodeJS.ProcessEnv = {
+      ARCHESTRA_DATABASE_IAM_AUTH_ENABLED: "true",
+      PGPASSWORD: "old-env-password",
+      PGSSLMODE: "prefer",
+    };
+
+    const rawUrl =
+      "postgresql://archestra_iam:expired_url_token@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra?sslmode=verify-full";
+
+    const sanitizedUrl = configurePgDefaultsForRdsIam(rawUrl, {
+      env,
+      credentials: async () => {
+        seq += 1;
+        return {
+          accessKeyId: `AKIA${seq}`,
+          secretAccessKey: `SECRET${seq}`,
+          sessionToken: `drizzle-session-${seq}`,
+        };
+      },
+    });
+
+    expect(sanitizedUrl).toBe(
+      "postgresql://archestra_iam@mydb.123456789012.eu-west-1.rds.amazonaws.com:5432/archestra",
+    );
+    expect(env.PGPASSWORD).toBeUndefined();
+    expect(env.PGSSLMODE).toBeUndefined();
+
+    // drizzle-kit constructs `new pg.Pool({ connectionString: url, max: 1 })`
+    const drizzlePool = new pg.Pool({
+      connectionString: sanitizedUrl,
+      max: 1,
+    });
+    try {
+      const poolOptions = (
+        drizzlePool as unknown as { options: pg.ClientConfig }
+      ).options;
+      const c1 = new pg.Client(poolOptions) as unknown as {
+        password: () => Promise<string>;
+        ssl: pg.ClientConfig["ssl"];
+      };
+      const c2 = new pg.Client(poolOptions) as unknown as {
+        password: () => Promise<string>;
+        ssl: pg.ClientConfig["ssl"];
+      };
+
+      expect(typeof c1.password).toBe("function");
+      expect(await c1.password()).toContain("drizzle-session-1");
+      expect(await c2.password()).toContain("drizzle-session-2");
+      expect(c1.ssl).toMatchObject({ rejectUnauthorized: true });
+    } finally {
+      await drizzlePool.end();
+    }
+  });
+
+  test("createRdsIamPasswordCallback signs fresh tokens on each call", async () => {
+    const callback = createRdsIamPasswordCallback({
+      hostname: "mydb.123456789012.us-west-2.rds.amazonaws.com",
+      port: 5432,
+      username: "archestra_user",
+      credentials: TEST_CREDENTIALS,
+      env: {},
+    });
+
+    const token = await callback();
+    expect(token).toContain(
+      "mydb.123456789012.us-west-2.rds.amazonaws.com:5432/?",
+    );
+    expect(token).toContain("DBUser=archestra_user");
+  });
+});

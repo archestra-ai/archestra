@@ -3,6 +3,7 @@ import pg from "pg";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
 import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
 import db, { getDatabaseConnectionString } from "@/database";
+import { buildPgConnectionConfig } from "@/database/rds-iam";
 import logger from "@/logging";
 
 /**
@@ -431,11 +432,12 @@ async function ensureMaintainedIndexes(params: {
 }
 
 async function openMaintenanceConnection(): Promise<pg.Client> {
-  const client = new pg.Client({
-    connectionString: getDatabaseConnectionString(),
-    connectionTimeoutMillis: 10_000,
-    application_name: "archestra-index-maintenance",
-  });
+  const client = new pg.Client(
+    buildPgConnectionConfig(getDatabaseConnectionString(), {
+      connectionTimeoutMillis: 10_000,
+      application_name: "archestra-index-maintenance",
+    }),
+  );
   // Without a listener, a dropped connection would crash the process.
   client.on("error", (error) => {
     logger.warn(

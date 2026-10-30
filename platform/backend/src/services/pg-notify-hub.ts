@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { buildPgConnectionConfig } from "@/database/rds-iam";
 import logger from "@/logging";
 
 /**
@@ -612,12 +613,13 @@ function parseFanoutMessage(
 }
 
 function createDefaultPgClient(connectionString: string): PgClient {
-  return new pg.Client({
-    connectionString,
-    connectionTimeoutMillis: 1_000,
-    keepAlive: true,
-    keepAliveInitialDelayMillis: 10_000,
-  });
+  return new pg.Client(
+    buildPgConnectionConfig(connectionString, {
+      connectionTimeoutMillis: 1_000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10_000,
+    }),
+  );
 }
 
 function sleepWithAbort(ms: number, abortSignal?: AbortSignal): Promise<void> {

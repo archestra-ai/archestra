@@ -1,6 +1,8 @@
 import path from "node:path";
 import dotenv from "dotenv";
 import { defineConfig } from "drizzle-kit";
+// @ts-expect-error — scripts/rds-iam.mjs is a plain-JS runtime module shipped in the production image alongside drizzle.config.ts
+import { configurePgDefaultsForRdsIam } from "./scripts/rds-iam.mjs";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env"), quiet: true });
 
@@ -13,12 +15,14 @@ if (!databaseUrl) {
   );
 }
 
+const drizzleDatabaseUrl = configurePgDefaultsForRdsIam(databaseUrl);
+
 export default defineConfig({
   out: "./src/database/migrations",
   schema: "./src/database/schemas",
   dialect: "postgresql",
   casing: "snake_case",
   dbCredentials: {
-    url: databaseUrl,
+    url: drizzleDatabaseUrl,
   },
 });

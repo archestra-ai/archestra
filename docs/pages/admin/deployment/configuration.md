@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-29
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -594,7 +594,7 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Bedrock and Ollama native streams get no keep-alive.
   - OpenAI Chat Completions and Responses, OpenAI-compatible chat providers using the shared transport, and Anthropic Messages also receive comments before the first event, once the upstream has accepted the HTTP request. No additional setting is needed.
   - Comments cannot cover a provider or ingress that delays its HTTP response headers. They do not extend upstream timeouts or absolute request deadlines; intervening proxies must forward streaming bytes without buffering.
-  - Model pools wait until a member is selected so failover and final pool headers remain accurate. Buffered policy responses keep their existing commit behavior. Other transports keep their existing behavior until the first client event.
+  - [Model pools](/docs/llm-proxy/model-pools) wait until a member is selected so failover and final pool headers remain accurate. Buffered policy responses keep their existing commit behavior. Other transports keep their existing behavior until the first client event.
 
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Records traffic sent with a subscription credential, such as a Claude Pro or Max login, as subscription usage with $0 billed spend.
   - Default: `true`

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  estimateCachePrices,
   mergeAnthropicUsage,
   moneyUnits,
   normalizeAnthropicUsage,
@@ -189,5 +190,79 @@ describe("cumulative provider accounting", () => {
         rates,
       ),
     ).toThrow();
+  });
+});
+
+describe("missing cache rates", () => {
+  const usage = {
+    inputTokens: 10,
+    outputTokens: 10,
+    cacheReadTokens: 1000,
+    cacheWriteTokens: 300,
+    cacheWrite1hTokens: 100,
+  };
+  const unpriced: TokenPrices = {
+    input: "0.90",
+    output: "0.90",
+    cacheRead: null,
+    cacheWrite: null,
+    cacheWrite1h: null,
+    source: "custom",
+  };
+
+  test("use the provider's cache multipliers of the input rate", () => {
+    expect(
+      estimateCachePrices({ usage, prices: unpriced, provider: "anthropic" }),
+    ).toEqual({
+      prices: {
+        ...unpriced,
+        cacheRead: "0.0900000000",
+        cacheWrite: "1.1250000000",
+        cacheWrite1h: "1.8000000000",
+      },
+      estimated: true,
+    });
+  });
+
+  test("read at half and write at the full input rate without provider multipliers", () => {
+    expect(
+      estimateCachePrices({ usage, prices: unpriced, provider: "vllm" }),
+    ).toEqual({
+      prices: {
+        ...unpriced,
+        cacheRead: "0.4500000000",
+        cacheWrite: "0.9000000000",
+        cacheWrite1h: "0.9000000000",
+      },
+      estimated: true,
+    });
+  });
+
+  test("keep known rates and report nothing for unused or free cache tokens", () => {
+    expect(
+      estimateCachePrices({ usage, prices: rates, provider: "vllm" }),
+    ).toEqual({ prices: rates, estimated: false });
+    expect(
+      estimateCachePrices({
+        usage: {
+          ...usage,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cacheWrite1hTokens: 0,
+        },
+        prices: unpriced,
+        provider: "vllm",
+      }).estimated,
+    ).toBe(false);
+    expect(
+      estimateCachePrices({
+        usage,
+        prices: { ...unpriced, input: "0" },
+        provider: "vllm",
+      }),
+    ).toMatchObject({
+      prices: { cacheRead: "0.0000000000" },
+      estimated: false,
+    });
   });
 });

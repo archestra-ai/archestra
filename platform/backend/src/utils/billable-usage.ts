@@ -1,4 +1,7 @@
-import type { SupportedProvider } from "@archestra/shared/model-constants";
+import {
+  CACHE_PRICE_MULTIPLIERS,
+  type SupportedProvider,
+} from "@archestra/shared/model-constants";
 import type { UsageView } from "@/types/llm-provider";
 
 export interface BillingAttribution {
@@ -209,6 +212,53 @@ export function sumMoney(values: string[]): string {
   return formatMoney(
     values.reduce((sum, value) => sum + moneyUnits(value), 0n),
   );
+}
+
+/** Cache estimate, as a fraction of the input rate, for a provider without multipliers. */
+const DEFAULT_CACHE_ESTIMATE = { read: 0.5, write: 1, write1h: 1 };
+
+/**
+ * Fill every cache rate that a billed token count needs but the quote lacks,
+ * so a request is always charged and never blocks a budget for being
+ * unpriced. Cache rates derive from the input rate: by the provider's own
+ * cache multipliers when it has them, otherwise by `DEFAULT_CACHE_ESTIMATE`.
+ *
+ * `estimated` reports a rate estimated for tokens the request used. A free
+ * rate derived from a free input rate is exact and not reported.
+ */
+export function estimateCachePrices(params: {
+  usage: UsageTokens;
+  prices: TokenPrices;
+  provider: SupportedProvider;
+}): { prices: TokenPrices; estimated: boolean } {
+  const { usage } = params;
+  const multiplier =
+    CACHE_PRICE_MULTIPLIERS[params.provider] ?? DEFAULT_CACHE_ESTIMATE;
+  const prices = { ...params.prices };
+  const freeInput = moneyUnits(prices.input) === 0n;
+  let estimated = false;
+  for (const [key, count, factor] of [
+    ["cacheRead", usage.cacheReadTokens, multiplier.read],
+    [
+      "cacheWrite",
+      usage.cacheWriteTokens - usage.cacheWrite1hTokens,
+      multiplier.write,
+    ],
+    [
+      "cacheWrite1h",
+      usage.cacheWrite1hTokens,
+      multiplier.write1h ?? multiplier.write,
+    ],
+  ] as const) {
+    if (prices[key] !== null) continue;
+    prices[key] = scalePrice(
+      prices.input,
+      BigInt(Math.round(factor * 100)),
+      100n,
+    );
+    if (count > 0 && !freeInput) estimated = true;
+  }
+  return { prices, estimated };
 }
 
 /** Round once per component, half up, after summing all token categories. */

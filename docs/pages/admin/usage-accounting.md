@@ -2,7 +2,7 @@
 title: Roll Out Usage Accounting
 description: Activate component billing without resetting existing budgets.
 order: 8
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-30
 ---
 
 Usage accounting includes separately billed inference, such as an Anthropic advisor or compaction pass, in the request's cost and matching budgets.
@@ -25,7 +25,12 @@ Clients keep their credentials and endpoint URLs. An enforced request records it
 
 - Advisor and compaction charges can exhaust a budget sooner than executor-only charges.
 - Subscription traffic continues to have $0 billed spend. A credential's billing team pays instead of the caller.
-- Unknown prices, unsupported billing components, or partial usage block further requests against affected budgets until the accounting issue or budget window is resolved. A database settlement failure returns an error instead of successful accounting.
+- A request runs even when its model lacks a cache price. Archestra estimates the missing rate from the model's input price and charges the request in full.
+  - Anthropic, Amazon Bedrock, OpenAI, Gemini, and DeepSeek models get their provider's standard cache rates.
+  - Other providers pay half the input price for a cache read and the full input price for a cache write.
+- Unsupported billing components, partial usage, and models with no price count at their recorded cost. Only spend at or over a limit blocks a request.
+- To start a spend limit's window at `$0`, call `POST /api/limits/{id}/reset` with [`llmLimit:update`](/docs/reference/permissions#llmLimit:update). Cost reports keep the past spend.
+- A database settlement failure returns an error instead of successful accounting.
 - Budgets check consumption before a request. Concurrent requests already in flight can exceed a limit; settlement does not reserve funds.
 
 A rolling restart can interrupt active streams and Chat or A2A runs. Streams cannot move between pods; schedule the rollout for a quiet period and use the deployment's drain policy.

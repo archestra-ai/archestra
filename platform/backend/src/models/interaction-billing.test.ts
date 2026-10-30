@@ -272,6 +272,36 @@ test("default model-scoped caps include advisor charges while subscription and t
   ).not.toBeNull();
 });
 
+test("a default user limit counts an incomplete receipt at its cost instead of blocking", async ({
+  makeAgent,
+  makeOrganization,
+  makeUser,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  await EnvironmentDefaultUserLimitModel.create({
+    organizationId: org.id,
+    environmentId: null,
+    limitValue: 100,
+    cleanupInterval: "calendar_month",
+  });
+  const interaction = await record({ agent, userId: user.id, cacheOnly: true });
+  // As an earlier release settled a cache hit with no cache price.
+  interaction.billingUsage = {
+    ...(interaction.billingUsage as PricedBillingUsage),
+    status: "incomplete",
+    issues: ["unpriced_usage"],
+  };
+  await InteractionModel.create(interaction);
+  expect(
+    await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      userId: user.id,
+    }),
+  ).toBeNull();
+});
+
 test("mixed shadow and enforced completions preserve uncovered legacy usage, including after reset", async ({
   makeAgent,
   makeOrganization,

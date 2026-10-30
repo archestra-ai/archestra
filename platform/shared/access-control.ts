@@ -1165,6 +1165,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateLimit]: {
     llmLimit: ["update"],
   },
+  // A reset changes the limit, so it takes the same access as an update.
+  [RouteId.ResetLimitUsage]: {
+    llmLimit: ["update"],
+  },
   [RouteId.DeleteLimit]: {
     llmLimit: ["delete"],
   },

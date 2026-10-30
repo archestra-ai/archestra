@@ -25,13 +25,15 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   Box,
+  ChevronDown,
   GripVertical,
   LockKeyhole,
+  MoreHorizontal,
   Pencil,
   Plus,
-  Trash2,
+  X,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
@@ -49,7 +51,6 @@ import {
 } from "@/components/agent-runtime-fields";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SettingsSaveBar } from "@/components/settings/settings-block";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -61,6 +62,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Form,
   FormControl,
   FormField,
@@ -70,7 +79,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
@@ -114,10 +122,8 @@ export function RuntimeTemplateSection({
   const images = useAgentCatalogImages();
   const appName = useAppName();
   const builtIns = getAgentCatalogTemplates(images, appName);
-  const addButtonRef = useRef<HTMLButtonElement>(null);
   const [draft, setDraft] = useState<SaveBody | null>(null);
   const [editing, setEditing] = useState<RuntimeTemplate | "new" | null>(null);
-  const [deleting, setDeleting] = useState<RuntimeTemplate | null>(null);
   const saved: SaveBody = {
     revision: settings.data?.revision ?? 0,
     templates: settings.data?.templates ?? [],
@@ -154,6 +160,8 @@ export function RuntimeTemplateSection({
         }))
       : (summaries.data ?? []).map((item) => ({ ...item, builtIn: false }))),
   ].sort((a, b) => position(a.id) - position(b.id));
+  const visibleRows = rows.filter((row) => !row.hidden);
+  const removedRows = rows.filter((row) => row.hidden);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
@@ -173,14 +181,16 @@ export function RuntimeTemplateSection({
   }
   function reorder(ids: string[]) {
     if (!editable) return;
-    setDraft(withRuntimeOrder(state, ids));
+    setDraft(
+      withRuntimeOrder(state, [...ids, ...removedRows.map((row) => row.id)]),
+    );
   }
 
   function move(from: number, to: number) {
-    if (to < 0 || to >= rows.length || from < 0) return;
+    if (to < 0 || to >= visibleRows.length || from < 0) return;
     reorder(
       arrayMove(
-        rows.map((item) => item.id),
+        visibleRows.map((item) => item.id),
         from,
         to,
       ),
@@ -189,30 +199,39 @@ export function RuntimeTemplateSection({
   function onDragEnd({ active, over }: DragEndEvent) {
     if (over && active.id !== over.id)
       move(
-        rows.findIndex((item) => item.id === active.id),
-        rows.findIndex((item) => item.id === over.id),
+        visibleRows.findIndex((item) => item.id === active.id),
+        visibleRows.findIndex((item) => item.id === over.id),
       );
   }
-  function toggle(row: Row, visible: boolean) {
+  function setAvailable(row: Row, visible: boolean) {
     if (!editable) return;
-    setDraft(
-      row.builtIn
-        ? {
-            ...state,
-            popularAgentOverrides: {
-              ...state.popularAgentOverrides,
-              [row.id]: {
-                ...state.popularAgentOverrides?.[row.id as AgentCatalogId],
-                hidden: !visible,
-              },
+    const next = row.builtIn
+      ? {
+          ...state,
+          popularAgentOverrides: {
+            ...state.popularAgentOverrides,
+            [row.id]: {
+              ...state.popularAgentOverrides?.[row.id as AgentCatalogId],
+              hidden: !visible,
             },
-          }
-        : {
-            ...state,
-            templates: state.templates.map((item) =>
-              item.id === row.id ? { ...item, hidden: !visible } : item,
-            ),
           },
+        }
+      : {
+          ...state,
+          templates: state.templates.map((item) =>
+            item.id === row.id ? { ...item, hidden: !visible } : item,
+          ),
+        };
+    setDraft(
+      visible
+        ? withRuntimeOrder(next, [
+            ...visibleRows.map((item) => item.id),
+            row.id,
+            ...removedRows
+              .filter((item) => item.id !== row.id)
+              .map((item) => item.id),
+          ])
+        : next,
     );
   }
 
@@ -222,20 +241,47 @@ export function RuntimeTemplateSection({
         <div className="space-y-1">
           <h3 className="text-sm font-medium">Agent Runtimes</h3>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Choose the runtimes offered when creating an agent. Drag to set
-            their order, or add a template for your own container.
+            Drag to set the order. Remove a runtime to stop offering it.
           </p>
         </div>
-        <Button
-          ref={addButtonRef}
-          size="sm"
-          variant="outline"
-          disabled={!editable || state.templates.length >= 100}
-          onClick={() => setEditing("new")}
-        >
-          <Plus />
-          <span>Add custom runtime</span>
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline" disabled={!editable}>
+              <Plus />
+              <span>Add runtime</span>
+              <ChevronDown />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel>Not in this list</DropdownMenuLabel>
+            {removedRows.length ? (
+              removedRows.map((row) => (
+                <DropdownMenuItem
+                  key={row.id}
+                  onSelect={() => setAvailable(row, true)}
+                >
+                  <RuntimeMark row={row} />
+                  <span className="min-w-0 flex-1 truncate" title={row.name}>
+                    {row.name}
+                  </span>
+                  <Plus className="ml-auto size-3.5" />
+                </DropdownMenuItem>
+              ))
+            ) : (
+              <DropdownMenuItem disabled>
+                All saved runtimes are included
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={state.templates.length >= 100}
+              onSelect={() => setEditing("new")}
+            >
+              <Plus />
+              <span>Create custom runtime…</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {organizationError || settings.isError ? (
         <QueryLoadError
@@ -255,25 +301,19 @@ export function RuntimeTemplateSection({
             onDragEnd={onDragEnd}
           >
             <SortableContext
-              items={rows.map((row) => row.id)}
+              items={visibleRows.map((row) => row.id)}
               strategy={verticalListSortingStrategy}
             >
               <ul className="divide-y" aria-label="Agent Runtimes">
-                {rows.map((row, index) => (
+                {visibleRows.map((row, index) => (
                   <RuntimeTemplateRow
                     key={row.id}
                     row={row}
                     disabled={!editable}
                     onMove={(direction) => move(index, index + direction)}
-                    onToggle={(visible) => toggle(row, visible)}
+                    onRemove={() => setAvailable(row, false)}
                     onEdit={() =>
                       setEditing(
-                        state.templates.find((item) => item.id === row.id) ??
-                          null,
-                      )
-                    }
-                    onDelete={() =>
-                      setDeleting(
                         state.templates.find((item) => item.id === row.id) ??
                           null,
                       )
@@ -283,15 +323,17 @@ export function RuntimeTemplateSection({
               </ul>
             </SortableContext>
           </DndContext>
-          <p className="border-t px-4 py-2 text-xs text-muted-foreground">
-            {rows.filter((item) => !item.hidden).length} runtimes available when
-            creating an agent
-          </p>
+          {!visibleRows.length && (
+            <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+              No runtimes offered. Add a runtime to get started.
+            </p>
+          )}
         </div>
       )}
       <p className="text-xs text-muted-foreground">
-        Built-in templates are maintained automatically. Template changes apply
-        to new agents; existing agents keep their saved configuration.
+        Only runtimes in this list appear when creating an agent. Removed
+        runtimes can be added back. Existing agents keep their saved
+        configuration.
       </p>
       <SettingsSaveBar
         hasChanges={hasChanges}
@@ -322,8 +364,9 @@ export function RuntimeTemplateSection({
             setDraft(
               editing === "new"
                 ? withRuntimeOrder(next, [
-                    ...rows.map((row) => row.id),
+                    ...visibleRows.map((row) => row.id),
                     template.id,
+                    ...removedRows.map((row) => row.id),
                   ])
                 : next,
             );
@@ -331,48 +374,6 @@ export function RuntimeTemplateSection({
           }}
         />
       )}
-      <Dialog
-        open={deleting !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleting(null);
-        }}
-      >
-        <DialogContent
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            addButtonRef.current?.focus();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Delete runtime template?</DialogTitle>
-            <DialogDescription>
-              Remove {deleting?.name} from the runtime choices. Existing agents
-              keep their configuration. This change takes effect when you save
-              settings.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleting(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (!editable) return;
-                setDraft({
-                  ...state,
-                  templates: state.templates.filter(
-                    (item) => item.id !== deleting?.id,
-                  ),
-                });
-                setDeleting(null);
-              }}
-            >
-              Delete template
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </section>
   );
 }
@@ -381,16 +382,14 @@ function RuntimeTemplateRow({
   row,
   disabled,
   onMove,
-  onToggle,
+  onRemove,
   onEdit,
-  onDelete,
 }: {
   row: Row;
   disabled: boolean;
   onMove: (direction: number) => void;
-  onToggle: (visible: boolean) => void;
+  onRemove: () => void;
   onEdit: () => void;
-  onDelete: () => void;
 }) {
   const {
     attributes,
@@ -401,13 +400,13 @@ function RuntimeTemplateRow({
     transition,
     isDragging,
   } = useSortable({ id: row.id, disabled });
+  const TypeIcon = row.builtIn ? LockKeyhole : Box;
   return (
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex items-center gap-3 bg-card px-4 py-3",
-        row.hidden && "opacity-60",
+        "group flex items-center gap-2 bg-card py-2.5 pl-1.5 pr-2",
         isDragging && "relative z-10 shadow-md",
       )}
     >
@@ -417,7 +416,7 @@ function RuntimeTemplateRow({
         {...listeners}
         disabled={disabled}
         aria-label={`Reorder ${row.name}`}
-        className="touch-none shrink-0 cursor-grab rounded-sm p-1 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+        className="flex size-5 shrink-0 touch-none cursor-grab items-center justify-center rounded-sm text-muted-foreground/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing disabled:cursor-not-allowed"
         onKeyDown={(event) => {
           if (!isDragging && ["ArrowUp", "ArrowDown"].includes(event.key)) {
             event.preventDefault();
@@ -425,63 +424,74 @@ function RuntimeTemplateRow({
           } else listeners?.onKeyDown?.(event);
         }}
       >
-        <GripVertical className="size-4 text-muted-foreground" />
+        <GripVertical className="size-3.5" />
       </UnstyledButton>
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
-        {row.builtIn ? (
-          <CatalogAgentIcon id={row.id as AgentCatalogId} />
-        ) : row.icon ? (
-          <AgentIcon icon={row.icon} size={22} />
-        ) : (
-          <Box className="size-5 text-muted-foreground" />
-        )}
+      <span className="flex size-7 shrink-0 items-center justify-center">
+        <RuntimeMark row={row} />
       </span>
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="break-words text-sm font-medium">{row.name}</span>
-          <Badge variant="outline">
-            {row.builtIn && <LockKeyhole className="size-3" />}
-            <span>{row.builtIn ? "Built-in" : "Custom"}</span>
-          </Badge>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-medium" title={row.name}>
+            {row.name}
+          </span>
+          <span
+            className="inline-flex shrink-0 text-muted-foreground/70"
+            title={row.builtIn ? "Built-in runtime" : "Custom runtime"}
+          >
+            <TypeIcon className="size-3" />
+            <span className="sr-only">
+              {row.builtIn ? "Built-in runtime" : "Custom runtime"}
+            </span>
+          </span>
         </div>
-        <p className="break-words text-sm text-muted-foreground">
-          {row.description}
-        </p>
-        <p className="break-all font-mono text-xs text-muted-foreground">
-          {row.image}
-        </p>
+        <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+          <span className="max-w-full truncate" title={row.description}>
+            {row.description}
+          </span>
+          <span
+            className="max-w-full truncate font-mono text-[11px] opacity-70"
+            title={row.image}
+          >
+            {row.image}
+          </span>
+        </div>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-1">
-        {!row.builtIn && (
-          <>
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              disabled={disabled}
-              aria-label={`Edit ${row.name}`}
-              onClick={onEdit}
-            >
-              <Pencil />
-            </Button>
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              disabled={disabled}
-              aria-label={`Delete ${row.name}`}
-              onClick={onDelete}
-            >
-              <Trash2 />
-            </Button>
-          </>
-        )}
-        <Switch
-          disabled={disabled}
-          checked={!row.hidden}
-          onCheckedChange={onToggle}
-          aria-label={`Offer ${row.name} when creating agents`}
-        />
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            disabled={disabled}
+            size="icon-xs"
+            variant="ghost"
+            className="text-muted-foreground"
+            aria-label={`Actions for ${row.name}`}
+          >
+            <MoreHorizontal className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {!row.builtIn && (
+            <DropdownMenuItem onSelect={onEdit}>
+              <Pencil className="size-3.5" />
+              Edit runtime
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={onRemove}>
+            <X className="size-3.5" />
+            Remove from list
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </li>
+  );
+}
+
+function RuntimeMark({ row }: { row: Row }) {
+  if (row.builtIn)
+    return <CatalogAgentIcon id={row.id as AgentCatalogId} size={19} />;
+  return row.icon ? (
+    <AgentIcon icon={row.icon} size={19} />
+  ) : (
+    <Box className="size-4 text-muted-foreground" />
   );
 }
 

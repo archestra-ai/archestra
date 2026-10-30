@@ -16,7 +16,7 @@ Your ChatGPT account must permit plugin archive uploads and custom MCP servers. 
 3. After the download finishes, click **Open ChatGPT** to open the desktop Plugins page, or **Configure on web instead** to use the browser. Choose **Upload plugin archive** and upload the ZIP. If uploads are restricted, ask your workspace administrator to upload it through the workspace's plugin controls.
 4. Review the plugin, install it, and connect your gateway account through OAuth. Start a new conversation with the plugin selected and ask which tools and skills are available.
 
-Use **Download plugin again** to return to the download step. Refreshing the page starts from the download step too. The desktop action uses the app-registered `codex://plugins` route; the web link is the fallback when the desktop app is unavailable or the browser blocks an app launch.
+Use **Download again** to return to the download step. Refreshing the page starts from the download step too. The desktop action uses the app-registered `codex://plugins` route; the web link is the fallback when the desktop app is unavailable or the browser blocks an app launch.
 
 The endpoint is inferred from your deployment, like other clients. Administrators must configure a public HTTPS connection base URL. For a private deployment, configure Secure MCP Tunnel in ChatGPT instead of using an unreachable localhost URL. A dot needs the plugin connected in its own configuration, subject to workspace policy.
 

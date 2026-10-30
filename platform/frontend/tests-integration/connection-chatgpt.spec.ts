@@ -53,6 +53,7 @@ test("downloads MCP and skill resources in one archive without installer or toke
       delayMs: 300,
     },
   ]);
+  await page.setViewportSize({ width: 375, height: 812 });
   const credentialRequests: string[] = [];
   page.on("request", (request) => {
     if (/\/api\/(connection-setups|user-tokens)/.test(request.url()))
@@ -63,6 +64,13 @@ test("downloads MCP and skill resources in one archive without installer or toke
     name: "Download ChatGPT plugin",
     exact: true,
   });
+  const checklist = page.getByRole("region", { name: "Connect", exact: true });
+  await expect(checklist).toBeVisible();
+  expect(
+    await checklist.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
   const downloaded = page.waitForEvent("download");
   await button.dblclick();
   const first = await downloaded;
@@ -85,6 +93,11 @@ test("downloads MCP and skill resources in one archive without installer or toke
   await expect(
     page.getByRole("link", { name: "Configure on web instead" }),
   ).toHaveAttribute("href", "https://chatgpt.com/plugins");
+  expect(
+    await checklist.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
   await page.getByRole("button", { name: "Download plugin again" }).click();
   const repeat = page.waitForEvent("download");
   await button.click();

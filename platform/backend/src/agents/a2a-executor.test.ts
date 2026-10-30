@@ -747,6 +747,46 @@ describe("executeA2AMessage current turn assembly", () => {
     expect(config.messages).toMatchObject(history);
   });
 
+  test("a self-fork follows its parent's auto routing unless it asks for fast or smart", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    const routable: Record<string, boolean> = {};
+    for (const tier of [undefined, "normal", "fast", "smart"] as const) {
+      primeStreamMocks();
+      mockCreateLLMModelForAgent.mockClear();
+      await executeA2AMessage({
+        agentId: agent.id,
+        message: "fork task",
+        organizationId: org.id,
+        userId: actor.id,
+        conversationId: "conv-1",
+        parentDelegationChain: agent.id,
+        selfFork: true,
+        tier,
+      });
+      routable[tier ?? "omitted"] =
+        mockCreateLLMModelForAgent.mock.calls[0]?.[0].autoRoutable;
+    }
+
+    expect(routable).toEqual({
+      omitted: true,
+      normal: true,
+      fast: false,
+      smart: false,
+    });
+  });
+
   test("stops the run once the model repeatedly calls a tool outside the tool list", async ({
     makeOrganization,
     makeAgent,

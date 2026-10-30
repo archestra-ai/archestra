@@ -372,8 +372,11 @@ export async function executeA2AMessage(
   const llmApiKeyId = resolvedApiKeyId ?? agent.llmApiKeyId;
   // An agent set to a pool runs on it; a fork runs on its parent's model.
   const modelPoolId = params.selfFork ? null : agent.modelPoolId;
-  // A fork that asked for a tier runs on it, never auto routed.
-  const autoRoutable = !modelPoolId && !(params.selfFork && params.tier);
+  // A fork that asked for fast or smart runs on it, never auto routed; one on
+  // normal follows its parent's routing.
+  const autoRoutable =
+    !modelPoolId &&
+    !(params.selfFork && (params.tier === "fast" || params.tier === "smart"));
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).

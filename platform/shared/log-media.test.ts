@@ -250,6 +250,39 @@ describe("withoutLoggedMedia", () => {
       "[Image #1] see above",
     );
   });
+
+  it("keeps tool text that only looks like a media container", () => {
+    const toolCall = {
+      arguments: {
+        source: { data: "hello" },
+        upload: { data: "aGVsbG8=" },
+        record: { bytes: "c2VjcmV0", blob: "YmxvYg==" },
+        images: ["aGVsbG8="],
+      },
+    };
+    expect(withoutLoggedMedia(toolCall)).toBe(toolCall);
+    const document = {
+      type: "document",
+      source: { type: "text", media_type: "text/plain", data: "hello" },
+    };
+    expect(withoutLoggedMedia(document)).toBe(document);
+  });
+
+  it("bounds nesting, also inside JSON text, and the result serializes", () => {
+    let deep: unknown = { type: "image", data: PNG, mimeType: "image/png" };
+    for (let index = 0; index < 20_000; index++) deep = { a: deep };
+
+    const stripped = withoutLoggedMedia({ content: deep });
+    const serialized = JSON.stringify(stripped);
+    expect(serialized).toContain("[nested too deeply to log]");
+    expect(serialized).not.toContain(PNG);
+
+    let text = '{"type":"text","text":"x"}';
+    for (let index = 0; index < 20_000; index++) text = `{"a":${text}}`;
+    const message = withoutLoggedMedia({ role: "tool", content: text });
+    expect(message.content).toContain("[nested too deeply to log]");
+    expect(message.content.length).toBeLessThan(1_000);
+  });
 });
 
 describe("isMediaNotKept", () => {

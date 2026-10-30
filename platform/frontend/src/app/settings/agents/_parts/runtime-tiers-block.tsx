@@ -56,12 +56,13 @@ export function RuntimeTiersBlock({
         )
       }
     >
-      <Table>
+      {/* Narrow screens scroll the table sideways rather than squeeze it. */}
+      <Table className="min-w-[46rem]">
         <TableHeader>
           <TableRow>
-            <TableHead className="w-12">Tier</TableHead>
+            <TableHead className="w-14 whitespace-nowrap">Tier</TableHead>
             {RUNTIME_TIER_FIELDS.map((field) => (
-              <TableHead key={field}>
+              <TableHead key={field} className="whitespace-nowrap">
                 {RUNTIME_TIER_FIELD_LABELS[field]}
               </TableHead>
             ))}
@@ -75,7 +76,6 @@ export function RuntimeTiersBlock({
                 <TableCell key={field}>
                   <Input
                     aria-label={`Tier ${tier} ${RUNTIME_TIER_FIELD_LABELS[field]}`}
-                    className="min-w-24"
                     disabled={!canEdit}
                     placeholder={defaultText(
                       DEFAULT_AGENT_RUNTIME_TIERS[tier],

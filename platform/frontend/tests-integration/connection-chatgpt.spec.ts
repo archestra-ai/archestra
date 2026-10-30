@@ -7,6 +7,23 @@ import { expect, test } from "./fixtures";
 
 const endpoint = "https://gateway.example.test/v1/mcp/team-tools";
 
+// Exercise the deployment-configured public endpoint, as production does.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    let runtimeEnv: Record<string, string>;
+    Object.defineProperty(window, "__ENV", {
+      configurable: true,
+      get: () => runtimeEnv,
+      set: (value: Record<string, string>) => {
+        runtimeEnv = {
+          ...value,
+          NEXT_PUBLIC_ARCHESTRA_API_BASE_URL: "https://gateway.example.test",
+        };
+      },
+    });
+  });
+});
+
 test("downloads MCP and skill resources in one archive without installer or token requests", async ({
   page,
   mswControl,
@@ -42,10 +59,6 @@ test("downloads MCP and skill resources in one archive without installer or toke
       credentialRequests.push(request.url());
   });
   await page.goto("/connection?clientId=chatgpt");
-  await page
-    .getByRole("button", { name: "Connection options and model routing" })
-    .click();
-  await page.getByLabel("Gateway HTTPS URL").fill(endpoint);
   const button = page.getByRole("button", {
     name: "Download ChatGPT plugin",
     exact: true,
@@ -66,7 +79,13 @@ test("downloads MCP and skill resources in one archive without installer or toke
   });
   expect(zip.file("skills/jira-task/SKILL.md")).not.toBeNull();
   expect(zip.file("skills/jira-task/reference/fields.md")).not.toBeNull();
-  await expect(button).toBeEnabled();
+  await expect(
+    page.getByRole("link", { name: "Open ChatGPT", exact: true }),
+  ).toHaveAttribute("href", "codex://plugins");
+  await expect(
+    page.getByRole("link", { name: "Configure on web instead" }),
+  ).toHaveAttribute("href", "https://chatgpt.com/plugins");
+  await page.getByRole("button", { name: "Download plugin again" }).click();
   const repeat = page.waitForEvent("download");
   await button.click();
   expect((await repeat).suggestedFilename()).toBe(first.suggestedFilename());
@@ -83,6 +102,11 @@ test("downloads MCP and skill resources in one archive without installer or toke
     Object.keys(toolsZip.files).some((name) => name.startsWith("skills/")),
   ).toBe(false);
   expect(credentialRequests).toEqual([]);
+  await page.reload();
+  await expect(button).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open ChatGPT", exact: true }),
+  ).toHaveCount(0);
 });
 
 test("missing gateway removes download actions", async ({
@@ -115,10 +139,6 @@ test("failed skill access stops the archive and permits a clean retry", async ({
     once: true,
   });
   await page.goto("/connection?clientId=chatgpt");
-  await page
-    .getByRole("button", { name: "Connection options and model routing" })
-    .click();
-  await page.getByLabel("Gateway HTTPS URL").fill(endpoint);
   const downloads: string[] = [];
   page.on("download", (download) =>
     downloads.push(download.suggestedFilename()),

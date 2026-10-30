@@ -1,6 +1,7 @@
 "use client";
 
 import { Terminal } from "lucide-react";
+import Image from "next/image";
 import { ClientMarkTile, markTileRadius } from "@/components/client-mark-tile";
 import type { ConnectClient } from "./clients";
 
@@ -10,6 +11,17 @@ interface ClientIconProps {
 }
 
 export function ClientIcon({ client, size = 36 }: ClientIconProps) {
+  if (client.iconSrc) {
+    return (
+      <Image
+        src={client.iconSrc}
+        alt={`${client.label} logo`}
+        width={size}
+        height={size}
+        className="shrink-0 object-contain"
+      />
+    );
+  }
   if (client.svg) {
     return (
       <ClientMarkTile

@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -28,30 +27,19 @@ beforeEach(() => {
   >);
 });
 
-it("updates the packaged endpoint after changing gateways and keeps advanced copy collapsed", async () => {
-  const user = userEvent.setup();
-  const { rerender } = render(<ChatgptGatewaySetup {...props} />, { wrapper });
+it("shows a compact upload instruction without connection configuration", () => {
+  render(<ChatgptGatewaySetup {...props} />, { wrapper });
   expect(
     screen.getByRole("button", { name: "Download ChatGPT plugin" }),
   ).toBeVisible();
-  expect(screen.queryByLabelText("Gateway HTTPS URL")).toBeNull();
-  await user.click(
-    screen.getByRole("button", {
+  expect(screen.queryByRole("link", { name: "Open ChatGPT" })).toBeNull();
+  expect(screen.queryByText("Upload plugin archive")).toBeNull();
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect(
+    screen.queryByRole("button", {
       name: "Connection options and model routing",
     }),
-  );
-  expect(screen.getByLabelText("Gateway HTTPS URL")).toHaveValue(
-    "https://gateway.example.test/v1/mcp/team-gateway",
-  );
-  rerender(
-    <ChatgptGatewaySetup
-      {...props}
-      gateway={{ id: "other-id", name: "Other gateway" }}
-    />,
-  );
-  expect(screen.getByLabelText("Gateway HTTPS URL")).toHaveValue(
-    "https://gateway.example.test/v1/mcp/other-id",
-  );
+  ).toBeNull();
 });
 
 it("removes download actions when the gateway becomes unavailable", () => {
@@ -61,7 +49,5 @@ it("removes download actions when the gateway becomes unavailable", () => {
   expect(
     screen.queryByRole("button", { name: "Download ChatGPT plugin" }),
   ).toBeNull();
-  expect(
-    screen.queryByRole("link", { name: "Open ChatGPT Plugins" }),
-  ).toBeNull();
+  expect(screen.queryByRole("link", { name: "Open ChatGPT" })).toBeNull();
 });

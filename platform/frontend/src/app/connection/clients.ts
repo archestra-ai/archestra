@@ -188,6 +188,8 @@ export interface ConnectClient {
   label: string;
   sub: string;
   svg?: string;
+  /** Official product artwork when a flat vector mark is insufficient. */
+  iconSrc?: string;
   /**
    * Second-tone shape drawn beneath `svg`, for two-tone marks a single path
    * can't carry (e.g. OpenCode's lighter inner block).
@@ -547,6 +549,8 @@ claude`,
     label: "ChatGPT",
     sub: "Desktop, Chat and Work",
     ...markFields(OPENAI_MARK),
+    iconColor: "#171717",
+    tileBg: "#f4f4f5",
     mcp: {
       kind: "custom",
       supportedAuth: "oauth",
@@ -580,9 +584,9 @@ claude`,
   },
   {
     id: "codex",
-    label: NATIVE_SESSION_CLIENT_LABELS.codex,
+    label: "Codex CLI",
     sub: "OpenAI CLI",
-    ...markFields(OPENAI_MARK),
+    iconSrc: "/icons/codex.png",
     mcp: {
       kind: "custom",
       supportedAuth: "oauth",

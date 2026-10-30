@@ -183,7 +183,7 @@ node CPU runs faster. One run per configuration.
 | Cold start, clone to ready | 63 s (90 CPU-seconds) | 121 s (191) | 148 s (191) |
 | Warm restart | 26 s | 43 s | not measured |
 | Six pages, first visit / warm | 82 s / 7.9 s | 58 s / 5.9 s | 91 s / 14.8 s |
-| Backend reload, median of 3 | 31 s, see below | 17 s | 19 s |
+| Backend reload, median of 3 | 16 s, see below | 17 s | 19 s |
 | vitest file, pure / with the database | 13 s / 19 s | 13 s / 18 s | not measured |
 | Idle CPU | 0.02 cores | 0.19 cores | 0.18 cores |
 | Peak memory, anonymous | 5.3 GiB | 8.4 GiB | 5.9 GiB |
@@ -195,9 +195,11 @@ equal CPU the lite stack starts in less than half the time and serves pages at
 least as fast. The full stack at 4 CPU wins first page compiles because of its
 CPU, not its stack.
 
-The lite backend reload waited out the backend's production shutdown drain;
-`dev-lite.sh` now gives the dev server a short drain and stops it within 5 s,
-like Tilt's backend runner.
+A first run measured the lite reload at 31 s: the container's PID 1 never
+reaped exited processes, and `dev-lite.sh` counted those zombies as a server
+still running until its 15 s cap. It now counts only live processes, and caps a
+backend stop at 5 s like Tilt's backend runner. With a PID 1 that reaps, the
+reload took 16 s.
 
 At 2 CPU the Playwright agents and chat specs first timed out on pages
 compiling for the first time (3 of 23). `archestra-dev-lite e2e` now compiles

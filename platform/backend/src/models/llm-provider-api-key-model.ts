@@ -14,6 +14,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, withDbTransaction } from "@/database";
 import type { LinkedApiKey, LlmProviderApiKey, Model } from "@/types";
 import ModelModel from "./model";
@@ -23,6 +24,26 @@ import ModelModel from "./model";
  * Manages the many-to-many relationship between chat_api_keys and models.
  */
 class LlmProviderApiKeyModelLinkModel {
+  /** Resolve the selected connection's cap without borrowing another key's metadata. */
+  static async resolveOutputLength(
+    model: Model | null,
+    apiKeyId?: string | null,
+  ): Promise<number | null> {
+    if (!model) return null;
+    if (!apiKeyId) return ModelModel.resolveEffectiveOutputLength(model);
+    const links = schema.llmProviderApiKeyModelsTable;
+    const [link] = await db
+      .select({ outputLength: links.outputLength })
+      .from(links)
+      .where(and(eq(links.apiKeyId, apiKeyId), eq(links.modelId, model.id)))
+      .limit(1);
+    const endpoint = sanitizeOutputLimit(link?.outputLength);
+    if (endpoint === null)
+      return ModelModel.resolveEffectiveOutputLength(model);
+    const custom = sanitizeOutputLimit(model.customOutputLength);
+    return custom === null ? endpoint : Math.min(custom, endpoint);
+  }
+
   /**
    * Link multiple models to an API key.
    * This performs a bulk insert, ignoring duplicates.
@@ -150,6 +171,7 @@ class LlmProviderApiKeyModelLinkModel {
     models: Array<{
       id: string;
       modelId: string;
+      outputLength?: number | null;
       recommendedForAgents?: boolean | null;
     }>,
     provider: SupportedProvider,
@@ -192,6 +214,7 @@ class LlmProviderApiKeyModelLinkModel {
         const values = uniqueModels.map((model) => ({
           apiKeyId,
           modelId: model.id,
+          outputLength: model.outputLength ?? null,
           isBest: model.id === bestModel?.id,
           recommendedForAgents: model.recommendedForAgents ?? null,
           syncedAt,
@@ -212,6 +235,7 @@ class LlmProviderApiKeyModelLinkModel {
               set: {
                 isBest: sql`excluded.is_best`,
                 syncedAt: sql`excluded.synced_at`,
+                outputLength: sql`excluded.output_length`,
                 recommendedForAgents: options.overwriteRecommendedForAgents
                   ? sql`excluded.recommended_for_agents`
                   : sql`COALESCE(excluded.recommended_for_agents, ${schema.llmProviderApiKeyModelsTable.recommendedForAgents})`,

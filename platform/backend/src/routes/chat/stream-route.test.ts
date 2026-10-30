@@ -2123,7 +2123,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     // the turn runs on a resolved stored credential, not the agent's own key
     mockCreateLLMModelForAgent.mockResolvedValueOnce({
       model: "mock-model",
-      chatApiKeyId: "credential-1",
+      chatApiKeyId: "00000000-0000-4000-8000-000000000123",
     });
     mockStreamText.mockClear();
     mockMarkOpenAiReasoningSummaryUnsupported.mockClear();
@@ -2177,7 +2177,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     // the verdict is keyed by the credential the turn ran on
     expect(mockMarkOpenAiReasoningSummaryUnsupported).toHaveBeenCalledTimes(1);
     expect(mockMarkOpenAiReasoningSummaryUnsupported).toHaveBeenCalledWith(
-      `openai-reasoning-summary-unsupported-${organizationId}:credential-1`,
+      `openai-reasoning-summary-unsupported-${organizationId}:00000000-0000-4000-8000-000000000123`,
     );
   });
 

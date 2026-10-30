@@ -466,12 +466,18 @@ export async function resolveModelOutputBudget(params: {
   provider: SupportedProvider;
   modelName: string;
   unknownOutputLength?: number;
+  chatApiKeyId?: string | null;
 }): Promise<ModelOutputBudget> {
+  const model = await ModelModel.findByProviderAndModelId(
+    params.provider,
+    params.modelName,
+  );
   return modelOutputBudget({
     provider: params.provider,
-    model: await ModelModel.findByProviderAndModelId(
-      params.provider,
-      params.modelName,
+    model,
+    outputLength: await LlmProviderApiKeyModelLinkModel.resolveOutputLength(
+      model,
+      params.chatApiKeyId,
     ),
     unknownOutputLength: params.unknownOutputLength,
   });
@@ -486,13 +492,12 @@ export async function resolveModelOutputBudget(params: {
 function modelOutputBudget(params: {
   provider: SupportedProvider;
   model: Model | null;
+  outputLength: number | null;
   /** Output cap to assume when the catalog has none for the model. */
   unknownOutputLength?: number;
 }): ModelOutputBudget {
   const { model } = params;
-  const outputLength = model
-    ? ModelModel.resolveEffectiveOutputLength(model)
-    : null;
+  const outputLength = params.outputLength;
   const contextLength = model
     ? ModelModel.resolveEffectiveContextLength(model)
     : null;

@@ -177,9 +177,16 @@ class ModelSyncService {
           deriveRecommendedForAgents(model.capabilities),
         ]),
       );
+      const outputLengthByModelId = new Map(
+        providerModels.map((model) => [
+          model.id,
+          model.capabilities?.outputLength,
+        ]),
+      );
       const modelsWithIds = upsertedModels.map((m) => ({
         id: m.id,
         modelId: m.modelId,
+        outputLength: outputLengthByModelId.get(m.modelId) ?? null,
         recommendedForAgents: verdictByProviderModelId.get(m.modelId) ?? null,
       }));
       await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
@@ -836,7 +843,6 @@ export function resolveModelCapabilities(params: {
         crossProviderMetadata?.contextLength ??
         null,
       outputLength:
-        fetched?.outputLength ??
         capabilities?.outputLength ??
         inferredCapabilities.outputLength ??
         crossProviderMetadata?.outputLength ??

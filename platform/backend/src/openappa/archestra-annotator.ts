@@ -137,6 +137,7 @@ class OpenAppaArchestraAnnotator {
       await resolveModelOutputBudget({
         provider: selection.provider,
         modelName: selection.modelName,
+        chatApiKeyId: selection.chatApiKeyId,
       }),
     );
     // The schema stays in the prompt under structured output too: some

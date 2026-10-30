@@ -452,8 +452,8 @@ const GEMINI_IMAGE: Record<
 
 /**
  * Realtime models: every input modality and cached input at its own rate.
- * `gpt-realtime-translate` is billed per minute of a live session, which no
- * response event reports, so it is not priced.
+ * `gpt-realtime-translate` and `gpt-realtime-whisper` are billed per minute
+ * of a live session, which no response event reports, so they are not priced.
  */
 const OPENAI_REALTIME: Record<
   string,
@@ -488,6 +488,26 @@ const OPENAI_REALTIME: Record<
     textOutput: 2.4,
     audioOutput: 20,
   },
+  "gpt-realtime-1.5": {
+    textInput: 4,
+    audioInput: 32,
+    imageInput: 5,
+    cachedTextInput: 0.4,
+    cachedAudioInput: 0.4,
+    cachedImageInput: 0.5,
+    textOutput: 16,
+    audioOutput: 64,
+  },
+  "gpt-realtime-2": {
+    textInput: 4,
+    audioInput: 32,
+    imageInput: 5,
+    cachedTextInput: 0.4,
+    cachedAudioInput: 0.4,
+    cachedImageInput: 0.5,
+    textOutput: 24,
+    audioOutput: 64,
+  },
   "gpt-realtime-2.1": {
     textInput: 4,
     audioInput: 32,
@@ -521,6 +541,12 @@ const OPENAI_AUDIO_CHAT: Record<
   }
 > = {
   "gpt-audio": {
+    textInput: 2.5,
+    textOutput: 10,
+    audioInput: 32,
+    audioOutput: 64,
+  },
+  "gpt-audio-1.5": {
     textInput: 2.5,
     textOutput: 10,
     audioInput: 32,

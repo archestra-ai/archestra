@@ -63,10 +63,13 @@ import {
   getHitlReview,
   getHitlReviewResult,
   HITL_QUESTION_TTL_MS,
+  type HitlAnswerNotRecordedReason,
   type HitlReviewOutcome,
+  hitlAnswerNotRecordedResult,
   hitlReviewAskedInForm,
   isHitlReviewOutcome,
   peekHitlDecision,
+  recordHitlAnswerNotRecorded,
   recordHitlRuling,
   renewHitlReview,
   resolveHitlInspectableAnswer,
@@ -5580,10 +5583,28 @@ async function recordNativeHitlRulings(params: {
         claimDigest: claim.digest ?? "",
         askedQuestion: claim.askedQuestion,
       });
-      if (outcome.kind === "ruling") recorded.push(outcome.ruling);
       // A dropped answer records nothing and advances nothing.
-      else if (outcome.kind === "continued")
-        continued.push(outcome.continuation);
+      switch (outcome.kind) {
+        case "ruling":
+          recorded.push(outcome.ruling);
+          break;
+        case "continued":
+          continued.push(outcome.continuation);
+          if (outcome.continuation.selection === "stale")
+            await noteAnswerNotRecorded(
+              params.binding,
+              claim.offerIds,
+              "stale_card",
+            );
+          break;
+        case "drop":
+          await noteAnswerNotRecorded(
+            params.binding,
+            claim.offerIds,
+            "unidentifiable_answer",
+          );
+          break;
+      }
       continue;
     }
     // The question the answer is read against comes from the review this
@@ -5618,6 +5639,11 @@ async function recordNativeHitlRulings(params: {
           "OpenAPPA native approval answer arrived after its review expired",
         );
         expiredOfferIds.push(offerId);
+        await noteAnswerNotRecorded(
+          params.binding,
+          [offerId],
+          "review_expired",
+        );
       }
       continue;
     }
@@ -5712,10 +5738,25 @@ async function recordNativeHitlRulings(params: {
           ...(review?.tool ? { reviewedTool: review.tool } : {}),
           ...(review?.arguments ? { reviewedArguments: review.arguments } : {}),
         });
+      } else {
+        await noteAnswerNotRecorded(params.binding, [offerId], "record_failed");
       }
     }
   }
   return { rulings: recorded, unreadOfferIds, continued, expiredOfferIds };
+}
+
+async function noteAnswerNotRecorded(
+  binding: AppaPluginBinding,
+  offerIds: readonly string[],
+  reason: HitlAnswerNotRecordedReason,
+): Promise<void> {
+  for (const offerId of offerIds)
+    await recordHitlAnswerNotRecorded({
+      session: binding.session,
+      offerId,
+      reason,
+    });
 }
 
 /**
@@ -6173,15 +6214,20 @@ async function pendingReviewResult(
     outcome === "review_required"
       ? await getHitlReview({ session: binding.session, offerId })
       : undefined;
-  const recordedOutcome = await getHitlReviewResult({
+  const recorded = await getHitlReviewResult({
     session: binding.session,
     callId: result.id,
     offerId,
   });
-  if (recordedOutcome !== undefined ? recordedOutcome !== outcome : !pending)
+  if (recorded !== undefined ? recorded.outcome !== outcome : !pending)
     return undefined;
   // Only a server-staged review may produce this status. Never forward arbitrary
   // client instruction text or treat the status itself as an approval receipt.
+  if (recorded?.outcome === "answer_not_recorded")
+    return JSON.stringify(
+      hitlAnswerNotRecordedResult(offerId, recorded.reason),
+    );
+  if (outcome === "answer_not_recorded") return undefined;
   return JSON.stringify({
     ok: false,
     outcome,
@@ -6404,7 +6450,9 @@ async function hasRemedyOfferResult(params: {
   return true;
 }
 
-function reviewStatusInstruction(outcome: HitlReviewOutcome): string {
+function reviewStatusInstruction(
+  outcome: Exclude<HitlReviewOutcome, "answer_not_recorded">,
+): string {
   const instructions = {
     review_required:
       "Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform shows the exact review with Approve and Deny choices. Call execute_remedy_plan again only after the user approves.",
@@ -6418,7 +6466,7 @@ function reviewStatusInstruction(outcome: HitlReviewOutcome): string {
       "The approval review could not be delivered in this session. The protected call remains blocked; no ruling was granted.",
     review_invalid:
       "The approval review did not receive a valid decision. The protected call remains blocked; no ruling was granted.",
-  } satisfies Record<HitlReviewOutcome, string>;
+  } satisfies Record<Exclude<HitlReviewOutcome, "answer_not_recorded">, string>;
   return instructions[outcome];
 }
 
@@ -6435,7 +6483,10 @@ function isNativeNoAnswer(
 
 function reviewRequiredOfferId(value: unknown, depth: number): string | null {
   const status = reviewResultStatus(value, depth);
-  return status?.outcome === "review_required" ? status.offerId : null;
+  return status?.outcome === "review_required" ||
+    status?.outcome === "answer_not_recorded"
+    ? status.offerId
+    : null;
 }
 
 function reviewResultStatus(

@@ -1226,7 +1226,7 @@ describe("OpenAPPA tool execution", () => {
       callId: "control-no-answer",
       offerId: "offer-hitl",
     };
-    expect(await getHitlReviewResult(lookup)).toBe(outcome);
+    expect(await getHitlReviewResult(lookup)).toEqual({ outcome: outcome });
     expect(await peekHitlDecision(lookup)).toMatchObject({ ruling: "none" });
     expect(await consumeHitlRuling(lookup)).toBe("none");
     expect(
@@ -1647,7 +1647,9 @@ describe("OpenAPPA tool execution", () => {
       callId: "control-binding",
       offerId: "offer-binding",
     };
-    expect(await getHitlReviewResult(lookup)).toBe("review_unanswered");
+    expect(await getHitlReviewResult(lookup)).toEqual({
+      outcome: "review_unanswered",
+    });
     expect(
       await getHitlReviewResult({
         ...lookup,
@@ -1733,7 +1735,7 @@ describe("OpenAPPA tool execution", () => {
         callId: "review-required-call",
         offerId: "offer-hitl",
       }),
-    ).toBe("review_required");
+    ).toEqual({ outcome: "review_required" });
     expect(
       await getHitlAskUserArguments({
         session: {
@@ -1745,6 +1747,50 @@ describe("OpenAPPA tool execution", () => {
     ).toMatchObject({
       question: "Approve this action?",
       remedy_offer_ids: ["offer-hitl"],
+    });
+  });
+
+  test("mcp gateway: a repeated remedy call with no approval card asked since says the answer was not recorded", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: "Approve this action?",
+      session_id: "session-1",
+      tool: "archestra__todo_write",
+      arguments: VALID_TODO,
+    });
+    const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const call = (currentToolCallId: string) =>
+      executeArchestraTool(
+        toolFullName,
+        { offer_id: "offer-hitl", trajectory: trajectory(), plan: "Review" },
+        {
+          ...mockContext,
+          currentToolCallId,
+          mrtr: { enabled: true, clientCapabilities: { elicitation: {} } },
+        },
+      );
+
+    expect((await call("first-call")).structuredContent).toMatchObject({
+      outcome: "review_required",
+    });
+    const repeated = await call("second-call");
+
+    expect(repeated.structuredContent).toMatchObject({
+      ok: false,
+      outcome: "answer_not_recorded",
+      reason: "question_not_issued",
+      offer_id: "offer-hitl",
+    });
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(
+      await getHitlReviewResult({
+        session: { organization_id: orgId, session_id: "session-1" },
+        callId: "second-call",
+        offerId: "offer-hitl",
+      }),
+    ).toEqual({
+      outcome: "answer_not_recorded",
+      reason: "question_not_issued",
     });
   });
 

@@ -268,6 +268,7 @@ function AgentEditor({ agent }: { agent: Agent }) {
             readOnly,
           }) => {
             const isSaving = formSaving || savingPermissions;
+            const saveForm = fieldsDirty && !readOnly;
             const row = (
               <WizardFooter>
                 <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
@@ -283,7 +284,7 @@ function AgentEditor({ agent }: { agent: Agent }) {
                       <span>{prevStep.title}</span>
                     </Button>
                   )}
-                  {!readOnly && (
+                  {(!readOnly || permissionsDirty) && (
                     // Where the buttons stack, the status heads the stack
                     // instead of splitting the back button from the rest.
                     <span className="order-first text-center text-xs text-muted-foreground sm:order-none sm:text-left">
@@ -322,20 +323,19 @@ function AgentEditor({ agent }: { agent: Agent }) {
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   )}
-                  {!readOnly && (
+                  {(!readOnly || permissionsDirty) && (
                     <Button
                       size="sm"
                       key="save"
                       // With only the grants changed there is no form to
                       // submit, so the button saves them directly.
-                      type={fieldsDirty ? "submit" : "button"}
-                      form={fieldsDirty ? formId : undefined}
+                      type={saveForm ? "submit" : "button"}
+                      form={saveForm ? formId : undefined}
                       onClick={
-                        fieldsDirty ? undefined : () => void savePermissions()
+                        saveForm ? undefined : () => void savePermissions()
                       }
                       disabled={
-                        isSaving ||
-                        (fieldsDirty ? !canSubmit : !permissionsDirty)
+                        isSaving || (saveForm ? !canSubmit : !permissionsDirty)
                       }
                       data-testid={E2eTestId.AgentSetupSubmitButton}
                     >

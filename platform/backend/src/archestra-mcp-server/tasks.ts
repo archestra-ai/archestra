@@ -2029,9 +2029,9 @@ async function protectedFileAccess(params: {
  * get_agent_run's governed result, or undefined when the raw output may be
  * read: Guardrails are off, or an unrecognized client reads a run no session
  * is bound to. Under a proof only a result admitted across the runtime
- * crossing is returned; a run without runtime metadata, a historical turn or
- * the run reading itself gets metadata and the run page, never the raw
- * artifact or request text.
+ * crossing is returned; a run without runtime metadata, a historical turn, an
+ * unparented run or the run reading itself gets metadata and the run page,
+ * never the raw artifact or request text.
  */
 async function governedRunOutput(params: {
   context: Parameters<typeof guardRuntimeCrossing>[0];
@@ -2049,7 +2049,9 @@ async function governedRunOutput(params: {
     // A task with no runtime has no output to govern.
     return session && workspace ? errorResult(gate.reason) : undefined;
   }
-  const withheld = () =>
+  const withheld = (
+    text = "Guardrails cannot verify this run's output for this conversation, so none was returned. A person can read it on the run page.",
+  ) =>
     structuredSuccessResult(
       {
         run: runSummary({
@@ -2065,7 +2067,7 @@ async function governedRunOutput(params: {
         workspace: null,
         session: null,
       },
-      "Guardrails cannot verify this run's output for this conversation, so none was returned. A person can read it on the run page.",
+      text,
     );
   if (gate.kind === "unrecognized") {
     if (!session || !workspace) return undefined;
@@ -2083,7 +2085,11 @@ async function governedRunOutput(params: {
     taskId: params.task.id,
   });
   if (crossed.kind === "producer") return withheld();
-  if (crossed.kind === "refused") return errorResult(crossed.reason);
+  if (crossed.kind === "refused") {
+    return crossed.cause === "unparented"
+      ? withheld(crossed.reason)
+      : errorResult(crossed.reason);
+  }
   const canContinue = Boolean(
     (workspace.state === "active" &&
       !session.endedAt &&

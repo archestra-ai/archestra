@@ -25,7 +25,9 @@ import { createFastifyInstance } from "@/fastify-instance";
 import LimitModel from "@/models/limit";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
+import { drainBackgroundWork } from "@/utils/background-work";
 import { openaiAdapterFactory } from "../adapters/openai";
 import openAiProxyRoutes from "./openai";
 
@@ -153,6 +155,220 @@ describe("LLM proxy limit enforcement (integration)", () => {
       __setTestDb(activeDb);
     }
   }
+
+  describe("personal standard key attribution", () => {
+    setupTestCacheManager();
+    let organizationId: string;
+    let agentId: string;
+    let owner: { id: string; email: string };
+    let other: { id: string; email: string };
+    let credential: string;
+    let virtualKeyId: string;
+    let providerKeyId: string;
+    let harness: ReturnType<typeof createOpenAiHarness>;
+
+    beforeEach(
+      async ({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeAgent,
+        makeSecret,
+        makeLlmProviderApiKey,
+      }) => {
+        const org = await makeOrganization();
+        organizationId = org.id;
+        owner = await makeUser({ email: "owner@example.com" });
+        other = await makeUser({ email: "other@example.com" });
+        await makeMember(owner.id, org.id);
+        await makeMember(other.id, org.id);
+        const agent = await makeAgent({ organizationId, access: "org" });
+        agentId = agent.id;
+        const secret = await makeSecret({
+          secret: { apiKey: "synthetic-provider-credential" },
+        });
+        const provider = await makeLlmProviderApiKey(org.id, secret.id, {
+          provider: "openai",
+          baseUrl: "https://provider.example/v1",
+        });
+        providerKeyId = provider.id;
+        const key = await VirtualApiKeyModel.create({
+          organizationId,
+          name: "Personal attribution key",
+          scope: "personal",
+          authorId: owner.id,
+          providerApiKeys: [
+            { provider: "openai", providerApiKeyId: providerKeyId },
+          ],
+        });
+        credential = key.value;
+        virtualKeyId = key.virtualKey.id;
+        const model = await ModelModel.findByProviderAndModelId(
+          "openai",
+          "gpt-4o",
+        );
+        if (!model) throw new Error("Missing seeded gpt-4o model");
+        await ModelModel.update(model.id, {
+          customPricePerMillionInput: "2.50",
+          customPricePerMillionOutput: "10.00",
+        });
+        harness = await setupRoute();
+      },
+    );
+
+    afterEach(() => drainBackgroundWork());
+
+    const call = (headers: Record<string, string> = {}, token = credential) =>
+      app.inject({
+        method: "POST",
+        url: OPENAI_ENDPOINT(agentId),
+        remoteAddress: "203.0.113.5",
+        headers: { ...OPENAI_HEADERS(`Bearer ${token}`), ...headers },
+        payload: SIMPLE_PAYLOAD(),
+      });
+
+    const hints = (): Record<string, string>[] => [
+      { "x-archestra-user-id": other.id },
+      { "x-openwebui-user-email": other.email },
+    ];
+
+    for (const source of ["custom", "default"] as const) {
+      test(`${source} owner limit cannot be bypassed with identity hints`, async ({
+        makeInteraction,
+      }) => {
+        const providerCall = harness.client.chat.completions.create;
+        if (source === "custom") {
+          await LimitModel.create({
+            entityType: "user",
+            entityId: owner.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            model: ["gpt-4o"],
+            lastCleanup: new Date(),
+          });
+          await LimitModel.updateTokenLimitUsage(
+            "user",
+            owner.id,
+            "gpt-4o",
+            1000000,
+            1000000,
+          );
+        } else {
+          await EnvironmentDefaultUserLimitModel.create({
+            organizationId,
+            environmentId: null,
+            limitValue: 1,
+            model: ["gpt-4o"],
+            cleanupInterval: "1w",
+          });
+          await makeInteraction(agentId, {
+            userId: owner.id,
+            model: "gpt-4o",
+            cost: "2",
+          });
+        }
+        for (const headers of [{}, ...hints()]) {
+          const response = await call(headers);
+          expect(response.statusCode, response.body).toBe(402);
+          expect(response.json().error.usage_limit).toMatchObject({
+            entity_type: "user",
+            entity_name: owner.email,
+            ...(source === "default" ? { source: "default_user" } : {}),
+          });
+        }
+        expect(providerCall).not.toHaveBeenCalled();
+        // A second personal key can still use the same agent and provider.
+        const otherKey = await VirtualApiKeyModel.create({
+          organizationId,
+          name: "Other personal key",
+          scope: "personal",
+          authorId: other.id,
+          providerApiKeys: [
+            { provider: "openai", providerApiKeyId: providerKeyId },
+          ],
+        });
+        const control = await call(
+          { "x-archestra-user-id": owner.id },
+          otherKey.value,
+        );
+        expect(control.statusCode, control.body).toBe(200);
+        expect(providerCall).toHaveBeenCalledTimes(1);
+      });
+    }
+
+    test("logs, personal spend and key usage stay with the owner", async () => {
+      const limits = await Promise.all(
+        [
+          { entityType: "user" as const, entityId: owner.id },
+          { entityType: "user" as const, entityId: other.id },
+          { entityType: "virtual_key" as const, entityId: virtualKeyId },
+        ].map((entity) =>
+          LimitModel.create({
+            ...entity,
+            limitType: "token_cost",
+            limitValue: 10,
+            model: ["gpt-4o"],
+            lastCleanup: new Date(),
+          }),
+        ),
+      );
+      for (const headers of hints()) {
+        const response = await call(headers);
+        expect(response.statusCode, response.body).toBe(200);
+      }
+      await drainBackgroundWork();
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, agentId));
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect(row).toMatchObject({
+          userId: owner.id,
+          virtualKeyId,
+          authMethod: "virtual_key",
+          billingTeamId: null,
+        });
+        expect(Number(row.cost)).toBeCloseTo(0.00045, 8);
+      }
+      for (const [index, limit] of limits.entries()) {
+        expect(await LimitModel.getRawModelUsage(limit.id)).toMatchObject([
+          {
+            currentUsageTokensIn: index === 1 ? 0 : 200,
+            currentUsageTokensOut: index === 1 ? 0 : 40,
+          },
+        ]);
+      }
+      const spend = await LimitModel.getDefaultUserLimitUsageByUser({
+        organizationId,
+        models: ["gpt-4o"],
+        cleanupInterval: "1w",
+      });
+      expect(spend.get(owner.id)?.cost).toBeCloseTo(0.0009, 8);
+      expect(spend.get(other.id)).toBeUndefined();
+    });
+
+    test("an org key still accepts integration attribution hints", async () => {
+      const key = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "Integration key",
+        scope: "org",
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: providerKeyId },
+        ],
+      });
+      const response = await call(
+        { "x-openwebui-user-email": other.email },
+        key.value,
+      );
+      expect(response.statusCode, response.body).toBe(200);
+      const [row] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, agentId));
+      expect(row.userId).toBe(other.id);
+    });
+  });
 
   test("a scoped cap refuses its model without dispatch and leaves unrelated models usable", async ({
     makeAgent,

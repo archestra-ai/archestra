@@ -447,6 +447,52 @@ describe("model-facing runtime tools", () => {
     expect(JSON.stringify(result)).not.toContain("RAW ARTIFACT");
   });
 
+  test("a proof reading a run that has no parent gets its state and page, not its output", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+      parentId: null,
+    });
+    await db.insert(schema.a2aArtifactsTable).values({
+      taskId: seeded.task.id,
+      name: "agent-response",
+      parts: [{ text: "RAW ARTIFACT" }],
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_GET_AGENT_RUN_FULL_NAME,
+      { run_id: seeded.task.id },
+      seeded.context,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      run: expect.objectContaining({
+        run_id: seeded.task.id,
+        state: expect.any(String),
+      }),
+      run_url: expect.stringMatching(
+        new RegExp(`/chat/runs/${seeded.task.id}$`),
+      ),
+      limits: SEEDED_RUN_LIMITS_OUTPUT,
+      requests: [],
+      output: "",
+      output_truncated: false,
+      workspace: null,
+      session: null,
+    });
+    expect(JSON.stringify(result)).not.toContain("RAW ARTIFACT");
+  });
+
   test("status reasons and run titles stay out of model-facing results under Guardrails", async ({
     makeAgent,
     makeMember,

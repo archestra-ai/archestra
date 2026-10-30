@@ -3,6 +3,7 @@ import { validateAzureModelOperation } from "@/services/azure-model-capabilities
 import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
+import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 /**
  * Generic LLM Proxy Handler
  *
@@ -71,6 +72,10 @@ import ProxyRequestContextModel, {
   type ProxyRequestState,
 } from "@/models/proxy-request-context";
 import { metrics } from "@/observability";
+import {
+  getLlmProxyRequestTelemetry,
+  type LlmProxyRequestTelemetry,
+} from "@/observability/llm-proxy-request";
 import {
   ATTR_ARCHESTRA_BILLING_MODE,
   ATTR_ARCHESTRA_COST,
@@ -168,6 +173,7 @@ import {
   buildInteractionRecord,
   calculateInteractionCosts,
   calculateUsageCost,
+  classifyProxyFailure,
   estimateCutOffAttemptUsage,
   handleError,
   isRetryableUpstreamConnectionFailure,
@@ -229,6 +235,7 @@ const {
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
+  telemetry?: LlmProxyRequestTelemetry;
   /** Recheck the original OAuth actor before each actual upstream attempt. */
   authorizeA2AOAuthAttempt?: () => Promise<unknown>;
   attributionLabels?: AttributionLabels;
@@ -476,6 +483,57 @@ export async function handleLLMProxy<
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
 ): Promise<FastifyReply> {
+  const telemetry = getLlmProxyRequestTelemetry({
+    request,
+    provider: (
+      request as FastifyRequest & {
+        llmProxyAuthOverride?: LLMProxyAuthOverride;
+      }
+    ).llmProxyAuthOverride?.modelPoolId
+      ? "router"
+      : provider.provider,
+    operation: provider.spanName,
+    stream: asRecord(body)?.stream === true,
+  });
+  try {
+    return await handleObservedLLMProxy({
+      body,
+      request,
+      reply,
+      provider,
+      telemetry,
+    });
+  } catch (error) {
+    telemetry.fail(classifyProxyFailure(error));
+    throw error;
+  } finally {
+    telemetry.finish({
+      statusCode: reply.statusCode,
+      headersSent: reply.raw.headersSent,
+      disconnected: reply.raw.destroyed && !reply.raw.writableEnded,
+    });
+  }
+}
+
+async function handleObservedLLMProxy<
+  TRequest,
+  TResponse,
+  TMessages,
+  TChunk,
+  THeaders,
+>({
+  body,
+  request,
+  reply,
+  provider,
+  telemetry,
+}: {
+  body: TRequest;
+  request: FastifyRequest;
+  reply: FastifyReply;
+  provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>;
+  telemetry: LlmProxyRequestTelemetry;
+}): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
   const proof = internalCallProvenance(request);
@@ -611,12 +669,14 @@ export async function handleLLMProxy<
     otelContext.active(),
     request.headers,
   );
+  telemetry.setTraceContext(parentContext);
 
   // Removes gateway tool attestation markers from the body in place
   // before adapters, logs, provider requests, or database records access them.
   const gatewayToolDeclarations =
     utils.gatewayToolDeclarations.extractGatewayToolDeclarations(body);
   const requestAdapter = provider.createRequestAdapter(body);
+  telemetry.setStreaming(requestAdapter.isStreaming());
   assertNotAutoOnNativeRoute(requestAdapter.getModel());
   const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
@@ -1088,10 +1148,11 @@ export async function handleLLMProxy<
 
   // The acting user as proven by a credential, as opposed to `userId`, which
   // starts from the unauthenticated X-Archestra-User-Id / OpenWebUI-email
-  // headers. Those headers are attribution hints — good enough for logging and
-  // usage records, never sufficient to unlock access — so authorization checks
-  // must read this instead. Undefined for org-scoped virtual keys, OAuth client
-  // credentials, and raw provider-key calls, none of which identify a user.
+  // headers. Those hints may attribute requests that have no authenticated
+  // user, but must not override a credential's owner or unlock access.
+  // Authorization checks must read this instead. Undefined for org-scoped
+  // virtual keys, OAuth client credentials, and raw provider-key calls, none
+  // of which identify a user.
   const authenticatedUserId =
     authOverride?.userId ??
     passthroughUserId ??
@@ -1100,14 +1161,6 @@ export async function handleLLMProxy<
     personalTokenUserId ??
     regularVirtualKeyUserId;
 
-  // Fall back to the personal standard virtual key's owner for user attribution.
-  // Higher-precedence sources — the passthrough key, JWKS, OAuth, and the
-  // X-Archestra-User-Id header — already set `userId` above, so this only fills
-  // the gap when a personal virtual key is the sole identity signal. That is the
-  // virtual-key connection mode: the connect flow mints a personal virtual key
-  // whose author is the acting user (Codex ChatGPT subscription, Claude Code
-  // virtual key). Consistency with any other authenticated identity was just
-  // asserted, so this can never disagree with them.
   if (serviceAccountId && authenticatedUserId) {
     throw new ApiError(
       401,
@@ -1119,7 +1172,10 @@ export async function handleLLMProxy<
     userId = undefined;
     resolvedUser = null;
   }
-  if (!userId && regularVirtualKeyUserId) {
+  // A personal standard key's authenticated owner controls user limits,
+  // spend, and logs, even when an unauthenticated identity hint is supplied.
+  // Any other authenticated user credential was checked for consistency above.
+  if (regularVirtualKeyUserId) {
     userId = regularVirtualKeyUserId;
     resolvedUser = await UserModel.getById(userId);
   }
@@ -1212,6 +1268,16 @@ export async function handleLLMProxy<
 
   const upstreamAttempt: UpstreamAttempt = {
     providerApiKeyId: perKeyChatApiKeyId,
+  };
+  telemetry.metadata = {
+    model: actualModel,
+    organizationId: resolvedAgent.organizationId,
+    agentId: resolvedAgent.id,
+    userId,
+    virtualKeyId,
+    passthroughVirtualKeyId,
+    appId: attributedAppId,
+    source,
   };
   const limitContext = {
     unpricedMediaModel: provider.unavailableUsageAccounting
@@ -2097,6 +2163,7 @@ export async function handleLLMProxy<
         : undefined,
     });
     const ctx: LLMProxyContext<TRequest> = {
+      telemetry,
       authorizeA2AOAuthAttempt: oauthExecution
         ? () =>
             authorizeA2AOAuthExecution({
@@ -2172,6 +2239,7 @@ export async function handleLLMProxy<
     return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
   } catch (error) {
     const lifecycleError = error;
+    telemetry.fail(classifyProxyFailure(error));
     if (lifecycleError instanceof RecordedCodexGenerationFailure) {
       return handleError(
         lifecycleError,
@@ -2766,6 +2834,7 @@ async function handleStreaming<
       parentContext,
       user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
+        ctx.telemetry?.setTraceContext(otelContext.active());
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
@@ -2972,8 +3041,7 @@ async function handleStreaming<
     // Anthropic requires message_stop; its beta usage arrives before that frame.
     upstreamFinished = providerName !== "anthropic" || providerTerminalSeen;
     if (!upstreamFinished)
-      throw new ApiError(
-        502,
+      throw new UpstreamStreamIncompleteError(
         "Provider stream ended before final usage was confirmed",
       );
     logger.info("Stream loop completed, processing final events");
@@ -3030,6 +3098,12 @@ async function handleStreaming<
         });
       }
       toolCallBlock = toToolCallBlock(null, hostedHold.blocked);
+      if (toolCallBlock)
+        ctx.telemetry?.fail({
+          statusCode: 403,
+          origin: "archestra",
+          outcome: "denied",
+        });
       const heldEvents = streamAdapter.formatHeldHostedToolCallsSSE(
         hostedHold.notices,
       );
@@ -3101,6 +3175,12 @@ async function handleStreaming<
         toolInvocationRefusal,
         policyOutcome.blocked,
       );
+      if (toolCallBlock)
+        ctx.telemetry?.fail({
+          statusCode: 403,
+          origin: "archestra",
+          outcome: "denied",
+        });
     }
 
     await ctx.governedThread?.recordResponse({
@@ -3232,6 +3312,18 @@ async function handleStreaming<
     return reply;
   } catch (error) {
     const lifecycleError = error;
+    if (
+      error instanceof CodexResponsesGenerationError &&
+      error.isIncompleteTerminal
+    )
+      ctx.telemetry?.markIncomplete();
+    else
+      ctx.telemetry?.fail(
+        error instanceof CodexResponsesGenerationError ||
+          error instanceof ResponsesStreamIncompleteError
+          ? { statusCode: 502, origin: "provider", outcome: "error" }
+          : classifyProxyFailure(error),
+      );
     const codexError =
       error instanceof CodexResponsesGenerationError ? error : undefined;
     if (codexError) {
@@ -3395,6 +3487,7 @@ async function handleStreaming<
       streamError = settlementError;
     }
     if (provider.binaryStream && reply.raw.headersSent) {
+      ctx.telemetry?.markServerAbort();
       reply.raw.destroy();
       return reply;
     }
@@ -3528,6 +3621,7 @@ async function handleNonStreaming<
     parentContext,
     user: toSpanUserInfo(resolvedUser),
     callback: async (llmSpan) => {
+      ctx.telemetry?.setTraceContext(otelContext.active());
       // Record request duration for providers we instrument in the handler
       // (Bedrock). getObservableFetch covers the fetch-based providers, so those
       // must not double-report here — the flag gates that.
@@ -3776,6 +3870,12 @@ async function handleNonStreaming<
           responseAdapter.getHostedToolCalls?.() ?? [],
         )
       : null;
+  if (hostedHold?.blocked.length)
+    ctx.telemetry?.fail({
+      statusCode: 403,
+      origin: "archestra",
+      outcome: "denied",
+    });
   for (const blocked of hostedHold?.blocked ?? []) {
     recordBlockedToolCallMetrics({
       allToolCallNames: [blocked.name],
@@ -3839,6 +3939,12 @@ async function handleNonStreaming<
     if (policyOutcome.wasRewritten)
       rewrittenToolCalls = policyOutcome.toolCalls;
     const toolInvocationRefusal = policyOutcome.refusal;
+    if (toolInvocationRefusal || policyOutcome.blocked.length)
+      ctx.telemetry?.fail({
+        statusCode: 403,
+        origin: "archestra",
+        outcome: "denied",
+      });
     await ctx.governedThread?.recordResponse({
       messageId: (responseAdapter.getOriginalResponse() as { id?: string }).id,
       providerCalls: toolCalls,
@@ -4275,7 +4381,10 @@ function withoutUnadmittedModelOutput<TResponse>(
 /** A native terminal failure ends the HTTP response, not the governed turn. */
 async function failResponsesGeneration(params: {
   response: unknown;
-  ctx: Pick<LLMProxyContext<unknown>, "pluginRegistry" | "pluginContext">;
+  ctx: Pick<
+    LLMProxyContext<unknown>,
+    "pluginRegistry" | "pluginContext" | "telemetry"
+  >;
   error?: Error;
 }): Promise<boolean> {
   const response = asRecord(params.response);
@@ -4287,6 +4396,18 @@ async function failResponsesGeneration(params: {
     return false;
   }
   const details = asRecord(response?.error);
+  if (
+    response?.status === "incomplete" ||
+    (params.error instanceof CodexResponsesGenerationError &&
+      params.error.isIncompleteTerminal)
+  )
+    params.ctx.telemetry?.markIncomplete();
+  else
+    params.ctx.telemetry?.fail({
+      statusCode: 502,
+      origin: "provider",
+      outcome: "error",
+    });
   const reason = asRecord(response?.incomplete_details)?.reason;
   const error =
     params.error ??
@@ -4519,6 +4640,16 @@ async function openUpstream<TRequest, T>(params: {
     throw error;
   } finally {
     ctx.providerApiKeyId = ctx.upstreamAttempt.providerApiKeyId;
+    if (ctx.telemetry) {
+      if (ctx.upstreamAttempt.provider)
+        ctx.telemetry.setProvider(ctx.upstreamAttempt.provider);
+      Object.assign(ctx.telemetry.metadata, {
+        modelPoolMemberModel: ctx.upstreamAttempt.modelId,
+        modelPoolId: ctx.upstreamAttempt.modelPoolId,
+        providerApiKeyId: ctx.upstreamAttempt.providerApiKeyId,
+        poolAttempts: ctx.upstreamAttempt.attempt,
+      });
+    }
     pool.setResponseHeaders(ctx.upstreamAttempt);
   }
 }

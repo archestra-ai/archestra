@@ -17,6 +17,7 @@ import {
 } from "@archestra/shared";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import type { Anthropic, Bedrock, LLMProvider, OpenAi } from "@/types";
+import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 import {
   anthropicAdapterFactory,
   azureAdapterFactory,
@@ -413,7 +414,9 @@ function anthropicEventsToOpenAiChunks(ctx: {
     finish() {
       // Without a stop reason the stream was cut off, not finished.
       if (finishReason === null) {
-        throw new Error("The upstream stream ended before it finished");
+        throw new UpstreamStreamIncompleteError(
+          "The upstream stream ended before it finished",
+        );
       }
       const prompt = inputTokens + cacheRead + cacheWrite;
       return [

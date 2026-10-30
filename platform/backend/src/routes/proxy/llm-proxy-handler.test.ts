@@ -16,6 +16,7 @@ import {
   SESSION_ID_HEADER,
   SOURCE_HEADER,
 } from "@archestra/shared";
+import { logs } from "@opentelemetry/api-logs";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -204,6 +205,106 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         customPricePerMillionOutput: "10.00",
         lastSyncedAt: new Date(),
       });
+    });
+
+    test.each([
+      {
+        stream: false,
+        failure: "none",
+        outcome: "success",
+        origin: "none",
+        status: 200,
+      },
+      {
+        stream: true,
+        failure: "none",
+        outcome: "success",
+        origin: "none",
+        status: 200,
+      },
+      {
+        stream: false,
+        failure: "provider",
+        outcome: "throttled",
+        origin: "provider",
+        status: 429,
+      },
+      {
+        stream: true,
+        failure: "provider",
+        outcome: "throttled",
+        origin: "provider",
+        status: 200,
+      },
+      {
+        stream: true,
+        failure: "internal",
+        outcome: "throttled",
+        origin: "archestra",
+        status: 429,
+      },
+    ])("exports one final outcome ($failure, stream=$stream)", async ({
+      stream,
+      failure,
+      outcome,
+      origin,
+      status,
+    }) => {
+      const emit = vi.fn();
+      vi.spyOn(logs, "getLogger").mockReturnValue({ emit } as never);
+      const error = Object.assign(new Error("private provider error detail"), {
+        status: 429,
+        headers: new Headers(),
+        error: { type: "rate_limit_error" },
+      });
+      if (failure === "internal") {
+        vi.spyOn(virtualKeyRateLimiter, "check").mockRejectedValue(
+          new ApiError(429, "private throttle detail"),
+        );
+      } else if (failure === "provider") {
+        const client = createOpenAiTestClient();
+        const create = client.chat.completions.create;
+        client.chat.completions.create = async (params) => {
+          if (!params.stream) throw error;
+          const chunks = (await create(params)) as AsyncIterable<unknown>;
+          return {
+            async *[Symbol.asyncIterator]() {
+              for await (const chunk of chunks) {
+                yield chunk;
+                throw error;
+              }
+            },
+          } as never;
+        };
+        vi.mocked(openaiAdapterFactory.createClient).mockReturnValue(
+          client as never,
+        );
+      }
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "private prompt" }],
+          stream,
+        },
+      });
+      expect(response.statusCode).toBe(status);
+      const events = emit.mock.calls
+        .map(([record]) => record)
+        .filter((record) => record.eventName === "archestra.llm_proxy.request");
+      expect(events).toHaveLength(1);
+      expect(events[0].attributes).toMatchObject({
+        "archestra.proxy.outcome": outcome,
+        "archestra.proxy.error_origin": origin,
+        "http.response.status_code": status,
+        "gen_ai.request.streaming": stream,
+      });
+      expect(JSON.stringify(events[0])).not.toMatch(/private|test-key/);
     });
 
     test.each([

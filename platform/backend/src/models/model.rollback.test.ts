@@ -1903,3 +1903,78 @@ describe("ModelModel", () => {
     });
   });
 });
+
+describe("published context pricing", () => {
+  test("uses coherent prices for stale rows and missing rows at strict boundaries", async () => {
+    const row = await ModelModel.create({
+      provider: "github-copilot",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      modelId: "gpt-6.1-sol",
+      externalId: "github-copilot/gpt-6.1-sol",
+      promptPricePerToken: "0.000099",
+      completionPricePerToken: "0.000099",
+      cacheReadPricePerToken: "0.000099",
+      cacheWritePricePerToken: "0.000099",
+    });
+    for (const model of [row, null])
+      for (const tokens of [271999, 272000, 272001]) {
+        const prices = ModelModel.getEffectivePricing(
+          model,
+          "gpt-6.1-sol",
+          "github-copilot",
+          tokens,
+        );
+        expect(Number(prices.pricePerMillionInput)).toBe(
+          tokens > 272000 ? 4 : 2,
+        );
+        expect(Number(prices.pricePerMillionOutput)).toBe(
+          tokens > 272000 ? 15 : 10,
+        );
+        expect(Number(prices.pricePerMillionCacheRead)).toBe(
+          tokens > 272000 ? 0.2 : 0.1,
+        );
+        expect(Number(prices.pricePerMillionCacheWrite)).toBe(
+          tokens > 272000 ? 5 : 2.5,
+        );
+        expect(prices.source).toBe("provider");
+        expect(prices.cacheSource).toBe("provider");
+      }
+  });
+
+  test("keeps selected-instance prices and unpublished directions instead of adding a catalog surcharge", async () => {
+    const row = await ModelModel.create({
+      provider: "github-copilot",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      modelId: "claude-haiku-5.5",
+      externalId: "github-copilot/claude-haiku-5.5",
+    });
+    const instance = ModelModel.withProviderPricing(row, [
+      {
+        promptPricePerToken: "0.000003",
+        completionPricePerToken: "0.000004",
+        cacheReadPricePerToken: null,
+        cacheWritePricePerToken: null,
+      },
+    ]);
+    const pricing = ModelModel.getEffectivePricing(
+      instance,
+      undefined,
+      undefined,
+      100001,
+    );
+    expect(Number(pricing.pricePerMillionInput)).toBe(3);
+    expect(Number(pricing.pricePerMillionOutput)).toBe(4);
+    expect(pricing.pricePerMillionCacheRead).toBeNull();
+    expect(ModelModel.getLongContextThreshold(instance)).toBeNull();
+    expect(
+      ModelModel.getEffectivePricing(null, "grok-4.7", "github-copilot", 200001)
+        .pricePerMillionCacheWrite,
+    ).toBeNull();
+    expect(
+      ModelModel.getEffectivePricing(null, "claude-haiku-5.5", "vllm", 100001)
+        .pricePerMillionInput,
+    ).toBe("0.00");
+  });
+});

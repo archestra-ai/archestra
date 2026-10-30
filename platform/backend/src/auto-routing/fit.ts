@@ -8,6 +8,7 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import ModelModel from "@/models/model";
 import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingHistoryModel, {
   type HistoryFitRow,
@@ -637,8 +638,8 @@ function fitTiers(trio: Trio): FitTiers {
       error: error.message,
       fingerprint: {
         model_ids: trio.map((model) => model.id),
-        long_context_thresholds: trio.map(
-          (model) => model.longContextThreshold,
+        long_context_thresholds: trio.map((model) =>
+          ModelModel.getLongContextThreshold(model),
         ),
       },
     };

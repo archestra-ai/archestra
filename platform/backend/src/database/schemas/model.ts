@@ -143,22 +143,22 @@ const modelsTable = pgTable(
 
     /** Custom admin-set price per million tokens for input (nullable, overrides models.dev price) */
     customPricePerMillionInput: numeric("custom_price_per_million_input", {
-      precision: 10,
-      scale: 2,
+      precision: 16,
+      scale: 8,
     }),
 
     /** Custom admin-set price per million tokens for output (nullable, overrides models.dev price) */
     customPricePerMillionOutput: numeric("custom_price_per_million_output", {
-      precision: 10,
-      scale: 2,
+      precision: 16,
+      scale: 8,
     }),
 
     /** Custom admin-set price per million cache-read tokens (nullable, overrides synced price) */
     customPricePerMillionCacheRead: numeric(
       "custom_price_per_million_cache_read",
       {
-        precision: 10,
-        scale: 2,
+        precision: 16,
+        scale: 8,
       },
     ),
 
@@ -166,8 +166,8 @@ const modelsTable = pgTable(
     customPricePerMillionCacheWrite: numeric(
       "custom_price_per_million_cache_write",
       {
-        precision: 10,
-        scale: 2,
+        precision: 16,
+        scale: 8,
       },
     ),
 
@@ -179,19 +179,19 @@ const modelsTable = pgTable(
     longContextThreshold: integer("long_context_threshold"),
     longContextPricePerMillionInput: numeric(
       "long_context_price_per_million_input",
-      { precision: 10, scale: 2 },
+      { precision: 16, scale: 8 },
     ),
     longContextPricePerMillionOutput: numeric(
       "long_context_price_per_million_output",
-      { precision: 10, scale: 2 },
+      { precision: 16, scale: 8 },
     ),
     longContextPricePerMillionCacheRead: numeric(
       "long_context_price_per_million_cache_read",
-      { precision: 10, scale: 2 },
+      { precision: 16, scale: 8 },
     ),
     longContextPricePerMillionCacheWrite: numeric(
       "long_context_price_per_million_cache_write",
-      { precision: 10, scale: 2 },
+      { precision: 16, scale: 8 },
     ),
 
     /** Whether this model should be excluded from chat model selection. */

@@ -57,7 +57,7 @@ describe("scoped model grants", () => {
       expect.arrayContaining([
         expect.objectContaining({
           after: expect.objectContaining({
-            pricePerMillionInput: "2.50",
+            pricePerMillionInput: "2.50000000",
           }),
         }),
       ]),

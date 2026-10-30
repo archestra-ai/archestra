@@ -831,40 +831,42 @@ function AgentDetails({
                   readOnly,
                 }) => {
                   const isSaving = formSaving || savingPermissions;
+                  const saveForm = fieldsDirty && !readOnly;
                   // Share the create flow's sticky row and primary-action
                   // alignment so saving stays in reach on long forms.
                   // Nothing to save onto once the record is gone; the PUT would
                   // only come back 404. A reader who cannot change it has no
-                  // save row at all — the alert above already says why.
-                  const row = readOnly ? null : (
-                    <WizardFooter className="sm:justify-end">
-                      <Button
-                        // With only the grants changed there is no form to
-                        // submit, so the button saves them directly.
-                        type={fieldsDirty ? "submit" : "button"}
-                        size="sm"
-                        form={fieldsDirty ? formId : undefined}
-                        onClick={
-                          fieldsDirty ? undefined : () => void savePermissions()
-                        }
-                        disabled={
-                          isGone ||
-                          isSaving ||
-                          (fieldsDirty ? !canSubmit : !permissionsDirty)
-                        }
-                        data-testid={E2eTestId.AgentSetupSubmitButton}
-                      >
-                        {isSaving ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span>Saving...</span>
-                          </>
-                        ) : (
-                          <span>Save changes</span>
-                        )}
-                      </Button>
-                    </WizardFooter>
-                  );
+                  // save row unless they can change the resource permissions.
+                  const row =
+                    readOnly && !permissionsDirty ? null : (
+                      <WizardFooter className="sm:justify-end">
+                        <Button
+                          // With only the grants changed there is no form to
+                          // submit, so the button saves them directly.
+                          type={saveForm ? "submit" : "button"}
+                          size="sm"
+                          form={saveForm ? formId : undefined}
+                          onClick={
+                            saveForm ? undefined : () => void savePermissions()
+                          }
+                          disabled={
+                            isGone ||
+                            isSaving ||
+                            (saveForm ? !canSubmit : !permissionsDirty)
+                          }
+                          data-testid={E2eTestId.AgentSetupSubmitButton}
+                        >
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <span>Save changes</span>
+                          )}
+                        </Button>
+                      </WizardFooter>
+                    );
                   // Below the permissions block when it is on this tab.
                   if (showPermissions)
                     return footerSlot ? createPortal(row, footerSlot) : null;

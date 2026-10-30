@@ -336,12 +336,40 @@ describe.each([
             row.cost === null,
         ),
       ).toBe(true);
+      // A row keeps what a speech call said and the audio it returned, and
+      // what a transcription was sent and returned, so the Logs page can
+      // show and play it. Never a credential or a provider's echoed error.
+      const responses = interactions.map(
+        (row) => row.response as Record<string, unknown>,
+      );
+      expect(responses).toContainEqual(
+        expect.objectContaining({
+          operation: "speech",
+          speech_input: "Synthetic input.",
+          audio: { content_type: "audio/wav", data: AUDIO.toString("base64") },
+        }),
+      );
+      for (const operation of ["transcriptions", "translations"])
+        expect(responses).toContainEqual(
+          expect.objectContaining({
+            operation,
+            transcript: TEXT,
+            upload: {
+              content_type: "audio/wav",
+              data: AUDIO.toString("base64"),
+            },
+          }),
+        );
+      // Plain text and streamed transcripts are kept too.
+      expect(
+        responses.filter(
+          (response) =>
+            response.operation !== "speech" && response.transcript === TEXT,
+        ).length,
+      ).toBeGreaterThanOrEqual(4);
       const audit = JSON.stringify(interactions);
-      expect(audit).not.toContain("Synthetic input.");
-      expect(audit).not.toContain(TEXT);
       expect(audit).not.toContain("synthetic-azure-secret");
       expect(audit).not.toContain("synthetic-provider-secret-sensitive-echo");
-      expect(audit).not.toContain(AUDIO.toString("base64"));
     } finally {
       app.server.closeAllConnections();
       await app.close();

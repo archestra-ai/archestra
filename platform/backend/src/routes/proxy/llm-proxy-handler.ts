@@ -146,7 +146,7 @@ import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { withMediaUsageAvailability } from "@/utils/media-usage";
 import { isUuid } from "@/utils/uuid";
-import { withoutReplyAudio } from "./adapters/openai";
+import { withReplyAudioWithinLimit } from "./adapters/openai";
 import { CodexResponsesGenerationError } from "./adapters/openai-codex-translator";
 import {
   discardUnadmittedResponsesOutput,
@@ -2640,7 +2640,9 @@ async function handleStreaming<
           request: originalRequest,
           processedRequest: request,
           response: withProviderToolCallIds(
-            failedStreamResponse ?? streamAdapter.toProviderResponse(),
+            failedStreamResponse ??
+              streamAdapter.toLoggedResponse?.() ??
+              streamAdapter.toProviderResponse(),
             streamAdapter.state.toolCalls,
           ),
           actualModel,
@@ -2672,7 +2674,9 @@ async function handleStreaming<
       // call must not disappear from interaction history.
       await recordUsagelessInteraction(
         withProviderToolCallIds(
-          failedStreamResponse ?? streamAdapter.toProviderResponse(),
+          failedStreamResponse ??
+            streamAdapter.toLoggedResponse?.() ??
+            streamAdapter.toProviderResponse(),
           streamAdapter.state.toolCalls,
         ),
       );
@@ -4087,8 +4091,8 @@ async function handleNonStreaming<
       // still wins where it exists: those adapters log a different wire shape on
       // purpose, and after a rewrite they hand back that shape's rewritten form.
       // Either way under the provider's call ids, as the requests are logged.
-      // A spoken reply is logged by its transcript; its audio is not kept.
-      response: withoutReplyAudio(
+      // A spoken reply keeps its audio up to the clip limit, so Logs plays it.
+      response: withReplyAudioWithinLimit(
         withProviderToolCallIds(
           generationFailed
             ? clientResponse

@@ -43,6 +43,7 @@ import {
   previewToolResultContent,
 } from "@/utils/tool-result-preview";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
+import { LOGGED_AUDIO_MAX_BYTES, LoggedAudioClip } from "../utils/logged-audio";
 import {
   doesModelSupportImages,
   hasImageContent,
@@ -1093,14 +1094,16 @@ export class OpenAIStreamAdapter
 
   /**
    * A spoken reply (`gpt-audio`) streams in `delta.audio`: base64 audio and
-   * transcript pieces, with no text content. The audio is relayed and never
-   * kept; the transcript is what the recorded turn says.
+   * transcript pieces, with no text content. The transcript is what the
+   * recorded turn says; the audio goes only to the log row, up to the clip
+   * limit, so the Logs page can play it.
    */
   private audioReply: {
     id?: string;
     transcript: string;
     expires_at?: number;
   } | null = null;
+  private readonly replyAudio = new LoggedAudioClip();
 
   /** The usage exactly as the provider reported it, details included. */
   private upstreamUsage: OpenAi.Types.Usage | null = null;
@@ -1209,6 +1212,7 @@ export class OpenAIStreamAdapter
       if (audio.expires_at !== undefined)
         this.audioReply.expires_at = audio.expires_at;
       if (audio.transcript) this.audioReply.transcript += audio.transcript;
+      if (audio.data) this.replyAudio.addBase64(audio.data);
     }
 
     // Splits streamable content from tool calls in the same chunk.
@@ -1502,6 +1506,23 @@ export class OpenAIStreamAdapter
     };
   }
 
+  /** The recorded turn, with a spoken reply's audio for the log row. */
+  toLoggedResponse(): OpenAiResponse {
+    const response = this.toProviderResponse();
+    const message = response.choices[0]?.message as
+      | { audio?: Record<string, unknown> }
+      | undefined;
+    if (!message?.audio) return response;
+    const data = this.replyAudio.base64();
+    const omitted = this.replyAudio.omitted();
+    message.audio = {
+      ...message.audio,
+      ...(data ? { data } : {}),
+      ...(omitted ? { data_omitted: omitted } : {}),
+    };
+    return response;
+  }
+
   private resolveTextPrefix(firstText: string): string {
     if (!this.getTextSuffix || this.responseReplacedWithText) {
       return "";
@@ -1511,28 +1532,36 @@ export class OpenAIStreamAdapter
 }
 
 /**
- * A spoken reply's audio stays out of the log: its id and transcript are
- * kept, the base64 audio is dropped. Any other response passes unchanged.
+ * A spoken reply as its log row keeps it: the audio up to the clip limit, so
+ * the Logs page can play it; past the limit, the id and transcript with the
+ * audio marked as omitted. Any other response passes unchanged.
  */
-export function withoutReplyAudio<T>(response: T): T {
+export function withReplyAudioWithinLimit<T>(response: T): T {
   const choices = (response as { choices?: unknown } | null)?.choices;
   if (!Array.isArray(choices)) return response;
   let changed = false;
-  const stripped = choices.map((choice) => {
+  const kept = choices.map((choice) => {
     const message = (choice as { message?: { audio?: unknown } } | null)
       ?.message;
     const audio = message?.audio;
-    if (
-      typeof audio !== "object" ||
-      audio === null ||
-      typeof (audio as { data?: unknown }).data !== "string"
-    )
+    const data = (audio as { data?: unknown } | null)?.data;
+    if (typeof audio !== "object" || audio === null || typeof data !== "string")
       return choice;
+    if (base64Bytes(data) <= LOGGED_AUDIO_MAX_BYTES) return choice;
     changed = true;
-    const { data: _data, ...kept } = audio as Record<string, unknown>;
-    return { ...choice, message: { ...message, audio: kept } };
+    const { data: _data, ...rest } = audio as Record<string, unknown>;
+    return {
+      ...choice,
+      message: { ...message, audio: { ...rest, data_omitted: "too_large" } },
+    };
   });
-  return changed ? ({ ...response, choices: stripped } as T) : response;
+  return changed ? ({ ...response, choices: kept } as T) : response;
+}
+
+/** Decoded size of a base64 string, without decoding it. */
+function base64Bytes(data: string): number {
+  const padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
+  return Math.floor((data.length * 3) / 4) - padding;
 }
 
 function audioDeltaOf(delta: unknown):
@@ -1540,15 +1569,17 @@ function audioDeltaOf(delta: unknown):
       id?: string;
       transcript?: string;
       expires_at?: number;
+      data?: string;
     }
   | undefined {
   const audio = (delta as { audio?: unknown } | null)?.audio;
   if (typeof audio !== "object" || audio === null) return undefined;
-  const { id, transcript, expires_at } = audio as Record<string, unknown>;
+  const { id, transcript, expires_at, data } = audio as Record<string, unknown>;
   return {
     ...(typeof id === "string" ? { id } : {}),
     ...(typeof transcript === "string" ? { transcript } : {}),
     ...(typeof expires_at === "number" ? { expires_at } : {}),
+    ...(typeof data === "string" ? { data } : {}),
   };
 }
 

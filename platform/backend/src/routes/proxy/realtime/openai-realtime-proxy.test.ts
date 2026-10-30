@@ -53,8 +53,17 @@ describe("OpenAI realtime sessions through the Model Router", () => {
         const event = JSON.parse(data.toString()) as { type: string };
         if (event.type === "session.update")
           socket.send(JSON.stringify({ type: "session.updated", session: {} }));
-        if (event.type === "response.create")
+        if (event.type === "response.create") {
+          for (const delta of ["AAEC", "AwQF"])
+            socket.send(
+              JSON.stringify({
+                type: "response.output_audio.delta",
+                response_id: "resp_1",
+                delta,
+              }),
+            );
           socket.send(JSON.stringify(RESPONSE_DONE));
+        }
       });
     });
     await once(upstream, "listening");
@@ -271,7 +280,11 @@ describe("OpenAI realtime sessions through the Model Router", () => {
     expect(
       sessions.data.map((session) => session.lastUserMessagePreview),
     ).toContain("Say hello.");
-    // Audio never enters the log; the mapped key never leaves the proxy.
+    // The spoken audio is kept once, as PCM the Logs page plays; the copy in
+    // the output items is not. The mapped key never leaves the proxy.
+    expect(rows[0].response).toMatchObject({
+      output_audio: { format: "pcm16", sample_rate: 24000, data: "AAECAwQF" },
+    });
     const stored = JSON.stringify(rows[0]);
     expect(stored).not.toContain("QUJD");
     expect(stored).not.toContain("sk-openai-mapped");

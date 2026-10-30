@@ -3,7 +3,8 @@ import { z } from "zod";
 /**
  * The log row of one Realtime response. A session streams audio both ways
  * over a WebSocket; the log keeps the session settings the client asked for,
- * the transcripts, and the usage of each `response.done`, never the audio.
+ * the transcripts, the usage of each `response.done`, and the model's spoken
+ * audio up to the clip limit so the Logs page can play it.
  */
 export const RealtimeInteractionRequestSchema = z.object({
   model: z.string(),
@@ -21,6 +22,16 @@ export const RealtimeInteractionResponseSchema = z.object({
   id: z.string(),
   status: z.string(),
   output_transcript: z.string().optional(),
+  /** The response's spoken audio as 16-bit PCM, kept up to 2 MB so Logs can play it. */
+  output_audio: z
+    .object({
+      format: z.literal("pcm16"),
+      sample_rate: z.number().int().positive(),
+      data: z.string(),
+    })
+    .optional(),
+  /** "too_large" when the spoken audio passed the clip limit and was not kept. */
+  output_audio_omitted: z.literal("too_large").optional(),
   /** Output items with their audio removed. */
   output: z.array(z.record(z.string(), z.unknown())).optional(),
   usage: z.record(z.string(), z.unknown()).optional(),

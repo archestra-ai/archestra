@@ -529,7 +529,24 @@ describe.each([
     expect(
       rows.every((row) => row.cost === null && row.inputTokens !== null),
     ).toBe(true);
-    expect(JSON.stringify(rows)).not.toContain("AAE=");
+    // The rows keep the streamed speech (to play in Logs) and the text that
+    // was spoken and transcribed; the session is titled by the spoken text.
+    expect(rows.map((row) => row.response)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          speech_input: "Synthetic.",
+          audio: { content_type: "audio/mpeg", data: "AAE=" },
+        }),
+        expect.objectContaining({ transcript: "Synthetic." }),
+      ]),
+    );
+    expect(
+      rows.map(
+        (row) =>
+          (row.sessionPreview as { lastUserMessagePreview?: string } | null)
+            ?.lastUserMessagePreview,
+      ),
+    ).toContain("Synthetic.");
   });
   test("rejects malformed JSON and wrong content types before streaming headers", async () => {
     handler = (response) => {

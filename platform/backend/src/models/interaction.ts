@@ -3945,9 +3945,15 @@ function extractGenuineAnthropicUserMessage(request: unknown): string | null {
   return null;
 }
 
+/**
+ * The session title's text: the last user message. A media row may keep
+ * what the user said on its response (the text a speech call spoke), so the
+ * response is read too when the caller has it.
+ */
 function buildLastUserMessagePreview(
   request: unknown,
   type: string,
+  response: unknown = {},
 ): string | null {
   try {
     if (type === "anthropic:messages") {
@@ -3958,7 +3964,7 @@ function buildLastUserMessagePreview(
     }
     const interaction = new DynamicInteraction({
       request,
-      response: {},
+      response: response ?? {},
       type,
     } as never);
     const message = interaction.getLastUserMessage().trim();
@@ -4082,6 +4088,7 @@ function buildSessionPreview(
   const lastUserMessagePreview = buildLastUserMessagePreview(
     data.request,
     data.type,
+    data.response,
   );
   return {
     hasContent:

@@ -89,6 +89,12 @@ export const AudioAuditRequestSchema = z.object({
     .optional(),
 });
 
+/** A clip a log row keeps so the Logs page can play it. */
+const LoggedAudioClipSchema = z.object({
+  content_type: z.string(),
+  data: z.string(),
+});
+
 export const AudioAuditResponseSchema = z.object({
   id: z.string(),
   model: z.string(),
@@ -98,6 +104,15 @@ export const AudioAuditResponseSchema = z.object({
   usage_available: z.boolean(),
   cost_available: z.boolean(),
   usage: z.record(z.string(), z.unknown()).optional(),
+  // Log content only, never sent to plugins: the text a speech call spoke,
+  // the text a transcription or translation returned, and each clip up to
+  // the size limit (a longer clip is marked omitted).
+  speech_input: z.string().optional(),
+  transcript: z.string().optional(),
+  audio: LoggedAudioClipSchema.optional(),
+  audio_omitted: z.literal("too_large").optional(),
+  upload: LoggedAudioClipSchema.optional(),
+  upload_omitted: z.literal("too_large").optional(),
 });
 
 export type AudioOperation = z.infer<typeof AudioOperationSchema>;

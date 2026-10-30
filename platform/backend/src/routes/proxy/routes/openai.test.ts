@@ -254,10 +254,9 @@ describe("OpenAI proxy spoken replies", () => {
   const server = useMswServer();
 
   // A gpt-audio answer has no text content: its words are the transcript
-  // under `audio`, beside the base64 WAV. The client receives both; the log
-  // keeps the transcript and drops the audio, which would otherwise make
-  // every spoken turn's row the size of the recording.
-  test("returns the audio to the client and logs only its transcript", async ({
+  // under `audio`, beside the base64 WAV. The client receives both, and the
+  // log row keeps both (the audio up to 2 MB) so the Logs page can play it.
+  test("returns the audio to the client and logs it to play back", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -328,10 +327,10 @@ describe("OpenAI proxy spoken replies", () => {
       ).choices[0].message.audio;
       expect(logged).toEqual({
         id: "audio_1",
+        data: wav,
         expires_at: 1700003600,
         transcript: "Hello from Archestra.",
       });
-      expect(JSON.stringify(row)).not.toContain("UklGR");
     } finally {
       await app.close();
     }

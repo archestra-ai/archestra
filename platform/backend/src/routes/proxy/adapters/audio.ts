@@ -22,6 +22,11 @@ import type {
 } from "@/types/llm-provider";
 import { PROXY_BODY_LIMIT } from "../common";
 import {
+  audioTypeFromFilename,
+  LoggedAudioClip,
+  speechAudioType,
+} from "../utils/logged-audio";
+import {
   type MediaMultipartFile,
   mediaUploadType,
 } from "../utils/media-multipart";
@@ -33,8 +38,15 @@ type AudioChunk = {
   contentType: string;
   usage?: Record<string, unknown>;
   done?: boolean;
+  /** Decoded audio from a streamed speech response's events. */
+  audio?: Uint8Array[];
+  /** The full text a transcription or translation returned, on the last chunk. */
+  transcript?: string;
 };
 type AudioHeaders = { authorization?: string };
+
+/** Characters of a transcript the log keeps; a longer one is cut here. */
+const LOGGED_TRANSCRIPT_MAX_BYTES = 256 * 1024;
 type AudioClient = { client: unknown; signal?: AbortSignal };
 
 /** Upload bytes and request parameters stay in this request-scoped closure, outside audits. */
@@ -96,6 +108,8 @@ export function makeAudioAdapterFactory(params: {
         sse,
         speechInput,
         audioSeconds,
+        file,
+        speechFormat: parameters.response_format,
       }),
     mediaTariffCovers: (request) =>
       mediaTariffCovers({
@@ -202,6 +216,7 @@ export function makeAudioAdapterFactory(params: {
           contentType,
           json: mime === "application/json",
           sse,
+          transcribes: operation !== "speech",
         });
       } catch (error) {
         throw safeAudioError(error);
@@ -304,6 +319,9 @@ class AudioStreamAdapter
   private contentType: string;
   private bytes = 0;
   private usage?: Record<string, unknown>;
+  /** The speech a speech call returned, for the log row only. */
+  private readonly spoken = new LoggedAudioClip();
+  private transcript?: string;
   constructor(
     private readonly options: {
       provider: "azure" | "openai";
@@ -313,6 +331,10 @@ class AudioStreamAdapter
       sse: boolean;
       speechInput?: string;
       audioSeconds?: number;
+      /** The uploaded clip of a transcription or translation. */
+      file?: MediaMultipartFile;
+      /** The speech `response_format`, which names a streamed clip's format. */
+      speechFormat?: unknown;
     },
   ) {
     this.provider = options.provider;
@@ -324,6 +346,12 @@ class AudioStreamAdapter
     this.contentType = chunk.contentType;
     this.bytes += chunk.bytes?.byteLength ?? 0;
     if (chunk.usage) this.usage = chunk.usage;
+    if (chunk.transcript !== undefined) this.transcript = chunk.transcript;
+    if (this.options.operation === "speech") {
+      if (this.options.sse)
+        for (const piece of chunk.audio ?? []) this.spoken.add(piece);
+      else if (chunk.bytes) this.spoken.add(chunk.bytes);
+    }
     if (chunk.done) {
       this.state.usage = audioUsage({
         operation: this.options.operation,
@@ -374,6 +402,50 @@ class AudioStreamAdapter
       ...(this.usage ? { usage: this.usage } : {}),
     };
   }
+  /**
+   * The row the log keeps: the metadata plugins see, plus the text spoken or
+   * returned and each clip up to the size limit, so the Logs page can play it.
+   */
+  toLoggedResponse(): AudioAuditResponse {
+    const response = this.toProviderResponse();
+    const { operation, speechInput, file, sse, speechFormat } = this.options;
+    if (operation === "speech") {
+      const data = this.spoken.base64();
+      const omitted = this.spoken.omitted();
+      return {
+        ...response,
+        ...(speechInput ? { speech_input: speechInput } : {}),
+        ...(data
+          ? {
+              audio: {
+                content_type: sse
+                  ? speechAudioType(speechFormat)
+                  : this.contentType.split(";")[0].trim(),
+                data,
+              },
+            }
+          : {}),
+        ...(omitted ? { audio_omitted: omitted } : {}),
+      };
+    }
+    const upload = new LoggedAudioClip();
+    if (file) upload.add(file.data);
+    const data = upload.base64();
+    const omitted = upload.omitted();
+    return {
+      ...response,
+      ...(this.transcript !== undefined ? { transcript: this.transcript } : {}),
+      ...(file && data
+        ? {
+            upload: {
+              content_type: audioTypeFromFilename(file.filename),
+              data,
+            },
+          }
+        : {}),
+      ...(omitted ? { upload_omitted: omitted } : {}),
+    };
+  }
 }
 
 async function* readAudioResponse(params: {
@@ -381,6 +453,8 @@ async function* readAudioResponse(params: {
   contentType: string;
   json: boolean;
   sse: boolean;
+  /** A transcription or translation, whose text the log keeps. */
+  transcribes: boolean;
 }): AsyncGenerator<AudioChunk> {
   const reader = params.response.body?.getReader();
   if (!reader) throw new ApiError(502, "Audio upstream returned an empty body");
@@ -390,6 +464,10 @@ async function* readAudioResponse(params: {
   let pending = "";
   let usage: Record<string, unknown> | undefined;
   let terminal = false;
+  let transcript: string | undefined;
+  // A text, SRT or VTT transcript is the body itself.
+  const plainText: Uint8Array[] = [];
+  let plainTextBytes = 0;
   try {
     for (;;) {
       const next = await readWithDeadline(reader);
@@ -404,6 +482,12 @@ async function* readAudioResponse(params: {
         chunks.push(next.value);
         continue;
       }
+      if (params.transcribes && !params.sse) {
+        plainTextBytes += next.value.byteLength;
+        if (plainTextBytes <= LOGGED_TRANSCRIPT_MAX_BYTES)
+          plainText.push(next.value);
+      }
+      const audio: Uint8Array[] = [];
       if (params.sse) {
         pending = (
           pending + decoder.decode(next.value, { stream: true })
@@ -425,6 +509,16 @@ async function* readAudioResponse(params: {
             terminal ||=
               parsed.type === "transcript.text.done" ||
               parsed.type === "speech.audio.done";
+            if (
+              parsed.type === "transcript.text.done" &&
+              typeof parsed.text === "string"
+            )
+              transcript = parsed.text;
+            if (
+              parsed.type === "speech.audio.delta" &&
+              typeof parsed.audio === "string"
+            )
+              audio.push(Buffer.from(parsed.audio, "base64"));
           }
           end = pending.indexOf("\n\n");
         }
@@ -434,7 +528,11 @@ async function* readAudioResponse(params: {
             "Audio upstream event exceeds the size limit",
           );
       }
-      yield { bytes: next.value, contentType: params.contentType };
+      yield {
+        bytes: next.value,
+        contentType: params.contentType,
+        ...(audio.length > 0 ? { audio } : {}),
+      };
     }
     if (!total || (params.sse && (!terminal || pending.trim())))
       throw new ApiError(
@@ -450,9 +548,24 @@ async function* readAudioResponse(params: {
           "Audio upstream returned an invalid transcript",
         );
       usage = safeUsage(value.usage);
+      transcript = value.text;
       yield { bytes, contentType: params.contentType };
     }
-    yield { contentType: params.contentType, usage, done: true };
+    if (
+      params.transcribes &&
+      !params.sse &&
+      !params.json &&
+      plainTextBytes <= LOGGED_TRANSCRIPT_MAX_BYTES
+    )
+      transcript = Buffer.concat(plainText).toString("utf8");
+    yield {
+      contentType: params.contentType,
+      usage,
+      done: true,
+      ...(params.transcribes && transcript !== undefined
+        ? { transcript: transcript.slice(0, LOGGED_TRANSCRIPT_MAX_BYTES) }
+        : {}),
+    };
   } catch (error) {
     throw safeAudioError(error);
   } finally {

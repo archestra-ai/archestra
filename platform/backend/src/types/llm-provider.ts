@@ -539,6 +539,14 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    * which is needed for saving the interaction to the database.
    */
   toProviderResponse(): TResponse;
+
+  /**
+   * The response as its log row stores it, when that holds more than plugins
+   * should receive: the audio a speech or audio-chat stream returned, kept up
+   * to a size limit so the Logs page can play it. Defaults to
+   * `toProviderResponse()`.
+   */
+  toLoggedResponse?(): TResponse;
 }
 
 // =============================================================================

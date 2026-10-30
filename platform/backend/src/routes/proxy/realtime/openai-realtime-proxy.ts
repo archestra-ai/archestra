@@ -33,6 +33,7 @@ import {
   getMappedProviders,
   getModelRouterAgent,
 } from "../routes/model-router";
+import { LoggedAudioClip } from "../utils/logged-audio";
 
 /**
  * OpenAI Realtime sessions through the Model Router and the OpenAI route.
@@ -334,6 +335,14 @@ class RealtimeSession {
   private inputText?: string;
   private inputTranscript?: string;
   private turnStartedAt = Date.now();
+  /**
+   * Each response's spoken audio, for its log row only, up to the clip
+   * limit. OpenAI's default output is 16-bit PCM at 24 kHz; a session set to
+   * G.711 keeps no audio, since browsers cannot play it from the log.
+   */
+  private readonly replyAudio = new Map<string, LoggedAudioClip>();
+  private outputPcm = true;
+  private outputRate = 24_000;
 
   constructor(
     private readonly params: {
@@ -348,8 +357,10 @@ class RealtimeSession {
   onClientEvent(text: string) {
     const event = parseEvent(text);
     if (!event) return;
-    if (event.type === "session.update" && isRecord(event.session))
+    if (event.type === "session.update" && isRecord(event.session)) {
       this.session = withoutAudio(event.session);
+      this.noteOutputFormat(event.session);
+    }
     if (event.type === "conversation.item.create" && isRecord(event.item)) {
       const text = userInputText(event.item);
       if (text)
@@ -366,8 +377,28 @@ class RealtimeSession {
       typeof event.transcript === "string"
     )
       this.inputTranscript = event.transcript;
+    if (
+      (event.type === "session.created" || event.type === "session.updated") &&
+      isRecord(event.session)
+    )
+      this.noteOutputFormat(event.session);
+    if (
+      (event.type === "response.output_audio.delta" ||
+        event.type === "response.audio.delta") &&
+      typeof event.delta === "string"
+    ) {
+      const key =
+        typeof event.response_id === "string" ? event.response_id : "";
+      const clip = this.replyAudio.get(key) ?? new LoggedAudioClip();
+      clip.addBase64(event.delta);
+      this.replyAudio.set(key, clip);
+    }
     if (event.type === "response.done" && isRecord(event.response)) {
       const response = event.response;
+      const key = typeof response.id === "string" ? response.id : "";
+      const replyAudio = this.replyAudio.get(key) ?? this.replyAudio.get("");
+      this.replyAudio.delete(key);
+      this.replyAudio.delete("");
       const inputText = this.inputText;
       const inputTranscript = this.inputTranscript;
       this.inputText = undefined;
@@ -382,6 +413,7 @@ class RealtimeSession {
           turn,
           inputText,
           inputTranscript,
+          replyAudio,
           startedAt,
         }).catch((error) => {
           logger.warn(
@@ -393,11 +425,26 @@ class RealtimeSession {
     }
   }
 
+  /** The session's output audio format, from either the GA or beta shape. */
+  private noteOutputFormat(session: Record<string, unknown>) {
+    const audio = isRecord(session.audio) ? session.audio : undefined;
+    const output = isRecord(audio?.output) ? audio.output : undefined;
+    const format = isRecord(output?.format) ? output.format : undefined;
+    if (typeof format?.type === "string") {
+      this.outputPcm = format.type === "audio/pcm";
+      if (typeof format.rate === "number" && format.rate > 0)
+        this.outputRate = format.rate;
+    }
+    if (typeof session.output_audio_format === "string")
+      this.outputPcm = session.output_audio_format === "pcm16";
+  }
+
   private async record(params: {
     response: Record<string, unknown>;
     turn: number;
     inputText: string | undefined;
     inputTranscript: string | undefined;
+    replyAudio: LoggedAudioClip | undefined;
     startedAt: number;
   }) {
     const { agent, identity, modelId, providerApiKeyId } = this.params;
@@ -438,6 +485,10 @@ class RealtimeSession {
         : {}),
     };
     const transcript = output ? outputTranscript(output) : "";
+    const audioData = this.outputPcm ? params.replyAudio?.base64() : undefined;
+    const audioOmitted = this.outputPcm
+      ? params.replyAudio?.omitted()
+      : undefined;
     const record = buildInteractionRecord({
       agent,
       billingAttribution: this.params.billingAttribution,
@@ -457,6 +508,16 @@ class RealtimeSession {
         status:
           typeof response.status === "string" ? response.status : "completed",
         ...(transcript ? { output_transcript: transcript } : {}),
+        ...(audioData
+          ? {
+              output_audio: {
+                format: "pcm16",
+                sample_rate: this.outputRate,
+                data: audioData,
+              },
+            }
+          : {}),
+        ...(audioOmitted ? { output_audio_omitted: audioOmitted } : {}),
         ...(output ? { output } : {}),
         ...(usage ? { usage } : {}),
       },

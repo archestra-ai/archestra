@@ -70942,6 +70942,18 @@ export type GetInteractionsResponses = {
                 usage?: {
                     [key: string]: unknown;
                 };
+                speech_input?: string;
+                transcript?: string;
+                audio?: {
+                    content_type: string;
+                    data: string;
+                };
+                audio_omitted?: 'too_large';
+                upload?: {
+                    content_type: string;
+                    data: string;
+                };
+                upload_omitted?: 'too_large';
             } | {
                 error: string;
             } | LogContentNotStored | {
@@ -71074,6 +71086,18 @@ export type GetInteractionsResponses = {
                 usage?: {
                     [key: string]: unknown;
                 };
+                speech_input?: string;
+                transcript?: string;
+                audio?: {
+                    content_type: string;
+                    data: string;
+                };
+                audio_omitted?: 'too_large';
+                upload?: {
+                    content_type: string;
+                    data: string;
+                };
+                upload_omitted?: 'too_large';
             } | {
                 error: string;
             } | LogContentNotStored | {
@@ -72041,6 +72065,12 @@ export type GetInteractionsResponses = {
                 id: string;
                 status: string;
                 output_transcript?: string;
+                output_audio?: {
+                    format: 'pcm16';
+                    sample_rate: number;
+                    data: string;
+                };
+                output_audio_omitted?: 'too_large';
                 output?: Array<{
                     [key: string]: unknown;
                 }>;
@@ -81937,6 +81967,18 @@ export type GetInteractionResponses = {
             usage?: {
                 [key: string]: unknown;
             };
+            speech_input?: string;
+            transcript?: string;
+            audio?: {
+                content_type: string;
+                data: string;
+            };
+            audio_omitted?: 'too_large';
+            upload?: {
+                content_type: string;
+                data: string;
+            };
+            upload_omitted?: 'too_large';
         } | {
             error: string;
         } | LogContentNotStored | {
@@ -82069,6 +82111,18 @@ export type GetInteractionResponses = {
             usage?: {
                 [key: string]: unknown;
             };
+            speech_input?: string;
+            transcript?: string;
+            audio?: {
+                content_type: string;
+                data: string;
+            };
+            audio_omitted?: 'too_large';
+            upload?: {
+                content_type: string;
+                data: string;
+            };
+            upload_omitted?: 'too_large';
         } | {
             error: string;
         } | LogContentNotStored | {
@@ -83036,6 +83090,12 @@ export type GetInteractionResponses = {
             id: string;
             status: string;
             output_transcript?: string;
+            output_audio?: {
+                format: 'pcm16';
+                sample_rate: number;
+                data: string;
+            };
+            output_audio_omitted?: 'too_large';
             output?: Array<{
                 [key: string]: unknown;
             }>;

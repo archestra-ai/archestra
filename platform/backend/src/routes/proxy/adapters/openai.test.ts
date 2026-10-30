@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { OpenAi } from "@/types";
-import { openaiAdapterFactory, withoutReplyAudio } from "./openai";
+import { openaiAdapterFactory, withReplyAudioWithinLimit } from "./openai";
 
 function createMockResponse(
   message: OpenAi.Types.ChatCompletionsResponse["choices"][0]["message"],
@@ -978,7 +978,11 @@ describe("OpenAIStreamAdapter", () => {
       content: null,
       audio: { id: "audio_1", transcript: "Hello there.", expires_at: 99 },
     });
+    // Plugins see the turn without the audio; the log row keeps it to play.
     expect(JSON.stringify(response)).not.toContain("AAAA");
+    expect(adapter.toLoggedResponse?.().choices[0].message).toMatchObject({
+      audio: { id: "audio_1", transcript: "Hello there.", data: "AAAABBBB" },
+    });
 
     const endSse = adapter.formatEndSSE();
     const end =
@@ -993,8 +997,8 @@ describe("OpenAIStreamAdapter", () => {
     });
   });
 
-  test("a logged spoken reply keeps its transcript and drops the audio", () => {
-    const response = {
+  test("a logged spoken reply keeps its audio up to the clip limit", () => {
+    const reply = (data: string) => ({
       id: "chatcmpl-b",
       choices: [
         {
@@ -1002,25 +1006,25 @@ describe("OpenAIStreamAdapter", () => {
           message: {
             role: "assistant",
             content: null,
-            audio: {
-              id: "audio_2",
-              data: "UklGR",
-              transcript: "Hi.",
-              expires_at: 1,
-            },
+            audio: { id: "audio_2", data, transcript: "Hi.", expires_at: 1 },
           },
         },
       ],
-    };
-    expect(withoutReplyAudio(response).choices[0].message.audio).toEqual({
+    });
+    // A short clip is kept as it came, so the Logs page can play it.
+    const short = reply("UklGRiQAAABXQVZF");
+    expect(withReplyAudioWithinLimit(short)).toBe(short);
+    // Past 2 MB the audio is dropped and marked, the transcript kept.
+    const long = reply("A".repeat(2_800_008));
+    expect(withReplyAudioWithinLimit(long).choices[0].message.audio).toEqual({
       id: "audio_2",
       transcript: "Hi.",
       expires_at: 1,
+      data_omitted: "too_large",
     });
-    // The client's copy is untouched, and a text reply passes as it was.
-    expect(response.choices[0].message.audio.data).toBe("UklGR");
+    expect(long.choices[0].message.audio.data).toHaveLength(2_800_008);
     const text = { choices: [{ message: { content: "Hello" } }] };
-    expect(withoutReplyAudio(text)).toBe(text);
+    expect(withReplyAudioWithinLimit(text)).toBe(text);
   });
 
   // The refusal is emitted as a further delta, which clients concatenate onto

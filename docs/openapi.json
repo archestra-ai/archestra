@@ -271627,6 +271627,56 @@
                                       "usage": {
                                         "type": "object",
                                         "additionalProperties": {}
+                                      },
+                                      "speech_input": {
+                                        "type": "string"
+                                      },
+                                      "transcript": {
+                                        "type": "string"
+                                      },
+                                      "audio": {
+                                        "type": "object",
+                                        "properties": {
+                                          "content_type": {
+                                            "type": "string"
+                                          },
+                                          "data": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "content_type",
+                                          "data"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "audio_omitted": {
+                                        "type": "string",
+                                        "enum": [
+                                          "too_large"
+                                        ]
+                                      },
+                                      "upload": {
+                                        "type": "object",
+                                        "properties": {
+                                          "content_type": {
+                                            "type": "string"
+                                          },
+                                          "data": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "content_type",
+                                          "data"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "upload_omitted": {
+                                        "type": "string",
+                                        "enum": [
+                                          "too_large"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -272421,6 +272471,56 @@
                                       "usage": {
                                         "type": "object",
                                         "additionalProperties": {}
+                                      },
+                                      "speech_input": {
+                                        "type": "string"
+                                      },
+                                      "transcript": {
+                                        "type": "string"
+                                      },
+                                      "audio": {
+                                        "type": "object",
+                                        "properties": {
+                                          "content_type": {
+                                            "type": "string"
+                                          },
+                                          "data": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "content_type",
+                                          "data"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "audio_omitted": {
+                                        "type": "string",
+                                        "enum": [
+                                          "too_large"
+                                        ]
+                                      },
+                                      "upload": {
+                                        "type": "object",
+                                        "properties": {
+                                          "content_type": {
+                                            "type": "string"
+                                          },
+                                          "data": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "content_type",
+                                          "data"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "upload_omitted": {
+                                        "type": "string",
+                                        "enum": [
+                                          "too_large"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -277839,6 +277939,38 @@
                                       },
                                       "output_transcript": {
                                         "type": "string"
+                                      },
+                                      "output_audio": {
+                                        "type": "object",
+                                        "properties": {
+                                          "format": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pcm16"
+                                            ]
+                                          },
+                                          "sample_rate": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "exclusiveMinimum": true,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "data": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "format",
+                                          "sample_rate",
+                                          "data"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "output_audio_omitted": {
+                                        "type": "string",
+                                        "enum": [
+                                          "too_large"
+                                        ]
                                       },
                                       "output": {
                                         "type": "array",
@@ -325679,6 +325811,56 @@
                                 "usage": {
                                   "type": "object",
                                   "additionalProperties": {}
+                                },
+                                "speech_input": {
+                                  "type": "string"
+                                },
+                                "transcript": {
+                                  "type": "string"
+                                },
+                                "audio": {
+                                  "type": "object",
+                                  "properties": {
+                                    "content_type": {
+                                      "type": "string"
+                                    },
+                                    "data": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "content_type",
+                                    "data"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "audio_omitted": {
+                                  "type": "string",
+                                  "enum": [
+                                    "too_large"
+                                  ]
+                                },
+                                "upload": {
+                                  "type": "object",
+                                  "properties": {
+                                    "content_type": {
+                                      "type": "string"
+                                    },
+                                    "data": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "content_type",
+                                    "data"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "upload_omitted": {
+                                  "type": "string",
+                                  "enum": [
+                                    "too_large"
+                                  ]
                                 }
                               },
                               "required": [
@@ -326473,6 +326655,56 @@
                                 "usage": {
                                   "type": "object",
                                   "additionalProperties": {}
+                                },
+                                "speech_input": {
+                                  "type": "string"
+                                },
+                                "transcript": {
+                                  "type": "string"
+                                },
+                                "audio": {
+                                  "type": "object",
+                                  "properties": {
+                                    "content_type": {
+                                      "type": "string"
+                                    },
+                                    "data": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "content_type",
+                                    "data"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "audio_omitted": {
+                                  "type": "string",
+                                  "enum": [
+                                    "too_large"
+                                  ]
+                                },
+                                "upload": {
+                                  "type": "object",
+                                  "properties": {
+                                    "content_type": {
+                                      "type": "string"
+                                    },
+                                    "data": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "content_type",
+                                    "data"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "upload_omitted": {
+                                  "type": "string",
+                                  "enum": [
+                                    "too_large"
+                                  ]
                                 }
                               },
                               "required": [
@@ -331891,6 +332123,38 @@
                                 },
                                 "output_transcript": {
                                   "type": "string"
+                                },
+                                "output_audio": {
+                                  "type": "object",
+                                  "properties": {
+                                    "format": {
+                                      "type": "string",
+                                      "enum": [
+                                        "pcm16"
+                                      ]
+                                    },
+                                    "sample_rate": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "exclusiveMinimum": true,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "data": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "format",
+                                    "sample_rate",
+                                    "data"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "output_audio_omitted": {
+                                  "type": "string",
+                                  "enum": [
+                                    "too_large"
+                                  ]
                                 },
                                 "output": {
                                   "type": "array",

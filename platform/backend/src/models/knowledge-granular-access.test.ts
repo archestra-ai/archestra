@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import db from "@/database";
+import { indexFilesIntoKnowledgeBase } from "@/knowledge-base/file-upload/index-file";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { expect, test } from "@/test";
 import type { AclEntry } from "@/types";
 import KbChunkModel from "./kb-chunk";
@@ -8,6 +10,7 @@ import KbDocumentModel from "./kb-document";
 import KbFileModel from "./kb-file";
 import KnowledgeBaseModel from "./knowledge-base";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
+import ManagedOauthClientModel from "./managed-oauth-client";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 for (const resource of ["knowledgeFile", "knowledgeConnector"] as const) {
@@ -256,4 +259,346 @@ test("source permission sync keeps its per-document restriction even when connec
       userAcl: [`user_email:${user.email}`, `principal:${user.id}`],
     }),
   ).toMatchObject({ id: document.id });
+});
+
+test("uploaded file grants follow the knowledge base it sits in and include OAuth client grants", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeKnowledgeBase,
+}) => {
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  const recipient = await makeUser();
+  const outsider = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  await makeMember(recipient.id, org.id, { role: "member" });
+  await makeMember(outsider.id, org.id, { role: "member" });
+
+  const { oauthClient } = await ManagedOauthClientModel.create({
+    organizationId: org.id,
+    authorId: admin.id,
+    name: "Portal client",
+    grantType: "client_credentials",
+    scopes: ["mcp"],
+    allowedGatewayIds: [],
+  });
+
+  const kb = await makeKnowledgeBase(org.id, { access: "personal" });
+  const file = await KbFileModel.create({
+    organizationId: org.id,
+    uploadedBy: admin.id,
+    filename: "runbook.txt",
+    directoryId: null,
+    mimeType: "text/plain",
+    sizeBytes: 7,
+    contentHash: "runbook",
+    data: Buffer.from("runbook"),
+    initialPermissionGrants: [],
+  });
+
+  const indexed = await indexFilesIntoKnowledgeBase({
+    organizationId: org.id,
+    knowledgeBaseId: kb.id,
+    fileIds: [file.id],
+  });
+  expect(indexed.indexed).toBe(1);
+
+  const [connector] = await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(
+    kb.id,
+    { canReadAll: true },
+  );
+  const document = await KbDocumentModel.findBySourceId({
+    connectorId: connector.id,
+    sourceId: file.id,
+  });
+  expect(document).not.toBeNull();
+  if (!document) throw new Error("Expected indexed document");
+
+  // Initially only the uploader has Can use on the file; recipient and OAuth client cannot read it.
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: document.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `principal:${recipient.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: document.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
+
+  // Granting Can use on the knowledge base to recipient and oauthClient updates chunk ACLs and live access.
+  const kbPolicy = await ResourcePermissionPolicyModel.find({
+    organizationId: org.id,
+    resource: "knowledgeBase",
+    scope: kb.id,
+  });
+  await ResourcePermissions.updatePolicy({
+    organizationId: org.id,
+    userId: admin.id,
+    resource: "knowledgeBase",
+    scope: kb.id,
+    revision: kbPolicy?.revision ?? 0,
+    grants: [
+      {
+        subject: { type: "user", id: recipient.id },
+        actions: ["read", "use"],
+      },
+      {
+        subject: { type: "oauthClient", id: oauthClient.id },
+        actions: ["read", "use"],
+      },
+    ],
+  });
+
+  const chunks = await KbChunkModel.findByDocument(document.id);
+  expect(chunks.length).toBeGreaterThan(0);
+  for (const chunk of chunks) {
+    expect(chunk.acl).toContain(`user_email:${recipient.email}`);
+    expect(chunk.acl).toContain(`oauth_client:${oauthClient.id}`);
+  }
+
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: document.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `principal:${recipient.id}`],
+      bypassAcl: false,
+    }),
+  ).toMatchObject({ id: document.id });
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: document.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toMatchObject({ id: document.id });
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: document.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `principal:${outsider.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
+
+  // Revoking knowledge base grants removes access immediately.
+  const updatedKbPolicy = await ResourcePermissionPolicyModel.find({
+    organizationId: org.id,
+    resource: "knowledgeBase",
+    scope: kb.id,
+  });
+  await ResourcePermissions.updatePolicy({
+    organizationId: org.id,
+    userId: admin.id,
+    resource: "knowledgeBase",
+    scope: kb.id,
+    revision: updatedKbPolicy?.revision ?? 0,
+    grants: [],
+  });
+
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: document.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `principal:${recipient.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: document.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
+});
+
+test("connectors attached to a knowledge base inherit Can use from the knowledge base and propagate OAuth client upstream ACLs through the client creator", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeKnowledgeBase,
+  makeKnowledgeBaseConnector,
+}) => {
+  const org = await makeOrganization();
+  const admin = await makeUser();
+  const recipient = await makeUser();
+  const outsider = await makeUser();
+  await makeMember(admin.id, org.id, { role: "admin" });
+  await makeMember(recipient.id, org.id, { role: "member" });
+  await makeMember(outsider.id, org.id, { role: "member" });
+
+  const { oauthClient } = await ManagedOauthClientModel.create({
+    organizationId: org.id,
+    authorId: admin.id,
+    name: "Inherited connector client",
+    grantType: "client_credentials",
+    scopes: ["mcp"],
+    allowedGatewayIds: [],
+  });
+
+  const kb = await makeKnowledgeBase(org.id, { access: "personal" });
+  const manualConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+    access: "personal",
+    syncPermissionsFromSource: false,
+  });
+  const upstreamConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+    access: "personal",
+    syncPermissionsFromSource: true,
+  });
+
+  const manualDoc = await KbDocumentModel.create({
+    organizationId: org.id,
+    connectorId: manualConnector.id,
+    title: "Manual doc",
+    content: "manual",
+    contentHash: "manual",
+    acl: [],
+  });
+  const ownerUpstreamDoc = await KbDocumentModel.create({
+    organizationId: org.id,
+    connectorId: upstreamConnector.id,
+    title: "Owner upstream doc",
+    content: "owner-upstream",
+    contentHash: "owner-upstream",
+    acl: [`user_email:${admin.email}`],
+  });
+  const outsiderUpstreamDoc = await KbDocumentModel.create({
+    organizationId: org.id,
+    connectorId: upstreamConnector.id,
+    title: "Outsider upstream doc",
+    content: "outsider-upstream",
+    contentHash: "outsider-upstream",
+    acl: [`user_email:${outsider.email}`],
+  });
+
+  // Before the KB is shared, neither recipient nor oauthClient can access the documents.
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: manualDoc.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `principal:${recipient.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: manualDoc.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: ownerUpstreamDoc.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
+
+  // Grant Can use ONLY on the knowledge base (not on the connectors directly).
+  const kbPolicy = await ResourcePermissionPolicyModel.find({
+    organizationId: org.id,
+    resource: "knowledgeBase",
+    scope: kb.id,
+  });
+  await ResourcePermissions.updatePolicy({
+    organizationId: org.id,
+    userId: admin.id,
+    resource: "knowledgeBase",
+    scope: kb.id,
+    revision: kbPolicy?.revision ?? 0,
+    grants: [
+      {
+        subject: { type: "user", id: recipient.id },
+        actions: ["read", "use"],
+      },
+      {
+        subject: { type: "oauthClient", id: oauthClient.id },
+        actions: ["read", "use"],
+      },
+    ],
+  });
+
+  // Both recipient and oauthClient can now read manualDoc via the inherited KB grant.
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: manualDoc.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `principal:${recipient.id}`],
+      bypassAcl: false,
+    }),
+  ).toMatchObject({ id: manualDoc.id });
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: manualDoc.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toMatchObject({ id: manualDoc.id });
+
+  // On the permission-sync connector, oauthClient propagates upstream ACLs through its creator (admin),
+  // matching ownerUpstreamDoc while blocking outsiderUpstreamDoc.
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: ownerUpstreamDoc.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toMatchObject({ id: ownerUpstreamDoc.id });
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: outsiderUpstreamDoc.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
+
+  // Unassigning a connector from the knowledge base immediately revokes its inherited KB grant.
+  await KnowledgeBaseConnectorModel.unassignFromKnowledgeBase(
+    manualConnector.id,
+    kb.id,
+  );
+  await KnowledgeBaseConnectorModel.unassignFromKnowledgeBase(
+    upstreamConnector.id,
+    kb.id,
+  );
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: manualDoc.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `principal:${recipient.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: manualDoc.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
+  expect(
+    await KbDocumentModel.findByIdForAcl({
+      documentId: ownerUpstreamDoc.id,
+      organizationId: org.id,
+      userAcl: ["org:*", `oauth_client:${oauthClient.id}`],
+      bypassAcl: false,
+    }),
+  ).toBeNull();
 });

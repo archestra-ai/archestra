@@ -58,7 +58,7 @@ Required RBAC permission: [`knowledgeSource:create`](/docs/reference/permissions
 |-----------|------|----------|-------------|
 | `initialGrants` | `object[]` | No |  |
 | `initialGrants[].subject` | `object` | Yes |  |
-| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "role" \| "organization"` | Yes |  |
+| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "oauthClient" \| "role" \| "organization"` | Yes |  |
 | `initialGrants[].subject.id` | `string \| "*"` | Yes |  |
 | `initialGrants[].actions` | `string[]` | Yes |  |
 | `name` | `string` | Yes | Name of the knowledge base. |
@@ -164,7 +164,7 @@ Required RBAC permission: [`knowledgeSource:create`](/docs/reference/permissions
 |-----------|------|----------|-------------|
 | `initialGrants` | `object[]` | No |  |
 | `initialGrants[].subject` | `object` | Yes |  |
-| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "role" \| "organization"` | Yes |  |
+| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "oauthClient" \| "role" \| "organization"` | Yes |  |
 | `initialGrants[].subject.id` | `string \| "*"` | Yes |  |
 | `initialGrants[].actions` | `string[]` | Yes |  |
 | `name` | `string` | Yes | Name of the knowledge connector. |
@@ -522,7 +522,7 @@ Required RBAC permission: [`mcpRegistry:create`](/docs/reference/permissions#mcp
 | `environmentId` | `string \| null` | No | ID of the environment this server belongs to. Pass null for the default environment. Omit it to use your own environment, or the organization's landing environment for new MCP servers when you have none. |
 | `initialGrants` | `object[]` | No |  |
 | `initialGrants[].subject` | `object` | Yes |  |
-| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "role" \| "organization"` | Yes |  |
+| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "oauthClient" \| "role" \| "organization"` | Yes |  |
 | `initialGrants[].subject.id` | `string \| "*"` | Yes |  |
 | `initialGrants[].actions` | `string[]` | Yes |  |
 | `serverType` | `"local" \| "remote" \| "builtin"` | No | Server type: local, remote, or builtin. |
@@ -626,7 +626,7 @@ Required RBAC permission: [`mcpGateway:create`](/docs/reference/permissions#mcpG
 |-----------|------|----------|-------------|
 | `initialGrants` | `object[]` | No |  |
 | `initialGrants[].subject` | `object` | Yes |  |
-| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "role" \| "organization"` | Yes |  |
+| `initialGrants[].subject.type` | `"user" \| "team" \| "serviceAccount" \| "oauthClient" \| "role" \| "organization"` | Yes |  |
 | `initialGrants[].subject.id` | `string \| "*"` | Yes |  |
 | `initialGrants[].actions` | `string[]` | Yes |  |
 | `name` | `string` | Yes | Name for the new resource. |

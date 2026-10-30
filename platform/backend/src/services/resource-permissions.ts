@@ -23,6 +23,7 @@ import {
   type ScopedPermission,
   type ScopedResource,
   scopedResourceNouns,
+  supportsOauthClientSubject,
   topResourcePermissionPreset,
 } from "@archestra/shared";
 import { roleActionResourceFor } from "@archestra/shared/access-control";
@@ -696,13 +697,30 @@ export class ResourcePermissions {
         organizationId: params.organizationId,
       });
     }
-    // A file's indexed documents carry its audience as ACL tokens, so they
-    // follow the edit, a revocation included.
-    if (params.resource === "knowledgeFile" && params.scope !== "*") {
-      await KbFileModel.refreshDocumentAcl({
-        fileId: params.scope,
-        organizationId: params.organizationId,
-      });
+    // A file's indexed documents carry its audience and its knowledge base's as
+    // ACL tokens, so they follow an edit on either, a revocation included.
+    if (params.resource === "knowledgeFile") {
+      if (params.scope === "*") {
+        await KbFileModel.refreshDocumentAclForOrganization({
+          organizationId: params.organizationId,
+        });
+      } else {
+        await KbFileModel.refreshDocumentAcl({
+          fileId: params.scope,
+          organizationId: params.organizationId,
+        });
+      }
+    } else if (params.resource === "knowledgeBase") {
+      if (params.scope === "*") {
+        await KbFileModel.refreshDocumentAclForOrganization({
+          organizationId: params.organizationId,
+        });
+      } else {
+        await KbFileModel.refreshDocumentAclForKnowledgeBase({
+          knowledgeBaseId: params.scope,
+          organizationId: params.organizationId,
+        });
+      }
     }
     const updated = await ResourcePermissions.getEffective(params);
     return {
@@ -799,6 +817,14 @@ export class ResourcePermissions {
         "Each grant must be one of the permission levels this resource offers",
       );
     const subjects = params.grants.map((grant) => grant.subject);
+    if (
+      subjects.some((subject) => subject.type === "oauthClient") &&
+      !supportsOauthClientSubject(params.resource)
+    )
+      throw new ApiError(
+        400,
+        "OAuth clients can only be granted access to knowledge bases, connectors, and files",
+      );
     if (new Set(subjects.map(subjectKey)).size !== subjects.length)
       throw new ApiError(400, "Each recipient can have only one direct grant");
     const existing = await ResourcePermissionSubjectModel.findExisting({
@@ -947,6 +973,15 @@ export class ResourcePermissions {
         403,
         "Sharing with a service account needs permission to see service accounts.",
       );
+    if (
+      added.some((subject) => subject.type === "oauthClient") &&
+      supportsOauthClientSubject(params.resource) &&
+      !(await ResourcePermissions.maySeeOauthClients(params))
+    )
+      throw new ApiError(
+        403,
+        "Sharing with an OAuth client needs permission to see OAuth clients.",
+      );
   }
 
   private static async maySeeServiceAccounts(params: {
@@ -955,6 +990,14 @@ export class ResourcePermissions {
   }): Promise<boolean> {
     const permissions = await getPermissionsForUserContext(params);
     return permissions.serviceAccount?.includes("read") ?? false;
+  }
+
+  private static async maySeeOauthClients(params: {
+    organizationId: string;
+    userId: string;
+  }): Promise<boolean> {
+    const permissions = await getPermissionsForUserContext(params);
+    return permissions.oauthClient?.includes("read") ?? false;
   }
 
   /**
@@ -1083,12 +1126,19 @@ export class ResourcePermissions {
     // they share it with teams in their organization, and with people a grant here would
     // give something to.
     const subjects = await ResourcePermissions.getSubjects(params);
-    const [organizationWide, seesServiceAccounts, coveredRoles] =
-      await Promise.all([
-        ResourcePermissions.mayAddOrganizationWide({ ...params, subjects }),
-        ResourcePermissions.maySeeServiceAccounts(params),
-        ResourcePermissions.rolesWithEveryAction(params),
-      ]);
+    const [
+      organizationWide,
+      seesServiceAccounts,
+      seesOauthClients,
+      coveredRoles,
+    ] = await Promise.all([
+      ResourcePermissions.mayAddOrganizationWide({ ...params, subjects }),
+      ResourcePermissions.maySeeServiceAccounts(params),
+      supportsOauthClientSubject(params.resource)
+        ? ResourcePermissions.maySeeOauthClients(params)
+        : Promise.resolve(false),
+      ResourcePermissions.rolesWithEveryAction(params),
+    ]);
     // Filter before the per-kind limit so already selected or ineligible
     // recipients cannot hide someone on a later page.
     const recipients = await ResourcePermissionSubjectModel.search({
@@ -1115,7 +1165,9 @@ export class ResourcePermissions {
         (recipient) =>
           !excluded.has(subjectKey(recipient.subject)) &&
           (organizationWide || !isOrganizationWideSubject(recipient.subject)) &&
-          (seesServiceAccounts || recipient.subject.type !== "serviceAccount"),
+          (seesServiceAccounts ||
+            recipient.subject.type !== "serviceAccount") &&
+          (seesOauthClients || recipient.subject.type !== "oauthClient"),
       );
   }
 

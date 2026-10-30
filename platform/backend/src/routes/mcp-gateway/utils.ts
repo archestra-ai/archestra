@@ -621,6 +621,7 @@ export async function buildAgentMcpToolList(params: {
         tokenAuth?.organizationId
           ? {
               userId: callerUserId,
+              oauthClientId: tokenAuth.oauthClientId,
               organizationId: tokenAuth.organizationId,
             }
           : undefined,
@@ -635,6 +636,7 @@ export async function buildAgentMcpToolList(params: {
               .map((tool) => tool.name),
             agentId,
             userId: callerUserId,
+            oauthClientId: tokenAuth?.oauthClientId,
             organizationId: tokenAuth?.organizationId,
             prefetchedCatalogs: catalogsById,
             lookups: params.lookups,
@@ -2953,6 +2955,7 @@ async function buildSearchToolsDescription(params: {
   availableBuiltInToolNames: string[];
   agentId: string;
   userId?: string;
+  oauthClientId?: string;
   organizationId?: string;
   prefetchedCatalogs?: Awaited<
     ReturnType<typeof InternalMcpCatalogModel.getByIds>
@@ -2962,6 +2965,7 @@ async function buildSearchToolsDescription(params: {
   const {
     agentId,
     mcpTools,
+    oauthClientId,
     organizationId,
     prefetchedCatalogs,
     userId,
@@ -2978,6 +2982,7 @@ async function buildSearchToolsDescription(params: {
   const knowledgeInstruction = await buildKnowledgeSearchInstruction({
     agentId,
     userId,
+    oauthClientId,
     organizationId,
     toolNames: params.advertisedToolNames,
     lookups,
@@ -2997,6 +3002,7 @@ async function buildSearchToolsDescription(params: {
     assignedToolNames: new Set(mcpTools.map((tool) => tool.name)),
     agentId,
     userId,
+    oauthClientId,
     organizationId,
     lookups,
   });

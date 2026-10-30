@@ -155,5 +155,12 @@ function formatAclEntry({
       className: scopeStyles.team,
     };
   }
+  if (entry.startsWith("oauth_client:")) {
+    return {
+      label: `OAuth client: ${entry.slice("oauth_client:".length)}`,
+      icon: UserIcon,
+      className: scopeStyles.personal,
+    };
+  }
   return { label: entry, icon: UserIcon, className: scopeStyles.personal };
 }

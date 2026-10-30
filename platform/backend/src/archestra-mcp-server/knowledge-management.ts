@@ -60,6 +60,7 @@ import {
   KnowledgeBaseModel,
   UserModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import * as metrics from "@/observability/metrics";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { hiddenKnowledgeConnectorViolation } from "@/services/integration-overrides";
@@ -587,6 +588,13 @@ async function handleQueryKnowledgeSources(params: {
             organizationId,
           })
         : null;
+    const oauthPrincipal =
+      !access && context.tokenAuth?.oauthClientId && organizationId
+        ? await ResourcePermissionSubjectModel.resolveOauthClientPrincipal({
+            oauthClientId: context.tokenAuth.oauthClientId,
+            organizationId,
+          })
+        : null;
 
     // Dynamic tool access: when the agent's "access all tools" setting is on,
     // the query spans every connector visible to the user — a superset of the
@@ -630,6 +638,33 @@ async function handleQueryKnowledgeSources(params: {
             : "No knowledge sources are accessible to the current user. Create a knowledge connector or ask an admin for access.",
         );
       }
+    } else if (
+      !access &&
+      context.userId !== "system" &&
+      (await AgentModel.getAccessAllTools(contextAgent.id))
+    ) {
+      const excludedConnectorIds =
+        await AgentExcludedConnectorModel.findConnectorIdsByAgent(
+          contextAgent.id,
+        );
+      const { connectors, queryableCount } =
+        await knowledgeSourceAccessControlService.findQueryableOrganizationConnectorsForNonUser(
+          {
+            organizationId,
+            environmentId: agentEnvironmentId,
+            excludedConnectorIds,
+            principal: oauthPrincipal ?? undefined,
+          },
+        );
+      connectorIds = connectors.map((connector) => connector.id);
+
+      if (connectorIds.length === 0) {
+        return errorResult(
+          queryableCount > 0
+            ? "Every knowledge source reachable here is disabled for this agent. Re-enable one in the agent's Tools & Knowledge settings."
+            : "No knowledge sources are accessible to the current user. Create a knowledge connector or ask an admin for access.",
+        );
+      }
     } else {
       const agent = await AgentModel.findById(contextAgent.id);
 
@@ -660,6 +695,7 @@ async function handleQueryKnowledgeSources(params: {
               resource: "knowledgeBase",
               sources: validKbs,
               action: "use",
+              principal: oauthPrincipal ?? undefined,
             },
           );
 
@@ -685,7 +721,8 @@ async function handleQueryKnowledgeSources(params: {
                   canReadAll: access?.canReadAll,
                   viewerTeamIds: access?.teamIds,
                   viewerUserId: access?.userId,
-                  viewerPrincipal: access?.principal,
+                  viewerPrincipal:
+                    access?.principal ?? oauthPrincipal ?? undefined,
                   visibilityScope: "query",
                   environmentId: agentEnvironmentId,
                 }),
@@ -709,6 +746,7 @@ async function handleQueryKnowledgeSources(params: {
               organizationId,
               connectors,
               knowledgeBaseIds: visibleKbs.map((kb) => kb.id),
+              principal: oauthPrincipal ?? undefined,
             },
           );
       // SPDX-SnippetEnd
@@ -764,7 +802,30 @@ async function handleQueryKnowledgeSources(params: {
       }
     }
 
-    if (context.userId) userAcl.push(`principal:${context.userId}`);
+    if (context.userId) {
+      userAcl.push(`principal:${context.userId}`);
+    } else {
+      if (oauthPrincipal?.authorId && oauthPrincipal.authorEmail) {
+        const accessTokens = await findAccessTokensForUserCached({
+          memberEmail: oauthPrincipal.authorEmail,
+          userId: oauthPrincipal.authorId,
+          connectorIds,
+        });
+        userAcl = [
+          ...new Set([
+            ...userAcl,
+            ...(oauthPrincipal.upstreamTokens ?? []),
+            ...accessTokens,
+          ]),
+        ];
+      }
+      const oauthClientSubject = oauthPrincipal?.subjects.find(
+        (subject) => subject.type === "oauthClient",
+      );
+      if (oauthClientSubject) {
+        userAcl.push(`oauth_client:${oauthClientSubject.id}`);
+      }
+    }
 
     const bypassAcl = access?.canReadAll ?? false;
     const documentFilter = args.documentFilter;

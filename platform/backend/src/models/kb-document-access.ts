@@ -17,12 +17,21 @@ export default class KbDocumentAccessModel {
     organizationId?: string;
   }): Promise<GrantPrincipal[] | null> {
     const userId = principalOf(params.userAcl);
-    return userId
-      ? ResourcePermissionSubjectModel.resolvePrincipals({
-          userId,
+    if (userId)
+      return ResourcePermissionSubjectModel.resolvePrincipals({
+        userId,
+        organizationId: params.organizationId,
+      });
+    const oauthClientId = oauthClientOf(params.userAcl);
+    if (oauthClientId) {
+      const principal =
+        await ResourcePermissionSubjectModel.resolveOauthClientPrincipal({
+          oauthClientId,
           organizationId: params.organizationId,
-        })
-      : null;
+        });
+      return principal ? [principal] : [];
+    }
+    return null;
   }
 
   /** The caller's resolved principals, resolving them here only when absent. */
@@ -46,9 +55,16 @@ export default class KbDocumentAccessModel {
   }) {
     // Identity is request context, not a stored ACL token. Excluding it from
     // overlap prevents a connector-supplied token from impersonating a grant.
-    const tokens = params.userAcl.filter(
-      (token) => !token.startsWith("principal:"),
-    );
+    const inheritedUpstreamTokens =
+      params.grantPrincipals?.flatMap(
+        (principal) => principal.upstreamTokens ?? [],
+      ) ?? [];
+    const tokens = [
+      ...new Set([
+        ...params.userAcl.filter((token) => !token.startsWith("principal:")),
+        ...inheritedUpstreamTokens,
+      ]),
+    ];
     const upstream = tokens.length
       ? sql`${params.acl} ?| ARRAY[${sql.join(
           tokens.map((token) => sql`${token}`),
@@ -60,13 +76,29 @@ export default class KbDocumentAccessModel {
       resource: "knowledgeFile" as const,
       scopeColumn: sql`permission_file.kb_file_id`,
     };
+    const knowledgeBaseContext = {
+      organizationId: params.organizationId,
+      resource: "knowledgeBase" as const,
+      scopeColumn: sql`permission_upload.knowledge_base_id`,
+    };
+    const assignedKnowledgeBaseContext = {
+      organizationId: params.organizationId,
+      resource: "knowledgeBase" as const,
+      scopeColumn: sql`permission_assignment.knowledge_base_id`,
+    };
     const connectorContext = {
       organizationId: params.organizationId,
       resource: "knowledgeConnector" as const,
       scopeColumn: params.connectorId,
     };
     const principals = params.grantPrincipals;
-    const access = (context: typeof fileContext | typeof connectorContext) =>
+    const access = (
+      context:
+        | typeof fileContext
+        | typeof knowledgeBaseContext
+        | typeof assignedKnowledgeBaseContext
+        | typeof connectorContext,
+    ) =>
       principals
         ? ResourcePermissionPolicyModel.grantConditionForAny({
             ...context,
@@ -78,16 +110,38 @@ export default class KbDocumentAccessModel {
             ...context,
             action: "use",
           });
+    const connectorOrAssignedKnowledgeBaseAccess = sql`(
+      ${access(connectorContext)}
+      OR EXISTS (
+        SELECT 1 FROM knowledge_base_connector_assignment permission_assignment
+        INNER JOIN knowledge_bases permission_kb
+          ON permission_kb.id = permission_assignment.knowledge_base_id
+          AND permission_kb.deleted_at IS NULL
+        WHERE permission_assignment.connector_id = ${params.connectorId}
+          AND ${access(assignedKnowledgeBaseContext)}
+      )
+    )`;
+    const hasUserPrincipal = Boolean(principalOf(params.userAcl));
     return sql`CASE
       WHEN EXISTS (SELECT 1 FROM kb_file_document permission_file WHERE permission_file.kb_document_id = ${params.documentId})
-      THEN EXISTS (
-        SELECT 1 FROM kb_file_document permission_file
-        WHERE permission_file.kb_document_id = ${params.documentId}
-          AND ${access(fileContext)}
+      THEN (
+        EXISTS (
+          SELECT 1 FROM kb_file_document permission_file
+          WHERE permission_file.kb_document_id = ${params.documentId}
+            AND ${access(fileContext)}
+        )
+        OR EXISTS (
+          SELECT 1 FROM kb_upload_connector permission_upload
+          INNER JOIN knowledge_bases permission_kb
+            ON permission_kb.id = permission_upload.knowledge_base_id
+            AND permission_kb.deleted_at IS NULL
+          WHERE permission_upload.connector_id = ${params.connectorId}
+            AND ${access(knowledgeBaseContext)}
+        )
       )
       WHEN EXISTS (SELECT 1 FROM knowledge_base_connectors permission_connector WHERE permission_connector.id = ${params.connectorId} AND permission_connector.sync_permissions_from_source)
-        THEN ${upstream}
-      ELSE ${access(connectorContext)}
+        THEN ${hasUserPrincipal ? upstream : sql`(${connectorOrAssignedKnowledgeBaseAccess} AND ${upstream})`}
+      ELSE ${connectorOrAssignedKnowledgeBaseAccess}
     END`;
   }
 }
@@ -96,4 +150,10 @@ function principalOf(userAcl: readonly string[]): string | undefined {
   return userAcl
     .find((token) => token.startsWith("principal:"))
     ?.slice("principal:".length);
+}
+
+function oauthClientOf(userAcl: readonly string[]): string | undefined {
+  return userAcl
+    .find((token) => token.startsWith("oauth_client:"))
+    ?.slice("oauth_client:".length);
 }

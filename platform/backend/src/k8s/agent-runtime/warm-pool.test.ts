@@ -8,7 +8,11 @@ import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
 import { useMswServer } from "@/test/msw";
 import type { KubernetesAgentRunLaunchSpec } from "./manifests";
 import { agentSandboxApi } from "./sandbox-api";
-import { agentWarmPoolManager, readWorkspaceSandbox } from "./warm-pool";
+import {
+  agentWarmPoolManager,
+  readWorkspaceSandbox,
+  servedLaunchSpec,
+} from "./warm-pool";
 import { warmPoolTemplate } from "./warm-pool-template";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
@@ -309,6 +313,42 @@ test("keeps tier L spares apart: none by default, and no pool slot taken from th
     [poolOf("L", { ...DEFAULT_AGENT_RUNTIME_TIERS.L, cpuRequest: "6" })]: 1,
     [poolOf("M")]: 2,
   });
+});
+
+test("a run served from a larger pool is told the size of the pod it got", () => {
+  const sizes = {
+    S: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
+    M: { cpuRequest: "4", memoryRequest: "8Gi", memoryLimit: "16Gi" },
+  };
+  const spec = {
+    ...SPEC,
+    tier: "S" as const,
+    resources: sizes.S,
+    warmTiers: [
+      { tier: "S" as const, resources: sizes.S },
+      { tier: "M" as const, resources: sizes.M },
+    ],
+    env: {
+      ARCHESTRA_AGENT_RUNTIME_TIER: "S",
+      ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
+      ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
+      ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "8Gi",
+      OTHER: "kept",
+    },
+  };
+  const served = servedLaunchSpec(spec, "M");
+  expect(served.tier).toBe("M");
+  expect(served.resources).toEqual(sizes.M);
+  expect(served.env).toEqual({
+    ARCHESTRA_AGENT_RUNTIME_TIER: "M",
+    ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
+    ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
+    ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
+    OTHER: "kept",
+  });
+  // Served by its own tier, or with no tiers at all: unchanged.
+  expect(servedLaunchSpec(spec, "S")).toBe(spec);
+  expect(servedLaunchSpec(SPEC, null)).toBe(SPEC);
 });
 
 test("rejects a claim pointing at another workspace's Sandbox", async () => {

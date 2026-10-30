@@ -15,6 +15,11 @@ import {
 import logger from "@/logging";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
 import {
+  AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_MEMORY_LIMIT_ENV,
+  AGENT_RUNTIME_TIER_ENV,
+} from "@/services/agent-runtime/runtime-contract";
+import {
   agentRuntimeTier,
   resolveRunResources,
   warmPoolReplicas,
@@ -457,6 +462,35 @@ class AgentWarmPoolManager {
 }
 
 export const agentWarmPoolManager = new AgentWarmPoolManager();
+
+/**
+ * The launch spec as the pod that served it is sized: a run claimed from a
+ * larger tier's pool runs at that tier, so its size variables must say so.
+ */
+export function servedLaunchSpec<
+  T extends Pick<
+    KubernetesAgentRunLaunchSpec,
+    "tier" | "resources" | "warmTiers" | "env"
+  >,
+>(spec: T, tier: AgentRuntimeTier | null): T {
+  const served = spec.warmTiers.find((candidate) => candidate.tier === tier);
+  if (!served || tier === spec.tier) return spec;
+  return {
+    ...spec,
+    tier,
+    resources: served.resources,
+    env: {
+      ...spec.env,
+      [AGENT_RUNTIME_TIER_ENV]: tier,
+      ...(served.resources.cpuRequest
+        ? { [AGENT_RUNTIME_CPU_REQUEST_ENV]: served.resources.cpuRequest }
+        : {}),
+      ...(served.resources.memoryLimit
+        ? { [AGENT_RUNTIME_MEMORY_LIMIT_ENV]: served.resources.memoryLimit }
+        : {}),
+    },
+  };
+}
 
 /** Agents idle longer than this hold no spare capacity. */
 const RECENT_RUN_WINDOW_MS = 7 * TimeInMs.Day;

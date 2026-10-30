@@ -86,7 +86,7 @@ export function resolveRunResources(
 
 /**
  * Tiers whose warm pool may serve a run, in order: the requested tier, then
- * the next larger one while it stays within the Agent's own tier. Never a
+ * the next larger one while it stays within the Agent's largest tier. Never a
  * smaller one: a run sized below what it asked for can run out of memory. A
  * run served from the larger pool runs at that size.
  */

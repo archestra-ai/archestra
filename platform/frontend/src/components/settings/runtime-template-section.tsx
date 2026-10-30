@@ -83,6 +83,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   type RuntimeTemplate,
+  runtimeTemplatePosition,
   useRuntimeTemplateCatalog,
   useRuntimeTemplateSettings,
   useSaveRuntimeTemplateSettings,
@@ -170,13 +171,10 @@ export function RuntimeTemplateSection({
   );
 
   function position(id: string) {
-    const custom = (
-      settings.data ? state.templates : (summaries.data ?? [])
-    ).find((item) => item.id === id);
-    if (custom) return custom.position;
-    return (
-      state.popularAgentOverrides?.[id as AgentCatalogId]?.position ??
-      AGENT_CATALOG_IDS.indexOf(id as AgentCatalogId)
+    return runtimeTemplatePosition(
+      id,
+      settings.data ? state.templates : (summaries.data ?? []),
+      state.popularAgentOverrides,
     );
   }
   function reorder(ids: string[]) {

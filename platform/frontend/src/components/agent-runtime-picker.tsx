@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import { Code } from "lucide-react";
 import { type ReactNode, useEffect, useId, useState } from "react";
+import { AgentIcon } from "@/components/agent-icon";
 import {
   CatalogAgentIcon,
   PlatformAgentIcon,
@@ -79,12 +80,14 @@ export function AgentRuntimePicker({
     id: AgentRuntimeSelection;
     name: string;
     runtime: AgentRuntimeConfig | null;
+    icon?: string | null;
   }> = [
     { id: "chat", name: appName, runtime: null },
     ...templates.map((template) => ({
       id: template.id,
       name: template.name,
       runtime: template.initialValues.runtime ?? null,
+      icon: template.icon,
     })),
     {
       id: "custom",
@@ -139,7 +142,10 @@ export function AgentRuntimePicker({
             aria-hidden="true"
             className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted"
           >
-            <RuntimeOptionIcon id={selectedOption.id} />
+            <RuntimeOptionIcon
+              id={selectedOption.id}
+              icon={selectedOption.icon}
+            />
           </span>
           <div className="min-w-0 flex-1 space-y-0.5">
             <p className="text-sm font-medium">
@@ -199,7 +205,11 @@ export function AgentRuntimePicker({
                 aria-hidden="true"
                 className="flex size-6 items-center justify-center rounded bg-muted"
               >
-                <RuntimeOptionIcon id={option.id} size={16} />
+                <RuntimeOptionIcon
+                  id={option.id}
+                  icon={option.icon}
+                  size={16}
+                />
               </span>
               <span>{option.name}</span>
             </Label>
@@ -326,16 +336,19 @@ export function AgentRuntimePicker({
 
 function RuntimeOptionIcon({
   id,
+  icon,
   size = 20,
 }: {
   id: AgentRuntimeSelection;
+  icon?: string | null;
   size?: number;
 }) {
   const appIconLogo = useAppIconLogo();
   if (id === "chat")
     return <PlatformAgentIcon appIconLogo={appIconLogo} size={size} />;
+  if (id === "custom") return <Code className="size-4" />;
   if (!AGENT_CATALOG_IDS.includes(id as AgentCatalogId))
-    return <Code className="size-4" />;
+    return <AgentIcon icon={icon} size={size} />;
   return <CatalogAgentIcon id={id as AgentCatalogId} size={size} />;
 }
 

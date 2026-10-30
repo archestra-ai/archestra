@@ -437,6 +437,9 @@ describe("model-facing runtime tools", () => {
         scenario === "no runtime metadata"
           ? null
           : expect.stringMatching(new RegExp(`/chat/runs/${task.id}$`)),
+      // The run's limits are metadata, reported even when the output is withheld.
+      limits:
+        scenario === "no runtime metadata" ? null : SEEDED_RUN_LIMITS_OUTPUT,
       output: "",
       requests: [],
       workspace: null,
@@ -850,6 +853,7 @@ describe("model-facing runtime tools", () => {
 
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toMatchObject({
+      limits: SEEDED_RUN_LIMITS_OUTPUT,
       output: "ADMITTED",
       output_truncated: false,
       requests: [],
@@ -1698,6 +1702,20 @@ async function bindChild(
   });
 }
 
+/** What the seeded run recorded, and how get_agent_run reports it. */
+const SEEDED_RUN_LIMITS = {
+  tier: "S" as const,
+  idleTimeoutMinutes: 10,
+  maxDurationHours: 1,
+  maxCostUsd: null,
+};
+const SEEDED_RUN_LIMITS_OUTPUT = {
+  tier: "S",
+  idle_timeout_minutes: 10,
+  max_duration_hours: 1,
+  max_cost_usd: null,
+};
+
 async function seededRun(params: {
   makeAgent: (overrides: Record<string, unknown>) => Promise<Agent>;
   makeMember: (
@@ -1743,6 +1761,7 @@ async function seededRun(params: {
     backend: "kubernetes",
     runtimeScope: scope,
     workloadName,
+    runtimeLimits: SEEDED_RUN_LIMITS,
   });
   const workspace = await AgentWorkspaceModel.create({
     id: task.id,

@@ -21001,6 +21001,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "moved": {
+          "name": "moved",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         }
       },
       "indexes": {},

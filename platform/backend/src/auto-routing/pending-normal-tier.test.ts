@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
+import AgentModel from "@/models/agent";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
@@ -58,6 +60,93 @@ describe("applyPendingNormalTiers", () => {
       enabled: true,
       normalModelId: tier.id,
     });
+    expect(await pendingTiers()).toEqual([]);
+  });
+
+  test("auto routing that fails to come back after the move is re-enabled at the next startup", async ({
+    makeOrganization,
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    await configureAutoRouting(organizationId);
+    await AutoRoutingSettingsModel.update(organizationId, { enabled: false });
+    await makeAgent({
+      organizationId,
+      agentType: "agent",
+      runtime: CODEX_RUNTIME,
+    });
+    const tier = await makeRoutingModel();
+    const key = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "openai",
+    });
+    await stash({ organizationId, tier, apiKeyId: key.id });
+    // The settings write's first read fails like a dropped connection.
+    const settingsRead = vi
+      .spyOn(AgentModel, "getOrgLlmProxy")
+      .mockRejectedValueOnce(new Error("Connection terminated unexpectedly"));
+
+    try {
+      await applyPendingNormalTiers();
+
+      expect(settingsRead).toHaveBeenCalled();
+      expect(await OrganizationModel.getById(organizationId)).toMatchObject({
+        defaultModelId: tier.id,
+        defaultLlmApiKeyId: key.id,
+      });
+      expect(
+        (await AutoRoutingSettingsModel.find(organizationId))?.enabled,
+      ).toBe(false);
+
+      await applyPendingNormalTiers();
+    } finally {
+      settingsRead.mockRestore();
+    }
+
+    expect(await AutoRoutingSettingsModel.find(organizationId)).toMatchObject({
+      enabled: true,
+      normalModelId: tier.id,
+    });
+    expect(await pendingTiers()).toEqual([]);
+  });
+
+  test("a moved tier whose auto routing an admin changed meanwhile is dropped without re-enabling", async ({
+    makeOrganization,
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    await configureAutoRouting(organizationId);
+    await AutoRoutingSettingsModel.update(organizationId, { enabled: false });
+    await makeAgent({
+      organizationId,
+      agentType: "agent",
+      runtime: CODEX_RUNTIME,
+    });
+    const tier = await makeRoutingModel();
+    const key = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "openai",
+    });
+    await stash({ organizationId, tier, apiKeyId: key.id });
+    const settingsRead = vi
+      .spyOn(AgentModel, "getOrgLlmProxy")
+      .mockRejectedValueOnce(new Error("Connection terminated unexpectedly"));
+    try {
+      await applyPendingNormalTiers();
+    } finally {
+      settingsRead.mockRestore();
+    }
+    const chosen = await makeRoutingModel();
+    await OrganizationModel.patch(organizationId, {
+      defaultModelId: chosen.id,
+      defaultLlmApiKeyId: key.id,
+    });
+
+    await applyPendingNormalTiers();
+
+    expect((await AutoRoutingSettingsModel.find(organizationId))?.enabled).toBe(
+      false,
+    );
     expect(await pendingTiers()).toEqual([]);
   });
 

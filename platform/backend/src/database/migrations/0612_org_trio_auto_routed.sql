@@ -27,7 +27,8 @@ CREATE TABLE "org_trio_pending_normal_tier" (
 	"api_key_id" text NOT NULL,
 	"auto_routing_was_enabled" boolean NOT NULL,
 	"expected_default_model_id" text,
-	"expected_default_llm_api_key_id" text
+	"expected_default_llm_api_key_id" text,
+	"moved" boolean DEFAULT false NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "org_trio_pending_normal_tier" ADD CONSTRAINT "org_trio_pending_normal_tier_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

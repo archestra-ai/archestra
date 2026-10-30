@@ -27,8 +27,20 @@ class OrgTrioPendingNormalTierModel {
     return row ?? null;
   }
 
-  static async delete(organizationId: string, tx: Transaction): Promise<void> {
-    await tx.delete(pending).where(eq(pending.organizationId, organizationId));
+  static async markMoved(
+    organizationId: string,
+    tx: Transaction,
+  ): Promise<void> {
+    await tx
+      .update(pending)
+      .set({ moved: true })
+      .where(eq(pending.organizationId, organizationId));
+  }
+
+  static async delete(organizationId: string, tx?: Transaction): Promise<void> {
+    await (tx ?? db)
+      .delete(pending)
+      .where(eq(pending.organizationId, organizationId));
   }
 }
 

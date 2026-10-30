@@ -330,6 +330,7 @@ test("the normal tier waits for the startup check while an Agent Runtime agent i
         auto_routing_was_enabled: true,
         expected_default_model_id: "normal-0",
         expected_default_llm_api_key_id: "runtime-default",
+        moved: false,
       },
     ]);
   } finally {

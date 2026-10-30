@@ -1,7 +1,11 @@
 import type * as archestraApiTypes from "../../hey-api/clients/api/types.gen";
 import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
-import { inlineMediaPart } from "./media";
+import {
+  type ImageEditUploads,
+  imageEditUploadParts,
+  inlineMediaPart,
+} from "./media";
 
 // Define more precise types for Gemini parts since the generated types use union discrimination
 type GeminiFunctionCallPart = {
@@ -411,6 +415,18 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
       } else {
         uiMessages.push(uiMessage);
       }
+    }
+
+    // An Images edit row logs its reference images as the edit's uploads, as
+    // every other provider's edit row does; they follow the prompt they were
+    // sent with. Older rows carry them as inline parts, mapped above.
+    const uploads = imageEditUploadParts(
+      (this.request as { input_files?: ImageEditUploads }).input_files,
+    );
+    if (uploads.length > 0) {
+      const turn = uiMessages.find((message) => message.role === "user");
+      if (turn) turn.parts.push(...uploads);
+      else uiMessages.unshift({ role: "user", parts: uploads });
     }
 
     return uiMessages;

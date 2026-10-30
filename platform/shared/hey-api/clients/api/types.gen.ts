@@ -62769,7 +62769,11 @@ export type GetInteractionsResponses = {
             attributionLabels: {
                 [key: string]: string;
             } | null;
-            request: GeminiGenerateContentRequest | {
+            request: (GeminiGenerateContentRequest & {
+                input_files?: {
+                    [key: string]: unknown;
+                };
+            }) | {
                 [key: string]: unknown;
             };
             processedRequest?: GeminiGenerateContentRequest | {
@@ -73794,7 +73798,11 @@ export type GetInteractionResponses = {
         attributionLabels: {
             [key: string]: string;
         } | null;
-        request: GeminiGenerateContentRequest | {
+        request: (GeminiGenerateContentRequest & {
+            input_files?: {
+                [key: string]: unknown;
+            };
+        }) | {
             [key: string]: unknown;
         };
         processedRequest?: GeminiGenerateContentRequest | {

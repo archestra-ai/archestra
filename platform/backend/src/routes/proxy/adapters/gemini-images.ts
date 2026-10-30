@@ -9,8 +9,10 @@ import {
   type LLMResponseAdapter,
 } from "@/types";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
-import type { ValidatedImageEditUploads } from "../utils/image-edit-input";
-import { LOGGED_MEDIA_MAX_BYTES } from "../utils/logged-media";
+import {
+  loggedUploadMetadata,
+  type ValidatedImageEditUploads,
+} from "../utils/image-edit-input";
 import { mediaProviderError } from "../utils/media-provider-error";
 import type { AzureImageEditRequest } from "./azure-image-edits";
 import { type GeminiRequestWithModel, geminiAdapterFactory } from "./gemini";
@@ -40,8 +42,7 @@ export function toGeminiImageRequest(
 
 /**
  * An Images edit request in Gemini's native shape. The reference images are
- * attached by `createGeminiImageEditAdapter` when the request executes, and
- * the log row keeps those within the per-file limit.
+ * attached by `createGeminiImageEditAdapter` when the request executes.
  */
 export function toGeminiImageEditRequest(
   request: AzureImageEditRequest,
@@ -57,13 +58,17 @@ export function toGeminiImageEditRequest(
   return toGeminiImageRequest(fields);
 }
 
-/** Gemini image edits: generateContent with the reference images as inline parts. */
+/**
+ * Gemini image edits: generateContent with the reference images as inline
+ * parts. The log row keeps them as the edit's uploads, as every other
+ * provider's edit row does: each named with its size, its bytes up to the
+ * per-file limit, and a larger one marked as not kept.
+ */
 export function createGeminiImageEditAdapter(
   uploads: ValidatedImageEditUploads,
 ): typeof geminiImagesAdapterFactory {
   const withReferences = (
     request: GeminiRequestWithModel,
-    maxBytes = Number.POSITIVE_INFINITY,
   ): GeminiRequestWithModel => {
     const [first, ...rest] = request.contents ?? [];
     return {
@@ -73,18 +78,12 @@ export function createGeminiImageEditAdapter(
           ...first,
           parts: [
             ...(first?.parts ?? []),
-            ...uploads.images.flatMap((file, index) =>
-              file.data.length > maxBytes
-                ? []
-                : [
-                    {
-                      inlineData: {
-                        mimeType: uploads.metadata.images[index].mime_type,
-                        data: file.data.toString("base64"),
-                      },
-                    },
-                  ],
-            ),
+            ...uploads.images.map((file, index) => ({
+              inlineData: {
+                mimeType: uploads.metadata.images[index].mime_type,
+                data: file.data.toString("base64"),
+              },
+            })),
           ],
         },
         ...rest,
@@ -93,9 +92,10 @@ export function createGeminiImageEditAdapter(
   };
   return {
     ...geminiImagesAdapterFactory,
-    // The log row keeps each reference within the per-file limit.
-    toLoggedRequest: (request: GeminiRequestWithModel) =>
-      withReferences(request, LOGGED_MEDIA_MAX_BYTES),
+    toLoggedRequest: (request: GeminiRequestWithModel) => ({
+      ...request,
+      input_files: loggedUploadMetadata(uploads),
+    }),
     execute(client: unknown, request: GeminiRequestWithModel) {
       return geminiImagesAdapterFactory.execute(
         client,

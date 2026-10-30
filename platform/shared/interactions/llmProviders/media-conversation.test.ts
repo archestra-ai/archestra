@@ -167,6 +167,117 @@ describe("media and embeddings in the conversation view", () => {
     });
   });
 
+  it("shows a Gemini edit's references after its prompt, naming one too large to keep", () => {
+    const row = {
+      type: "gemini:generateContent",
+      model: "gemini-2.5-flash-image",
+      request: {
+        contents: [{ role: "user", parts: [{ text: "Blend them" }] }],
+        generationConfig: { responseModalities: ["IMAGE"] },
+        input_files: {
+          images: [
+            {
+              filename: "circle.png",
+              mime_type: "image/png",
+              width: 1024,
+              height: 1024,
+              data: "iVBORw0KGgo",
+            },
+            {
+              filename: "photo.png",
+              mime_type: "image/png",
+              width: 4032,
+              height: 3024,
+              data_omitted: "too_large",
+            },
+          ],
+        },
+      },
+      response: {
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [{ inlineData: { mimeType: "image/png", data: "iVBO" } }],
+            },
+          },
+        ],
+      },
+    };
+    const tooLarge = {
+      type: "data-missing-media",
+      data: {
+        kind: "image",
+        label: "photo.png · 4032 × 3024",
+        reason: "Larger than the log keeps (2 MB per image)",
+      },
+    };
+    const { messages, title } = conversation(row);
+    expect(title).toBe("Blend them");
+    expect(messages[0]).toEqual({
+      role: "user",
+      parts: [
+        { type: "text", text: "Blend them" },
+        {
+          type: "file",
+          mediaType: "image/png",
+          url: "data:image/png;base64,iVBORw0KGgo",
+          filename: "circle.png · 1024 × 1024",
+        },
+        tooLarge,
+      ],
+    });
+    expect(messages[1]).toEqual({
+      role: "assistant",
+      parts: [
+        {
+          type: "file",
+          mediaType: "image/png",
+          url: "data:image/png;base64,iVBO",
+        },
+      ],
+    });
+
+    // With media logging off, the kept reference keeps its name.
+    expect(conversation(withoutLoggedMedia(row)).messages[0].parts).toEqual([
+      { type: "text", text: "Blend them" },
+      {
+        type: "data-missing-media",
+        data: {
+          kind: "image",
+          label: "circle.png · 1024 × 1024",
+          reason: MEDIA_NOT_KEPT_REASON,
+        },
+      },
+      tooLarge,
+    ]);
+
+    // A row written before edits logged their uploads carries the reference
+    // as an inline part, and still shows it.
+    const older = conversation({
+      ...row,
+      request: {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: "Blend them" },
+              { inlineData: { mimeType: "image/png", data: "iVBORw0KGgo" } },
+            ],
+          },
+        ],
+      },
+    });
+    expect(older.messages[0].parts).toEqual([
+      { type: "text", text: "Blend them" },
+      {
+        type: "file",
+        mediaType: "image/png",
+        url: "data:image/png;base64,iVBORw0KGgo",
+      },
+    ]);
+  });
+
   it("plays speech and transcription audio, and says when it was not kept", () => {
     const speech = conversation({
       type: "openai:audio",

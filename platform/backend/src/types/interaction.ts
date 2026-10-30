@@ -480,6 +480,14 @@ const withErrorResponse = <T extends z.ZodTypeAny>(schema: T) =>
  * Discriminated union schema for API responses
  * This provides type safety based on the type field
  */
+/**
+ * A Gemini row's request as logged: an image edit's row also names its
+ * reference images, as OpenAI edits do.
+ */
+const GeminiLoggedRequestSchema = Gemini.API.GenerateContentRequestSchema.and(
+  z.object({ input_files: z.record(z.string(), z.unknown()).optional() }),
+);
+
 export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["openai:chatCompletions"]),
@@ -549,7 +557,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["gemini:generateContent"]),
-    request: withReadFallback(Gemini.API.GenerateContentRequestSchema),
+    request: withReadFallback(GeminiLoggedRequestSchema),
     processedRequest: withReadFallback(Gemini.API.GenerateContentRequestSchema)
       .nullable()
       .optional(),

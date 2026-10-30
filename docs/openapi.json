@@ -232750,7 +232750,21 @@
                               "request": {
                                 "anyOf": [
                                   {
-                                    "$ref": "#/components/schemas/GeminiGenerateContentRequest"
+                                    "allOf": [
+                                      {
+                                        "$ref": "#/components/schemas/GeminiGenerateContentRequest"
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "input_files": {
+                                            "type": "object",
+                                            "additionalProperties": {}
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   },
                                   {
                                     "type": "object",
@@ -286934,7 +286948,21 @@
                         "request": {
                           "anyOf": [
                             {
-                              "$ref": "#/components/schemas/GeminiGenerateContentRequest"
+                              "allOf": [
+                                {
+                                  "$ref": "#/components/schemas/GeminiGenerateContentRequest"
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "input_files": {
+                                      "type": "object",
+                                      "additionalProperties": {}
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              ]
                             },
                             {
                               "type": "object",

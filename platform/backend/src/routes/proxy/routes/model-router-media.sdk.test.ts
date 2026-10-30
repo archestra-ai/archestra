@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
 import { promisify } from "node:util";
+import { crc32 } from "node:zlib";
 import OpenAI from "openai";
 import sharp from "sharp";
 import config from "@/config";
@@ -12,8 +13,10 @@ import {
   ModelModel,
   VirtualApiKeyModel,
 } from "@/models";
+import OrganizationModel from "@/models/organization";
 import { accessGrants, describe, expect, test, vi } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { SelectInteractionSchema } from "@/types";
 import { azureCapabilityConfigurationHash } from "@/utils/azure-capability-scope";
 import modelRouterRoutes from "./model-router";
 
@@ -171,6 +174,10 @@ describe.each([
   }) => {
     config.llmProxy.plugins = [];
     const agent = await makeAgent({ isDefault: true, agentType: "llm_proxy" });
+    // Logs keep media only when the organization turns it on.
+    await OrganizationModel.patch(agent.organizationId, {
+      keepMediaInLogs: true,
+    });
     const upstream = await startUpstream();
     const mappings = [];
     const imageModels = [];
@@ -367,8 +374,9 @@ describe.each([
         },
       });
       // Nano Banana edits: the reference image reaches generateContent as an
-      // inline part after the prompt, and the logged request keeps only the
-      // prompt. Gemini has no mask, so one is refused before any upstream call.
+      // inline part after the prompt, and the logged request keeps it as the
+      // edit's upload. Gemini has no mask, so one is refused before any
+      // upstream call.
       const reference = await sharp({
         create: {
           width: 16,
@@ -650,6 +658,137 @@ describe.each([
   });
 });
 
+test("a Gemini edit sends every reference in full and logs a larger one as not kept, by name", async ({
+  makeAgent,
+  makeSecret,
+  makeLlmProviderApiKey,
+}) => {
+  config.llmProxy.plugins = [];
+  const agent = await makeAgent({ isDefault: true, agentType: "llm_proxy" });
+  await OrganizationModel.patch(agent.organizationId, {
+    keepMediaInLogs: true,
+  });
+  const upstream = await startUpstream();
+  const secret = await makeSecret({
+    secret: { apiKey: "synthetic-gemini-secret" },
+  });
+  const providerKey = await makeLlmProviderApiKey(
+    agent.organizationId,
+    secret.id,
+    { provider: "gemini", baseUrl: `${upstream.origin}/gemini` },
+  );
+  const model = await ModelModel.upsert({
+    externalId: "gemini/gemini-2.5-flash-image",
+    provider: "gemini",
+    modelId: "gemini-2.5-flash-image",
+    inputModalities: ["text", "image"],
+    outputModalities: ["image"],
+    lastSyncedAt: new Date(),
+  });
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+    model.id,
+  ]);
+  const key = await VirtualApiKeyModel.create({
+    organizationId: agent.organizationId,
+    name: "gemini-edits",
+    ...accessGrants("org"),
+    providerApiKeys: [{ provider: "gemini", providerApiKeyId: providerKey.id }],
+  });
+  const app = createFastifyInstance();
+  await app.register(modelRouterRoutes);
+  const origin = await app.listen({ port: 0, host: "127.0.0.1" });
+  const client = new OpenAI({
+    baseURL: `${origin}/v1/model-router`,
+    apiKey: key.value,
+    maxRetries: 0,
+  });
+  const small = await sharp({
+    create: {
+      width: 16,
+      height: 16,
+      channels: 4,
+      background: { r: 1, g: 2, b: 3, alpha: 1 },
+    },
+  })
+    .png()
+    .toBuffer();
+  // One byte over the 2 MiB a log row keeps of each file.
+  const large = paddedPng(small, 2 * 1024 * 1024 + 1);
+  try {
+    const edited = await client.images.edit({
+      model: "gemini:gemini-2.5-flash-image",
+      prompt: "Blend them.",
+      image: [
+        new File([small], "small.png", { type: "image/png" }),
+        new File([large], "large.png", { type: "image/png" }),
+      ],
+    });
+    expect(edited.data?.[0].b64_json).toBe(IMAGE);
+    // Gemini receives both references inline, at full size.
+    expect(upstream.calls.at(-1)?.body.contents).toEqual([
+      {
+        role: "user",
+        parts: [
+          { text: "Blend them." },
+          {
+            inlineData: {
+              mimeType: "image/png",
+              data: small.toString("base64"),
+            },
+          },
+          {
+            inlineData: {
+              mimeType: "image/png",
+              data: large.toString("base64"),
+            },
+          },
+        ],
+      },
+    ]);
+    // The log row keeps them as the edit's uploads, not as inline parts: the
+    // small one with its bytes, the larger one named and marked as too large.
+    const [row] = (
+      await InteractionModel.getAllInteractionsForProfile(agent.id)
+    ).filter((interaction) => interaction.type === "gemini:generateContent");
+    const logged = row.request as {
+      contents: unknown;
+      input_files: unknown;
+    };
+    expect(logged.contents).toEqual([
+      { role: "user", parts: [{ text: "Blend them." }] },
+    ]);
+    expect(logged.input_files).toEqual({
+      images: [
+        {
+          filename: "small.png",
+          mime_type: "image/png",
+          bytes: small.length,
+          width: 16,
+          height: 16,
+          sha256: expect.any(String),
+          data: small.toString("base64"),
+        },
+        {
+          filename: "large.png",
+          mime_type: "image/png",
+          bytes: 2 * 1024 * 1024 + 1,
+          width: 16,
+          height: 16,
+          sha256: expect.any(String),
+          data_omitted: "too_large",
+        },
+      ],
+    });
+    // The Logs API reads the uploads back, not only the stored row.
+    const read = SelectInteractionSchema.parse(row);
+    expect(read.request).toHaveProperty("input_files", logged.input_files);
+  } finally {
+    app.server.closeAllConnections();
+    await app.close();
+    await upstream.close();
+  }
+});
+
 const IMAGE = "aW1hZ2U=";
 const PYTHON_IMAGES = `
 import os, json, openai
@@ -831,4 +970,26 @@ async function startUpstream() {
       );
     },
   };
+}
+
+/** The PNG grown to exactly `bytes` by a text chunk before its end chunk. */
+function paddedPng(png: Buffer, bytes: number) {
+  const end = png.length - 12;
+  const type = Buffer.from("tEXt");
+  const text = Buffer.concat([
+    Buffer.from("Comment\0"),
+    Buffer.alloc(bytes - png.length - 20, "a"),
+  ]);
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(text.length);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([type, text])));
+  return Buffer.concat([
+    png.subarray(0, end),
+    length,
+    type,
+    text,
+    crc,
+    png.subarray(end),
+  ]);
 }

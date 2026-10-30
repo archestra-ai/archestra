@@ -77,11 +77,27 @@ export function missingAudioReason(omitted: unknown): string {
     : "Not kept in the log";
 }
 
-/** Why the log holds no copy of an uploaded image: too large, or not kept. */
-export function missingImageReason(omitted: unknown): string {
-  return omitted === "too_large"
-    ? "Larger than the log keeps (2 MB per image)"
-    : "Not kept in the log";
+/**
+ * An Images edit's uploads as its log row keeps them (`input_files`): each
+ * image, and the mask, with its bytes when the log kept them.
+ */
+export type ImageEditUploads = { images?: ImageUpload[]; mask?: ImageUpload };
+
+/**
+ * An edit's uploaded images, then its mask, for the user's turn: each shown
+ * inline, or as a named placeholder saying why the log has no copy.
+ */
+export function imageEditUploadParts(
+  files: ImageEditUploads | undefined,
+): Part[] {
+  return [
+    ...(files?.images ?? []).map((upload) =>
+      uploadPart({ upload, fallbackName: "Input image" }),
+    ),
+    ...(files?.mask
+      ? [uploadPart({ upload: files.mask, fallbackName: "Mask", role: "Mask" })]
+      : []),
+  ];
 }
 
 /** The media type of an OpenAI audio format name. */
@@ -161,4 +177,49 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Number((bytes / 1024).toFixed(1))} KB`;
   return `${Number((bytes / (1024 * 1024)).toFixed(1))} MB`;
+}
+
+/** An edit's uploaded image: its metadata, and its bytes when the log kept them. */
+type ImageUpload = {
+  filename?: string;
+  mime_type?: string;
+  width?: number;
+  height?: number;
+  data?: string;
+  data_omitted?: string;
+};
+
+/** "circle.png · 1024 × 1024" shown inline, or a placeholder saying why not. */
+function uploadPart(params: {
+  upload: ImageUpload;
+  fallbackName: string;
+  role?: string;
+}): Part {
+  const { upload, fallbackName, role } = params;
+  const caption = [
+    role && upload.filename ? `${role}: ${upload.filename}` : upload.filename,
+    upload.width && upload.height
+      ? `${upload.width} × ${upload.height}`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return upload.data
+    ? inlineMediaPart({
+        mediaType: upload.mime_type ?? "image/png",
+        data: upload.data,
+        caption: caption || fallbackName,
+      })
+    : missingMediaPart({
+        kind: "image",
+        label: caption || fallbackName,
+        reason: missingImageReason(upload.data_omitted),
+      });
+}
+
+/** Why the log holds no copy of an uploaded image: too large, or not kept. */
+function missingImageReason(omitted: unknown): string {
+  return omitted === "too_large"
+    ? "Larger than the log keeps (2 MB per image)"
+    : "Not kept in the log";
 }

@@ -1,28 +1,18 @@
 import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
 import {
+  type ImageEditUploads,
+  imageEditUploadParts,
   inlineMediaPart,
   linkedMediaPart,
   mediaFormatLabel,
-  missingImageReason,
-  missingMediaPart,
 } from "./media";
-
-/** An edit's uploaded image: its metadata, and its bytes when the log kept them. */
-type Upload = {
-  filename?: string;
-  mime_type?: string;
-  width?: number;
-  height?: number;
-  data?: string;
-  data_omitted?: string;
-};
 
 type ImageRequest = {
   prompt?: string;
   size?: string;
   output_format?: string;
-  input_files?: { images?: Upload[]; mask?: Upload };
+  input_files?: ImageEditUploads;
 };
 
 type ImageResponse = {
@@ -68,11 +58,7 @@ export default class AzureImagesInteraction implements InteractionUtils {
     return `${count} ${count === 1 ? "image" : "images"}${size ? `, ${size}` : ""}`;
   }
   mapToUiMessages(): PartialUIMessage[] {
-    const files = this.request.input_files;
-    const inputs = [
-      ...(files?.images ?? []).map((image) => uploadPart(image, "Input image")),
-      ...(files?.mask ? [uploadPart(files.mask, "Mask", "Mask")] : []),
-    ];
+    const inputs = imageEditUploadParts(this.request.input_files);
     const mediaType = `image/${(this.response.output_format ?? this.request.output_format ?? "png").toLowerCase()}`;
     const caption = [mediaFormatLabel(mediaType), this.size()]
       .filter(Boolean)
@@ -106,31 +92,4 @@ export default class AzureImagesInteraction implements InteractionUtils {
     const size = this.response.size ?? this.request.size;
     return size && size !== "auto" ? size.replace("x", " × ") : undefined;
   }
-}
-
-/** "circle.png · 1024 × 1024" shown inline, or a placeholder saying why not. */
-function uploadPart(
-  upload: Upload,
-  fallbackName: string,
-  role?: string,
-): PartialUIMessage["parts"][number] {
-  const caption = [
-    role && upload.filename ? `${role}: ${upload.filename}` : upload.filename,
-    upload.width && upload.height
-      ? `${upload.width} × ${upload.height}`
-      : undefined,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  return upload.data
-    ? inlineMediaPart({
-        mediaType: upload.mime_type ?? "image/png",
-        data: upload.data,
-        caption: caption || fallbackName,
-      })
-    : missingMediaPart({
-        kind: "image",
-        label: caption || fallbackName,
-        reason: missingImageReason(upload.data_omitted),
-      });
 }

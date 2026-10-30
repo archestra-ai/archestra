@@ -50,6 +50,12 @@ describe("pass-through logging", () => {
     config.llm.openai.baseUrl = `http://127.0.0.1:${address.port}/v1`;
     config.llm.anthropic.baseUrl = `http://127.0.0.1:${address.port}`;
     app = createFastifyInstance();
+    // The real server runs async onSend hooks (the audit log) before Fastify
+    // pipes a proxied body to the client. Logging must not consume the body
+    // in that gap: the client then got the headers and no body.
+    app.addHook("onSend", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
     await app.register(openAiProxyRoutes);
     await app.register(anthropicProxyRoutes);
     await app.ready();
@@ -95,6 +101,44 @@ describe("pass-through logging", () => {
       ],
     });
   }
+
+  test("delivers the whole body to the client while logging it", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent();
+    const key = await standardKey({
+      organizationId: agent.organizationId,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const listing = {
+      object: "list",
+      data: Array.from({ length: 200 }, (_, index) => ({
+        id: `file-${index}`,
+        object: "file",
+        filename: `upload-${index}.jsonl`,
+      })),
+    };
+    respond = () => json(listing);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/openai/${agent.id}/files`,
+      headers: { authorization: `Bearer ${key.value}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(listing);
+    await drainBackgroundWork();
+    const [row] = await InteractionModel.getAllInteractionsForProfile(agent.id);
+    expect(row).toMatchObject({
+      type: "openai:passthrough",
+      request: { method: "GET", path: "/files" },
+      response: { status: 200, body: listing },
+    });
+  });
 
   test("logs a moderation call with its bodies, the key it ran as, and no charge", async ({
     makeAdmin,

@@ -1,4 +1,4 @@
-import type { Readable } from "node:stream";
+import { pipeline, type Readable, Transform } from "node:stream";
 import { promisify } from "node:util";
 import { brotliDecompress, gunzip, inflate } from "node:zlib";
 import type {
@@ -118,17 +118,21 @@ export function passthroughReplyOptions(next?: ReplyOnResponse): {
         send(request, reply, response);
         return;
       }
-      const stream = response.stream as Readable;
+      // The body is observed on its way to the client, never read beside it:
+      // a `data` listener would start the upstream stream flowing before
+      // Fastify pipes it (after its async onSend hooks), and every chunk in
+      // that gap would reach the log and not the client.
       const chunks: Buffer[] = [];
       let bytes = 0;
-      stream.on("data", (chunk: Buffer) => {
-        bytes += chunk.length;
-        if (bytes <= PASSTHROUGH_LOG_BODY_LIMIT) chunks.push(chunk);
+      const observed = new Transform({
+        transform(chunk: Buffer, _encoding, callback) {
+          bytes += chunk.length;
+          if (bytes <= PASSTHROUGH_LOG_BODY_LIMIT) chunks.push(chunk);
+          callback(null, chunk);
+        },
       });
       const ended = new Promise<void>((resolve) => {
-        stream.once("end", () => resolve());
-        stream.once("close", () => resolve());
-        stream.once("error", () => resolve());
+        pipeline(response.stream as Readable, observed, () => resolve());
       });
       const status = reply.statusCode;
       const contentType = reply.getHeader("content-type");
@@ -158,7 +162,13 @@ export function passthroughReplyOptions(next?: ReplyOnResponse): {
             );
           }),
       );
-      send(request, reply, response);
+      // The same response, its `stream` swapped for the observed one. The
+      // next handler only pipes `stream` onward (as the Anthropic token
+      // count observer does), which a Transform satisfies.
+      const forwarded: typeof response = Object.create(response, {
+        stream: { value: observed, enumerable: true },
+      });
+      send(request, reply, forwarded);
     },
   };
 }

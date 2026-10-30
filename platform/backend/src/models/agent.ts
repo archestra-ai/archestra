@@ -1406,6 +1406,7 @@ class AgentModel {
         defaultNamespace: schema.organizationsTable.defaultEnvironmentNamespace,
         environmentPolicy: schema.environmentsTable.networkPolicy,
         defaultPolicy: schema.organizationsTable.defaultNetworkPolicy,
+        agentRuntimeTiers: schema.organizationsTable.agentRuntimeTiers,
       })
       .from(schema.agentsTable)
       .innerJoin(recentRuns, eq(recentRuns.agentId, schema.agentsTable.id))

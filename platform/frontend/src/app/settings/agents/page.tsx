@@ -58,6 +58,13 @@ import {
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
+import { RuntimeTiersBlock } from "./_parts/runtime-tiers-block";
+import {
+  type RuntimeTierDraft,
+  runtimeTierDraft,
+  runtimeTierDraftChanged,
+  validateRuntimeTierDraft,
+} from "./_parts/runtime-tiers-draft";
 import {
   type AgentSettingsState,
   buildSavePayload,
@@ -95,6 +102,10 @@ export default function AgentSettingsPage() {
     defaultAgentId: "",
   });
   const savedFileUploadsRef = useRef(true);
+  const [runtimeTiers, setRuntimeTiers] = useState<RuntimeTierDraft>(() =>
+    runtimeTierDraft(null),
+  );
+  const savedRuntimeTiersRef = useRef<RuntimeTierDraft>(runtimeTierDraft(null));
   const runtimeBackend = useFeature("agentRuntimeBackend");
   const runtimeEnabled = useFeature("agentRuntime");
 
@@ -138,6 +149,9 @@ export default function AgentSettingsPage() {
     setPlaywrightEnabled(organization.playwrightMcpEnabled);
     savedPlaywrightRef.current = organization.playwrightMcpEnabled;
     setFileUploads(savedFileUploads);
+    const savedRuntimeTiers = runtimeTierDraft(organization.agentRuntimeTiers);
+    setRuntimeTiers(savedRuntimeTiers);
+    savedRuntimeTiersRef.current = savedRuntimeTiers;
     savedStateRef.current = state;
     savedFileUploadsRef.current = savedFileUploads;
     initializedRef.current = true;
@@ -158,6 +172,11 @@ export default function AgentSettingsPage() {
   };
 
   const changes = detectChanges(localState, savedStateRef.current);
+  const runtimeTiersChanged = runtimeTierDraftChanged(
+    runtimeTiers,
+    savedRuntimeTiersRef.current,
+  );
+  const runtimeTierCheck = validateRuntimeTierDraft(runtimeTiers);
   const securityHasChanges =
     fileUploads !== savedFileUploadsRef.current ||
     playwrightEnabled !== savedPlaywrightRef.current;
@@ -165,10 +184,20 @@ export default function AgentSettingsPage() {
   const handleSave = async () => {
     if (!apiKeys) return;
 
-    if (changes.hasChanges) {
-      const payload = buildSavePayload(localState, savedStateRef.current);
-      await updateAgentMutation.mutateAsync(payload);
+    if (changes.hasChanges || runtimeTiersChanged) {
+      if (runtimeTiersChanged && !runtimeTierCheck.ok) return;
+      const payload = {
+        ...(changes.hasChanges
+          ? buildSavePayload(localState, savedStateRef.current)
+          : {}),
+        ...(runtimeTiersChanged && runtimeTierCheck.ok
+          ? { agentRuntimeTiers: runtimeTierCheck.settings }
+          : {}),
+      };
+      const saved = await updateAgentMutation.mutateAsync(payload);
+      if (!saved) return;
       savedStateRef.current = { ...localState };
+      savedRuntimeTiersRef.current = runtimeTiers;
     }
 
     if (securityHasChanges) {
@@ -193,6 +222,7 @@ export default function AgentSettingsPage() {
     setDefaultAgentId(saved.defaultAgentId);
     setFileUploads(savedFileUploadsRef.current);
     setPlaywrightEnabled(savedPlaywrightRef.current);
+    setRuntimeTiers(savedRuntimeTiersRef.current);
   };
 
   const modelItems = useMemo(() => {
@@ -442,8 +472,13 @@ export default function AgentSettingsPage() {
       </section>
 
       <SettingsSaveBar
-        hasChanges={changes.hasChanges || securityHasChanges}
-        disabledSave={selectedApiKeyId !== "" && defaultModel === ""}
+        hasChanges={
+          changes.hasChanges || securityHasChanges || runtimeTiersChanged
+        }
+        disabledSave={
+          (selectedApiKeyId !== "" && defaultModel === "") ||
+          (runtimeTiersChanged && !runtimeTierCheck.ok)
+        }
         isSaving={isSaving}
         permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}
@@ -502,6 +537,14 @@ export default function AgentSettingsPage() {
             savedMessage="Agent Runtimes updated"
           />
           {runtimeBackend && <RuntimeBackendSection />}
+          {runtimeBackend && (
+            <RuntimeTiersBlock
+              value={runtimeTiers}
+              onChange={setRuntimeTiers}
+              problems={runtimeTierCheck.ok ? [] : runtimeTierCheck.problems}
+              canEdit={isGlobalAdmin && runtimeEnabled === true}
+            />
+          )}
         </div>
       </section>
     </SettingsSectionStack>

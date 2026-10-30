@@ -153051,6 +153051,14 @@
                           ],
                           "additionalProperties": false
                         },
+                        "agentRuntimeTiers": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          }
+                        },
                         "defaultEnvironmentValidationRegex": {
                           "nullable": true,
                           "type": "string"
@@ -153158,6 +153166,7 @@
                         "defaultEnvironmentNamespace",
                         "defaultEnvironmentDescription",
                         "defaultNetworkPolicy",
+                        "agentRuntimeTiers",
                         "defaultEnvironmentValidationRegex",
                         "defaultEnvironmentTrustedImageRegistries",
                         "skillToolsEnabled",
@@ -153273,34 +153282,6 @@
                                     "M",
                                     "L"
                                   ]
-                                },
-                                "tiers": {
-                                  "type": "object",
-                                  "additionalProperties": {
-                                    "type": "object",
-                                    "properties": {
-                                      "cpuRequest": {
-                                        "type": "string"
-                                      },
-                                      "memoryRequest": {
-                                        "type": "string"
-                                      },
-                                      "memoryLimit": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "cpuRequest",
-                                      "memoryRequest",
-                                      "memoryLimit"
-                                    ],
-                                    "additionalProperties": false
-                                  },
-                                  "required": [
-                                    "S",
-                                    "M",
-                                    "L"
-                                  ]
                                 }
                               },
                               "required": [
@@ -153309,8 +153290,7 @@
                                 "defaultTtlHours",
                                 "defaultIdleTimeoutMinutes",
                                 "allowPrivileged",
-                                "defaultTier",
-                                "tiers"
+                                "defaultTier"
                               ],
                               "additionalProperties": false
                             },
@@ -190645,34 +190625,6 @@
                                 "M",
                                 "L"
                               ]
-                            },
-                            "tiers": {
-                              "type": "object",
-                              "additionalProperties": {
-                                "type": "object",
-                                "properties": {
-                                  "cpuRequest": {
-                                    "type": "string"
-                                  },
-                                  "memoryRequest": {
-                                    "type": "string"
-                                  },
-                                  "memoryLimit": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "cpuRequest",
-                                  "memoryRequest",
-                                  "memoryLimit"
-                                ],
-                                "additionalProperties": false
-                              },
-                              "required": [
-                                "S",
-                                "M",
-                                "L"
-                              ]
                             }
                           },
                           "required": [
@@ -190681,8 +190633,7 @@
                             "defaultTtlHours",
                             "defaultIdleTimeoutMinutes",
                             "allowPrivileged",
-                            "defaultTier",
-                            "tiers"
+                            "defaultTier"
                           ],
                           "additionalProperties": false
                         },
@@ -465826,6 +465777,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -465933,6 +465892,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -467001,6 +466961,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -467108,6 +467076,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -468420,6 +468389,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -468527,6 +468504,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -469450,6 +469428,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -469557,6 +469543,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -470477,6 +470464,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -470584,6 +470579,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -470843,7 +470839,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update agent settings (default model, default agent, skill slash commands)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Update agent settings (default model, default agent, skill slash commands, Agent Runtime tiers)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -470851,6 +470847,88 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "agentRuntimeTiers": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "S": {
+                        "type": "object",
+                        "properties": {
+                          "cpuRequest": {
+                            "type": "string"
+                          },
+                          "cpuLimit": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "memoryRequest": {
+                            "type": "string"
+                          },
+                          "memoryLimit": {
+                            "type": "string"
+                          },
+                          "warmPoolSize": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "M": {
+                        "type": "object",
+                        "properties": {
+                          "cpuRequest": {
+                            "type": "string"
+                          },
+                          "cpuLimit": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "memoryRequest": {
+                            "type": "string"
+                          },
+                          "memoryLimit": {
+                            "type": "string"
+                          },
+                          "warmPoolSize": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "L": {
+                        "type": "object",
+                        "properties": {
+                          "cpuRequest": {
+                            "type": "string"
+                          },
+                          "cpuLimit": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "memoryRequest": {
+                            "type": "string"
+                          },
+                          "memoryLimit": {
+                            "type": "string"
+                          },
+                          "warmPoolSize": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
                   "defaultModelId": {
                     "nullable": true,
                     "type": "string",
@@ -471528,6 +471606,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -471635,6 +471721,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -472687,6 +472774,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -472794,6 +472889,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -473871,6 +473967,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -473978,6 +474082,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -474968,6 +475073,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -475075,6 +475188,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -476009,6 +476123,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -476116,6 +476238,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -477081,6 +477204,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -477188,6 +477319,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -478090,6 +478222,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -478197,6 +478337,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
@@ -480303,6 +480444,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "agentRuntimeTiers": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
                       "type": "string"
@@ -480410,6 +480559,7 @@
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
+                    "agentRuntimeTiers",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",

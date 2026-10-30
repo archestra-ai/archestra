@@ -48,15 +48,6 @@ export function makeConfig(
         defaultIdleTimeoutMinutes: 60,
         allowPrivileged: false,
         defaultTier: "M",
-        tiers: {
-          S: { cpuRequest: "1", memoryRequest: "2Gi", memoryLimit: "4Gi" },
-          M: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
-          L: {
-            cpuRequest: "3500m",
-            memoryRequest: "12Gi",
-            memoryLimit: "18Gi",
-          },
-        },
       },
       plugins: false,
       sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,

@@ -3,7 +3,7 @@
 A runtime image for Archestra work that runs the dev stack as plain processes:
 PostgreSQL, the backend dev server and the Next.js dev server. No Docker, kind,
 Helm or Tilt inside the pod, so the pod needs no privilege, no Docker volume,
-and a fraction of what a full Lobster run reserves (3.5 CPU / 12 GiB, limit 18 GiB).
+and half of what a full-image run reserves (tier L: 4 CPU / 8 GiB, limit 16 GiB).
 
 It is not a replacement for the full image. It covers the common cases: a
 preview of a branch, manual QA, code review with a running app, unit tests, and
@@ -152,7 +152,10 @@ runs on an `n2d-standard-8` node instead of one.
 
 Tier M, the lite image's size: request 2 CPU and 4 GiB, limit 8 GiB, no CPU
 limit, `privileged: false`, no Docker volume. That fits three runs on the same
-node.
+node. Tier L, the full image's size for the rare Kubernetes work: request 4 CPU
+and 8 GiB, limit 16 GiB. That limit is below the p90 above (16.8 GiB, measured
+before the Tilt stack's overhead was trimmed), so a long full-stack session can
+still reach it.
 The frontend dev server is the largest and most variable consumer; a
 production build (`next build` and `next start`) would cut it to a few hundred
 MB for preview-only runs at the cost of a build per start, and is a candidate

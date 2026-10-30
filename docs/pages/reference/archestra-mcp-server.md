@@ -1654,7 +1654,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `attachments[].contentType` | `string` | Yes |  |
 | `attachments[].contentBase64` | `string` | Yes |  |
 | `limits` | `object` | No | Limits for this run, each at or below the Agent's own; a larger value is refused with the maximum named. Omit to take the Agent's defaults. |
-| `limits.tier` | `"S" \| "M" \| "L"` | No | Container size: S (1 CPU, 2 GiB, for a review or a script), M (2 CPU, 4 GiB, a dev stack and tests) or L (3.5 CPU, 12 GiB, a full stack with Docker). At or below the Agent's tier. |
+| `limits.tier` | `"S" \| "M" \| "L"` | No | Container size: S (a review or a script), M (a dev stack and tests) or L (a full stack with Docker), as the organization sizes them. At or below the Agent's tier. |
 | `limits.idle_timeout_minutes` | `integer` | No |  |
 | `limits.max_duration_hours` | `integer` | No | Hours until the run and its saved files end. Keep it short for work that nobody continues. |
 | `limits.max_cost_usd` | `integer` | No |  |
@@ -1675,7 +1675,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `run.state_changed_at` | `string` | Yes | ISO 8601 of the last transition. |
 | `run_url` | `string` | Yes | Open the run and its workspace in the browser. |
 | `limits` | `object \| null` | Yes |  |
-| `limits.tier` | `"S" \| "M" \| "L" \| null` | Yes | Container size the run has: S (1 CPU, 2 GiB), M (2 CPU, 4 GiB) or L (3.5 CPU, 12 GiB). Null when the Agent sizes its runs with explicit resources. |
+| `limits.tier` | `"S" \| "M" \| "L" \| null` | Yes | Container size the run has: S, M or L, as the organization sizes them. Null when the Agent sizes its runs with explicit resources. |
 | `limits.idle_timeout_minutes` | `number` | Yes |  |
 | `limits.max_duration_hours` | `number` | Yes | The run and its saved files end this many hours after the start. |
 | `limits.max_cost_usd` | `number \| null` | Yes |  |
@@ -1707,7 +1707,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `run.state_changed_at` | `string` | Yes | ISO 8601 of the last transition. |
 | `run_url` | `string \| null` | Yes |  |
 | `limits` | `object \| null` | Yes |  |
-| `limits.tier` | `"S" \| "M" \| "L" \| null` | Yes | Container size the run has: S (1 CPU, 2 GiB), M (2 CPU, 4 GiB) or L (3.5 CPU, 12 GiB). Null when the Agent sizes its runs with explicit resources. |
+| `limits.tier` | `"S" \| "M" \| "L" \| null` | Yes | Container size the run has: S, M or L, as the organization sizes them. Null when the Agent sizes its runs with explicit resources. |
 | `limits.idle_timeout_minutes` | `number` | Yes |  |
 | `limits.max_duration_hours` | `number` | Yes | The run and its saved files end this many hours after the start. |
 | `limits.max_cost_usd` | `number \| null` | Yes |  |

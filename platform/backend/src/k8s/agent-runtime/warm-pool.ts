@@ -1,4 +1,8 @@
-import { followAgentCatalogImage, TimeInMs } from "@archestra/shared";
+import {
+  followAgentCatalogImage,
+  resolveAgentRuntimeTiers,
+  TimeInMs,
+} from "@archestra/shared";
 import type { CustomObjectsApi } from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import config from "@/config";
@@ -11,9 +15,9 @@ import {
 import logger from "@/logging";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
 import {
-  AGENT_RUNTIME_TIER_RESOURCES,
   agentRuntimeTier,
   resolveRunResources,
+  warmPoolReplicas,
 } from "@/services/agent-runtime/runtime-tiers";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type { AgentRuntimeTier } from "@/types";
@@ -115,6 +119,7 @@ class AgentWarmPoolManager {
           namespace: string;
           organizationId: string;
           template: ReturnType<typeof warmPoolTemplate>;
+          replicas: number;
         }
       >();
       const [environments, organizations] = await Promise.all([
@@ -153,8 +158,12 @@ class AgentWarmPoolManager {
         const namespace =
           agent.namespace ?? agent.defaultNamespace ?? clients.namespace;
         namespaces.add(namespace);
+        const tiers = resolveAgentRuntimeTiers(agent.agentRuntimeTiers);
+        const tier = agentRuntimeTier(runtime);
+        const replicas = warmPoolReplicas(tiers, tier);
+        // A tier without spares takes no pool slot from the other Agents.
         if (
-          config.agentRuntime.warmPoolSize === 0 ||
+          replicas === 0 ||
           desired.size >= config.agentRuntime.warmPoolMaxPools
         )
           continue;
@@ -164,13 +173,12 @@ class AgentWarmPoolManager {
           environmentNetworkPolicy: agent.environmentPolicy,
           defaultNetworkPolicy: agent.defaultPolicy,
         });
-        const tier = agentRuntimeTier(runtime);
         const template = warmPoolTemplate({
           poolScope: `${agent.organizationId}:${agent.environmentId ?? "default"}`,
           namespace,
           image: runtime.image,
           privileged: runtime.privileged,
-          resources: resolveRunResources(runtime, tier),
+          resources: resolveRunResources(runtime, tier, tiers),
           tier,
           warmTiers: [],
           workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
@@ -192,6 +200,7 @@ class AgentWarmPoolManager {
           namespace,
           organizationId: agent.organizationId,
           template,
+          replicas,
         });
       }
       for (const namespace of namespaces) {
@@ -245,6 +254,7 @@ class AgentWarmPoolManager {
           namespace: target,
           organizationId,
           template,
+          replicas,
         } of desired.values()) {
           if (target !== namespace) continue;
           const metadata = {
@@ -297,7 +307,7 @@ class AgentWarmPoolManager {
                 kind: "SandboxWarmPool",
                 metadata,
                 spec: {
-                  replicas: config.agentRuntime.warmPoolSize,
+                  replicas,
                   sandboxTemplateRef: { name: template.name },
                   updateStrategy: { type: "Recreate" },
                 },
@@ -312,7 +322,7 @@ class AgentWarmPoolManager {
                   name: template.name,
                   body: {
                     metadata: { labels: metadata.labels },
-                    spec: { replicas: config.agentRuntime.warmPoolSize },
+                    spec: { replicas },
                   },
                 },
                 setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
@@ -328,9 +338,10 @@ class AgentWarmPoolManager {
   /**
    * Claim a warm Sandbox for the run. The requested tier's pool serves it
    * while that pool has a ready Sandbox. When it is drained or missing, the
-   * first neighbouring tier with a ready Sandbox serves it, and the run runs
-   * at that tier. When no neighbour has one either, the run claims from its
-   * own pool and waits for it to refill. Null means a cold start.
+   * next larger tier within the Agent's serves it if that pool has a ready
+   * Sandbox, and the run runs at that tier; a smaller tier never does. When
+   * neither has one, the run claims from its own pool and waits for it to
+   * refill. Null means a cold start.
    */
   async claim(params: {
     api: CustomObjectsApi;
@@ -347,17 +358,15 @@ class AgentWarmPoolManager {
       return null;
     const { api, spec } = params;
     const namespace = spec.namespace;
-    const candidates: Array<AgentRuntimeTier | null> = spec.tier
-      ? spec.warmTiers.length
-        ? spec.warmTiers
-        : [spec.tier]
-      : [null];
+    // Each candidate is sized as the run's organization sizes that tier.
+    const candidates = spec.warmTiers.length
+      ? spec.warmTiers.map(({ tier, resources }) => ({
+          tier,
+          sized: tier === spec.tier ? spec : { ...spec, tier, resources },
+        }))
+      : [{ tier: spec.tier, sized: spec }];
     let drained: string | undefined;
-    for (const tier of candidates) {
-      const sized =
-        tier === null || tier === spec.tier
-          ? spec
-          : { ...spec, tier, resources: AGENT_RUNTIME_TIER_RESOURCES[tier] };
+    for (const { tier, sized } of candidates) {
       const template = warmPoolTemplate(sized);
       let pool: { status?: { readyReplicas?: number } };
       try {

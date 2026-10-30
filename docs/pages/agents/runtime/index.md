@@ -108,9 +108,9 @@ Set these under **Limits** on the agent's **Agent Runtime** tab. A field you lea
 | **Idle timeout** | Stops the run when it finishes a task and no follow-up arrives in this time. |
 | **Maximum duration** | Ends the run after this time, even mid-task, and deletes its files. Follow-ups do not extend it. |
 | **Metered LLM budget** | Blocks metered model calls once the run spends this amount. Subscription usage does not count. |
-| **Size** | The tier of the run's container: **S** (1 CPU, 2 GiB), **M** (2 CPU, 4 GiB, the default) or **L** (3.5 CPU, 12 GiB). Custom CPU and memory values replace the tier. |
+| **Size** | The tier of the run's container: **S**, **M** (the default) or **L**. Administrators set each tier's CPU and memory under **Settings > Agents > Runtime tiers**; by default S is 1 CPU and 2 GiB, M 2 CPU and 4 GiB, and L 4 CPU and 8 GiB. Custom CPU and memory values replace the tier. |
 
-A caller that starts a run can ask for less than the agent allows: a smaller size, a shorter idle timeout, a shorter maximum duration or a lower budget. The [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) tool and the [`POST /api/agents/{id}/runs`](/docs/reference/api#/Agents/startAgentRun) endpoint take these as `limits`; a value above the agent's is refused with the maximum named. The run shows what it got. When the warm pool for a run's size has no ready container and a neighbouring size's pool has one, that container serves the run, which then runs one size up or down.
+A caller that starts a run can ask for less than the agent allows: a smaller size, a shorter idle timeout, a shorter maximum duration or a lower budget. The [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) tool and the [`POST /api/agents/{id}/runs`](/docs/reference/api#/Agents/startAgentRun) endpoint take these as `limits`; a value above the agent's is refused with the maximum named. The run shows what it got. When the warm pool for a run's size has no ready container and the next larger size within the agent's has one, that container serves the run, which then runs one size up. A run never starts at a smaller size than it asked for.
 
 <span id="environments-and-network-egress"></span>
 

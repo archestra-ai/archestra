@@ -40,8 +40,14 @@ export type AgentRunLaunchSpec = {
   resources: AgentRuntimeResources | null;
   /** Tier the run asked for; null when its Agent sizes runs with explicit resources. */
   tier: AgentRuntimeTier | null;
-  /** Tiers whose warm pool may serve the run, the requested one first. */
-  warmTiers: AgentRuntimeTier[];
+  /**
+   * Tiers whose warm pool may serve the run, the requested one first, each
+   * with its size in the run's organization.
+   */
+  warmTiers: Array<{
+    tier: AgentRuntimeTier;
+    resources: AgentRuntimeResources;
+  }>;
   env: Record<string, string>;
   secretEnv: Record<string, string>;
   renewableCredentials?: Record<string, RenewableCredential>;

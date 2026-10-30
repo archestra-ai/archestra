@@ -1,10 +1,14 @@
-import { describe, expect, test } from "vitest";
+import {
+  DEFAULT_AGENT_RUNTIME_TIERS,
+  resolveAgentRuntimeTiers,
+} from "@archestra/shared";
+import { afterEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import {
-  AGENT_RUNTIME_TIER_RESOURCES,
   agentRuntimeTier,
   resolveAgentRunLimits,
   resolveRunResources,
+  warmPoolReplicas,
   warmTierCandidates,
 } from "./runtime-tiers";
 
@@ -23,31 +27,69 @@ describe("runtime tiers", () => {
     expect(
       agentRuntimeTier({ resources: { cpuRequest: "7" }, tier: "L" }),
     ).toBeNull();
-    expect(resolveRunResources(DEFAULTS, "S")).toEqual(
-      AGENT_RUNTIME_TIER_RESOURCES.S,
-    );
-    expect(resolveRunResources(DEFAULTS, null)).toEqual(
-      AGENT_RUNTIME_TIER_RESOURCES.M,
-    );
+    const tiers = DEFAULT_AGENT_RUNTIME_TIERS;
+    expect(resolveRunResources(DEFAULTS, "S", tiers)).toEqual({
+      cpuRequest: "1",
+      memoryRequest: "2Gi",
+      memoryLimit: "4Gi",
+    });
+    expect(resolveRunResources(DEFAULTS, null, tiers)).toEqual({
+      cpuRequest: "2",
+      memoryRequest: "4Gi",
+      memoryLimit: "8Gi",
+    });
     expect(
-      resolveRunResources({ resources: { cpuRequest: "7" }, tier: null }, "S"),
+      resolveRunResources(
+        { resources: { cpuRequest: "7" }, tier: null },
+        "S",
+        tiers,
+      ),
     ).toEqual({ cpuRequest: "7" });
   });
 
-  test("the tiers are sized so S, M and L fit seven, three and two runs on an 8-vCPU node", () => {
-    expect(AGENT_RUNTIME_TIER_RESOURCES).toEqual({
-      S: { cpuRequest: "1", memoryRequest: "2Gi", memoryLimit: "4Gi" },
-      M: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
-      L: { cpuRequest: "3500m", memoryRequest: "12Gi", memoryLimit: "18Gi" },
+  test("a run gets its tier's size in the organization, CPU limit included when an administrator set one", () => {
+    const tiers = resolveAgentRuntimeTiers({
+      L: { cpuRequest: "6", cpuLimit: "8", memoryLimit: "24Gi" },
+    });
+    expect(resolveRunResources(DEFAULTS, "L", tiers)).toEqual({
+      cpuRequest: "6",
+      cpuLimit: "8",
+      memoryRequest: "8Gi",
+      memoryLimit: "24Gi",
     });
   });
 
-  test("a warm Sandbox may come from the requested tier, then the larger neighbour within the Agent's, then the smaller", () => {
+  test("a warm Sandbox may come from the requested tier, then the larger neighbour within the Agent's, never a smaller one", () => {
     expect(warmTierCandidates("S", "L")).toEqual(["S", "M"]);
-    expect(warmTierCandidates("M", "L")).toEqual(["M", "L", "S"]);
-    expect(warmTierCandidates("M", "M")).toEqual(["M", "S"]);
-    expect(warmTierCandidates("L", "L")).toEqual(["L", "M"]);
+    expect(warmTierCandidates("M", "L")).toEqual(["M", "L"]);
+    expect(warmTierCandidates("M", "M")).toEqual(["M"]);
+    expect(warmTierCandidates("L", "L")).toEqual(["L"]);
     expect(warmTierCandidates("S", "S")).toEqual(["S"]);
+  });
+
+  describe("warm spares per pool", () => {
+    const warmPoolSize = config.agentRuntime.warmPoolSize;
+    afterEach(() => {
+      config.agentRuntime.warmPoolSize = warmPoolSize;
+    });
+
+    test("L keeps none by default; S, M and explicit resources follow the deployment; a tier's own count wins", () => {
+      config.agentRuntime.warmPoolSize = 2;
+      const defaults = DEFAULT_AGENT_RUNTIME_TIERS;
+      expect(warmPoolReplicas(defaults, "S")).toBe(2);
+      expect(warmPoolReplicas(defaults, "M")).toBe(2);
+      expect(warmPoolReplicas(defaults, "L")).toBe(0);
+      expect(warmPoolReplicas(defaults, null)).toBe(2);
+      const set = resolveAgentRuntimeTiers({
+        L: { warmPoolSize: 1 },
+        M: { warmPoolSize: 0 },
+      });
+      expect(warmPoolReplicas(set, "L")).toBe(1);
+      expect(warmPoolReplicas(set, "M")).toBe(0);
+      // Warm pools off: no tier keeps spares.
+      config.agentRuntime.warmPoolSize = 0;
+      expect(warmPoolReplicas(set, "L")).toBe(0);
+    });
   });
 
   test("a run takes the Agent's limits, else the deployment defaults", () => {

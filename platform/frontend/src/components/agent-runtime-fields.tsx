@@ -3,6 +3,7 @@
 import {
   buildCustomAgentRuntime,
   getAgentRuntimeAllowedProtocols,
+  resolveAgentRuntimeTiers,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
 import { ChevronDown } from "lucide-react";
@@ -46,6 +47,7 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useOrganization } from "@/lib/organization.query";
 import {
   type RuntimeCredentialDefinition,
   useCanAttachCredential,
@@ -590,9 +592,12 @@ function AgentRuntimeContainerOptions({
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...value, ...patch });
   const runtimeDefaults = useFeature("agentRuntimeBackend");
+  // Sizes come from the organization's tier settings over the code defaults.
+  const { data: organization } = useOrganization();
+  const tiers = resolveAgentRuntimeTiers(organization?.agentRuntimeTiers);
   const [open, setOpen] = useState(false);
   const selectedTier = value.tier ?? runtimeDefaults?.defaultTier ?? "M";
-  const tierResources = runtimeDefaults?.tiers[selectedTier];
+  const tierResources = tiers[selectedTier];
   return (
     <Collapsible
       open={open}
@@ -634,7 +639,7 @@ function AgentRuntimeContainerOptions({
             <SelectContent>
               {TIER_ORDER.map((tier) => (
                 <SelectItem key={tier} value={tier}>
-                  {tierLabel(tier, runtimeDefaults?.tiers[tier])}
+                  {tierLabel(tier, tiers[tier])}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -649,7 +654,7 @@ function AgentRuntimeContainerOptions({
             id="agent-runtime-cpu-request"
             label="CPU request"
             placeholder={installationDefaultPlaceholder(
-              tierResources?.cpuRequest,
+              tierResources.cpuRequest,
             )}
             value={value.resources?.cpuRequest}
             onChange={(cpuRequest) =>
@@ -659,7 +664,9 @@ function AgentRuntimeContainerOptions({
           <ResourceField
             id="agent-runtime-cpu-limit"
             label="CPU limit"
-            placeholder={installationDefaultPlaceholder("No limit")}
+            placeholder={installationDefaultPlaceholder(
+              tierResources.cpuLimit ?? "No limit",
+            )}
             value={value.resources?.cpuLimit}
             onChange={(cpuLimit) => updateResource(value, update, { cpuLimit })}
           />
@@ -667,7 +674,7 @@ function AgentRuntimeContainerOptions({
             id="agent-runtime-memory-request"
             label="Memory request"
             placeholder={installationDefaultPlaceholder(
-              tierResources?.memoryRequest,
+              tierResources.memoryRequest,
             )}
             value={value.resources?.memoryRequest}
             onChange={(memoryRequest) =>
@@ -678,7 +685,7 @@ function AgentRuntimeContainerOptions({
             id="agent-runtime-memory-limit"
             label="Memory limit"
             placeholder={installationDefaultPlaceholder(
-              tierResources?.memoryLimit,
+              tierResources.memoryLimit,
             )}
             value={value.resources?.memoryLimit}
             onChange={(memoryLimit) =>

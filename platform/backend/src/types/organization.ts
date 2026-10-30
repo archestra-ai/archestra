@@ -1,4 +1,5 @@
 import {
+  AgentRuntimeTierSettingsSchema,
   BM25_B_MAX,
   BM25_B_MIN,
   BM25_K1_MAX,
@@ -16,6 +17,7 @@ import {
   RoleAssignmentSchema,
   SESSION_MAX_AGE_MAX_SECONDS,
   SESSION_MAX_AGE_MIN_SECONDS,
+  StoredAgentRuntimeTierSettingsSchema,
   StoredKnowledgeConnectorOverridesSchema,
   StoredMessagingChannelOverridesSchema,
   StoredModelProviderOverridesSchema,
@@ -377,6 +379,7 @@ const extendedFields = {
   knowledgeConnectorOverrides:
     StoredKnowledgeConnectorOverridesSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
+  agentRuntimeTiers: StoredAgentRuntimeTierSettingsSchema.nullable(),
   defaultEnvironmentTrustedImageRegistries:
     TrustedImageRegistriesSchema.nullable(),
 };
@@ -478,6 +481,8 @@ export const UpdateSkillsSettingsSchema = z.object({
 });
 
 export const UpdateAgentSettingsSchema = z.object({
+  /** Per-tier overrides of the Agent Runtime tiers; null restores every default. */
+  agentRuntimeTiers: AgentRuntimeTierSettingsSchema.nullable().optional(),
   defaultModelId: z.string().uuid().nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
   defaultAgentId: z.string().uuid().nullable().optional(),

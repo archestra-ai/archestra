@@ -1,5 +1,5 @@
 {
-  "id": "d5589f0d-f8e4-474c-86e2-e083de650272",
+  "id": "e0a7162f-5f99-4d78-ae7e-32cb309b7647",
   "prevId": "ef3e1aee-9459-4fa9-8cf9-c7443e4e5b76",
   "version": "7",
   "dialect": "postgresql",
@@ -21752,6 +21752,12 @@
         },
         "default_network_policy": {
           "name": "default_network_policy",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "agent_runtime_tiers": {
+          "name": "agent_runtime_tiers",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

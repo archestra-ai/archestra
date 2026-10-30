@@ -41277,6 +41277,11 @@ export type GetBootstrapResponses = {
                 allowedDomains: Array<string>;
                 allowedCidrs: Array<string>;
             } | null;
+            agentRuntimeTiers: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            } | null;
             defaultEnvironmentValidationRegex: string | null;
             defaultEnvironmentTrustedImageRegistries: Array<string> | null;
             skillToolsEnabled: boolean;
@@ -41314,13 +41319,6 @@ export type GetBootstrapResponses = {
                     defaultIdleTimeoutMinutes: number;
                     allowPrivileged: boolean;
                     defaultTier: 'S' | 'M' | 'L';
-                    tiers: {
-                        [key: string]: {
-                            cpuRequest: string;
-                            memoryRequest: string;
-                            memoryLimit: string;
-                        };
-                    };
                 };
                 plugins: boolean;
                 sandboxArtifactBytesLimit: number;
@@ -51026,13 +51024,6 @@ export type GetConfigResponses = {
                 defaultIdleTimeoutMinutes: number;
                 allowPrivileged: boolean;
                 defaultTier: 'S' | 'M' | 'L';
-                tiers: {
-                    [key: string]: {
-                        cpuRequest: string;
-                        memoryRequest: string;
-                        memoryLimit: string;
-                    };
-                };
             };
             plugins: boolean;
             sandboxArtifactBytesLimit: number;
@@ -119407,6 +119398,11 @@ export type GetOrganizationResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -119748,6 +119744,11 @@ export type UpdateAppearanceSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -119968,6 +119969,11 @@ export type UpdateSecuritySettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -120185,6 +120191,11 @@ export type UpdateMcpSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -120401,6 +120412,11 @@ export type UpdateSkillsSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -120414,6 +120430,29 @@ export type UpdateSkillsSettingsResponse = UpdateSkillsSettingsResponses[keyof U
 
 export type UpdateAgentSettingsData = {
     body: {
+        agentRuntimeTiers?: {
+            S?: {
+                cpuRequest?: string;
+                cpuLimit?: string | null;
+                memoryRequest?: string;
+                memoryLimit?: string;
+                warmPoolSize?: number | null;
+            };
+            M?: {
+                cpuRequest?: string;
+                cpuLimit?: string | null;
+                memoryRequest?: string;
+                memoryLimit?: string;
+                warmPoolSize?: number | null;
+            };
+            L?: {
+                cpuRequest?: string;
+                cpuLimit?: string | null;
+                memoryRequest?: string;
+                memoryLimit?: string;
+                warmPoolSize?: number | null;
+            };
+        } | null;
         defaultModelId?: string | null;
         defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
@@ -120619,6 +120658,11 @@ export type UpdateAgentSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -120858,6 +120902,11 @@ export type UpdateConnectionSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -121123,6 +121172,11 @@ export type UpdateIntegrationSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -121349,6 +121403,11 @@ export type UpdateDefaultEnvironmentResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -121569,6 +121628,11 @@ export type UpdateAuthSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -121793,6 +121857,11 @@ export type UpdateKnowledgeSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -122005,6 +122074,11 @@ export type DropEmbeddingConfigResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -122580,6 +122654,11 @@ export type CompleteOnboardingResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;

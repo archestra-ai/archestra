@@ -326,7 +326,7 @@ const RunSummarySchema = z.object({
 const RunLimitsSchema = z
   .object({
     tier: AgentRuntimeTierSchema.nullable().describe(
-      "Container size the run has: S (1 CPU, 2 GiB), M (2 CPU, 4 GiB) or L (3.5 CPU, 12 GiB). Null when the Agent sizes its runs with explicit resources.",
+      "Container size the run has: S, M or L, as the organization sizes them. Null when the Agent sizes its runs with explicit resources.",
     ),
     idle_timeout_minutes: z.number(),
     max_duration_hours: z
@@ -788,7 +788,7 @@ const registry = defineArchestraTools([
         .object({
           // The same fields and bounds as the REST route's `limits`, in snake case.
           tier: AgentRunLimitsRequestSchema.shape.tier.describe(
-            "Container size: S (1 CPU, 2 GiB, for a review or a script), M (2 CPU, 4 GiB, a dev stack and tests) or L (3.5 CPU, 12 GiB, a full stack with Docker). At or below the Agent's tier.",
+            "Container size: S (a review or a script), M (a dev stack and tests) or L (a full stack with Docker), as the organization sizes them. At or below the Agent's tier.",
           ),
           idle_timeout_minutes:
             AgentRunLimitsRequestSchema.shape.idleTimeoutMinutes,

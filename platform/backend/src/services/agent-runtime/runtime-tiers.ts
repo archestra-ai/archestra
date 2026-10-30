@@ -1,4 +1,9 @@
+import {
+  type AgentRuntimeTierSize,
+  resolveAgentRuntimeTiers,
+} from "@archestra/shared";
 import config from "@/config";
+import OrganizationModel from "@/models/organization";
 import {
   type AgentRunLimits,
   type AgentRunLimitsRequest,
@@ -14,21 +19,31 @@ const AGENT_RUNTIME_TIER_ORDER: readonly AgentRuntimeTier[] = ["S", "M", "L"];
 /** The tier a run gets when its Agent names none. */
 export const DEFAULT_AGENT_RUNTIME_TIER: AgentRuntimeTier = "M";
 
+/** Each tier's size in one organization. */
+type AgentRuntimeTierSizes = Record<AgentRuntimeTier, AgentRuntimeTierSize>;
+
 /**
- * CPU and memory of each tier. No CPU limit, like every run: throttling an
- * agent loop mid-turn produces confusing timeouts rather than back-pressure.
- * S fits seven runs on an 8-vCPU node, M three, L two.
+ * The organization's tiers in effect: its administrator's overrides
+ * (Settings > Agents) over the code defaults in @archestra/shared.
  */
-export const AGENT_RUNTIME_TIER_RESOURCES: Record<
-  AgentRuntimeTier,
-  Required<
-    Pick<AgentRuntimeResources, "cpuRequest" | "memoryRequest" | "memoryLimit">
-  >
-> = {
-  S: { cpuRequest: "1", memoryRequest: "2Gi", memoryLimit: "4Gi" },
-  M: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
-  L: { cpuRequest: "3500m", memoryRequest: "12Gi", memoryLimit: "18Gi" },
-};
+export async function organizationAgentRuntimeTiers(
+  organizationId: string,
+): Promise<AgentRuntimeTierSizes> {
+  const organization = await OrganizationModel.getById(organizationId);
+  return resolveAgentRuntimeTiers(organization?.agentRuntimeTiers);
+}
+
+/** The container resources of a tier's size. */
+export function tierResources(
+  size: AgentRuntimeTierSize,
+): AgentRuntimeResources {
+  return {
+    cpuRequest: size.cpuRequest,
+    ...(size.cpuLimit ? { cpuLimit: size.cpuLimit } : {}),
+    memoryRequest: size.memoryRequest,
+    memoryLimit: size.memoryLimit,
+  };
+}
 
 type SizedRuntime = Pick<AgentRuntime, "resources" | "tier">;
 
@@ -48,29 +63,40 @@ function tierRank(tier: AgentRuntimeTier): number {
 export function resolveRunResources(
   runtime: SizedRuntime,
   tier: AgentRuntimeTier | null,
+  tiers: AgentRuntimeTierSizes,
 ): AgentRuntimeResources {
   return (
     runtime.resources ??
-    AGENT_RUNTIME_TIER_RESOURCES[tier ?? DEFAULT_AGENT_RUNTIME_TIER]
+    tierResources(tiers[tier ?? DEFAULT_AGENT_RUNTIME_TIER])
   );
 }
 
 /**
  * Tiers whose warm pool may serve a run, in order: the requested tier, then
- * the next larger one while it stays within the Agent's own tier, then the
- * next smaller one. A run served from a neighbour runs at that size.
+ * the next larger one while it stays within the Agent's own tier. Never a
+ * smaller one: a run sized below what it asked for can run out of memory. A
+ * run served from the larger pool runs at that size.
  */
 export function warmTierCandidates(
   tier: AgentRuntimeTier,
   max: AgentRuntimeTier,
 ): AgentRuntimeTier[] {
-  const index = tierRank(tier);
-  const candidates = [tier];
-  const larger = AGENT_RUNTIME_TIER_ORDER[index + 1];
-  if (larger && tierRank(larger) <= tierRank(max)) candidates.push(larger);
-  const smaller = AGENT_RUNTIME_TIER_ORDER[index - 1];
-  if (smaller) candidates.push(smaller);
-  return candidates;
+  const larger = AGENT_RUNTIME_TIER_ORDER[tierRank(tier) + 1];
+  return larger && tierRank(larger) <= tierRank(max) ? [tier, larger] : [tier];
+}
+
+/**
+ * Spares a warm pool keeps: the tier's own count when its administrator or
+ * the defaults set one (L keeps none by default), else the deployment's
+ * `ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`. None while warm pools are off.
+ */
+export function warmPoolReplicas(
+  tiers: AgentRuntimeTierSizes,
+  tier: AgentRuntimeTier | null,
+): number {
+  const deployment = config.agentRuntime.warmPoolSize;
+  if (deployment === 0 || tier === null) return deployment;
+  return tiers[tier].warmPoolSize ?? deployment;
 }
 
 /**

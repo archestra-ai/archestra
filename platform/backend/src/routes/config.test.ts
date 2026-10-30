@@ -243,8 +243,9 @@ describe("config routes", () => {
         available: false,
         defaultTtlHours: config.agentRuntime.defaultTtlHours,
         defaultTier: "M",
-        tiers: { M: { cpuRequest: "2", memoryLimit: "8Gi" } },
       });
+      // Tier sizes are organization settings, not public config.
+      expect(missing.features.agentRuntimeBackend).not.toHaveProperty("tiers");
 
       sandboxInstalled.mockReturnValue(true);
       const installed = (

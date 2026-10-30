@@ -60,7 +60,9 @@ import {
 } from "./runtime-contract";
 import {
   agentRuntimeTier,
+  organizationAgentRuntimeTiers,
   resolveRunResources,
+  tierResources,
   warmTierCandidates,
 } from "./runtime-tiers";
 
@@ -446,6 +448,7 @@ export async function buildAgentRunLaunchSpec(params: {
       : {}),
   };
 
+  const tiers = await organizationAgentRuntimeTiers(params.organizationId);
   return {
     virtualApiKeyId: virtualKey?.virtualKey.id ?? null,
     gatewayTokenId: accountToken?.id ?? null,
@@ -460,13 +463,13 @@ export async function buildAgentRunLaunchSpec(params: {
       image: params.runtime.image,
       command: params.runtime.command ?? null,
       privileged: params.runtime.privileged,
-      resources: resolveRunResources(params.runtime, params.limits.tier),
+      resources: resolveRunResources(params.runtime, params.limits.tier, tiers),
       tier: params.limits.tier,
       warmTiers: params.limits.tier
         ? warmTierCandidates(
             params.limits.tier,
             agentRuntimeTier(params.runtime) ?? params.limits.tier,
-          )
+          ).map((tier) => ({ tier, resources: tierResources(tiers[tier]) }))
         : [],
       env: nonSecretEnv,
       secretEnv,

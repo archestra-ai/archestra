@@ -85,6 +85,10 @@ import {
 import type { A2ATaskFailure } from "@/types/a2a-task";
 import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
 import {
+  AgentRunLimitsRequestSchema,
+  AgentRuntimeTierSchema,
+} from "@/types/agent-runtime";
+import {
   type RuntimeLaunchFailureReason,
   type RuntimeLaunchOutcome,
   RuntimeLaunchStateSchema,
@@ -321,12 +325,9 @@ const RunSummarySchema = z.object({
 
 const RunLimitsSchema = z
   .object({
-    tier: z
-      .enum(["S", "M", "L"])
-      .nullable()
-      .describe(
-        "Container size the run has: S (1 CPU, 2 GiB), M (2 CPU, 4 GiB) or L (3.5 CPU, 12 GiB). Null when the Agent sizes its runs with explicit resources.",
-      ),
+    tier: AgentRuntimeTierSchema.nullable().describe(
+      "Container size the run has: S (1 CPU, 2 GiB), M (2 CPU, 4 GiB) or L (3.5 CPU, 12 GiB). Null when the Agent sizes its runs with explicit resources.",
+    ),
     idle_timeout_minutes: z.number(),
     max_duration_hours: z
       .number()
@@ -785,23 +786,17 @@ const registry = defineArchestraTools([
       ),
       limits: z
         .object({
-          tier: z
-            .enum(["S", "M", "L"])
-            .optional()
-            .describe(
-              "Container size: S (1 CPU, 2 GiB, for a review or a script), M (2 CPU, 4 GiB, a dev stack and tests) or L (3.5 CPU, 12 GiB, a full stack with Docker). At or below the Agent's tier.",
-            ),
-          idle_timeout_minutes: z.number().int().min(1).max(1440).optional(),
-          max_duration_hours: z
-            .number()
-            .int()
-            .min(1)
-            .max(720)
-            .optional()
-            .describe(
+          // The same fields and bounds as the REST route's `limits`, in snake case.
+          tier: AgentRunLimitsRequestSchema.shape.tier.describe(
+            "Container size: S (1 CPU, 2 GiB, for a review or a script), M (2 CPU, 4 GiB, a dev stack and tests) or L (3.5 CPU, 12 GiB, a full stack with Docker). At or below the Agent's tier.",
+          ),
+          idle_timeout_minutes:
+            AgentRunLimitsRequestSchema.shape.idleTimeoutMinutes,
+          max_duration_hours:
+            AgentRunLimitsRequestSchema.shape.maxDurationHours.describe(
               "Hours until the run and its saved files end. Keep it short for work that nobody continues.",
             ),
-          max_cost_usd: z.number().int().min(1).max(100_000).optional(),
+          max_cost_usd: AgentRunLimitsRequestSchema.shape.maxCostUsd,
         })
         .optional()
         .describe(

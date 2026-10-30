@@ -327,9 +327,10 @@ class AgentWarmPoolManager {
 
   /**
    * Claim a warm Sandbox for the run. The requested tier's pool serves it
-   * whenever that pool exists (the claim waits for a Sandbox). A neighbouring
-   * tier's pool serves it only while it reports a ready, unclaimed Sandbox;
-   * the run then runs at that tier. Null means a cold start.
+   * while that pool has a ready Sandbox. When it is drained or missing, the
+   * first neighbouring tier with a ready Sandbox serves it, and the run runs
+   * at that tier. When no neighbour has one either, the run claims from its
+   * own pool and waits for it to refill. Null means a cold start.
    */
   async claim(params: {
     api: CustomObjectsApi;
@@ -351,6 +352,7 @@ class AgentWarmPoolManager {
         ? spec.warmTiers
         : [spec.tier]
       : [null];
+    let drained: string | undefined;
     for (const tier of candidates) {
       const sized =
         tier === null || tier === spec.tier
@@ -368,12 +370,15 @@ class AgentWarmPoolManager {
         if (isK8sNotFoundError(error)) continue;
         throw error;
       }
-      if (tier !== spec.tier && !((pool.status?.readyReplicas ?? 0) > 0))
-        continue;
-      await this.createClaim({ api, spec, templateName: template.name });
-      return { tier };
+      if ((pool.status?.readyReplicas ?? 0) > 0 || candidates.length === 1) {
+        await this.createClaim({ api, spec, templateName: template.name });
+        return { tier };
+      }
+      if (tier === spec.tier) drained = template.name;
     }
-    return null;
+    if (drained === undefined) return null;
+    await this.createClaim({ api, spec, templateName: drained });
+    return { tier: spec.tier };
   }
 
   private async createClaim(params: {

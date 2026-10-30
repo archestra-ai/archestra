@@ -108,24 +108,36 @@ test("claims without environment or disk overrides that would force an upstream 
   expect(JSON.stringify(submitted)).not.toContain("secret-value");
 });
 
-test("serves a run from a neighbouring tier's pool only while that pool has a ready Sandbox", async () => {
+test("serves a run from a neighbouring tier's pool only while its own pool has no ready Sandbox and the neighbour has one", async () => {
   config.agentRuntime.warmPoolSize = 1;
   const sized = (tier: "S" | "M") => ({
     ...SPEC,
     tier,
-    warmTiers: ["S" as const, "M" as const],
+    warmTiers:
+      tier === "S"
+        ? ["S" as const, "M" as const]
+        : ["M" as const, "S" as const],
     resources: AGENT_RUNTIME_TIER_RESOURCES[tier],
   });
-  const poolOfM = warmPoolTemplate(sized("M")).name;
-  let readyInM = 1;
-  let submitted: { spec?: { warmPoolRef?: { name: string } } } | undefined;
+  const poolName = {
+    S: warmPoolTemplate(sized("S")).name,
+    M: warmPoolTemplate(sized("M")).name,
+  };
+  // Ready Sandboxes per tier; a missing key means the pool does not exist.
+  let ready: Partial<Record<"S" | "M", number>> = {};
+  type Claim = { spec?: { warmPoolRef?: { name: string } } };
+  let submitted: Claim | undefined;
   server.use(
     http.get(
       `${ORIGIN}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/test/sandboxwarmpools/:name`,
-      ({ params }) =>
-        params.name === poolOfM
-          ? HttpResponse.json({ status: { readyReplicas: readyInM } })
-          : HttpResponse.json({ code: 404 }, { status: 404 }),
+      ({ params }) => {
+        const tier = (["S", "M"] as const).find(
+          (t) => poolName[t] === params.name,
+        );
+        return tier && ready[tier] !== undefined
+          ? HttpResponse.json({ status: { readyReplicas: ready[tier] } })
+          : HttpResponse.json({ code: 404 }, { status: 404 });
+      },
     ),
     http.post(
       `${ORIGIN}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/test/sandboxclaims`,
@@ -135,22 +147,32 @@ test("serves a run from a neighbouring tier's pool only while that pool has a re
       },
     ),
   );
+  const claim = async (tier: "S" | "M") => {
+    submitted = undefined;
+    const result = await agentWarmPoolManager.claim({
+      api: api(),
+      spec: sized(tier),
+    });
+    // Set by the POST handler during the claim; TypeScript cannot see that.
+    const sent = submitted as Claim | undefined;
+    return { result, pool: sent?.spec?.warmPoolRef?.name };
+  };
+
   // No S pool: the M pool has a ready Sandbox, so the run starts at M.
-  expect(
-    await agentWarmPoolManager.claim({ api: api(), spec: sized("S") }),
-  ).toEqual({ tier: "M" });
-  expect(submitted?.spec?.warmPoolRef?.name).toBe(poolOfM);
-  // The same M pool, empty: a neighbour never gets a waiting claim.
-  readyInM = 0;
-  submitted = undefined;
-  expect(
-    await agentWarmPoolManager.claim({ api: api(), spec: sized("S") }),
-  ).toBeNull();
-  expect(submitted).toBeUndefined();
-  // The requested tier's own pool serves even while it is refilling.
-  expect(
-    await agentWarmPoolManager.claim({ api: api(), spec: sized("M") }),
-  ).toEqual({ tier: "M" });
+  ready = { M: 1 };
+  expect(await claim("S")).toEqual({ result: { tier: "M" }, pool: poolName.M });
+  // No S pool and the M pool is empty: a neighbour never gets a waiting claim.
+  ready = { M: 0 };
+  expect(await claim("S")).toEqual({ result: null, pool: undefined });
+  // Both pools ready: the requested tier serves.
+  ready = { M: 1, S: 1 };
+  expect(await claim("M")).toEqual({ result: { tier: "M" }, pool: poolName.M });
+  // The M pool is drained and S has a ready Sandbox: the run starts at S.
+  ready = { M: 0, S: 1 };
+  expect(await claim("M")).toEqual({ result: { tier: "S" }, pool: poolName.S });
+  // Both drained: the run waits on its own pool to refill.
+  ready = { M: 0, S: 0 };
+  expect(await claim("M")).toEqual({ result: { tier: "M" }, pool: poolName.M });
 });
 
 test("rejects a claim pointing at another workspace's Sandbox", async () => {

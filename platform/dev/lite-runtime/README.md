@@ -13,11 +13,12 @@ code runtime, Vault, and the Keycloak-backed identity-provider specs.
 
 Lite is the default: a Lobster Agent runs this kind of image, unprivileged, at
 runtime tier M (2 CPU, 4 GiB, 8 GiB limit). Work that needs Kubernetes goes to
-a separate "Full" twin Agent that runs the full image, privileged, at tier L.
-A run promotes by handing its branch to that Agent with `start_agent_run`
-and continues with what comes back; nothing switches a running workspace in
-place. `$ARCHESTRA_AGENT_RUNTIME_TIER` names the Pod's size (S, M or L), not
-its kind of image.
+one of a few separate Tilt Agents that run the full image, privileged, at tier
+L; any lite Agent can hand work to any of them. A run promotes by handing its
+branch to such an Agent with `start_agent_run` and continues with what comes
+back; nothing switches a running workspace in place.
+`$ARCHESTRA_AGENT_RUNTIME_TIER` names the Pod's size (S, M or L), not its kind
+of image.
 
 ## What the image adds to the public agent image
 

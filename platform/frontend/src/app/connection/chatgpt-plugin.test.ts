@@ -75,6 +75,18 @@ describe("ChatGPT plugin archive", () => {
     ).rejects.toThrow("resource path");
   });
 
+  it("keeps different gateway imports distinct without changing an existing gateway's identity", async () => {
+    const first = await buildChatgptPlugin({ ...params, skills: [] });
+    const repeated = await buildChatgptPlugin({ ...params, skills: [] });
+    const other = await buildChatgptPlugin({
+      ...params,
+      gatewayUrl: "https://other.example.test/v1/mcp/team",
+      skills: [],
+    });
+    expect(first.filename).toBe(repeated.filename);
+    expect(other.filename).not.toBe(first.filename);
+  });
+
   it("reports skills that require platform activation instead of shipping broken templates", async () => {
     const skill = makeSkillDetail("example");
     const result = await buildChatgptPlugin({

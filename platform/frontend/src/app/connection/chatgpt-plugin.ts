@@ -15,6 +15,14 @@ export async function buildChatgptPlugin({
   validateChatgptGatewayUrl(gatewayUrl);
   const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(new URL(gatewayUrl).href),
+  );
+  const endpointId = [...new Uint8Array(digest)]
+    .slice(0, 6)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
   const name = `${
     appName
       .toLowerCase()
@@ -22,7 +30,7 @@ export async function buildChatgptPlugin({
       .replace(/^-|-$/g, "")
       .slice(0, 40)
       .replace(/-$/g, "") || "gateway"
-  }-connect`;
+  }-connect-${endpointId}`;
   zip.file(
     "plugin.json",
     JSON.stringify(

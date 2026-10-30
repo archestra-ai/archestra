@@ -389718,23 +389718,19 @@
                     "properties": {
                       "input": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "output": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "cacheRead": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "cacheWrite": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -390123,23 +390119,19 @@
                     "properties": {
                       "input": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "output": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "cacheRead": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "cacheWrite": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       }
                     },
                     "required": [

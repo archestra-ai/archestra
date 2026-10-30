@@ -3,7 +3,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { expect, test } from "vitest";
 
 const migration = readFileSync(
-  new URL("./0612_org_trio_auto_routed.sql", import.meta.url),
+  new URL("./0613_org_trio_auto_routed.sql", import.meta.url),
   "utf8",
 );
 

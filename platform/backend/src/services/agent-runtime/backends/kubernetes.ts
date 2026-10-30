@@ -8,7 +8,6 @@ import type {
   AgentRunRecord,
   AgentRunStartupProgress,
   AgentRuntimeSteerMode,
-  AgentRuntimeTier,
 } from "@/types";
 import { ApiError } from "@/types";
 import type { AgentWorkspaceFileRequest } from "@/types/agent-workspace-file";
@@ -20,7 +19,6 @@ import type {
   AgentRunCompletion,
   AgentRunLaunchSpec,
   AgentRuntimeBackendDriver,
-  AgentRuntimeTierSettings,
 } from "./types";
 
 /**
@@ -259,17 +257,6 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     operation: () => Promise<void>,
   ): Promise<boolean> {
     return agentRuntimeManager.withSessionLease(session, operation);
-  }
-
-  async switchWorkspaceTier(params: {
-    session: AgentRunRecord;
-    tier: AgentRuntimeTier;
-    settings: AgentRuntimeTierSettings;
-    resumePrompt: string;
-    shouldResume: () => Promise<boolean>;
-    onStarted?: (switching: boolean) => void;
-  }): Promise<boolean> {
-    return agentRuntimeManager.switchWorkspaceTier(params);
   }
 }
 

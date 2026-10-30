@@ -8,7 +8,6 @@ import type {
   AgentRuntimeBackend,
   AgentRuntimeResources,
   AgentRuntimeSteerMode,
-  AgentRuntimeTier,
   EffectiveNetworkPolicy,
 } from "@/types";
 import type { A2ATaskFailure } from "@/types/a2a-task";
@@ -38,10 +37,6 @@ export type AgentRunLaunchSpec = {
   command: string[] | null;
   privileged: boolean;
   resources: AgentRuntimeResources | null;
-  /** Tier these settings belong to, set only when the Agent defines a Full tier. */
-  tier?: AgentRuntimeTier;
-  /** The Agent's Full tier, resolved; a retained workspace may be running it. */
-  fullTier?: AgentRuntimeTierSettings;
   env: Record<string, string>;
   secretEnv: Record<string, string>;
   renewableCredentials?: Record<string, RenewableCredential>;
@@ -242,32 +237,7 @@ export interface AgentRuntimeBackendDriver {
     session: AgentRunRecord,
     operation: () => Promise<void>,
   ): Promise<boolean>;
-
-  /**
-   * Move a workspace to another tier's image, host access and resources on
-   * the same volume. A turn that is running continues in the replacement as
-   * a native continuation prompted with `resumePrompt`, so its task does not
-   * end. Resolves false when the workspace already runs these settings, and
-   * rejects with `ClusterLeaseHeldError` while another switch of the run is
-   * in progress. Optional: a backend without movable compute offers no tiers.
-   */
-  switchWorkspaceTier?(params: {
-    session: AgentRunRecord;
-    tier: AgentRuntimeTier;
-    settings: AgentRuntimeTierSettings;
-    resumePrompt: string;
-    /** Checked before compute starts again; false leaves it stopped. */
-    shouldResume: () => Promise<boolean>;
-    /** Once the run's switch is exclusive: whether the workspace moves. */
-    onStarted?: (switching: boolean) => void;
-  }): Promise<boolean>;
 }
-
-/** Compute settings one runtime tier runs with. */
-export type AgentRuntimeTierSettings = Pick<
-  AgentRunLaunchSpec,
-  "image" | "privileged" | "resources"
->;
 
 /** Mirrors `AgentRuntimeBackendSchema`; durable runs store exactly these. */
 export type AgentRuntimeBackendName = AgentRuntimeBackend;

@@ -5,11 +5,7 @@ import type {
   AgentRuntimeBackendName,
 } from "./types";
 
-export type {
-  AgentRunLaunchSpec,
-  AgentRuntimeBackendDriver,
-  AgentRuntimeTierSettings,
-} from "./types";
+export type { AgentRunLaunchSpec, AgentRuntimeBackendDriver } from "./types";
 
 /**
  * Every Agent Runtime backend this deployment knows how to drive.

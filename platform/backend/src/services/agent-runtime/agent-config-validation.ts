@@ -29,17 +29,13 @@ export function requireAgentRuntimePermission(params: {
   if (params.agentType !== "agent") {
     throw new ApiError(400, "Agent Runtime can only be configured for Agents");
   }
-  // The Full tier runs with the same authority as the primary settings, so
-  // either one asking for host access needs the same permission.
-  const privileged =
-    params.runtime.privileged || (params.runtime.fullTier?.privileged ?? false);
-  if (privileged && !params.isAdmin) {
+  if (params.runtime.privileged && !params.isAdmin) {
     throw new ApiError(
       403,
       "Only Agent administrators can enable a privileged background deployment",
     );
   }
-  if (privileged && !config.agentRuntime.allowPrivileged) {
+  if (params.runtime.privileged && !config.agentRuntime.allowPrivileged) {
     throw new ApiError(
       403,
       "Privileged background deployments are disabled by the deployment operator",

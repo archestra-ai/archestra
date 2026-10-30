@@ -28,7 +28,6 @@ import {
 } from "@/models";
 import ServiceAccountModel from "@/models/service-account";
 import type { OpenAppaSession } from "@/openappa/service";
-import { AGENT_RUNTIME_SELF_TIER_PATH } from "@/routes/route-paths";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identity";
 import { archestraMarkWithText } from "@/services/archestra-mark";
@@ -52,11 +51,8 @@ import {
 } from "./model-compatibility";
 import {
   AGENT_RUNTIME_STEER_FIFO,
-  AGENT_RUNTIME_TIER_ENV,
-  AGENT_RUNTIME_TIER_URL_ENV,
   constructStableRunName,
 } from "./runtime-contract";
-import { resolveAgentRuntimeTierSettings } from "./runtime-tier";
 
 /**
  * Everything a runtime backend needs to carry one A2A task, resolved for
@@ -287,11 +283,6 @@ export async function buildAgentRunLaunchSpec(params: {
   const modelOutputLength = selectedModel
     ? ModelModel.resolveEffectiveOutputLength(selectedModel)
     : null;
-  // A run starts on the Lite tier, the primary settings. With a Full tier
-  // defined, it may move its workspace there and back (runtime-tier-switch).
-  const lightTier = resolveAgentRuntimeTierSettings(params.runtime, "light");
-  const fullTier =
-    resolveAgentRuntimeTierSettings(params.runtime, "full") ?? undefined;
   const nonSecretEnv: Record<string, string> = {
     // The Agent Runtime run's own environment goes first: the addresses below must win.
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
@@ -353,13 +344,6 @@ export async function buildAgentRunLaunchSpec(params: {
         }
       : {}),
     ARCHESTRA_MCP_GATEWAY_URL: `${platformBaseUrl}/v1/mcp/${params.agentId}`,
-    // The run can move its own workspace between tiers. The current tier is
-    // the Pod's own environment (manifests), never a per-turn value.
-    ...(fullTier
-      ? {
-          [AGENT_RUNTIME_TIER_URL_ENV]: `${platformBaseUrl}${AGENT_RUNTIME_SELF_TIER_PATH}`,
-        }
-      : {}),
   };
 
   const task = taskWithAgentRunInputs({
@@ -459,9 +443,14 @@ export async function buildAgentRunLaunchSpec(params: {
         boundWorkspace?.workloadName ??
         constructStableRunName(agent.name, params.taskId),
       runtimeScope: params.runtimeScope,
-      ...lightTier,
+      image: params.runtime.image,
       command: params.runtime.command ?? null,
-      ...(fullTier ? { tier: "light" as const, fullTier } : {}),
+      privileged: params.runtime.privileged,
+      resources: params.runtime.resources ?? {
+        cpuRequest: config.agentRuntime.resources.cpuRequest,
+        memoryRequest: config.agentRuntime.resources.memoryRequest,
+        memoryLimit: config.agentRuntime.resources.memoryLimit,
+      },
       env: nonSecretEnv,
       secretEnv,
       ...(Object.keys(credentials.renewableCredentials).length
@@ -529,8 +518,6 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_MCP_GATEWAY_URL",
   "ARCHESTRA_VIRTUAL_KEY",
   "ARCHESTRA_AGENT_RUNTIME_BINDING",
-  AGENT_RUNTIME_TIER_ENV,
-  AGENT_RUNTIME_TIER_URL_ENV,
 ]);
 
 function claudeCodeCustomHeaders(params: {

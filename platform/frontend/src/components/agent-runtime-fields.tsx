@@ -66,15 +66,6 @@ export type AgentRuntimeConfig = {
     cpuLimit?: string;
     memoryLimit?: string;
   } | null;
-  /**
-   * Optional Full tier a run may move its workspace to. Set through the API;
-   * the form keeps it unchanged when other settings are edited.
-   */
-  fullTier?: {
-    image: string;
-    privileged?: boolean;
-    resources?: AgentRuntimeConfig["resources"];
-  } | null;
   ports?: number[];
   environment: Array<{ key: string; value: string }> | null;
   credentials: Array<{
@@ -922,7 +913,6 @@ function containerOptionsSummary(config: AgentRuntimeConfig): string {
     config.ports?.length &&
       `${config.ports.length === 1 ? "Port" : "Ports"} ${config.ports.join(", ")}`,
     config.privileged && "Privileged",
-    config.fullTier && "Full tier on request",
   ].filter(Boolean);
   return parts.length
     ? parts.join(" · ")

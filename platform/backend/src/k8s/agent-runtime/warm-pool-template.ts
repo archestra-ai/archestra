@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { AGENT_RUNTIME_TIER_ENV } from "@/services/agent-runtime/runtime-contract";
 import {
   buildAgentRuntimeSandbox,
   type KubernetesAgentRunLaunchSpec,
@@ -29,8 +28,6 @@ export function warmPoolTemplate(spec: KubernetesAgentRunLaunchSpec) {
     { name: "TERM", value: "xterm-256color" },
     { name: "ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT", value: "0" },
     { name: "ARCHESTRA_AGENT_RUNTIME_WARM", value: "1" },
-    // The Pod's tier outlives the claim, like the image it describes.
-    ...(spec.tier ? [{ name: AGENT_RUNTIME_TIER_ENV, value: spec.tier }] : []),
   ];
   delete container.envFrom;
   pod.volumes = [];

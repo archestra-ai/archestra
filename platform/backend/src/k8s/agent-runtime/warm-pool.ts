@@ -164,8 +164,6 @@ class AgentWarmPoolManager {
           image: runtime.image,
           privileged: runtime.privileged,
           resources: runtime.resources ?? config.agentRuntime.resources,
-          // A claimed workspace starts on the Lite tier, as a launch does.
-          ...(runtime.fullTier ? { tier: "light" as const } : {}),
           workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
           workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
           nodeSelector: config.agentRuntime.nodeSelector,

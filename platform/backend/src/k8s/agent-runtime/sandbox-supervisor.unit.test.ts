@@ -1,11 +1,7 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  AGENT_RUNTIME_RESUME_TURN_ENV,
-  buildSandboxSupervisorScript,
-  buildTurnResumeHook,
-} from "./sandbox-supervisor";
+import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
 
 // This exercises real tmux, process exit and Pod replacement semantics. Enable
 // explicitly where Docker and a maintained runtime image are available.
@@ -283,51 +279,6 @@ echo VERIFIED
       expect(result.stdout).toContain("VERIFIED");
     }, 30_000);
 
-    it.each([
-      true,
-      false,
-    ])("continues a turn a tier switch stopped only when the Pod names it (named: %s)", (named) => {
-      // A request as a turn publishes it: the original instruction, then the
-      // resume hook every entrypoint runs before the agent command.
-      const request = [
-        "set -eu",
-        "export ARCHESTRA_AGENT_RUNTIME_TASK='original instruction'",
-        "export ARCHESTRA_AGENT_RUNTIME_CONTINUE=0",
-        ...buildTurnResumeHook(),
-        'printf "%s|%s" "$ARCHESTRA_AGENT_RUNTIME_CONTINUE" "$ARCHESTRA_AGENT_RUNTIME_TASK" > /var/run/archestra/seen',
-      ].join("\n");
-      const result = runInContainer(
-        `
-mkdir -p /var/run/archestra/turns
-touch /var/run/archestra/turns/1.started /var/run/archestra/turns/1.running
-printf 'note from the platform' > /var/run/archestra/turns/1.resume
-# The stopped Pod's recorder left its FIFO behind.
-mkfifo /var/run/archestra/turns/1.recording-input
-cat > /var/run/archestra/turns/1.request.tmp <<'REQUEST'
-${request}
-REQUEST
-mv /var/run/archestra/turns/1.request.tmp /var/run/archestra/turns/1.request
-wait_for /var/run/archestra/turns/1.exit
-${
-  named
-    ? `test "$(cat /var/run/archestra/turns/1.exit)" = 0
-test "$(cat /var/run/archestra/seen)" = '1|note from the platform'`
-    : `test "$(cat /var/run/archestra/turns/1.exit)" = 75
-test ! -f /var/run/archestra/seen
-grep -q runtime.interrupted /var/run/archestra/turns/1.failure`
-}
-test ! -e /var/run/archestra/turns/1.resume
-test ! -e /var/run/archestra/turns/1.resume-prompt
-test ! -e /var/run/archestra/turns/1.request
-kill -0 "$supervisor"
-echo VERIFIED
-`,
-        named ? { [AGENT_RUNTIME_RESUME_TURN_ENV]: "1" } : {},
-      );
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toContain("VERIFIED");
-    }, 30_000);
-
     it("explains a crashed pane without replaying the turn", () => {
       const result = runInContainer(`
 mkdir -p /var/run/archestra/turns
@@ -352,10 +303,7 @@ echo VERIFIED
   },
 );
 
-function runInContainer(
-  assertions: string,
-  supervisorEnv: Record<string, string> = {},
-) {
+function runInContainer(assertions: string) {
   return spawnSync(
     "docker",
     [
@@ -363,10 +311,6 @@ function runInContainer(
       "--rm",
       "-i",
       "--network=none",
-      ...Object.entries(supervisorEnv).flatMap(([name, value]) => [
-        "-e",
-        `${name}=${value}`,
-      ]),
       "-v",
       `${path.resolve("../docker_images/agent/bin")}:/usr/local/bin:ro`,
       "--entrypoint=/bin/sh",

@@ -16975,16 +16975,6 @@ export type GetAgentCatalogResponses = {
                         cpuLimit?: string;
                         memoryLimit?: string;
                     } | null;
-                    fullTier?: {
-                        image: string;
-                        privileged?: boolean;
-                        resources?: {
-                            cpuRequest?: string;
-                            memoryRequest?: string;
-                            cpuLimit?: string;
-                            memoryLimit?: string;
-                        } | null;
-                    } | null;
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -17374,16 +17364,6 @@ export type GetAgentsResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
-                fullTier?: {
-                    image: string;
-                    privileged?: boolean;
-                    resources?: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
-                } | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -17539,16 +17519,6 @@ export type CreateAgentData = {
                 memoryRequest?: string;
                 cpuLimit?: string;
                 memoryLimit?: string;
-            } | null;
-            fullTier?: {
-                image: string;
-                privileged?: boolean;
-                resources?: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
             } | null;
             ports?: Array<number>;
             environment: Array<{
@@ -17817,16 +17787,6 @@ export type CreateAgentResponses = {
                 memoryRequest?: string;
                 cpuLimit?: string;
                 memoryLimit?: string;
-            } | null;
-            fullTier?: {
-                image: string;
-                privileged?: boolean;
-                resources?: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
             } | null;
             ports?: Array<number>;
             environment: Array<{
@@ -18222,16 +18182,6 @@ export type GetChatAgentRosterResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
-            fullTier?: {
-                image: string;
-                privileged?: boolean;
-                resources?: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
-            } | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -18378,16 +18328,6 @@ export type GetChatAgentRosterPageResponses = {
                     memoryRequest?: string;
                     cpuLimit?: string;
                     memoryLimit?: string;
-                } | null;
-                fullTier?: {
-                    image: string;
-                    privileged?: boolean;
-                    resources?: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
                 } | null;
                 ports?: Array<number>;
                 environment: Array<{
@@ -18556,16 +18496,6 @@ export type GetAgentOptionsResponses = {
                     memoryRequest?: string;
                     cpuLimit?: string;
                     memoryLimit?: string;
-                } | null;
-                fullTier?: {
-                    image: string;
-                    privileged?: boolean;
-                    resources?: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
                 } | null;
                 ports?: Array<number>;
                 environment: Array<{
@@ -18752,16 +18682,6 @@ export type GetAgentOptionsPageResponses = {
                     memoryRequest?: string;
                     cpuLimit?: string;
                     memoryLimit?: string;
-                } | null;
-                fullTier?: {
-                    image: string;
-                    privileged?: boolean;
-                    resources?: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
                 } | null;
                 ports?: Array<number>;
                 environment: Array<{
@@ -19142,16 +19062,6 @@ export type GetDefaultMcpGatewayResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
-            fullTier?: {
-                image: string;
-                privileged?: boolean;
-                resources?: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
-            } | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19459,16 +19369,6 @@ export type ImportAgentResponses = {
                     memoryRequest?: string;
                     cpuLimit?: string;
                     memoryLimit?: string;
-                } | null;
-                fullTier?: {
-                    image: string;
-                    privileged?: boolean;
-                    resources?: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
                 } | null;
                 ports?: Array<number>;
                 environment: Array<{
@@ -19787,16 +19687,6 @@ export type GetAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
-            fullTier?: {
-                image: string;
-                privileged?: boolean;
-                resources?: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
-            } | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19934,16 +19824,6 @@ export type UpdateAgentData = {
                 memoryRequest?: string;
                 cpuLimit?: string;
                 memoryLimit?: string;
-            } | null;
-            fullTier?: {
-                image: string;
-                privileged?: boolean;
-                resources?: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
             } | null;
             ports?: Array<number>;
             environment: Array<{
@@ -20121,16 +20001,6 @@ export type UpdateAgentResponses = {
                 memoryRequest?: string;
                 cpuLimit?: string;
                 memoryLimit?: string;
-            } | null;
-            fullTier?: {
-                image: string;
-                privileged?: boolean;
-                resources?: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
             } | null;
             ports?: Array<number>;
             environment: Array<{
@@ -20723,16 +20593,6 @@ export type RestoreAgentVersionResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
-            fullTier?: {
-                image: string;
-                privileged?: boolean;
-                resources?: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
-            } | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20978,16 +20838,6 @@ export type CloneAgentResponses = {
                 memoryRequest?: string;
                 cpuLimit?: string;
                 memoryLimit?: string;
-            } | null;
-            fullTier?: {
-                image: string;
-                privileged?: boolean;
-                resources?: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
             } | null;
             ports?: Array<number>;
             environment: Array<{
@@ -23473,16 +23323,6 @@ export type RestoreAgentResponses = {
                 memoryRequest?: string;
                 cpuLimit?: string;
                 memoryLimit?: string;
-            } | null;
-            fullTier?: {
-                image: string;
-                privileged?: boolean;
-                resources?: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                } | null;
             } | null;
             ports?: Array<number>;
             environment: Array<{
@@ -26171,102 +26011,6 @@ export type UploadAgentWorkspaceTransferResponses = {
 };
 
 export type UploadAgentWorkspaceTransferResponse = UploadAgentWorkspaceTransferResponses[keyof UploadAgentWorkspaceTransferResponses];
-
-export type SwitchAgentRuntimeTierData = {
-    body: {
-        tier: 'light' | 'full';
-    };
-    path?: never;
-    query?: never;
-    url: '/api/agent-runtime/self/tier';
-};
-
-export type SwitchAgentRuntimeTierErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type SwitchAgentRuntimeTierError = SwitchAgentRuntimeTierErrors[keyof SwitchAgentRuntimeTierErrors];
-
-export type SwitchAgentRuntimeTierResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        tier: 'light' | 'full';
-        switching: boolean;
-    };
-    /**
-     * Default Response
-     */
-    202: {
-        tier: 'light' | 'full';
-        switching: boolean;
-    };
-};
-
-export type SwitchAgentRuntimeTierResponse = SwitchAgentRuntimeTierResponses[keyof SwitchAgentRuntimeTierResponses];
 
 export type GetAllAgentToolsData = {
     body?: never;
@@ -41725,16 +41469,6 @@ export type GetNewChatBootstrapResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
-                fullTier?: {
-                    image: string;
-                    privileged?: boolean;
-                    resources?: {
-                        cpuRequest?: string;
-                        memoryRequest?: string;
-                        cpuLimit?: string;
-                        memoryLimit?: string;
-                    } | null;
-                } | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -41910,16 +41644,6 @@ export type GetNewChatBootstrapResponses = {
                         memoryRequest?: string;
                         cpuLimit?: string;
                         memoryLimit?: string;
-                    } | null;
-                    fullTier?: {
-                        image: string;
-                        privileged?: boolean;
-                        resources?: {
-                            cpuRequest?: string;
-                            memoryRequest?: string;
-                            cpuLimit?: string;
-                            memoryLimit?: string;
-                        } | null;
                     } | null;
                     ports?: Array<number>;
                     environment: Array<{
@@ -42306,16 +42030,6 @@ export type GetConversationBootstrapResponses = {
                         cpuLimit?: string;
                         memoryLimit?: string;
                     } | null;
-                    fullTier?: {
-                        image: string;
-                        privileged?: boolean;
-                        resources?: {
-                            cpuRequest?: string;
-                            memoryRequest?: string;
-                            cpuLimit?: string;
-                            memoryLimit?: string;
-                        } | null;
-                    } | null;
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -42491,16 +42205,6 @@ export type GetConversationBootstrapResponses = {
                             memoryRequest?: string;
                             cpuLimit?: string;
                             memoryLimit?: string;
-                        } | null;
-                        fullTier?: {
-                            image: string;
-                            privileged?: boolean;
-                            resources?: {
-                                cpuRequest?: string;
-                                memoryRequest?: string;
-                                cpuLimit?: string;
-                                memoryLimit?: string;
-                            } | null;
                         } | null;
                         ports?: Array<number>;
                         environment: Array<{

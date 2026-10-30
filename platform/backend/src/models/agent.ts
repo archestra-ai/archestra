@@ -5488,7 +5488,6 @@ class AgentModel {
             steerMode: row.runtime.steerMode,
             privileged: row.runtime.privileged,
             resources: row.runtime.resources,
-            fullTier: row.runtime.fullTier ?? null,
             environmentKeys: (row.runtime.environment ?? [])
               .map((entry) => entry.key)
               .sort(),

@@ -142,11 +142,6 @@ export const ARCHESTRA_CATALOG_PROXY_PREFIX = "/api/archestra-catalog";
  * is consumed on success. */
 export const AGENT_WORKSPACE_TRANSFER_PREFIX = "/api/agent-workspace-transfers";
 
-/** A run inside a workspace moves it to another compute tier. It holds no
- * session: its server-signed runtime binding is the proof, and the route
- * checks that the binding's turn is the workspace's current one. */
-export const AGENT_RUNTIME_SELF_TIER_PATH = "/api/agent-runtime/self/tier";
-
 /** Stateless APPA annotator: returns no restrictions and reads no user data. */
 export const GUARDRAILS_NOOP_ANNOTATOR_PATH =
   "/api/guardrails-policy/annotators/noop";

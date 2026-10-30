@@ -12,23 +12,17 @@ import {
   AGENT_RUNTIME_INPUTS_READY_FILE,
   AGENT_RUNTIME_SHELL_INIT_SCRIPT,
   AGENT_RUNTIME_STEER_FIFO,
-  AGENT_RUNTIME_TIER_ENV,
 } from "@/services/agent-runtime/runtime-contract";
-import type { AgentRuntimeResources, AgentRuntimeTier } from "@/types";
+import type { AgentRuntimeResources } from "@/types";
 import { buildRuntimeFailureEnvelopeScript } from "./failure-envelope";
 import { usesFloatingAgentImageTag } from "./image-pull-policy";
 import {
   AGENT_RUNTIME_TASK_LABEL,
-  AGENT_RUNTIME_TIER_ANNOTATION,
   AGENT_RUNTIME_WORKSPACE_LABEL,
   agentRuntimeLabels,
   agentRuntimeNames,
 } from "./naming";
-import {
-  AGENT_RUNTIME_RESUME_TURN_ENV,
-  buildSandboxSupervisorScript,
-  buildTurnResumeHook,
-} from "./sandbox-supervisor";
+import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
 
 const DNS_PORTS = [
   { protocol: "UDP" as const, port: 53 },
@@ -224,9 +218,6 @@ export function buildAgentRuntimeSandbox(
       name: names.sandbox,
       namespace: spec.namespace,
       labels,
-      ...(spec.tier
-        ? { annotations: { [AGENT_RUNTIME_TIER_ANNOTATION]: spec.tier } }
-        : {}),
       ownerReferences: spec.ownerReferences,
     },
     spec: {
@@ -340,7 +331,6 @@ export function buildAgentRuntimeSandbox(
                   PROMPT_COMMAND: `. ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
                   ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH: "1",
                   ...spec.env,
-                  ...(spec.tier ? { [AGENT_RUNTIME_TIER_ENV]: spec.tier } : {}),
                   ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE:
                     AGENT_RUNTIME_CREDENTIALS_FILE,
                 }).map(([name, value]) => ({ name, value })),
@@ -381,9 +371,22 @@ export function buildAgentRuntimeSandbox(
                   subPath: "runtime",
                 },
                 { name: "workspace", mountPath: "/home/node", subPath: "home" },
-                ...dockerDataMounts(spec.privileged),
+                ...(spec.privileged
+                  ? // Keep nested development containers, images and volumes on
+                    // the same durable disk as the workspace. A Pod replacement
+                    // restarts dockerd; it must not erase the development DB.
+                    [
+                      {
+                        name: "workspace",
+                        mountPath: "/var/lib/docker",
+                        subPath: "docker",
+                      },
+                    ]
+                  : []),
               ],
-              securityContext: agentContainerSecurityContext(spec.privileged),
+              ...(spec.privileged
+                ? { securityContext: { privileged: true } }
+                : { securityContext: { allowPrivilegeEscalation: false } }),
             },
           ],
           volumes: [
@@ -404,94 +407,6 @@ export function buildAgentRuntimeSandbox(
         },
       },
     },
-  };
-}
-
-/**
- * The containers a workspace runs on another tier: that tier's image (the
- * initializer's too), host access and resources, on the same volume. The
- * Docker data mount follows host access, as it does at launch, and the Pod
- * environment names the tier. Everything else is kept as launched.
- */
-export function withAgentRuntimeTier(params: {
-  podSpec: k8s.V1PodSpec;
-  tier: AgentRuntimeTier;
-  settings: Pick<AgentRunLaunchSpec, "image" | "privileged" | "resources">;
-}): Pick<k8s.V1PodSpec, "containers" | "initContainers"> {
-  const { tier, settings } = params;
-  const moved = withAgentRuntimeImage(params.podSpec, settings.image);
-  return {
-    ...moved,
-    containers: moved.containers.map((entry) =>
-      entry.name === AGENT_RUNTIME_CONTAINER_NAME
-        ? {
-            ...entry,
-            env: withEnv(entry.env, AGENT_RUNTIME_TIER_ENV, tier),
-            resources: buildResourceRequirements(settings.resources),
-            volumeMounts: [
-              ...(entry.volumeMounts ?? []).filter(
-                ({ mountPath }) => mountPath !== DOCKER_DATA_PATH,
-              ),
-              ...dockerDataMounts(settings.privileged),
-            ],
-            securityContext: agentContainerSecurityContext(settings.privileged),
-          }
-        : entry,
-    ),
-  };
-}
-
-/**
- * The containers with the agent's image replaced, the workspace initializer's
- * too, keeping each one's pull policy rule for the new tag.
- */
-export function withAgentRuntimeImage(
-  podSpec: Pick<k8s.V1PodSpec, "containers" | "initContainers">,
-  image: string,
-): Pick<k8s.V1PodSpec, "containers" | "initContainers"> {
-  const previousImage = podSpec.containers.find(
-    (entry) => entry.name === AGENT_RUNTIME_CONTAINER_NAME,
-  )?.image;
-  const imagePullPolicy = usesFloatingAgentImageTag(image)
-    ? ("Always" as const)
-    : undefined;
-  const withImage = (entry: k8s.V1Container): k8s.V1Container => {
-    if (entry.image !== previousImage) return entry;
-    const { imagePullPolicy: _previousPolicy, ...rest } = entry;
-    return { ...rest, image, ...(imagePullPolicy ? { imagePullPolicy } : {}) };
-  };
-  return {
-    containers: podSpec.containers.map(withImage),
-    ...(podSpec.initContainers
-      ? { initContainers: podSpec.initContainers.map(withImage) }
-      : {}),
-  };
-}
-
-/**
- * Name the started turn the next Pod continues instead of failing it as
- * interrupted (see the supervisor), or, with null, none. Set only together
- * with the note a tier switch writes beside that turn.
- */
-export function withTurnResume(
-  podSpec: Pick<k8s.V1PodSpec, "containers" | "initContainers">,
-  taskId: string | null,
-): Pick<k8s.V1PodSpec, "containers" | "initContainers"> {
-  return {
-    ...podSpec,
-    containers: podSpec.containers.map((entry) =>
-      entry.name === AGENT_RUNTIME_CONTAINER_NAME
-        ? {
-            ...entry,
-            env:
-              taskId === null
-                ? (entry.env ?? []).filter(
-                    ({ name }) => name !== AGENT_RUNTIME_RESUME_TURN_ENV,
-                  )
-                : withEnv(entry.env, AGENT_RUNTIME_RESUME_TURN_ENV, taskId),
-          }
-        : entry,
-    ),
   };
 }
 
@@ -642,8 +557,6 @@ function resolveEntrypoint(command: string[] | null): string {
       ? "archestra-runtime-agent"
       : command.map(shellQuote).join(" ");
   return [
-    // A tier switch replaced the Pod while this turn ran: see the supervisor.
-    ...buildTurnResumeHook(),
     "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi",
     `exec ${resolved}`,
   ].join("\n");
@@ -653,40 +566,7 @@ function shellQuote(argument: string): string {
   return `'${argument.replaceAll("'", `'\\''`)}'`;
 }
 
-const DOCKER_DATA_PATH = "/var/lib/docker";
-
-/** Set one variable, in place when the container already defines it. */
-function withEnv(
-  env: k8s.V1EnvVar[] | undefined,
-  name: string,
-  value: string,
-): k8s.V1EnvVar[] {
-  const entries = env ?? [];
-  return entries.some((entry) => entry.name === name)
-    ? entries.map((entry) => (entry.name === name ? { name, value } : entry))
-    : [...entries, { name, value }];
-}
-
-/**
- * Keep nested development containers, images and volumes on the same durable
- * disk as the workspace. A Pod replacement restarts dockerd; it must not erase
- * the development DB. Only a privileged container runs dockerd.
- */
-function dockerDataMounts(privileged: boolean): k8s.V1VolumeMount[] {
-  return privileged
-    ? [{ name: "workspace", mountPath: DOCKER_DATA_PATH, subPath: "docker" }]
-    : [];
-}
-
-function agentContainerSecurityContext(
-  privileged: boolean,
-): k8s.V1SecurityContext {
-  return privileged
-    ? { privileged: true }
-    : { allowPrivilegeEscalation: false };
-}
-
-export function buildResourceRequirements(
+function buildResourceRequirements(
   resources: AgentRuntimeResources | null,
 ): k8s.V1ResourceRequirements {
   const requests: Record<string, string> = {};

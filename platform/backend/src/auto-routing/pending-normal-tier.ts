@@ -3,10 +3,10 @@ import logger from "@/logging";
 import AutoRoutingSettingsModel, {
   lockRoutingPlan,
 } from "@/models/auto-routing-settings";
-import OrganizationModel from "@/models/organization";
 import OrgTrioPendingNormalTierModel, {
   type PendingNormalTier,
 } from "@/models/org-trio-pending-normal-tier";
+import OrganizationModel from "@/models/organization";
 import { assertRuntimeAgentsSupportOrganizationDefault } from "@/services/agent-runtime/model-compatibility";
 import { ApiError } from "@/types";
 import { updateAutoRoutingSettings } from "./settings";
@@ -45,7 +45,8 @@ async function applyPendingNormalTier(stashed: PendingNormalTier) {
     const tier = await OrgTrioPendingNormalTierModel.claim(organizationId, tx);
     if (!tier) return { kind: "claimed" };
     await OrgTrioPendingNormalTierModel.delete(organizationId, tx);
-    if (incompatibility) return { kind: "incompatible", reason: incompatibility };
+    if (incompatibility)
+      return { kind: "incompatible", reason: incompatibility };
     await OrganizationModel.lockRowForUpdate(organizationId, tx);
     const organization = await OrganizationModel.getById(organizationId, tx);
     const settings = await AutoRoutingSettingsModel.find(organizationId, tx);
@@ -56,7 +57,10 @@ async function applyPendingNormalTier(stashed: PendingNormalTier) {
     if (!untouched) return { kind: "superseded" };
     await OrganizationModel.patchInTransaction({
       id: organizationId,
-      data: { defaultModelId: tier.normalModelId, defaultLlmApiKeyId: tier.apiKeyId },
+      data: {
+        defaultModelId: tier.normalModelId,
+        defaultLlmApiKeyId: tier.apiKeyId,
+      },
       tx,
     });
     await AutoRoutingSettingsModel.bumpGeneration(organizationId, tx);

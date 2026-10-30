@@ -199,9 +199,7 @@ export async function userProviderKeyMappings(params: {
 }): Promise<ModelRouterMappedProviderKey[]> {
   const { keys } = await LlmProviderApiKeyModel.findUsableKeys(params);
   const providerApiKeys: ModelRouterMappedProviderKey[] = [];
-  for (const apiKey of [...keys].sort(
-    compareModelRouterUserProviderKeys,
-  )) {
+  for (const apiKey of [...keys].sort(compareModelRouterUserProviderKeys)) {
     if (
       !providerHasEndpointLocalModels(apiKey.provider) &&
       providerApiKeys.some((mapping) => mapping.provider === apiKey.provider)

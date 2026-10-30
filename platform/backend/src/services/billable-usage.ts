@@ -6,6 +6,7 @@ import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model
 import ModelModel from "@/models/model";
 import type { UsageView } from "@/types/llm-provider";
 import {
+  estimateMissingPrices,
   formatMoney,
   moneyUnits,
   type PricedBillingUsage,
@@ -52,7 +53,7 @@ export async function resolvePricingQuote(params: {
       provider,
       size,
     );
-    return quotedPrices({
+    const quoted = quotedPrices({
       model: modelId,
       provider,
       pricing,
@@ -60,6 +61,20 @@ export async function resolvePricingQuote(params: {
         projected?.providerPricing !== undefined &&
         projected.providerPricing !== "conflicting",
     });
+    if (projected?.providerPricing === undefined) return quoted;
+    const catalog = ModelModel.getEffectivePricing(
+      row ?? null,
+      modelId,
+      provider,
+      size,
+    );
+    return {
+      ...quoted,
+      catalog: {
+        input: catalog.pricePerMillionInput,
+        output: catalog.pricePerMillionOutput,
+      },
+    };
   };
   return {
     model,
@@ -109,7 +124,7 @@ export function quotedPrices(params: {
 }
 
 /** The request's quote, resolved once and retained on its usage snapshot. */
-export async function quoteUsagePricing(params: {
+async function quoteUsagePricing(params: {
   model: string;
   provider: SupportedProvider;
   usage: UsageView;
@@ -160,27 +175,23 @@ export async function priceBillingUsage(params: {
     ) {
       issues.push("estimated_model_price");
     }
+    // A missing rate is estimated, never left unpriced: an unpriced request
+    // would leave its budgets unable to say what was spent.
+    const estimate = estimateMissingPrices({
+      usage: component,
+      prices,
+      provider,
+      fallback: quoted.catalog,
+    });
+    if (!authoritative && estimate.model) issues.push("estimated_model_price");
+    if (!authoritative && estimate.cache) issues.push("estimated_cache_price");
     let cost = "0.0000000000";
     try {
-      const missing =
-        (component.inputTokens > 0 && prices.input === null) ||
-        (component.outputTokens > 0 && prices.output === null) ||
-        (component.cacheReadTokens > 0 && prices.cacheRead === null) ||
-        (component.cacheWriteTokens > component.cacheWrite1hTokens &&
-          prices.cacheWrite === null) ||
-        (component.cacheWrite1hTokens > 0 && prices.cacheWrite1h === null);
-      if (missing && !authoritative) issues.push("unpriced_usage");
-      cost = priceTokens(component, {
-        ...prices,
-        input: prices.input ?? "0",
-        output: prices.output ?? "0",
-        cacheRead: prices.cacheRead ?? "0",
-        cacheWrite: prices.cacheWrite ?? "0",
-        cacheWrite1h: prices.cacheWrite1h ?? "0",
-      });
+      cost = priceTokens(component, estimate.prices);
     } catch {
-      if (!authoritative) issues.push("unpriced_usage");
+      if (!authoritative) issues.push("invalid_token_count");
     }
+    // The receipt keeps the rates that were known; the estimate is in the cost.
     components.push({ ...component, provider, prices, cost });
   }
   if (usage.inputTokensEstimated) issues.push("estimated_input_tokens");

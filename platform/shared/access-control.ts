@@ -1201,6 +1201,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateLimit]: {},
   [RouteId.GetLimit]: {},
   [RouteId.UpdateLimit]: {},
+  [RouteId.ResetLimitUsage]: {},
   [RouteId.DeleteLimit]: {},
   [RouteId.BulkDeleteLimits]: {},
   [RouteId.ListDefaultUserLimits]: {

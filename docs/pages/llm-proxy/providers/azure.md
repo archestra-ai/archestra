@@ -2,7 +2,7 @@
 title: Azure AI Foundry
 description: Connect Azure model deployments with an API key or Microsoft Entra ID
 order: 2
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -120,7 +120,7 @@ with open("reference.png", "rb") as image, open("mask.png", "rb") as mask:
 
 Send between 1 and 16 PNG, JPEG, or WebP references, each smaller than 50 MiB and at most 16,777,216 pixels. An optional PNG mask must be smaller than 4 MiB, match the first image's dimensions, and contain an alpha channel with fully transparent pixels. The configured [proxy body limit](/docs/admin/deployment/configuration#ARCHESTRA_API_BODY_LIMIT) also bounds the complete multipart request. Invalid MIME declarations, duplicate scalar parameters, malformed uploads, URL references, and unsupported fields are rejected before inference.
 
-The selected deployment and API version must support image editing, input formats, and the parameters you request. Known DALL-E 2 deployments accept one square PNG reference smaller than 4 MiB. Returned token usage is recorded when available. Image edit cost remains unknown because media pricing is unavailable; enforced accounting and applicable financial budgets block the request before Azure is called.
+The selected deployment and API version must support image editing, input formats, and the parameters you request. Known DALL-E 2 deployments accept one square PNG reference smaller than 4 MiB. Returned token usage is recorded when available. Image edits have no price, so they record no cost. A hard [spend limit](/docs/llm-proxy/costs-and-limits/limits) that covers the model refuses the request before Azure is called.
 
 ### Use Provider Files
 
@@ -140,7 +140,7 @@ Only `purpose="user_data"` is accepted. Upload one nonempty file within the conf
 
 Archestra returns an opaque file handle bound to the organization, authenticated principal, and selected provider account. Listing returns metadata for that principal's uploads, rather than the account's complete file inventory. Account endpoint, credential, or account header changes invalidate existing bindings. Deleting a handle requires Azure to confirm deletion. Upload registration failures trigger a best-effort remote deletion; a lost upstream response can leave a remote upload whose ID Archestra never received.
 
-These handles support file lifecycle operations only. Referencing them in inference, resumable Uploads API requests, and other file purposes are explicitly unsupported. Send image references as multipart image files. Provider Files and Chat attachments have separate storage and authorization. File storage cost is unknown, so enforced accounting and applicable financial budgets block uploads. Azure may reject operations unsupported by the selected resource; the proxy returns that error.
+These handles support file lifecycle operations only. Referencing them in inference, resumable Uploads API requests, and other file purposes are explicitly unsupported. Send image references as multipart image files. Provider Files and Chat attachments have separate storage and authorization. File storage has no price, so a hard spend limit that covers all models refuses uploads. Azure may reject operations unsupported by the selected resource; the proxy returns that error.
 
 Image parameters are validated against the discovered backing model. The proxy preserves `response_format` for compatible legacy models; GPT Image rejects it because its response is always base64. Unknown fields return a validation error instead of being discarded.
 

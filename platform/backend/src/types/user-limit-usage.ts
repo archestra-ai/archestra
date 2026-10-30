@@ -66,6 +66,8 @@ export const UserLimitUsageSchema = z.object({
   models: z.array(z.string()).nullable(),
   /** Dollars counted toward the limit this window. */
   spent: z.number(),
+  /** Part of `spent` is estimated: a model had no price for some tokens. */
+  estimatedUsage: z.boolean(),
   /** Spend as a percentage of the limit; null when no limit applies. */
   percent: z.number().nullable(),
   status: UserLimitStatusSchema,

@@ -1,5 +1,5 @@
 {
-  "id": "1130f6d5-3cc1-4563-88e3-76cc944f49c3",
+  "id": "ef3e1aee-9459-4fa9-8cf9-c7443e4e5b76",
   "prevId": "c36475c9-e1ce-400f-9b12-19f2cd44e30f",
   "version": "7",
   "dialect": "postgresql",
@@ -3552,12 +3552,6 @@
         "active_deadline_seconds": {
           "name": "active_deadline_seconds",
           "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "runtime_limits": {
-          "name": "runtime_limits",
-          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -11549,6 +11543,12 @@
         },
         "attribution_labels": {
           "name": "attribution_labels",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entities": {
+          "name": "entities",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

@@ -27,38 +27,34 @@ describe("unavailable media accounting", () => {
         model: "tts-alias",
       }),
     ).toBe(usage);
-    for (const mode of ["off", "shadow", "enforce"] as const) {
-      expect(
-        await calculateUsageCost({
-          model: "tts-alias",
-          provider: "openai",
-          usage,
-          usageAccountingMode: mode,
-        }),
-      ).toBeUndefined();
-      const costs = await calculateInteractionCosts({
-        actualModel: "tts-alias",
-        providerName: "openai",
+    expect(
+      await calculateUsageCost({
+        model: "tts-alias",
+        provider: "openai",
         usage,
-        usageAccountingMode: mode,
-      });
-      expect(costs.actualCost).toBeUndefined();
-      expect(costs.billingUsage).toBeUndefined();
-      const row = buildInteractionRecord({
-        agent: { id: "fixture" } as GatewayAgent,
-        billingMode: "metered",
-        providerType: "openai:chatCompletions",
-        request: {},
-        processedRequest: {},
-        response: {},
-        actualModel: "tts-alias",
-        usage,
-        costs,
-      });
-      expect(row.cost).toBeNull();
-      expect(row.inputTokens).toBe(flag === "usageUnavailable" ? null : 0);
-      expect(row.outputTokens).toBe(flag === "usageUnavailable" ? null : 9);
-    }
+      }),
+    ).toBeUndefined();
+    const costs = await calculateInteractionCosts({
+      actualModel: "tts-alias",
+      providerName: "openai",
+      usage,
+    });
+    expect(costs.actualCost).toBeUndefined();
+    expect(costs.billingUsage).toBeUndefined();
+    const row = buildInteractionRecord({
+      agent: { id: "fixture" } as GatewayAgent,
+      billingMode: "metered",
+      providerType: "openai:chatCompletions",
+      request: {},
+      processedRequest: {},
+      response: {},
+      actualModel: "tts-alias",
+      usage,
+      costs,
+    });
+    expect(row.cost).toBeNull();
+    expect(row.inputTokens).toBe(flag === "usageUnavailable" ? null : 0);
+    expect(row.outputTokens).toBe(flag === "usageUnavailable" ? null : 9);
   });
 });
 

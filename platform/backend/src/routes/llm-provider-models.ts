@@ -652,7 +652,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.StartModelCostBackfill,
         description:
-          "Recompute the recorded cost of a model's past requests from `since` (all of them when null) at its current prices. Runs in the background; poll the GET endpoint for progress. Requests settled under an enforced cost limit keep their cost.",
+          "Recompute the recorded cost of a model's past requests from `since` (all of them when null) at its current prices. Runs in the background; poll the GET endpoint for progress. It also re-prices each request's settled receipt and corrects the spend limits whose current window holds the charge.",
         tags: ["LLM Models"],
         params: z.object({ id: UuidIdSchema }),
         body: z.object({

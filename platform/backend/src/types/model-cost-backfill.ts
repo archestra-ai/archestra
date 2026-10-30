@@ -147,8 +147,6 @@ export const CostBackfillPreviewSchema = z.object({
       users: z.number().int(),
       recordedCost: z.number(),
       recomputedCost: z.number(),
-      /** Requests settled under an enforced cost limit; they keep their cost. */
-      settledRequests: z.number().int(),
     })
     .nullable(),
 });

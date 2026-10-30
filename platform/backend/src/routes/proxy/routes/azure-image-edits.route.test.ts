@@ -433,7 +433,7 @@ test("client cancellation aborts the in-flight image provider request without re
   expect(media.requests).toHaveLength(1);
 });
 
-test("rejects unauthenticated calls and enforced accounting before any upstream request", async ({
+test("rejects unauthenticated calls before any upstream request", async ({
   media,
 }) => {
   const request = {
@@ -444,10 +444,6 @@ test("rejects unauthenticated calls and enforced accounting before any upstream 
   await expect(
     media.client.withOptions({ apiKey: "invalid-key" }).images.edit(request),
   ).rejects.toMatchObject({ status: 401 });
-  config.llmProxy.usageAccountingMode = "enforce";
-  await expect(media.client.images.edit(request)).rejects.toMatchObject({
-    status: 422,
-  });
   expect(media.requests).toHaveLength(0);
 });
 

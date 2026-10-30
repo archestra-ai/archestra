@@ -48,7 +48,8 @@
     "dev:stack:up": "scripts/dev-stack.sh up",
     "dev:stack:down": "scripts/dev-stack.sh down",
     "dev:stack:hydrate": "scripts/dev-stack.sh hydrate",
-    "dev:stack:status": "scripts/dev-stack.sh status"
+    "dev:stack:status": "scripts/dev-stack.sh status",
+    "check:test-associations": "node --test scripts/check-test-associations.test.mjs && node scripts/check-test-associations.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.6",

@@ -21,3 +21,5 @@ Load the `archestra-dev-frontend` skill (`.agents/skills/archestra-dev-frontend/
 | Dot suffixes | Closed list: `.query`, `.keys`, `.utils`, `.types`, `.constants`, `.context`, `.server`, `.client`, `.ee`, `.test`, `.test-data`. A test may add topic segments before `.test` (`page.client.streaming.test.tsx`). Anything else folds into the kebab name. |
 
 Biome enforces these (`useFilenamingConvention` and the `route-private-folder` and `hook-file-name` plugins in `platform/biome.json`). To check changed files, run `pnpm biome check --changed --since=origin/main` from `platform/`, substituting the fetched target branch for `origin/main` when the PR targets a different branch.
+
+Unit/integration test files must identify their implementation (`page.client.streaming.test.tsx` → `page.client.tsx`). Reuse the existing suite/harness before adding another file. `pnpm check:test-associations` from `platform/` enforces ownership in addition to Biome naming; exact cross-module or off-directory associations belong in `platform/scripts/test-associations.json`. Playwright `tests-integration/` is excluded.

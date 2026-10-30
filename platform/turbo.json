@@ -4,6 +4,9 @@
   "globalPassThroughEnv": ["TMPDIR"],
   "globalDependencies": [".env", "pnpm-workspace.yaml"],
   "tasks": {
+    "//#check:test-associations": {
+      "cache": false
+    },
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**", "*.node"],
@@ -39,21 +42,26 @@
       "cache": false
     },
     "lint": {
+      "dependsOn": ["//#check:test-associations"],
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json"]
     },
     "lint:fix": {
+      "dependsOn": ["//#check:test-associations"],
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json"]
     },
     "lint:fix:unsafe": {
+      "dependsOn": ["//#check:test-associations"],
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json"]
     },
     "check:ci": {
+      "dependsOn": ["//#check:test-associations"],
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json", "src/database/migrations/**"]
     },
     "@backend#check:ci": {
-      "dependsOn": ["@archestra/app-runtime-rs#build", "@archestra/sandbox-rs#build"]
+      "dependsOn": ["@archestra/app-runtime-rs#build", "@archestra/sandbox-rs#build", "//#check:test-associations"]
     },
     "check:commit": {
+      "dependsOn": ["//#check:test-associations"],
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json", "src/database/migrations/**"]
     },
     "knip": {
@@ -101,6 +109,7 @@
       "cache": false
     },
     "@archestra/shared#check:ci": {
+      "dependsOn": ["//#check:test-associations"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "**/*.tsx",

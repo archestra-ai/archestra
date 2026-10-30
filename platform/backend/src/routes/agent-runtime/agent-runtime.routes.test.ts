@@ -1201,11 +1201,422 @@ describe("Agent Runtime routes", () => {
         }),
         expect.objectContaining({
           action: "agentRun.deleted",
-          before: expect.objectContaining({ title: "Concise session title" }),
-          after: { deleted: true },
+          before: expect.objectContaining({
+            title: "Concise session title",
+            workspaceState: null,
+          }),
+          after: { deleted: true, workspaceState: null },
         }),
       ]),
     );
+  });
+
+  test("bulk stop and delete act only on the caller's runs in the right state and audit each batch", async ({
+    makeAdmin,
+    makeMember,
+  }) => {
+    const finished = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Finished review",
+    });
+    await AgentRunModel.close({ id: finished.id });
+    const active = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Active review",
+    });
+    const colleague = await makeAdmin();
+    await makeMember(colleague.id, organizationId, { role: "admin" });
+    const colleagueRun = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: colleague.id,
+      title: "Colleague review",
+    });
+    await AgentRunModel.close({ id: colleagueRun.id });
+    vi.mocked(cancelDetachedAgentTask).mockImplementation(
+      async ({ taskId }) => {
+        await db
+          .update(schema.a2aTasksTable)
+          .set({ state: "TASK_STATE_CANCELED" })
+          .where(eq(schema.a2aTasksTable.id, taskId));
+        return {
+          id: taskId,
+          contextId: "context",
+          status: { state: "TASK_STATE_CANCELED" },
+        };
+      },
+    );
+
+    const stopped = await app.inject({
+      method: "POST",
+      url: "/api/agent-runs/bulk-cancel",
+      payload: { ids: [active.taskId, finished.taskId] },
+    });
+    expect(stopped.statusCode).toBe(200);
+    expect(stopped.json()).toEqual({
+      succeeded: [{ id: active.taskId, name: "Active review" }],
+      failed: [
+        {
+          id: finished.taskId,
+          name: "Finished review",
+          error: "The run has already ended",
+        },
+      ],
+    });
+    expect(cancelDetachedAgentTask).toHaveBeenCalledTimes(1);
+    expect(cancelDetachedAgentTask).toHaveBeenCalledWith({
+      actor: { id: user.id, kind: "user", organizationId },
+      agentId: agent.id,
+      taskId: active.taskId,
+    });
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: "/api/agent-runs/bulk",
+      payload: {
+        ids: [finished.taskId, active.taskId, colleagueRun.taskId, "nope"],
+      },
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json()).toEqual({
+      succeeded: [{ id: finished.taskId, name: "Finished review" }],
+      failed: [
+        {
+          id: active.taskId,
+          name: "Active review",
+          error: "Stop the run before deleting it",
+        },
+        { id: colleagueRun.taskId, name: null, error: "Run not found" },
+        { id: "nope", name: null, error: "Run not found" },
+      ],
+    });
+    expect(await A2ATaskModel.findById(finished.taskId)).toBeNull();
+    expect(await A2ATaskModel.findById(colleagueRun.taskId)).not.toBeNull();
+
+    const audits = await db
+      .select({
+        action: schema.auditLogsTable.action,
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.resourceType, "agentRun"));
+    const runEntry = (run: typeof finished, state: string) => ({
+      taskId: run.taskId,
+      agentId: agent.id,
+      title: run.title,
+      state,
+      workspaceState: null,
+    });
+    expect(audits).toEqual(
+      expect.arrayContaining([
+        {
+          action: "agentRun.bulk_canceled",
+          before: {
+            runs: [
+              runEntry(active, "TASK_STATE_SUBMITTED"),
+              runEntry(finished, "TASK_STATE_SUBMITTED"),
+            ].sort((a, b) => a.taskId.localeCompare(b.taskId)),
+          },
+          after: {
+            runs: [
+              runEntry(active, "TASK_STATE_CANCELED"),
+              runEntry(finished, "TASK_STATE_SUBMITTED"),
+            ].sort((a, b) => a.taskId.localeCompare(b.taskId)),
+          },
+        },
+        {
+          action: "agentRun.bulk_deleted",
+          before: {
+            runs: [
+              runEntry(active, "TASK_STATE_CANCELED"),
+              runEntry(finished, "TASK_STATE_SUBMITTED"),
+            ].sort((a, b) => a.taskId.localeCompare(b.taskId)),
+          },
+          after: { runs: [runEntry(active, "TASK_STATE_CANCELED")] },
+        },
+      ]),
+    );
+  });
+
+  test("deleting a finished run frees its saved files, and waits for files that are being suspended", async () => {
+    const remove = vi
+      .spyOn(agentRuntimeManager, "deleteWorkspace")
+      .mockResolvedValue(undefined);
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(undefined);
+    const idle = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+    });
+    await AgentRunModel.close({ id: idle.id });
+    await createWorkspace({ run: idle, state: "suspended" });
+    const busy = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+    });
+    await AgentRunModel.close({ id: busy.id });
+    await createWorkspace({ run: busy, state: "suspending" });
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/agent-runs/${idle.taskId}`,
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(await A2ATaskModel.findById(idle.taskId)).toBeNull();
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(idle.workloadName))?.state,
+    ).toBe("deleted");
+
+    // Deleting it now would leave its files until their retention deadline.
+    const refused = await app.inject({
+      method: "DELETE",
+      url: `/api/agent-runs/${busy.taskId}`,
+    });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error.message).toBe(
+      "This run's saved files are still being put away. Try deleting it again in a minute.",
+    );
+    expect(await A2ATaskModel.findById(busy.taskId)).not.toBeNull();
+    expect(remove).toHaveBeenCalledTimes(1);
+
+    const audits = await db
+      .select({
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.action, "agentRun.deleted"));
+    expect(audits).toContainEqual({
+      before: expect.objectContaining({
+        taskId: idle.taskId,
+        workspaceState: "suspended",
+      }),
+      after: { deleted: true, workspaceState: "deleted" },
+    });
+  });
+
+  test("a continued session is one run: listed once, deleted with every turn, acted on once per batch", async () => {
+    const remove = vi
+      .spyOn(agentRuntimeManager, "deleteWorkspace")
+      .mockResolvedValue(undefined);
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(undefined);
+    const first = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Review pull request",
+    });
+    await AgentRunModel.close({ id: first.id });
+    const second = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Review pull request",
+      workloadName: first.workloadName,
+    });
+    await AgentRunModel.close({ id: second.id });
+    const workspace = await createWorkspace({
+      run: { ...second, workloadName: first.workloadName },
+      state: "idle",
+    });
+
+    const listed = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/runs`,
+    });
+    expect(
+      listed
+        .json()
+        .map((run: { taskId: string; sessionId: string }) => [
+          run.taskId,
+          run.sessionId,
+        ]),
+    ).toEqual([[second.taskId, workspace.id]]);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/agent-runs/bulk",
+      payload: { ids: [workspace.id, first.taskId, second.taskId] },
+    });
+    expect(response.json()).toEqual({
+      succeeded: [{ id: workspace.id, name: "Review pull request" }],
+      failed: [
+        { id: first.taskId, name: null, error: "Run not found" },
+        { id: second.taskId, name: null, error: "Run not found" },
+      ],
+    });
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(await A2ATaskModel.findById(first.taskId)).toBeNull();
+    expect(await A2ATaskModel.findById(second.taskId)).toBeNull();
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(first.workloadName))?.state,
+    ).toBe("deleted");
+  });
+
+  test("a run whose saved files could not be deleted stays, so deleting it again finishes the job", async () => {
+    const remove = vi
+      .spyOn(agentRuntimeManager, "deleteWorkspace")
+      .mockRejectedValueOnce(new Error("volume API unavailable"))
+      .mockResolvedValue(undefined);
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(undefined);
+    const run = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+    });
+    await AgentRunModel.close({ id: run.id });
+    await createWorkspace({ run, state: "suspended" });
+
+    const failed = await app.inject({
+      method: "DELETE",
+      url: `/api/agent-runs/${run.taskId}`,
+    });
+    expect(failed.statusCode).toBe(500);
+    expect(failed.json().error.message).toBe(
+      "Couldn't finish deleting this run's saved files. Try deleting it again.",
+    );
+    expect(await A2ATaskModel.findById(run.taskId)).not.toBeNull();
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,
+    ).toBe("deleting");
+
+    const retried = await app.inject({
+      method: "DELETE",
+      url: `/api/agent-runs/${run.taskId}`,
+    });
+    expect(retried.statusCode).toBe(200);
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(await A2ATaskModel.findById(run.taskId)).toBeNull();
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,
+    ).toBe("deleted");
+  });
+
+  test("bulk deletes saved files of the caller's finished runs, keeps their history, and audits the batch", async ({
+    makeAdmin,
+    makeMember,
+  }) => {
+    const remove = vi
+      .spyOn(agentRuntimeManager, "deleteWorkspace")
+      .mockResolvedValue(undefined);
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(undefined);
+    const saved = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Saved review",
+    });
+    await AgentRunModel.close({ id: saved.id, logs: "review transcript" });
+    await createWorkspace({ run: saved, state: "suspended" });
+    const noFiles = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Run without files",
+    });
+    await AgentRunModel.close({ id: noFiles.id });
+    const live = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Live review",
+    });
+    await createWorkspace({ run: live, state: "active", activeTaskId: true });
+    const gone = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Run with deleted files",
+    });
+    await AgentRunModel.close({ id: gone.id });
+    await createWorkspace({ run: gone, state: "deleted" });
+    const colleague = await makeAdmin();
+    await makeMember(colleague.id, organizationId, { role: "admin" });
+    const colleagueRun = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: colleague.id,
+    });
+    await AgentRunModel.close({ id: colleagueRun.id });
+    await createWorkspace({
+      run: colleagueRun,
+      state: "suspended",
+      actorId: colleague.id,
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/agent-runs/bulk/workspace",
+      payload: {
+        ids: [
+          saved.taskId,
+          noFiles.taskId,
+          live.taskId,
+          gone.taskId,
+          colleagueRun.taskId,
+        ],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      succeeded: [{ id: saved.taskId, name: "Saved review" }],
+      failed: [
+        {
+          id: noFiles.taskId,
+          name: "Run without files",
+          error: "This run has no saved files",
+        },
+        {
+          id: live.taskId,
+          name: "Live review",
+          error:
+            "Stop the active run and wait for its history to be saved before deleting its files",
+        },
+        {
+          id: gone.taskId,
+          name: "Run with deleted files",
+          error: "This run has no saved files",
+        },
+        { id: colleagueRun.taskId, name: null, error: "Run not found" },
+      ],
+    });
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(saved.workloadName))?.state,
+    ).toBe("deleted");
+    expect((await AgentRunModel.findByTaskId(saved.taskId))?.logs).toBe(
+      "review transcript",
+    );
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(colleagueRun.workloadName))
+        ?.state,
+    ).toBe("suspended");
+
+    const [audit] = await db
+      .select({
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.action, "agentRun.bulk_files_deleted"));
+    const entry = (run: typeof saved, workspaceState: string | null) => ({
+      taskId: run.taskId,
+      title: run.title,
+      workspaceState,
+    });
+    const byTask = (a: { taskId: string }, b: { taskId: string }) =>
+      a.taskId.localeCompare(b.taskId);
+    expect(audit).toEqual({
+      before: {
+        runs: [
+          entry(saved, "suspended"),
+          entry(noFiles, null),
+          entry(live, "active"),
+          entry(gone, "deleted"),
+        ].sort(byTask),
+      },
+      after: {
+        runs: [
+          entry(saved, "deleted"),
+          entry(noFiles, null),
+          entry(live, "active"),
+          entry(gone, "deleted"),
+        ].sort(byTask),
+      },
+    });
   });
 
   test("preflight distinguishes missing personal credentials from missing shared configuration", async () => {
@@ -2648,12 +3059,34 @@ describe("Agent Runtime routes", () => {
     });
   }
 
+  async function createWorkspace(params: {
+    run: { taskId: string; workloadName: string; runtimeScope: string };
+    state: "active" | "idle" | "suspending" | "suspended" | "deleted";
+    activeTaskId?: boolean;
+    actorId?: string;
+  }) {
+    return await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: params.actorId ?? user.id,
+      backend: "kubernetes",
+      runtimeScope: params.run.runtimeScope,
+      workloadName: params.run.workloadName,
+      state: params.state,
+      activeTaskId: params.activeTaskId ? params.run.taskId : null,
+      lastTaskId: params.run.taskId,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+  }
+
   async function createRun(params: {
     taskId: string;
     actorUserId: string;
     projectId?: string;
     title?: string;
     pinnedAt?: Date;
+    workloadName?: string;
   }) {
     return await AgentRunModel.create({
       organizationId,
@@ -2665,7 +3098,7 @@ describe("Agent Runtime routes", () => {
       projectId: params.projectId,
       title: params.title,
       pinnedAt: params.pinnedAt,
-      workloadName: `agent-run-${params.taskId}`,
+      workloadName: params.workloadName ?? `agent-run-${params.taskId}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
       virtualApiKeyId: null,

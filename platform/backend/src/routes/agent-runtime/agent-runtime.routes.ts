@@ -25,6 +25,12 @@ import {
   ProjectModel,
 } from "@/models";
 import ResourcePermissionAccessModel from "@/models/resource-permission-access";
+import {
+  BulkDeleteBodySchema,
+  BulkIdsSchema,
+  BulkOutcomeSchema,
+  runBulk,
+} from "@/routes/bulk-route";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
 import {
   isAnyAgentRuntimeBackendDriverEnabled,
@@ -48,7 +54,10 @@ import {
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
 import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
-import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
+import {
+  deleteAgentWorkspace,
+  deleteFinishedRunWorkspace,
+} from "@/services/agent-runtime/workspace-lifecycle";
 import {
   ticketPath,
   WORKSPACE_TRANSFER_TICKET_TTL_MS,
@@ -1006,7 +1015,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.DeleteAgentRun,
         description:
-          "Delete one finished Agent Runtime session started by this user",
+          "Delete one finished Agent Runtime session started by this user, with its saved files",
         tags: ["Agents"],
         params: z.object({ taskId: z.string().uuid() }),
         response: constructResponseSchema(
@@ -1020,15 +1029,168 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(409, "Stop the run before deleting it");
       }
       request.auditResourceId = { value: run.taskId };
+      const workspace = await AgentWorkspaceModel.findByWorkloadName(
+        run.workloadName,
+      );
       request.auditBefore = {
         taskId: run.taskId,
         agentId: run.agentId,
         title: run.title,
         state: run.state,
+        workspaceState: workspace?.state ?? null,
       };
-      await A2ATaskModel.delete(run.taskId);
-      request.auditAfter = { deleted: true };
+      const workspaceState = await deleteFinishedRunWorkspace({
+        actor: {
+          ...actorFromUserId(request.user.id),
+          organizationId: request.organizationId,
+        },
+        run,
+      });
+      await deleteRunSession(run);
+      request.auditAfter = { deleted: true, workspaceState };
       return reply.send({ deleted: true as const });
+    },
+  );
+
+  fastify.delete(
+    "/api/agent-runs/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteAgentRuns,
+        description:
+          "Delete several finished Agent Runtime sessions started by this " +
+          "user, with every turn and their saved files. A run that is still " +
+          "active, one whose saved files are still being suspended, or one " +
+          "this user did not start is reported in `failed` and leaves the " +
+          "rest of the batch applied.",
+        tags: ["Agents"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const actor = {
+        ...actorFromUserId(request.user.id),
+        organizationId: request.organizationId,
+      };
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "agent runs bulk delete",
+        notFoundMessage: "Run not found",
+        unexpectedMessage: "Could not delete this run",
+        load: (ids) => loadOwnedRuns(request, ids),
+        describe: (run) => run.title,
+        // The same refusal the single-run delete gives.
+        authorize: (run) => {
+          if (!run.endedAt) {
+            throw new ApiError(409, "Stop the run before deleting it");
+          }
+        },
+        applyEach: async (run) => {
+          await deleteFinishedRunWorkspace({ actor, run });
+          await deleteRunSession(run);
+        },
+        audit: {
+          target: request,
+          snapshot: (ids) => snapshotOwnedRuns(request, ids),
+        },
+      });
+      return reply.send(outcome);
+    },
+  );
+
+  fastify.delete(
+    "/api/agent-runs/bulk/workspace",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteAgentWorkspaces,
+        description:
+          "Permanently delete the saved files of several finished Agent " +
+          "Runtime sessions started by this user; their transcripts remain " +
+          "available. A run with no saved files, one still running, or one " +
+          "this user did not start is reported in `failed` and leaves the " +
+          "rest of the batch applied.",
+        tags: ["Agents"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const actor = {
+        ...actorFromUserId(request.user.id),
+        organizationId: request.organizationId,
+      };
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "agent run workspaces bulk delete",
+        notFoundMessage: "Run not found",
+        unexpectedMessage: "Could not delete this run's saved files",
+        load: (ids) => loadOwnedRuns(request, ids),
+        describe: (run) => run.title,
+        authorize: async (run) => {
+          const workspace = await AgentWorkspaceModel.findByWorkloadName(
+            run.workloadName,
+          );
+          if (!workspace || workspace.state === "deleted") {
+            throw new ApiError(404, "This run has no saved files");
+          }
+        },
+        // The single-run route's checks: owner, idle, then delete with retry.
+        applyEach: async (run) => {
+          await deleteAgentWorkspace({ actor, taskId: run.taskId });
+        },
+        audit: {
+          target: request,
+          snapshot: (ids) => snapshotOwnedRunWorkspaces(request, ids),
+        },
+      });
+      return reply.send(outcome);
+    },
+  );
+
+  fastify.post(
+    "/api/agent-runs/bulk-cancel",
+    {
+      schema: {
+        operationId: RouteId.BulkCancelAgentRuns,
+        description:
+          "Cancel several active Agent Runtime sessions started by this " +
+          "user. A run that has already ended, or that this user did not " +
+          "start, is reported in `failed` and leaves the rest of the batch " +
+          "applied.",
+        tags: ["Agents"],
+        body: z.object({ ids: BulkIdsSchema }),
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const actor = {
+        ...actorFromUserId(request.user.id),
+        organizationId: request.organizationId,
+      };
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "agent runs bulk cancel",
+        notFoundMessage: "Run not found",
+        unexpectedMessage: "Could not stop this run",
+        load: (ids) => loadOwnedRuns(request, ids),
+        describe: (run) => run.title,
+        authorize: (run) => {
+          if (run.endedAt) throw new ApiError(409, "The run has already ended");
+        },
+        applyEach: async (run) => {
+          await cancelDetachedAgentTask({
+            actor,
+            agentId: run.agentId,
+            taskId: run.taskId,
+          });
+        },
+        audit: {
+          target: request,
+          snapshot: (ids) => snapshotOwnedRuns(request, ids),
+        },
+      });
+      return reply.send(outcome);
     },
   );
 
@@ -1214,6 +1376,88 @@ async function requireOwnedRun(request: OwnedRunRequest) {
   });
   if (!run) throw new ApiError(404, "Run not found");
   return run;
+}
+
+/**
+ * The runs of a batch the caller started, resolved the way `requireOwnedRun`
+ * resolves one. An id that is not a uuid names no run, so it is left out and
+ * reported as not found rather than reaching the uuid casts in the lookup.
+ */
+async function loadOwnedRuns(
+  request: { user: { id: string }; organizationId: string },
+  ids: string[],
+): Promise<Map<string, AgentRunSession>> {
+  const runs = new Map<string, AgentRunSession>();
+  const sessions = new Set<string>();
+  for (const taskId of ids) {
+    if (!z.string().uuid().safeParse(taskId).success) continue;
+    const run = await AgentRunModel.findCurrentSessionForActor({
+      taskId,
+      actorUserId: request.user.id,
+      organizationId: request.organizationId,
+    });
+    // Two ids of one session (its id and a turn's) act on it once.
+    if (!run || sessions.has(run.taskId)) continue;
+    sessions.add(run.taskId);
+    runs.set(taskId, run);
+  }
+  return runs;
+}
+
+/**
+ * Deletes every turn of a session, so no earlier turn is left behind as a
+ * run of its own. The current turn goes last: until then the session still
+ * resolves, and a failed delete can be retried.
+ */
+async function deleteRunSession(run: AgentRunSession) {
+  const taskIds = await AgentRunModel.listSessionTaskIds(run);
+  for (const taskId of taskIds) {
+    if (taskId !== run.taskId) await A2ATaskModel.delete(taskId);
+  }
+  await A2ATaskModel.delete(run.taskId);
+}
+
+/** The saved-files state of a batch's runs, safe to store in the audit log. */
+async function snapshotOwnedRunWorkspaces(
+  request: { user: { id: string }; organizationId: string },
+  ids: string[],
+) {
+  const runs = await loadOwnedRuns(request, ids);
+  const entries = [];
+  for (const run of runs.values()) {
+    const workspace = await AgentWorkspaceModel.findByWorkloadName(
+      run.workloadName,
+    );
+    entries.push({
+      taskId: run.taskId,
+      title: run.title,
+      workspaceState: workspace?.state ?? null,
+    });
+  }
+  // Sorted so an unchanged batch snapshots identically on both sides.
+  return { runs: entries.sort((a, b) => a.taskId.localeCompare(b.taskId)) };
+}
+
+/** What a bulk run action changes, safe to store in the audit log. */
+async function snapshotOwnedRuns(
+  request: { user: { id: string }; organizationId: string },
+  ids: string[],
+) {
+  const runs = await loadOwnedRuns(request, ids);
+  const entries = [];
+  for (const { taskId, agentId, title, state, workloadName } of runs.values()) {
+    const workspace =
+      await AgentWorkspaceModel.findByWorkloadName(workloadName);
+    entries.push({
+      taskId,
+      agentId,
+      title,
+      state,
+      workspaceState: workspace?.state ?? null,
+    });
+  }
+  // Sorted so an unchanged batch snapshots identically on both sides.
+  return { runs: entries.sort((a, b) => a.taskId.localeCompare(b.taskId)) };
 }
 
 async function requireReadableProject(params: {

@@ -7,7 +7,13 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import {
+  AgentRunList,
+  initiatorLabel,
+  starterKey,
+} from "@/components/agent-pages/agent-run-list";
 import { AgentRunChatSession } from "@/components/agent-run-session";
 import { AgentRunState } from "@/components/agent-run-state";
 import { EmptyState } from "@/components/empty-state";
@@ -32,8 +38,15 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { type AgentRunListItem, useAgentRuns } from "@/lib/agent-runtime.query";
 import { useSession } from "@/lib/auth/auth.query";
 
+/**
+ * An Agent's Runs tab: the list of its runs, or the one named by `?run=`.
+ * The run lives in the URL so the browser's Back returns to the list.
+ */
 export function AgentRuns({ agentId }: { agentId: string }) {
   const { data: session } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const {
     data: runs = [],
     isPending,
@@ -41,7 +54,87 @@ export function AgentRuns({ agentId }: { agentId: string }) {
     error,
     refetch,
   } = useAgentRuns(agentId);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const runHref = (runId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (runId) params.set("run", runId);
+    else params.delete("run");
+    return `${pathname}?${params}`;
+  };
+  if (isPending)
+    return <div className="h-48 animate-pulse rounded-lg border bg-muted/30" />;
+  if (isError)
+    return (
+      <QueryLoadError
+        className="border"
+        title="Couldn't load runs"
+        error={error}
+        onRetry={() => refetch()}
+      />
+    );
+  if (!runs.length)
+    return (
+      <EmptyState
+        icon={TerminalSquare}
+        title="No runs yet"
+        description={
+          <span>
+            Start a run from{" "}
+            <Link
+              href={`/chat/new?agent_id=${encodeURIComponent(agentId)}`}
+              className="underline underline-offset-4"
+            >
+              Chat
+            </Link>
+            .
+          </span>
+        }
+      />
+    );
+  // A run that is gone (deleted, or not this Agent's) falls back to the list.
+  // A run is addressed by its session, so a link survives a continued run;
+  // links that name a turn's task still open it.
+  const runId = searchParams.get("run");
+  const selected = runs.find(
+    (run) => run.sessionId === runId || run.taskId === runId,
+  );
+  if (!selected)
+    return (
+      <AgentRunList
+        runs={runs}
+        viewerId={session?.user.id}
+        runHref={runHref}
+        onOpen={(runId) => router.push(runHref(runId), { scroll: false })}
+      />
+    );
+  return (
+    <AgentRunDetail
+      runs={runs}
+      selected={selected}
+      viewerId={session?.user.id}
+      // Stepping between runs replaces the entry, so Back still means the list.
+      onSelect={(runId) => router.replace(runHref(runId), { scroll: false })}
+      onBack={() => router.push(runHref(null), { scroll: false })}
+      // A deleted run's entry is replaced, so Back cannot return to it.
+      onDeleted={() => router.replace(runHref(null), { scroll: false })}
+    />
+  );
+}
+
+function AgentRunDetail({
+  runs,
+  selected,
+  viewerId,
+  onSelect,
+  onBack,
+  onDeleted,
+}: {
+  runs: AgentRunListItem[];
+  selected: AgentRunListItem;
+  viewerId: string | undefined;
+  onSelect: (runId: string) => void;
+  onBack: () => void;
+  onDeleted: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -66,12 +159,11 @@ export function AgentRuns({ agentId }: { agentId: string }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  const selected = runs.find((run) => run.taskId === selectedId) ?? runs[0];
-  const index = runs.findIndex((run) => run.taskId === selected?.taskId);
+  const index = runs.findIndex((run) => run.sessionId === selected.sessionId);
   const filtered = runs.filter(
     (run) =>
       (starter === "anyone" || starterKey(run) === starter) &&
-      `${run.title} ${run.taskId} ${initiatorLabel(run)}`
+      `${run.title} ${run.sessionId} ${run.taskId} ${initiatorLabel(run)}`
         .toLowerCase()
         .includes(search.trim().toLowerCase()),
   );
@@ -81,64 +173,41 @@ export function AgentRuns({ agentId }: { agentId: string }) {
     ).entries(),
   );
   const choose = (id: string) => {
-    setSelectedId(id);
+    onSelect(id);
     setOpen(false);
   };
-  if (isPending)
-    return <div className="h-48 animate-pulse rounded-lg border bg-muted/30" />;
-  if (isError)
-    return (
-      <QueryLoadError
-        className="border"
-        title="Couldn't load runs"
-        error={error}
-        onRetry={() => refetch()}
-      />
-    );
-  if (!selected)
-    return (
-      <EmptyState
-        icon={TerminalSquare}
-        title="No runs yet"
-        description={
-          <span>
-            Start a run from{" "}
-            <Link
-              href={`/chat/new?agent_id=${encodeURIComponent(agentId)}`}
-              className="underline underline-offset-4"
-            >
-              Chat
-            </Link>
-            .
-          </span>
-        }
-      />
-    );
   return (
     <div className="flex h-[calc(100dvh-16rem)] min-h-[520px] min-w-0 flex-col overflow-hidden rounded-xl border bg-card/30">
       <AgentRunChatSession
         key={selected.taskId}
         detailsOpen={detailsOpen}
         onDetailsOpenChange={setDetailsOpen}
+        // Shares name a turn's task, so a shared viewer reads the run by it.
         taskId={selected.taskId}
         embedded
+        onDeleted={onDeleted}
         initiatorName={
-          selected.actorUserId === session?.user.id
-            ? "You"
-            : initiatorLabel(selected)
+          selected.actorUserId === viewerId ? "You" : initiatorLabel(selected)
         }
         headerLeading={
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full justify-start @3xl:w-auto"
-            aria-label="Switch run"
-            onClick={() => setOpen(true)}
-          >
-            <Search />
-            <span>Switch run</span>
-            <RunSwitcherShortcut />
-          </Button>
+          <div className="flex w-full items-center gap-1.5 @3xl:w-auto">
+            <Button variant="ghost" size="sm" onClick={onBack}>
+              <ChevronLeft />
+              <span>All runs</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-w-0 justify-start @md:flex-1 @3xl:flex-none"
+              aria-label="Switch run"
+              onClick={() => setOpen(true)}
+            >
+              <Search />
+              {/* Beside "All runs" a phone has room for the icon only. */}
+              <span className="@max-md:sr-only">Switch run</span>
+              <RunSwitcherShortcut />
+            </Button>
+          </div>
         }
         drawerFooter={
           <div className="flex items-center justify-between">
@@ -147,7 +216,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
               size="icon-sm"
               aria-label="Previous run"
               disabled={index === 0}
-              onClick={() => setSelectedId(runs[index - 1].taskId)}
+              onClick={() => onSelect(runs[index - 1].sessionId)}
             >
               <ChevronLeft />
             </Button>
@@ -159,7 +228,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
               size="icon-sm"
               aria-label="Next run"
               disabled={index === runs.length - 1}
-              onClick={() => setSelectedId(runs[index + 1].taskId)}
+              onClick={() => onSelect(runs[index + 1].sessionId)}
             >
               <ChevronRight />
             </Button>
@@ -196,7 +265,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
                   setHighlighted((v) => Math.max(0, v - 1));
                 }
                 if (event.key === "Enter" && filtered[highlighted])
-                  choose(filtered[highlighted].taskId);
+                  choose(filtered[highlighted].sessionId);
               }}
             />
             <Select
@@ -213,7 +282,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
                 <SelectItem value="anyone">Started by anyone</SelectItem>
                 {starters.map(([id, name]) => (
                   <SelectItem key={id} value={id}>
-                    {id === `user:${session?.user.id}` ? "Started by me" : name}
+                    {id === `user:${viewerId}` ? "Started by me" : name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -222,8 +291,8 @@ export function AgentRuns({ agentId }: { agentId: string }) {
           <div className="max-h-80 overflow-y-auto p-2">
             {filtered.map((run, i) => (
               <UnstyledButton
-                key={run.taskId}
-                onClick={() => choose(run.taskId)}
+                key={run.sessionId}
+                onClick={() => choose(run.sessionId)}
                 className={`mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left hover:bg-muted ${i === highlighted ? "bg-muted" : ""}`}
               >
                 <TerminalSquare className="size-4 shrink-0 text-muted-foreground" />
@@ -232,9 +301,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
                     {run.title}
                   </span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {run.actorUserId === session?.user.id
-                      ? "You"
-                      : initiatorLabel(run)}{" "}
+                    {run.actorUserId === viewerId ? "You" : initiatorLabel(run)}{" "}
                     ·{" "}
                     {formatDistanceToNow(new Date(run.startedAt), {
                       addSuffix: true,
@@ -257,18 +324,6 @@ export function AgentRuns({ agentId }: { agentId: string }) {
       </Dialog>
     </div>
   );
-}
-
-function starterKey(run: AgentRunListItem): string {
-  return `${run.actorKind}:${run.actorId}`;
-}
-function initiatorLabel(run: AgentRunListItem): string {
-  if (run.initiatorName) return run.initiatorName;
-  if (run.actorKind === "serviceAccount") return "a service account";
-  if (run.actorKind === "organization") return "the organization";
-  if (run.actorKind === "team") return "a team";
-  if (run.actorKind === "system") return "automation";
-  return "an unknown user";
 }
 
 function RunSwitcherShortcut() {

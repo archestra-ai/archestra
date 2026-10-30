@@ -1170,7 +1170,7 @@ export function ChatSidebarSection({
         open={deleteRunId !== null}
         onOpenChange={(open) => !open && setDeleteRunId(null)}
         title="Delete run?"
-        description="This removes the session and its retained output. This action cannot be undone."
+        description="This removes the session, its retained output, and its saved files. This action cannot be undone."
         isPending={deleteRunMutation.isPending}
         confirmLabel="Delete"
         pendingLabel="Deleting…"

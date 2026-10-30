@@ -20,6 +20,7 @@ import {
   Unplug,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type ReactNode, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agent-icon";
@@ -51,6 +52,7 @@ import { WorkspaceRetention } from "@/components/workspace-retention";
 import {
   useCancelAgentRun,
   useContinueAgentRun,
+  useDeleteAgentRun,
   useDeleteAgentWorkspace,
   useMyAgentRun,
 } from "@/lib/agent-runtime.query";
@@ -72,6 +74,7 @@ export function AgentRunChatSession({
   initiatorName,
   detailsOpen = false,
   onDetailsOpenChange,
+  onDeleted,
 }: {
   taskId: string;
   embedded?: boolean;
@@ -80,7 +83,10 @@ export function AgentRunChatSession({
   initiatorName?: string;
   detailsOpen?: boolean;
   onDetailsOpenChange?: (open: boolean) => void;
+  /** Where to go once the run is deleted; a new chat when omitted. */
+  onDeleted?: () => void;
 }) {
+  const router = useRouter();
   const logsRef = useRef<AgentRunLogsHandle>(null);
   const [resumedRun, setResumedRun] = useState<{
     sourceId: string;
@@ -101,6 +107,8 @@ export function AgentRunChatSession({
   const deleteWorkspace = useDeleteAgentWorkspace();
   const [deleteWorkspaceDialogOpen, setDeleteWorkspaceDialogOpen] =
     useState(false);
+  const deleteRun = useDeleteAgentRun();
+  const [deleteRunDialogOpen, setDeleteRunDialogOpen] = useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [reattachedTaskId, setReattachedTaskId] = useState<string | null>(null);
   const reattached = reattachedTaskId === taskId;
@@ -380,6 +388,18 @@ export function AgentRunChatSession({
                       <span>Delete saved files</span>
                     </DropdownMenuItem>
                   )}
+                {!live && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => setDeleteRunDialogOpen(true)}
+                    >
+                      <Trash2 className="size-4" />
+                      <span>Delete run</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
               </>
             )}
           </DropdownMenuContent>
@@ -629,6 +649,25 @@ export function AgentRunChatSession({
             onSuccess: () => setDeleteWorkspaceDialogOpen(false),
           })
         }
+      />
+      <DeleteConfirmDialog
+        open={deleteRunDialogOpen}
+        onOpenChange={setDeleteRunDialogOpen}
+        title="Delete run?"
+        description="This removes the session, its retained output, and its saved files. This action cannot be undone."
+        confirmLabel="Delete run"
+        pendingLabel="Deleting…"
+        isPending={deleteRun.isPending}
+        onConfirm={() => {
+          if (!run) return;
+          deleteRun.mutate(run.taskId, {
+            onSuccess: () => {
+              setDeleteRunDialogOpen(false);
+              if (onDeleted) onDeleted();
+              else router.push("/chat");
+            },
+          });
+        }}
       />
       <ShareAgentRunDialog
         taskId={run?.taskId ?? activeTaskId}

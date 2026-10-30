@@ -527,6 +527,10 @@ export const requiredEndpointPermissionsMap: Partial<
    * authenticated but no specific permission.
    */
   [RouteId.GetOrganization]: {},
+  [RouteId.ListAgentRuntimeTemplates]: {},
+  [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped create/update check in the handler.
+  [RouteId.GetRuntimeTemplateSettings]: { organizationSettings: ["update"] },
+  [RouteId.SaveRuntimeTemplateSettings]: { organizationSettings: ["update"] },
   /** Names the default model for every member, so "Organization default" reads the same for all. */
   [RouteId.GetOrganizationDefaultModel]: {},
 

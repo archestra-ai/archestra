@@ -41,8 +41,8 @@ export async function resolveVirtualKeyProviderMappings(
     await VirtualApiKeyModel.getProviderApiKeysForRouting(virtualApiKeyId);
   const ownerPrimaries =
     key.keyType === "standard" &&
-    key.scope === "personal" &&
     key.authorId &&
+    (await VirtualApiKeyModel.isPersonal(key)) &&
     (await ConnectionSetupModel.hasManagedPrimaryInstallation({
       organizationId: key.organizationId,
       userId: key.authorId,
@@ -100,7 +100,18 @@ export async function resolveProviderMappings<
 }
 
 function primaryProviderMapping(
-  primary: Awaited<ReturnType<typeof getSharedPrimaryProviderKeys>>[number],
+  primary: Pick<
+    Awaited<ReturnType<typeof getSharedPrimaryProviderKeys>>[number],
+    | "id"
+    | "provider"
+    | "name"
+    | "organizationId"
+    | "secretId"
+    | "scope"
+    | "userId"
+    | "inferenceBaseUrl"
+    | "baseUrl"
+  >,
 ) {
   return {
     provider: primary.provider,

@@ -5,7 +5,7 @@
  *
  * Each figure is transcribed from the vendor's own price list, as in
  * `vendor-published-pricing.ts`, and each formula follows what the vendor
- * meters on the response (the same formulas LiteLLM's cost calculators use):
+ * meters on the response:
  *
  * - OpenAI: https://developers.openai.com/api/docs/pricing (standard tier).
  *   `gpt-image-1` no longer appears there; its figures are the ones it was

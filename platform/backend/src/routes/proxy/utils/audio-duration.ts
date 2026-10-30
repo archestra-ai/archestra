@@ -2,10 +2,10 @@
  * Playing time of an uploaded audio file, read from its container headers.
  *
  * Transcripts returned as text, SRT or VTT, and every translation, carry no
- * usage, yet OpenAI bills them per second of input audio. LiteLLM prices those
- * calls from the upload's duration, measured with libsndfile (WAV, FLAC, Ogg,
- * MP3); this reads the same formats plus MP4/M4A. A format it cannot read
- * (WebM, which browser recorders often write without a duration) or a
+ * usage, yet OpenAI bills them per second of input audio, so their cost comes
+ * from the upload's duration. This reads WAV, FLAC, Ogg, MP3 and MP4/M4A;
+ * its results match libsndfile on the formats both read. A format it cannot
+ * read (WebM, which browser recorders often write without a duration) or a
  * malformed file yields `undefined`: the cost then stays unknown, never zero.
  */
 export function audioDurationSeconds(data: Buffer): number | undefined {

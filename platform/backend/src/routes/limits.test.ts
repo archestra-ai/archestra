@@ -6,6 +6,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { EnvironmentModel, LimitModel } from "@/models";
 import AgentModel from "@/models/agent";
+import { LimitValidationService } from "@/models/limit";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import type { User } from "@/types";
@@ -986,6 +987,90 @@ describe("limits routes", () => {
           }),
         }),
       ]);
+    });
+
+    test("a budget an older release blocked for an unpriced charge runs again, flagged until reset", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      const limit = await LimitModel.create({
+        entityType: "organization",
+        entityId: organizationId,
+        limitType: "token_cost",
+        limitValue: 1,
+        model: null,
+        cleanupInterval: "calendar_month",
+        lastCleanup: new Date(Date.now() - 60_000),
+      });
+      // What 1.4 settled for a cache hit with no cache price: the cache left
+      // out of the cost, the receipt incomplete, and the budget's counter
+      // marked incomplete, which 1.4 read as exhausted.
+      await db.transaction((tx) =>
+        LimitModel.settleBillableUsage({
+          tx,
+          attribution: {
+            organizationId,
+            environmentId: null,
+            entities: [
+              { entityType: "organization", entityId: organizationId },
+            ],
+          },
+          usage: {
+            version: 1,
+            mode: "enforce",
+            status: "incomplete",
+            issues: ["unpriced_usage"],
+            cost: "0.2000000000",
+            components: [
+              {
+                id: "primary",
+                model: "fireworks-model",
+                kind: "message",
+                provider: "vllm",
+                inputTokens: 100_000,
+                outputTokens: 100_000,
+                cacheReadTokens: 1_000_000,
+                cacheWriteTokens: 0,
+                cacheWrite1hTokens: 0,
+                prices: {
+                  input: "1",
+                  output: "1",
+                  cacheRead: null,
+                  cacheWrite: null,
+                  cacheWrite1h: null,
+                  source: "custom",
+                },
+                cost: "0.2000000000",
+              },
+            ],
+          },
+        }),
+      );
+      const [counter] = await db
+        .select({ incomplete: schema.limitBillingUsageTable.incomplete })
+        .from(schema.limitBillingUsageTable)
+        .where(eq(schema.limitBillingUsageTable.limitId, limit.id));
+      expect(counter.incomplete).toBe(1);
+
+      expect(
+        await LimitValidationService.checkLimitsBeforeRequest({
+          agentId: agent.id,
+        }),
+      ).toBeNull();
+      expect(await spendOf(limit.id)).toEqual({
+        cost: 0.2,
+        estimatedUsage: true,
+      });
+
+      const reset = await app.inject({
+        method: "POST",
+        url: `/api/limits/${limit.id}/reset`,
+      });
+      expect(reset.statusCode, reset.body).toBe(200);
+      expect(await spendOf(limit.id)).toEqual({
+        cost: 0,
+        estimatedUsage: false,
+      });
     });
 
     test("refuses limits that recover on their own schedule", async () => {

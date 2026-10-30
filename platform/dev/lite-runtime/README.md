@@ -43,7 +43,7 @@ Native addons (`app-runtime-rs`, `image-rs`, `openappa-rs`, `router-rs`,
 `sandbox-rs`) are not in the image. `dev-lite.sh` installs the ones CI
 publishes for main's `platform/archestra-rs` tree (`scripts/napi-prebuilt.mjs`,
 about a second) and builds them with cargo only for a changed tree (about 6
-minutes at 16 CPUs, longer on a Lite tier pod).
+minutes at 16 CPUs, longer on a tier M pod).
 
 ## Use
 
@@ -149,8 +149,9 @@ median and 6.5 at p90. The Lobster agents' requests were cut on that evidence
 from 7 CPU / 24 GiB to 3.5 CPU / 12 GiB with an 18 GiB limit, which fits two
 runs on an `n2d-standard-8` node instead of one.
 
-Lite tier sizing: request 2 CPU and 4 GiB, limit 8 GiB, no CPU limit,
-`privileged: false`, no Docker volume. That fits three runs on the same node.
+Tier M, the lite image's size: request 2 CPU and 4 GiB, limit 8 GiB, no CPU
+limit, `privileged: false`, no Docker volume. That fits three runs on the same
+node.
 The frontend dev server is the largest and most variable consumer; a
 production build (`next build` and `next start`) would cut it to a few hundred
 MB for preview-only runs at the cost of a build per start, and is a candidate

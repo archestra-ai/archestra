@@ -2,10 +2,10 @@
 #
 # Run the Archestra dev stack as plain processes in this platform/ checkout:
 # PostgreSQL, the backend dev server and the frontend dev server. No Docker,
-# kind, Helm or Tilt. An Agent Runtime's Lite tier runs this for previews,
+# kind, Helm or Tilt. A lite Agent Runtime image runs this for previews,
 # manual QA, unit tests and the Playwright lite projects. Work that needs
 # Kubernetes (MCP server installs, nested Agent Runtime, the code runtime)
-# still needs the Tilt stack (scripts/dev-stack.sh, or the Full tier).
+# still needs the Tilt stack (scripts/dev-stack.sh, or a full image).
 #
 # Usage (from platform/):
 #   scripts/dev-lite.sh up [--e2e] [--mock-data]
@@ -312,7 +312,7 @@ install_dependencies() {
 # The backend lazily loads NAPI addons whose .node binaries are gitignored and
 # never built by pnpm install. Install the prebuilt ones published for main's
 # archestra-rs tree (scripts/napi-prebuilt.mjs, about a second), else build
-# them: several minutes of cargo, more on a small Lite tier pod.
+# them: several minutes of cargo, more on a small pod.
 ensure_native_addons() {
   local crate filters=()
   if (cd "$PLATFORM_DIR" && node scripts/napi-prebuilt.mjs "${CRATES[@]}") >&2; then
@@ -425,8 +425,15 @@ start_e2e_deps() {
     "exec env A2A_FIXTURE_HOST=127.0.0.1 A2A_FIXTURE_PORT=$A2A_PORT node e2e-tests/fixtures/a2a-test-agent/server.mjs"
 }
 
+# Both sidecars, so a fixture that died is restarted by the next `up --e2e`
+# instead of being waited for.
 e2e_enabled() {
-  session_alive wiremock
+  session_alive wiremock && session_alive a2a
+}
+
+# Either sidecar: the stack was started with --e2e, so readiness includes both.
+e2e_requested() {
+  session_alive wiremock || session_alive a2a
 }
 
 # --- readiness -------------------------------------------------------------
@@ -441,7 +448,7 @@ wait_ready() {
     [ "$backend_ok" = 1 ] || { http_ok "http://127.0.0.1:$BACKEND_PORT/ready" && backend_ok=1 && log "backend answers on :$BACKEND_PORT"; }
     # The first page request compiles the app; give it the time it needs.
     [ "$frontend_ok" = 1 ] || { http_ok "http://127.0.0.1:$FRONTEND_PORT/" 180 && frontend_ok=1 && log "frontend answers on :$FRONTEND_PORT"; }
-    if e2e_enabled; then
+    if e2e_requested; then
       [ "$e2e_ok" = 1 ] || { http_ok "http://127.0.0.1:$WIREMOCK_PORT/__admin/health" && http_ok "http://127.0.0.1:$A2A_PORT/health" && e2e_ok=1 && log "WireMock on :$WIREMOCK_PORT, A2A fixture on :$A2A_PORT"; }
     else
       e2e_ok=1
@@ -451,7 +458,7 @@ wait_ready() {
       [ -n "${ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL:-}" ] && echo "browser URL: $ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL"
       return 0
     fi
-    for name in backend frontend; do
+    for name in backend frontend $(e2e_requested && echo "wiremock a2a"); do
       session_alive "$name" || { tail -n 40 "$LOG_DIR/$name.log" >&2 2>/dev/null || true; die "$name exited; see $LOG_DIR/$name.log"; }
     done
     # The tsdown watcher outlives a crashed server and only restarts it on the
@@ -493,7 +500,7 @@ cmd_start() {
   fi
   # The servers read .env when they start: switching a running stack to the
   # e2e environment restarts them.
-  if [ "$e2e" = 1 ] && ! e2e_enabled; then
+  if [ "$e2e" = 1 ] && ! session_alive wiremock; then
     for name in backend frontend; do
       session_alive "$name" && { log "restarting $name with the e2e environment"; stop_session "$name"; }
     done

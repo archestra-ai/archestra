@@ -382,9 +382,8 @@ export enum ChatErrorCode {
    */
   UpstreamStalled = "upstream_stalled",
   /**
-   * Non-fatal notice: the turn produced a reply, but the model finished for a
-   * reason other than a clean stop (e.g. output limit reached), so the reply
-   * may be cut short. Rendered alongside the reply, not instead of it.
+   * The model stopped before completing a reply. Usually a non-fatal notice
+   * alongside partial content; also used when the output limit leaves no reply.
    */
   IncompleteResponse = "incomplete_response",
   /**

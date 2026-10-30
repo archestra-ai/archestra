@@ -47,6 +47,7 @@ A request runs even when its model lacks a price for some of the tokens it uses.
 - **Cache tokens:** Archestra charges a cache read at half the model's input price, and a cache write at the full input price. Anthropic, Amazon Bedrock, OpenAI, Gemini, and DeepSeek models get their provider's standard cache rates instead.
 - **Input or output:** when a provider key lists prices for a model but leaves out its input or output rate, Archestra uses the model's own price.
 - **To correct an estimate:** set the missing price on the model, then [recompute its past costs](#recompute-past-costs-after-a-price-change).
+- **Limits flagged by an earlier release:** a limit that an earlier release blocked for an unpriced request now blocks only on its spend. It keeps **Includes estimates** until you [reset it](/docs/llm-proxy/costs-and-limits/limits#reset-a-spend-limit) or its window ends. Those requests did not record which limits they were charged to, so recompute cannot clear it.
 
 Audio calls, and Azure image calls and file uploads, have no price. Archestra does not estimate them: they record no cost and do not count toward spend. Instead, a hard spend limit that covers them refuses the request.
 

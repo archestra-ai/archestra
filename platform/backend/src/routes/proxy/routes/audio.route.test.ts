@@ -285,7 +285,20 @@ describe.each([
           type: `${provider}:audio`,
           cost: null,
         });
-        expect(JSON.stringify(rows)).not.toContain(audio.toString("base64"));
+        // Each row keeps its clip as base64 with its type, so Logs can play
+        // it: the speech returned, or the audio uploaded.
+        for (const row of rows) {
+          const response = row.response as {
+            audio?: { content_type?: string; data?: string };
+            upload?: { content_type?: string; data?: string };
+          };
+          expect(
+            operation === "speech" ? response.audio : response.upload,
+          ).toEqual({
+            content_type: "audio/wav",
+            data: audio.toString("base64"),
+          });
+        }
         expect(JSON.stringify(rows)).not.toContain('"type":"Buffer"');
       } finally {
         await app.close();

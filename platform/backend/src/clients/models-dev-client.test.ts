@@ -22,6 +22,7 @@ beforeEach(() => {
 import {
   ModelsDevClient,
   modelsDevClient,
+  modelsDevLongContextToColumns,
   sanitizeOutputLimit,
 } from "./models-dev-client";
 
@@ -730,4 +731,43 @@ describe("ModelsDevClient", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
+});
+
+test("explicit boundaries outrank legacy metadata, absent rates stay unknown, and unsupported tiers fail visibly", () => {
+  expect(
+    modelsDevLongContextToColumns({
+      input: 1,
+      output: 2,
+      context_over_200k: { input: 4, output: 6 },
+      tiers: [{ input: 2, output: 3, tier: { type: "context", size: 272000 } }],
+    }),
+  ).toMatchObject({
+    syncedLongContextThreshold: 272000,
+    syncedLongContextPromptPricePerToken: "0.000002",
+    syncedLongContextCacheReadPricePerToken: null,
+  });
+  expect(
+    modelsDevLongContextToColumns({
+      context_over_200k: { input: 2, output: 3 },
+    }).syncedLongContextThreshold,
+  ).toBe(200000);
+  expect(
+    modelsDevLongContextToColumns({
+      tiers: [],
+      context_over_200k: { input: 2, output: 3 },
+    }).syncedLongContextThreshold,
+  ).toBeNull();
+  expect(() =>
+    modelsDevLongContextToColumns({
+      tiers: [
+        { tier: { type: "context", size: 100 }, input: 1, output: 2 },
+        { tier: { type: "context", size: 200 }, input: 2, output: 3 },
+      ],
+    }),
+  ).toThrow("Multiple Copilot");
+  expect(() =>
+    modelsDevLongContextToColumns({
+      tiers: [{ tier: { type: "context", size: 100 }, input: -1, output: 2 }],
+    }),
+  ).toThrow();
 });

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   type ModelInputModality,
   type ModelOutputModality,
@@ -5,7 +6,12 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
-import { modelsDevClient } from "@/clients/models-dev-client";
+import { tiersFingerprint } from "@/auto-routing/tiers";
+import {
+  type ModelsDevApiResponse,
+  modelsDevClient,
+} from "@/clients/models-dev-client";
+import captured from "@/clients/models-dev-client.test-data.json";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
@@ -22,7 +28,7 @@ import {
 // Keep the real client and stub HTTP so imports through the runtime launch
 // path cannot capture a different singleton from a partial module mock.
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper, not a React hook
-useMswServer(
+const server = useMswServer(
   http.get("https://models.dev/api.json", () => HttpResponse.json({})),
 );
 beforeEach(() => modelsDevClient.clearFetchCache());
@@ -1625,5 +1631,197 @@ describe("withDistinctDisplayNames", () => {
       "GPT-4o",
       "GPT-4o",
     ]);
+  });
+});
+
+describe("Copilot registry pricing sync", () => {
+  test("imports model-specific tiers, preserves custom prices, and refreshes or removes synced rates", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const token = `gho_sync_test_${randomUUID()}`;
+    const secret = await makeSecret({ secret: { apiKey: token } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "github-copilot",
+    });
+    let catalog: ModelsDevApiResponse = structuredClone(
+      captured.catalog,
+    ) as ModelsDevApiResponse;
+    let catalogAvailable = true;
+    server.use(
+      http.get("https://models.dev/api.json", () =>
+        catalogAvailable
+          ? HttpResponse.json(catalog)
+          : new HttpResponse(null, { status: 503 }),
+      ),
+      http.get("https://api.github.com/copilot_internal/v2/token", () =>
+        HttpResponse.json({
+          token: "test-copilot-bearer",
+          expires_at: Math.floor(Date.now() / 1000) + 1800,
+        }),
+      ),
+      http.get("https://api.githubcopilot.com/models", () =>
+        HttpResponse.json({
+          data: Object.keys(captured.catalog["github-copilot"].models).map(
+            (id) => ({ id, capabilities: { type: "chat" } }),
+          ),
+        }),
+      ),
+    );
+    const sync = async (forceRefresh = false) => {
+      modelsDevClient.clearFetchCache();
+      return modelSyncService.syncModelsForApiKey({
+        apiKeyId: key.id,
+        provider: "github-copilot",
+        apiKeyValue: token,
+        forceRefresh,
+      });
+    };
+    await sync();
+    // Every captured model survives parser -> enrichment -> SQL, including the
+    // 272K entries that also expose a misleading legacy context_over_200k field.
+    for (const model of Object.values(catalog["github-copilot"].models)) {
+      const saved = await ModelModel.findByProviderAndModelId(
+        "github-copilot",
+        model.id,
+      );
+      const tier = model.cost?.tiers?.[0];
+      expect(saved?.syncedLongContextThreshold).toBe(tier?.tier.size ?? null);
+      const prices = ModelModel.getEffectivePricing(
+        saved,
+        model.id,
+        "github-copilot",
+        (tier?.tier.size ?? 300_000) + 1,
+      );
+      expect(Number(prices.pricePerMillionInput)).toBe(
+        tier?.input ?? model.cost?.input,
+      );
+      expect(Number(prices.pricePerMillionOutput)).toBe(
+        tier?.output ?? model.cost?.output,
+      );
+    }
+    const id = "claude-haiku-5.5";
+    const row = await ModelModel.findByProviderAndModelId("github-copilot", id);
+    if (!row) throw new Error("Missing synced model");
+    expect(row.syncedLongContextThreshold).toBe(100_000);
+    expect(tiersFingerprint([row, row, row]).long_context_threshold).toBe(
+      100_000,
+    );
+    expect(tiersFingerprint([row, row, row]).tiers[0].long?.input).toBe(0.5);
+    expect(Number(row.syncedLongContextCacheWritePricePerToken) * 1e6).toBe(
+      0.625,
+    );
+    await ModelModel.update(row.id, {
+      customPricePerMillionInput: "0.03",
+      customPricePerMillionOutput: "0.07",
+    });
+    await sync();
+    let updated = await ModelModel.findById(row.id);
+    expect(updated?.customPricePerMillionInput).toBe("0.03");
+    let prices = ModelModel.getEffectivePricing(
+      updated,
+      id,
+      "github-copilot",
+      100_001,
+    );
+    expect(Number(prices.pricePerMillionInput)).toBe(0.03);
+    expect(Number(prices.pricePerMillionOutput)).toBe(0.07);
+    expect(Number(prices.pricePerMillionCacheRead)).toBe(0.05);
+    await ModelModel.update(row.id, {
+      customPricePerMillionInput: null,
+      customPricePerMillionOutput: null,
+      customPricePerMillionCacheRead: "0.02",
+      customPricePerMillionCacheWrite: "0.04",
+    });
+    await sync();
+    updated = await ModelModel.findById(row.id);
+    prices = ModelModel.getEffectivePricing(
+      updated,
+      id,
+      "github-copilot",
+      100_001,
+    );
+    expect(Number(prices.pricePerMillionInput)).toBe(0.5);
+    expect(Number(prices.pricePerMillionCacheRead)).toBe(0.02);
+    expect(Number(prices.pricePerMillionCacheWrite)).toBe(0.04);
+    await ModelModel.update(row.id, {
+      longContextThreshold: 150_000,
+      longContextPricePerMillionInput: "2",
+      longContextPricePerMillionOutput: "3",
+      longContextPricePerMillionCacheRead: "0.2",
+      longContextPricePerMillionCacheWrite: "2.5",
+    });
+    await sync();
+    updated = await ModelModel.findById(row.id);
+    expect(
+      Number(
+        ModelModel.getEffectivePricing(updated, id, "github-copilot", 120_000)
+          .pricePerMillionInput,
+      ),
+    ).toBe(0.1);
+    expect(
+      Number(
+        ModelModel.getEffectivePricing(updated, id, "github-copilot", 150_001)
+          .pricePerMillionInput,
+      ),
+    ).toBe(2);
+    expect(
+      ModelModel.getEffectivePricing(updated, id, "github-copilot", 150_001)
+        .source,
+    ).toBe("custom");
+    const next = structuredClone(catalog);
+    const nextCost = next["github-copilot"].models[id].cost;
+    if (!nextCost?.tiers?.[0]) throw new Error("Missing captured tier");
+    nextCost.tiers[0].input = 0.7;
+    catalog = next;
+    await sync();
+    expect(
+      Number(
+        (await ModelModel.findById(row.id))
+          ?.syncedLongContextPromptPricePerToken,
+      ) * 1e6,
+    ).toBe(0.7);
+    catalogAvailable = false;
+    await expect(sync()).rejects.toThrow(
+      "Copilot pricing catalog is unavailable",
+    );
+    expect(
+      (await ModelModel.findById(row.id))?.syncedLongContextThreshold,
+    ).toBe(100_000);
+    catalogAvailable = true;
+    delete nextCost.tiers;
+    catalog = next;
+    await sync();
+    updated = await ModelModel.findById(row.id);
+    expect(updated?.syncedLongContextThreshold).toBeNull();
+    expect(updated?.longContextThreshold).toBe(150_000);
+    catalog = structuredClone(captured.catalog) as ModelsDevApiResponse;
+    await sync();
+    await ModelModel.update(row.id, {
+      customPricePerMillionCacheRead: null,
+      customPricePerMillionCacheWrite: null,
+      longContextThreshold: null,
+      longContextPricePerMillionInput: null,
+      longContextPricePerMillionOutput: null,
+      longContextPricePerMillionCacheRead: null,
+      longContextPricePerMillionCacheWrite: null,
+    });
+    updated = await ModelModel.findById(row.id);
+    expect(
+      Number(
+        ModelModel.getEffectivePricing(updated, id, "github-copilot", 100_001)
+          .pricePerMillionInput,
+      ),
+    ).toBe(0.5);
+    await ModelModel.update(row.id, {
+      customPricePerMillionInput: "7",
+      customPricePerMillionOutput: "8",
+    });
+    await sync(true); // Explicit full refresh retains its existing reset contract.
+    expect(
+      (await ModelModel.findById(row.id))?.customPricePerMillionInput,
+    ).toBeNull();
   });
 });

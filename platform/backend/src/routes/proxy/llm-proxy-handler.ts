@@ -1868,10 +1868,10 @@ export async function handleLLMProxy<
                 );
               } catch (error) {
                 if (error instanceof ThroughputError && error.status === 402)
-                  throw new ModelBudgetExceededError([
-                    error.message,
-                    error.message,
-                  ]);
+                  throw new ModelBudgetExceededError(
+                    [error.message, error.message],
+                    error.quota,
+                  );
                 throw error;
               }
             },
@@ -2195,7 +2195,11 @@ export async function handleLLMProxy<
       }
     }
     if (lifecycleError instanceof ModelBudgetExceededError)
-      return sendUsageLimitRefusal(reply, lifecycleError.violation);
+      return sendUsageLimitRefusal(
+        reply,
+        lifecycleError.violation,
+        lifecycleError.quota,
+      );
     if (
       (lifecycleError instanceof ObservedProviderUsageError &&
         lifecycleError.billingRecorded) ||
@@ -3296,7 +3300,11 @@ async function handleStreaming<
       // This member never dispatched. Earlier failed pool attempts already
       // have their own records; do not finalize an empty stream for this one.
       accountingFinalized = true;
-      return sendUsageLimitRefusal(reply, lifecycleError.violation);
+      return sendUsageLimitRefusal(
+        reply,
+        lifecycleError.violation,
+        lifecycleError.quota,
+      );
     }
     if (codexError?.isIncompleteTerminal) {
       // Preserve Chat's legal partial terminal only after failure cleanup.
@@ -4790,12 +4798,16 @@ async function readProxyRequestState(
 export function sendUsageLimitRefusal(
   reply: FastifyReply,
   [_refusalMessage, contentMessage, limitMetadata]: LimitViolationResponse,
+  quota?: ThroughputError["quota"],
 ) {
+  if (quota?.retryAfter != null && !quota.oversized)
+    reply.header("Retry-After", quota.retryAfter);
   return reply.status(402).send({
     error: {
       message: contentMessage,
       type: "usage_limit_exceeded",
       code: "token_cost_limit_exceeded",
+      ...(quota ? { quota } : {}),
       usage_limit: limitMetadata
         ? {
             limit_type: limitMetadata.limitType,
@@ -4809,7 +4821,10 @@ export function sendUsageLimitRefusal(
 }
 
 class ModelBudgetExceededError extends ApiError {
-  constructor(readonly violation: LimitViolationResponse) {
+  constructor(
+    readonly violation: LimitViolationResponse,
+    readonly quota?: ThroughputError["quota"],
+  ) {
     super(402, violation[1]);
   }
 }

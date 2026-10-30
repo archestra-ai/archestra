@@ -215,6 +215,15 @@ describe("Model pools - LLM Proxy", () => {
             type: "usage_limit_exceeded",
             code: "token_cost_limit_exceeded",
           });
+          if (minute) {
+            expect(Number(response.headers["retry-after"])).toBeGreaterThan(0);
+            expect(response.json().error.quota).toMatchObject({
+              entityType: "virtual_key",
+              limitType: "token_cost",
+              oversized: false,
+              retryAfter: Number(response.headers["retry-after"]),
+            });
+          }
           expect(
             (await LlmThroughputModel.usage([rpm])).get(rpm.id)?.currentUsage,
           ).toBeCloseTo(cappedModel === "model-a" ? 0 : 1, 2);

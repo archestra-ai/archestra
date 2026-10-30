@@ -384,12 +384,19 @@ console.log(JSON.stringify({ updated: cfg.updatedGeneration, headers: output.hea
 
   test("reconnect refuses a retained file that would fail launcher ownership checks", async () => {
     const files = await fixture();
-    const checked = path.join(files.root, "last-check.json");
-    await writeFile(checked, "{}", { mode: 0o666 });
-    await chmod(checked, 0o666);
-    await expect(
-      exec(process.execPath, ["-e", files.install.script], { env: files.env }),
-    ).rejects.toThrow("Unsafe managed runtime ownership");
+    for (const retained of [
+      path.join(files.root, "last-check.json"),
+      files.configPath,
+    ]) {
+      await writeFile(retained, "{}", { mode: 0o666 });
+      await chmod(retained, 0o666);
+      await expect(
+        exec(process.execPath, ["-e", files.install.script], {
+          env: files.env,
+        }),
+      ).rejects.toThrow("Unsafe managed runtime ownership");
+      await chmod(retained, 0o600);
+    }
   });
 
   test("serializes concurrent launches and never exposes a partially-written generation", async () => {

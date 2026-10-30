@@ -19,7 +19,7 @@ function owned(file, directory = false, privateFile = true) {
   if (process.platform === "win32") {
     try {
       require("node:child_process").execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-        '$ErrorActionPreference="Stop"; [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false); try { $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; if($owner -ne $sid.Value){[Console]::Error.WriteLine("Owner mismatch: actual="+$owner+"; expected="+$sid.Value); exit 2}; $genericWrite=0x40000000; $genericAll=0x10000000; $writes=([int64][Security.AccessControl.FileSystemRights]"Write,Delete,ChangePermissions,TakeOwnership") -bor $genericWrite -bor $genericAll; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($rule.AccessControlType -eq "Allow" -and $rule.IdentityReference.Value -notin @($sid.Value,"S-1-5-18","S-1-5-32-544") -and ($env:ARCHESTRA_RUNTIME_ACL_PRIVATE -eq "1" -or (([int64]$rule.FileSystemRights -band $writes) -ne 0))){[Console]::Error.WriteLine("Foreign allow ACE: SID="+$rule.IdentityReference.Value+"; rights="+$rule.FileSystemRights+"; inherited="+$rule.IsInherited); exit 2}} } catch { [Console]::Error.WriteLine("PowerShell ACL inspection failed: "+$_.Exception.Message); exit 1 }'
+        '$ErrorActionPreference="Stop"; [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false); try { $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $trusted=@($sid.Value,"S-1-5-18","S-1-5-32-544"); $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; if($owner -notin $trusted){[Console]::Error.WriteLine("Owner mismatch: actual="+$owner+"; expected="+$sid.Value); exit 2}; $genericWrite=0x40000000; $genericAll=0x10000000; $writes=([int64][Security.AccessControl.FileSystemRights]"Write,Delete,ChangePermissions,TakeOwnership") -bor $genericWrite -bor $genericAll; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($rule.AccessControlType -eq "Allow" -and $rule.IdentityReference.Value -notin $trusted -and ($env:ARCHESTRA_RUNTIME_ACL_PRIVATE -eq "1" -or (([int64]$rule.FileSystemRights -band $writes) -ne 0))){[Console]::Error.WriteLine("Foreign allow ACE: SID="+$rule.IdentityReference.Value+"; rights="+$rule.FileSystemRights+"; inherited="+$rule.IsInherited); exit 2}} } catch { [Console]::Error.WriteLine("PowerShell ACL inspection failed: "+$_.Exception.Message); exit 1 }'
       ], { env: { ...process.env, ARCHESTRA_RUNTIME_ACL_PATH: file, ARCHESTRA_RUNTIME_ACL_PRIVATE: privateFile ? "1" : "0" }, timeout: 15000, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     } catch (error) {
       const detail = error.code === "ETIMEDOUT" ? "PowerShell timed out after 15000 ms" :
@@ -110,6 +110,12 @@ function verify(root) {
   const runtime = cached(root, installedParams(root));
   const checkedPath = path.join(root, "last-check.json");
   if (fs.existsSync(checkedPath)) owned(checkedPath);
+  const configDir = path.join(process.env.XDG_CONFIG_HOME || path.join(require("node:os").homedir(), ".config"), runtime.params.clientId);
+  if (fs.existsSync(configDir)) owned(configDir, true, false);
+  for (const suffix of [".json", ".jsonc"]) {
+    const file = path.join(configDir, runtime.params.clientId + suffix);
+    if (fs.existsSync(file)) owned(file, false, false);
+  }
   return runtime;
 }
 async function refresh(root) {
@@ -123,9 +129,10 @@ async function refresh(root) {
       const age = Date.now() - checked.attemptedAt;
       if (checked.installation === params.installation && Number.isFinite(age) && age >= 0 && age < 30000) return old;
     }
+    let updated = false;
     try {
       const url = new URL(params.source.url);
-      if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0" || url.protocol !== "https:" || url.origin !== params.origin || url.username || url.password || url.hash ||
+      if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0" || (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) || url.origin !== params.origin || url.username || url.password || url.hash ||
           url.pathname !== "/api/connection-setups/runtime" || url.search) throw new Error("Unsafe runtime update endpoint");
       const response = await fetch(url, {
         headers: { Authorization: "Bearer " + params.source.token },
@@ -162,13 +169,14 @@ async function refresh(root) {
           if (hash(fs.readFileSync(path.join(destination, name))) !== manifest.artifacts[name].sha256) throw new Error("Modified staged managed artifact");
         }
         atomic(path.join(root, "current.json"), JSON.stringify(manifest));
+        updated = true;
       }
     } catch (error) {
       // Keep the verified cache, but do not hide a programming error in validate or write.
       console.error("Managed runtime refresh kept the verified cache:", error && error.message ? error.message : error);
     }
     atomic(checkedPath, JSON.stringify({ installation: params.installation, attemptedAt: Date.now() }));
-    return cached(root, params);
+    return updated ? cached(root, params) : old;
   });
 }
 module.exports = { refresh, verify, locked, owned, atomic };

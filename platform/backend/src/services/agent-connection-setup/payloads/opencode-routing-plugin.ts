@@ -199,7 +199,7 @@ const directFetch = ${
     const base = new URL(route);
     return base.origin === url.origin && url.pathname.startsWith(base.pathname.replace(/\\/+$/, "") + "/");
   });
-  if (url.protocol === "https:" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && url.origin === runtimeParams.origin && managedRoute && directInferencePath.test(url.pathname) && mcpConnected()) {
+  if ((url.protocol === "https:" || (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && url.origin === runtimeParams.origin && managedRoute && directInferencePath.test(url.pathname) && mcpConnected()) {
     const binding = sessionBindingProofs.get(headers.get("x-opencode-session"));
     if (runtimeParams.questionCards && binding?.origin === url.origin && binding.headers["x-archestra-client-runtime-token"]) headers.set("x-archestra-question-cards", "1");
     for (const [name, value] of Object.entries(binding?.origin === url.origin ? binding.headers : {})) headers.set(name, value);
@@ -620,7 +620,7 @@ export default {
         const base = new URL(route);
         return base.origin === finalUrl.origin && finalUrl.pathname.startsWith(base.pathname.replace(/\\/+$/, "") + "/");
       });
-      if (finalUrl.protocol === "https:" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && finalUrl.origin === runtimeParams.origin && managedRoute && directInferencePath.test(finalUrl.pathname)) {
+      if ((finalUrl.protocol === "https:" || (finalUrl.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(finalUrl.hostname))) && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && finalUrl.origin === runtimeParams.origin && managedRoute && directInferencePath.test(finalUrl.pathname)) {
         for (const [name, value] of Object.entries(bindingProof?.() ?? {})) headers.set(name, value);
       }
       event.request = rewritten

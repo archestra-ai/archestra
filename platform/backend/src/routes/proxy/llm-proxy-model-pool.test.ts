@@ -21,6 +21,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { ModelModel, ModelPoolModel, VirtualApiKeyModel } from "@/models";
 import LimitModel from "@/models/limit";
+import LlmThroughputModel from "@/models/llm-throughput";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
@@ -96,7 +97,7 @@ describe("Model pools - LLM Proxy", () => {
           (await makeSecret({ secret: { apiKey: "sk-pool" } })).id,
           { provider: "openai" },
         );
-        const { value: token } = await VirtualApiKeyModel.create({
+        const { virtualKey, value: token } = await VirtualApiKeyModel.create({
           organizationId: proxy.organizationId,
           name: "budget-pool-key",
           providerApiKeys: [{ provider: "openai", providerApiKeyId: key.id }],
@@ -107,6 +108,8 @@ describe("Model pools - LLM Proxy", () => {
             externalId: `openai/${modelId}`,
             provider: "openai",
             modelId,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
             customPricePerMillionInput: "1",
             customPricePerMillionOutput: "1",
           });
@@ -125,12 +128,18 @@ describe("Model pools - LLM Proxy", () => {
           },
         });
         await LimitModel.create({
-          entityType: "agent",
-          entityId: proxy.id,
+          entityType: "virtual_key",
+          entityId: virtualKey.id,
           limitType: "token_cost",
           limitValue: 0,
           model: [cappedModel],
           lastCleanup: new Date(),
+        });
+        const rpm = await LimitModel.create({
+          entityType: "organization",
+          entityId: proxy.organizationId,
+          limitType: "requests_per_minute",
+          limitValue: 1,
         });
         const dispatched: string[] = [];
         vi.mocked(openaiAdapterFactory.createClient).mockImplementation(() => {
@@ -179,6 +188,22 @@ describe("Model pools - LLM Proxy", () => {
             type: "usage_limit_exceeded",
             code: "token_cost_limit_exceeded",
           });
+          expect(
+            (await LlmThroughputModel.usage([rpm])).get(rpm.id)?.currentUsage,
+          ).toBeCloseTo(cappedModel === "model-a" ? 0 : 1, 2);
+          const unrelated = await app.inject({
+            method: "POST",
+            url: `/v1/openai/${proxy.id}/chat/completions`,
+            headers: { authorization: `Bearer ${token}` },
+            payload: {
+              model: "model-c",
+              stream,
+              messages: [{ role: "user", content: "Hello" }],
+            },
+          });
+          expect(unrelated.statusCode, unrelated.body).toBe(
+            cappedModel === "model-a" ? 200 : 429,
+          );
         }
       });
     }

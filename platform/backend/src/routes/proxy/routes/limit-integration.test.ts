@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type OpenAI from "openai";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { __setTestDb, getDb, schema } from "@/database";
 import {
   EnvironmentDefaultUserLimitModel,
@@ -165,6 +166,8 @@ describe("LLM proxy limit enforcement (integration)", () => {
       externalId: "openai/gpt-4o-mini",
       provider: "openai",
       modelId: "gpt-4o-mini",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
     });
     await LimitModel.create({
       entityType: "agent",
@@ -235,6 +238,15 @@ describe("LLM proxy limit enforcement (integration)", () => {
       model: ["claude-sonnet-4-5"],
       lastCleanup: new Date(),
     });
+    config.llmProxy.modelPoolsEnabled = true;
+    await LimitModel.create({
+      entityType: "organization",
+      entityId: agent.organizationId,
+      limitType: "token_cost",
+      limitValue: 0,
+      model: null,
+      lastCleanup: new Date(),
+    });
     const harness = await setupRoute();
     const response = await app.inject({
       method: "POST",
@@ -250,6 +262,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     });
 
     expect(response.statusCode, response.body).toBe(402);
+    expect(response.json().error.usage_limit.entity_type).toBe("agent");
     expect(harness.client.chat.completions.create).not.toHaveBeenCalled();
   });
 

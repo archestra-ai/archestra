@@ -1227,7 +1227,6 @@ export async function handleLLMProxy<
     agent: resolvedAgent,
     snapshot: requestContext,
   };
-  const deferModelScopedLimits = config.llmProxy.modelPoolsEnabled;
   try {
     // A redacted audit context cannot retain an enforceable trajectory safely.
     if (
@@ -1246,6 +1245,37 @@ export async function handleLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
+    // A request for a model pool's name is served by the pool's members when
+    // the caller may use the pool (see `mayUseModelPool`). Members on a wire
+    // the client's can't reach are left out of the plan.
+    const poolWire = openAiCodexPassthrough
+      ? null
+      : inboundPoolWire(provider.interactionType);
+    // A chat or agent set to a pool names it, and sends one of its members'
+    // models. Any other platform call runs on the key and model it names.
+    const chatModelPoolHeader = internalCall
+      ? headersForExtraction[MODEL_POOL_ID_HEADER.toLowerCase()]
+      : undefined;
+    const chatModelPoolId =
+      typeof chatModelPoolHeader === "string" && chatModelPoolHeader
+        ? chatModelPoolHeader
+        : undefined;
+    const modelPoolPlan =
+      poolWire && (!internalCall || chatModelPoolId)
+        ? await planModelPool({
+            organizationId: resolvedAgent.organizationId,
+            name: actualModel,
+            poolId: chatModelPoolId,
+            inbound: poolWire,
+            caller: {
+              virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
+              providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
+            },
+            grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
+            sessionId,
+          })
+        : null;
+    const deferModelScopedLimits = modelPoolPlan != null;
     // Check usage limits. Media without a known cost is refused only when a
     // spend budget applies to it.
     logger.debug(
@@ -1324,36 +1354,6 @@ export async function handleLLMProxy<
       }
     }
 
-    // A request for a model pool's name is served by the pool's members when
-    // the caller may use the pool (see `mayUseModelPool`). Members on a wire
-    // the client's can't reach are left out of the plan.
-    const poolWire = openAiCodexPassthrough
-      ? null
-      : inboundPoolWire(provider.interactionType);
-    // A chat or agent set to a pool names it, and sends one of its members'
-    // models. Any other platform call runs on the key and model it names.
-    const chatModelPoolHeader = internalCall
-      ? headersForExtraction[MODEL_POOL_ID_HEADER.toLowerCase()]
-      : undefined;
-    const chatModelPoolId =
-      typeof chatModelPoolHeader === "string" && chatModelPoolHeader
-        ? chatModelPoolHeader
-        : undefined;
-    const modelPoolPlan =
-      poolWire && (!internalCall || chatModelPoolId)
-        ? await planModelPool({
-            organizationId: resolvedAgent.organizationId,
-            name: actualModel,
-            poolId: chatModelPoolId,
-            inbound: poolWire,
-            caller: {
-              virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
-              providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
-            },
-            grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
-            sessionId,
-          })
-        : null;
     // A credential let in only for a pool has no key for this provider, so
     // the request can't go anywhere but the pool.
     if (grantedPoolId && !perKeyChatApiKeyId && !modelPoolPlan) {
@@ -1361,14 +1361,6 @@ export async function handleLLMProxy<
         400,
         `${wasOAuthAuthenticated ? "LLM OAuth client" : "Virtual API key"} is not mapped to provider "${providerName}".`,
       );
-    }
-
-    if (deferModelScopedLimits && !modelPoolPlan) {
-      const violation = await LimitValidationService.checkLimitsBeforeRequest({
-        ...limitContext,
-        model: actualModel,
-      });
-      if (violation) return sendUsageLimitRefusal(reply, violation);
     }
 
     // The catalog identity and independent metadata were read together after
@@ -4406,10 +4398,10 @@ async function openUpstream<TRequest, T>(params: {
   }) => void;
 }): Promise<T> {
   const { ctx, transport, open, memberTimeoutMs, ...retry } = params;
+  let dispatched = false;
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
     await ctx.authorizeA2AOAuthAttempt?.();
-    if (ctx.modelPool && ctx.upstreamAttempt.modelId)
-      await ctx.modelPool.checkLimits(ctx.upstreamAttempt.modelId);
+    dispatched = true;
     return open(attemptTransport);
   };
   const pool = ctx.modelPool;
@@ -4424,11 +4416,16 @@ async function openUpstream<TRequest, T>(params: {
       plan: pool.plan,
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
+      beforeAttempt: (member) => pool.checkLimits(member.modelId),
       open: authorizedOpen,
       memberTimeoutMs,
       recordFailedAttempt: pool.recordFailedAttempt,
       ...retry,
     });
+  } catch (error) {
+    if (error instanceof ModelBudgetExceededError && !dispatched)
+      await ctx.throughput?.cancelBeforeSend();
+    throw error;
   } finally {
     ctx.providerApiKeyId = ctx.upstreamAttempt.providerApiKeyId;
     pool.setResponseHeaders(ctx.upstreamAttempt);

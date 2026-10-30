@@ -87,6 +87,8 @@ describe("Selected model budget applicability", () => {
         externalId: `openai/${modelId}`,
         provider: "openai",
         modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
         customPricePerMillionInput: "1",
         customPricePerMillionOutput: "1",
       });

@@ -185,6 +185,47 @@ test("only allowlisted attribution reaches OTEL and model/consumer values do not
   ).not.toMatch(/private|secret credential|authorization/);
 });
 
+test("a normal incomplete terminal is distinct from a provider error", async () => {
+  const telemetry = new LlmProxyRequestTelemetry({
+    provider: "openai",
+    operation: "chat",
+    stream: true,
+  });
+  telemetry.markIncomplete();
+  telemetry.finish({ statusCode: 200, headersSent: true, disconnected: false });
+  expect(await counts()).toEqual([
+    expect.objectContaining({
+      value: 1,
+      labels: expect.objectContaining({
+        outcome: "incomplete",
+        error_origin: "none",
+        status_code: "200",
+      }),
+    }),
+  ]);
+  const [record] = exporter.getFinishedLogRecords();
+  expect(record.attributes["error.type"]).toBeUndefined();
+});
+
+test("disconnect during failover supersedes the member failure", async () => {
+  const telemetry = new LlmProxyRequestTelemetry({
+    provider: "openai",
+    operation: "chat",
+    stream: true,
+  });
+  telemetry.fail({ statusCode: 429, origin: "provider", outcome: "throttled" });
+  telemetry.finish({ statusCode: 200, headersSent: true, disconnected: true });
+  expect(await counts()).toEqual([
+    expect.objectContaining({
+      value: 1,
+      labels: expect.objectContaining({
+        outcome: "cancelled",
+        error_origin: "client",
+      }),
+    }),
+  ]);
+});
+
 test("a settlement failure supersedes an earlier policy denial", async () => {
   const telemetry = new LlmProxyRequestTelemetry({
     provider: "openai",

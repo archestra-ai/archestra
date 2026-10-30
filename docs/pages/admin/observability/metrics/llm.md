@@ -32,7 +32,7 @@ Track LLM request latency, token usage, and billed spend across providers and mo
 
 Every replica reports the same `llm_active_users` value, so aggregate it with `max()`, not `sum()`. [`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`](/docs/admin/deployment/configuration#ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS) sets the refresh interval; `0` turns the metric off.
 
-LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data point to its trace. See [Exemplars](/docs/admin/observability#exemplars).
+Upstream LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data point to its trace. See [Exemplars](/docs/admin/observability#exemplars).
 
 ## Proxy Request Outcomes
 
@@ -47,9 +47,11 @@ The metric covers inference requests handled by the shared proxy and model route
 | `provider` | Resolved provider name (such as `openai` or `anthropic`), or `router` when a model-router request fails before routing selects a provider |
 | `operation` | Inference operation, such as `chat`, `generate_content`, or `embedding` |
 | `stream` | `true` or `false` |
-| `outcome` | `success`, `error`, `throttled`, `denied`, `cancelled`, `timeout`, or `overloaded` |
-| `error_origin` | `none` (when `outcome="success"`), `archestra`, `provider`, or `client` |
+| `outcome` | `success`, `incomplete`, `error`, `throttled`, `denied`, `cancelled`, `timeout`, or `overloaded` |
+| `error_origin` | `none` for `success` or `incomplete`, `archestra`, `provider`, or `client` |
 | `status_code` | HTTP response status code (`100`–`599`, normalized to `500` if invalid, or `499` when the client disconnects before headers are sent) |
+
+`incomplete` identifies a provider terminal such as an output-token limit; it has no error origin.
 
 If a streaming request fails after HTTP `200` headers are sent, `status_code` stays `200` while `outcome` and `error_origin` record the midstream failure. To keep cardinality bounded, this histogram carries only the six labels above and omits model, agent, user, team, and key dimensions. For per-request attribution, use the metadata-only `archestra.llm_proxy.request` OpenTelemetry log event in [Proxy Request Log Events](/docs/admin/observability/tracing#proxy-request-log-events); existing token, cache, and cost metrics above, [costs and limits](/docs/llm-proxy/costs-and-limits), and [LLM spans](/docs/admin/observability/tracing#llm-spans) keep their existing dimensions.
 

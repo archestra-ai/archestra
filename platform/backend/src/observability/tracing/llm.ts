@@ -202,7 +202,11 @@ export async function startActiveLlmSpan<T>(params: {
       return result;
     } catch (error) {
       // Provider error messages can echo prompts, including for encrypted sessions.
-      setSpanError(span, error, captureContent && !params.suppressContent);
+      setSpanError({
+        span,
+        error,
+        includeMessage: captureContent && !params.suppressContent,
+      });
       throw error;
     } finally {
       span.end();

@@ -38,6 +38,7 @@ export class LlmProxyRequestTelemetry {
   private readonly startedAt = Date.now();
   private traceContext = context.active();
   private failure?: ProxyRequestFailure;
+  private incomplete = false;
   private finished = false;
   // An explicit metadata allowlist, never request bodies, headers or error messages.
   metadata: {
@@ -49,7 +50,7 @@ export class LlmProxyRequestTelemetry {
     passthroughVirtualKeyId?: string;
     appId?: string;
     source?: InteractionSource;
-    responseModel?: string;
+    modelPoolMemberModel?: string;
     modelPoolId?: string;
     providerApiKeyId?: string;
     poolAttempts?: number;
@@ -71,6 +72,10 @@ export class LlmProxyRequestTelemetry {
     this.request.stream = stream;
   }
 
+  markIncomplete(): void {
+    this.incomplete = true;
+  }
+
   fail(failure: ProxyRequestFailure): void {
     // Preserve the original failure if a response mapper rethrows a generic ApiError.
     // A later operational failure does supersede a policy denial while settling the response.
@@ -89,8 +94,12 @@ export class LlmProxyRequestTelemetry {
   }): void {
     if (this.finished) return;
     this.finished = true;
-    if (params.disconnected && !this.failure)
-      this.fail({ statusCode: 499, origin: "client", outcome: "cancelled" });
+    if (params.disconnected)
+      this.failure = {
+        statusCode: 499,
+        origin: "client",
+        outcome: "cancelled",
+      };
     if (!this.failure && params.statusCode >= 400)
       this.fail({
         statusCode: params.statusCode,
@@ -108,7 +117,8 @@ export class LlmProxyRequestTelemetry {
         ? params.statusCode
         : (this.failure?.statusCode ?? params.statusCode),
     );
-    const outcome = this.failure?.outcome ?? "success";
+    const outcome =
+      this.failure?.outcome ?? (this.incomplete ? "incomplete" : "success");
     const errorOrigin = this.failure?.origin ?? "none";
     const durationSeconds = Math.max(0, Date.now() - this.startedAt) / 1000;
     try {
@@ -144,7 +154,8 @@ export class LlmProxyRequestTelemetry {
           this.metadata.passthroughVirtualKeyId,
         "archestra.app.id": this.metadata.appId,
         "archestra.trigger.source": this.metadata.source,
-        "gen_ai.response.model": this.metadata.responseModel,
+        // Configured pool member model, not a model reported by a provider response.
+        "archestra.model_pool.member_model": this.metadata.modelPoolMemberModel,
         "archestra.model_pool.id": this.metadata.modelPoolId,
         "archestra.provider_api_key.id": this.metadata.providerApiKeyId,
         "archestra.proxy.pool_attempts": this.metadata.poolAttempts,

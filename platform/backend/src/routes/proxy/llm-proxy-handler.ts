@@ -3,6 +3,7 @@ import { validateAzureModelOperation } from "@/services/azure-model-capabilities
 import type { BillingAttribution } from "@/utils/billable-usage";
 import { primaryBillingUsage } from "@/utils/billable-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
+import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 /**
  * Generic LLM Proxy Handler
  *
@@ -483,7 +484,13 @@ export async function handleLLMProxy<
 ): Promise<FastifyReply> {
   const telemetry = getLlmProxyRequestTelemetry({
     request,
-    provider: provider.provider,
+    provider: (
+      request as FastifyRequest & {
+        llmProxyAuthOverride?: LLMProxyAuthOverride;
+      }
+    ).llmProxyAuthOverride?.modelPoolId
+      ? "router"
+      : provider.provider,
     operation: provider.spanName,
     stream: asRecord(body)?.stream === true,
   });
@@ -2958,8 +2965,7 @@ async function handleStreaming<
     // Anthropic requires message_stop; its beta usage arrives before that frame.
     upstreamFinished = providerName !== "anthropic" || providerTerminalSeen;
     if (!upstreamFinished)
-      throw new ApiError(
-        502,
+      throw new UpstreamStreamIncompleteError(
         "Provider stream ended before final usage was confirmed",
       );
     logger.info("Stream loop completed, processing final events");
@@ -3230,12 +3236,18 @@ async function handleStreaming<
     return reply;
   } catch (error) {
     const lifecycleError = error;
-    ctx.telemetry?.fail(
-      error instanceof CodexResponsesGenerationError ||
-        error instanceof ResponsesStreamIncompleteError
-        ? { statusCode: 502, origin: "provider", outcome: "error" }
-        : classifyProxyFailure(error),
-    );
+    if (
+      error instanceof CodexResponsesGenerationError &&
+      error.isIncompleteTerminal
+    )
+      ctx.telemetry?.markIncomplete();
+    else
+      ctx.telemetry?.fail(
+        error instanceof CodexResponsesGenerationError ||
+          error instanceof ResponsesStreamIncompleteError
+          ? { statusCode: 502, origin: "provider", outcome: "error" }
+          : classifyProxyFailure(error),
+      );
     const codexError =
       error instanceof CodexResponsesGenerationError ? error : undefined;
     if (codexError) {
@@ -4297,11 +4309,18 @@ async function failResponsesGeneration(params: {
     return false;
   }
   const details = asRecord(response?.error);
-  params.ctx.telemetry?.fail({
-    statusCode: 502,
-    origin: "provider",
-    outcome: "error",
-  });
+  if (
+    response?.status === "incomplete" ||
+    (params.error instanceof CodexResponsesGenerationError &&
+      params.error.isIncompleteTerminal)
+  )
+    params.ctx.telemetry?.markIncomplete();
+  else
+    params.ctx.telemetry?.fail({
+      statusCode: 502,
+      origin: "provider",
+      outcome: "error",
+    });
   const reason = asRecord(response?.incomplete_details)?.reason;
   const error =
     params.error ??
@@ -4527,7 +4546,7 @@ async function openUpstream<TRequest, T>(params: {
       if (ctx.upstreamAttempt.provider)
         ctx.telemetry.setProvider(ctx.upstreamAttempt.provider);
       Object.assign(ctx.telemetry.metadata, {
-        responseModel: ctx.upstreamAttempt.modelId,
+        modelPoolMemberModel: ctx.upstreamAttempt.modelId,
         modelPoolId: ctx.upstreamAttempt.modelPoolId,
         providerApiKeyId: ctx.upstreamAttempt.providerApiKeyId,
         poolAttempts: ctx.upstreamAttempt.attempt,

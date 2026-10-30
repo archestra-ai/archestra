@@ -987,7 +987,8 @@ export function classifyProxyFailure(error: unknown): ProxyRequestFailure {
             : origin === "provider" &&
                 (statusCode === 503 || statusCode === 529)
               ? "overloaded"
-              : origin === "provider" && statusCode === 504
+              : origin === "provider" &&
+                  (statusCode === 408 || statusCode === 504)
                 ? "timeout"
                 : "error",
   };

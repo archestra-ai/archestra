@@ -1,10 +1,19 @@
 import { describe, expect, test } from "vitest";
 import { ThroughputError } from "@/services/llm-throughput";
 import { ApiError } from "@/types";
+import { UpstreamStreamIncompleteError } from "@/utils/upstream-stream-incomplete-error";
 import { classifyProxyFailure } from "./llm-proxy-helpers";
 
 describe("logical proxy failure classification", () => {
   test.each([
+    [
+      new UpstreamStreamIncompleteError(
+        "Provider stream ended before final usage was confirmed",
+      ),
+      502,
+      "provider",
+      "error",
+    ],
     [
       Object.assign(new Error("provider throttled"), { status: 429 }),
       429,

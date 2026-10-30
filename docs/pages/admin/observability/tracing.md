@@ -135,7 +135,7 @@ The LLM Proxy has no labels or teams. Filter its traffic by the `archestra.user.
 
 Attribute logical [LLM Proxy](/docs/llm-proxy) and model router outcomes—including throttled, denied, cancelled, and midstream-failed requests—to a model, agent, user, app, or virtual key with the `archestra.llm_proxy.request` OpenTelemetry log event.
 
-When an inference request handled by the shared proxy or model router finishes, logger `archestra-llm-proxy` emits one structured log record with body `"LLM proxy request completed"` (`INFO` on success, `WARN` on failure) attached to the active trace context (`trace_id` and `span_id`). Like [`llm_proxy_request_duration_seconds`](/docs/admin/observability/metrics/llm#llm_proxy_request_duration_seconds), it records one event per logical request across internal retries and failovers, and excludes pre-handler authentication or validation rejections, model listing, unsupported passthrough endpoints, and provider file routes.
+When an inference request handled by the shared proxy or model router finishes, logger `archestra-llm-proxy` emits one structured log record with body `"LLM proxy request completed"` (`INFO` on success or an incomplete terminal, `WARN` on failure) attached to the active trace context (`trace_id` and `span_id`). Like [`llm_proxy_request_duration_seconds`](/docs/admin/observability/metrics/llm#llm_proxy_request_duration_seconds), it records one event per logical request across internal retries and failovers, and excludes pre-handler authentication or validation rejections, model listing, unsupported passthrough endpoints, and provider file routes.
 
 Emission is best-effort and unsampled, so every completed proxy inference request emits the event regardless of [`ARCHESTRA_OTEL_TRACES_SAMPLE_RATE`](/docs/admin/deployment/configuration#ARCHESTRA_OTEL_TRACES_SAMPLE_RATE). The record uses a metadata-only allowlist—never prompts, completions, request or response bodies, headers, or error messages—and is not durable log replication. Use [LLM spans](#llm-spans) for token and cost attribution, [limit metrics](/docs/admin/observability/metrics/limits) for rule evaluations, and [audit logs](/docs/admin/observability/audit-logs) for administrative actions.
 
@@ -145,8 +145,8 @@ Emission is best-effort and unsampled, so every completed proxy inference reques
 | `gen_ai.operation.name` | Inference operation, such as `chat`, `generate_content`, or `embedding` |
 | `gen_ai.request.streaming` | `true` or `false` |
 | `http.response.status_code` | Committed HTTP status code (`200` when a stream fails after headers are sent, `499` on client disconnect before headers) |
-| `archestra.proxy.outcome` | `success`, `error`, `throttled`, `denied`, `cancelled`, `timeout`, or `overloaded` |
-| `archestra.proxy.error_origin` | `none` (when `outcome` is `success`), `archestra`, `provider`, or `client` |
+| `archestra.proxy.outcome` | `success`, `incomplete`, `error`, `throttled`, `denied`, `cancelled`, `timeout`, or `overloaded` |
+| `archestra.proxy.error_origin` | `none` for `success` or `incomplete`, `archestra`, `provider`, or `client` |
 | `archestra.proxy.duration_seconds` | End-to-end logical request duration in seconds, including preflight and streaming |
 | `error.type` | Normalized failure status code as a string (such as `"429"` or `"502"`), present on failed requests even when `http.response.status_code` is `200` |
 | `gen_ai.request.model` | Requested model name, when resolved |
@@ -154,4 +154,4 @@ Emission is best-effort and unsampled, so every completed proxy inference reques
 | `archestra.virtual_key.id`, `archestra.passthrough_virtual_key.id` | [Virtual key](/docs/llm-proxy/authentication) or passthrough virtual key ID, when used |
 | `archestra.app.id` | [App](/docs/chat/apps) ID, when called from an app |
 | `archestra.trigger.source` | Invocation source, such as `api`, `chat`, or `email`, when available |
-| `gen_ai.response.model`, `archestra.model_pool.id`, `archestra.provider_api_key.id`, `archestra.proxy.pool_attempts` | Final model-pool member model, pool ID, provider credential ID, and number of pool attempts, when a pool is used |
+| `archestra.model_pool.member_model`, `archestra.model_pool.id`, `archestra.provider_api_key.id`, `archestra.proxy.pool_attempts` | Configured final model-pool member model, pool ID, provider credential ID, and number of pool attempts, when a pool is used |

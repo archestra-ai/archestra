@@ -224,11 +224,15 @@ export function setSessionId(
   }
 }
 
-export function setSpanError(
-  span: Span,
-  error: unknown,
+export function setSpanError({
+  span,
+  error,
   includeMessage = true,
-): void {
+}: {
+  span: Span;
+  error: unknown;
+  includeMessage?: boolean;
+}): void {
   span.setStatus({
     code: SpanStatusCode.ERROR,
     ...(includeMessage

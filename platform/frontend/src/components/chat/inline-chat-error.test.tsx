@@ -1,3 +1,4 @@
+import { OUTPUT_LIMIT_REACHED_MESSAGE } from "@archestra/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
@@ -95,33 +96,62 @@ describe("InlineChatError", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps output-limit guidance in slim mode without offering an unchanged retry", () => {
+  it.each([
+    false,
+    true,
+  ])("keeps output-limit guidance with slim mode=%s without offering an unchanged retry", (slim) => {
     render(
       <InlineChatError
         error={
           new Error(
             JSON.stringify({
               code: "incomplete_response",
-              message:
-                "The model reached its output limit before producing a reply.",
+              message: OUTPUT_LIMIT_REACHED_MESSAGE,
               isRetryable: false,
             }),
           )
         }
         onRetry={vi.fn()}
-        slimChatErrorUi
+        slimChatErrorUi={slim}
       />,
     );
 
     expect(
-      screen.getByText(/stopped before completing a reply/),
+      screen.getByText(/output limit before producing a reply/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/try a smaller task/)).toBeInTheDocument();
+    expect(screen.getByText(/try a smaller task/i)).toBeInTheDocument();
     expect(
       screen.getByText(/increase the output-token limit/),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /try again/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps other incomplete replies neutral in slim mode", () => {
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "incomplete_response",
+              message: "private provider detail",
+              isRetryable: false,
+            }),
+          )
+        }
+        slimChatErrorUi
+      />,
+    );
+
+    expect(
+      screen.getByText("The model stopped before completing a reply."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/increase the output-token limit/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("private provider detail"),
     ).not.toBeInTheDocument();
   });
 

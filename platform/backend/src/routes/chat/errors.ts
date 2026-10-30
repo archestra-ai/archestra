@@ -9,6 +9,7 @@ import {
   GeminiErrorReasons,
   OllamaErrorTypes,
   OpenAIErrorTypes,
+  OUTPUT_LIMIT_REACHED_MESSAGE,
   providerDisplayNames,
   RetryableErrorCodes,
   SUBSCRIPTION_CREDENTIALS,
@@ -1796,7 +1797,7 @@ export function mapProviderError(
     }
     const message =
       error.finishReason === "length"
-        ? "The model reached its output limit before producing a reply. Try a smaller task, lower the reasoning effort, or ask an administrator to increase the output-token limit."
+        ? OUTPUT_LIMIT_REACHED_MESSAGE
         : ChatErrorMessages[code];
     const brandedMessage = archestraMcpBranding.brandBuiltInText(message);
     return {

@@ -411,6 +411,10 @@ export enum ChatErrorCode {
 /**
  * User-friendly error messages for each error code
  */
+/** Curated guidance for an empty turn that exhausted its output budget. */
+export const OUTPUT_LIMIT_REACHED_MESSAGE =
+  "The model reached its output limit before producing a reply. Try a smaller task, lower the reasoning effort, or ask an administrator to increase the output-token limit.";
+
 export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.RateLimit]:
     "Too many requests. Please wait a moment and try again.",
@@ -454,7 +458,7 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.UpstreamStalled]:
     "The model stopped sending its reply and timed out. Retrying may help.",
   [ChatErrorCode.IncompleteResponse]:
-    "The model stopped before completing a reply. If it ran out of output space, try a smaller task, lower the reasoning effort, or ask an administrator to increase the output-token limit.",
+    "The model stopped before completing a reply.",
   [ChatErrorCode.ProviderAuthRequired]:
     "Connect your account to use this model.",
   [ChatErrorCode.ToolsUnsupported]:

@@ -1,4 +1,8 @@
-import { E2eTestId } from "@archestra/shared";
+import {
+  AGENT_CATALOG_IDS,
+  AGENT_CATALOG_NAMES,
+  E2eTestId,
+} from "@archestra/shared";
 import { mergeTests } from "@playwright/test";
 import { UI_BASE_URL } from "../consts";
 import { expect, test as uiTest } from "../fixtures";
@@ -137,22 +141,36 @@ test("configures popular agent templates and preserves the creation wizard", asy
     "Requires an Agent Runtime backend",
   );
 
-  const organizationResponse = await page.request.get(
-    `${UI_BASE_URL}/api/organization`,
-  );
-  expect(organizationResponse.ok()).toBe(true);
-  const original = await organizationResponse.json();
   const settingsUrl = `${UI_BASE_URL}/api/organization/integration-settings`;
+  const templateSettingsUrl = `${UI_BASE_URL}/api/agent-runtime-templates/settings`;
+  const templateResponse = await page.request.get(templateSettingsUrl);
+  expect(templateResponse.ok()).toBe(true);
+  const original = await templateResponse.json();
+  const customCount = original.templates.filter(
+    (template: { hidden: boolean }) => !template.hidden,
+  ).length;
   const settings = page.getByRole("list", {
     name: "Agent Runtimes",
     exact: true,
   });
-  const names = ["Claude Code", "Codex", "OpenCode", "Hermes", "OpenClaw"];
+  const names = AGENT_CATALOG_IDS.map((id) => AGENT_CATALOG_NAMES[id]);
+  const removedNames = names.filter(
+    (name) => name !== "Claude Code" && name !== "Codex",
+  );
+  const actions = () => settings.getByRole("button", { name: /^Actions for / });
+  const remove = async (name: string) => {
+    await settings
+      .getByRole("button", { name: `Actions for ${name}`, exact: true })
+      .click();
+    await page
+      .getByRole("menuitem", { name: "Remove from list", exact: true })
+      .click();
+  };
   const save = async () => {
     const response = page.waitForResponse(
       (r) =>
-        r.url().endsWith("/api/organization/integration-settings") &&
-        r.request().method() === "PATCH",
+        r.url().endsWith("/api/agent-runtime-templates/settings") &&
+        r.request().method() === "PUT",
     );
     await page.getByRole("button", { name: "Save", exact: true }).click();
     expect((await response).ok()).toBe(true);
@@ -170,22 +188,14 @@ test("configures popular agent templates and preserves the creation wizard", asy
       ).ok(),
     ).toBe(true);
     await goToPage(page, "/settings/agents");
-    await expect(
-      settings.getByRole("button", { name: /^Remove / }),
-    ).toHaveCount(5);
-    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
-      await settings
-        .getByRole("button", { name: `Remove ${name}`, exact: true })
-        .click();
-    }
+    await expect(actions()).toHaveCount(names.length + customCount);
+    for (const name of removedNames) await remove(name);
     await save();
     await page.reload();
-    await expect(
-      settings.getByRole("button", { name: /^Remove / }),
-    ).toHaveCount(2);
+    await expect(actions()).toHaveCount(2 + customCount);
 
     await goToPage(page, "/agents/new");
-    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
+    for (const name of removedNames) {
       await expect(
         page.getByRole("button", { name: new RegExp(name) }),
       ).toHaveCount(0);
@@ -195,31 +205,22 @@ test("configures popular agent templates and preserves the creation wizard", asy
     await expect(page.getByRole("textbox", { name: /^Name\b/ })).toHaveValue(
       "Claude Code",
     );
-    // The catalog is where the runtime is chosen: a custom image is a card
-    // of its own, and the built-in agent's form does not ask again.
+    // A catalog choice supplies the runtime, without a second picker in the form.
     await goToPage(page, "/agents/new");
     await expect(
       page.getByRole("button", { name: /Custom image/ }),
     ).toBeVisible();
     await page.getByRole("button", { name: /^New .* agent/ }).click();
-    const runtimeChoices = page.getByRole("radiogroup", {
-      name: "Runtime",
-      exact: true,
-    });
     await expect(page.getByRole("textbox", { name: /^Name\b/ })).toBeVisible();
-    await expect(runtimeChoices).toHaveCount(0);
+    await expect(
+      page.getByRole("radiogroup", { name: "Runtime", exact: true }),
+    ).toHaveCount(0);
 
     await goToPage(page, "/settings/agents");
-    await expect(
-      settings.getByRole("button", { name: /^Remove / }),
-    ).toHaveCount(2);
-    await settings
-      .getByRole("button", { name: /^Remove / })
-      .first()
-      .click();
-    await settings.getByRole("button", { name: /^Remove / }).click();
+    await expect(actions()).toHaveCount(2 + customCount);
+    for (const name of ["Claude Code", "Codex"]) await remove(name);
     await save();
-    // With every template hidden, a custom image is the Agent Runtime left.
+    // Hiding the built-ins preserves custom images and the other creation flows.
     await goToPage(page, "/agents/new");
     for (const name of names) {
       await expect(
@@ -238,8 +239,10 @@ test("configures popular agent templates and preserves the creation wizard", asy
 
     await goToPage(page, "/settings/agents");
     for (const name of names) {
-      await settings.getByRole("button", { name: "Add Agent Runtime" }).click();
-      await page.getByRole("button", { name, exact: true }).click();
+      await page
+        .getByRole("button", { name: "Add runtime", exact: true })
+        .click();
+      await page.getByRole("menuitem", { name: new RegExp(name) }).click();
     }
     await save();
     await goToPage(page, "/agents/new");

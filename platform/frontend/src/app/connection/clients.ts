@@ -18,6 +18,7 @@ import {
 } from "@archestra/shared/connection-setup";
 import {
   CLAUDE_MARK,
+  CODEX_MARK,
   COPILOT_MARK,
   GROK_MARK,
   HERMES_AGENT_MARK,
@@ -217,6 +218,7 @@ const N8N_PATH =
  */
 function markFields(mark: ClientMark) {
   return {
+    iconSrc: mark.imageSrc,
     svg: mark.path,
     svgAccent: mark.accent,
     svgViewBox: mark.viewBox,
@@ -586,7 +588,7 @@ claude`,
     id: "codex",
     label: "Codex CLI",
     sub: "OpenAI CLI",
-    iconSrc: "/icons/codex.png",
+    ...markFields(CODEX_MARK),
     mcp: {
       kind: "custom",
       supportedAuth: "oauth",

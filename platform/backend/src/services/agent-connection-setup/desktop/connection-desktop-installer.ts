@@ -3,6 +3,10 @@ import {
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared/archestra-mcp-server";
+import {
+  WINDOWS_DESKTOP_CLOSE,
+  WINDOWS_DESKTOP_PROCESSES,
+} from "./windows-desktop-processes";
 
 const APPA_TOOLS = [
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -201,7 +205,8 @@ class DesktopInstaller {
     } else if (process.platform === 'win32') {
       const script = path.join(resultDir,'restart.ps1');
       fs.writeFileSync(script,RESTART_WINDOWS,{mode:0o600});
-      child = spawn('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-SuccessPage',success,'-FailurePage',failure],{detached:true,stdio:'ignore',windowsHide:true});
+      // Not detached: see RESTART_WINDOWS.
+      child = spawn('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-SuccessPage',success,'-FailurePage',failure],{stdio:'ignore',windowsHide:true});
     } else {
       child = spawn('/bin/sh',['-c',RESTART_LINUX,'desktop-restart',success,failure],{detached:true,stdio:'ignore'});
     }
@@ -455,7 +460,8 @@ function page(nonce) {
 const OAUTH_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
 function completionPage(setup,success) {
   const title = success ? 'Claude Desktop restarted' : 'Restart Claude Desktop to finish';
-  const instructions = success ? 'Your connection settings are saved.' + (setup.proxy ? ' Send a message in Desktop and check LLM Proxy Logs to verify inference.' : '') : 'Your connection settings are saved, but Desktop could not restart automatically. Finish active tasks, quit Desktop from its app menu, and open it again.';
+  const quit = process.platform === 'win32' ? 'exit Desktop from its icon in the system tray' : 'quit Desktop from its app menu';
+  const instructions = success ? 'Your connection settings are saved.' + (setup.proxy ? ' Send a message in Desktop and check LLM Proxy Logs to verify inference.' : '') : 'Your connection settings are saved, but Desktop could not restart automatically. Finish active tasks, ' + quit + ', and open it again.';
   const steps = [setup.mcp && 'In Desktop Settings → Connectors, connect your gateway if needed. Complete sign-in and approve access in your browser.',setup.mcp && 'In your conversation, open + → Connectors and enable your gateway if it is off. A connected checkmark in Settings does not confirm it is enabled for that conversation.',setup.mcp && 'Ask Claude to list the tools available from your gateway.',setup.proxy && 'Open Settings → Import to bring over your Claude.ai conversations. Rerun it later to add newer conversations.',setup.proxy && 'To return to standard Claude Desktop, choose Anthropic sign-in on Desktop’s sign-in screen. Keep the third-party app data to preserve conversations created in that mode.',setup.skills && 'Your selected ' + (setup.skills.pluginNames?.length ? (setup.skills.hasSkills === false ? 'plugins' : 'skills and plugins') : 'shared skills') + ' install automatically after Desktop restarts.','You can remove the setup helper from Desktop Extensions.'].filter(Boolean);
   return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + title + '</title><style>body{margin:0;background:#faf9f6;color:#292824;font:16px/1.6 system-ui,sans-serif}main{max-width:520px;margin:12vh auto;padding:32px}h1{font-size:28px;line-height:1.2;font-weight:600}p,li{color:#605e56}li{margin-bottom:12px}</style><main><h1>' + title + '</h1><p>' + instructions + '</p><ul>' + steps.map(text => '<li>' + text + '</li>').join('') + '</ul></main></html>';
 }
@@ -474,14 +480,24 @@ const RESTART_MAC = [
   '  if /usr/bin/pgrep -f \'/[C]laude.app/Contents/MacOS/Claude\' >/dev/null; then /usr/bin/open "$1"; else /usr/bin/open "$2"; fi',
   'else /usr/bin/open "$2"; fi'
 ].join('\n');
+// Node ends its non-detached children when it exits, and a detached PowerShell
+// has no console and exits at once. The script therefore starts a hidden copy
+// of itself, which Windows keeps outside Node's job, so it outlives Desktop.
+// Desktop usually hides in the tray instead of quitting, so Close-Desktop
+// closes it the way Windows closes apps before an update.
 const RESTART_WINDOWS = [
-  'param([string]$SuccessPage,[string]$FailurePage)',
+  'param([string]$SuccessPage,[string]$FailurePage,[switch]$Relaunched)',
   '$ErrorActionPreference = "Stop"',
+  'if (-not $Relaunched) {',
+  '  try { Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""$PSCommandPath"" -Relaunched -SuccessPage ""$SuccessPage"" -FailurePage ""$FailurePage""" }',
+  '  catch { Start-Process $FailurePage; exit 1 }',
+  '  exit',
+  '}',
+  ${JSON.stringify(WINDOWS_DESKTOP_PROCESSES)},
+  ${JSON.stringify(WINDOWS_DESKTOP_CLOSE)},
   'Start-Sleep -Seconds 1',
   'try {',
-  '  $processes = Get-Process Claude -ErrorAction SilentlyContinue',
-  '  $processes | ForEach-Object { [void]$_.CloseMainWindow() }',
-  '  $processes | Wait-Process -Timeout 120 -ErrorAction Stop',
+  '  Close-Desktop',
   '  $p = Get-AppxPackage | Where-Object { $_.Name -in @( "Claude", "AnthropicPBC.Claude" ) } | Select-Object -First 1',
   '  if ($p) {',
   '    $m = Get-AppxPackageManifest -Package $p.PackageFullName',

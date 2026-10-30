@@ -3,7 +3,6 @@ import {
   isChatCompletionsOnlyRouterProvider,
   isModelRouterSupportedProvider,
   perUserCredentialLabel,
-  providerHasEndpointLocalModels,
   type ResourceVisibilityScope,
   requiresOpenAiResponsesApi,
   requiresResponsesApi,
@@ -189,34 +188,24 @@ export async function selectModelRouterCredential(params: {
 }
 
 /**
- * The provider keys `userId` may use, as Model Router mappings in preference
- * order: every endpoint of a self-hosted provider, and for a credential-style
- * provider only the best-ranked key, as everywhere else.
+ * Every provider key `userId` may use, as Model Router mappings in preference
+ * order; a request takes the first one linked to its model
+ * (`selectMappedProviderKey`).
  */
 export async function userProviderKeyMappings(params: {
   organizationId: string;
   userId: string;
 }): Promise<ModelRouterMappedProviderKey[]> {
   const { keys } = await LlmProviderApiKeyModel.findUsableKeys(params);
-  const providerApiKeys: ModelRouterMappedProviderKey[] = [];
-  for (const apiKey of [...keys].sort(compareModelRouterUserProviderKeys)) {
-    if (
-      !providerHasEndpointLocalModels(apiKey.provider) &&
-      providerApiKeys.some((mapping) => mapping.provider === apiKey.provider)
-    ) {
-      continue;
-    }
-    providerApiKeys.push({
-      provider: apiKey.provider,
-      providerApiKeyId: apiKey.id,
-      providerApiKeyName: apiKey.name,
-      secretId: apiKey.secretId,
-      baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
-      scope: apiKey.scope,
-      userId: apiKey.userId,
-    });
-  }
-  return providerApiKeys;
+  return [...keys].sort(compareModelRouterUserProviderKeys).map((apiKey) => ({
+    provider: apiKey.provider,
+    providerApiKeyId: apiKey.id,
+    providerApiKeyName: apiKey.name,
+    secretId: apiKey.secretId,
+    baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
+    scope: apiKey.scope,
+    userId: apiKey.userId,
+  }));
 }
 
 /**

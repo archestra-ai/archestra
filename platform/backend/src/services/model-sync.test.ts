@@ -799,7 +799,8 @@ describe("ModelSyncService", () => {
     // models.dev still fills fields the fetcher does not carry.
     expect(capabilities.description).toBe("DeepSeek V3.1");
     expect(capabilities.inputModalities).toEqual(["text"]);
-    expect(capabilities.outputLength).toBe(4096);
+    // Endpoint output caps belong to the API-key/model link, not this shared row.
+    expect(capabilities.outputLength).toBe(16384);
   });
 
   test("persists fetcher pricing so :free models sync as zero-priced", async ({

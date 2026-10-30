@@ -209,11 +209,13 @@ export async function resolveOcrConfig(
       apiKey: resolved.apiKey ?? undefined,
       modelName: org.ocrModel,
       baseUrl: resolved.baseUrl,
+      chatApiKeyId: org.ocrChatApiKeyId,
     }),
     maxOutputTokens: (
       await resolveModelOutputBudget({
         provider: resolved.provider,
         modelName: org.ocrModel,
+        chatApiKeyId: org.ocrChatApiKeyId,
         // Older vision models cap output at 4096 and some providers (Bedrock)
         // reject a larger request instead of clamping it.
         unknownOutputLength: 4_096,
@@ -339,6 +341,7 @@ async function resolveRerankerConfigForOrganization(
       apiKey: resolved.apiKey ?? undefined,
       modelName,
       baseUrl: resolved.baseUrl,
+      chatApiKeyId: org.rerankerChatApiKeyId,
     }),
     modelName,
     provider: resolved.provider,

@@ -98,6 +98,7 @@ import {
   ConversationEnabledToolModel,
   ConversationModel,
   LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   McpGatewayTaskModel,
   MessageModel,
   ModelModel,
@@ -1673,9 +1674,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const maxOutputTokens = resolveAgentMaxOutputTokens({
                   // Resolved, so an admin-set max-output override on a model
                   // whose provider reports no limit is what the turn asks for.
-                  outputLength: modelRow
-                    ? ModelModel.resolveEffectiveOutputLength(modelRow)
-                    : null,
+                  outputLength:
+                    await LlmProviderApiKeyModelLinkModel.resolveOutputLength(
+                      modelRow,
+                      chatApiKeyId,
+                    ),
                   ceiling: config.chat.maxOutputTokensCeiling,
                   rateMeteredCeiling:
                     config.chat.rateMeteredMaxOutputTokensCeiling,

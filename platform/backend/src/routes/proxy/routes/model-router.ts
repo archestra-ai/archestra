@@ -33,6 +33,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import AgentTeamModel from "@/models/agent-team";
+import { getLlmProxyRequestTelemetry } from "@/observability/llm-proxy-request";
 import { collectDelegationMarkers } from "@/openappa/delegation";
 import { scrubTranslatedClientWire } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
@@ -119,6 +120,7 @@ import {
   type LLMProxyAuthOverride,
   sendUsageLimitRefusal,
 } from "../llm-proxy-handler";
+import { classifyProxyFailure } from "../llm-proxy-helpers";
 import { type ModelPoolCaller, mayUseModelPool } from "../model-pool-failover";
 import {
   type ModelRouterAuth,
@@ -505,7 +507,12 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      return routeResponse(request, reply);
+      return withRouterTelemetry({
+        request,
+        reply,
+        operation: "chat",
+        run: () => routeResponse(request, reply),
+      });
     },
   );
 
@@ -527,7 +534,12 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      return routeResponse(request, reply);
+      return withRouterTelemetry({
+        request,
+        reply,
+        operation: "chat",
+        run: () => routeResponse(request, reply),
+      });
     },
   );
 
@@ -546,7 +558,12 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      return routeEmbedding(request, reply);
+      return withRouterTelemetry({
+        request,
+        reply,
+        operation: "embedding",
+        run: () => routeEmbedding(request, reply),
+      });
     },
   );
 
@@ -568,7 +585,12 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      return routeEmbedding(request, reply);
+      return withRouterTelemetry({
+        request,
+        reply,
+        operation: "embedding",
+        run: () => routeEmbedding(request, reply),
+      });
     },
   );
 
@@ -589,7 +611,12 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      return routeChatCompletion(request, reply);
+      return withRouterTelemetry({
+        request,
+        reply,
+        operation: "chat",
+        run: () => routeChatCompletion(request, reply),
+      });
     },
   );
 
@@ -613,7 +640,12 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      return routeChatCompletion(request, reply);
+      return withRouterTelemetry({
+        request,
+        reply,
+        operation: "chat",
+        run: () => routeChatCompletion(request, reply),
+      });
     },
   );
 };
@@ -698,6 +730,33 @@ async function routeImageGeneration(
         400,
         `Provider "${resolution.provider}" does not support the Model Router images endpoint.`,
       );
+  }
+}
+
+async function withRouterTelemetry(params: {
+  request: FastifyRequest;
+  reply: FastifyReply;
+  operation: "chat" | "embedding";
+  run: () => Promise<FastifyReply>;
+}): Promise<FastifyReply> {
+  const telemetry = getLlmProxyRequestTelemetry({
+    request: params.request,
+    provider: "router",
+    operation: params.operation,
+    stream: (params.request.body as { stream?: boolean })?.stream === true,
+  });
+  try {
+    return await params.run();
+  } catch (error) {
+    telemetry.fail(classifyProxyFailure(error));
+    throw error;
+  } finally {
+    telemetry.finish({
+      statusCode: params.reply.statusCode,
+      headersSent: params.reply.raw.headersSent,
+      disconnected:
+        params.reply.raw.destroyed && !params.reply.raw.writableEnded,
+    });
   }
 }
 

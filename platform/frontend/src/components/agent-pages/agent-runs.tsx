@@ -54,9 +54,9 @@ export function AgentRuns({ agentId }: { agentId: string }) {
     error,
     refetch,
   } = useAgentRuns(agentId);
-  const runHref = (taskId: string | null) => {
+  const runHref = (runId: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (taskId) params.set("run", taskId);
+    if (runId) params.set("run", runId);
     else params.delete("run");
     return `${pathname}?${params}`;
   };
@@ -91,14 +91,19 @@ export function AgentRuns({ agentId }: { agentId: string }) {
       />
     );
   // A run that is gone (deleted, or not this Agent's) falls back to the list.
-  const selected = runs.find((run) => run.taskId === searchParams.get("run"));
+  // A run is addressed by its session, so a link survives a continued run;
+  // links that name a turn's task still open it.
+  const runId = searchParams.get("run");
+  const selected = runs.find(
+    (run) => run.sessionId === runId || run.taskId === runId,
+  );
   if (!selected)
     return (
       <AgentRunList
         runs={runs}
         viewerId={session?.user.id}
         runHref={runHref}
-        onOpen={(taskId) => router.push(runHref(taskId), { scroll: false })}
+        onOpen={(runId) => router.push(runHref(runId), { scroll: false })}
       />
     );
   return (
@@ -107,7 +112,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
       selected={selected}
       viewerId={session?.user.id}
       // Stepping between runs replaces the entry, so Back still means the list.
-      onSelect={(taskId) => router.replace(runHref(taskId), { scroll: false })}
+      onSelect={(runId) => router.replace(runHref(runId), { scroll: false })}
       onBack={() => router.push(runHref(null), { scroll: false })}
       // A deleted run's entry is replaced, so Back cannot return to it.
       onDeleted={() => router.replace(runHref(null), { scroll: false })}
@@ -126,7 +131,7 @@ function AgentRunDetail({
   runs: AgentRunListItem[];
   selected: AgentRunListItem;
   viewerId: string | undefined;
-  onSelect: (taskId: string) => void;
+  onSelect: (runId: string) => void;
   onBack: () => void;
   onDeleted: () => void;
 }) {
@@ -154,11 +159,11 @@ function AgentRunDetail({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  const index = runs.findIndex((run) => run.taskId === selected.taskId);
+  const index = runs.findIndex((run) => run.sessionId === selected.sessionId);
   const filtered = runs.filter(
     (run) =>
       (starter === "anyone" || starterKey(run) === starter) &&
-      `${run.title} ${run.taskId} ${initiatorLabel(run)}`
+      `${run.title} ${run.sessionId} ${run.taskId} ${initiatorLabel(run)}`
         .toLowerCase()
         .includes(search.trim().toLowerCase()),
   );
@@ -177,6 +182,7 @@ function AgentRunDetail({
         key={selected.taskId}
         detailsOpen={detailsOpen}
         onDetailsOpenChange={setDetailsOpen}
+        // Shares name a turn's task, so a shared viewer reads the run by it.
         taskId={selected.taskId}
         embedded
         onDeleted={onDeleted}
@@ -210,7 +216,7 @@ function AgentRunDetail({
               size="icon-sm"
               aria-label="Previous run"
               disabled={index === 0}
-              onClick={() => onSelect(runs[index - 1].taskId)}
+              onClick={() => onSelect(runs[index - 1].sessionId)}
             >
               <ChevronLeft />
             </Button>
@@ -222,7 +228,7 @@ function AgentRunDetail({
               size="icon-sm"
               aria-label="Next run"
               disabled={index === runs.length - 1}
-              onClick={() => onSelect(runs[index + 1].taskId)}
+              onClick={() => onSelect(runs[index + 1].sessionId)}
             >
               <ChevronRight />
             </Button>
@@ -259,7 +265,7 @@ function AgentRunDetail({
                   setHighlighted((v) => Math.max(0, v - 1));
                 }
                 if (event.key === "Enter" && filtered[highlighted])
-                  choose(filtered[highlighted].taskId);
+                  choose(filtered[highlighted].sessionId);
               }}
             />
             <Select
@@ -285,8 +291,8 @@ function AgentRunDetail({
           <div className="max-h-80 overflow-y-auto p-2">
             {filtered.map((run, i) => (
               <UnstyledButton
-                key={run.taskId}
-                onClick={() => choose(run.taskId)}
+                key={run.sessionId}
+                onClick={() => choose(run.sessionId)}
                 className={`mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left hover:bg-muted ${i === highlighted ? "bg-muted" : ""}`}
               >
                 <TerminalSquare className="size-4 shrink-0 text-muted-foreground" />

@@ -1029,21 +1029,25 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(409, "Stop the run before deleting it");
       }
       request.auditResourceId = { value: run.taskId };
+      const workspace = await AgentWorkspaceModel.findByWorkloadName(
+        run.workloadName,
+      );
       request.auditBefore = {
         taskId: run.taskId,
         agentId: run.agentId,
         title: run.title,
         state: run.state,
+        workspaceState: workspace?.state ?? null,
       };
-      await deleteFinishedRunWorkspace({
+      const workspaceState = await deleteFinishedRunWorkspace({
         actor: {
           ...actorFromUserId(request.user.id),
           organizationId: request.organizationId,
         },
         run,
       });
-      await A2ATaskModel.delete(run.taskId);
-      request.auditAfter = { deleted: true };
+      await deleteRunSession(run);
+      request.auditAfter = { deleted: true, workspaceState };
       return reply.send({ deleted: true as const });
     },
   );
@@ -1055,9 +1059,10 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.BulkDeleteAgentRuns,
         description:
           "Delete several finished Agent Runtime sessions started by this " +
-          "user, with their saved files. A run that is still active, or that this user did not " +
-          "start, is reported in `failed` and leaves the rest of the batch " +
-          "applied.",
+          "user, with every turn and their saved files. A run that is still " +
+          "active, one whose saved files are still being suspended, or one " +
+          "this user did not start is reported in `failed` and leaves the " +
+          "rest of the batch applied.",
         tags: ["Agents"],
         body: BulkDeleteBodySchema,
         response: constructResponseSchema(BulkOutcomeSchema),
@@ -1083,7 +1088,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         applyEach: async (run) => {
           await deleteFinishedRunWorkspace({ actor, run });
-          await A2ATaskModel.delete(run.taskId);
+          await deleteRunSession(run);
         },
         audit: {
           target: request,
@@ -1126,7 +1131,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const workspace = await AgentWorkspaceModel.findByWorkloadName(
             run.workloadName,
           );
-          if (!workspace) {
+          if (!workspace || workspace.state === "deleted") {
             throw new ApiError(404, "This run has no saved files");
           }
         },
@@ -1383,6 +1388,7 @@ async function loadOwnedRuns(
   ids: string[],
 ): Promise<Map<string, AgentRunSession>> {
   const runs = new Map<string, AgentRunSession>();
+  const sessions = new Set<string>();
   for (const taskId of ids) {
     if (!z.string().uuid().safeParse(taskId).success) continue;
     const run = await AgentRunModel.findCurrentSessionForActor({
@@ -1390,9 +1396,25 @@ async function loadOwnedRuns(
       actorUserId: request.user.id,
       organizationId: request.organizationId,
     });
-    if (run) runs.set(taskId, run);
+    // Two ids of one session (its id and a turn's) act on it once.
+    if (!run || sessions.has(run.taskId)) continue;
+    sessions.add(run.taskId);
+    runs.set(taskId, run);
   }
   return runs;
+}
+
+/**
+ * Deletes every turn of a session, so no earlier turn is left behind as a
+ * run of its own. The current turn goes last: until then the session still
+ * resolves, and a failed delete can be retried.
+ */
+async function deleteRunSession(run: AgentRunSession) {
+  const taskIds = await AgentRunModel.listSessionTaskIds(run);
+  for (const taskId of taskIds) {
+    if (taskId !== run.taskId) await A2ATaskModel.delete(taskId);
+  }
+  await A2ATaskModel.delete(run.taskId);
 }
 
 /** The saved-files state of a batch's runs, safe to store in the audit log. */
@@ -1422,17 +1444,20 @@ async function snapshotOwnedRuns(
   ids: string[],
 ) {
   const runs = await loadOwnedRuns(request, ids);
-  return {
-    runs: [...runs.values()]
-      .map(({ taskId, agentId, title, state }) => ({
-        taskId,
-        agentId,
-        title,
-        state,
-      }))
-      // Sorted so an unchanged batch snapshots identically on both sides.
-      .sort((a, b) => a.taskId.localeCompare(b.taskId)),
-  };
+  const entries = [];
+  for (const { taskId, agentId, title, state, workloadName } of runs.values()) {
+    const workspace =
+      await AgentWorkspaceModel.findByWorkloadName(workloadName);
+    entries.push({
+      taskId,
+      agentId,
+      title,
+      state,
+      workspaceState: workspace?.state ?? null,
+    });
+  }
+  // Sorted so an unchanged batch snapshots identically on both sides.
+  return { runs: entries.sort((a, b) => a.taskId.localeCompare(b.taskId)) };
 }
 
 async function requireReadableProject(params: {

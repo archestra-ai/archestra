@@ -24995,6 +24995,7 @@ export type GetAgentRunsResponses = {
         stateChangedAt: string | null;
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
+        sessionId: string;
         initiatorName: string | null;
         workspace: {
             state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';

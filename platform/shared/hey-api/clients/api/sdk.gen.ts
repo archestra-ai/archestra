@@ -1172,7 +1172,7 @@ export const continueAgentRun = <ThrowOnError extends boolean = false>(options: 
 export const cancelAgentRun = <ThrowOnError extends boolean = false>(options: Options<CancelAgentRunData, ThrowOnError>) => (options.client ?? client).post<CancelAgentRunResponses, CancelAgentRunErrors, ThrowOnError>({ url: '/api/agent-runs/{taskId}/cancel', ...options });
 
 /**
- * Delete several finished Agent Runtime sessions started by this user, with their saved files. A run that is still active, or that this user did not start, is reported in `failed` and leaves the rest of the batch applied.
+ * Delete several finished Agent Runtime sessions started by this user, with every turn and their saved files. A run that is still active, one whose saved files are still being suspended, or one this user did not start is reported in `failed` and leaves the rest of the batch applied.
  *
  * Authentication:
  *

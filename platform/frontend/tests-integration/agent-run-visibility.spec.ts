@@ -27,6 +27,7 @@ test("keeps a long run owner and the access details inside the phone viewport", 
   const run = {
     id: "run-1",
     taskId: "12345678-abcd-4000-8000-123456789abc",
+    sessionId: "12345678-abcd-4000-8000-123456789abc",
     agentId: agent.id,
     organizationId: "test-org",
     actorKind: "user",

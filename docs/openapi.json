@@ -92612,6 +92612,11 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "sessionId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "initiatorName": {
                         "nullable": true,
                         "type": "string"
@@ -92707,6 +92712,7 @@
                       "stateChangedAt",
                       "hardDeadlineAt",
                       "lastModelActivityAt",
+                      "sessionId",
                       "initiatorName",
                       "workspace",
                       "shareVisibility",
@@ -96010,7 +96016,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Delete several finished Agent Runtime sessions started by this user, with their saved files. A run that is still active, or that this user did not start, is reported in `failed` and leaves the rest of the batch applied.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Delete several finished Agent Runtime sessions started by this user, with every turn and their saved files. A run that is still active, one whose saved files are still being suspended, or one this user did not start is reported in `failed` and leaves the rest of the batch applied.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {

@@ -405,9 +405,9 @@ export function useDeleteAgentRun() {
 export function useBulkCancelAgentRuns() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (taskIds: string[]) => {
+    mutationFn: async (runIds: string[]) => {
       const { data, error } = await bulkCancelAgentRuns({
-        body: { ids: taskIds },
+        body: { ids: runIds },
       });
       if (error) throw reportApiError(error);
       return toBulkOutcome(data ?? { succeeded: [], failed: [] });
@@ -428,9 +428,9 @@ export function useBulkCancelAgentRuns() {
 export function useBulkDeleteAgentRuns() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (taskIds: string[]) => {
+    mutationFn: async (runIds: string[]) => {
       const { data, error } = await bulkDeleteAgentRuns({
-        body: { ids: taskIds },
+        body: { ids: runIds },
       });
       if (error) throw reportApiError(error);
       return toBulkOutcome(data ?? { succeeded: [], failed: [] });
@@ -442,8 +442,8 @@ export function useBulkDeleteAgentRuns() {
         failureVerb: "delete",
         noun: "run",
       }),
-    onSettled: (_outcome, _error, taskIds) =>
-      invalidateRunLists(queryClient, taskIds),
+    onSettled: (_outcome, _error, runIds) =>
+      invalidateRunLists(queryClient, runIds),
   });
 }
 
@@ -451,9 +451,9 @@ export function useBulkDeleteAgentRuns() {
 export function useBulkDeleteAgentWorkspaces() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (taskIds: string[]) => {
+    mutationFn: async (runIds: string[]) => {
       const { data, error } = await bulkDeleteAgentWorkspaces({
-        body: { ids: taskIds },
+        body: { ids: runIds },
       });
       if (error) throw reportApiError(error);
       return toBulkOutcome(data ?? { succeeded: [], failed: [] });

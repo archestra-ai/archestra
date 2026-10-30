@@ -1,32 +1,50 @@
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import logger from "@/logging";
 import { AgentRunModel, AgentWorkspaceModel } from "@/models";
-import { ApiError } from "@/types";
+import { type AgentWorkspaceState, ApiError } from "@/types";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
 import { cleanupAgentRun } from "./pod-run";
 
 /**
  * Deletes a finished run's saved files ahead of the run itself, so deleting a
- * run frees its volume now rather than at its retention deadline. A workspace
- * a turn still holds, or one changing state, is left to expire as before.
+ * run frees its volume now rather than at its retention deadline. Returns the
+ * files' state afterwards, or null for a run that never had any.
  */
 export async function deleteFinishedRunWorkspace(params: {
   actor: A2AActor;
   run: { taskId: string; workloadName: string };
-}) {
+}): Promise<AgentWorkspaceState | null> {
   const workspace = await AgentWorkspaceModel.findByWorkloadName(
     params.run.workloadName,
   );
+  if (!workspace) return null;
+  if (workspace.state === "deleted") return workspace.state;
+  // Files a turn still holds, or that are being suspended, would outlive the
+  // run until their retention deadline, so the run waits for them instead.
   if (
-    !workspace ||
     workspace.activeTaskId ||
     !DELETABLE_WORKSPACE_STATES.includes(workspace.state)
   )
-    return;
-  await deleteAgentWorkspace({
-    actor: params.actor,
-    taskId: params.run.taskId,
-  });
+    throw new ApiError(
+      409,
+      "This run's saved files are still being put away. Try deleting it again in a minute.",
+    );
+  try {
+    const { state } = await deleteAgentWorkspace({
+      actor: params.actor,
+      taskId: params.run.taskId,
+    });
+    return state;
+  } catch (error) {
+    // The run is kept, so a retry, and the reconciler, still find its
+    // credentials to revoke.
+    if (error instanceof ApiError && error.statusCode >= 500)
+      throw new ApiError(
+        error.statusCode,
+        "Couldn't finish deleting this run's saved files. Try deleting it again.",
+      );
+    throw error;
+  }
 }
 
 /** Deletion is intentionally separate from cancellation: files are not recoverable. */

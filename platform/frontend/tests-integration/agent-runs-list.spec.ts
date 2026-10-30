@@ -240,5 +240,10 @@ function makeRun(overrides: Partial<AgentRunListItem>): AgentRunListItem {
     shareTeamNames: null,
     shareUserNames: null,
     ...overrides,
+    // A run without a workspace is its own session.
+    sessionId:
+      overrides.sessionId ??
+      overrides.taskId ??
+      "00000000-0000-4000-8000-000000000000",
   };
 }

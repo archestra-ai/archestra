@@ -56,8 +56,8 @@ export function AgentRunList({
 }: {
   runs: AgentRunListItem[];
   viewerId: string | undefined;
-  runHref: (taskId: string) => string;
-  onOpen: (taskId: string) => void;
+  runHref: (runId: string) => string;
+  onOpen: (runId: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [starter, setStarter] = useState(ANYONE);
@@ -66,9 +66,13 @@ export function AgentRunList({
   const bulkCancel = useBulkCancelAgentRuns();
   const bulkDelete = useBulkDeleteAgentRuns();
   const bulkDeleteFiles = useBulkDeleteAgentWorkspaces();
-  const [confirming, setConfirming] = useState<
-    "stop" | "delete" | "files" | null
-  >(null);
+  // What a dialog acts on is fixed when it opens: the list refreshes every few
+  // seconds, and a run that ends meanwhile must not change what Confirm sends.
+  const [confirming, setConfirming] = useState<{
+    action: BulkRunAction;
+    runIds: string[];
+    selectedCount: number;
+  } | null>(null);
 
   const isOwn = (run: AgentRunListItem) =>
     !!viewerId && run.actorUserId === viewerId;
@@ -77,7 +81,7 @@ export function AgentRunList({
     (run) =>
       (starter === ANYONE || starterKey(run) === starter) &&
       STATUS_MATCHES[status](run) &&
-      `${run.title} ${run.taskId} ${initiatorLabel(run)}`
+      `${run.title} ${run.sessionId} ${run.taskId} ${initiatorLabel(run)}`
         .toLowerCase()
         .includes(query),
   );
@@ -96,7 +100,7 @@ export function AgentRunList({
     selectAllMatching,
   } = useBulkSelection({
     rows: filtered,
-    getId: (run) => run.taskId,
+    getId: (run) => run.sessionId,
     canSelect: isOwn,
     filterSignature: JSON.stringify({ query, starter, status }),
     matchDescription: hasActiveFilters ? "match the filters" : "exist",
@@ -154,7 +158,7 @@ export function AgentRunList({
           <div className="min-w-0">
             <RowClickShield className="min-w-0">
               <Link
-                href={runHref(run.taskId)}
+                href={runHref(run.sessionId)}
                 className="block truncate font-medium hover:underline"
               >
                 {run.title}
@@ -218,11 +222,33 @@ export function AgentRunList({
   const deleteCount = ended.length;
   const stopCount = active.length;
   const filesCount = withFiles.length;
+  const targets: Record<BulkRunAction, AgentRunListItem[]> = {
+    stop: active,
+    files: withFiles,
+    delete: ended,
+  };
+  const confirm = (action: BulkRunAction) =>
+    setConfirming({
+      action,
+      runIds: targets[action].map((run) => run.sessionId),
+      selectedCount: selected.length,
+    });
+  const runIds = confirming?.runIds ?? [];
+  const count = runIds.length;
+  // Runs the action leaves alone stay selected for the next one.
+  const finish = (outcome: { failed: unknown[] }) => {
+    if (
+      outcome.failed.length === 0 &&
+      count === (confirming?.selectedCount ?? 0)
+    )
+      clearSelection();
+    setConfirming(null);
+  };
   // An action that reaches only part of the selection says how many it
   // reaches, so Delete never looks like it will take the runs still going.
   const reach = (count: number) => (count < selected.length ? ` ${count}` : "");
   const actions: {
-    key: "stop" | "files" | "delete";
+    key: BulkRunAction;
     label: string;
     icon: LucideIcon;
     iconClassName?: string;
@@ -333,7 +359,7 @@ export function AgentRunList({
                   <DropdownMenuItem
                     key={action.key}
                     variant={action.destructive ? "destructive" : "default"}
-                    onSelect={() => setConfirming(action.key)}
+                    onSelect={() => confirm(action.key)}
                   >
                     <action.icon className={action.iconClassName} />
                     <span>{action.label}</span>
@@ -348,7 +374,7 @@ export function AgentRunList({
               variant={action.destructive ? "destructive" : "outline"}
               size="sm"
               className={actions.length > 1 ? "max-sm:hidden" : undefined}
-              onClick={() => setConfirming(action.key)}
+              onClick={() => confirm(action.key)}
             >
               <action.icon className={action.iconClassName} />
               <span>{action.label}</span>
@@ -360,7 +386,7 @@ export function AgentRunList({
       <DataTable
         columns={columns}
         data={filtered}
-        getRowId={(run) => run.taskId}
+        getRowId={(run) => run.sessionId}
         rowSelection={canSelectAny ? rowSelection : undefined}
         onRowSelectionChange={canSelectAny ? setRowSelection : undefined}
         onPageRowIdsChange={onPageRowIdsChange}
@@ -369,7 +395,7 @@ export function AgentRunList({
         onPaginationChange={setPagination}
         hidePaginationWhenSinglePage
         onRowClick={(run, event) =>
-          openRowOnPlainClick(event, () => onOpen(run.taskId))
+          openRowOnPlainClick(event, () => onOpen(run.sessionId))
         }
         emptyIcon={TerminalSquare}
         emptyMessage="No runs yet"
@@ -382,87 +408,46 @@ export function AgentRunList({
       />
 
       <DeleteConfirmDialog
-        open={confirming === "stop"}
+        open={confirming?.action === "stop"}
         onOpenChange={(open) => !open && setConfirming(null)}
-        title={`Stop ${countOf(stopCount)}?`}
+        title={`Stop ${countOf(count)}?`}
         description={`The Agent ${
-          stopCount === 1 ? "process" : "processes"
+          count === 1 ? "process" : "processes"
         } will stop. Saved files and run history will be retained so you can continue later.`}
-        confirmLabel={stopCount === 1 ? "Stop run" : "Stop runs"}
+        confirmLabel={count === 1 ? "Stop run" : "Stop runs"}
         pendingLabel="Stopping…"
         isPending={bulkCancel.isPending}
-        onConfirm={() =>
-          bulkCancel.mutate(
-            active.map((run) => run.taskId),
-            {
-              onSuccess: (outcome) => {
-                setConfirming(null);
-                if (outcome.failed.length === 0) clearSelection();
-              },
-            },
-          )
-        }
+        onConfirm={() => bulkCancel.mutate(runIds, { onSuccess: finish })}
       />
       <DeleteConfirmDialog
-        open={confirming === "delete"}
+        open={confirming?.action === "delete"}
         onOpenChange={(open) => !open && setConfirming(null)}
-        title={`Delete ${countOf(deleteCount)}?`}
+        title={`Delete ${countOf(count)}?`}
         description={`This removes ${
-          deleteCount === 1
+          count === 1
             ? "the session, its retained output, and its"
             : "their sessions, retained output, and"
-        } saved files. This action cannot be undone.${
-          stopCount === 1
-            ? " The run that is still running is not deleted."
-            : stopCount > 1
-              ? ` The ${stopCount} runs that are still running are not deleted.`
-              : ""
-        }`}
-        confirmLabel={deleteCount === 1 ? "Delete run" : "Delete runs"}
+        } saved files. This action cannot be undone.${runningNote(
+          (confirming?.selectedCount ?? 0) - count,
+        )}`}
+        confirmLabel={count === 1 ? "Delete run" : "Delete runs"}
         pendingLabel="Deleting…"
         isPending={bulkDelete.isPending}
-        onConfirm={() =>
-          bulkDelete.mutate(
-            ended.map((run) => run.taskId),
-            {
-              onSuccess: (outcome) => {
-                setConfirming(null);
-                if (outcome.failed.length === 0 && stopCount === 0) {
-                  clearSelection();
-                }
-              },
-            },
-          )
-        }
+        onConfirm={() => bulkDelete.mutate(runIds, { onSuccess: finish })}
       />
       <DeleteConfirmDialog
-        open={confirming === "files"}
+        open={confirming?.action === "files"}
         onOpenChange={(open) => !open && setConfirming(null)}
-        title={`Delete saved files of ${countOf(filesCount)}?`}
+        title={`Delete saved files of ${countOf(count)}?`}
         description={`This permanently removes ${
-          filesCount === 1
+          count === 1
             ? "the run's saved files. You cannot resume the run"
             : "their saved files. You cannot resume these runs"
         } afterward. Run history remains available.`}
         confirmLabel="Delete saved files"
         pendingLabel="Deleting…"
         isPending={bulkDeleteFiles.isPending}
-        onConfirm={() =>
-          bulkDeleteFiles.mutate(
-            withFiles.map((run) => run.taskId),
-            {
-              onSuccess: (outcome) => {
-                setConfirming(null);
-                if (
-                  outcome.failed.length === 0 &&
-                  filesCount === selected.length
-                ) {
-                  clearSelection();
-                }
-              },
-            },
-          )
-        }
+        onConfirm={() => bulkDeleteFiles.mutate(runIds, { onSuccess: finish })}
       />
     </BulkActionsScope>
   );
@@ -498,6 +483,8 @@ function RunStatus({ run }: { run: AgentRunListItem }) {
 
 const ANYONE = "anyone";
 
+type BulkRunAction = "stop" | "files" | "delete";
+
 type StatusFilter = "all" | "running" | "ended" | "failed";
 
 const STATUS_ITEMS: { value: StatusFilter; label: string }[] = [
@@ -517,6 +504,14 @@ const STATUS_MATCHES: Record<StatusFilter, (run: AgentRunListItem) => boolean> =
 
 function startedAgo(run: AgentRunListItem) {
   return formatRelativeTimeFromNow(run.startedAt, { strict: true });
+}
+
+/** Delete reaches only ended runs; the rest of the selection is still running. */
+function runningNote(running: number) {
+  if (running === 1) return " The run that is still running is not deleted.";
+  if (running > 1)
+    return ` The ${running} runs that are still running are not deleted.`;
+  return "";
 }
 
 function countOf(count: number) {

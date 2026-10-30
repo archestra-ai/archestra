@@ -149,6 +149,27 @@ class AgentRunModel {
       : null;
   }
 
+  /** Every turn's task of a session, current turn included. */
+  static async listSessionTaskIds(
+    session: Pick<
+      AgentRunRecord,
+      "workloadName" | "organizationId" | "actorKind" | "actorId"
+    >,
+  ): Promise<string[]> {
+    const rows = await db
+      .select({ taskId: schema.agentRunsTable.taskId })
+      .from(schema.agentRunsTable)
+      .where(
+        and(
+          eq(schema.agentRunsTable.workloadName, session.workloadName),
+          eq(schema.agentRunsTable.organizationId, session.organizationId),
+          eq(schema.agentRunsTable.actorKind, session.actorKind),
+          eq(schema.agentRunsTable.actorId, session.actorId),
+        ),
+      );
+    return rows.map((row) => row.taskId);
+  }
+
   /**
    * The current turn's task of a run addressed by its stable run id: the
    * workspace id, or the task id of a run with no workspace. Null when the id
@@ -481,6 +502,7 @@ class AgentRunModel {
     const rows = await db
       .select({
         ...runColumns,
+        sessionId: sql<string>`COALESCE(${schema.agentWorkspacesTable.id}, ${schema.agentRunsTable.taskId})`,
         workspaceState: schema.agentWorkspacesTable.state,
         workspaceExpiresAt: schema.agentWorkspacesTable.expiresAt,
         state: schema.a2aTasksTable.state,
@@ -542,6 +564,9 @@ class AgentRunModel {
         and(
           eq(schema.agentRunsTable.agentId, params.agentId),
           eq(schema.agentRunsTable.organizationId, params.organizationId),
+          // One row per session: its current turn, as the sidebar lists it.
+          sql`(${schema.agentWorkspacesTable.lastTaskId} IS NULL
+            OR ${schema.agentWorkspacesTable.lastTaskId} = ${schema.agentRunsTable.taskId})`,
         ),
       )
       .orderBy(desc(schema.agentRunsTable.startedAt));

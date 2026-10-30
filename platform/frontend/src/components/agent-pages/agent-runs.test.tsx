@@ -116,6 +116,7 @@ describe("AgentRuns", () => {
     state.runs.push({
       ...createRun("2026-09-03T20:10:00.000Z"),
       taskId: "second-run",
+      sessionId: "second-run",
       actorId: "user-2",
       actorUserId: "user-2",
       initiatorName: "Sam Chen",
@@ -147,6 +148,7 @@ describe("AgentRuns", () => {
     const own = (taskId: string, title: string, endedAt: string | null) => ({
       ...createRun(endedAt),
       taskId,
+      sessionId: taskId,
       title,
     });
     state.runs = [
@@ -156,6 +158,7 @@ describe("AgentRuns", () => {
       {
         ...createRun("2026-09-03T20:07:00.000Z"),
         taskId: "colleague-run",
+        sessionId: "colleague-run",
         actorId: "user-2",
         actorUserId: "user-2",
         initiatorName: "Sam Chen",
@@ -224,6 +227,7 @@ describe("AgentRuns", () => {
     const ended = (taskId: string, title: string) => ({
       ...createRun("2026-09-03T20:05:00.000Z"),
       taskId,
+      sessionId: taskId,
       title,
     });
     state.runs = [
@@ -272,6 +276,82 @@ describe("AgentRuns", () => {
     );
     expect(toast.success).toHaveBeenCalledWith("Deleted 1 run's saved files");
     expect(sent).toEqual(["kept"]);
+  });
+  it("addresses a continued run by its session, and opens older links to its turn", async () => {
+    state.runs = [
+      {
+        ...createRun("2026-09-03T20:05:00.000Z"),
+        taskId: "turn-2",
+        sessionId: "session-1",
+      },
+    ];
+    let sent: string[] = [];
+    server.use(
+      http.delete(
+        "http://localhost:9000/api/agent-runs/bulk",
+        async ({ request }) => {
+          sent = ((await request.json()) as { ids: string[] }).ids;
+          return HttpResponse.json({ succeeded: [], failed: [] });
+        },
+      ),
+    );
+    renderRuns("agent-1", false, "section=runs&run=turn-2");
+    expect(
+      await screen.findByRole("heading", { name: "Native TUI verification" }),
+    ).toBeVisible();
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole("button", { name: "All runs" })[0]);
+    expect(
+      await screen.findByRole("link", { name: "Native TUI verification" }),
+    ).toHaveAttribute("href", "/agents/agent-1?section=runs&run=session-1");
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select Native TUI verification" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Delete run" }));
+    expect(sent).toEqual(["session-1"]);
+  });
+  it("keeps what a confirm dialog acts on while the list refreshes, and the runs it skipped selected", async () => {
+    const live = { ...createRun(null), title: "Live review" };
+    const done = {
+      ...createRun("2026-09-03T20:05:00.000Z"),
+      taskId: "done-1",
+      sessionId: "done-1",
+      title: "Finished review",
+    };
+    state.runs = [live, done];
+    let sent: string[] = [];
+    server.use(
+      http.post(
+        "http://localhost:9000/api/agent-runs/bulk-cancel",
+        async ({ request }) => {
+          sent = ((await request.json()) as { ids: string[] }).ids;
+          return HttpResponse.json({
+            succeeded: [],
+            failed: sent.map((id) => ({
+              id,
+              name: "Live review",
+              error: "The run has already ended",
+            })),
+          });
+        },
+      ),
+    );
+    renderRuns("agent-1", false, "section=runs");
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("checkbox", {
+        name: "Select all runs on this page",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Stop 1" }));
+    // The run ends while the dialog is open.
+    state.runs = [{ ...live, endedAt: "2026-09-03T20:06:00.000Z" }, done];
+    await act(() => queryClient.invalidateQueries());
+    const dialog = screen.getByRole("dialog", { name: "Stop 1 run?" });
+    await user.click(within(dialog).getByRole("button", { name: "Stop run" }));
+    expect(sent).toEqual([live.sessionId]);
+    expect(screen.getAllByText("2 runs selected")[0]).toBeInTheDocument();
   });
   it("offers no selection to a viewer who started none of the runs", async () => {
     state.runs = [
@@ -350,6 +430,7 @@ describe("AgentRuns", () => {
     state.runs.push({
       ...createRun(null),
       taskId: "second-run",
+      sessionId: "second-run",
       actorId: "user-2",
       actorUserId: "user-2",
       initiatorName: "Sam Chen",
@@ -395,6 +476,7 @@ describe("AgentRuns", () => {
       {
         ...createRun(null),
         taskId: "second-run",
+        sessionId: "second-run",
         actorKind: "serviceAccount",
         actorId: "account-2",
         actorUserId: null,
@@ -439,6 +521,7 @@ describe("AgentRuns", () => {
     state.runs.push({
       ...createRun(null),
       taskId: "second-live",
+      sessionId: "second-live",
       title: "Second live run",
     });
     renderRuns();
@@ -478,6 +561,7 @@ describe("AgentRuns", () => {
     state.runs.push({
       ...createRun(null),
       taskId: "second-run",
+      sessionId: "second-run",
       title: "Second run",
       actorUserId: "user-2",
       actorId: "user-2",
@@ -604,6 +688,7 @@ function createRun(endedAt: string | null): AgentRunListItem {
     id: "run-1",
     organizationId: "org-1",
     taskId: "12345678-abcd-4000-8000-123456789abc",
+    sessionId: "12345678-abcd-4000-8000-123456789abc",
     agentId: "agent-1",
     actorKind: "user",
     actorId: "user-1",

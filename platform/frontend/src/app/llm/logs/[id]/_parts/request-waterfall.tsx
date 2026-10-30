@@ -264,13 +264,17 @@ export function RequestWaterfall({
   const pageTotals = useMemo(() => {
     let tokens = 0;
     let billed = 0;
+    // A page of requests that recorded no cost at all (pass-through calls,
+    // models without a tariff) has no bill to show, not a bill of $0.
+    let costRecorded = false;
     for (const span of spans) {
       if (span.type !== "request") continue;
       const { row } = span;
       tokens += (row.inputTokens ?? 0) + (row.outputTokens ?? 0);
+      if (row.cost != null) costRecorded = true;
       billed += row.billingMode === "subscription" ? 0 : Number(row.cost ?? 0);
     }
-    return { tokens, billed };
+    return { tokens, billed: costRecorded ? billed : null };
   }, [spans]);
 
   // Keep the selection in view inside the list when it changes from outside
@@ -699,7 +703,7 @@ function StatusText({
   requests: number;
   toolCalls: number;
   tokens: number;
-  billed: number;
+  billed: number | null;
   timeline: Timeline | null;
 }) {
   // Phones keep the request count and the bill beside the paging (tokens
@@ -738,7 +742,15 @@ function StatusText({
       text: <span>{formatCompactNumber(tokens)} tokens</span>,
       wideOnly: true,
     },
-    { key: "billed", text: <span>{formatUsageCost(billed)} billed</span> },
+    {
+      key: "billed",
+      text:
+        billed == null ? (
+          <span>no cost recorded</span>
+        ) : (
+          <span>{formatUsageCost(billed)} billed</span>
+        ),
+    },
   ];
   if (timeline && timeline.realSpanMs > 0) {
     parts.push({

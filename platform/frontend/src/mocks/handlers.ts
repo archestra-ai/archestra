@@ -401,6 +401,11 @@ export const handlers: HttpHandler[] = [
   }),
   ...getJson("/api/organization", organizationSeed),
   ...getJson("/api/agent-runtime-templates", []),
+  ...getJson("/api/agent-runtime-templates/settings", {
+    revision: 0,
+    templates: [],
+    popularAgentOverrides: organizationSeed.popularAgentOverrides,
+  }),
   ...getJson("/api/default-user-limits", []),
   // Per-user limit usage on the Limits page: no members, nothing spent.
   ...getJson("/api/default-user-limits/users", {

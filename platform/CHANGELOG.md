@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.4.11](https://github.com/archestra-ai/archestra/compare/platform-v1.4.10...platform-v1.4.11) (2026-10-30)
+
+
+### Features
+
+* **agent-runs:** focus terminal layout and simplify run headers (1.4) ([#9876](https://github.com/archestra-ai/archestra/issues/9876)) ([70f3a19](https://github.com/archestra-ai/archestra/commit/70f3a195df631a9c7f3d4a5e53fa95607f768d11))
+* **helm:** support registry-only BusyBox image overrides (backport release/1.4) ([#9866](https://github.com/archestra-ai/archestra/issues/9866)) ([621a2a2](https://github.com/archestra-ai/archestra/commit/621a2a23bdad91d1bf2ea71463ab0039033957f4))
+
+
+### Bug Fixes
+
+* **agent-runs:** prevent narrow header overlap (1.4) ([#9887](https://github.com/archestra-ai/archestra/issues/9887)) ([928bffe](https://github.com/archestra-ai/archestra/commit/928bffe1e450dfa67c81307df08e143cd643cd5e))
+* **agents:** restore cloned Auto access modes together (backport release/1.4) ([#9860](https://github.com/archestra-ai/archestra/issues/9860)) ([16c504c](https://github.com/archestra-ai/archestra/commit/16c504c54e78f003b9818380d8cab02f42db4a0a))
+* **chat:** follow updated project default assistant (backport release/1.4) ([#9856](https://github.com/archestra-ai/archestra/issues/9856)) ([875948e](https://github.com/archestra-ai/archestra/commit/875948ea0c2683f28b419655aee54d53ca2a0b2e))
+* **chatops:** cancel failed initial Slack connections (backport release/1.4) ([#9868](https://github.com/archestra-ai/archestra/issues/9868)) ([b7bb838](https://github.com/archestra-ai/archestra/commit/b7bb838888d7a586bcbe12320de56d7d865e3e5a))
+* **chatops:** stop failed Slack setup attempts (1.4) ([#9888](https://github.com/archestra-ai/archestra/issues/9888)) ([4645633](https://github.com/archestra-ai/archestra/commit/46456337830f903ddeffdebc0c0d2fa7f3ee6251))
+* **helm:** configure all auth Secret keys on release/1.4 ([#9847](https://github.com/archestra-ai/archestra/issues/9847)) ([170d158](https://github.com/archestra-ai/archestra/commit/170d1580aaa2950299fed81573d75732e270f2c2))
+* **knowledge:** send Bedrock cache points to Nova 2 in per-passage contextual (backport release/1.4) ([#9852](https://github.com/archestra-ai/archestra/issues/9852)) ([5f10eaf](https://github.com/archestra-ai/archestra/commit/5f10eafc418543efecda4d9ad96af9e03d60212e))
+* **logging:** bound OTLP metadata on release/1.4 ([#9846](https://github.com/archestra-ai/archestra/issues/9846)) ([c9d76ff](https://github.com/archestra-ai/archestra/commit/c9d76ff248973e604456f243ed190fd6b1ef8eeb))
+* **mcp-app:** preserve guest filter and UI state across app reloads (backport release/1.4) ([#9850](https://github.com/archestra-ai/archestra/issues/9850)) ([6f596fb](https://github.com/archestra-ai/archestra/commit/6f596fbeac57bd72e8f1332cab9431a77c1773ed))
+* **mcp:** keep any-value tool schema fields free in tools/list (1.4) ([#9890](https://github.com/archestra-ai/archestra/issues/9890)) ([49eb4f7](https://github.com/archestra-ai/archestra/commit/49eb4f744d75695db78dce4cb37a913369016448))
+* **mcp:** stop transportType from turning remote MCP servers into local confi (backport release/1.4) ([#9851](https://github.com/archestra-ai/archestra/issues/9851)) ([94af776](https://github.com/archestra-ai/archestra/commit/94af776037624bd572c0ad1fa8d2e72b98b590b4))
+* **openappa:** accept organizations of Enterprise Managed Users enterprises (1.4) ([#9893](https://github.com/archestra-ai/archestra/issues/9893)) ([7dcc629](https://github.com/archestra-ai/archestra/commit/7dcc62986a44ef742da7c4ca5514680a4192c4ec))
+* **openappa:** bound session cache keys (backport release/1.4) ([#9864](https://github.com/archestra-ai/archestra/issues/9864)) ([5ae9e9b](https://github.com/archestra-ai/archestra/commit/5ae9e9b289e567b0799d295c260926438b3faddd))
+* **permissions:** remove an object's permission policy when it is purged (backport release/1.4) ([#9842](https://github.com/archestra-ai/archestra/issues/9842)) ([3d8d335](https://github.com/archestra-ai/archestra/commit/3d8d335b723d3593ea6a8bcc94cab5f3092886e0))
+* **schedules:** hide fixed agent field on agent detail page (backport release/1.4) ([#9855](https://github.com/archestra-ai/archestra/issues/9855)) ([fa1b301](https://github.com/archestra-ai/archestra/commit/fa1b30108d721fe4e2f4af3a1fa1ec24afcf8607))
+* **shutdown:** coordinate request draining and stop budgets (1.4) ([#9870](https://github.com/archestra-ai/archestra/issues/9870)) ([217dff6](https://github.com/archestra-ai/archestra/commit/217dff6818d4dff7b8fd96676da1ec3b081ce1bc))
+
 ## [1.4.10](https://github.com/archestra-ai/archestra/compare/platform-v1.4.9...platform-v1.4.10) (2026-10-29)
 
 

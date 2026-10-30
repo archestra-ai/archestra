@@ -449,13 +449,20 @@ start_frontend() {
 
 # `next build` with the e2e environment, then the static assets and public
 # files next to the standalone server, as the platform image lays them out.
+# Node loads the env file for a small launcher that runs the build as a child,
+# as scripts/dev.mjs does for the dev server: Next passes its own Node flags to
+# its workers, and Node refuses --env-file there. Next sizes its workers from
+# CIRCLE_NODE_TOTAL, else from every CPU of the node; here they follow the
+# CPUs this stack can count on.
 build_frontend() {
-  local started=$SECONDS
+  local started=$SECONDS cpus launcher
+  cpus="$(available_cpus)"
+  launcher='const { status } = require("node:child_process").spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build", "--turbopack"], { stdio: "inherit" }); process.exit(status ?? 1);'
   log "building the frontend for e2e (production build, as CI serves it); log in $LOG_DIR/frontend-build.log"
   # frontend_env quotes its values for a shell, as the session commands do.
   (
     cd "$PLATFORM_DIR/frontend"
-    bash -c "exec env $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") ./node_modules/.bin/next build --turbopack"
+    bash -c "exec env CIRCLE_NODE_TOTAL=$((cpus + 1)) $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") -e $(printf '%q' "$launcher")"
   ) > "$LOG_DIR/frontend-build.log" 2>&1 \
     || { tail -n 30 "$LOG_DIR/frontend-build.log" >&2; die "frontend build failed"; }
   rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public"

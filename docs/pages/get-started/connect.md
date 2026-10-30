@@ -15,8 +15,8 @@ Connect your AI client once, and Archestra governs everything it does. It gets A
 
 Open **Connect** in the Archestra sidebar and choose how to connect:
 
-- **Coding agents:** for [Claude Code](/docs/integrations/claude-code), Codex, Cursor, Copilot CLI, OpenCode, Kilo Code, and Kimi Code, you run one command in a terminal and approve the connection in your browser.
-- **[Claude Desktop](/docs/integrations/claude-desktop#setup):** a downloadable installer sets up Desktop.
+- **Coding agents:** for [Claude Code](/docs/integrations/ai-clients/claude-code), Codex, Cursor, Copilot CLI, OpenCode, Kilo Code, and Kimi Code, you run one command in a terminal and approve the connection in your browser.
+- **[Claude Desktop](/docs/integrations/ai-clients/claude-desktop#setup):** a downloadable installer sets up Desktop.
 - **[n8n](/docs/integrations/web-ui-and-automation#n8n):** you enter the gateway URL and model settings in your workflow.
 - **Any Client:** any tool that supports MCP or an OpenAI-compatible API. Copy the gateway URL, the proxy base URL, a key, and a Git URL for the shared skills.
 

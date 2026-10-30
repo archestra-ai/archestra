@@ -722,7 +722,9 @@ describe("ConnectCommandPanel", () => {
       expect(revertLink).toBeVisible();
       expect(revertLink).toHaveAttribute(
         "href",
-        expect.stringContaining("integrations/claude-desktop#revert"),
+        expect.stringContaining(
+          "integrations/ai-clients/claude-desktop#revert",
+        ),
       );
     } else {
       expect(revertLink).not.toBeInTheDocument();

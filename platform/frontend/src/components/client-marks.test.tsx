@@ -23,10 +23,12 @@ const CONNECT_CLIENT_ID: Record<AgentCatalogId, string> = {
 function drawnLogo(container: HTMLElement) {
   const tile = container.firstElementChild as HTMLElement | null;
   const glyph = tile?.querySelector("svg");
+  const image = tile?.tagName === "IMG" ? tile : tile?.querySelector("img");
   return {
     background: tile?.style.background,
     viewBox: glyph?.getAttribute("viewBox"),
     paths: glyph?.innerHTML,
+    imageSrc: image?.getAttribute("src"),
   };
 }
 
@@ -40,7 +42,7 @@ describe.each(AGENT_CATALOG_IDS)("the %s logo", (id) => {
     const connect = drawnLogo(
       render(<ClientIcon client={client} size={20} />).container,
     );
-    expect(connect.paths).toBeTruthy();
+    expect(connect.paths || connect.imageSrc).toBeTruthy();
     expect(
       drawnLogo(
         render(<AgentIcon icon={CATALOG_AGENT_ICONS[id]} size={20} />)

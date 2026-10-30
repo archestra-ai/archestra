@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.4.13](https://github.com/archestra-ai/archestra/compare/platform-v1.4.12...platform-v1.4.13) (2026-10-30)
+
+
+### Features
+
+* **agents:** add custom runtime templates (1.4 backport) ([#9908](https://github.com/archestra-ai/archestra/issues/9908)) ([574650e](https://github.com/archestra-ai/archestra/commit/574650e4aa62891685006604d2135a887ab5f004))
+* **agents:** require permission to configure runtimes [1.4] ([#9905](https://github.com/archestra-ai/archestra/issues/9905)) ([9dc1207](https://github.com/archestra-ai/archestra/commit/9dc1207994999a0a38e686c3d31dbc6309151484))
+
+
+### Bug Fixes
+
+* **api:** preserve errors from failed binary downloads [1.4] ([#9939](https://github.com/archestra-ai/archestra/issues/9939)) ([2c7e814](https://github.com/archestra-ai/archestra/commit/2c7e8148d2b740d5f2ad050f858e1d9534694ca3))
+* **chat:** spill oversized tool results to the sandbox in headless runs (backport release/1.4) ([#9911](https://github.com/archestra-ai/archestra/issues/9911)) ([cf13282](https://github.com/archestra-ai/archestra/commit/cf13282f4a1c9e55b4774073f9e19a5e5750863b))
+* **connect:** refresh owner credentials at client launch (1.4) ([#9924](https://github.com/archestra-ai/archestra/issues/9924)) ([15c01b8](https://github.com/archestra-ai/archestra/commit/15c01b832b517e9d0af163f98f38f13a0d997df9))
+* **knowledge:** discover and embed with Cohere Embed v4 on Bedrock (backport release/1.4) ([#9921](https://github.com/archestra-ai/archestra/issues/9921)) ([8c71323](https://github.com/archestra-ai/archestra/commit/8c7132318b7ca7d52e0b47a7b85791402a754f53))
+* **llm-proxy:** charge estimates instead of blocking budgets, and add a spend limit reset (1.4) ([#9920](https://github.com/archestra-ai/archestra/issues/9920)) ([f6a0a2e](https://github.com/archestra-ai/archestra/commit/f6a0a2e9883b26876d416d74021bdc5d79244382))
+* **llm:** allow owner-matched service Copilot mappings (1.4) ([#9923](https://github.com/archestra-ai/archestra/issues/9923)) ([c3a6836](https://github.com/archestra-ai/archestra/commit/c3a6836dab036c95409ee72c356f984229e16ddd))
+* **mcp:** keep run_tool args and results parseable for MCP clients (backport release/1.4) ([#9894](https://github.com/archestra-ai/archestra/issues/9894)) ([4164582](https://github.com/archestra-ai/archestra/commit/4164582accb71caa53a97fe04dd13002fd83c95e))
+* **proxy:** keep accepted SSE streams alive before the first event (backport release/1.4) ([#9928](https://github.com/archestra-ai/archestra/issues/9928)) ([7886ce3](https://github.com/archestra-ai/archestra/commit/7886ce308e4c4cc995aa308c0fafe64d1d76d362))
+* **sandbox:** clean up stale headless sandboxes (backport release/1.4) ([#9912](https://github.com/archestra-ai/archestra/issues/9912)) ([1c1863c](https://github.com/archestra-ai/archestra/commit/1c1863c58a8b7cbd1b009f890fe14541e675ff13))
+
 ## [1.4.12](https://github.com/archestra-ai/archestra/compare/platform-v1.4.11...platform-v1.4.12) (2026-10-30)
 
 

@@ -241,7 +241,10 @@ export function RuntimeTemplateSection({
         <div className="space-y-1">
           <h3 className="text-sm font-medium">Agent Runtimes</h3>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Drag to set the order. Remove a runtime to stop offering it.
+            These runtimes appear as configuration templates when creating an
+            agent. Drag to change their order, add custom runtimes, or remove
+            built-in and custom choices. Removed runtimes can be added back at
+            any time. Changes here don’t affect existing agents.
           </p>
         </div>
         <DropdownMenu>
@@ -330,11 +333,6 @@ export function RuntimeTemplateSection({
           )}
         </div>
       )}
-      <p className="text-xs text-muted-foreground">
-        Only runtimes in this list appear when creating an agent. Removed
-        runtimes can be added back. Existing agents keep their saved
-        configuration.
-      </p>
       <SettingsSaveBar
         hasChanges={hasChanges}
         isSaving={save.isPending}

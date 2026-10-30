@@ -75,6 +75,8 @@ archestra:
 
 Alternatively, set `archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead: true` to grant the platform service account `get` on the `kube-system/kube-dns` Service. This creates a Role and RoleBinding in `kube-system`; the installer and any GitOps project must permit managing both resources there. Creating the platform service account alone does not grant the installer this access.
 
+Disabling an existing DNS reader grant does not guarantee Helm removes its Role and RoleBinding when the installer lacks access to `kube-system`. Have an operator with access to that namespace remove the release's DNS reader objects.
+
 On EKS Auto Mode, check that workload DNS lookups succeed after deployment. If no resolver can be determined, [egress policies](/docs/admin/deployment/networking#enforce-workload-egress) omit the DNS bootstrap exception rather than allowing port 53 to arbitrary destinations.
 
 ### Verify the Installation
@@ -116,9 +118,7 @@ Agent Runtime pods scale separately from web and worker pods. See [production ru
 
 ## Upgrade
 
-Charts in `1.5.0-rc.14` through `1.5.0-rc.16` enable the `kube-system` DNS reader by default. When retaining those values, set `archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead: false` to use namespace-restricted installation.
-
-If an earlier release already created the DNS reader Role and RoleBinding, a namespace-restricted upgrade can leave them behind even when Helm reports success. Have an operator with access to `kube-system` remove this release's DNS reader objects; disabling the setting alone does not guarantee their removal. See [DNS Discovery](#dns-discovery) for resolver configuration.
+<!-- Describe the current chart behavior and supported upgrade procedure here. Do not add version-specific migration histories or before/after release narratives; those belong in release notes. -->
 
 Use the installation command with the selected version and your current values after completing the [production release checks](/docs/admin/deployment/production#releases-and-backups).
 

@@ -1,26 +1,18 @@
 {
   "schema": 1,
-  "sourceSha": "876172810bce1af56be351b69589a9b4327f3926",
-  "baseSha": "a6db64ac4f210ca84b41485106ea906400bf22f1",
-  "runId": 40978981432,
+  "sourceSha": "790513ea7e3b9842f337a5a6b8ba5b2614a17c6d",
+  "baseSha": "d319ab91c94ed40238b66b3a72cfc5b1303c1f83",
+  "runId": 40996753554,
   "attempt": 1,
-  "platformTree": "fa05fa0e812f6a37c4482bd5e67563edffc04d12",
+  "platformTree": "72018896bd1f46c2a0b14003820cdca80d359389",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "d7235bd1b1aabb2396a96f5252feecb14b084149"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/llm-proxy_throughput.dark.webp",
-      "blob": "df90ada0fc07a7b164ae7c701c0ab30d8406554b"
-    },
-    {
-      "path": "docs/assets/automated_screenshots/llm-proxy_throughput.webp",
-      "blob": "f25ff1a058d89b5d436a379040c5d25d59bce61f"
+      "blob": "576e99885ba612a18b916a8ae185b8b5d90befa9"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "f3e28832defe00cee9c084262c2179aac553b602"
+      "blob": "05fb707ad5969ae0a520e5b2c84984065fb02411"
     }
   ]
 }

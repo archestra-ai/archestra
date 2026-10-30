@@ -2058,6 +2058,7 @@ async function governedRunOutput(params: {
           narrow: true,
         }),
         run_url: session ? agentRunUrl(params.runId) : null,
+        limits: runLimitsOutput(session?.runtimeLimits ?? null),
         requests: [],
         output: "",
         output_truncated: false,
@@ -2094,6 +2095,7 @@ async function governedRunOutput(params: {
     {
       run: runSummary({ row: params.task, runId: params.runId, narrow: true }),
       run_url: agentRunUrl(params.runId),
+      limits: runLimitsOutput(session.runtimeLimits),
       requests: [],
       output: crossed.kind === "admitted" ? crossed.value : "",
       output_truncated: false,

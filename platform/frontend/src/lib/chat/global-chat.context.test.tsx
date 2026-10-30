@@ -30,11 +30,11 @@ const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
   setMessages: vi.fn(),
   stop: vi.fn(),
-  useChat: vi.fn(),
+  useOffStreamChat: vi.fn(),
 }));
 
-vi.mock("@ai-sdk/react", () => ({
-  useChat: mocks.useChat,
+vi.mock("@/lib/chat/use-off-stream-chat", () => ({
+  useOffStreamChat: mocks.useOffStreamChat,
 }));
 
 vi.mock("ai", () => ({
@@ -103,7 +103,7 @@ vi.mock("@/lib/config/config.query", () => ({
 }));
 
 describe("ChatProvider retries", () => {
-  let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+  let chatOptions: Parameters<typeof mocks.useOffStreamChat>[0] | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -116,7 +116,7 @@ describe("ChatProvider retries", () => {
     mocks.clearChatErrors.mockResolvedValue({ success: true });
     chatOptions = undefined;
     const messages: UIMessage[] = [];
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -145,7 +145,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled(), {
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled(), {
       timeout: 5_000,
     });
 
@@ -173,7 +173,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     vi.useFakeTimers();
     act(() => {
@@ -200,7 +200,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     vi.useFakeTimers();
     act(() => {
@@ -218,7 +218,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     vi.useFakeTimers();
     act(() => {
@@ -244,7 +244,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     // server_error is not silently auto-retried, so it stays terminal and leaves
     // no pending "clear on retry" intent for the next successful turn.
@@ -281,7 +281,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     // network_error auto-retries; its regenerate re-POSTs into the still-live run
     // and lands the duplicate-run 409, so the session reattaches via resumeStream.
@@ -496,7 +496,7 @@ describe("ChatProvider retries", () => {
         ],
       },
     ];
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -565,7 +565,7 @@ describe("ChatProvider retries", () => {
         ],
       },
     ];
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -865,7 +865,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     await waitFor(() => expect(mocks.resumeStream).toHaveBeenCalledTimes(1));
     expect(chatOptions?.resume).toBeUndefined();
@@ -901,7 +901,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     const transportOptions = vi.mocked(DefaultChatTransport).mock.calls[0]?.[0];
     const prepared = await transportOptions?.prepareSendMessagesRequest?.({
@@ -937,7 +937,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     const transportOptions = vi.mocked(DefaultChatTransport).mock.calls[0]?.[0];
     const prepared = await transportOptions?.prepareSendMessagesRequest?.({
@@ -970,7 +970,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     const transportOptions = vi.mocked(DefaultChatTransport).mock.calls[0]?.[0];
     const prepared = await transportOptions?.prepareSendMessagesRequest?.({
@@ -995,7 +995,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     act(() => {
       chatOptions?.onError?.(
@@ -1022,7 +1022,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     // A transient network error severs the stream; the auto-retry re-POSTs
     // into the still-running backend run and gets the duplicate-run 409.
@@ -1086,7 +1086,7 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
     act(() => {
       chatOptions?.onData?.({
         type: "data-mcp-elicitation",
@@ -1178,7 +1178,7 @@ describe("ChatProvider retries", () => {
     } as UIMessage;
     // Live SDK message list the useChat mock serves on every render.
     const liveMessages = { current: [userMessage, oldAssistant] };
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -1346,7 +1346,7 @@ describe("streamed session updates", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     streamState = { messages: [], status: "ready" };
-    mocks.useChat.mockImplementation(function useStreamingChat() {
+    mocks.useOffStreamChat.mockImplementation(function useStreamingChat() {
       const state = useSyncExternalStore(
         (listener) => {
           listeners.add(listener);
@@ -1391,7 +1391,7 @@ describe("streamed session updates", () => {
         />
       </ChatProvider>,
     );
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     act(() => {
       setStreamState({ messages: assistantReply(""), status: "streaming" });
@@ -1469,9 +1469,9 @@ describe("ChatProvider auto title generation", () => {
   ];
 
   it("titles an untitled chat after a tool-only exchange", async () => {
-    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+    let chatOptions: Parameters<typeof mocks.useOffStreamChat>[0] | undefined;
 
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -1497,7 +1497,7 @@ describe("ChatProvider auto title generation", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     // Trigger onFinish to simulate the AI stream completing
     act(() => {
@@ -1516,9 +1516,9 @@ describe("ChatProvider auto title generation", () => {
   });
 
   it("titles an existing untitled chat after the first settled exchange", async () => {
-    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+    let chatOptions: Parameters<typeof mocks.useOffStreamChat>[0] | undefined;
 
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -1540,7 +1540,7 @@ describe("ChatProvider auto title generation", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     act(() => {
       chatOptions?.onFinish?.({
@@ -1558,9 +1558,9 @@ describe("ChatProvider auto title generation", () => {
   });
 
   it("titles an app chat still carrying its seeded app name", async () => {
-    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+    let chatOptions: Parameters<typeof mocks.useOffStreamChat>[0] | undefined;
 
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -1587,7 +1587,7 @@ describe("ChatProvider auto title generation", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     act(() => {
       chatOptions?.onFinish?.({
@@ -1605,9 +1605,9 @@ describe("ChatProvider auto title generation", () => {
   });
 
   it("leaves a renamed app chat alone", async () => {
-    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+    let chatOptions: Parameters<typeof mocks.useOffStreamChat>[0] | undefined;
 
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -1633,7 +1633,7 @@ describe("ChatProvider auto title generation", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     // Awaited: the title decision sits behind the cache invalidations onFinish
     // awaits, so asserting synchronously would pass before it is even reached.
@@ -1648,9 +1648,9 @@ describe("ChatProvider auto title generation", () => {
   });
 
   it("does not regenerate a title the conversation already has", async () => {
-    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+    let chatOptions: Parameters<typeof mocks.useOffStreamChat>[0] | undefined;
 
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -1672,7 +1672,7 @@ describe("ChatProvider auto title generation", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
     act(() => {
       chatOptions?.onFinish?.({
         message: toolOnlyMessages[toolOnlyMessages.length - 1],
@@ -1684,9 +1684,9 @@ describe("ChatProvider auto title generation", () => {
   });
 
   it("attempts automatic title generation only once", async () => {
-    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+    let chatOptions: Parameters<typeof mocks.useOffStreamChat>[0] | undefined;
 
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -1708,7 +1708,7 @@ describe("ChatProvider auto title generation", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     act(() => {
       chatOptions?.onFinish?.({
@@ -1766,7 +1766,7 @@ describe("ChatProvider title animation", () => {
 
 describe("stopping with queued messages", () => {
   const conversationId = "conversation-stop-queue";
-  let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+  let chatOptions: Parameters<typeof mocks.useOffStreamChat>[0] | undefined;
   let status: "ready" | "streaming";
   let messages: UIMessage[];
 
@@ -1777,7 +1777,7 @@ describe("stopping with queued messages", () => {
     status = "streaming";
     mocks.resumeStream.mockResolvedValue(undefined);
     messages = [];
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -2144,7 +2144,7 @@ describe("manual context compaction and the message queue", () => {
     // to resume (no trailing user message).
     mocks.resumeStream.mockResolvedValue(undefined);
     const messages: UIMessage[] = [];
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       void options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -2261,7 +2261,7 @@ describe("manual context compaction and the message queue", () => {
 });
 
 describe("context window breakdown state", () => {
-  let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+  let chatOptions: Parameters<typeof mocks.useOffStreamChat>[0] | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -2273,7 +2273,7 @@ describe("context window breakdown state", () => {
     // loop that hangs render(<ChatProvider>) and never exits the worker. Hoist
     // one stable empty array so the mock honors that contract.
     const messages: UIMessage[] = [];
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -2555,13 +2555,13 @@ describe("context window breakdown state", () => {
 });
 
 describe("ChatProvider app-tool cache invalidation", () => {
-  let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+  let chatOptions: Parameters<typeof mocks.useOffStreamChat>[0] | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
     chatOptions = undefined;
     const messages: UIMessage[] = [];
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -2601,7 +2601,7 @@ describe("ChatProvider app-tool cache invalidation", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     // publish_app mutates the app's scope server-side, inside the chat loop —
     // no frontend mutation hook runs, so onFinish must mark the app caches
@@ -2628,7 +2628,7 @@ describe("ChatProvider app-tool cache invalidation", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useOffStreamChat).toHaveBeenCalled());
 
     await act(async () => {
       await chatOptions?.onFinish?.({
@@ -2662,7 +2662,7 @@ function CaptureTitleAnimation({
 
 describe("pending MCP elicitation questions", () => {
   const conversationId = "conversation-questions";
-  let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+  let chatOptions: Parameters<typeof mocks.useOffStreamChat>[0] | undefined;
   let messages: UIMessage[];
 
   beforeEach(() => {
@@ -2673,7 +2673,7 @@ describe("pending MCP elicitation questions", () => {
     // Nothing to resume (no trailing user message), so the queue drain is
     // gated only by what these tests set up.
     mocks.resumeStream.mockResolvedValue(undefined);
-    mocks.useChat.mockImplementation((options) => {
+    mocks.useOffStreamChat.mockImplementation((options) => {
       chatOptions = options;
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
@@ -3050,7 +3050,7 @@ describe("useChatSession snapshot", () => {
     vi.clearAllMocks();
     mocks.resumeStream.mockReturnValue(new Promise(() => {}));
     const messages: UIMessage[] = [];
-    mocks.useChat.mockImplementation(() => ({
+    mocks.useOffStreamChat.mockImplementation(() => ({
       addToolApprovalResponse: mocks.addToolApprovalResponse,
       addToolResult: mocks.addToolResult,
       clearError: mocks.clearError,

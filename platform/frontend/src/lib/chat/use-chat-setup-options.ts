@@ -37,7 +37,6 @@ import {
   useAvailableLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
 import { useAvailableModelPools } from "@/lib/model-pools.query";
-import { useOrganizationDefaultModelSummary } from "@/lib/organization.query";
 import {
   isOrganizationSubscription,
   organizationSubscriptionSubtitle,
@@ -275,24 +274,6 @@ export function useChatSetupOptions(params: {
     ? pools.find((pool) => pool.id === params.modelPoolId)
     : undefined;
 
-  // ---- the organization default: an agent with no model of its own is
-  // auto routed on it while the organization routes.
-  const { data: organizationDefault } = useOrganizationDefaultModelSummary();
-  const agentFollowsDefault =
-    !!activeAgent &&
-    activeAgent.runtime === null &&
-    !activeAgent.modelId &&
-    !activeAgent.llmApiKeyId &&
-    !activeAgent.modelPoolId;
-  const organizationDefaultNote = (dbId: string): string | null => {
-    if (!organizationDefault?.model || organizationDefault.model.id !== dbId)
-      return null;
-    if (!agentFollowsDefault || !organizationDefault.autoRouting.active)
-      return "Organization default";
-    const { fast, normal, smart } = organizationDefault.autoRouting.tiers;
-    return `Organization default · Auto routed: ${fast.displayName}, ${normal.displayName}, ${smart.displayName}`;
-  };
-
   // ---- reasoning
   const supportsReasoning =
     !activePool &&
@@ -350,7 +331,6 @@ export function useChatSetupOptions(params: {
       params.fallbackModelName ??
       "Choose a model",
     modelSections,
-    organizationDefaultNote,
     selectModel: (dbId: string) => {
       if (dbId !== params.selectedModel) params.onModelChange(dbId);
     },

@@ -72,6 +72,7 @@ import type { LlmModel } from "@/lib/llm-models.query";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import type { AvailableModelPool } from "@/lib/model-pools.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
+import { useOrganizationDefaultModelSummary } from "@/lib/organization.query";
 import {
   isOrganizationSubscription,
   ORGANIZATION_SUBSCRIPTIONS_HEADING,
@@ -136,6 +137,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     ...ctx,
     agentSearch: scopeState === "agent" ? query : "",
   });
+  const organizationDefaultNote = useOrganizationDefaultNote(data.activeAgent);
   const router = useRouter();
   const catalog = useModelProviderCatalog();
   const subscriptions = useMemo(
@@ -629,7 +631,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
                       keywords={modelKeywords(m, data.providerLabel)}
                       selected={isCurrent}
                       warning={isCurrent && !searching ? warning : null}
-                      note={data.organizationDefaultNote(m.dbId)}
+                      note={organizationDefaultNote(m.dbId)}
                       onSelect={() => pickModel(m)}
                     />
                   );
@@ -1403,4 +1405,27 @@ function formatContext(n: number | null | undefined) {
   if (!n) return null;
   if (n >= 1_000_000) return `${Number((n / 1_000_000).toFixed(1))}M`;
   return `${Math.round(n / 1000)}K`;
+}
+
+/**
+ * The note under the organization default's model row. Read only while the
+ * menu is open, so a chat load does not wait on it: an agent with no model of
+ * its own is auto routed on the default while the organization routes.
+ */
+function useOrganizationDefaultNote(agent: ChatSetupAgent | undefined) {
+  const { data: organizationDefault } = useOrganizationDefaultModelSummary();
+  const agentFollowsDefault =
+    !!agent &&
+    agent.runtime === null &&
+    !agent.modelId &&
+    !agent.llmApiKeyId &&
+    !agent.modelPoolId;
+  return (dbId: string): string | null => {
+    if (!organizationDefault?.model || organizationDefault.model.id !== dbId)
+      return null;
+    if (!agentFollowsDefault || !organizationDefault.autoRouting.active)
+      return "Organization default";
+    const { fast, normal, smart } = organizationDefault.autoRouting.tiers;
+    return `Organization default · Auto routed: ${fast.displayName}, ${normal.displayName}, ${smart.displayName}`;
+  };
 }

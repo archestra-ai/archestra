@@ -104,6 +104,10 @@ export function makeOrganization(
 
 export const organizationSeed = makeOrganization();
 
+/** The seeded organization has no default model, so nothing is auto routed. */
+export const organizationDefaultModelSeed: archestraApiTypes.GetOrganizationDefaultModelResponses["200"] =
+  { model: null, autoRouting: { active: false } };
+
 type AppearanceSettings =
   archestraApiTypes.GetAppearanceSettingsResponses["200"];
 

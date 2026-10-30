@@ -38,8 +38,8 @@ import {
   InlineNoticeText,
 } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
+import { runtimeTemplatePosition } from "@/lib/agent-runtime-template-order";
 import {
-  runtimeTemplatePosition,
   useResolveRuntimeTemplate,
   useRuntimeTemplateCatalog,
 } from "@/lib/agent-runtime-templates.query";

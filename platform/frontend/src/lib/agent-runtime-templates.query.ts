@@ -1,8 +1,4 @@
-import {
-  archestraApiSdk,
-  type archestraApiTypes,
-  type PopularAgentOverrides,
-} from "@archestra/shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { organizationKeys } from "@/lib/organization.query";
@@ -14,19 +10,6 @@ export type RuntimeTemplateSummary =
   archestraApiTypes.ListAgentRuntimeTemplatesResponses["200"][number];
 const catalogKey = ["agent-runtime-templates"] as const;
 const settingsKey = ["agent-runtime-template-settings"] as const;
-
-/** Explicit saved positions precede unpositioned choices, which retain catalog order. */
-export function runtimeTemplatePosition(
-  id: string,
-  custom: ReadonlyArray<Pick<RuntimeTemplateSummary, "id" | "position">>,
-  overrides: PopularAgentOverrides | null | undefined,
-) {
-  return (
-    custom.find((item) => item.id === id)?.position ??
-    overrides?.[id as keyof PopularAgentOverrides]?.position ??
-    Number.MAX_SAFE_INTEGER
-  );
-}
 
 export function useRuntimeTemplateCatalog() {
   return useQuery({

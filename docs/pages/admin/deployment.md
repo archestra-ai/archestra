@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-29
+lastUpdated: 2026-11-02
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -63,6 +63,26 @@ archestra:
 ```
 
 Preserve these keys across upgrades and restores. Use the [key rotation procedure](/docs/admin/security/credentials#database-storage) when changing encryption keys.
+
+### DNS Discovery
+
+In-cluster installations can discover the DNS resolver from the platform pod's DNS configuration without creating resources in `kube-system`. Environment egress policies use that resolver to allow DNS lookups for MCP servers, agents, and sandboxes.
+
+If workloads use a different resolver or discovery fails, configure verified addresses:
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      clusterDnsIps:
+        - 172.20.0.10 # Replace with your cluster's resolver IP.
+```
+
+Alternatively, set `archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead: true` to grant the platform service account `get` on the `kube-system/kube-dns` Service. This creates a Role and RoleBinding in `kube-system`; the installer and any GitOps project must permit managing both resources there. Creating the platform service account alone does not grant the installer this access.
+
+Disabling an existing DNS reader grant does not guarantee Helm removes its Role and RoleBinding when the installer lacks access to `kube-system`. Have an operator with access to that namespace remove the release's DNS reader objects.
+
+On EKS Auto Mode, check that workload DNS lookups succeed after deployment. If no resolver can be determined, [egress policies](/docs/admin/environments#network-egress-policies) omit the DNS bootstrap exception rather than allowing port 53 to arbitrary destinations.
 
 ### Database Configuration
 

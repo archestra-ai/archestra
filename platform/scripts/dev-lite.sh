@@ -702,8 +702,9 @@ cmd_e2e() {
   if [ $# -gt 0 ]; then
     exec pnpm exec playwright test "$@"
   fi
-  # Same projects as scripts/e2e-lite.sh. Without Keycloak and a Kubernetes
-  # cluster, the identity-provider, MCP-install and orchestrator specs fail.
+  # Same projects as scripts/e2e-lite.sh. Without Keycloak, the JWKS-auth specs
+  # for the LLM proxy and the MCP gateway fail; without a Kubernetes cluster,
+  # the MCP server install and orchestrator specs fail.
   exec pnpm exec playwright test --project=chromium --project=api --grep-invert @quickstart
 }
 

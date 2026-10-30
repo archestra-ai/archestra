@@ -1077,12 +1077,14 @@ function RequestRow({
           <span className="hidden shrink-0 lg:flex">
             <MakerDisc
               provider={
-                origin && origin.kind !== "unknown" ? origin.provider : null
+                origin && origin.kind !== "unknown"
+                  ? origin.provider
+                  : passThroughProvider(row.type)
               }
               vendor={
                 origin?.kind === "aggregator"
                   ? origin.provider
-                  : (origin?.name ?? modelName)
+                  : (origin?.name ?? passThroughProvider(row.type) ?? modelName)
               }
               size={13}
               ring={false}

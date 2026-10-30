@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.5.0-rc.17](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.16...platform-v1.5.0-rc.17) (2026-10-30)
+
+
+### Features
+
+* **agents:** add custom runtime templates ([#9907](https://github.com/archestra-ai/archestra/issues/9907)) ([79f71bd](https://github.com/archestra-ai/archestra/commit/79f71bd07954ec7d676624fcbd7ee737ada08194))
+* **agents:** require permission to configure runtimes ([#9904](https://github.com/archestra-ai/archestra/issues/9904)) ([ba283b2](https://github.com/archestra-ai/archestra/commit/ba283b2d986a51c016b75d6642343168cca2ba31))
+* **auto-routing:** route the organization default across the org model trio ([#9877](https://github.com/archestra-ai/archestra/issues/9877)) ([5d1dbad](https://github.com/archestra-ai/archestra/commit/5d1dbad3db38476d1d3fbcfb348198227de5e602))
+* **connect:** download ChatGPT plugin with gateway and skills ([#9925](https://github.com/archestra-ai/archestra/issues/9925)) ([6830d58](https://github.com/archestra-ai/archestra/commit/6830d585dab3751f09c7d8fe4c9c479a4f5a97b0))
+* **observability:** export logical proxy request outcomes ([#9929](https://github.com/archestra-ai/archestra/issues/9929)) ([a54f4fa](https://github.com/archestra-ai/archestra/commit/a54f4fa5135cb7af7b9397e55b0334f5951ba0bf))
+
+
+### Bug Fixes
+
+* **agent-runtime:** return withheld run state for unparented get_agent_run ([#9932](https://github.com/archestra-ai/archestra/issues/9932)) ([adad970](https://github.com/archestra-ai/archestra/commit/adad9700746d2d8fe6a4a2e0ab4a26adf38dc082))
+* **api:** preserve errors from failed binary downloads ([#9938](https://github.com/archestra-ai/archestra/issues/9938)) ([eb83ee1](https://github.com/archestra-ai/archestra/commit/eb83ee1963d0698f6e3e2d3d3009f392a7a8339f))
+* **chat:** keep long buffered streams from hitting React's update depth limit ([#9934](https://github.com/archestra-ai/archestra/issues/9934)) ([1d94c2b](https://github.com/archestra-ai/archestra/commit/1d94c2b1d11ac35cdadffd2d894a57b96149f80b))
+* **connect:** refresh owner credentials at client launch ([#9883](https://github.com/archestra-ai/archestra/issues/9883)) ([b36c4bf](https://github.com/archestra-ai/archestra/commit/b36c4bf32d75067b35d4da166c0c5624b56c9f46))
+* **connect:** validate exported skill frontmatter ([#9931](https://github.com/archestra-ai/archestra/issues/9931)) ([2067f0d](https://github.com/archestra-ai/archestra/commit/2067f0d4dedbad4d49af5dba8b1a254b15faf25b))
+* **helm:** make kube-system DNS reader opt-in ([#9926](https://github.com/archestra-ai/archestra/issues/9926)) ([13af3b9](https://github.com/archestra-ai/archestra/commit/13af3b9414fec2c52cee0417a850055bcd57c177))
+* **helm:** route OpenAPI preflight to the backend ([#9940](https://github.com/archestra-ai/archestra/issues/9940)) ([91f45b2](https://github.com/archestra-ai/archestra/commit/91f45b22be2e8eece199cb7a765ab2b69acf4029))
+* **knowledge:** discover and embed with Cohere Embed v4 on Bedrock ([#9260](https://github.com/archestra-ai/archestra/issues/9260)) ([c6751c8](https://github.com/archestra-ai/archestra/commit/c6751c8628cafe3098106fc8d752137ab926c686))
+* **llm-proxy:** bind personal key attribution to its owner ([#9930](https://github.com/archestra-ai/archestra/issues/9930)) ([fdba345](https://github.com/archestra-ai/archestra/commit/fdba3452466d74825dc13644b03e42aa4cf2ff4c))
+* **llm-proxy:** scope budgets to selected models ([#9881](https://github.com/archestra-ai/archestra/issues/9881)) ([e3b5497](https://github.com/archestra-ai/archestra/commit/e3b5497d046b02d37a5f59755dfb6c22cba829f6))
+* **llm:** allow owner-matched service Copilot mappings ([#9882](https://github.com/archestra-ai/archestra/issues/9882)) ([0ed7203](https://github.com/archestra-ai/archestra/commit/0ed72038dbdb784d27bc2cd443ad76dd3cbe64c2))
+* **models:** preserve precise custom token prices ([#9807](https://github.com/archestra-ai/archestra/issues/9807)) ([d90f3c6](https://github.com/archestra-ai/archestra/commit/d90f3c6bb699b4993e31a5b314e7dd32d81066e8))
+* **proxy:** keep accepted SSE streams alive before the first event ([#9878](https://github.com/archestra-ai/archestra/issues/9878)) ([7e90571](https://github.com/archestra-ai/archestra/commit/7e9057135234ff896588fde2b9ced41f31540186))
+
+
+### Documentation
+
+* **config:** align DNS example with resolver fallback ([#9927](https://github.com/archestra-ai/archestra/issues/9927)) ([f24cf2d](https://github.com/archestra-ai/archestra/commit/f24cf2d8f4da8a7f9df1cb521391e09bd19bdd9e))
+
+
+### Dependencies
+
+* bump the rust-dependencies group in /platform/archestra-rs with 3 updates ([#9857](https://github.com/archestra-ai/archestra/issues/9857)) ([23cc6d5](https://github.com/archestra-ai/archestra/commit/23cc6d538f445037939173926ff95bd3ea5580a8))
+
+
+### Miscellaneous Chores
+
+* update agent runtime CLIs ([#9909](https://github.com/archestra-ai/archestra/issues/9909)) ([029a5f1](https://github.com/archestra-ai/archestra/commit/029a5f1f9bc15ecb264c8c56c95e7a505b650e86))
+
 ## [1.5.0-rc.16](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.15...platform-v1.5.0-rc.16) (2026-10-30)
 
 

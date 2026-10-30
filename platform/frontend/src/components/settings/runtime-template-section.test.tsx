@@ -122,10 +122,13 @@ describe("RuntimeTemplateSection", () => {
     // The organization query deliberately holds an older snapshot.
     const view = mount();
     const add = await screen.findByRole("button", {
-      name: "Add custom runtime",
+      name: "Add runtime",
     });
     await waitFor(() => expect(add).toBeEnabled());
     await user.click(add);
+    await user.click(
+      screen.getByRole("menuitem", { name: "Create custom runtime…" }),
+    );
     await user.click(screen.getByRole("button", { name: "Add template" }));
     expect(await screen.findByText("Enter a name")).toBeInTheDocument();
     await user.type(
@@ -138,6 +141,9 @@ describe("RuntimeTemplateSection", () => {
       }),
     );
     await user.click(add);
+    await user.click(
+      screen.getByRole("menuitem", { name: "Create custom runtime…" }),
+    );
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("");
     await user.type(
       screen.getByRole("textbox", { name: "Name" }),
@@ -167,14 +173,16 @@ describe("RuntimeTemplateSection", () => {
     view.unmount();
     mount();
     expect(
-      await screen.findByRole("button", { name: "Edit Engineering workspace" }),
+      await screen.findByRole("button", {
+        name: "Actions for Engineering workspace",
+      }),
     ).toBeEnabled();
     expect(
       screen.queryByRole("button", { name: "Edit Codex" }),
     ).not.toBeInTheDocument();
   });
 
-  it("edits, reorders, hides and deletes custom entries with cancel-safe changes", async () => {
+  it("edits and reorders visible entries, with cancel-safe removal and persistent add-back", async () => {
     settings.templates = [
       {
         id: "00000000-0000-4000-8000-000000000001",
@@ -189,22 +197,29 @@ describe("RuntimeTemplateSection", () => {
         },
       },
     ];
-    mount();
+    const view = mount();
     const user = userEvent.setup();
     await user.click(
-      await screen.findByRole("button", { name: "Edit Engineering workspace" }),
+      await screen.findByRole("button", {
+        name: "Actions for Engineering workspace",
+      }),
     );
+    await user.click(screen.getByRole("menuitem", { name: "Edit runtime" }));
     const name = screen.getByRole("textbox", { name: "Name" });
     await user.clear(name);
     await user.type(name, "Review workspace");
     await user.click(screen.getByRole("button", { name: "Update template" }));
+    await user.click(screen.getByRole("button", { name: "Actions for Codex" }));
+    expect(
+      screen.queryByRole("menuitem", { name: "Edit runtime" }),
+    ).not.toBeInTheDocument();
     await user.click(
-      screen.getByRole("switch", { name: "Offer Codex when creating agents" }),
+      screen.getByRole("menuitem", { name: "Remove from list" }),
     );
-    await user.keyboard("{Tab}");
-    await screen
-      .getByRole("button", { name: "Reorder Review workspace" })
-      .focus();
+    expect(
+      screen.queryByRole("button", { name: "Actions for Codex" }),
+    ).not.toBeInTheDocument();
+    screen.getByRole("button", { name: "Reorder Review workspace" }).focus();
     await user.keyboard("{ArrowDown}");
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
@@ -213,31 +228,77 @@ describe("RuntimeTemplateSection", () => {
     expect(settings.templates[0].position).toBeGreaterThan(0);
     expect(overrides?.codex?.hidden).toBe(true);
     await user.click(
-      screen.getByRole("button", { name: "Delete Review workspace" }),
+      screen.getByRole("button", { name: "Actions for Review workspace" }),
     );
     await user.click(
-      within(screen.getByRole("dialog")).getByRole("button", {
-        name: "Cancel",
-      }),
+      screen.getByRole("menuitem", { name: "Remove from list" }),
     );
-    expect(
-      screen.getByRole("button", { name: "Edit Review workspace" }),
-    ).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: "Delete Review workspace" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Delete template" }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(
-      screen.getByRole("button", { name: "Edit Review workspace" }),
+      screen.getByRole("button", { name: "Actions for Review workspace" }),
     ).toBeInTheDocument();
     await user.click(
-      screen.getByRole("button", { name: "Delete Review workspace" }),
+      screen.getByRole("button", { name: "Actions for Review workspace" }),
     );
-    await user.click(screen.getByRole("button", { name: "Delete template" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Remove from list" }),
+    );
     await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(settings.templates).toEqual([]));
+    await waitFor(() => expect(settings.templates[0].hidden).toBe(true));
+    expect(settings.templates[0].runtime.image).toBe(
+      "registry.example.com/dev:v1",
+    );
+    view.unmount();
+    mount();
+    const add = await screen.findByRole("button", { name: "Add runtime" });
+    await waitFor(() => expect(add).toBeEnabled());
+    expect(
+      screen.queryByRole("button", { name: "Actions for Review workspace" }),
+    ).not.toBeInTheDocument();
+    await user.click(add);
+    await user.click(screen.getByRole("menuitem", { name: /Codex/ }));
+    await user.click(add);
+    await user.click(
+      screen.getByRole("menuitem", { name: "Review workspace" }),
+    );
+    const rows = within(
+      screen.getByRole("list", { name: "Agent Runtimes" }),
+    ).getAllByRole("listitem");
+    expect(rows.at(-2)).toHaveTextContent("Codex");
+    expect(rows.at(-1)).toHaveTextContent("Review workspace");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(settings.templates[0].hidden).toBe(false));
+    expect(overrides?.codex?.hidden).toBe(false);
+    expect(settings.templates[0].runtime.image).toBe(
+      "registry.example.com/dev:v1",
+    );
   });
+
+  it("uses the built-in logo in Add runtime and restores into an empty list", async () => {
+    const { AGENT_CATALOG_IDS } = await import("@archestra/shared");
+    settings.popularAgentOverrides = Object.fromEntries(
+      AGENT_CATALOG_IDS.map((id) => [id, { hidden: true }]),
+    );
+    mount();
+    const user = userEvent.setup();
+    const add = await screen.findByRole("button", { name: "Add runtime" });
+    await waitFor(() => expect(add).toBeEnabled());
+    expect(
+      screen.getByText("No runtimes offered. Add a runtime to get started."),
+    ).toBeInTheDocument();
+    await user.click(add);
+    const opencode = screen.getByRole("menuitem", { name: /OpenCode/ });
+    expect(
+      within(opencode).getByRole("img", { name: "OpenCode logo" }),
+    ).toBeInTheDocument();
+    await user.click(opencode);
+    expect(
+      screen.getByRole("button", { name: "Actions for OpenCode" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(overrides?.opencode?.hidden).toBe(false));
+  });
+
   it("appends new templates after existing choices when saved positions contain gaps", async () => {
     settings.templates = [999, 1000].map((position, index) => ({
       id: `00000000-0000-4000-8000-00000000000${index + 1}`,
@@ -256,10 +317,13 @@ describe("RuntimeTemplateSection", () => {
     mount();
     const user = userEvent.setup();
     const add = await screen.findByRole("button", {
-      name: "Add custom runtime",
+      name: "Add runtime",
     });
     await waitFor(() => expect(add).toBeEnabled());
     await user.click(add);
+    await user.click(
+      screen.getByRole("menuitem", { name: "Create custom runtime…" }),
+    );
     await user.type(
       screen.getByRole("textbox", { name: "Name" }),
       "New workspace",

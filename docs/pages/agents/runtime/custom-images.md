@@ -29,12 +29,12 @@ Give teammates a named starting point, such as Engineering workspace, with your 
 
 Requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
-1. Go to **Settings → Agents → Agent Runtimes** and click **Add custom runtime**.
+1. Go to **Settings → Agents → Agent Runtimes** and choose **Add runtime → Create custom runtime…**.
 2. Enter a **Name** and **Description**, and optionally choose a **Display icon**.
 3. Set **Container image**, **Command**, and **Inference API**. Add environment variables or reusable credential bindings if needed.
 4. Click **Add template**, then **Save**. The template appears among the choices when creating an agent.
 
-Drag runtime rows to order the choices, or focus a drag handle and press the arrow keys. Switch off a runtime to hide it. Built-in configurations cannot be edited; custom templates can be edited or deleted. Existing agents keep their saved configuration when a template changes or disappears.
+Drag runtime rows to order the choices, or focus a drag handle and press the arrow keys. Use a runtime’s **… → Remove from list** action to hide it, then **Save**. Choose **Add runtime** to add it back at the end of the list. Built-in configurations cannot be edited; custom templates can be edited from their **…** menu. Existing agents keep their saved configuration when a template changes or disappears.
 
 ## What the Image Needs
 

@@ -273,7 +273,10 @@ describe("AgentRuntimeFields", () => {
       "href",
       "/settings/credentials",
     );
-    await user.click(screen.getByRole("button", { name: "Edit GITHUB_TOKEN" }));
+    await user.click(
+      screen.getByRole("button", { name: "Actions for GITHUB_TOKEN" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: /^Edit$/ }));
     expect(
       within(screen.getByRole("dialog")).getByLabelText("Secret source"),
     ).toHaveTextContent("Repository access");

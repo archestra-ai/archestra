@@ -36,7 +36,6 @@ import {
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { AgentIcon } from "@/components/agent-icon";
-import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   CatalogAgentIcon,
   getAgentCatalogTemplates,
@@ -49,6 +48,7 @@ import {
   AgentRuntimeSteeringField,
   defaultAgentRuntime,
 } from "@/components/agent-runtime-fields";
+import { IdentityFields } from "@/components/identity-fields";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SettingsSaveBar } from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
@@ -535,23 +535,10 @@ function RuntimeTemplateDialog({
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="space-y-5">
-              <div className="flex items-start gap-4">
-                <Controller
-                  control={form.control}
-                  name="icon"
-                  render={({ field }) => (
-                    <div className="space-y-1">
-                      <AgentIconPicker
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Display icon
-                      </p>
-                    </div>
-                  )}
-                />
-                <div className="min-w-0 flex-1">
+              <Controller
+                control={form.control}
+                name="icon"
+                render={({ field: iconField }) => (
                   <FormField
                     control={form.control}
                     name="name"
@@ -574,20 +561,25 @@ function RuntimeTemplateDialog({
                     }}
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Name</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            maxLength={100}
-                            placeholder="Engineering workspace"
-                          />
-                        </FormControl>
-                        <FormMessage />
+                        <IdentityFields
+                          icon={iconField.value}
+                          onIconChange={iconField.onChange}
+                          label={<FormLabel>Name</FormLabel>}
+                        >
+                          <FormControl>
+                            <Input
+                              {...field}
+                              maxLength={100}
+                              placeholder="Engineering workspace"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </IdentityFields>
                       </FormItem>
                     )}
                   />
-                </div>
-              </div>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="description"
@@ -605,10 +597,6 @@ function RuntimeTemplateDialog({
                   </FormItem>
                 )}
               />
-              <p className="text-xs text-muted-foreground">
-                The display icon appears on the choice card. The Docker image
-                below is the container that runs the agent.
-              </p>
               <FormField
                 control={form.control}
                 name="runtime"

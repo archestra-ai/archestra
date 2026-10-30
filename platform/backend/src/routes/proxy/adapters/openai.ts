@@ -1091,6 +1091,20 @@ export class OpenAIStreamAdapter
    */
   private reasoningText = "";
 
+  /**
+   * A spoken reply (`gpt-audio`) streams in `delta.audio`: base64 audio and
+   * transcript pieces, with no text content. The audio is relayed and never
+   * kept; the transcript is what the recorded turn says.
+   */
+  private audioReply: {
+    id?: string;
+    transcript: string;
+    expires_at?: number;
+  } | null = null;
+
+  /** The usage exactly as the provider reported it, details included. */
+  private upstreamUsage: OpenAi.Types.Usage | null = null;
+
   private replacedText: string | null = null;
   private getTextSuffix: ((completedText: string) => string) | null = null;
   private textPrefixIssued = false;
@@ -1144,6 +1158,7 @@ export class OpenAIStreamAdapter
     // Handle usage first - OpenAI sends usage in a final chunk with empty choices[]
     // when stream_options.include_usage is true
     if (chunk.usage) {
+      this.upstreamUsage = chunk.usage;
       const tokens = getUsageTokens(chunk.usage);
       this.state.usage = withAudioTokenCost(
         {
@@ -1187,6 +1202,15 @@ export class OpenAIStreamAdapter
         typeof reasoning === "string" ? reasoning : (reasoningAlt as string);
     }
 
+    const audio = audioDeltaOf(delta);
+    if (audio) {
+      this.audioReply ??= { transcript: "" };
+      if (audio.id) this.audioReply.id = audio.id;
+      if (audio.expires_at !== undefined)
+        this.audioReply.expires_at = audio.expires_at;
+      if (audio.transcript) this.audioReply.transcript += audio.transcript;
+    }
+
     // Splits streamable content from tool calls in the same chunk.
     // Content streams immediately. The tool call is buffered for policy evaluation
     // and re-emitted upon approval.
@@ -1210,9 +1234,21 @@ export class OpenAIStreamAdapter
     }
 
     let isResponsePreamble = false;
-    if (delta.role && !delta.content && !hasReasoning && !delta.tool_calls) {
+    if (
+      delta.role &&
+      !delta.content &&
+      !hasReasoning &&
+      !delta.tool_calls &&
+      !audio
+    ) {
       sseData = `data: ${JSON.stringify(chunk)}\n\n`;
       isResponsePreamble = true;
+    }
+
+    // Audio and transcript deltas are the reply itself: relay each as it
+    // arrives, like text.
+    if (audio && sseData === null) {
+      sseData = `data: ${JSON.stringify(chunk)}\n\n`;
     }
 
     // Handle tool calls
@@ -1393,7 +1429,10 @@ export class OpenAIStreamAdapter
     // OpenAI-compatible models) never see token counts. `state.usage.inputTokens` is net of
     // cache reads (see processChunk above), so this must recombine them into a gross
     // `prompt_tokens` with `prompt_tokens_details` — mirrors `toProviderResponse()` below.
-    const usage = toOpenAiStreamUsageWithCache(this.state.usage);
+    const usage = withUpstreamUsageDetails(
+      toOpenAiStreamUsageWithCache(this.state.usage),
+      this.upstreamUsage,
+    );
     if (usage && this.clientRequestedUsage) {
       const usageChunk: OpenAiStreamChunk = {
         id: finalChunk.id,
@@ -1442,6 +1481,9 @@ export class OpenAIStreamAdapter
               : {}),
             refusal: null,
             tool_calls: toolCalls,
+            ...(this.audioReply && !this.responseReplacedWithText
+              ? { audio: this.audioReply }
+              : {}),
           },
           logprobs: null,
           finish_reason: this.responseReplacedWithText
@@ -1449,7 +1491,10 @@ export class OpenAIStreamAdapter
             : ((this.state.stopReason as OpenAi.Types.FinishReason) ?? "stop"),
         },
       ],
-      usage: toOpenAiStreamUsageWithCache(this.state.usage) ?? {
+      usage: withUpstreamUsageDetails(
+        toOpenAiStreamUsageWithCache(this.state.usage),
+        this.upstreamUsage,
+      ) ?? {
         prompt_tokens: 0,
         completion_tokens: 0,
         total_tokens: 0,
@@ -1463,6 +1508,71 @@ export class OpenAIStreamAdapter
     }
     return this.getTextSuffix(firstText);
   }
+}
+
+/**
+ * A spoken reply's audio stays out of the log: its id and transcript are
+ * kept, the base64 audio is dropped. Any other response passes unchanged.
+ */
+export function withoutReplyAudio<T>(response: T): T {
+  const choices = (response as { choices?: unknown } | null)?.choices;
+  if (!Array.isArray(choices)) return response;
+  let changed = false;
+  const stripped = choices.map((choice) => {
+    const message = (choice as { message?: { audio?: unknown } } | null)
+      ?.message;
+    const audio = message?.audio;
+    if (
+      typeof audio !== "object" ||
+      audio === null ||
+      typeof (audio as { data?: unknown }).data !== "string"
+    )
+      return choice;
+    changed = true;
+    const { data: _data, ...kept } = audio as Record<string, unknown>;
+    return { ...choice, message: { ...message, audio: kept } };
+  });
+  return changed ? ({ ...response, choices: stripped } as T) : response;
+}
+
+function audioDeltaOf(delta: unknown):
+  | {
+      id?: string;
+      transcript?: string;
+      expires_at?: number;
+    }
+  | undefined {
+  const audio = (delta as { audio?: unknown } | null)?.audio;
+  if (typeof audio !== "object" || audio === null) return undefined;
+  const { id, transcript, expires_at } = audio as Record<string, unknown>;
+  return {
+    ...(typeof id === "string" ? { id } : {}),
+    ...(typeof transcript === "string" ? { transcript } : {}),
+    ...(typeof expires_at === "number" ? { expires_at } : {}),
+  };
+}
+
+/**
+ * The usage the proxy rebuilds from its own counts, with the details the
+ * provider reported beside it (audio, text and reasoning token splits), so a
+ * streaming client reads the same usage it would read from OpenAI.
+ */
+function withUpstreamUsageDetails<T extends object>(
+  usage: T | undefined,
+  upstream: OpenAi.Types.Usage | null,
+): T | undefined {
+  if (!usage || !upstream) return usage;
+  const prompt = upstream.prompt_tokens_details;
+  const completion = upstream.completion_tokens_details;
+  const rebuilt = (usage as { prompt_tokens_details?: object })
+    .prompt_tokens_details;
+  return {
+    ...usage,
+    ...(prompt || rebuilt
+      ? { prompt_tokens_details: { ...prompt, ...rebuilt } }
+      : {}),
+    ...(completion ? { completion_tokens_details: completion } : {}),
+  };
 }
 
 function withContentPrefix(

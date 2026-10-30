@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { OpenAi } from "@/types";
-import { openaiAdapterFactory } from "./openai";
+import { openaiAdapterFactory, withoutReplyAudio } from "./openai";
 
 function createMockResponse(
   message: OpenAi.Types.ChatCompletionsResponse["choices"][0]["message"],
@@ -917,6 +917,111 @@ describe("OpenAIStreamAdapter", () => {
     const firstData = text.split("\n\n")[0].replace(/^data: /, "");
     return (JSON.parse(firstData) as { usage?: unknown }).usage;
   }
+
+  // gpt-audio streams its reply in `delta.audio`: audio and transcript pieces
+  // with no text content. Only the first chunk (which carries `role`) reached
+  // the client, so it played a tenth of a second and never saw the words, and
+  // the recorded turn had no reply at all.
+  test("relays a spoken reply, records its transcript, and keeps the usage details", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter({
+      model: "gpt-audio",
+      messages: [{ role: "user", content: "Say hello." }],
+      stream: true,
+      stream_options: { include_usage: true },
+    } as OpenAi.Types.ChatCompletionsRequest);
+    const chunk = (delta: object, extra: object = {}) =>
+      ({
+        id: "chatcmpl-a",
+        object: "chat.completion.chunk",
+        created: 0,
+        model: "gpt-audio",
+        choices: [{ index: 0, delta, finish_reason: null }],
+        ...extra,
+      }) as unknown as Chunk;
+
+    const relayed = [
+      adapter.processChunk(
+        chunk({
+          role: "assistant",
+          content: null,
+          audio: { id: "audio_1", data: "AAAA", expires_at: 99 },
+        }),
+      ),
+      adapter.processChunk(chunk({ audio: { transcript: "Hello " } })),
+      adapter.processChunk(chunk({ audio: { data: "BBBB" } })),
+      adapter.processChunk(chunk({ audio: { transcript: "there." } })),
+    ];
+    for (const result of relayed) {
+      expect(result.sseData).toMatch(/^data: /);
+      expect(result.isResponsePreamble ?? false).toBe(false);
+    }
+    expect(relayed[2].sseData).toContain('"data":"BBBB"');
+
+    adapter.processChunk({
+      ...chunk({}),
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+    } as Chunk);
+    adapter.processChunk({
+      ...chunk({}),
+      choices: [],
+      usage: {
+        prompt_tokens: 19,
+        completion_tokens: 72,
+        total_tokens: 91,
+        prompt_tokens_details: { cached_tokens: 0, audio_tokens: 0 },
+        completion_tokens_details: { audio_tokens: 56, text_tokens: 16 },
+      },
+    } as unknown as Chunk);
+
+    const response = adapter.toProviderResponse();
+    expect(response.choices[0].message).toMatchObject({
+      content: null,
+      audio: { id: "audio_1", transcript: "Hello there.", expires_at: 99 },
+    });
+    expect(JSON.stringify(response)).not.toContain("AAAA");
+
+    const endSse = adapter.formatEndSSE();
+    const end =
+      typeof endSse === "string" ? endSse : new TextDecoder().decode(endSse);
+    const usage = JSON.parse(end.split("\n\n")[1].replace(/^data: /, "")) as {
+      usage: unknown;
+    };
+    expect(usage.usage).toMatchObject({
+      prompt_tokens: 19,
+      completion_tokens: 72,
+      completion_tokens_details: { audio_tokens: 56, text_tokens: 16 },
+    });
+  });
+
+  test("a logged spoken reply keeps its transcript and drops the audio", () => {
+    const response = {
+      id: "chatcmpl-b",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: null,
+            audio: {
+              id: "audio_2",
+              data: "UklGR",
+              transcript: "Hi.",
+              expires_at: 1,
+            },
+          },
+        },
+      ],
+    };
+    expect(withoutReplyAudio(response).choices[0].message.audio).toEqual({
+      id: "audio_2",
+      transcript: "Hi.",
+      expires_at: 1,
+    });
+    // The client's copy is untouched, and a text reply passes as it was.
+    expect(response.choices[0].message.audio.data).toBe("UklGR");
+    const text = { choices: [{ message: { content: "Hello" } }] };
+    expect(withoutReplyAudio(text)).toBe(text);
+  });
 
   // The refusal is emitted as a further delta, which clients concatenate onto
   // the content they have accumulated — so the client holds the model's text

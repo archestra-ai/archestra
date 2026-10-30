@@ -63,6 +63,8 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
   // read, so this tick is what keeps the catalog current.
   { taskType: "llm_model_sync", intervalSeconds: 60, payload: {} },
   { taskType: "audit_log_cleanup", intervalSeconds: 86400, payload: {} },
+  // Hourly so a busy deployment's backlog drains within the per-tick batch cap.
+  { taskType: "headless_sandbox_cleanup", intervalSeconds: 3600, payload: {} },
   // Rebuilds the portable BM25 corpus statistics (document frequency, chunk
   // count, mean chunk length) the keyword ranker scores from. A read-only
   // scan of kb_chunks, and a long interval is safe: stale statistics shift

@@ -3284,6 +3284,14 @@ const config = {
       process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
       DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
     ),
+    /**
+     * Days a headless (conversation-less, non-app) sandbox is kept after its
+     * last activity before the sweep deletes it. 0 keeps them forever.
+     */
+    headlessRetentionDays: parseNonNegativeInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_HEADLESS_RETENTION_DAYS,
+      7,
+    ),
   },
   /**
    * agent lifecycle hooks — user scripts run at chat lifecycle events.

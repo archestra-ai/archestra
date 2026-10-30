@@ -11,7 +11,7 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
-import { LlmProviderApiKeyModel, TeamModel } from "@/models";
+import { LlmProviderApiKeyModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import { ApiError } from "@/types";
@@ -197,13 +197,9 @@ export async function userProviderKeyMappings(params: {
   organizationId: string;
   userId: string;
 }): Promise<ModelRouterMappedProviderKey[]> {
-  const availableKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
-    params.organizationId,
-    params.userId,
-    await TeamModel.getUserTeamIds(params.userId),
-  );
+  const { keys } = await LlmProviderApiKeyModel.findUsableKeys(params);
   const providerApiKeys: ModelRouterMappedProviderKey[] = [];
-  for (const apiKey of [...availableKeys].sort(
+  for (const apiKey of [...keys].sort(
     compareModelRouterUserProviderKeys,
   )) {
     if (
@@ -320,8 +316,8 @@ export function modelRouterServesEndpoint(
 }
 
 type ModelRouterUserProviderKey = Awaited<
-  ReturnType<typeof LlmProviderApiKeyModel.getAvailableKeysForUser>
->[number];
+  ReturnType<typeof LlmProviderApiKeyModel.findUsableKeys>
+>["keys"][number];
 
 function compareModelRouterUserProviderKeys(
   left: ModelRouterUserProviderKey,

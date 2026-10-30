@@ -2,6 +2,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   AUTO_PROVISIONED_INVITATION_STATUS,
+  agentRuntimeTierProblems,
   CursorQuerySchema,
   createCursorPaginatedResponseSchema,
   getArchestraMcpServerName,
@@ -9,6 +10,7 @@ import {
   providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   RouteId,
+  resolveAgentRuntimeTiers,
 } from "@archestra/shared";
 import {
   INSTALLER_CLIENT_KEY_PROVIDERS,
@@ -55,6 +57,7 @@ import {
   SessionModel,
   ToolModel,
 } from "@/models";
+import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { assertRuntimeAgentsSupportOrganizationDefault } from "@/services/agent-runtime/model-compatibility";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
@@ -334,13 +337,27 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateAgentSettings,
         description:
-          "Update agent settings (default model, default agent, skill slash commands)",
+          "Update agent settings (default model, default agent, skill slash commands, Agent Runtime tiers)",
         tags: ["Organization"],
         body: UpdateAgentSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
+    async ({ organizationId, body, user }, reply) => {
+      if (body.agentRuntimeTiers !== undefined) {
+        // Tier sizes reserve cluster capacity, so like the built-in browser
+        // they need a built-in administrator role.
+        if (!(await isGlobalAdmin(user.id, organizationId))) {
+          throw new ApiError(
+            403,
+            "Only administrators can change the Agent Runtime tiers",
+          );
+        }
+        const problems = agentRuntimeTierProblems(
+          resolveAgentRuntimeTiers(body.agentRuntimeTiers),
+        );
+        if (problems.length) throw new ApiError(400, problems.join("; "));
+      }
       // The default model and its API key are a pair: persist both or neither.
       const currentOrg =
         body.defaultModelId !== undefined ||
@@ -515,7 +532,13 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
-      const organization = await OrganizationModel.patch(organizationId, body);
+      const organization =
+        body.popularAgentOverrides !== undefined
+          ? await AgentRuntimeTemplateModel.updateIntegrationSettings({
+              organizationId,
+              data: body,
+            })
+          : await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");

@@ -67,6 +67,45 @@ export const AgentRuntimeResourcesSchema = z.object({
 });
 export type AgentRuntimeResources = z.infer<typeof AgentRuntimeResourcesSchema>;
 
+/**
+ * Runtime tiers: the fixed CPU and memory sizes a run can get. An Agent names
+ * the tier its runs get by default; a caller may ask for a tier at or below it.
+ * The sizes live in `services/agent-runtime/runtime-tiers.ts`.
+ */
+export const AgentRuntimeTierSchema = z.enum(["S", "M", "L"]);
+export type AgentRuntimeTier = z.infer<typeof AgentRuntimeTierSchema>;
+
+/** Limits a caller asks for one run. Each must stay within the Agent's own. */
+export const AgentRunLimitsRequestSchema = z.object({
+  tier: AgentRuntimeTierSchema.optional(),
+  idleTimeoutMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 60)
+    .optional(),
+  maxDurationHours: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 30)
+    .optional(),
+  maxCostUsd: z.number().int().min(1).max(100_000).optional(),
+});
+export type AgentRunLimitsRequest = z.infer<typeof AgentRunLimitsRequestSchema>;
+
+/**
+ * What a run got: the tier it runs at (null when the Agent sizes its runs
+ * with explicit resources), and its idle, duration and spend limits.
+ */
+export const AgentRunLimitsSchema = z.object({
+  tier: AgentRuntimeTierSchema.nullable(),
+  idleTimeoutMinutes: z.number().int().min(1),
+  maxDurationHours: z.number().int().min(1),
+  maxCostUsd: z.number().int().min(1).nullable(),
+});
+export type AgentRunLimits = z.infer<typeof AgentRunLimitsSchema>;
+
 /** Where a detached run delivers its terminal result. */
 export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
   z.object({
@@ -224,6 +263,17 @@ export const AgentRuntimeSchema = z.object({
   steerMode: AgentRuntimeSteerModeSchema,
   privileged: z.boolean(),
   resources: AgentRuntimeResourcesSchema.nullable(),
+  /**
+   * Size of a run's container while `resources` is null: S, M or L. Absent
+   * means M. Explicit `resources` replace the tier for custom images.
+   */
+  tier: AgentRuntimeTierSchema.nullable().optional(),
+  /**
+   * Largest tier a caller may ask for when it starts a run, so a run can move
+   * its work to a larger run of the same Agent. Absent means the Agent's
+   * tier; a value below it counts as the Agent's tier.
+   */
+  maxTier: AgentRuntimeTierSchema.nullable().optional(),
   /** Container ports users can forward from an active workspace. */
   ports: z.array(z.number().int().min(1).max(65_535)).max(20).optional(),
   environment: z.array(AgentRuntimeEnvironmentEntrySchema).nullable(),
@@ -282,6 +332,8 @@ export const SelectAgentRunRecordSchema = createSelectSchema(
   actorKind: AgentRunActorKindSchema,
   attentionState: z.union([AgentRunAttentionStateSchema, z.null()]),
   completionTarget: AgentRunCompletionTargetSchema.nullable(),
+  /** Null on runs that started before limits were recorded. */
+  runtimeLimits: AgentRunLimitsSchema.nullable(),
 });
 export const InsertAgentRunRecordSchema = createInsertSchema(
   schema.agentRunsTable,
@@ -293,6 +345,7 @@ export const InsertAgentRunRecordSchema = createInsertSchema(
       .union([AgentRunAttentionStateSchema, z.null()])
       .optional(),
     completionTarget: AgentRunCompletionTargetSchema.nullable().optional(),
+    runtimeLimits: AgentRunLimitsSchema.nullable().optional(),
   })
   .omit({ id: true, startedAt: true, endedAt: true });
 
@@ -422,6 +475,8 @@ export const StartAgentRunResponseSchema = z.object({
   prompt: z.string(),
   projectId: z.string().uuid().nullable(),
   createdAt: z.date(),
+  /** The tier and limits the run got, within the Agent's own; null for a continuation of a run that recorded none. */
+  limits: AgentRunLimitsSchema.nullable(),
 });
 
 export type AgentRunRecord = z.infer<typeof SelectAgentRunRecordSchema>;

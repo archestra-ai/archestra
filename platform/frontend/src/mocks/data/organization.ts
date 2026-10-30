@@ -97,6 +97,7 @@ export function makeOrganization(
     defaultEnvironmentNamespace: null,
     defaultEnvironmentDescription: null,
     defaultNetworkPolicy: null,
+    agentRuntimeTiers: null,
     defaultEnvironmentValidationRegex: null,
     defaultEnvironmentTrustedImageRegistries: null,
     ...overrides,

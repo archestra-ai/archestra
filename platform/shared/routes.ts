@@ -1,4 +1,8 @@
 export const RouteId = {
+  ListAgentRuntimeTemplates: "listAgentRuntimeTemplates",
+  GetAgentRuntimeTemplate: "getAgentRuntimeTemplate",
+  GetRuntimeTemplateSettings: "getRuntimeTemplateSettings",
+  SaveRuntimeTemplateSettings: "saveRuntimeTemplateSettings",
   AzureAudioSpeechWithDefaultAgent: "azureAudioSpeechWithDefaultAgent",
   AzureAudioSpeechWithAgent: "azureAudioSpeechWithAgent",
   AzureAudioTranscriptionsWithDefaultAgent:

@@ -1416,6 +1416,7 @@ class AgentModel {
         defaultNamespace: schema.organizationsTable.defaultEnvironmentNamespace,
         environmentPolicy: schema.environmentsTable.networkPolicy,
         defaultPolicy: schema.organizationsTable.defaultNetworkPolicy,
+        agentRuntimeTiers: schema.organizationsTable.agentRuntimeTiers,
       })
       .from(schema.agentsTable)
       .innerJoin(recentRuns, eq(recentRuns.agentId, schema.agentsTable.id))
@@ -5526,6 +5527,8 @@ class AgentModel {
             steerMode: row.runtime.steerMode,
             privileged: row.runtime.privileged,
             resources: row.runtime.resources,
+            tier: row.runtime.tier ?? null,
+            maxTier: row.runtime.maxTier ?? null,
             environmentKeys: (row.runtime.environment ?? [])
               .map((entry) => entry.key)
               .sort(),

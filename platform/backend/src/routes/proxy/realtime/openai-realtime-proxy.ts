@@ -245,6 +245,26 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
     },
   });
 
+  // Whether a hard budget covers the model: such a session starts every
+  // response from here, after the check, including the one OpenAI would start
+  // itself when the user stops speaking.
+  const gated = await LimitValidationService.checkLimitsBeforeRequest({
+    unpricedMediaModel: resolution.modelId,
+    agentId: agent.id,
+    userId: identity.userId,
+    virtualKeyId: identity.virtualKeyId,
+    llmOauthClientId: identity.authenticatedApp?.id,
+    billingTeamId: identity.billingTeamId,
+    teamMemberUserId: identity.userId ?? null,
+    agent,
+  }).then(
+    () => false,
+    (error: unknown) => {
+      if (error instanceof ApiError && error.statusCode === 422) return true;
+      throw error;
+    },
+  );
+
   // The upstream URL keeps the client's query, with the model as OpenAI
   // names it; the client's bearer is replaced by the mapped provider key.
   const base = credential.mappedApiKey.baseUrl ?? config.llm.openai.baseUrl;
@@ -305,7 +325,7 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
   acceptor.handleUpgrade(request, socket, head, (client) => {
     socket.off("close", abandon);
     upstream.off("message", hold);
-    bridge({ client, upstream, session, backlog });
+    bridge({ client, upstream, session, backlog, gated });
   });
 }
 
@@ -321,14 +341,20 @@ function isWebSocketHandshake(request: IncomingMessage): boolean {
   );
 }
 
-/** Pipes frames both ways; the upstream's text events feed the session log. */
+/**
+ * Pipes frames both ways; the upstream's text events feed the session log.
+ * In a `gated` session, OpenAI never starts a response on its own: turn
+ * detection keeps every setting but `create_response`, and the response a
+ * finished spoken turn asks for is sent from here once the budget allows it.
+ */
 function bridge(params: {
   client: WebSocket;
   upstream: WebSocket;
   session: RealtimeSession;
   backlog: Array<{ data: RawData; isBinary: boolean }>;
+  gated: boolean;
 }) {
-  const { client, upstream, session } = params;
+  const { client, upstream, session, gated } = params;
   let idle = setTimeout(() => close(1001, "Idle session"), IDLE_TIMEOUT_MS);
   const touch = () => {
     clearTimeout(idle);
@@ -364,35 +390,88 @@ function bridge(params: {
     close(1008, "Budget exhausted");
   };
   session.onBudgetSpent = refuseResponse;
+  const enqueue = (step: () => Promise<void> | void) => {
+    forwarding = forwarding.then(step).catch((error: unknown) => {
+      logger.warn({ error }, "Could not process a realtime client event");
+      close(1011, "Could not process an event");
+    });
+  };
+  // Gated sessions: what the client's turn detection asks for, whether the
+  // client set it itself, and the replies owed to the proxy's own update.
+  let autoResponse = false;
+  let clientSetTurnDetection = false;
+  let spokenTurn = false;
+  let ownUpdates = 0;
   const forward = async (data: RawData, isBinary: boolean) => {
-    if (
-      !isBinary &&
-      session.onClientEvent(data.toString()) === "response.create"
-    ) {
-      const refusal = await session.refusalBeforeResponse();
-      if (refusal) return refuseResponse(refusal);
+    let frame: RawData | string = data;
+    if (!isBinary) {
+      const text = data.toString();
+      const type = session.onClientEvent(text);
+      if (type === "response.create") {
+        const refusal = await session.refusalBeforeResponse();
+        if (refusal) return refuseResponse(refusal);
+      }
+      if (gated && type === "session.update") {
+        const gatedUpdate = withoutAutoResponse(text);
+        if (gatedUpdate) {
+          frame = gatedUpdate.text;
+          autoResponse = gatedUpdate.autoResponse;
+          clientSetTurnDetection = true;
+        }
+      }
     }
     if (upstream.readyState === WebSocket.OPEN)
-      upstream.send(data, { binary: isBinary });
+      upstream.send(frame, { binary: isBinary });
   };
   client.on("message", (data, isBinary) => {
     touch();
-    forwarding = forwarding
-      .then(() => forward(data, isBinary))
-      .catch((error: unknown) => {
-        logger.warn({ error }, "Could not process a realtime client event");
-        close(1011, "Could not process an event");
-      });
+    enqueue(() => forward(data, isBinary));
   });
+  /** The response OpenAI would have started for a finished spoken turn. */
+  const respondToTurn = () =>
+    enqueue(async () => {
+      const refusal = await session.refusalBeforeResponse();
+      if (refusal) return refuseResponse(refusal);
+      session.noteResponseRequested();
+      if (upstream.readyState === WebSocket.OPEN)
+        upstream.send(JSON.stringify({ type: "response.create" }));
+    });
+  const gate = (event: Record<string, unknown>): boolean => {
+    if (event.type === "session.created" && !clientSetTurnDetection) {
+      const found = turnDetectionOf(event.session);
+      if (isRecord(found?.value) && found.value.create_response !== false) {
+        autoResponse = true;
+        ownUpdates += 1;
+        const update = autoResponseOffUpdate(event.session, found);
+        enqueue(() => {
+          if (upstream.readyState === WebSocket.OPEN)
+            upstream.send(JSON.stringify(update));
+        });
+      }
+    }
+    // The reply to the proxy's own update is not the client's.
+    if (event.type === "session.updated" && ownUpdates > 0) {
+      ownUpdates -= 1;
+      return false;
+    }
+    if (event.type === "input_audio_buffer.speech_stopped") spokenTurn = true;
+    if (event.type === "input_audio_buffer.committed" && spokenTurn) {
+      spokenTurn = false;
+      if (autoResponse) respondToTurn();
+    }
+    return true;
+  };
   const relay = (data: RawData, isBinary: boolean) => {
     touch();
     if (!isBinary) {
       // The log is best effort; a frame it cannot read still reaches the client.
+      let event: Record<string, unknown> | undefined;
       try {
-        session.onUpstreamEvent(data.toString());
+        event = session.onUpstreamEvent(data.toString());
       } catch (error) {
         logger.warn({ error }, "Could not log a realtime server event");
       }
+      if (gated && event && !gate(event)) return;
     }
     if (client.readyState === WebSocket.OPEN)
       client.send(data, { binary: isBinary });
@@ -483,8 +562,13 @@ class RealtimeSession {
       const text = userInputText(event.item);
       if (text) this.noteInputText(text);
     }
-    if (event.type === "response.create") this.turnStartedAt = Date.now();
+    if (event.type === "response.create") this.noteResponseRequested();
     return event.type as string;
+  }
+
+  /** A response was asked for: its row's duration starts now. */
+  noteResponseRequested() {
+    this.turnStartedAt = Date.now();
   }
 
   /** Settles the responses already done, then checks the budget again. */
@@ -493,9 +577,10 @@ class RealtimeSession {
     return this.params.budgetRefusal();
   }
 
-  onUpstreamEvent(text: string) {
+  /** Notes what OpenAI sent for the log; returns the parsed event. */
+  onUpstreamEvent(text: string): Record<string, unknown> | undefined {
     const event = parseEvent(text);
-    if (!event) return;
+    if (!event) return undefined;
     if (
       event.type === "conversation.item.input_audio_transcription.completed" &&
       typeof event.transcript === "string"
@@ -545,8 +630,8 @@ class RealtimeSession {
         );
       });
       this.settled = this.settled.then(() => recorded);
-      // Responses the model starts on its own, such as after the user stops
-      // speaking, ask for no check; a spent budget ends the session instead.
+      // A session whose response spent the budget ends now, rather than at
+      // the next response it asks for.
       trackBackgroundWork(
         recorded
           .then(() => this.params.budgetRefusal())
@@ -561,6 +646,7 @@ class RealtimeSession {
           }),
       );
     }
+    return event;
   }
 
   /** Keeps the typed text up to the log's limit, marking where it was cut. */
@@ -619,7 +705,7 @@ class RealtimeSession {
       providerApiKeyId,
     });
     const output = Array.isArray(response.output)
-      ? response.output.filter(isRecord).map(withoutAudio)
+      ? response.output.filter(isRecord).map((item) => withoutAudio(item))
       : undefined;
     const request = {
       model: modelId,
@@ -767,4 +853,69 @@ function outputTranscript(output: Record<string, unknown>[]): string {
     }
   }
   return parts.join("\n");
+}
+
+/**
+ * Where a session sets turn detection: under `audio.input` in the GA shape,
+ * or at the top in the beta shape. `undefined` when the event leaves it as is.
+ */
+function turnDetectionOf(
+  session: unknown,
+): { shape: "ga" | "beta"; value: unknown } | undefined {
+  if (!isRecord(session)) return undefined;
+  const audio = isRecord(session.audio) ? session.audio : undefined;
+  const input = isRecord(audio?.input) ? audio.input : undefined;
+  if (input && "turn_detection" in input)
+    return { shape: "ga", value: input.turn_detection };
+  if ("turn_detection" in session)
+    return { shape: "beta", value: session.turn_detection };
+  return undefined;
+}
+
+/** The update that keeps a session's turn detection but stops its responses. */
+function autoResponseOffUpdate(
+  session: unknown,
+  found: { shape: "ga" | "beta"; value: unknown },
+): Record<string, unknown> {
+  const turnDetection = {
+    ...(isRecord(found.value) ? found.value : {}),
+    create_response: false,
+  };
+  return found.shape === "ga"
+    ? {
+        type: "session.update",
+        session: {
+          type:
+            isRecord(session) && typeof session.type === "string"
+              ? session.type
+              : "realtime",
+          audio: { input: { turn_detection: turnDetection } },
+        },
+      }
+    : { type: "session.update", session: { turn_detection: turnDetection } };
+}
+
+/**
+ * A client's `session.update` with OpenAI's own responses turned off, and
+ * whether the client asked for them; `undefined` when the update leaves turn
+ * detection alone.
+ */
+function withoutAutoResponse(
+  text: string,
+): { text: string; autoResponse: boolean } | undefined {
+  const event = parseEvent(text);
+  const session = isRecord(event?.session) ? event.session : undefined;
+  const found = turnDetectionOf(session);
+  if (!event || !session || !found) return undefined;
+  if (!isRecord(found.value)) return { text, autoResponse: false };
+  const turnDetection = { ...found.value, create_response: false };
+  if (found.shape === "ga") {
+    const audio = session.audio as Record<string, unknown>;
+    const input = audio.input as Record<string, unknown>;
+    input.turn_detection = turnDetection;
+  } else session.turn_detection = turnDetection;
+  return {
+    text: JSON.stringify(event),
+    autoResponse: found.value.create_response !== false,
+  };
 }

@@ -98,7 +98,7 @@ with client.realtime.connect(model="openai:gpt-realtime") as session:
 
 Each response of the session is one row under **Logs → LLM Proxy**, with its transcripts and its tokens and cost at OpenAI's realtime rates. With **Keep media in logs** on, the row also plays the spoken reply. SIP calls (`call_id`) are not served.
 
-- **Budgets:** Archestra checks the budgets again before each response the client asks for. Once a response spends them, Archestra sends an `error` event with code `budget_exceeded` and closes the session.
+- **Budgets:** Archestra checks the budgets again before each response, including one that starts when the user stops speaking. Once a response spends them, Archestra sends an `error` event with code `budget_exceeded` and closes the session.
 - **Refused sessions:** Archestra refuses a realtime session while Guardrails are enforced or a throughput limit applies to the caller. Neither can review a live session yet.
 
 ## Fix a Failed Request

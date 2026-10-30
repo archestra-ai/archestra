@@ -40,23 +40,47 @@ describe("OpenAI realtime sessions through the Model Router", () => {
     authorization: string | undefined;
     beta: string | undefined;
     socket: ServerSocket;
+    /** Event types OpenAI received, in order. */
+    received: string[];
+    /** Whether server voice detection would start a response itself. */
+    createResponse: boolean;
   }>;
 
   beforeEach(async () => {
     upstreamConnections = [];
     upstream = new WebSocketServer({ port: 0, host: "127.0.0.1" });
     upstream.on("connection", (socket, request) => {
-      upstreamConnections.push({
+      const connection = {
         url: request.url ?? "",
         authorization: request.headers.authorization,
         beta: request.headers["openai-beta"] as string | undefined,
         socket,
-      });
-      socket.send(JSON.stringify({ type: "session.created", session: {} }));
+        received: [] as string[],
+        createResponse: true,
+      };
+      upstreamConnections.push(connection);
+      // OpenAI's default: server voice detection that answers each turn.
+      socket.send(
+        JSON.stringify({
+          type: "session.created",
+          session: {
+            turn_detection: { type: "server_vad", create_response: true },
+          },
+        }),
+      );
       socket.on("message", (data) => {
-        const event = JSON.parse(data.toString()) as { type: string };
-        if (event.type === "session.update")
+        const event = JSON.parse(data.toString()) as {
+          type: string;
+          session?: { turn_detection?: { create_response?: boolean } | null };
+        };
+        connection.received.push(event.type);
+        if (event.type === "session.update") {
+          const turnDetection = event.session?.turn_detection;
+          if (turnDetection === null) connection.createResponse = false;
+          else if (turnDetection)
+            connection.createResponse = turnDetection.create_response !== false;
           socket.send(JSON.stringify({ type: "session.updated", session: {} }));
+        }
         if (event.type === "response.create") {
           for (const delta of ["AAEC", "AwQF"])
             socket.send(
@@ -68,9 +92,33 @@ describe("OpenAI realtime sessions through the Model Router", () => {
             );
           socket.send(JSON.stringify(RESPONSE_DONE));
         }
-        // Server voice detection answers a committed turn on its own.
-        if (event.type === "input_audio_buffer.commit")
-          socket.send(JSON.stringify(RESPONSE_DONE));
+        // Stands in for the user finishing a spoken turn.
+        if (event.type === "input_audio_buffer.commit") {
+          socket.send(
+            JSON.stringify({ type: "input_audio_buffer.speech_stopped" }),
+          );
+          socket.send(JSON.stringify({ type: "input_audio_buffer.committed" }));
+          if (connection.createResponse)
+            socket.send(JSON.stringify(RESPONSE_DONE));
+        }
+        // A reply long enough to have many output items.
+        if (event.type === "conversation.item.retrieve")
+          socket.send(
+            JSON.stringify({
+              type: "response.done",
+              response: {
+                ...RESPONSE_DONE.response,
+                id: "resp_long",
+                output: Array.from({ length: 40 }, (_, index) => ({
+                  type: "message",
+                  role: "assistant",
+                  content: [
+                    { type: "output_audio", transcript: `Part ${index}.` },
+                  ],
+                })),
+              },
+            }),
+          );
       });
     });
     await once(upstream, "listening");
@@ -506,23 +554,121 @@ describe("OpenAI realtime sessions through the Model Router", () => {
     asked.socket.send(JSON.stringify({ type: "response.create" }));
     expect((await askedClosed)[0]).toBe(1008);
     budgetRefusal(asked.socket);
-    await drainBackgroundWork();
     expect(
-      await InteractionModel.getAllInteractionsForProfile(agent.id),
+      upstreamConnections[0].received.filter(
+        (type) => type === "response.create",
+      ),
     ).toHaveLength(1);
+  });
 
-    // A response the model starts on its own ends the session once settled.
-    await LimitModel.patch(budget.id, { limitValue: 100 });
-    const automatic = await connect(url, key.value);
-    if (!("socket" in automatic)) throw new Error(`Refused: ${automatic.body}`);
-    await nextEvent(automatic.socket, "session.created");
-    await LimitModel.patch(budget.id, { limitValue: 0 });
-    const automaticClosed = once(automatic.socket, "close");
-    automatic.socket.send(
-      JSON.stringify({ type: "input_audio_buffer.commit" }),
+  test("starts the response to a spoken turn itself under a budget, and never once the budget is spent", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const key = await mappedKey({
+      organizationId: agent.organizationId,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const url = `${origin}/v1/model-router/${agent.id}/realtime?model=openai:gpt-realtime-2.1`;
+    const budgetRefusal = (socket: WebSocket) =>
+      expect(events.get(socket)).toContainEqual(
+        expect.objectContaining({
+          type: "error",
+          error: expect.objectContaining({ code: "budget_exceeded" }),
+        }),
+      );
+
+    // Without a budget, OpenAI answers the turn itself, untouched.
+    const free = await connect(url, key.value);
+    if (!("socket" in free)) throw new Error(`Refused: ${free.body}`);
+    await nextEvent(free.socket, "session.created");
+    free.socket.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+    await nextEvent(free.socket, "response.done");
+    expect(upstreamConnections[0].received).toEqual([
+      "input_audio_buffer.commit",
+    ]);
+    free.socket.close();
+
+    // Under a budget, OpenAI's own response is off and the proxy asks for
+    // the turn's response after the check; the client sees no extra update.
+    const budget = await LimitModel.create({
+      entityType: "virtual_key",
+      entityId: key.virtualKey.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      lastCleanup: new Date(),
+    });
+    const gated = await connect(url, key.value);
+    if (!("socket" in gated)) throw new Error(`Refused: ${gated.body}`);
+    await nextEvent(gated.socket, "session.created");
+    await vi.waitFor(() =>
+      expect(upstreamConnections[1].createResponse).toBe(false),
     );
-    expect((await automaticClosed)[0]).toBe(1008);
-    budgetRefusal(automatic.socket);
+    gated.socket.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+    await nextEvent(gated.socket, "response.done");
+    expect(upstreamConnections[1].received).toEqual([
+      "session.update",
+      "input_audio_buffer.commit",
+      "response.create",
+    ]);
+    expect(events.get(gated.socket)?.map((event) => event.type)).not.toContain(
+      "session.updated",
+    );
+    // A client that sets turn detection keeps its settings, without
+    // OpenAI's own responses.
+    gated.socket.send(
+      JSON.stringify({
+        type: "session.update",
+        session: { turn_detection: { type: "semantic_vad" } },
+      }),
+    );
+    await nextEvent(gated.socket, "session.updated");
+    expect(upstreamConnections[1].createResponse).toBe(false);
+
+    // Spent elsewhere: the next spoken turn starts nothing upstream.
+    await drainBackgroundWork();
+    await LimitModel.patch(budget.id, { limitValue: 0 });
+    const closed = once(gated.socket, "close");
+    gated.socket.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+    expect((await closed)[0]).toBe(1008);
+    budgetRefusal(gated.socket);
+    expect(
+      upstreamConnections[1].received.filter(
+        (type) => type === "response.create",
+      ),
+    ).toHaveLength(1);
+  });
+
+  test("logs every output item of a long reply, however many there are", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const key = await mappedKey({
+      organizationId: agent.organizationId,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const opened = await connect(
+      `${origin}/v1/model-router/${agent.id}/realtime?model=openai:gpt-realtime-2.1`,
+      key.value,
+    );
+    if (!("socket" in opened)) throw new Error(`Refused: ${opened.body}`);
+    await nextEvent(opened.socket, "session.created");
+    opened.socket.send(JSON.stringify({ type: "conversation.item.retrieve" }));
+    await nextEvent(opened.socket, "response.done");
+    opened.socket.close();
+    await drainBackgroundWork();
+
+    const [row] = await InteractionModel.getAllInteractionsForProfile(agent.id);
+    const transcript = (row.response as { output_transcript: string })
+      .output_transcript;
+    expect(transcript).toContain("Part 0.");
+    expect(transcript).toContain("Part 39.");
   });
 
   test("refuses a session while throughput limits or enforced Guardrails apply", async ({

@@ -294,6 +294,11 @@ class OrganizationModel {
       { id, updated: !!updatedOrganization },
       "OrganizationModel.patch: completed",
     );
+    await OrganizationModel.invalidateSettingsCaches(id);
+    return updatedOrganization || null;
+  }
+
+  static async invalidateSettingsCaches(id: string): Promise<void> {
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
     await cacheManager.delete(getOrganizationOnlineSkillCatalogCacheKey(id));
@@ -311,7 +316,6 @@ class OrganizationModel {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     OrganizationModel.mcpIdleHibernationCache.clear();
     // SPDX-SnippetEnd
-    return updatedOrganization || null;
   }
 
   /**

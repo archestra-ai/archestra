@@ -1,6 +1,7 @@
 import config from "@/config";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentModel from "@/models/agent";
+import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
@@ -246,6 +247,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "hook",
     fetchById: (id, organizationId) =>
       HookFileModel.findByIdForAudit(id, organizationId),
+  },
+  "/api/agent-runtime-templates/settings": {
+    resourceType: "organization",
+    resourceIdSource: "organizationContext",
+    action: "organization.updated",
+    fetchById: (id) => AgentRuntimeTemplateModel.findByIdForAudit(id),
   },
   // Agents
   "/api/agents": {

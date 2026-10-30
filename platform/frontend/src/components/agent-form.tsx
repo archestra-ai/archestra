@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  type AgentCatalogId,
   type AgentScope,
   type AgentType,
   type archestraApiTypes,
@@ -943,7 +942,7 @@ export interface AgentFormProps {
   defaultIconType?: AgentIconVariant;
   /** Catalog/template defaults for a new Agent. Ignored in edit mode. */
   initialValues?: AgentFormInitialValues;
-  initialRuntimeId?: AgentCatalogId;
+  initialRuntimeId?: string;
   /** Callback when a new agent/profile is created (not called for updates) */
   onCreated?: (created: {
     id: string;
@@ -1338,9 +1337,8 @@ export function AgentForm({
     (initialValues?.runtime
       ? (resolveAgentCatalogId(initialValues.runtime) ?? "custom")
       : "chat");
-  const [selectedRuntimeId, setSelectedRuntimeId] = useState<
-    AgentCatalogId | "chat" | "custom"
-  >(originalRuntimeId);
+  const [selectedRuntimeId, setSelectedRuntimeId] =
+    useState<string>(originalRuntimeId);
   // The catalog already decided this is a built-in agent; there is no
   // runtime left to pick.
   const runsOnBuiltInHarness =

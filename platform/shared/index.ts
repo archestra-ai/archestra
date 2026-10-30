@@ -38,6 +38,7 @@ export * from "./knowledge-base";
 export * from "./labels";
 export * from "./linked-idp-auth";
 export * from "./log-content";
+export * from "./log-media";
 export * from "./mcp-alert-fingerprint";
 export * from "./mcp-config-redaction";
 export * from "./mcp-executed-as";

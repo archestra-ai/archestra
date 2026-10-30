@@ -1,3 +1,4 @@
+import { withoutLoggedMedia } from "@archestra/shared";
 import type { Span } from "@opentelemetry/api";
 import { SpanStatusCode } from "@opentelemetry/api";
 import config from "@/config";
@@ -235,8 +236,14 @@ export function setSpanError(span: Span, error: unknown): void {
   );
 }
 
+/**
+ * Content for a span attribute: without media bytes, which a trace has no use
+ * for (an image's base64 would fill the attribute's budget), then cut to the
+ * configured length.
+ */
 export function truncateContent(content: unknown): string {
-  const str = typeof content === "string" ? content : JSON.stringify(content);
+  const kept = withoutLoggedMedia(content);
+  const str = typeof kept === "string" ? kept : JSON.stringify(kept);
   if (str.length <= contentMaxLength) {
     return str;
   }

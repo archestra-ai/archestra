@@ -152110,6 +152110,9 @@
                         "allowUnauthenticatedLlmProxyRequests": {
                           "type": "boolean"
                         },
+                        "keepMediaInLogs": {
+                          "type": "boolean"
+                        },
                         "allowToolAutoAssignment": {
                           "type": "boolean"
                         },
@@ -152693,6 +152696,7 @@
                         "playwrightMcpEnabled",
                         "allowChatFileUploads",
                         "allowUnauthenticatedLlmProxyRequests",
+                        "keepMediaInLogs",
                         "allowToolAutoAssignment",
                         "embeddingModel",
                         "embeddingDimensions",
@@ -473165,6 +473169,9 @@
                     "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
+                    "keepMediaInLogs": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -473748,6 +473755,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -474340,6 +474348,9 @@
                     "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
+                    "keepMediaInLogs": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -474923,6 +474934,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -475638,6 +475650,9 @@
                   "allowUnauthenticatedLlmProxyRequests": {
                     "type": "boolean"
                   },
+                  "keepMediaInLogs": {
+                    "type": "boolean"
+                  },
                   "newAppsDisabledByDefault": {
                     "type": "boolean"
                   },
@@ -475757,6 +475772,9 @@
                       "type": "boolean"
                     },
                     "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
+                    "keepMediaInLogs": {
                       "type": "boolean"
                     },
                     "allowToolAutoAssignment": {
@@ -476342,6 +476360,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -476789,6 +476808,9 @@
                     "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
+                    "keepMediaInLogs": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -477372,6 +477394,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -477816,6 +477839,9 @@
                     "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
+                    "keepMediaInLogs": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -478399,6 +478425,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -478867,6 +478894,9 @@
                     "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
+                    "keepMediaInLogs": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -479450,6 +479480,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -480026,6 +480057,9 @@
                     "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
+                    "keepMediaInLogs": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -480609,6 +480643,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -481210,6 +481245,9 @@
                     "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
+                    "keepMediaInLogs": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -481793,6 +481831,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -482307,6 +482346,9 @@
                     "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
+                    "keepMediaInLogs": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -482890,6 +482932,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -483348,6 +483391,9 @@
                     "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
+                    "keepMediaInLogs": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -483931,6 +483977,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -484420,6 +484467,9 @@
                     "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
+                    "keepMediaInLogs": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -485003,6 +485053,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -485429,6 +485480,9 @@
                     "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
+                    "keepMediaInLogs": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -486012,6 +486066,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -487642,6 +487697,9 @@
                     "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
+                    "keepMediaInLogs": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -488225,6 +488283,7 @@
                     "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
+                    "keepMediaInLogs",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",

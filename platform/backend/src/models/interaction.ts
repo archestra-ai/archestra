@@ -53,6 +53,7 @@ import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import {
   resolveLogContentMode,
   withholdInteractionContent,
+  withoutInteractionMedia,
 } from "@/log-content";
 import logger from "@/logging";
 import { parseClaudeMetadataParentSessionId } from "@/routes/proxy/utils/headers/session-id";
@@ -98,6 +99,7 @@ import InteractionUserActivityModel from "./interaction-user-activity";
 import LimitModel from "./limit";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import { interactionBelongsToOrganization } from "./log-organization";
+import OrganizationModel from "./organization";
 import RoutingUsageModel from "./routing-usage";
 import VirtualApiKeyModel from "./virtual-api-key";
 
@@ -3536,15 +3538,35 @@ class InteractionModel {
     } = data;
     if (billingUsage && !billingAttribution)
       throw new Error("Billing attribution is required for settlement");
+    // One cached read of the agent gives its environment and its
+    // organization's media setting.
+    const agentSettings = data.profileId
+      ? await AgentModel.findLogSettings(data.profileId)
+      : null;
     const environmentId = billingAttribution
       ? billingAttribution.environmentId
       : data.profileId
-        ? await AgentModel.findEnvironmentId(data.profileId)
+        ? (agentSettings?.environmentId ?? null)
         : (data.environmentId ?? null);
     // Enforced here, in the single funnel, so no writer can store content
-    // the deployment's Log Content mode withholds.
+    // the deployment's Log Content mode withholds, or media the organization
+    // keeps out of its logs, whether the call came from Chat, an agent
+    // session or a client of the proxy.
     const withheld = resolveLogContentMode() === "metadata_only";
-    const record = withheld ? withholdInteractionContent(columns) : columns;
+    const keepMedia =
+      withheld ||
+      (agentSettings?.keepMediaInLogs ??
+        (await OrganizationModel.keepsMediaInLogs({
+          organizationId: billingAttribution?.organizationId,
+          appId: data.appId,
+          connectorId: data.connectorId,
+          environmentId,
+        })));
+    const record = withheld
+      ? withholdInteractionContent(columns)
+      : keepMedia
+        ? columns
+        : withoutInteractionMedia(columns);
     // A withheld row holds no content to encrypt under a conversation key, so
     // it is written like the encrypted-chat fallback: unkeyed, marker in place.
     const audit = withheld ? null : (auditContext ?? null);

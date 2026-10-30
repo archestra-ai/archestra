@@ -41116,6 +41116,7 @@ export type GetBootstrapResponses = {
             playwrightMcpEnabled: boolean;
             allowChatFileUploads: boolean;
             allowUnauthenticatedLlmProxyRequests: boolean;
+            keepMediaInLogs: boolean;
             allowToolAutoAssignment: boolean;
             embeddingModel: string | null;
             embeddingDimensions: EmbeddingDimensions | null;
@@ -121144,6 +121145,7 @@ export type GetOrganizationResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121485,6 +121487,7 @@ export type UpdateAppearanceSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121604,6 +121607,7 @@ export type UpdateSecuritySettingsData = {
         playwrightMcpEnabled?: boolean;
         allowChatFileUploads?: boolean;
         allowUnauthenticatedLlmProxyRequests?: boolean;
+        keepMediaInLogs?: boolean;
         newAppsDisabledByDefault?: boolean;
         newAppsLockedByDefault?: boolean;
         allowToolAutoAssignment?: boolean;
@@ -121705,6 +121709,7 @@ export type UpdateSecuritySettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -121922,6 +121927,7 @@ export type UpdateMcpSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -122138,6 +122144,7 @@ export type UpdateSkillsSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -122357,6 +122364,7 @@ export type UpdateAgentSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -122596,6 +122604,7 @@ export type UpdateConnectionSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -122860,6 +122869,7 @@ export type UpdateIntegrationSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -123086,6 +123096,7 @@ export type UpdateDefaultEnvironmentResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -123307,6 +123318,7 @@ export type UpdateAuthSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -123530,6 +123542,7 @@ export type UpdateKnowledgeSettingsResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -123743,6 +123756,7 @@ export type DropEmbeddingConfigResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -124318,6 +124332,7 @@ export type CompleteOnboardingResponses = {
         playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
+        keepMediaInLogs: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;

@@ -5,6 +5,7 @@ import {
   logContentNotStored,
   MCP_EXECUTED_AS_META_KEY,
   McpExecutedAsSchema,
+  withoutLoggedMedia,
 } from "@archestra/shared";
 import config from "@/config";
 import type {
@@ -68,6 +69,34 @@ export function withholdToolCallContent(
       record.toolResult === null || record.toolResult === undefined
         ? record.toolResult
         : logContentNotStored(toolResultOutcome(record.toolResult)),
+  };
+}
+
+/**
+ * An LLM interaction without the media its request and response carry, for
+ * an organization that turned off "Keep media in logs". The text, usage and
+ * cost stay; each image, clip or file is replaced by the not-kept marker
+ * where it stood, so Logs can say what was there.
+ */
+export function withoutInteractionMedia(
+  record: InsertInteraction,
+): InsertInteraction {
+  return {
+    ...record,
+    request: withoutLoggedMedia(record.request),
+    processedRequest: withoutLoggedMedia(record.processedRequest),
+    response: withoutLoggedMedia(record.response),
+  };
+}
+
+/** An MCP log row without the media in its arguments and result. */
+export function withoutToolCallMedia(
+  record: InsertMcpToolCall,
+): InsertMcpToolCall {
+  return {
+    ...record,
+    toolCall: withoutLoggedMedia(record.toolCall),
+    toolResult: withoutLoggedMedia(record.toolResult),
   };
 }
 

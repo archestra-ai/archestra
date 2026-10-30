@@ -455,6 +455,7 @@ export const UpdateSecuritySettingsSchema = z.object({
   playwrightMcpEnabled: z.boolean().optional(),
   allowChatFileUploads: z.boolean().optional(),
   allowUnauthenticatedLlmProxyRequests: z.boolean().optional(),
+  keepMediaInLogs: z.boolean().optional(),
   newAppsDisabledByDefault: z.boolean().optional(),
   newAppsLockedByDefault: z.boolean().optional(),
   /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */

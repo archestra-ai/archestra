@@ -116,4 +116,31 @@ describe("PATCH /api/organization/security-settings", () => {
       });
     });
   });
+
+  test("media in logs is kept by default, and an administrator can turn it off, audited", async () => {
+    expect(await OrganizationModel.keepsMediaInLogs({ organizationId })).toBe(
+      true,
+    );
+
+    const response = await patch({ keepMediaInLogs: false });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().keepMediaInLogs).toBe(false);
+    expect(await OrganizationModel.keepsMediaInLogs({ organizationId })).toBe(
+      false,
+    );
+    await vi.waitFor(async () => {
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "organization",
+        limit: 10,
+        offset: 0,
+      });
+      expect(data[0]).toMatchObject({
+        action: "organization.updated",
+        before: { keepMediaInLogs: true },
+        after: { keepMediaInLogs: false },
+      });
+    });
+  });
 });

@@ -109,7 +109,13 @@ export function resolveDiscoveredModelRegistryEntry(params: {
   prices: CrossProviderPrices | null;
   metadata: CrossProviderMetadata | null;
 } | null {
-  const scoped = resolveCrossProviderEntries(params);
+  const scoped =
+    params.provider === "github-copilot"
+      ? toArray(
+          params.modelsDevData["github-copilot"]?.models[params.modelId] ??
+            null,
+        )
+      : resolveCrossProviderEntries(params);
   const entries = scoped.length
     ? scoped
     : toArray(

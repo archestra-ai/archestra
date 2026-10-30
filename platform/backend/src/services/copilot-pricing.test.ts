@@ -53,17 +53,19 @@ type Fixtures = Pick<
   | "makeSecret"
   | "makeLlmProviderApiKey"
 >;
-async function setup(f: Fixtures) {
+async function setup(f: Fixtures, syncInitially = true) {
   const org = await f.makeOrganization();
   const user = await f.makeUser();
   await f.makeMember(user.id, org.id);
   const agent = await f.makeAgent({ organizationId: org.id });
   const token = `gho_test_${randomUUID()}`;
-  const secret = await f.makeSecret({ secret: { apiKey: token } });
-  const key = await f.makeLlmProviderApiKey(org.id, secret.id, {
-    provider: "github-copilot",
-    userId: user.id,
-  });
+  const key = syncInitially
+    ? await f.makeLlmProviderApiKey(
+        org.id,
+        (await f.makeSecret({ secret: { apiKey: token } })).id,
+        { provider: "github-copilot", userId: user.id },
+      )
+    : null;
   const passthrough = await makePassthroughCredential({
     organizationId: org.id,
     ownerId: user.id,
@@ -256,6 +258,7 @@ async function setup(f: Fixtures) {
     ),
   );
   const sync = async (forceRefresh = false) => {
+    if (!key) throw new Error("This fixture has no stored provider key");
     modelsDevClient.clearFetchCache();
     return modelSyncService.syncModelsForApiKey({
       apiKeyId: key.id,
@@ -264,7 +267,7 @@ async function setup(f: Fixtures) {
       forceRefresh,
     });
   };
-  await sync();
+  if (syncInitially) await sync();
   const app = createFastifyInstance();
   apps.push(app);
   await app.register(githubCopilotProxyRoutes);
@@ -733,4 +736,106 @@ test("custom prices win in actual proxy receipts without importing a surcharge",
   });
   await verify(120_000, [0.1, 0.5, 0.02, 0.04]);
   await verify(150_001, [2, 3, 0.2, 2.5]);
+});
+
+test("passthrough discovery and registry refresh price already-known Copilot models without stored keys", async ({
+  makeOrganization,
+  makeAgent,
+  makeUser,
+  makeMember,
+  makeSecret,
+  makeLlmProviderApiKey,
+}) => {
+  const c = await setup(
+    {
+      makeOrganization,
+      makeAgent,
+      makeUser,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+    },
+    false,
+  );
+  const modelId = "claude-haiku-5.5";
+  expect(
+    await ModelModel.findByProviderAndModelId("github-copilot", modelId),
+  ).toBeNull();
+  expect(
+    (await c.send(modelId, 100_001, { read: 500, write: 100 })).statusCode,
+  ).toBe(200);
+  const row = await ModelModel.findByProviderAndModelId(
+    "github-copilot",
+    modelId,
+  );
+  if (!row) throw new Error("Missing discovered model");
+  expect(row.discoveredViaLlmProxy).toBe(true);
+  expect(row.syncedLongContextThreshold).toBe(100_000);
+  const [original] = await db
+    .select()
+    .from(schema.interactionsTable)
+    .where(eq(schema.interactionsTable.profileId, c.agent.id));
+  expect(original.cost).toBe("0.0497980000");
+  const [receipt] = await InteractionBillingModel.findMany([original.id]);
+  expect(receipt.usage.cost).toBe(original.cost);
+  const counters = await db.select().from(schema.limitBillingUsageTable);
+  const legacyCounters = await db.select().from(schema.limitModelUsageTable);
+
+  // Simulate a row discovered before tier metadata existed. Registry refresh
+  // must upgrade future pricing without a stored credential or history rewrite.
+  const oldRow = await ModelModel.ensureModelExists(
+    "gpt-6.1-sol",
+    "github-copilot",
+  );
+  expect(oldRow?.syncedLongContextThreshold).toBeNull();
+  await ModelModel.update(row.id, {
+    customPricePerMillionInput: "0.03",
+    customPricePerMillionOutput: "0.07",
+  });
+  const next = structuredClone(c.catalog);
+  const tier = next["github-copilot"].models[modelId].cost?.tiers?.[0];
+  if (!tier) throw new Error("Missing fixture tier");
+  tier.input = 0.7;
+  c.changeCatalog(next);
+  modelsDevClient.clearFetchCache();
+  expect(await modelsDevClient.syncModelMetadata(true)).toBe(2);
+  const refreshed = await ModelModel.findById(row.id);
+  expect(Number(refreshed?.syncedLongContextPromptPricePerToken)).toBe(
+    0.0000007,
+  );
+  expect(refreshed?.customPricePerMillionInput).toBe("0.03");
+  expect(refreshed?.discoveredViaLlmProxy).toBe(true);
+  expect(
+    (await ModelModel.findByProviderAndModelId("github-copilot", "gpt-6.1-sol"))
+      ?.syncedLongContextThreshold,
+  ).toBe(272_000);
+  expect(
+    await ModelModel.findByProviderAndModelId("github-copilot", "grok-4.7"),
+  ).toBeNull();
+  expect(await db.select().from(schema.llmProviderApiKeysTable)).toEqual([]);
+
+  delete next["github-copilot"].models[modelId].cost?.tiers;
+  c.changeCatalog(next);
+  modelsDevClient.clearFetchCache();
+  await modelsDevClient.syncModelMetadata(true);
+  expect(
+    (await ModelModel.findById(row.id))?.syncedLongContextThreshold,
+  ).toBeNull();
+  expect((await InteractionBillingModel.findMany([original.id]))[0]).toEqual(
+    receipt,
+  );
+  expect(await db.select().from(schema.limitBillingUsageTable)).toEqual(
+    counters,
+  );
+  expect(await db.select().from(schema.limitModelUsageTable)).toEqual(
+    legacyCounters,
+  );
+  expect(
+    (
+      await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.id, original.id))
+    )[0].cost,
+  ).toBe(original.cost);
 });

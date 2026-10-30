@@ -613,14 +613,32 @@ export class ModelsDevClient {
       await ModelModel.bulkUpsert(uniqueModelsToSync);
     }
 
+    // Copilot availability is account-specific, so never create models from
+    // this catalog. Refresh prices for already-known rows, including models
+    // discovered through passthrough credentials with no stored provider key.
+    const copilotCatalog = apiResponse["github-copilot"]?.models ?? {};
+    const knownCopilot = await ModelModel.findByProviderAndModelIds(
+      "github-copilot",
+      Object.keys(copilotCatalog),
+    );
+    // Validate all schedules before writing any Copilot price changes.
+    const copilotPrices = [...knownCopilot.values()].map((model) => ({
+      id: model.id,
+      prices: {
+        ...modelsDevCostToPerToken(copilotCatalog[model.modelId].cost),
+        ...modelsDevLongContextToColumns(copilotCatalog[model.modelId].cost),
+      },
+    }));
+    for (const { id, prices } of copilotPrices) {
+      await ModelModel.applyRegistryCapabilities(id, prices);
+    }
+
     await this.updateSyncTimestamp();
 
-    logger.info(
-      { syncedCount: uniqueModelsToSync.length },
-      "models.dev model metadata sync completed",
-    );
+    const syncedCount = uniqueModelsToSync.length + copilotPrices.length;
+    logger.info({ syncedCount }, "models.dev model metadata sync completed");
 
-    return uniqueModelsToSync.length;
+    return syncedCount;
   }
 
   /**

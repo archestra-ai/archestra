@@ -891,16 +891,24 @@ class ModelModel {
    */
   static async applyRegistryCapabilities(
     id: string,
-    capabilities: {
-      promptPricePerToken: string | null;
-      completionPricePerToken: string | null;
-      cacheReadPricePerToken: string | null;
-      cacheWritePricePerToken: string | null;
-      contextLength: number | null;
-      outputLength: number | null;
-      supportsToolCalling: boolean | null;
-      supportsReasoningEffort: boolean | null;
-    },
+    capabilities: Partial<
+      Pick<
+        Model,
+        | "promptPricePerToken"
+        | "completionPricePerToken"
+        | "cacheReadPricePerToken"
+        | "cacheWritePricePerToken"
+        | "contextLength"
+        | "outputLength"
+        | "supportsToolCalling"
+        | "supportsReasoningEffort"
+        | "syncedLongContextThreshold"
+        | "syncedLongContextPromptPricePerToken"
+        | "syncedLongContextCompletionPricePerToken"
+        | "syncedLongContextCacheReadPricePerToken"
+        | "syncedLongContextCacheWritePricePerToken"
+      >
+    >,
   ): Promise<void> {
     await db
       .update(schema.modelsTable)

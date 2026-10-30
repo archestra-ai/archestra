@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-29
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -600,6 +600,9 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Values: `0` turns it off
   - Keep it below the shortest stall timeout of your clients. Claude Code reports a stall after 20 seconds.
   - Bedrock and Ollama native streams get no keep-alive.
+  - OpenAI Chat Completions and Responses, OpenAI-compatible chat providers using the shared transport, and Anthropic Messages also receive comments before the first event, once the upstream has accepted the HTTP request. No additional setting is needed.
+  - Comments cannot cover a provider or ingress that delays its HTTP response headers. They do not extend upstream timeouts or absolute request deadlines; intervening proxies must forward streaming bytes without buffering.
+  - [Model pools](/docs/llm-proxy/model-pools) wait until a member is selected so failover and final pool headers remain accurate. Buffered policy responses keep their existing commit behavior. Other transports keep their existing behavior until the first client event.
 
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Records traffic sent with a subscription credential, such as a Claude Pro or Max login, as subscription usage with $0 billed spend.
   - Default: `true`
@@ -791,9 +794,9 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Values: comma-separated namespaces, for example `staging,production`
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`** - Cluster resolver addresses that [environment](/docs/admin/environments) egress policies allow DNS to.
-  - Default: unset (Archestra reads the `kube-system/kube-dns` Service, which the Helm chart grants access to)
-  - Values: comma-separated IP addresses, for example `172.20.0.10`
-  - Set it when the resolver is not the `kube-dns` Service, such as NodeLocal DNSCache, or when Archestra cannot read that Service.
+  - Default: unset (discovery reads the `kube-system/kube-dns` Service when permitted, then falls back to the platform pod's `/etc/resolv.conf` when running in-cluster)
+  - Values: comma-separated IP addresses, for example `172.20.0.10`. Helm also accepts a list under `archestra.orchestrator.kubernetes.clusterDnsIps`.
+  - Set verified resolver addresses when discovery fails or workloads use a different resolver from the platform pod, such as custom or NodeLocal DNS. Explicit addresses bypass discovery.
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN`** - Cluster DNS domain used to build in-cluster Service addresses.
   - Default: `cluster.local`

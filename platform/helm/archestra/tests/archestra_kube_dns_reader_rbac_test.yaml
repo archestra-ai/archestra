@@ -5,7 +5,14 @@ release:
   name: archestra
   namespace: platform
 tests:
-  - it: grants the platform ServiceAccount get on the kube-dns Service only
+  - it: does not require kube-system access by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: grants the platform ServiceAccount get on the kube-dns Service only when opted in
+    set:
+      archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead: true
     asserts:
       - hasDocuments:
           count: 2
@@ -47,6 +54,8 @@ tests:
   # must not collide between two releases of the same name in different
   # namespaces.
   - it: names the objects after the release namespace
+    set:
+      archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead: true
     release:
       namespace: other
     asserts:
@@ -57,6 +66,7 @@ tests:
 
   - it: binds a custom ServiceAccount name
     set:
+      archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead: true
       archestra.orchestrator.kubernetes.serviceAccount.name: custom-sa
     documentIndex: 1
     asserts:
@@ -73,7 +83,22 @@ tests:
 
   - it: is omitted when rbac.create is false
     set:
+      archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead: true
       archestra.orchestrator.kubernetes.rbac.create: false
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: binds an existing platform ServiceAccount when opted in
+    set:
+      archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead: true
+      archestra.orchestrator.kubernetes.serviceAccount.create: false
+      archestra.orchestrator.kubernetes.serviceAccount.name: existing-platform
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: subjects[0]
+          value:
+            kind: ServiceAccount
+            name: existing-platform
+            namespace: platform

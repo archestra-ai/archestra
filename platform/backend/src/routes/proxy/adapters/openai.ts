@@ -1833,6 +1833,7 @@ export const openaiAdapterFactory: LLMProvider<
   async executeStream(
     client: unknown,
     request: OpenAiRequest,
+    onAccepted?: () => void,
   ): Promise<AsyncIterable<OpenAiStreamChunk>> {
     const openaiClient = client as OpenAIProvider;
     const openaiRequest = {
@@ -1842,6 +1843,7 @@ export const openaiAdapterFactory: LLMProvider<
     } as unknown as ChatCompletionCreateParamsStreaming;
     return streamChatCompletionChunks<OpenAiStreamChunk>(
       openaiClient.chat.completions.create(openaiRequest),
+      onAccepted,
     );
   },
 

@@ -311,6 +311,7 @@ export interface LLMProxyContext<TRequest> {
 /** How a request is spread across its model pool's members. */
 export interface ModelPoolRouting {
   plan: ModelPoolPlan;
+  checkLimits: (member: PlannedMember) => Promise<void>;
   transportFor: (
     member: PlannedMember,
     signal: AbortSignal,
@@ -1213,6 +1214,26 @@ export async function handleLLMProxy<
   const upstreamAttempt: UpstreamAttempt = {
     providerApiKeyId: perKeyChatApiKeyId,
   };
+  // A media operation the published media tariff prices settles its cost
+  // like any other request. One it cannot price has no cost to settle, so
+  // it is refused only where a spend budget applies to it.
+  const mediaPricedForBudget =
+    provider.mediaTariffCovers?.(requestAdapter.getOriginalRequest()) === true;
+  const limitContext = {
+    unpricedMediaModel:
+      provider.unavailableUsageAccounting && !mediaPricedForBudget
+        ? actualModel
+        : undefined,
+    agentId: resolvedAgentId,
+    userId,
+    virtualKeyId,
+    passthroughVirtualKeyId,
+    llmOauthClientId: authenticatedApp?.id,
+    billingTeamId,
+    teamMemberUserId: authenticatedUserId ?? null,
+    agent: resolvedAgent,
+    snapshot: requestContext,
+  };
   try {
     // A redacted audit context cannot retain an enforceable trajectory safely.
     if (
@@ -1231,32 +1252,48 @@ export async function handleLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
-    // A media operation the published media tariff prices settles its cost
-    // like any other request. One it cannot price has no cost to settle, so
-    // it is refused only where a spend budget applies to it.
-    const mediaPricedForBudget =
-      provider.mediaTariffCovers?.(requestAdapter.getOriginalRequest()) ===
-      true;
-    // Check usage limits
+    // A request for a model pool's name is served by the pool's members when
+    // the caller may use the pool (see `mayUseModelPool`). Members on a wire
+    // the client's can't reach are left out of the plan.
+    const poolWire = openAiCodexPassthrough
+      ? null
+      : inboundPoolWire(provider.interactionType);
+    // A chat or agent set to a pool names it, and sends one of its members'
+    // models. Any other platform call runs on the key and model it names.
+    const chatModelPoolHeader = internalCall
+      ? headersForExtraction[MODEL_POOL_ID_HEADER.toLowerCase()]
+      : undefined;
+    const chatModelPoolId =
+      typeof chatModelPoolHeader === "string" && chatModelPoolHeader
+        ? chatModelPoolHeader
+        : undefined;
+    const modelPoolPlan =
+      poolWire && (!internalCall || chatModelPoolId)
+        ? await planModelPool({
+            organizationId: resolvedAgent.organizationId,
+            name: actualModel,
+            poolId: chatModelPoolId,
+            inbound: poolWire,
+            caller: {
+              virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
+              providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
+            },
+            grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
+            sessionId,
+          })
+        : null;
+    const deferModelScopedLimits = modelPoolPlan != null;
+    // Check usage limits. Media without a known cost is refused only when a
+    // spend budget applies to it.
     logger.debug(
       { resolvedAgentId },
       `[${providerName}Proxy] Checking usage limits`,
     );
     const limitViolation =
       await LimitValidationService.checkLimitsBeforeRequest({
-        unpricedMediaModel:
-          provider.unavailableUsageAccounting && !mediaPricedForBudget
-            ? requestAdapter.getModel()
-            : undefined,
-        agentId: resolvedAgentId,
-        userId,
-        virtualKeyId,
-        passthroughVirtualKeyId,
-        llmOauthClientId: authenticatedApp?.id,
-        billingTeamId,
-        teamMemberUserId: authenticatedUserId ?? null,
-        agent: resolvedAgent,
-        snapshot: requestContext,
+        ...limitContext,
+        model: deferModelScopedLimits ? undefined : actualModel,
+        deferModelScopedLimits,
       });
 
     if (limitViolation) {
@@ -1324,36 +1361,6 @@ export async function handleLLMProxy<
       }
     }
 
-    // A request for a model pool's name is served by the pool's members when
-    // the caller may use the pool (see `mayUseModelPool`). Members on a wire
-    // the client's can't reach are left out of the plan.
-    const poolWire = openAiCodexPassthrough
-      ? null
-      : inboundPoolWire(provider.interactionType);
-    // A chat or agent set to a pool names it, and sends one of its members'
-    // models. Any other platform call runs on the key and model it names.
-    const chatModelPoolHeader = internalCall
-      ? headersForExtraction[MODEL_POOL_ID_HEADER.toLowerCase()]
-      : undefined;
-    const chatModelPoolId =
-      typeof chatModelPoolHeader === "string" && chatModelPoolHeader
-        ? chatModelPoolHeader
-        : undefined;
-    const modelPoolPlan =
-      poolWire && (!internalCall || chatModelPoolId)
-        ? await planModelPool({
-            organizationId: resolvedAgent.organizationId,
-            name: actualModel,
-            poolId: chatModelPoolId,
-            inbound: poolWire,
-            caller: {
-              virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
-              providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
-            },
-            grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
-            sessionId,
-          })
-        : null;
     // A credential let in only for a pool has no key for this provider, so
     // the request can't go anywhere but the pool.
     if (grantedPoolId && !perKeyChatApiKeyId && !modelPoolPlan) {
@@ -1765,8 +1772,11 @@ export async function handleLLMProxy<
       attemptSignal?: AbortSignal;
       /** The deployment and query of an Azure-shaped inbound URL. */
       azureRequest?: ReturnType<typeof getAzureProxyIngress>;
-    }) =>
-      target.adapter.createClient(target.apiKey, {
+    }) => {
+      const clientBillingMode = modelPoolPlan
+        ? billingMode
+        : credentialBillingMode;
+      return target.adapter.createClient(target.apiKey, {
         ...(target.azureRequest ? { azureRequest: target.azureRequest } : {}),
         baseUrl: target.baseUrl,
         agent: resolvedAgent,
@@ -1784,7 +1794,7 @@ export async function handleLLMProxy<
           if (target.adapter.provider === "anthropic") {
             billingMode = utils.refineAnthropicBillingModeFromHeaders({
               // A retry's response must not inherit a failed attempt's overage.
-              billingMode: credentialBillingMode,
+              billingMode: clientBillingMode,
               headers: responseHeaders,
             });
           }
@@ -1795,6 +1805,7 @@ export async function handleLLMProxy<
           ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
           : {}),
       });
+    };
     // A pooled request never uses the caller's own key, which a Model Router
     // pool request doesn't even carry.
     const client = modelPoolPlan
@@ -1814,21 +1825,74 @@ export async function handleLLMProxy<
 
     // Each pool member is reached with its own provider's client, its own
     // model id and, when it speaks another wire, a translator.
+    const loadPoolMember = async (member: PlannedMember) => {
+      const row = await LlmProviderApiKeyModel.findById(
+        member.providerApiKeyId,
+      );
+      const adapter = memberAdapter(member.provider);
+      if (!row || !adapter)
+        throw new ApiError(500, "Model pool member key no longer exists");
+      return {
+        row,
+        adapter,
+        apiKey: row.secretId
+          ? await getSecretValueForLlmProviderApiKey(row.secretId)
+          : undefined,
+      };
+    };
+    let preparedMember:
+      | { value: Awaited<ReturnType<typeof loadPoolMember>> }
+      | { error: unknown }
+      | undefined;
     const modelPool: ModelPoolRouting | undefined =
       modelPoolPlan && poolWire
         ? {
             plan: modelPoolPlan,
-            transportFor: async (member, signal) => {
-              const row = await LlmProviderApiKeyModel.findById(
-                member.providerApiKeyId,
-              );
-              const adapter = memberAdapter(member.provider);
-              if (!row || !adapter) {
-                throw new ApiError(
-                  500,
-                  "Model pool member key no longer exists",
-                );
+            checkLimits: async (member) => {
+              const model = stripClaudeContextVariantSuffix(member.modelId);
+              const violation =
+                await LimitValidationService.checkLimitsBeforeRequest({
+                  ...limitContext,
+                  model,
+                });
+              if (violation) throw new ModelBudgetExceededError(violation);
+              try {
+                preparedMember = { value: await loadPoolMember(member) };
+              } catch (error) {
+                // Keep unavailable credentials on the existing member-failover path.
+                preparedMember = { error };
+                return;
               }
+              const { adapter, apiKey: memberApiKey } = preparedMember.value;
+              billingMode = utils.resolveInteractionBillingMode({
+                isSubscriptionCredential:
+                  adapter.isSubscriptionCredential?.(memberApiKey) === true,
+                autodetectEnabled: config.llmCost.subscriptionAutodetect,
+              });
+              try {
+                await throughput.admitSpendForModel(
+                  model,
+                  billingMode === "subscription",
+                );
+              } catch (error) {
+                if (error instanceof ThroughputError && error.status === 402)
+                  throw new ModelBudgetExceededError(
+                    [error.message, error.message],
+                    error.quota,
+                  );
+                throw error;
+              }
+            },
+            transportFor: async (member, signal) => {
+              if (!preparedMember || "error" in preparedMember)
+                throw preparedMember && "error" in preparedMember
+                  ? preparedMember.error
+                  : new ApiError(500, "Model pool member was not prepared");
+              const {
+                row,
+                adapter,
+                apiKey: memberApiKey,
+              } = preparedMember.value;
               const sameWire =
                 inboundPoolWire(adapter.interactionType) === poolWire;
               return memberTransport({
@@ -1837,9 +1901,7 @@ export async function handleLLMProxy<
                 modelId: member.modelId,
                 client: createUpstreamClient({
                   adapter,
-                  apiKey: row.secretId
-                    ? await getSecretValueForLlmProviderApiKey(row.secretId)
-                    : undefined,
+                  apiKey: memberApiKey,
                   baseUrl:
                     row.inferenceBaseUrl ?? row.baseUrl ?? adapter.getBaseUrl(),
                   // Protocol headers (anthropic-beta, ...) only mean something
@@ -1894,10 +1956,12 @@ export async function handleLLMProxy<
                   outputTokens: 0,
                   cost: cutOff ? cutOff.cost : "0",
                   baselineCost: cutOff?.cost,
+                  billingMode,
                 },
                 encryptedChat,
                 streamTiming,
                 attributionLabels,
+                throughput,
                 // A failed attempt has no usage to attribute to its routing decision.
                 autoRouting: undefined,
                 upstreamAttempt: attempt,
@@ -2024,6 +2088,22 @@ export async function handleLLMProxy<
       requestAdapter.getOriginalRequest(),
       claudeCodeAgentId,
     );
+    const throughput = new LlmThroughput({
+      entities: [...uniqueBillingEntities.values()],
+      model: actualModel,
+      provider: providerName,
+      subscription: billingMode === "subscription",
+      rules: modelPool
+        ? requestContext.throughputRules.filter(
+            (rule) => rule.limitType !== "token_cost",
+          )
+        : requestContext.throughputRules,
+      attemptSpendRules: modelPool
+        ? requestContext.throughputRules.filter(
+            (rule) => rule.limitType === "token_cost",
+          )
+        : undefined,
+    });
     const ctx: LLMProxyContext<TRequest> = {
       authorizeA2AOAuthAttempt: oauthExecution
         ? () =>
@@ -2034,13 +2114,7 @@ export async function handleLLMProxy<
         : undefined,
       attributionLabels,
       autoRouting,
-      throughput: new LlmThroughput({
-        entities: [...uniqueBillingEntities.values()],
-        model: actualModel,
-        provider: providerName,
-        subscription: billingMode === "subscription",
-        rules: requestContext.throughputRules,
-      }),
+      throughput,
       providerApiKeyId: perKeyChatApiKeyId,
       upstreamAttempt,
       ...(modelPool ? { modelPool } : {}),
@@ -2128,6 +2202,12 @@ export async function handleLLMProxy<
         );
       }
     }
+    if (lifecycleError instanceof ModelBudgetExceededError)
+      return sendUsageLimitRefusal(
+        reply,
+        lifecycleError.violation,
+        lifecycleError.quota,
+      );
     if (
       (lifecycleError instanceof ObservedProviderUsageError &&
         lifecycleError.billingRecorded) ||
@@ -2360,18 +2440,16 @@ async function handleStreaming<
   const carriesStreamTerminal = provider.carriesStreamTerminal;
   let terminalSent = false;
 
-  // Every byte to the client goes through here so the keep-alive knows when
-  // the stream last spoke. The keep-alive itself only ever writes to a stream
-  // that is already committed and idle (see StreamKeepAlive) — it is armed
-  // now, before the upstream call, so it also covers a stream committed
-  // during preflight and a slow post-stream plugin ruling, but it cannot
-  // itself turn a pending upstream error into a 200.
+  // Comments cannot commit a response until the upstream accepted it. Pools
+  // wait for member selection, and buffered policy responses retain their
+  // existing lazy commit. Already committed streams still get idle comments.
   const keepAlive = new StreamKeepAlive(
     reply.raw,
     config.llmProxy.streamKeepAliveIntervalMs,
     streamAdapter
       .getSSEHeaders()
       ["Content-Type"]?.startsWith("text/event-stream") ?? false,
+    ensureStreamHeaders,
   );
   keepAlive.start();
   const writeToClient = (data: string | Uint8Array) => {
@@ -2712,11 +2790,27 @@ async function handleStreaming<
         }
         const stream = await openUpstream({
           ctx,
-          transport: ownTransport(provider, client),
-          open: async (transport) =>
-            withFirstChunk(
-              (await transport.executeStream(request)) as AsyncIterable<TChunk>,
-            ),
+          transport: ownTransport(provider, client, () => {
+            if (
+              !ctx.modelPool &&
+              !bufferModelResponse &&
+              !ctx.connectionVerification
+            )
+              keepAlive.allowCommit();
+          }),
+          open: async (transport) => {
+            keepAlive.suspendCommit();
+            try {
+              return await withFirstChunk(
+                (await transport.executeStream(
+                  request,
+                )) as AsyncIterable<TChunk>,
+              );
+            } catch (error) {
+              keepAlive.suspendCommit();
+              throw error;
+            }
+          },
           memberTimeoutMs:
             ctx.modelPool?.plan.streamTimeoutMs ??
             MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
@@ -2733,6 +2827,8 @@ async function handleStreaming<
               model: actualModel,
             }),
         });
+        if (!bufferModelResponse && !ctx.connectionVerification)
+          keepAlive.allowCommit();
         billingMode = getBillingMode();
 
         // Record request duration at stream establishment for providers whose
@@ -3226,6 +3322,16 @@ async function handleStreaming<
       logger.warn(
         { err: pluginError },
         "Plugin cleanup failed while handling proxy error",
+      );
+    }
+    if (lifecycleError instanceof ModelBudgetExceededError) {
+      // This member never dispatched. Earlier failed pool attempts already
+      // have their own records; do not finalize an empty stream for this one.
+      accountingFinalized = true;
+      return sendUsageLimitRefusal(
+        reply,
+        lifecycleError.violation,
+        lifecycleError.quota,
       );
     }
     if (codexError?.isIncompleteTerminal) {
@@ -4398,8 +4504,10 @@ async function openUpstream<TRequest, T>(params: {
   }) => void;
 }): Promise<T> {
   const { ctx, transport, open, memberTimeoutMs, ...retry } = params;
+  let dispatched = false;
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
     await ctx.authorizeA2AOAuthAttempt?.();
+    dispatched = true;
     return open(attemptTransport);
   };
   const pool = ctx.modelPool;
@@ -4414,11 +4522,20 @@ async function openUpstream<TRequest, T>(params: {
       plan: pool.plan,
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
+      beforeAttempt: (member) => pool.checkLimits(member),
       open: authorizedOpen,
       memberTimeoutMs,
       recordFailedAttempt: pool.recordFailedAttempt,
       ...retry,
     });
+  } catch (error) {
+    if (
+      (error instanceof ModelBudgetExceededError ||
+        error instanceof ThroughputError) &&
+      !dispatched
+    )
+      await ctx.throughput?.cancelBeforeSend();
+    throw error;
   } finally {
     ctx.providerApiKeyId = ctx.upstreamAttempt.providerApiKeyId;
     pool.setResponseHeaders(ctx.upstreamAttempt);
@@ -4447,10 +4564,12 @@ function ownTransport(
     "execute" | "executeStream"
   >,
   client: unknown,
+  onAccepted?: () => void,
 ): MemberTransport {
   return {
     execute: (request) => provider.execute(client, request),
-    executeStream: (request) => provider.executeStream(client, request),
+    executeStream: (request) =>
+      provider.executeStream(client, request, onAccepted),
   };
 }
 
@@ -4716,12 +4835,16 @@ async function readProxyRequestState(
 export function sendUsageLimitRefusal(
   reply: FastifyReply,
   [_refusalMessage, contentMessage, limitMetadata]: LimitViolationResponse,
+  quota?: ThroughputError["quota"],
 ) {
+  if (quota?.retryAfter != null && !quota.oversized)
+    reply.header("Retry-After", quota.retryAfter);
   return reply.status(402).send({
     error: {
       message: contentMessage,
       type: "usage_limit_exceeded",
       code: "token_cost_limit_exceeded",
+      ...(quota ? { quota } : {}),
       usage_limit: limitMetadata
         ? {
             limit_type: limitMetadata.limitType,
@@ -4732,6 +4855,15 @@ export function sendUsageLimitRefusal(
         : undefined,
     },
   });
+}
+
+class ModelBudgetExceededError extends ApiError {
+  constructor(
+    readonly violation: LimitViolationResponse,
+    readonly quota?: ThroughputError["quota"],
+  ) {
+    super(402, violation[1]);
+  }
 }
 
 function withClaudeSubagentMetadata<TRequest>(

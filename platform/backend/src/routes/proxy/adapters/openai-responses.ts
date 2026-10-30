@@ -224,13 +224,18 @@ export const openAiResponsesAdapterFactory: LLMProvider<
   async executeStream(
     client: unknown,
     request: OpenAiResponsesRequest,
+    onAccepted?: () => void,
   ): Promise<AsyncIterable<OpenAiResponsesStreamChunk>> {
     const openaiClient = client as OpenAIProvider;
 
-    const stream = (await openaiClient.responses.create({
+    const pending = openaiClient.responses.create({
       ...request,
       stream: true,
-    } as ResponseCreateParamsStreaming)) as AsyncIterable<OpenAiResponsesStreamChunk>;
+    } as ResponseCreateParamsStreaming);
+    const stream = (await pending) as AsyncIterable<OpenAiResponsesStreamChunk>;
+    // Custom clients can return lazy iterators; only the SDK's response
+    // promise guarantees that successful HTTP headers have arrived.
+    if (typeof pending.asResponse === "function") onAccepted?.();
     // Spread-factory aliases keep their own transport contracts. Native compact
     // requests have a separate executeStream implementation below.
     if (

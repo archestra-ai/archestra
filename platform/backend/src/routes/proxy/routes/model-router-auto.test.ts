@@ -370,7 +370,7 @@ describe("Model Router auto model", () => {
       entityId: key.id,
       limitType: "token_cost",
       limitValue: 1,
-      model: [org.trio[2].modelId],
+      model: null,
       lastCleanup: new Date(),
     });
     await LimitModel.updateTokenLimitUsage(
@@ -479,6 +479,44 @@ describe("Model Router auto model", () => {
     expect(upstreamModels).toEqual([org.trio[2].modelId]);
     expect(await decisions(org.organizationId)).toHaveLength(1);
   });
+
+  for (const scopedTier of [0, 2] as const) {
+    test(`auto checks the selected tier, not the incoming alias or unrelated tier ${scopedTier}`, async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+      await LimitModel.create({
+        entityType: "organization",
+        entityId: org.organizationId,
+        limitType: "token_cost",
+        limitValue: 0,
+        model: [org.trio[scopedTier].modelId],
+        lastCleanup: new Date(),
+      });
+
+      const response = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "scoped-budget",
+      });
+
+      expect(response.statusCode, response.body).toBe(
+        scopedTier === 2 ? 402 : 200,
+      );
+      expect(jevCalls).toBe(1);
+      expect(upstreamModels).toEqual(
+        scopedTier === 2 ? [] : [org.trio[2].modelId],
+      );
+      expect(await decisions(org.organizationId)).toHaveLength(1);
+    });
+  }
 
   test("auto wins over a model pool of the same name", async ({
     makeOrganization,

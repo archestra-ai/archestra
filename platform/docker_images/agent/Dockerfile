@@ -172,7 +172,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.163.0 \
+RUN pnpm add --global @openai/codex@0.164.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -186,7 +186,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-opencode
 USER root
-RUN pnpm add --global opencode-ai@1.19.3 \
+RUN pnpm add --global opencode-ai@1.19.4 \
  && OPENCODE_PACKAGE_DIR="$(pnpm list --global --json opencode-ai | jq -r '.[0].dependencies["opencode-ai"].path')" \
  && node "${OPENCODE_PACKAGE_DIR}/postinstall.mjs" \
  && opencode --version \
@@ -299,14 +299,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=297c002381f4d80246343aef5837c89fd69a759fccc15e549c9adeddd2b0aa52 ;; \
-      arm64) grok_arch=arm64; checksum=05f62db666c802eea7f5aba1c1b3112a28bf345677ff36cb6f69a91ff9e1d02a ;; \
+      amd64) grok_arch=x64; checksum=3443e402a2dcaaa1dce0877fa61ee72d3a4a59e309762b0cc6860579b608cf96 ;; \
+      arm64) grok_arch=arm64; checksum=9064136edf4ad7eadb0debc9e54832d05e66692dc0d1e69f36d9baaf1d0217bf ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.67" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.67.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.69" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.69.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \
@@ -357,13 +357,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=7861cf6ec3f4a764207d56428ed6c604564f04e250d0337bc486c1440a3ba06f1bd737cb8ab40875f23887c232ebc0efd9c289189660dbf10eed6ecaa483093b ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=e6b3b4076fc076e09e92b13e694ce2a7248a671658d9bfed55167c4aecbcca63c5342d10ec742243c0d98718fedd184747cad4d99f0a3895406ed32544e5faf8 ;; \
+      amd64) copilot_arch=x64; copilot_checksum=f6a36bceb79c0d32f837de2d3ecc687170b5049f82ca45c68b029039d558ce9cb6e89778dea2ed19f60d22baebe22422f6502140fa7ae10e540c0910dc966057 ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=40afab4a82f1183efda96a4f19906157ff4a07fc803a77d3916b0001c44174544ede5a1214efdb90a0dbf3c695ad2318fe0b9ed7aee04ce4a947605674539b8e ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.102)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.103)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

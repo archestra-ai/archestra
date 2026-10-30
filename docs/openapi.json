@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "v1.5.0-rc.15"
+    "version": "v1.5.0-rc.16"
   },
   "components": {
     "schemas": {
@@ -151933,7 +151933,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -471357,7 +471358,8 @@
                                   "query",
                                   "impersonate",
                                   "full-view",
-                                  "admin"
+                                  "admin",
+                                  "configure-runtime"
                                 ]
                               }
                             }
@@ -471716,7 +471718,8 @@
                           "query",
                           "impersonate",
                           "full-view",
-                          "admin"
+                          "admin",
+                          "configure-runtime"
                         ]
                       }
                     }
@@ -471769,7 +471772,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -472116,7 +472120,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -472427,7 +472432,8 @@
                           "query",
                           "impersonate",
                           "full-view",
-                          "admin"
+                          "admin",
+                          "configure-runtime"
                         ]
                       }
                     }
@@ -472502,7 +472508,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -553916,7 +553923,8 @@
                               "query",
                               "impersonate",
                               "full-view",
-                              "admin"
+                              "admin",
+                              "configure-runtime"
                             ]
                           }
                         }
@@ -554200,7 +554208,8 @@
                         "query",
                         "impersonate",
                         "full-view",
-                        "admin"
+                        "admin",
+                        "configure-runtime"
                       ]
                     }
                   }

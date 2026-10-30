@@ -708,6 +708,9 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   executeStream(
     client: unknown,
     request: TRequest,
+    /** Signal only after a successful upstream HTTP response, never merely
+     * after constructing a lazy iterator. Implementations may omit it. */
+    onAccepted?: () => void,
   ): Promise<AsyncIterable<TChunk>>;
 
   /**

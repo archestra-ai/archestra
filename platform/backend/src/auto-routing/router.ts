@@ -185,9 +185,10 @@ export async function resolveAutoModel(params: {
     );
     return { kind: "routed", model: tiers[NORMAL_TIER].routedModel };
   }
-  const violation = await LimitValidationService.checkLimitsBeforeRequest(
-    modelRouterLimitScope(auth, params.agent),
-  );
+  const violation = await LimitValidationService.checkLimitsBeforeRequest({
+    ...modelRouterLimitScope(auth, params.agent),
+    deferModelScopedLimits: true,
+  });
   if (violation) return { kind: "usage_limited", violation };
   return route(
     await createDecisionOnce({

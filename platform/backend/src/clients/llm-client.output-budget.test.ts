@@ -1,13 +1,18 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { generateText } from "ai";
-import { HttpResponse, http } from "msw";
+import { delay, HttpResponse, http } from "msw";
 import { describe, expect, vi } from "vitest";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { createDirectLLMModel } from "@/clients/llm-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
-import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
+import {
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+} from "@/models";
 import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
+import { invalidateGatewayOutputLimits } from "@/services/gateway-output-limits";
 import { buildModelsToUpsert, modelSyncService } from "@/services/model-sync";
 import { test } from "@/test";
 import { useMswServer } from "@/test/msw";
@@ -33,9 +38,10 @@ describe("gateway-discovered output budget", () => {
     expected,
   }, { makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
     const org = await makeOrganization();
-    const secret = await makeSecret();
+    const secret = await makeSecret({ secret: { apiKey: "fixture-key" } });
     const key = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "openai",
+      baseUrl: "https://gateway.example.test/v1",
     });
     const modelId = "gateway-model";
     server.use(
@@ -75,7 +81,6 @@ describe("gateway-discovered output budget", () => {
         {
           id: stored.id,
           modelId,
-          outputLength: discovered[0].capabilities?.outputLength ?? null,
         },
       ],
       "openai",
@@ -110,7 +115,7 @@ describe("connection-local output limits", () => {
     order,
   }, { makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
     const org = await makeOrganization();
-    const secret = await makeSecret();
+    const secret = await makeSecret({ secret: { apiKey: "fixture-key" } });
     const modelId = "shared-gateway-alias";
     const limits = [8192, 64000];
     const bases = [
@@ -174,6 +179,172 @@ describe("connection-local output limits", () => {
           baseUrl: bases[i],
         }),
       ).toBe(expected);
+    }
+  });
+});
+
+describe("gateway metadata cache", () => {
+  test("loads cold metadata once, refreshes it, and follows connection edits", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "fixture-key" } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      baseUrl: "https://cache.example.test/v1",
+    });
+    await LlmProviderApiKeyModel.update(key.id, {
+      extraHeaders: { "X-Gateway-Scope": "one" },
+    });
+    const model = await ModelModel.create({
+      externalId: "openai/cache-alias",
+      provider: "openai",
+      modelId: "cache-alias",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      model.id,
+    ]);
+    let calls = 0;
+    let cap = 64000;
+    server.use(
+      http.get("https://cache.example.test/v1/models", ({ request }) => {
+        expect(request.headers.get("Authorization")).toBe("Bearer fixture-key");
+        expect(request.headers.get("X-Gateway-Scope")).toBe("one");
+        calls++;
+        return HttpResponse.json({
+          data: [{ id: model.modelId, max_output_tokens: cap }],
+        });
+      }),
+      http.get(
+        "https://cache.example.test/v1/model/info",
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+      http.get("https://edited.example.test/v1/models", () =>
+        HttpResponse.json({
+          data: [{ id: model.modelId, max_output_tokens: 2048 }],
+        }),
+      ),
+      http.get(
+        "https://edited.example.test/v1/model/info",
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+    );
+    const resolve = () =>
+      resolveModelOutputBudget({
+        provider: "openai",
+        modelName: model.modelId,
+        chatApiKeyId: key.id,
+      });
+    expect(
+      (await Promise.all([resolve(), resolve(), resolve()])).map(
+        (b) => b.tokens,
+      ),
+    ).toEqual([32768, 32768, 32768]);
+    expect(calls).toBe(1);
+    cap = 4096;
+    modelsDevClient.clearFetchCache();
+    server.use(
+      http.get("https://models.dev/api.json", () => HttpResponse.json({})),
+    );
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: key.id,
+      provider: "openai",
+      apiKeyValue: "fixture-key",
+      baseUrl: key.baseUrl,
+      extraHeaders: { "X-Gateway-Scope": "one" },
+    });
+    expect((await resolve()).tokens).toBe(4096);
+    // A fresh process/replica has no cached discovery state and still resolves it.
+    invalidateGatewayOutputLimits(key.id);
+    expect((await resolve()).tokens).toBe(4096);
+    await LlmProviderApiKeyModel.update(key.id, {
+      baseUrl: "https://edited.example.test/v1",
+    });
+    expect((await resolve()).tokens).toBe(2048);
+  });
+
+  test.for([
+    "restricted",
+    "invalid",
+    "network",
+    "timeout",
+  ] as const)("recovers from $0 metadata without failing generation", async (failure, {
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "fixture-key" } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      baseUrl: "https://transient.example.test/v1",
+    });
+    const model = await ModelModel.create({
+      externalId: "openai/transient-alias",
+      provider: "openai",
+      modelId: "transient-alias",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      model.id,
+    ]);
+    let recovered = false;
+    const response = async () => {
+      if (recovered)
+        return HttpResponse.json({
+          data: [
+            {
+              id: model.modelId,
+              model_name: model.modelId,
+              max_output_tokens: 64000,
+              model_info: { max_output_tokens: 64000 },
+            },
+          ],
+        });
+      if (failure === "restricted")
+        return new HttpResponse(null, { status: 403 });
+      if (failure === "invalid") return new HttpResponse("invalid json");
+      if (failure === "network") return HttpResponse.error();
+      await delay(3500);
+      return new HttpResponse(null, { status: 503 });
+    };
+    server.use(
+      http.get("https://transient.example.test/v1/models", response),
+      http.get("https://transient.example.test/v1/model/info", response),
+    );
+    const resolve = () =>
+      resolveModelOutputBudget({
+        provider: "openai",
+        modelName: model.modelId,
+        chatApiKeyId: key.id,
+      });
+    expect((await resolve()).tokens).toBe(8192);
+    expect(
+      await sentMaxTokens({
+        provider: "openai",
+        modelName: model.modelId,
+        chatApiKeyId: key.id,
+        maxOutputTokens: (await resolve()).tokens,
+      }),
+    ).toBe(8192);
+    recovered = true;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 31_000);
+    try {
+      expect((await resolve()).tokens).toBe(32768);
+      expect(
+        await sentMaxTokens({
+          provider: "openai",
+          modelName: model.modelId,
+          chatApiKeyId: key.id,
+        }),
+      ).toBe(32768);
+    } finally {
+      clock.mockRestore();
     }
   });
 });
@@ -328,9 +499,11 @@ async function sentBody(params: {
   providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
 }): Promise<Record<string, unknown>> {
   const sent: Array<Record<string, unknown>> = [];
+  const originalFetch = globalThis.fetch;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (_input: unknown, init: RequestInit | undefined) => {
+    vi.fn(async (input: RequestInfo | URL, init: RequestInit | undefined) => {
+      if (!init?.body) return originalFetch(input, init);
       sent.push(JSON.parse(init?.body as string));
       return new Response("upstream stub", { status: 500 });
     }),
@@ -349,6 +522,7 @@ async function sentBody(params: {
     providerOptions: params.providerOptions,
     maxRetries: 0,
   }).catch(() => {});
+  vi.stubGlobal("fetch", originalFetch);
 
   expect(sent).toHaveLength(1);
   return sent[0];

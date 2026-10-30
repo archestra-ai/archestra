@@ -46,6 +46,7 @@ import {
   resolveSelfHostedModelMetadata,
   resolveSelfHostedModelReasoning,
 } from "@/services/cross-provider-pricing";
+import { invalidateGatewayOutputLimits } from "@/services/gateway-output-limits";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   resolveVendorPublishedPrices,
@@ -117,6 +118,7 @@ class ModelSyncService {
       const providerModels = await fetcher(apiKeyValue, baseUrl, extraHeaders, {
         providerApiKeyId: apiKeyId,
       });
+      invalidateGatewayOutputLimits(apiKeyId);
       if (credentialRow?.requiresReauthentication) {
         await LlmProviderApiKeyModel.setRequiresReauthentication({
           id: apiKeyId,
@@ -177,16 +179,9 @@ class ModelSyncService {
           deriveRecommendedForAgents(model.capabilities),
         ]),
       );
-      const outputLengthByModelId = new Map(
-        providerModels.map((model) => [
-          model.id,
-          model.capabilities?.outputLength,
-        ]),
-      );
       const modelsWithIds = upsertedModels.map((m) => ({
         id: m.id,
         modelId: m.modelId,
-        outputLength: outputLengthByModelId.get(m.modelId) ?? null,
         recommendedForAgents: verdictByProviderModelId.get(m.modelId) ?? null,
       }));
       await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(

@@ -31,7 +31,7 @@ export function modelFetchError(
  * Kept minimal and separate from the API-facing `ModelCapabilities`: a fetcher
  * only reports raw provider facts, not computed/price-source fields. Fed into
  * `resolveModelCapabilities` as the highest-priority tier during model sync,
- * except output limits, which are stored on the API-key/model link.
+ * except output limits, which are resolved separately for each connection.
  */
 export interface FetchedModelCapabilities {
   contextLength?: number | null;

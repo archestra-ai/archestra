@@ -46,7 +46,7 @@ export async function fetchLiteLlmOutputLimits(params: {
   return outputLimits;
 }
 
-/** Only provider-published positive integers that fit the stored integer column. */
+/** Only positive provider-published limits in the supported integer range. */
 export function readOutputTokenLimit(value: unknown): number | undefined {
   return typeof value === "number" &&
     Number.isSafeInteger(value) &&

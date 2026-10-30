@@ -1,7 +1,6 @@
 import {
   boolean,
   index,
-  integer,
   pgTable,
   timestamp,
   unique,
@@ -31,8 +30,6 @@ const llmProviderApiKeyModelsTable = pgTable(
     modelId: uuid("model_id")
       .notNull()
       .references(() => modelsTable.id, { onDelete: "cascade" }),
-    /** Output cap advertised by this connection, never by another gateway. */
-    outputLength: integer("output_length"),
     /** Whether this model is marked as the best (highest quality) for this API key */
     isBest: boolean("is_best").notNull().default(false),
     /**

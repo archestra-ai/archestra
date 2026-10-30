@@ -225,12 +225,15 @@ start_session() {
 
 # tmux makes the pane process a session leader, so its pid is the process
 # group of everything it started.
+# A dev backend gets 5 s to exit, like Tilt's runner (dev/run-backend-dev.sh);
+# PostgreSQL and the rest get 15 s for a clean shutdown.
 stop_session() {
-  local name="$1" pid
+  local name="$1" pid polls=30
+  [ "$name" = backend ] && polls=10
   pid="$(session_pid "$name")"
   if [ -n "$pid" ]; then
     kill -TERM -- "-$pid" 2>/dev/null || true
-    for _ in $(seq 1 30); do
+    for _ in $(seq 1 "$polls"); do
       pgrep -g "$pid" >/dev/null 2>&1 || break
       sleep 0.5
     done
@@ -381,8 +384,10 @@ start_backend() {
     # shellcheck disable=SC2016 # expanded by the session's own shell
     run='./node_modules/.bin/tsdown || exit 1; quick_exits=0; while :; do started=$(date +%s); node --enable-source-maps dist/server.mjs; status=$?; if [ $(( $(date +%s) - started )) -ge 60 ]; then quick_exits=0; else quick_exits=$((quick_exits + 1)); fi; if [ "$quick_exits" -ge 5 ]; then echo "backend exited ($status) five times right after starting; giving up" >&2; exit "$status"; fi; echo "backend exited ($status); restarting in 1 s" >&2; sleep 1; done'
   fi
+  # A dev server has no traffic to drain: shut down in a few seconds rather
+  # than the production 60 s drain plus 20 s cleanup, so a reload does not wait.
   start_session backend "$PLATFORM_DIR/backend" \
-    "export ARCHESTRA_LOGGING_LEVEL=${ARCHESTRA_DEV_LITE_BACKEND_LOG_LEVEL:-info} ARCHESTRA_ANALYTICS=disabled ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=0; $run"
+    "export ARCHESTRA_LOGGING_LEVEL=${ARCHESTRA_DEV_LITE_BACKEND_LOG_LEVEL:-info} ARCHESTRA_ANALYTICS=disabled ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=0 ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS=1 ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS=2 ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS=1; $run"
 }
 
 # Mirror Tilt's get_frontend_env(): browser-visible copies of the ARCHESTRA_*

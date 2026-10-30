@@ -11,6 +11,7 @@ import {
 import {
   Bot,
   Code,
+  Info,
   Laptop,
   type LucideIcon,
   MessageSquare,
@@ -28,6 +29,7 @@ import { ClientMarkTile } from "@/components/client-mark-tile";
 import { CATALOG_AGENT_MARKS } from "@/components/client-marks";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
@@ -222,6 +224,18 @@ export function AgentCatalog({
         }
         description={`Each one runs in its own container, with a live terminal and files that persist between messages. Its model and tool calls go through ${appName}, so logs, guardrails and cost limits apply.`}
       >
+        {canConfigureRuntime === false && (
+          <InlineNotice variant="info">
+            <Info className="size-4 shrink-0" />
+            <span className="font-medium">
+              Configure runtime permission required
+            </span>
+            <InlineNoticeText>
+              You can still create ordinary agents. Ask an administrator to
+              enable runtime configuration for your role.
+            </InlineNoticeText>
+          </InlineNotice>
+        )}
         {runtimeAvailable === false && <AgentRuntimeUnavailableNotice />}
         <GiveItWorkFrom />
         {runtimeAvailable === undefined || isLoading ? (

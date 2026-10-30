@@ -28,6 +28,7 @@ describe("SSE keep-alive lifecycle", () => {
       early ? commit : undefined,
     );
     keepAlive.start();
+    if (early) keepAlive.allowCommit();
     return { raw, keepAlive, commit };
   }
 
@@ -55,6 +56,20 @@ describe("SSE keep-alive lifecycle", () => {
     expect(raw.write).not.toHaveBeenCalled();
     raw.headersSent = true;
     vi.advanceTimersByTime(30);
+    expect(raw.write).toHaveBeenCalledOnce();
+    keepAlive.stop();
+  });
+
+  test("a failed attempt cannot commit while its replacement is pending", () => {
+    const { raw, keepAlive, commit } = setup();
+    vi.advanceTimersByTime(20);
+    keepAlive.suspendCommit();
+    vi.advanceTimersByTime(100);
+    expect(commit).not.toHaveBeenCalled();
+    keepAlive.allowCommit();
+    vi.advanceTimersByTime(29);
+    expect(raw.write).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
     expect(raw.write).toHaveBeenCalledOnce();
     keepAlive.stop();
   });

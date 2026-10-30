@@ -1,14 +1,19 @@
 import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { Stream as AnthropicSseStream } from "@anthropic-ai/sdk/streaming";
+import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
+import { Stream as OpenAiSseStream } from "openai/core/streaming";
 import { afterEach, describe, expect, vi } from "vitest";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import InteractionModel from "@/models/interaction";
 import ModelModel from "@/models/model";
+import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { beforeEach, test } from "@/test";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { STREAM_KEEPALIVE_SSE_COMMENT } from "../stream-keepalive";
 import anthropicProxyRoutes from "./anthropic";
+import deepseekProxyRoutes from "./deepseek";
 import openaiProxyRoutes from "./openai";
 
 function deferred() {
@@ -114,18 +119,19 @@ describe("prefill SSE keep-alives over HTTP", () => {
 
   beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
     config.llmProxy.streamKeepAliveIntervalMs = 30;
-    config.llmProxy.streamKeepAliveDuringPrefill = true;
     release = deferred();
     received = deferred();
     requests = 0;
     respond = async (raw, payload, path) => {
-      await release.promise;
       if (!payload.stream) {
+        await release.promise;
         raw.writeHead(200, { "content-type": "application/json" });
         raw.end(JSON.stringify(message));
         return;
       }
       raw.writeHead(200, { "content-type": "text/event-stream" });
+      raw.flushHeaders();
+      await release.promise;
       raw.end(
         (path.endsWith("/responses")
           ? responsesStream
@@ -152,6 +158,7 @@ describe("prefill SSE keep-alives over HTTP", () => {
     config.llm.anthropic.baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
     config.llm.anthropic.vertexAi.enabled = false;
     config.llm.openai.baseUrl = `${config.llm.anthropic.baseUrl}/v1`;
+    config.llm.deepseek.baseUrl = config.llm.openai.baseUrl;
     const agent = await makeAgent({ name: "Prefill test" });
     agentId = agent.id;
     const owner = await makeUser();
@@ -163,6 +170,7 @@ describe("prefill SSE keep-alives over HTTP", () => {
     for (const [provider, modelId] of [
       ["anthropic", "claude-test"],
       ["openai", "gpt-test"],
+      ["deepseek", "gpt-test"],
     ] as const) {
       await ModelModel.create({
         externalId: `${provider}/${modelId}`,
@@ -175,6 +183,7 @@ describe("prefill SSE keep-alives over HTTP", () => {
     app = createFastifyInstance();
     await app.register(anthropicProxyRoutes);
     await app.register(openaiProxyRoutes);
+    await app.register(deepseekProxyRoutes);
     baseUrl = await app.listen({ port: 0, host: "127.0.0.1" });
   });
 
@@ -190,9 +199,10 @@ describe("prefill SSE keep-alives over HTTP", () => {
     endpoint = "messages",
     stream = true,
     signal = AbortSignal.timeout(3000),
+    extraHeaders: Record<string, string> = {},
   ) =>
     fetch(
-      `${baseUrl}/v1/${endpoint === "messages" ? "anthropic" : "openai"}/${agentId}/${endpoint === "messages" ? "v1/messages" : endpoint}`,
+      `${baseUrl}/v1/${endpoint === "messages" ? "anthropic" : endpoint.startsWith("deepseek/") ? "deepseek" : "openai"}/${agentId}/${endpoint === "messages" ? "v1/messages" : endpoint.replace(/^deepseek\//, "")}`,
       {
         method: "POST",
         signal,
@@ -202,6 +212,7 @@ describe("prefill SSE keep-alives over HTTP", () => {
           authorization: "Bearer test-key",
           "anthropic-version": "2023-06-01",
           "x-archestra-virtual-key": credential,
+          ...extraHeaders,
         },
         body: JSON.stringify({
           model: endpoint === "messages" ? "claude-test" : "gpt-test",
@@ -214,8 +225,13 @@ describe("prefill SSE keep-alives over HTTP", () => {
       },
     );
 
-  for (const endpoint of ["messages", "chat/completions", "responses"]) {
-    test(`sends comments before upstream headers on ${endpoint} and preserves the response and usage`, async () => {
+  for (const endpoint of [
+    "messages",
+    "chat/completions",
+    "responses",
+    "deepseek/chat/completions",
+  ]) {
+    test(`sends comments after accepted headers but before the first event on ${endpoint} and preserves the response and usage`, async () => {
       try {
         const result = await send(endpoint);
         if (!result.body) throw new Error("Expected SSE body");
@@ -252,51 +268,111 @@ describe("prefill SSE keep-alives over HTTP", () => {
     });
   }
 
-  test("reports a delayed upstream 429 as an SSE error after a heartbeat", async () => {
-    respond = async (raw) => {
-      await release.promise;
-      raw.writeHead(429, { "content-type": "application/json" });
-      raw.end(
-        JSON.stringify({
-          type: "error",
-          error: { type: "rate_limit_error", message: "Try later" },
-        }),
+  for (const endpoint of ["messages", "chat/completions", "responses"]) {
+    test(`delivers a pre-first-event stream failure to the real SDK parser on ${endpoint}`, async () => {
+      respond = async (raw) => {
+        raw.writeHead(200, { "content-type": "text/event-stream" });
+        raw.flushHeaders();
+        await release.promise;
+        raw.end(
+          event({
+            type: "error",
+            error: { type: "api_error", message: "Late stream failure" },
+          } as { type: string }),
+        );
+      };
+      const result = await send(endpoint);
+      release.resolve();
+      const Parser =
+        endpoint === "messages" ? AnthropicSseStream : OpenAiSseStream;
+      const stream = Parser.fromSSEResponse<Record<string, unknown>>(
+        result,
+        new AbortController(),
       );
-    };
-    const result = await send();
-    expect(result.status).toBe(200);
-    release.resolve();
-    const body = await result.text();
-    expect(body).toContain(STREAM_KEEPALIVE_SSE_COMMENT);
-    expect(body).toContain("event: error");
-    expect(body).toContain("rate_limit_error");
-    expect(requests).toBe(1);
+      const consume = async () => {
+        const events: Record<string, unknown>[] = [];
+        for await (const frame of stream) events.push(frame);
+        return events;
+      };
+      await expect(consume()).rejects.toThrow("Late stream failure");
+    });
+  }
+
+  for (const endpoint of ["messages", "chat/completions", "responses"]) {
+    for (const status of [429, 503]) {
+      test(`preserves delayed HTTP ${status} and retry headers on ${endpoint}`, async () => {
+        respond = async (raw) => {
+          await new Promise((resolve) => setTimeout(resolve, 120));
+          raw.writeHead(status, {
+            "content-type": "application/json",
+            "retry-after": "60",
+          });
+          raw.end(
+            JSON.stringify({
+              type: "error",
+              error: { type: "rate_limit_error", message: "Try later" },
+            }),
+          );
+        };
+        const result = await send(endpoint);
+        expect(result.status).toBe(status);
+        expect(result.headers.get("retry-after")).toBe("60");
+        expect(await result.text()).not.toContain(STREAM_KEEPALIVE_SSE_COMMENT);
+        expect(requests).toBe(1);
+      });
+    }
+  }
+
+  test("preserves HTTP errors from slow pre-inference checks before upstream acceptance", async () => {
+    const unregister = registerLlmProxyPlugin({
+      id: "prefill-pre-inference-denial",
+      onBeforeModel: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        throw new Error("Pre-inference check failed");
+      },
+    });
+    try {
+      const result = await send();
+      expect(result.status).toBe(500);
+      expect(await result.text()).not.toContain(STREAM_KEEPALIVE_SSE_COMMENT);
+      expect(requests).toBe(0);
+    } finally {
+      unregister();
+    }
   });
 
-  test.each([
-    "prefill",
-    "interval",
-  ])("retains the HTTP error status with %s keep-alives disabled", async (setting) => {
-    if (setting === "prefill")
-      config.llmProxy.streamKeepAliveDuringPrefill = false;
-    else config.llmProxy.streamKeepAliveIntervalMs = 0;
+  test("zero interval disables comments during an accepted prefill", async () => {
+    config.llmProxy.streamKeepAliveIntervalMs = 0;
     respond = async (raw) => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      raw.writeHead(429, { "content-type": "application/json" });
-      raw.end(
-        JSON.stringify({
-          type: "error",
-          error: { type: "rate_limit_error", message: "Try later" },
-        }),
-      );
+      raw.writeHead(200, { "content-type": "text/event-stream" });
+      raw.flushHeaders();
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      raw.end(anthropicStream.join(""));
     };
     const result = await send();
-    expect(result.status).toBe(429);
+    expect(await result.text()).not.toContain(STREAM_KEEPALIVE_SSE_COMMENT);
+  });
+
+  test("a slow connection probe retains its local 409 for disallowed model output", async () => {
+    respond = async (raw) => {
+      raw.writeHead(200, { "content-type": "text/event-stream" });
+      raw.flushHeaders();
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      raw.end(
+        event({
+          type: "response.output_item.added",
+          item: { type: "function_call", id: "call_probe", name: "run_tool" },
+        } as { type: string }),
+      );
+    };
+    const result = await send("responses", true, AbortSignal.timeout(3000), {
+      originator: ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
+    });
+    expect(result.status).toBe(409);
     expect(await result.text()).not.toContain(STREAM_KEEPALIVE_SSE_COMMENT);
   });
 
   test("keeps a silent mid-stream response alive without releasing or inventing model events", async () => {
-    config.llmProxy.streamKeepAliveDuringPrefill = false;
     respond = async (raw) => {
       raw.writeHead(200, { "content-type": "text/event-stream" });
       raw.write(anthropicStream[0]);
@@ -332,6 +408,8 @@ describe("prefill SSE keep-alives over HTTP", () => {
     const succeed = respond;
     respond = async (raw, payload, path) => {
       if (requests === 1) {
+        raw.writeHead(200, { "content-type": "text/event-stream" });
+        raw.flushHeaders();
         await release.promise;
         raw.destroy();
       } else await succeed(raw, payload, path);
@@ -342,6 +420,34 @@ describe("prefill SSE keep-alives over HTTP", () => {
     expect(body).toContain(STREAM_KEEPALIVE_SSE_COMMENT);
     expect(body).toContain("message_stop");
     expect(body).not.toContain("event: error");
+    expect(requests).toBe(2);
+  });
+
+  test("a failed accepted attempt cannot commit while its retry awaits HTTP headers", async () => {
+    respond = async (raw) => {
+      if (requests === 1) {
+        raw.writeHead(200, { "content-type": "text/event-stream" });
+        raw.flushHeaders();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        raw.destroy();
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        raw.writeHead(429, {
+          "content-type": "application/json",
+          "retry-after": "60",
+        });
+        raw.end(
+          JSON.stringify({
+            type: "error",
+            error: { type: "rate_limit_error", message: "Try later" },
+          }),
+        );
+      }
+    };
+    const result = await send();
+    expect(result.status).toBe(429);
+    expect(result.headers.get("retry-after")).toBe("60");
+    expect(await result.text()).not.toContain(STREAM_KEEPALIVE_SSE_COMMENT);
     expect(requests).toBe(2);
   });
 

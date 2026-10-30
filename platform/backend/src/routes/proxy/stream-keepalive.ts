@@ -21,13 +21,14 @@ export const STREAM_KEEPALIVE_SSE_COMMENT = ": archestra keep-alive\n\n";
  * minutes), and the upstream `ping` events that would otherwise cover it never
  * reach us: the Anthropic SDK drops them inside its SSE parser.
  *
- * By default this never commits headers, preserving upstream HTTP error
- * statuses. An optional callback enables comments during prefill too: its
- * first invocation commits 200, so later failures use the stream's error
- * framing. Every real write is reported through {@link touch}.
+ * Uncommitted responses can send comments only after {@link allowCommit}:
+ * the caller must first observe a successful upstream HTTP response or select
+ * a pooled stream. Failures before that retain their HTTP status. Every real
+ * write is reported through {@link touch}.
  */
 export class StreamKeepAlive {
   private timer: NodeJS.Timeout | undefined;
+  private commitAllowed = false;
 
   constructor(
     private readonly raw: Pick<
@@ -48,6 +49,16 @@ export class StreamKeepAlive {
   ) {}
 
   private readonly onClose = () => this.stop();
+
+  allowCommit(): void {
+    this.commitAllowed = true;
+    this.touch();
+  }
+
+  /** An attempt failed before its first event; its replacement is pending. */
+  suspendCommit(): void {
+    this.commitAllowed = false;
+  }
 
   /** Arm the idle timer. A disabled or non-SSE keep-alive stays inert. */
   start(): void {
@@ -85,7 +96,7 @@ export class StreamKeepAlive {
     // A queued byte already keeps the connection busy. Do not accumulate
     // comments behind it while the client cannot drain the socket.
     if (!this.raw.writableNeedDrain) {
-      if (!this.raw.headersSent) this.commitHeaders?.();
+      if (!this.raw.headersSent && this.commitAllowed) this.commitHeaders?.();
       if (this.raw.headersSent) this.raw.write(STREAM_KEEPALIVE_SSE_COMMENT);
     }
     this.timer?.refresh();

@@ -3504,9 +3504,6 @@ const config = {
       process.env.ARCHESTRA_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
       DEFAULT_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
     ),
-    streamKeepAliveDuringPrefill:
-      process.env.ARCHESTRA_LLM_PROXY_STREAM_KEEPALIVE_DURING_PREFILL ===
-      "true",
   },
   autoRouting: {
     /** ALPHA gate for the Model Router's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */

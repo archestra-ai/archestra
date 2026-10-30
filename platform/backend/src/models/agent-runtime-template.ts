@@ -1,30 +1,68 @@
 import type { PopularAgentOverrides } from "@archestra/shared";
 import { ApiError } from "@archestra/shared";
 import { eq } from "drizzle-orm";
-import db, { schema, withDbTransaction } from "@/database";
+import { schema, type Transaction, withDbTransaction } from "@/database";
 import type { Organization } from "@/types";
 import type {
   RuntimeTemplateEditorSettings,
   RuntimeTemplateSettings,
 } from "@/types/agent-runtime-template";
+import { RuntimeTemplateSettingsSchema } from "@/types/agent-runtime-template";
 import OrganizationModel from "./organization";
+import SecretModel from "./secret";
 
 class AgentRuntimeTemplateModel {
+  // Private platform configuration uses the same encrypted database store as
+  // ChatOps configuration. The organization row serializes first writes too.
+  private static secretName(organizationId: string) {
+    return `agent-runtime-templates:${organizationId}`;
+  }
+
+  private static async readStoredSettings(
+    organizationId: string,
+    tx: Transaction,
+  ) {
+    const row = await SecretModel.findByName(
+      AgentRuntimeTemplateModel.secretName(organizationId),
+      tx,
+    );
+    return row
+      ? RuntimeTemplateSettingsSchema.parse(row.secret)
+      : { revision: 0, templates: [] };
+  }
+
+  private static async writeStoredSettings(
+    organizationId: string,
+    settings: RuntimeTemplateSettings,
+    tx: Transaction,
+  ) {
+    const name = AgentRuntimeTemplateModel.secretName(organizationId);
+    const row = await SecretModel.findByName(name, tx);
+    if (row) await SecretModel.update(row.id, { secret: settings }, tx);
+    else await SecretModel.create({ name, secret: settings }, tx);
+  }
+
   static async getSettings(
     organizationId: string,
   ): Promise<RuntimeTemplateEditorSettings> {
-    const [row] = await db
-      .select({
-        settings: schema.organizationsTable.runtimeTemplateSettings,
-        popularAgentOverrides: schema.organizationsTable.popularAgentOverrides,
-      })
-      .from(schema.organizationsTable)
-      .where(eq(schema.organizationsTable.id, organizationId));
-    if (!row) throw new ApiError(404, "Organization not found");
-    return {
-      ...(row.settings ?? { revision: 0, templates: [] }),
-      popularAgentOverrides: row.popularAgentOverrides ?? null,
-    };
+    return withDbTransaction(async (tx) => {
+      const [row] = await tx
+        .select({
+          popularAgentOverrides:
+            schema.organizationsTable.popularAgentOverrides,
+        })
+        .from(schema.organizationsTable)
+        .where(eq(schema.organizationsTable.id, organizationId))
+        .for("share");
+      if (!row) throw new ApiError(404, "Organization not found");
+      return {
+        ...(await AgentRuntimeTemplateModel.readStoredSettings(
+          organizationId,
+          tx,
+        )),
+        popularAgentOverrides: row.popularAgentOverrides ?? null,
+      };
+    });
   }
 
   static async saveSettings(params: {
@@ -34,12 +72,16 @@ class AgentRuntimeTemplateModel {
   }): Promise<RuntimeTemplateEditorSettings> {
     const saved = await withDbTransaction(async (tx) => {
       const [row] = await tx
-        .select({ settings: schema.organizationsTable.runtimeTemplateSettings })
+        .select({ id: schema.organizationsTable.id })
         .from(schema.organizationsTable)
         .where(eq(schema.organizationsTable.id, params.organizationId))
         .for("update");
       if (!row) throw new ApiError(404, "Organization not found");
-      if ((row.settings?.revision ?? 0) !== params.settings.revision)
+      const current = await AgentRuntimeTemplateModel.readStoredSettings(
+        params.organizationId,
+        tx,
+      );
+      if (current.revision !== params.settings.revision)
         throw new ApiError(
           409,
           "Runtime templates changed. Reload the settings before saving again.",
@@ -48,10 +90,14 @@ class AgentRuntimeTemplateModel {
         revision: params.settings.revision + 1,
         templates: params.settings.templates,
       };
+      await AgentRuntimeTemplateModel.writeStoredSettings(
+        params.organizationId,
+        settings,
+        tx,
+      );
       await tx
         .update(schema.organizationsTable)
         .set({
-          runtimeTemplateSettings: settings,
           popularAgentOverrides: params.popularAgentOverrides,
         })
         .where(eq(schema.organizationsTable.id, params.organizationId));
@@ -76,23 +122,30 @@ class AgentRuntimeTemplateModel {
   }) {
     const organization = await withDbTransaction(async (tx) => {
       const [row] = await tx
-        .select({ settings: schema.organizationsTable.runtimeTemplateSettings })
+        .select({ id: schema.organizationsTable.id })
         .from(schema.organizationsTable)
         .where(eq(schema.organizationsTable.id, params.organizationId))
         .for("update");
       if (!row) return null;
-      const settings = row.settings ?? { revision: 0, templates: [] };
+      const settings = await AgentRuntimeTemplateModel.readStoredSettings(
+        params.organizationId,
+        tx,
+      );
+      await AgentRuntimeTemplateModel.writeStoredSettings(
+        params.organizationId,
+        {
+          ...settings,
+          revision: settings.revision + 1,
+        },
+        tx,
+      );
       const [updated] = await tx
         .update(schema.organizationsTable)
         .set({
           ...params.data,
-          runtimeTemplateSettings: {
-            ...settings,
-            revision: settings.revision + 1,
-          },
         })
         .where(eq(schema.organizationsTable.id, params.organizationId))
-        .returning(OrganizationModel.columns);
+        .returning();
       return updated ?? null;
     });
     await OrganizationModel.invalidateSettingsCaches(params.organizationId);

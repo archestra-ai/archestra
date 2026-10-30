@@ -9,7 +9,7 @@ import {
   type SupportedProvider,
   TimeInMs,
 } from "@archestra/shared";
-import { and, asc, eq, getTableColumns, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
@@ -29,14 +29,7 @@ export type IntegrationOverrideColumns = {
   knowledgeConnectorOverrides: KnowledgeConnectorOverrides | null;
 };
 
-const {
-  runtimeTemplateSettings: _runtimeTemplateSettings,
-  ...organizationColumns
-} = getTableColumns(schema.organizationsTable);
-
 class OrganizationModel {
-  /** General organization reads must not load private runtime configurations. */
-  static readonly columns = organizationColumns;
   /** Read only when provisioning a new personal assistant or gateway. */
   static async getDefaultPersonalAgentAccessAllTools(
     organizationId: string,
@@ -101,7 +94,7 @@ class OrganizationModel {
    */
   static async findWithAnonymousSkillMarketplace(): Promise<Organization | null> {
     const [organization] = await db
-      .select(OrganizationModel.columns)
+      .select()
       .from(schema.organizationsTable)
       .where(
         eq(schema.organizationsTable.skillMarketplaceAnonymousAccess, true),
@@ -120,7 +113,7 @@ class OrganizationModel {
   static async getFirst(): Promise<Organization | null> {
     logger.debug("OrganizationModel.getFirst: fetching first organization");
     const [organization] = await db
-      .select(OrganizationModel.columns)
+      .select()
       .from(schema.organizationsTable)
       .limit(1);
     logger.debug(
@@ -200,7 +193,7 @@ class OrganizationModel {
         })
         // A concurrently booting replica may have created it first.
         .onConflictDoNothing()
-        .returning(OrganizationModel.columns);
+        .returning();
       if (!organization) return null;
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -329,7 +322,7 @@ class OrganizationModel {
       .update(schema.organizationsTable)
       .set(params.data)
       .where(eq(schema.organizationsTable.id, params.id))
-      .returning(OrganizationModel.columns);
+      .returning();
     return row ?? null;
   }
 
@@ -544,7 +537,7 @@ class OrganizationModel {
   static async getById(id: string): Promise<Organization | null> {
     logger.debug({ id }, "OrganizationModel.getById: fetching organization");
     const [organization] = await db
-      .select(OrganizationModel.columns)
+      .select()
       .from(schema.organizationsTable)
       .where(eq(schema.organizationsTable.id, id))
       .limit(1);

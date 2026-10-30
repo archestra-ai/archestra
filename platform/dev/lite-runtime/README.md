@@ -108,7 +108,7 @@ or memory limit. Base image `agent-claude-code:f80e33a17`, checkout at
 | Memory after compiling six pages | 5.4 GB anonymous: frontend 3.6 GB (Next dev server and turbopack workers), backend 2.3 GB, PostgreSQL 0.3 GB; cgroup 10.2 GB with file cache |
 | Disk per workspace | `node_modules` 178 MB (hard links), `frontend/.next` 0.6 to 1.4 GB, PostgreSQL data 75 MB |
 | `up --e2e` warm restart with WireMock and the A2A fixture | 21 s; WireMock 218 MB RSS, fixture 61 MB |
-| Playwright `chromium` project, `agents`, `auth-redirect` and `chat` specs | 25 passed, 1 flaky (the Anthropic chat spec passed on retry), 3.2 min |
+| Playwright `chromium` project, `agents`, `auth-redirect` and `chat` specs, against the dev server at 16 vCPU | 25 passed, 1 flaky (the Anthropic chat spec passed on retry), 3.2 min |
 
 ### Compared with the full Tilt stack on the same VM
 
@@ -165,9 +165,9 @@ under Settings > Agents > Runtime tiers):
 
 L keeps no warm spares by default: its runs are rare and an idle spare holds 8
 CPU and 16 GiB.
-The frontend dev server is the largest and most variable consumer; a
-production build (`next build` and `next start`) would cut it to a few hundred
-MB for preview-only runs at the cost of a build per start, and is a candidate
+The frontend dev server is the largest and most variable consumer. The e2e
+mode (`up --e2e`) already serves a production build instead (see below); doing
+the same for preview-only runs would cost a build per start and is a candidate
 follow-up.
 
 ## Lite and full stacks side by side

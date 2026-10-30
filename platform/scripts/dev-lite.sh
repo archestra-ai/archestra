@@ -72,6 +72,9 @@ ENV_FILE="$PLATFORM_DIR/.env"
 # The standalone server of a production frontend build (next.config.ts sets
 # output "standalone" with platform/ as the tracing root).
 STANDALONE_DIR="$PLATFORM_DIR/frontend/.next/standalone/frontend"
+# Which frontend is running, dev or e2e: recorded when it starts, so reload and
+# up --e2e keep or change it on purpose.
+FRONTEND_MODE_FILE="$STATE_DIR/frontend-mode"
 PGDATA="$STATE_DIR/postgres"
 DB_PORT="${ARCHESTRA_DEV_LITE_DB_PORT:-5432}"
 DB_USER=archestra
@@ -434,8 +437,10 @@ start_frontend() {
     build_frontend
     start_session frontend "$STANDALONE_DIR" \
       "exec env PORT=$FRONTEND_PORT HOSTNAME=127.0.0.1 NODE_ENV=production $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") server.js"
+    echo e2e > "$FRONTEND_MODE_FILE"
     return 0
   fi
+  echo dev > "$FRONTEND_MODE_FILE"
   # Next reads ARCHESTRA_* from its environment (Tilt exports .env); Node's
   # --env-file does the same here, and explicit variables take precedence.
   start_session frontend "$PLATFORM_DIR/frontend" \
@@ -447,10 +452,10 @@ start_frontend() {
 build_frontend() {
   local started=$SECONDS
   log "building the frontend for e2e (production build, as CI serves it); log in $LOG_DIR/frontend-build.log"
+  # frontend_env quotes its values for a shell, as the session commands do.
   (
     cd "$PLATFORM_DIR/frontend"
-    # shellcheck disable=SC2046 # frontend_env prints NAME=value words
-    env $(frontend_env) node --env-file="$ENV_FILE" ./node_modules/.bin/next build --turbopack
+    bash -c "exec env $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") ./node_modules/.bin/next build --turbopack"
   ) > "$LOG_DIR/frontend-build.log" 2>&1 \
     || { tail -n 30 "$LOG_DIR/frontend-build.log" >&2; die "frontend build failed"; }
   rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public"
@@ -473,6 +478,10 @@ start_e2e_deps() {
 
 # Both sidecars, so a fixture that died is restarted by the next `up --e2e`
 # instead of being waited for.
+frontend_mode() {
+  cat "$FRONTEND_MODE_FILE" 2>/dev/null || echo dev
+}
+
 e2e_enabled() {
   session_alive wiremock && session_alive a2a
 }
@@ -539,17 +548,22 @@ cmd_start() {
   mkdir -p "$STATE_DIR" "$LOG_DIR"
   # An Agent Runtime starts the stack on every turn: leave a running one alone.
   if session_alive backend && session_alive frontend && db_ready \
-    && { [ "$e2e" = 0 ] || e2e_enabled; } && [ "$mock_data" = 0 ]; then
+    && { [ "$e2e" = 0 ] || { e2e_enabled && [ "$(frontend_mode)" = e2e ]; }; } \
+    && [ "$mock_data" = 0 ]; then
     log "stack already running; logs in $LOG_DIR"
     [ "$wait" = 1 ] && wait_ready
     return 0
   fi
   # The servers read .env when they start: switching a running stack to the
-  # e2e environment restarts them.
+  # e2e environment restarts them, and e2e needs the production frontend.
   if [ "$e2e" = 1 ] && ! session_alive wiremock; then
     for name in backend frontend; do
       session_alive "$name" && { log "restarting $name with the e2e environment"; stop_session "$name"; }
     done
+  fi
+  if [ "$e2e" = 1 ] && session_alive frontend && [ "$(frontend_mode)" != e2e ]; then
+    log "restarting the frontend as a production build for e2e"
+    stop_session frontend
   fi
   ensure_env "$e2e"
   install_dependencies
@@ -661,7 +675,7 @@ available_cpus() {
 cmd_e2e() {
   e2e_enabled || die "start the stack with --e2e first"
   http_ok "http://127.0.0.1:$BACKEND_PORT/ready" || die "backend is not ready"
-  # The browser, both dev servers and PostgreSQL share these CPUs: fewer
+  # The browser, the backend, the frontend server and PostgreSQL share these CPUs: fewer
   # workers and longer timeouts on a small Pod. E2E_* set by hand win.
   local cpus
   cpus="$(available_cpus)"
@@ -705,7 +719,7 @@ cmd_reload() {
       # In e2e mode this rebuilds the production frontend.
       log "reloading the frontend"
       stop_session frontend
-      if e2e_enabled; then start_frontend 1; else start_frontend; fi
+      if [ "$(frontend_mode)" = e2e ]; then start_frontend 1; else start_frontend; fi
       ;;
     *) die "reload: expected backend or frontend" ;;
   esac

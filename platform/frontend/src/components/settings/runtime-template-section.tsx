@@ -81,9 +81,9 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { runtimeTemplatePosition } from "@/lib/agent-runtime-template-order";
 import {
   type RuntimeTemplate,
-  runtimeTemplatePosition,
   useRuntimeTemplateCatalog,
   useRuntimeTemplateSettings,
   useSaveRuntimeTemplateSettings,

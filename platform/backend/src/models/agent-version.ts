@@ -91,8 +91,6 @@ class AgentVersionModel {
       excludedConnectors,
       activationSkillRuleRows,
       model,
-      fastModel,
-      smartModel,
       keyRows,
     ] = await Promise.all([
       tx
@@ -199,8 +197,6 @@ class AgentVersionModel {
         .from(schema.agentActivationSkillRulesTable)
         .where(eq(schema.agentActivationSkillRulesTable.agentId, agent.id)),
       findModelIdentity(tx, agent.modelId),
-      findModelIdentity(tx, agent.fastModelId),
-      findModelIdentity(tx, agent.smartModelId),
       // Redacted key identity (never key material) so an LLM-config change is
       // legible in history — mirrors findByIdForAudit.
       agent.llmApiKeyId
@@ -242,8 +238,6 @@ class AgentVersionModel {
       incomingEmailAllowedDomain: agent.incomingEmailAllowedDomain ?? null,
       builtInAgentConfig: agent.builtInAgentConfig ?? null,
       model,
-      fastModel,
-      smartModel,
       llmApiKey: keyRows[0] ?? null,
       identityProviderId: agent.identityProviderId ?? null,
       environmentId: agent.environmentId ?? null,
@@ -526,12 +520,6 @@ function normalizeAgentVersion(row: AgentVersion): AgentVersion {
         AgentConfigSnapshotSchema.shape.activationSkillRules.parse(
           row.snapshot.activationSkillRules,
         ),
-      fastModel: AgentConfigSnapshotSchema.shape.fastModel.parse(
-        row.snapshot.fastModel,
-      ),
-      smartModel: AgentConfigSnapshotSchema.shape.smartModel.parse(
-        row.snapshot.smartModel,
-      ),
     },
   };
 }

@@ -275,9 +275,6 @@ function validateIncomingEmailDomain(
 const AUTO_ROUTING_COLUMNS = {
   autoRoutingEnabled: true,
   autoRoutingBudgetUsdPerDay: true,
-  autoRoutingFastModelId: true,
-  autoRoutingNormalModelId: true,
-  autoRoutingSmartModelId: true,
   autoRoutingScorerVersionId: true,
   autoRoutingGeneration: true,
   autoRoutingPlannedGeneration: true,

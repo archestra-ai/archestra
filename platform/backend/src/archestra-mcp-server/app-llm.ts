@@ -129,6 +129,9 @@ async function runAppLlmCompletion(
     // Runtime agent every app shares — without this an app's runtime cost is
     // unattributable, and "what does this app cost to run" has no answer.
     appId,
+    // The proxy routes it only when the App Runtime agent inherits the
+    // organization default.
+    autoRoutable: true,
   });
 
   const system = args.jsonMode

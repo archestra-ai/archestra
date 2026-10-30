@@ -1185,6 +1185,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     source: "chat",
                     agentLlmApiKeyId: agent.llmApiKeyId,
                     modelPoolId: conversation.modelPoolId,
+                    autoRoutable: !conversation.modelPoolId,
                     // Lets the proxy store this turn's interaction encrypted
                     // rather than redacted. Only sent when an escrow record
                     // exists, since without one the row could never be reopened.
@@ -1424,6 +1425,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           source: "chat:tool_call_repair",
                           agentLlmApiKeyId: agent.llmApiKeyId,
                           modelPoolId: conversation.modelPoolId,
+                          autoRoutable: !conversation.modelPoolId,
                           // A repair prompt carries the same conversation
                           // content as the turn it repairs.
                           encryptedChatKey: encryptedChatAudit?.dek ?? null,

@@ -398,6 +398,34 @@ export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
   connectionDefaultProviderKeys: true,
   appsHackathonRecorderEnabled: true,
 });
+const OrganizationDefaultModelRefSchema = z.object({
+  id: z.string().uuid(),
+  provider: SupportedProvidersSchema,
+  displayName: z.string(),
+});
+export type OrganizationDefaultModelRef = z.infer<
+  typeof OrganizationDefaultModelRefSchema
+>;
+
+/** What "Organization default" runs on: the default model, routed across the trio while auto routing is active. */
+export const OrganizationDefaultModelSchema = z.object({
+  model: OrganizationDefaultModelRefSchema.nullable(),
+  autoRouting: z.discriminatedUnion("active", [
+    z.object({ active: z.literal(false) }),
+    z.object({
+      active: z.literal(true),
+      tiers: z.object({
+        fast: OrganizationDefaultModelRefSchema,
+        normal: OrganizationDefaultModelRefSchema,
+        smart: OrganizationDefaultModelRefSchema,
+      }),
+    }),
+  ]),
+});
+export type OrganizationDefaultModel = z.infer<
+  typeof OrganizationDefaultModelSchema
+>;
+
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,

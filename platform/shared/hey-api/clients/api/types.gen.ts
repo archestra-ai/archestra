@@ -16958,8 +16958,6 @@ export type GetAgentCatalogResponses = {
                 llmModel: string | null;
                 modelId: string | null;
                 modelPoolId: string | null;
-                fastModelId: string | null;
-                smartModelId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
                 runtime: {
@@ -17347,8 +17345,6 @@ export type GetAgentsResponses = {
             llmModel: string | null;
             modelId: string | null;
             modelPoolId: string | null;
-            fastModelId: string | null;
-            smartModelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
             runtime: {
@@ -17503,8 +17499,6 @@ export type CreateAgentData = {
         llmModel?: string | null;
         modelId?: string | null;
         modelPoolId?: string | null;
-        fastModelId?: string | null;
-        smartModelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
         runtime?: {
@@ -17771,8 +17765,6 @@ export type CreateAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -19045,8 +19037,6 @@ export type GetDefaultMcpGatewayResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -19353,8 +19343,6 @@ export type ImportAgentResponses = {
             llmModel: string | null;
             modelId: string | null;
             modelPoolId: string | null;
-            fastModelId: string | null;
-            smartModelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
             runtime: {
@@ -19670,8 +19658,6 @@ export type GetAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -19808,8 +19794,6 @@ export type UpdateAgentData = {
         llmModel?: string | null;
         modelId?: string | null;
         modelPoolId?: string | null;
-        fastModelId?: string | null;
-        smartModelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
         runtime?: {
@@ -19985,8 +19969,6 @@ export type UpdateAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -20406,14 +20388,6 @@ export type GetAgentVersionResponses = {
                 id: string;
                 externalId: string;
             } | null;
-            fastModel: {
-                id: string;
-                externalId: string;
-            } | null;
-            smartModel: {
-                id: string;
-                externalId: string;
-            } | null;
             llmApiKey: {
                 id: string;
                 name: string;
@@ -20576,8 +20550,6 @@ export type RestoreAgentVersionResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -20822,8 +20794,6 @@ export type CloneAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -23307,8 +23277,6 @@ export type RestoreAgentResponses = {
         llmModel: string | null;
         modelId: string | null;
         modelPoolId: string | null;
-        fastModelId: string | null;
-        smartModelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -32587,6 +32555,7 @@ export type GetAutoRoutingSettingsResponses = {
                 modelId: string;
             } | null;
         };
+        routedAgentCount: number;
         generation: number;
         plannedGeneration: number;
         status: {
@@ -32611,9 +32580,6 @@ export type UpdateAutoRoutingSettingsData = {
     body: {
         enabled?: boolean;
         budgetUsdPerDay?: number;
-        fastModelId?: string;
-        normalModelId?: string;
-        smartModelId?: string;
     };
     path?: never;
     query?: never;
@@ -32712,6 +32678,7 @@ export type UpdateAutoRoutingSettingsResponses = {
                 modelId: string;
             } | null;
         };
+        routedAgentCount: number;
         generation: number;
         plannedGeneration: number;
         status: {
@@ -33071,6 +33038,7 @@ export type ReplanAutoRoutingResponses = {
                 modelId: string;
             } | null;
         };
+        routedAgentCount: number;
         generation: number;
         plannedGeneration: number;
         status: {
@@ -41628,8 +41596,6 @@ export type GetNewChatBootstrapResponses = {
                 llmModel: string | null;
                 modelId: string | null;
                 modelPoolId: string | null;
-                fastModelId: string | null;
-                smartModelId: string | null;
                 identityProviderId: string | null;
                 environmentId: string | null;
                 runtime: {
@@ -42189,8 +42155,6 @@ export type GetConversationBootstrapResponses = {
                     llmModel: string | null;
                     modelId: string | null;
                     modelPoolId: string | null;
-                    fastModelId: string | null;
-                    smartModelId: string | null;
                     identityProviderId: string | null;
                     environmentId: string | null;
                     runtime: {
@@ -119349,6 +119313,118 @@ export type GetOrganizationResponses = {
 };
 
 export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
+
+export type GetOrganizationDefaultModelData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/default-model';
+};
+
+export type GetOrganizationDefaultModelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOrganizationDefaultModelError = GetOrganizationDefaultModelErrors[keyof GetOrganizationDefaultModelErrors];
+
+export type GetOrganizationDefaultModelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        model: {
+            id: string;
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            displayName: string;
+        } | null;
+        autoRouting: {
+            active: false;
+        } | {
+            active: true;
+            tiers: {
+                fast: {
+                    id: string;
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    displayName: string;
+                };
+                normal: {
+                    id: string;
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    displayName: string;
+                };
+                smart: {
+                    id: string;
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    displayName: string;
+                };
+            };
+        };
+    };
+};
+
+export type GetOrganizationDefaultModelResponse = GetOrganizationDefaultModelResponses[keyof GetOrganizationDefaultModelResponses];
 
 export type GetAppearanceSettingsData = {
     body?: never;

@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.12](https://github.com/archestra-ai/archestra/compare/platform-v1.4.11...platform-v1.4.12) (2026-10-30)
+
+
+### Bug Fixes
+
+* **orchestrator:** restrict EKS DNS bootstrap to known resolvers (1.4 backport) ([#9897](https://github.com/archestra-ai/archestra/issues/9897)) ([8cc6ce2](https://github.com/archestra-ai/archestra/commit/8cc6ce22dae53c7e183b3f23c402bb19371a8386))
+* **rbac:** backport service account role permissions to 1.4 ([#9902](https://github.com/archestra-ai/archestra/issues/9902)) ([68ed505](https://github.com/archestra-ai/archestra/commit/68ed505f8d9b46fef232ceea5572dd69ac8eccb0))
+
 ## [1.4.11](https://github.com/archestra-ai/archestra/compare/platform-v1.4.10...platform-v1.4.11) (2026-10-30)
 
 

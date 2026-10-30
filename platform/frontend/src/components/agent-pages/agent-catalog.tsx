@@ -412,21 +412,35 @@ function GiveItWorkFrom() {
   const { visibleIds } = useMessagingChannelCatalog();
   // Chat apps only, and only the ones the admins left switched on.
   const messengers = visibleIds.filter((id) => id in CHANNEL_ICON_SRC);
-  const source = (Icon: LucideIcon, label: string) => (
+  const source = ({
+    Icon,
+    label,
+    compactLabel,
+  }: {
+    Icon: LucideIcon;
+    label: string;
+    compactLabel?: string;
+  }) => (
     <span
       key={label}
-      className="flex items-center gap-1.5 text-muted-foreground"
+      className="flex items-center gap-1.5 whitespace-nowrap text-muted-foreground"
     >
-      <Icon className="size-3.5" aria-hidden="true" />
-      <span>{label}</span>
+      <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+      {compactLabel ? (
+        <>
+          <span className="sm:hidden">{compactLabel}</span>
+          <span className="hidden sm:inline">{label}</span>
+        </>
+      ) : (
+        <span>{label}</span>
+      )}
     </span>
   );
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg bg-muted px-4 py-3 text-sm">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 rounded-lg bg-muted px-4 py-3 text-sm sm:flex sm:flex-wrap sm:gap-x-5">
       <span className="font-medium">Give it work from</span>
-      {source(MessageSquare, `${appName} chat`)}
       {messengers.length > 0 && (
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-2 sm:order-2">
           {messengers.map((id) => (
             <span key={id} title={MESSAGING_CHANNEL_LABELS[id]}>
               <ChannelIcon channel={id} className="size-4" />
@@ -435,8 +449,19 @@ function GiveItWorkFrom() {
           ))}
         </span>
       )}
-      {source(Laptop, "Handoff from a local coding agent")}
-      {source(Share2, "Other agents")}
+      <div className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-2 sm:contents sm:[&>span]:order-3 sm:[&>span:first-child]:order-1">
+        {source({
+          Icon: MessageSquare,
+          label: `${appName} chat`,
+          compactLabel: "Chat",
+        })}
+        {source({
+          Icon: Laptop,
+          label: "Handoff from a local coding agent",
+          compactLabel: "Handoff",
+        })}
+        {source({ Icon: Share2, label: "Other agents" })}
+      </div>
     </div>
   );
 }

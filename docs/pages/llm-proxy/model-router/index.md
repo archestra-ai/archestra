@@ -89,12 +89,12 @@ with client.realtime.connect(model="openai:gpt-realtime") as session:
             break
 ```
 
-Each response of the session is one row under **Logs → LLM Proxy**, with its transcripts, tokens and cost at OpenAI's realtime rates. Audio never enters the logs. SIP calls (`call_id`) are not served.
+Each response of the session is one row under **Logs → LLM Proxy**, with its transcripts, a player for the spoken reply, and its tokens and cost at OpenAI's realtime rates. SIP calls (`call_id`) are not served.
 
 - **Provider parameters:** OpenAI and Azure accept their native image parameters. Gemini returns one base64 image at its own size and rejects `quality`, `size`, `output_format`, and a mask on edits. Image streaming is rejected for every provider.
-- **Uploads and logs:** audio uploads are limited to 25 MiB per file. Logs keep file metadata and usage, never audio bytes or transcript text.
+- **Uploads and logs:** audio uploads are limited to 25 MiB per file. Logs keep the text spoken, the transcript, and each audio clip up to 2 MB, so the conversation view can play it. A longer clip is marked as not kept. To store metadata and usage only, set [`ARCHESTRA_LOGS_CONTENT_MODE`](/docs/admin/deployment/configuration#ARCHESTRA_LOGS_CONTENT_MODE) to `metadata_only`.
 - **Pricing:** image, speech, transcription, and translation calls are priced at the vendor's published media rates: per image token, per speech character, per minute of audio. A translation or a text-format transcript reports no usage, so Archestra reads its length from the uploaded file. A WebM upload has no readable length and records no cost. **Models** lists each media model's rates.
-- **Budgets:** with [`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE=enforce`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE), a priced media call counts toward cost budgets like a chat call. In the default mode, and for a call that cannot be priced, a cost budget rejects the request before it reaches the provider.
+- **Budgets:** a priced media call counts toward cost budgets like a chat call. A cost budget rejects a call that cannot be priced, such as a translation of a WebM file, before it reaches the provider.
 
 Azure file operations stay on the Azure provider route: a router model name cannot select a file account, and a file id cannot replace a multipart image upload.
 

@@ -98,7 +98,7 @@ export function TeamsList() {
   const { data: canUpdateTeams = false } = useHasPermissions({
     team: ["update"],
   });
-  // Identity-provider readers may view a team's external group sync mappings
+  // Identity-provider readers may view a team's Team Sync group links
   // without being able to manage the team.
   const { data: canReadIdentityProviders = false } = useHasPermissions({
     identityProvider: ["read"],
@@ -289,7 +289,7 @@ export function TeamsList() {
         const team = row.original;
         const canEditTeam = canUpdateTeams || isTeamAdminOf(team);
         // Identity-provider readers who can't manage the team still get a
-        // view-only entry into the External Group Sync section.
+        // view-only entry into the Team Sync section.
         const viewOnlyGroupSync = !canEditTeam && canReadIdentityProviders;
         const actions: TableRowAction[] = [
           {

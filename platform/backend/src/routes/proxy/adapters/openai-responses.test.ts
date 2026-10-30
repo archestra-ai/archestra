@@ -129,6 +129,34 @@ describe("responsesToOpenaiChat", () => {
       { role: "user", content: "Open the pull request." },
     ]);
   });
+
+  test("keeps the text of a tool result sent as an array of content parts", () => {
+    const request = {
+      model: "vllm:qwen",
+      input: [
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "list_documents",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: [
+            { type: "input_text", text: '{"items":[]}' },
+            { type: "input_text", text: "second block" },
+          ],
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    expect(responsesToOpenaiChat(request).chatBody.messages.at(-1)).toEqual({
+      role: "tool",
+      tool_call_id: "call_1",
+      content: '{"items":[]}\nsecond block',
+    });
+  });
 });
 
 describe("OpenAI Responses execution terminal guard", () => {

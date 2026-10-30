@@ -567,6 +567,57 @@ test.for([
 });
 
 test.for([
+  0, 1, 2,
+])("returns a large base64 image with %i padding bytes without retrying", async (padding, {
+  media,
+}) => {
+  // Exercise all padding cases with an output large enough to overflow a
+  // repeated-group base64 regex, using only synthetic image bytes.
+  const bytes = 6_000_000 - padding;
+  const output = Buffer.alloc(bytes, 0xa5).toString("base64");
+  media.respond((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ created: 1, data: [{ b64_json: output }] }));
+  });
+  const result = await media.client.images.edit({
+    model: "gpt-image-1",
+    prompt: "A circle.",
+    image: await toFile(media.image, "one.png"),
+  });
+  expect(result.data?.[0].b64_json).toBe(output);
+  expect(media.requests).toHaveLength(1);
+});
+
+test.for([
+  "",
+  "AAA",
+  "A===",
+  "AA=A",
+  "====",
+  "AAA_",
+  "AAA\n",
+  "AAA\r",
+  "AAA ",
+  "AAAé",
+  `${"AAAA".repeat(2_000_000)}AA=A`,
+])("rejects malformed base64 provider output (case %#) without retrying", async (output, {
+  media,
+}) => {
+  media.respond((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ created: 1, data: [{ b64_json: output }] }));
+  });
+  await expect(
+    media.client.images.edit({
+      model: "gpt-image-1",
+      prompt: "A circle.",
+      image: await toFile(media.image, "one.png"),
+    }),
+  ).rejects.toMatchObject({ status: 502 });
+  expect(media.requests).toHaveLength(1);
+});
+
+test.for([
   "empty",
   "malformed-json",
   "oversized",

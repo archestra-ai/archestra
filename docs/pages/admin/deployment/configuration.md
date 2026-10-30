@@ -2,12 +2,25 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Archestra reads these environment variables at startup. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. The Docker quickstart and the Helm chart run with none set. See [Helm](/docs/admin/deployment/helm) for Kubernetes installation.
+
+## Shutdown
+
+Give long model requests and MCP tool calls time to finish when a replica stops.
+
+- **`ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS`** — Seconds after a stop signal for admitted requests, handlers and background persistence to finish. Default `60`; integer `1`–`86400`.
+- **`ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS`** — Extra time for persistence, dependency cleanup and telemetry. Default `20`; integer `5`–`86400`. The backend deadline is `max(request drain, worker task shutdown timeout) + cleanup`. The unified container gives the backend another 10 seconds before forcing it to stop.
+
+- **`ARCHESTRA_SERVER_POD_GRACE_SECONDS`** — Injected by Helm from the rendered pod grace period. At server startup, checks the resolved environment values, including Secret and ConfigMap imports, against `max(drain, worker timeout) + cleanup + 40`. Insufficient grace prevents startup. Leave unset outside Helm unless you want this validation.
+
+The Helm chart derives web and worker pod grace periods from settings it can read, reserving 40 seconds beyond the backend deadline. The `archestra.shutdown` values default to `null`, preserving existing `envFrom`, `envFromSecrets` and `envWithValueFrom` settings. Explicit chart settings override imported values; literal `archestra.env` values take precedence over the chart settings.
+
+Helm cannot read timeout values inside a Secret or ConfigMap. When importing longer durations, set `archestra.terminationGracePeriodSeconds` high enough for the resolved values. For example, an imported worker timeout of 90 seconds with default drain and cleanup requires at least 150 seconds of pod grace. Both servers validate that budget before accepting requests.
 
 ## Database
 
@@ -782,6 +795,11 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: unset (the editor takes free text)
   - Values: comma-separated namespaces, for example `staging,production`
 
+- **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`** - Cluster resolver addresses that [environment](/docs/admin/environments) egress policies allow DNS to.
+  - Default: unset (Archestra reads the `kube-system/kube-dns` Service, which the Helm chart grants access to)
+  - Values: comma-separated IP addresses, for example `172.20.0.10`
+  - Set it when the resolver is not the `kube-dns` Service, such as NodeLocal DNSCache, or when Archestra cannot read that Service.
+
 - **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN`** - Cluster DNS domain used to build in-cluster Service addresses.
   - Default: `cluster.local`
 
@@ -971,6 +989,9 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 - **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Largest file the sandbox can read, save, or export to the conversation's Files panel, and the largest chat attachment it can stage, in bytes.
   - Default: `52428800` (50 MiB), equal to the [`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`](/docs/admin/deployment/configuration#ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT) default
   - Chat still stores a larger attachment; it is not staged in the sandbox.
+
+- **`ARCHESTRA_SKILLS_SANDBOX_HEADLESS_RETENTION_DAYS`** - Days a sandbox from a run without a conversation, such as an A2A task, is kept after its last activity before it is deleted. Files it exported are kept. `0` keeps them forever.
+  - Default: `7`
 
 - **`ARCHESTRA_DAGGER_RUNTIME_CLI_BIN`** - Path to the Dagger CLI executable used by the sandbox.
   - Default: unset (uses the bundled or discovered CLI)

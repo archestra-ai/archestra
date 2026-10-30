@@ -4356,14 +4356,19 @@ describe("InteractionModel", () => {
       makeMember,
       makeAdmin,
       makeTeam,
+      makeTeamMember,
     }) => {
       const org = await makeOrganization();
       const admin = await makeAdmin();
       await makeMember(admin.id, org.id, { role: "admin" });
       const team = await makeTeam(org.id, admin.id);
-      const agent = await makeAgent({ access: { teams: [team.id] } });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
       // Team limits follow the agent's team assignment, not its grants.
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+      await makeTeamMember(team.id, admin.id);
 
       const agentLimit = await LimitModel.create({
         entityType: "agent",
@@ -4391,6 +4396,7 @@ describe("InteractionModel", () => {
 
       await InteractionModel.create({
         profileId: agent.id,
+        userId: admin.id,
         model: "gpt-4o",
         inputTokens: 80,
         outputTokens: 160,
@@ -4436,15 +4442,20 @@ describe("InteractionModel", () => {
       makeMember,
       makeAdmin,
       makeTeam,
+      makeTeamMember,
     }) => {
       const org = await makeOrganization();
       const admin = await makeAdmin();
       await makeMember(admin.id, org.id, { role: "admin" });
       const team = await makeTeam(org.id, admin.id);
-      const agent = await makeAgent({ access: { teams: [team.id] } });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
 
       // Also assign via agent_team table (like production)
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+      await makeTeamMember(team.id, admin.id);
 
       const teamLimit = await LimitModel.create({
         entityType: "team",
@@ -4456,6 +4467,7 @@ describe("InteractionModel", () => {
 
       await InteractionModel.create({
         profileId: agent.id,
+        userId: admin.id,
         model: "gpt-4o",
         inputTokens: 80,
         outputTokens: 160,
@@ -4487,6 +4499,7 @@ describe("InteractionModel", () => {
       makeMember,
       makeAdmin,
       makeTeam,
+      makeTeamMember,
     }) => {
       const org = await makeOrganization();
       const admin = await makeAdmin();
@@ -4494,11 +4507,14 @@ describe("InteractionModel", () => {
       const team1 = await makeTeam(org.id, admin.id);
       const team2 = await makeTeam(org.id, admin.id);
       const agent = await makeAgent({
+        organizationId: org.id,
         access: { teams: [team1.id, team2.id] },
       });
 
       // Assign to both teams
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team1.id, team2.id]);
+      await makeTeamMember(team1.id, admin.id);
+      await makeTeamMember(team2.id, admin.id);
 
       // Create all-models limit for ONLY team1
       const team1Limit = await LimitModel.create({
@@ -4520,6 +4536,7 @@ describe("InteractionModel", () => {
 
       await InteractionModel.create({
         profileId: agent.id,
+        userId: admin.id,
         model: "gpt-4o",
         inputTokens: 100,
         outputTokens: 200,
@@ -4724,6 +4741,7 @@ describe("InteractionModel", () => {
       await makeMember(admin.id, org.id, { role: "admin" });
       const team = await makeTeam(org.id, admin.id);
       const agent = await makeAgent({
+        organizationId: org.id,
         access: { teams: [team.id] },
       });
 
@@ -4821,6 +4839,7 @@ describe("InteractionModel", () => {
         makeMember,
         makeAdmin,
         makeTeam,
+        makeTeamMember,
         makeUser,
         makeVirtualApiKey,
       }) => {
@@ -4836,6 +4855,8 @@ describe("InteractionModel", () => {
         });
         await AgentTeamModel.assignTeamsToAgent(agent.id, [team1.id, team2.id]);
         const user = await makeUser();
+        await makeTeamMember(team1.id, user.id);
+        await makeTeamMember(team2.id, user.id);
         const virtualKey = await makeVirtualApiKey(org.id);
         const passthroughKey = await makeVirtualApiKey(org.id);
         const environment = await EnvironmentModel.create({

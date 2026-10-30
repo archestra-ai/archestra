@@ -38,6 +38,7 @@ spec:
         {{- toYaml $workerPodAnnotations | nindent 8 }}
       {{- end }}
     spec:
+      terminationGracePeriodSeconds: {{ include "archestra-platform.shutdownPodGrace" . }}
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
       initContainers:
         {{- include "archestra-platform.initContainers" . | nindent 8 }}

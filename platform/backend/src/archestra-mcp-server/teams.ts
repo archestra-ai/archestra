@@ -236,33 +236,50 @@ const RemoveTeamMemberToolArgsSchema = z
   .strict();
 
 const TeamExternalGroupOutputItemSchema = z.object({
-  id: z.string().describe("The external group mapping ID."),
+  id: z.string().describe("The Team Sync group link ID."),
   teamId: z.string().describe("The team the mapping belongs to."),
   groupIdentifier: z
     .string()
     .describe("The external identity provider group identifier."),
+  identityProviderId: z
+    .string()
+    .nullable()
+    .describe(
+      "The identity provider the group is matched for, or null to match it from any provider.",
+    ),
+  role: TeamMemberRoleSchema.describe(
+    "The team role members of this group receive.",
+  ),
   createdAt: z.string().describe("ISO timestamp when the mapping was created."),
 });
 
 const ListTeamExternalGroupsToolArgsSchema = z
   .object({
     team_id: UuidIdSchema.describe(
-      "The ID of the team whose external group mappings to list.",
+      "The ID of the team whose Team Sync group links to list.",
     ),
   })
   .strict();
 
 const AddTeamExternalGroupToolArgsSchema = z
   .object({
-    team_id: UuidIdSchema.describe(
-      "The ID of the team to map the external group to.",
-    ),
+    team_id: UuidIdSchema.describe("The ID of the team to link the group to."),
     group_identifier: z
       .string()
       .min(1)
       .describe(
         "The external identity provider group identifier. Format varies by provider: LDAP Distinguished Name (e.g. cn=admins,ou=groups,dc=example,dc=com), OAuth/OIDC group name from the groups claim, SAML group attribute value, or Azure AD group object ID (GUID). Matched case-insensitively.",
       ),
+    identity_provider_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "The ID of the identity provider to match the group for. Omit to match the group from any provider.",
+      ),
+    role: TeamMemberRoleSchema.optional().describe(
+      "The team role members of this group receive: member (default) or admin.",
+    ),
   })
   .strict();
 
@@ -270,7 +287,7 @@ const RemoveTeamExternalGroupToolArgsSchema = z
   .object({
     team_id: UuidIdSchema.describe("The ID of the team."),
     group_id: UuidIdSchema.optional().describe(
-      "The ID of the external group mapping to remove.",
+      "The ID of the Team Sync group link to remove.",
     ),
     group_identifier: z
       .string()
@@ -406,9 +423,9 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: TOOL_LIST_TEAM_EXTERNAL_GROUPS_SHORT_NAME,
-    title: "List Team External Groups",
+    title: "List Team Sync Groups",
     description:
-      "List the external identity provider groups mapped to a team for SSO team sync. Requires an enterprise license.",
+      "List the identity provider groups linked to a team for Team Sync, with the team role each grants. Requires an enterprise license.",
     schema: ListTeamExternalGroupsToolArgsSchema,
     outputSchema: z.object({
       externalGroups: z.array(TeamExternalGroupOutputItemSchema),
@@ -419,9 +436,9 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: TOOL_ADD_TEAM_EXTERNAL_GROUP_SHORT_NAME,
-    title: "Add Team External Group",
+    title: "Link Team Sync Group",
     description:
-      "Map an external identity provider group to a team for SSO team sync: users whose SSO group memberships match are automatically added to or removed from the team on login. Requires an enterprise license.",
+      "Link an identity provider group to a team for Team Sync: on each sign-in, people in the group join the team with the link's team role, and leave it once they leave the group. Requires an enterprise license.",
     schema: AddTeamExternalGroupToolArgsSchema,
     outputSchema: z.object({
       externalGroup: TeamExternalGroupOutputItemSchema,
@@ -432,9 +449,9 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: TOOL_REMOVE_TEAM_EXTERNAL_GROUP_SHORT_NAME,
-    title: "Remove Team External Group",
+    title: "Unlink Team Sync Group",
     description:
-      "Remove an external group mapping from a team's SSO team sync, by mapping ID or by group identifier. Requires an enterprise license.",
+      "Unlink an identity provider group from a team's Team Sync, by link ID or by group identifier. Requires an enterprise license.",
     schema: RemoveTeamExternalGroupToolArgsSchema,
     outputSchema: z.object({
       success: z.literal(true),
@@ -508,7 +525,7 @@ async function assertCanReadTeam(
 }
 
 /**
- * Team-management access (memberships, external group sync), mapped to an MCP
+ * Team-management access (memberships, Team Sync), mapped to an MCP
  * result: allowed → null; denied → a permission error naming the attempted
  * action. Authorization itself lives in the shared service (org-level team
  * manager OR admin of that specific team).
@@ -551,6 +568,8 @@ function serializeExternalGroup(group: TeamExternalGroup) {
     id: group.id,
     teamId: group.teamId,
     groupIdentifier: group.groupIdentifier,
+    identityProviderId: group.identityProviderId,
+    role: group.role,
     createdAt: group.createdAt.toISOString(),
   };
 }
@@ -1202,7 +1221,7 @@ async function handleListTeamExternalGroups(params: {
     if (serialized.length === 0) {
       return structuredSuccessResult(
         { externalGroups: [] },
-        `Team "${team.name}" has no external group mappings.`,
+        `Team "${team.name}" has no Team Sync group links.`,
       );
     }
 
@@ -1212,7 +1231,7 @@ async function handleListTeamExternalGroups(params: {
 
     return structuredSuccessResult(
       { externalGroups: serialized },
-      `Team "${team.name}" has ${serialized.length} external group mapping(s):\n\n${formatted}`,
+      `Team "${team.name}" has ${serialized.length} Team Sync group link(s):\n\n${formatted}`,
     );
   } catch (error) {
     return catchError(error, "listing team external groups");
@@ -1247,10 +1266,24 @@ async function handleAddTeamExternalGroup(params: {
     const manageDenied = await assertCanManageTeam({
       context,
       teamId: team.id,
-      action: "manage this team's external group sync",
+      action: "manage this team's Team Sync",
     });
     if (manageDenied) {
       return manageDenied;
+    }
+
+    const identityProviderId = args.identity_provider_id ?? null;
+    if (identityProviderId) {
+      if (
+        !(await TeamModel.isIdentityProviderInOrganization({
+          identityProviderId,
+          organizationId: context.organizationId,
+        }))
+      ) {
+        return errorResult(
+          `Identity provider with ID ${identityProviderId} not found.`,
+        );
+      }
     }
 
     // Normalize the identifier to lowercase for case-insensitive matching,
@@ -1261,21 +1294,24 @@ async function handleAddTeamExternalGroup(params: {
     if (
       existingGroups.some(
         (group) =>
-          group.groupIdentifier.toLowerCase() === normalizedGroupIdentifier,
+          group.groupIdentifier.toLowerCase() === normalizedGroupIdentifier &&
+          group.identityProviderId === identityProviderId,
       )
     ) {
-      return errorResult("This external group is already mapped to this team.");
+      return errorResult("This group is already linked to this team.");
     }
 
-    const externalGroup = await TeamModel.addExternalGroup(
-      args.team_id,
-      normalizedGroupIdentifier,
-    );
+    const externalGroup = await TeamModel.addExternalGroup({
+      teamId: args.team_id,
+      groupIdentifier: normalizedGroupIdentifier,
+      identityProviderId,
+      role: args.role,
+    });
 
     const serialized = serializeExternalGroup(externalGroup);
     return structuredSuccessResult(
       { externalGroup: serialized },
-      `Successfully mapped external group "${serialized.groupIdentifier}" to team "${team.name}".\n\nMapping ID: ${serialized.id}`,
+      `Linked group "${serialized.groupIdentifier}" to team "${team.name}" as ${serialized.role}.\n\nLink ID: ${serialized.id}`,
     );
   } catch (error) {
     return catchError(error, "adding team external group");
@@ -1310,7 +1346,7 @@ async function handleRemoveTeamExternalGroup(params: {
     const manageDenied = await assertCanManageTeam({
       context,
       teamId: team.id,
-      action: "manage this team's external group sync",
+      action: "manage this team's Team Sync",
     });
     if (manageDenied) {
       return manageDenied;
@@ -1327,12 +1363,12 @@ async function handleRemoveTeamExternalGroup(params: {
         ));
 
     if (!removed) {
-      return errorResult("External group mapping not found.");
+      return errorResult("Team Sync group link not found.");
     }
 
     return structuredSuccessResult(
       { success: true, teamId: args.team_id },
-      `Successfully removed external group mapping from team "${team.name}".`,
+      `Successfully unlinked the group from team "${team.name}".`,
     );
   } catch (error) {
     return catchError(error, "removing team external group");

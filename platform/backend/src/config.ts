@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { isIP } from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1857,6 +1858,25 @@ export const parseSreApiServerCidrs = (
 };
 
 /**
+ * Parses `ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`: the cluster resolver
+ * address(es) MCP, agent and sandbox egress policies allow DNS to. Each entry
+ * becomes a single-host ipBlock on port 53, so anything that is not one IP
+ * address (a CIDR, a hostname) is dropped loudly rather than widening the rule.
+ *
+ * @public — exported for testability
+ */
+export const parseClusterDnsIps = (envValue: string | undefined): string[] => {
+  const entries = parseCommaSeparatedList(envValue ?? "");
+  const invalid = entries.filter((entry) => isIP(entry) === 0);
+  if (invalid.length > 0) {
+    logger.error(
+      `ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS ignoring entries that are not IP addresses: ${invalid.join(", ")}`,
+    );
+  }
+  return entries.filter((entry) => isIP(entry) !== 0);
+};
+
+/**
  * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
  * undefined when it is not one.
  *
@@ -2248,7 +2268,64 @@ const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,
 );
 
+/** @public — validated directly by configuration tests. */
+export function parseShutdownSeconds(
+  value: string | undefined,
+  fallback: number,
+  minimum = 1,
+  maximum = 86400,
+): number {
+  if (value === undefined) return fallback;
+  if (
+    !/^\d+$/.test(value) ||
+    !Number.isSafeInteger(Number(value)) ||
+    Number(value) < minimum ||
+    Number(value) > maximum
+  ) {
+    throw new Error(
+      `Shutdown durations must be integer seconds between ${minimum} and ${maximum}`,
+    );
+  }
+  return Number(value);
+}
+
+/** Validate resolved Secret/ConfigMap values before the server accepts work. */
+export function validateShutdownPodGrace(
+  podGraceSeconds: number | undefined,
+  drainSeconds: number,
+  cleanupSeconds: number,
+  workerSeconds: number,
+): void {
+  if (podGraceSeconds === undefined) return;
+  const required = Math.max(drainSeconds, workerSeconds) + cleanupSeconds + 40;
+  if (podGraceSeconds < required) {
+    throw new Error(
+      `Pod shutdown grace is ${podGraceSeconds}s but resolved shutdown durations require at least ${required}s. Increase archestra.terminationGracePeriodSeconds or reduce the configured shutdown durations.`,
+    );
+  }
+}
+
 const config = {
+  shutdown: {
+    podGraceSeconds:
+      process.env.ARCHESTRA_SERVER_POD_GRACE_SECONDS === undefined
+        ? undefined
+        : parseShutdownSeconds(
+            process.env.ARCHESTRA_SERVER_POD_GRACE_SECONDS,
+            120,
+            1,
+            Number.MAX_SAFE_INTEGER,
+          ),
+    drainSeconds: parseShutdownSeconds(
+      process.env.ARCHESTRA_SERVER_REQUEST_DRAIN_SECONDS,
+      60,
+    ),
+    cleanupSeconds: parseShutdownSeconds(
+      process.env.ARCHESTRA_SERVER_SHUTDOWN_CLEANUP_SECONDS,
+      20,
+      5,
+    ),
+  },
   openappa,
   frontendBaseUrl,
   api: {
@@ -3185,6 +3262,11 @@ const config = {
       clusterDomain:
         process.env.ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN ||
         "cluster.local",
+      // Cluster resolver IP(s) for egress-policy DNS rules. When set, they are
+      // used instead of discovering the kube-dns Service.
+      clusterDnsIps: parseClusterDnsIps(
+        process.env.ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS,
+      ),
       // Namespaces the platform ServiceAccount is granted RBAC in (Helm
       // rbac.environmentNamespaces). Surfaced to the UI so the environment
       // editor can offer a namespace dropdown instead of free text.
@@ -3253,6 +3335,14 @@ const config = {
     artifactBytesLimit: parsePositiveInt(
       process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
       DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+    ),
+    /**
+     * Days a headless (conversation-less, non-app) sandbox is kept after its
+     * last activity before the sweep deletes it. 0 keeps them forever.
+     */
+    headlessRetentionDays: parseNonNegativeInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_HEADLESS_RETENTION_DAYS,
+      7,
     ),
   },
   /**
@@ -3660,7 +3750,7 @@ const config = {
         .ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT,
       1,
     ),
-    taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
+    taskWorkerShutdownTimeoutSeconds: parseShutdownSeconds(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
       30,
     ),

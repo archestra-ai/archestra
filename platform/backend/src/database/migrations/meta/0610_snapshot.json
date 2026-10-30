@@ -1,5 +1,5 @@
 {
-  "id": "e16c0bad-273e-4ffd-b016-303a07e5748e",
+  "id": "c36475c9-e1ce-400f-9b12-19f2cd44e30f",
   "prevId": "93c0d2ed-6424-4b5e-bae1-11a5566042b6",
   "version": "7",
   "dialect": "postgresql",
@@ -4634,6 +4634,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "fast_model_id": {
+          "name": "fast_model_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "smart_model_id": {
+          "name": "smart_model_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "auto_routing_enabled": {
           "name": "auto_routing_enabled",
           "type": "boolean",
@@ -4644,6 +4656,24 @@
         "auto_routing_budget_usd_per_day": {
           "name": "auto_routing_budget_usd_per_day",
           "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_routing_fast_model_id": {
+          "name": "auto_routing_fast_model_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_routing_normal_model_id": {
+          "name": "auto_routing_normal_model_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_routing_smart_model_id": {
+          "name": "auto_routing_smart_model_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -4927,6 +4957,86 @@
           ],
           "isUnique": false,
           "where": "\"agents\".\"model_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_fast_model_id_idx": {
+          "name": "agents_fast_model_id_idx",
+          "columns": [
+            {
+              "expression": "fast_model_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"agents\".\"fast_model_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_smart_model_id_idx": {
+          "name": "agents_smart_model_id_idx",
+          "columns": [
+            {
+              "expression": "smart_model_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"agents\".\"smart_model_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_auto_routing_fast_model_id_idx": {
+          "name": "agents_auto_routing_fast_model_id_idx",
+          "columns": [
+            {
+              "expression": "auto_routing_fast_model_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"agents\".\"auto_routing_fast_model_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_auto_routing_normal_model_id_idx": {
+          "name": "agents_auto_routing_normal_model_id_idx",
+          "columns": [
+            {
+              "expression": "auto_routing_normal_model_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"agents\".\"auto_routing_normal_model_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_auto_routing_smart_model_id_idx": {
+          "name": "agents_auto_routing_smart_model_id_idx",
+          "columns": [
+            {
+              "expression": "auto_routing_smart_model_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"agents\".\"auto_routing_smart_model_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -5294,6 +5404,71 @@
           "tableTo": "model_pools",
           "columnsFrom": [
             "model_pool_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agents_fast_model_id_models_id_fk": {
+          "name": "agents_fast_model_id_models_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "models",
+          "columnsFrom": [
+            "fast_model_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agents_smart_model_id_models_id_fk": {
+          "name": "agents_smart_model_id_models_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "models",
+          "columnsFrom": [
+            "smart_model_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agents_auto_routing_fast_model_id_models_id_fk": {
+          "name": "agents_auto_routing_fast_model_id_models_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "models",
+          "columnsFrom": [
+            "auto_routing_fast_model_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agents_auto_routing_normal_model_id_models_id_fk": {
+          "name": "agents_auto_routing_normal_model_id_models_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "models",
+          "columnsFrom": [
+            "auto_routing_normal_model_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agents_auto_routing_smart_model_id_models_id_fk": {
+          "name": "agents_auto_routing_smart_model_id_models_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "models",
+          "columnsFrom": [
+            "auto_routing_smart_model_id"
           ],
           "columnsTo": [
             "id"
@@ -16285,6 +16460,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "team_managed": {
+          "name": "team_managed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "cleanup_interval": {
           "name": "cleanup_interval",
           "type": "varchar",
@@ -20940,69 +21122,6 @@
             "id"
           ],
           "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.org_trio_pending_normal_tier": {
-      "name": "org_trio_pending_normal_tier",
-      "schema": "",
-      "columns": {
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "normal_model_id": {
-          "name": "normal_model_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "api_key_id": {
-          "name": "api_key_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "auto_routing_was_enabled": {
-          "name": "auto_routing_was_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expected_default_model_id": {
-          "name": "expected_default_model_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expected_default_llm_api_key_id": {
-          "name": "expected_default_llm_api_key_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "org_trio_pending_normal_tier_organization_id_organization_id_fk": {
-          "name": "org_trio_pending_normal_tier_organization_id_organization_id_fk",
-          "tableFrom": "org_trio_pending_normal_tier",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -29315,6 +29434,19 @@
           "primaryKey": false,
           "notNull": true
         },
+        "identity_provider_id": {
+          "name": "identity_provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'member'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -29337,15 +29469,29 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "team_external_group_identity_provider_id_identity_provider_id_fk": {
+          "name": "team_external_group_identity_provider_id_identity_provider_id_fk",
+          "tableFrom": "team_external_group",
+          "tableTo": "identity_provider",
+          "columnsFrom": [
+            "identity_provider_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "team_external_group_team_group_unique": {
-          "name": "team_external_group_team_group_unique",
-          "nullsNotDistinct": false,
+        "team_external_group_team_provider_group_unique": {
+          "name": "team_external_group_team_provider_group_unique",
+          "nullsNotDistinct": true,
           "columns": [
             "team_id",
+            "identity_provider_id",
             "group_identifier"
           ]
         }
@@ -29471,6 +29617,13 @@
         },
         "synced_from_sso": {
           "name": "synced_from_sso",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "role_synced_from_sso": {
+          "name": "role_synced_from_sso",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

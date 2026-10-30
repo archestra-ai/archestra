@@ -433,11 +433,17 @@ export async function syncSsoTeams(
   try {
     const {
       added,
+      roleChanged,
       removed,
       matchedExternalGroupCount,
       matchedTeamCount,
       unmappedGroupCount,
-    } = await TeamModel.syncUserTeams(userId, organizationId, groups);
+    } = await TeamModel.syncUserTeams({
+      userId,
+      organizationId,
+      ssoGroups: groups,
+      identityProviderId: idpProvider.id,
+    });
 
     logger.info(
       {
@@ -451,12 +457,13 @@ export async function syncSsoTeams(
         matchedTeamCount,
         unmappedGroupCount,
         teamsAdded: added.length,
+        teamRolesChanged: roleChanged.length,
         teamsRemoved: removed.length,
       },
       "[syncSsoTeams] Evaluated IdP groups for team sync",
     );
 
-    if (added.length > 0 || removed.length > 0) {
+    if (added.length > 0 || roleChanged.length > 0 || removed.length > 0) {
       logger.info(
         {
           userId,
@@ -465,6 +472,7 @@ export async function syncSsoTeams(
           organizationId,
           groupCount: groups.length,
           teamsAdded: added.length,
+          teamRolesChanged: roleChanged.length,
           teamsRemoved: removed.length,
         },
         "[syncSsoTeams] SSO team sync completed - memberships changed",

@@ -42,7 +42,7 @@ const SHORT_ERRORS: Array<[RegExp, string]> = [
   ],
   [
     /doesn't allow Copilot requests from GitHub Apps/,
-    "No Copilot Business or Enterprise plan.",
+    "The organization doesn't allow Copilot requests from Apps.",
   ],
   [
     /^This plan is for (\S+), but the new App is installed on (\S+)\./,

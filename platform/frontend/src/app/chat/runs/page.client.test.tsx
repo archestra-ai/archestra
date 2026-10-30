@@ -97,7 +97,7 @@ describe("AgentRunChatSession", () => {
       },
     });
     const { rerender } = render(<AgentRunChatSession taskId="task-1" />);
-    await user.click(screen.getByRole("button", { name: "Resume" }));
+    await user.click(screen.getAllByRole("button", { name: "Resume" })[0]);
     expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
     expect(screen.queryByText("Retained run output")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More run actions" }));
@@ -114,7 +114,9 @@ describe("AgentRunChatSession", () => {
       },
     };
     rerender(<AgentRunChatSession taskId="task-1" />);
-    expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Resume" })[0],
+    ).toBeInTheDocument();
   });
 
   it("opens the shared terminal while the session is being created", () => {
@@ -181,7 +183,9 @@ describe("AgentRunChatSession", () => {
 
     expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Stop" })[0],
+    ).toBeInTheDocument();
     expect(terminalState.props).toMatchObject({
       showManualCommand: false,
       showDisconnectedStatus: false,

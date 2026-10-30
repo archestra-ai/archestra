@@ -68,6 +68,11 @@ require_platform_cwd() {
 # — so restarts stay fast.
 ensure_native_addons() {
   local platform_dir="$1" crate filters=()
+  # The addons CI built for this exact archestra-rs tree, when there are any
+  # (see scripts/napi-prebuilt.mjs); otherwise build what is missing.
+  if (cd "$platform_dir" && node scripts/napi-prebuilt.mjs app-runtime-rs sandbox-rs image-rs router-rs); then
+    return 0
+  fi
   for crate in app-runtime-rs sandbox-rs image-rs router-rs; do
     if ! ls "$platform_dir/archestra-rs/$crate"/*.node >/dev/null 2>&1; then
       filters+=("--filter" "@archestra/$crate")

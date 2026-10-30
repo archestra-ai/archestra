@@ -71,7 +71,7 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Minimal provider projection for the team External Group Sync section:
+   * Minimal provider projection for the team Team Sync section:
    * lets team admins pick a provider and see how group identifiers are
    * extracted without holding identityProvider:read. Exposes no provider
    * configuration or secrets (gated on team:read in the permission map).

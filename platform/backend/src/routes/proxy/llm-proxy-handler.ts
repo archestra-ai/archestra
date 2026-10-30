@@ -1195,6 +1195,9 @@ export async function handleLLMProxy<
     llmOauthClientId: authenticatedApp?.id,
     includeRuntime: hasProxyPlugins && enterpriseTier.isOpenappaActive(),
     userId,
+    // Only a credential-proven user attributes the call to their teams for
+    // team limits; the X-Archestra-User-Id hint cannot.
+    teamMemberUserId: authenticatedUserId ?? null,
     billingTeamId,
     virtualKeyId:
       authMethod === "virtual_key"
@@ -1280,6 +1283,7 @@ export async function handleLLMProxy<
         passthroughVirtualKeyId,
         llmOauthClientId: authenticatedApp?.id,
         billingTeamId,
+        teamMemberUserId: authenticatedUserId ?? null,
         agent: resolvedAgent,
         snapshot: requestContext,
       });
@@ -2099,9 +2103,10 @@ export async function handleLLMProxy<
     const billingEntities: BillingAttribution["entities"] = [
       { entityType: "organization", entityId: resolvedAgent.organizationId },
       { entityType: "agent", entityId: resolvedAgent.id },
-      ...(billingTeamId ? [billingTeamId] : teams.map((team) => team.id)).map(
-        (entityId) => ({ entityType: "team" as const, entityId }),
-      ),
+      ...requestContext.limitTeamIds.map((entityId) => ({
+        entityType: "team" as const,
+        entityId,
+      })),
     ];
     for (const [entityType, entityId] of [
       ["user", billingTeamId ? undefined : userId],

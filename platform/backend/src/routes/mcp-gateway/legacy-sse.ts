@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { LOOPBACK_HOST } from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
-
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import {
+  registerShutdownStream,
+  withDrainContinuation,
+} from "@/server/llm-proxy-drain";
 import { trackBackgroundWork } from "@/utils/background-work";
 import {
   MCP_PROTOCOL_VERSION_HEADER,
@@ -48,6 +51,7 @@ const HEADERS_NOT_FORWARDED = new Set([
   "te",
   "transfer-encoding",
   "upgrade",
+  "x-archestra-drain-continuation",
 ]);
 
 type JsonRpcMessage = Record<string, unknown>;
@@ -169,6 +173,7 @@ export async function openLegacySseStream(params: {
     connection: "keep-alive",
   });
   reply.raw.write(`event: endpoint\ndata: ${endpoint}\n\n`);
+  registerShutdownStream(request, reply);
 
   let closed = false;
   const write = (chunk: string): void => {
@@ -283,11 +288,15 @@ async function replayThroughGateway(params: {
 }): Promise<JsonRpcMessage | undefined> {
   const { request, profileId, message, requestId } = params;
 
-  const response = await fetch(gatewayLoopbackUrl(request, profileId), {
-    method: "POST",
-    headers: forwardedHeaders(request),
-    body: JSON.stringify(message),
-    signal: AbortSignal.timeout(REPLAY_TIMEOUT_MS),
+  const response = await withDrainContinuation(request, async (token) => {
+    const headers = forwardedHeaders(request);
+    if (token) headers.set("x-archestra-drain-continuation", token);
+    return fetch(gatewayLoopbackUrl(request, profileId), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(message),
+      signal: AbortSignal.timeout(REPLAY_TIMEOUT_MS),
+    });
   });
 
   // A notification or a client response gets 202 and no body: nothing to relay.

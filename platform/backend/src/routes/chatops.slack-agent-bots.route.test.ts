@@ -31,7 +31,9 @@ vi.mock("@/agents/chatops/chatops-manager", () => ({
 const { authTestMock } = vi.hoisted(() => ({
   authTestMock: vi.fn(() => Promise.resolve({ ok: true })),
 }));
-vi.mock("@slack/web-api", () => ({
+vi.mock("@slack/web-api", async (importOriginal) => ({
+  ErrorCode: (await importOriginal<typeof import("@slack/web-api")>())
+    .ErrorCode,
   WebClient: class {
     auth = { test: authTestMock };
     tooling = {
@@ -100,6 +102,10 @@ describe("Slack agent bots", () => {
       organizationId,
       name: "Marketing",
     });
+
+    vi.mocked(chatOpsManager.getSlackProvider).mockReturnValueOnce({
+      getBotUserId: () => "UBOT_TEST",
+    } as ReturnType<typeof chatOpsManager.getSlackProvider>);
 
     const response = await connect(agent.id, {
       botToken: "xoxb-marketing",

@@ -145,7 +145,7 @@ import {
   useMissingPermissions,
 } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useMyTeams, useTeams } from "@/lib/teams/team.query";
 
 vi.mock("@/components/loading", () => ({
   LoadingState: () => <div>Loading</div>,
@@ -334,6 +334,10 @@ vi.mock("@/lib/entity-labels.query");
 describe("LimitsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [],
+      isPending: false,
+    } as unknown as ReturnType<typeof useMyTeams>);
     // JSDOM has no layout/scroll API; keep the real Select behavior.
     Element.prototype.scrollIntoView = vi.fn();
     vi.mocked(usePathname).mockReturnValue("/llm/limits");
@@ -365,6 +369,110 @@ describe("LimitsPage", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("reuses the create form with only administered team scopes for a team admin", () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: Object.keys(permissions).length === 0,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [
+        { id: "team-a", name: "Platform", myRole: "admin" },
+        { id: "team-b", name: "Product", myRole: "member" },
+      ],
+      isPending: false,
+    } as unknown as ReturnType<typeof useMyTeams>);
+    render(<LimitsPage />);
+    const action = mockSetCostsAction.mock.calls.at(-1)?.[0];
+    render(action);
+    fireEvent.click(screen.getByRole("button", { name: "Add Limit" }));
+    expect(
+      screen.getByRole("combobox", { name: "Limit scope" }),
+    ).toHaveTextContent("Team");
+    fireEvent.click(screen.getByRole("combobox", { name: "Limit scope" }));
+    const scopes = screen.getByRole("listbox", { name: "Limit scope" });
+    expect(
+      within(scopes).getByRole("option", { name: /Organization/ }),
+    ).toBeDisabled();
+    expect(
+      within(scopes).getByRole("option", { name: /Virtual Key/ }),
+    ).toBeDisabled();
+    expect(
+      within(scopes).getByRole("option", { name: /Organization/ }),
+    ).toHaveTextContent("Requires organization-wide Limits permission.");
+    expect(within(scopes).getByRole("option", { name: /^Team/ })).toBeEnabled();
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Limit scope" }), {
+      key: "Escape",
+    });
+    fireEvent.change(screen.getByLabelText("Limit value"), {
+      target: { value: "250" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create limit" }));
+    expect(mockCreateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: "team",
+        entityId: "team-a",
+        limitValue: 250,
+      }),
+    );
+  });
+
+  it("lets a team admin change their own team limits but not one the organization set", () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: Object.keys(permissions).length === 0,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [{ id: "team-a", name: "Platform", myRole: "admin" }],
+      isPending: false,
+    } as unknown as ReturnType<typeof useMyTeams>);
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          ...limitRow({ id: "org-set", limitValue: 500 }),
+          entityType: "team",
+          entityId: "team-a",
+          teamManaged: false,
+        },
+        {
+          ...limitRow({ id: "team-set", limitValue: 100 }),
+          entityType: "team",
+          entityId: "team-a",
+          limitType: "requests",
+          teamManaged: true,
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    const orgRow = screen.getByTestId("data-table-row-org-set");
+    const teamRow = screen.getByTestId("data-table-row-team-set");
+    expect(
+      within(orgRow).getByRole("img", { name: "Set by your organization" }),
+    ).toBeInTheDocument();
+    for (const name of [/Edit limit/, /Delete limit/]) {
+      expect(within(orgRow).getByRole("button", { name })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+      expect(within(teamRow).getByRole("button", { name })).not.toHaveAttribute(
+        "aria-disabled",
+      );
+    }
+    expect(
+      within(teamRow).queryByRole("img", {
+        name: "Set by your organization",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a model carried from Costs even when it is absent from the provider catalog", () => {
@@ -1589,6 +1697,35 @@ describe("LimitsPage", () => {
         entityId: "agent-1",
         limitValue: 1000,
       }),
+    );
+  });
+
+  it("edits a limit's reason, and clears it when emptied", async () => {
+    const limit = {
+      ...limitRow({ id: "with-reason", limitValue: 1000 }),
+      reason: "Keep experiments in check",
+    };
+    mockUseLimits.mockReturnValue({ data: [limit], isPending: false });
+    const params = new URLSearchParams({ edit: limit.id });
+    mockDataTableSearchParams.mockReturnValue(params);
+    vi.mocked(useSearchParams).mockReturnValue(
+      params as unknown as ReturnType<typeof useSearchParams>,
+    );
+    render(<LimitsPage />);
+    await screen.findByText("Save changes");
+    const reason = screen.getByLabelText("Reason (optional)");
+    expect(reason).toHaveValue("Keep experiments in check");
+
+    fireEvent.change(reason, { target: { value: "  Quarterly budget  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(mockUpdateLimit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: limit.id, reason: "Quarterly budget" }),
+    );
+
+    fireEvent.change(reason, { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(mockUpdateLimit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: limit.id, reason: null }),
     );
   });
 

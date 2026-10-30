@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.5.0-rc.13" # x-release-please-version
+  imageTag: "1.5.0-rc.15" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -20,9 +20,16 @@ archestra:
   # as the HPA will manage the replica count dynamically
   replicaCount: 1
 
-  # Covers frontend stop, backend's 60s proxy drain / 80s shutdown deadline,
-  # and supervisord's 90s backend stop budget. Keep at least 120 seconds.
-  terminationGracePeriodSeconds: 120
+  # null derives max(request drain, worker timeout) + cleanup + 40 seconds.
+  # An explicit value must cover that budget. Applies to web and worker pods.
+  terminationGracePeriodSeconds: null
+  shutdown:
+    # null preserves envFrom, envFromSecrets and envWithValueFrom sources.
+    # Runtime defaults are 60s drain, 20s cleanup and 30s worker task timeout.
+    # Set explicit values here to override imported environment settings.
+    requestDrainSeconds: null
+    cleanupSeconds: null
+    workerTaskTimeoutSeconds: null
 
   # Optional database connection budgeting across all backend pods.
   # When configured, Helm divides the budget across peak web and worker pods,
@@ -389,6 +396,11 @@ archestra:
     # Image used by the wait-for-postgres init container.
     # Override to pull from a private registry when Docker Hub is inaccessible.
     busyboxImage: "docker.io/library/busybox:1.36"
+    # Optional registry (and mirror path prefix) replacing the image's registry.
+    # Preserves its repository and tag/digest, including future chart updates.
+    # Example: mirror.example.com/dockerhub -> mirror.example.com/dockerhub/library/busybox:1.36
+    # Empty keeps busyboxImage unchanged. Also applies to network policy probes.
+    busyboxImageRegistry: ""
 
     # Resource requests/limits applied to ALL init containers.
     # Required on clusters that enforce ResourceQuota (e.g., OpenShift restricted-v2 SCC).
@@ -531,7 +543,7 @@ archestra:
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
-    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.13" # x-release-please-version
+    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.15" # x-release-please-version
     baseImage: ""
 
     # Resource requests/limits applied to generated MCP server containers
@@ -589,6 +601,11 @@ archestra:
       # use a different libc. Override this with a static private mirror when
       # Docker Hub is unavailable.
       bootstrapImage: "docker.io/library/busybox:1.36-musl"
+      # Optional registry (and mirror path prefix), preserving the repository
+      # and static musl tag/digest from bootstrapImage as the chart is updated.
+      # Example: mirror.example.com -> mirror.example.com/library/busybox:1.36-musl
+      # Empty keeps bootstrapImage unchanged.
+      bootstrapImageRegistry: ""
 
       # Pull secrets in the MCP namespace that can fetch a private bootstrap
       # image. These are added alongside credentials required by MCP images.
@@ -619,6 +636,15 @@ archestra:
       # Kubernetes cluster DNS domain for internal service URL construction (streamable-http MCP servers)
       # If not set, defaults to cluster.local
       clusterDomain: ""
+
+      # Cluster resolver IP(s) that MCP server, agent and sandbox egress policies
+      # allow DNS (port 53) to. Leave empty to discover the kube-system/kube-dns
+      # Service (see rbac.kubeDnsServiceRead). Set it when that Service is not the
+      # resolver (NodeLocal DNSCache, custom DNS) or cannot be read.
+      # Example:
+      #   clusterDnsIps:
+      #     - 172.20.0.10
+      clusterDnsIps: []
 
       # Kubeconfig configuration
       # Choose one of the following methods:
@@ -675,6 +701,13 @@ archestra:
         # external RBAC supplies a readable Role with that name in every runtime
         # namespace and deletes each Role during release uninstall.
         create: true
+
+        # Grant the platform ServiceAccount `get` on the kube-system/kube-dns
+        # Service (a Role + RoleBinding in kube-system, scoped to that one
+        # object). Egress policies pin DNS to its ClusterIP. Without this read,
+        # and with no clusterDnsIps set, the AWS ApplicationNetworkPolicy DNS rule
+        # omits the DNS bootstrap exception. Requires rbac.create.
+        kubeDnsServiceRead: true
 
         # Kubernetes namespaces backing deployment environments that the platform
         # may deploy MCP servers into. The platform ServiceAccount only gets

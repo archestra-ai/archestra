@@ -111,7 +111,10 @@ vi.mock("@/components/mcp-app/app-settings-form", () => ({
 
 // ── Import component under test after mocks ───────────────────────────────────
 
-import { AppBridge } from "@modelcontextprotocol/ext-apps/app-bridge";
+import {
+  AppBridge,
+  PostMessageTransport,
+} from "@modelcontextprotocol/ext-apps/app-bridge";
 import {
   clearMcpAppGuestState,
   McpAppRuntime,
@@ -2883,6 +2886,731 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
     } finally {
       window.removeEventListener("message", onParentMessage);
       captureFrame.remove();
+    }
+  });
+
+  it("does not capture untouched [aria-pressed] toggles or click toggles while startup RPCs are in flight, and restores select filters in the same microtask before paint", async () => {
+    const proxyHtml = readFileSync(
+      join(__dirname, "../../../../backend/src/static/mcp-sandbox-proxy.html"),
+      "utf-8",
+    );
+    const bootstrapStart = proxyHtml.indexOf(
+      "function guestStateBootstrap(restored)",
+    );
+    const bootstrapEnd = proxyHtml.indexOf(
+      "function buildStatePreservationScript(restoredState)",
+    );
+    const bootstrapFnSource = `(${proxyHtml.slice(bootstrapStart, bootstrapEnd).trim()})`;
+
+    const syncedPayloads: Record<string, unknown>[] = [];
+    const onParentMessage = (event: MessageEvent) => {
+      const data = event.data as {
+        type?: unknown;
+        state?: Record<string, unknown>;
+      } | null;
+      if (data?.type === "mcp-apps:state-sync" && data.state) {
+        syncedPayloads.push(data.state);
+      }
+    };
+    window.addEventListener("message", onParentMessage);
+
+    const hostFrame = document.createElement("iframe");
+    document.body.appendChild(hostFrame);
+    const guestWin = hostFrame.contentWindow as Window & typeof globalThis;
+    const guestDoc = hostFrame.contentDocument as Document;
+
+    try {
+      // Static markup matches pm-board.ts before render(): #toggle-done-btn starts
+      // with aria-pressed="false", and render() mutates it to aria-pressed="true".
+      guestDoc.body.innerHTML = `
+        <div class="subbar">
+          <select id="filter-user"><option value="">All</option></select>
+          <select id="filter-client" hidden><option value="">All clients</option></select>
+          <button id="toggle-done-btn" aria-pressed="false">Hide done</button>
+        </div>
+      `;
+
+      vm.runInNewContext(`(${bootstrapFnSource})(null)`, {
+        window: guestWin,
+        document: guestDoc,
+        Element: guestWin.Element,
+        MutationObserver: guestWin.MutationObserver,
+        Event: guestWin.Event,
+        setTimeout: guestWin.setTimeout.bind(guestWin),
+        clearTimeout: guestWin.clearTimeout.bind(guestWin),
+        queueMicrotask: guestWin.queueMicrotask.bind(guestWin),
+        Object,
+        Array,
+        String,
+        Number,
+        JSON,
+        CSS: guestWin.CSS,
+      });
+
+      // Initial app render() mutates #toggle-done-btn to aria-pressed="true" and populates selects
+      const toggleDoneBtn = guestDoc.getElementById(
+        "toggle-done-btn",
+      ) as HTMLButtonElement;
+      toggleDoneBtn.setAttribute("aria-pressed", "true");
+      const filterUser = guestDoc.getElementById(
+        "filter-user",
+      ) as HTMLSelectElement;
+      filterUser.innerHTML =
+        '<option value="">All</option><option value="mark">@Mark</option>';
+
+      // User ONLY selects @Mark in #filter-user; never clicks #toggle-done-btn
+      filterUser.value = "mark";
+      filterUser.dispatchEvent(new guestWin.Event("change", { bubbles: true }));
+
+      await new Promise((r) => setTimeout(r, 40));
+      expect(syncedPayloads.length).toBeGreaterThan(0);
+      const snapshot = syncedPayloads[syncedPayloads.length - 1];
+      const controls = snapshot.controls as Record<string, unknown>;
+
+      // Untouched #toggle-done-btn must NOT be in captured controls
+      expect(controls["#toggle-done-btn"]).toBeUndefined();
+      expect(controls["#filter-user"]).toMatchObject({
+        kind: "form",
+        value: "mark",
+      });
+
+      // Now simulate reload of an SDK app where a toggle WAS saved, while startup RPCs are in flight
+      const reloadSnapshot = {
+        controls: {
+          "#filter-user": controls["#filter-user"],
+          "#toggle-done-btn": {
+            kind: "toggle",
+            selector: "#toggle-done-btn",
+            mode: "aria-pressed",
+            active: true,
+            isGroup: false,
+            label: "Hide done",
+          },
+        },
+      };
+
+      const reloadFrame = document.createElement("iframe");
+      document.body.appendChild(reloadFrame);
+      const reloadWin = reloadFrame.contentWindow as Window & typeof globalThis;
+      const reloadDoc = reloadFrame.contentDocument as Document;
+
+      try {
+        (
+          reloadWin as unknown as { __ARCHESTRA_APP_CONTEXT__: object }
+        ).__ARCHESTRA_APP_CONTEXT__ = {};
+        reloadDoc.body.innerHTML = `
+          <div class="subbar">
+            <select id="filter-user"><option value="">All</option></select>
+            <button id="toggle-done-btn" aria-pressed="false">Hide done</button>
+          </div>
+          <main id="list"></main>
+        `;
+
+        let prematureToggleClicks = 0;
+        let boardLoaded = false;
+        const reloadToggleBtn = reloadDoc.getElementById(
+          "toggle-done-btn",
+        ) as HTMLButtonElement;
+        reloadToggleBtn.addEventListener("click", () => {
+          if (!boardLoaded) {
+            prematureToggleClicks++;
+          }
+        });
+
+        const reloadUserSelect = reloadDoc.getElementById(
+          "filter-user",
+        ) as HTMLSelectElement;
+        const renderedFrames: string[] = [];
+        const renderBoard = () => {
+          const listEl = reloadDoc.getElementById("list");
+          if (listEl) {
+            listEl.textContent =
+              reloadUserSelect.value === "mark"
+                ? "Filtered: @Mark (6 tasks)"
+                : "Unfiltered: All (90 tasks)";
+          }
+        };
+        reloadUserSelect.addEventListener("change", () => {
+          renderBoard();
+        });
+
+        vm.runInNewContext(
+          `(${bootstrapFnSource})(${JSON.stringify(reloadSnapshot)})`,
+          {
+            window: reloadWin,
+            document: reloadDoc,
+            Element: reloadWin.Element,
+            MutationObserver: reloadWin.MutationObserver,
+            Event: reloadWin.Event,
+            setTimeout: reloadWin.setTimeout.bind(reloadWin),
+            clearTimeout: reloadWin.clearTimeout.bind(reloadWin),
+            queueMicrotask: reloadWin.queueMicrotask.bind(reloadWin),
+            Object,
+            Array,
+            String,
+            Number,
+            JSON,
+            CSS: reloadWin.CSS,
+          },
+        );
+
+        // Startup RPCs (list_custom_emoji + board_state) are in flight (count = 2)
+        reloadWin.dispatchEvent(
+          new reloadWin.MessageEvent("message", {
+            data: { type: "mcp-apps:rpc-flight", count: 2 },
+          }),
+        );
+        // Initialize handshake response arrives while RPCs are in flight
+        reloadWin.dispatchEvent(
+          new reloadWin.MessageEvent("message", {
+            data: {
+              jsonrpc: "2.0",
+              id: 1,
+              result: { protocolVersion: "2025-06-18", hostInfo: {} },
+            },
+          }),
+        );
+
+        await new Promise((r) => setTimeout(r, 50));
+        // Toggle must NOT be clicked while startup RPCs are in flight on the empty board
+        expect(prematureToggleClicks).toBe(0);
+
+        // Now board_state arrives: app sets aria-pressed="true", populates #filter-user, and calls renderBoard()
+        boardLoaded = true;
+        reloadWin.dispatchEvent(
+          new reloadWin.MessageEvent("message", {
+            data: { jsonrpc: "2.0", id: 2, result: { content: [] } },
+          }),
+        );
+        reloadToggleBtn.setAttribute("aria-pressed", "true");
+        reloadUserSelect.innerHTML =
+          '<option value="">All</option><option value="mark">@Mark</option>';
+        reloadUserSelect.value = "";
+        renderBoard();
+
+        // Record what the DOM looks like at the end of the microtask checkpoint (before macrotask/paint)
+        await Promise.resolve();
+        await Promise.resolve();
+        renderedFrames.push(
+          reloadDoc.getElementById("list")?.textContent ?? "",
+        );
+
+        expect(reloadUserSelect.value).toBe("mark");
+        expect(renderedFrames[0]).toBe("Filtered: @Mark (6 tasks)");
+        expect(prematureToggleClicks).toBe(0);
+      } finally {
+        reloadFrame.remove();
+      }
+    } finally {
+      window.removeEventListener("message", onParentMessage);
+      hostFrame.remove();
+    }
+  });
+
+  it("does not send a duplicate sendSandboxResourceReady when reload resources/read returns identical HTML/CSP, and keeps outgoing iframe visible until mcp-apps:guest-ready", async () => {
+    const user = userEvent.setup();
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    installBridgeCollector(bridgeInstances);
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const transportInstances: any[] = [];
+    (PostMessageTransport as ReturnType<typeof vi.fn>).mockImplementation(
+      function (this: Record<string, unknown>) {
+        this.close = vi.fn().mockReturnValue(Promise.resolve());
+        transportInstances.push(this);
+      },
+    );
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(
+        Response.json({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            contents: [
+              {
+                uri: defaultProps.uiResourceUri,
+                text: "<html><body><div>PM Board</div></body></html>",
+                _meta: {
+                  ui: {
+                    csp: { connectDomains: ["https://api.example.com"] },
+                    permissions: { clipboardWrite: {} },
+                  },
+                },
+              },
+            ],
+          },
+        }),
+      ),
+    );
+
+    try {
+      await act(async () => {
+        render(<McpAppSection {...defaultProps} surface="panel" />);
+      });
+
+      const firstIframe = document.querySelector("iframe");
+      if (!firstIframe) throw new Error("initial iframe did not mount");
+      await notifySandboxProxyReady(firstIframe);
+
+      await vi.waitFor(() => {
+        expect(
+          bridgeInstances[0].sendSandboxResourceReady,
+        ).toHaveBeenCalledTimes(1);
+      });
+      // Simulate detached onmessage where teardownResource never receives a reply
+      bridgeInstances[0].teardownResource.mockReturnValue(
+        new Promise(() => {}),
+      );
+
+      // Click Reload app (#1)
+      const reloadButton = screen.getByRole("button", { name: /reload app/i });
+      await act(async () => {
+        await user.click(reloadButton);
+      });
+
+      // Both outgoing and incoming iframes exist in container during reload transition;
+      // incoming iframe is first in DOM order and hidden until mcp-apps:guest-ready.
+      const allIframesDuringReload = Array.from(
+        document.querySelectorAll("iframe"),
+      );
+      expect(allIframesDuringReload).toHaveLength(2);
+      const intermediateIframe = allIframesDuringReload[0];
+      expect(intermediateIframe).not.toBe(firstIframe);
+      expect(intermediateIframe.style.opacity).toBe("0");
+      expect(firstIframe.isConnected).toBe(true);
+      await notifySandboxProxyReady(intermediateIframe);
+      bridgeInstances[1].teardownResource.mockReturnValue(
+        new Promise(() => {}),
+      );
+      // Outgoing bridge handlers reject calls immediately so the retained frame
+      // cannot run tools during overlap, and teardownResource waits until removal.
+      await expect(
+        bridgeInstances[0].oncalltool(
+          { name: "board_state", arguments: {} },
+          {},
+        ),
+      ).rejects.toThrow("MCP App bridge is closed");
+      expect(bridgeInstances[0].teardownResource).not.toHaveBeenCalled();
+      expect(transportInstances[0].close).not.toHaveBeenCalled();
+
+      // Click Reload app (#2) before intermediateIframe reveals -> firstIframe
+      // stays visible and intermediateIframe is discarded and its transport closed
+      // right away without waiting for teardownResource to settle.
+      await act(async () => {
+        await user.click(reloadButton);
+      });
+
+      const allIframesAfterSecondReload = Array.from(
+        document.querySelectorAll("iframe"),
+      );
+      expect(allIframesAfterSecondReload).toHaveLength(2);
+      const reloadedIframe = allIframesAfterSecondReload[0];
+      expect(reloadedIframe).not.toBe(firstIframe);
+      expect(reloadedIframe).not.toBe(intermediateIframe);
+      expect(intermediateIframe.isConnected).toBe(false);
+      expect(bridgeInstances[1].teardownResource).toHaveBeenCalledTimes(1);
+      expect(transportInstances[1].close).toHaveBeenCalledTimes(1);
+      expect(firstIframe.isConnected).toBe(true);
+      expect(firstIframe.style.opacity).toBe("");
+      expect(reloadedIframe.style.opacity).toBe("0");
+      expect(bridgeInstances[0].teardownResource).not.toHaveBeenCalled();
+      expect(transportInstances[0].close).not.toHaveBeenCalled();
+
+      await notifySandboxProxyReady(reloadedIframe);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+
+      // Must only call sendSandboxResourceReady ONCE on the reloaded bridge even
+      // though resources/read returned a fresh csp/permissions object reference.
+      expect(bridgeInstances[2].sendSandboxResourceReady).toHaveBeenCalledTimes(
+        1,
+      );
+
+      // Signal guest-ready from the reloaded iframe -> incoming iframe is revealed
+      // and outgoing iframe is torn down and its transport closed immediately.
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            source: reloadedIframe.contentWindow,
+            origin: SANDBOX_ORIGIN,
+            data: { type: "mcp-apps:guest-ready" },
+          }),
+        );
+      });
+
+      expect(reloadedIframe.style.opacity).toBe("");
+      expect(firstIframe.isConnected).toBe(false);
+      expect(bridgeInstances[0].teardownResource).toHaveBeenCalledTimes(1);
+      expect(transportInstances[0].close).toHaveBeenCalledTimes(1);
+      expect(document.querySelectorAll("iframe")).toHaveLength(1);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("shows immediate button and view reload progress during a delayed reload, waits for resources/read before sending resource ready, and clears progress on mcp-apps:guest-ready", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime.bind(vi),
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    installBridgeCollector(bridgeInstances);
+
+    let resolveReloadFetch: ((response: Response) => void) | null = null;
+    let fetchCallCount = 0;
+    const makeResourceResponse = (html: string) =>
+      Response.json({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          contents: [
+            {
+              uri: defaultProps.uiResourceUri,
+              text: html,
+            },
+          ],
+        },
+      });
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+      fetchCallCount += 1;
+      if (fetchCallCount === 1) {
+        return Promise.resolve(
+          makeResourceResponse("<html><body><div>v1</div></body></html>"),
+        );
+      }
+      return new Promise<Response>((resolve) => {
+        resolveReloadFetch = resolve;
+      });
+    });
+
+    try {
+      await act(async () => {
+        render(<McpAppSection {...defaultProps} surface="panel" />);
+      });
+
+      const firstIframe = document.querySelector("iframe");
+      if (!firstIframe) throw new Error("initial iframe did not mount");
+      await notifySandboxProxyReady(firstIframe);
+
+      await vi.waitFor(() => {
+        expect(
+          bridgeInstances[0].sendSandboxResourceReady,
+        ).toHaveBeenCalledTimes(1);
+      });
+
+      const reloadButton = screen.getByRole("button", { name: /reload app/i });
+      expect(reloadButton).not.toHaveAttribute("aria-busy");
+      expect(
+        screen.queryByTestId("mcp-app-reload-indicator"),
+      ).not.toBeInTheDocument();
+
+      // Click Reload app while the second resources/read request is held pending
+      await act(async () => {
+        await user.click(reloadButton);
+      });
+
+      // Immediately after click, both button and app view show reload progress
+      expect(reloadButton).toHaveAttribute("aria-busy", "true");
+      expect(reloadButton).toHaveAttribute("data-state", "active");
+      expect(reloadButton.querySelector("svg")).toHaveClass("animate-spin");
+      expect(
+        screen.getByTestId("mcp-app-reload-indicator"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("progressbar", { name: /reloading app/i }),
+      ).toBeInTheDocument();
+
+      const iframesDuringReload = Array.from(
+        document.querySelectorAll("iframe"),
+      );
+      expect(iframesDuringReload).toHaveLength(2);
+      const reloadedIframe = iframesDuringReload[0];
+
+      // Even if the incoming sandbox iframe reports proxy-ready before resources/read resolves
+      // and remains pending beyond the 2,600ms reveal fallback timeout, sendSandboxResourceReady
+      // must NOT be called with stale HTML and the outgoing frame + reload progress must remain visible.
+      await notifySandboxProxyReady(reloadedIframe);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2800);
+      });
+      expect(
+        bridgeInstances[1].sendSandboxResourceReady,
+      ).not.toHaveBeenCalled();
+      expect(firstIframe.isConnected).toBe(true);
+      expect(firstIframe.style.opacity).toBe("");
+      expect(reloadedIframe.style.opacity).toBe("0");
+      expect(reloadButton).toHaveAttribute("aria-busy", "true");
+      expect(
+        screen.getByTestId("mcp-app-reload-indicator"),
+      ).toBeInTheDocument();
+
+      // Resolve the delayed resources/read fetch
+      await act(async () => {
+        resolveReloadFetch?.(
+          makeResourceResponse("<html><body><div>v2</div></body></html>"),
+        );
+      });
+
+      await vi.waitFor(() => {
+        expect(
+          bridgeInstances[1].sendSandboxResourceReady,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            html: "<html><body><div>v2</div></body></html>",
+          }),
+        );
+      });
+
+      // Progress indicator stays visible until the incoming guest signals ready
+      expect(reloadButton).toHaveAttribute("aria-busy", "true");
+      expect(
+        screen.getByTestId("mcp-app-reload-indicator"),
+      ).toBeInTheDocument();
+
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            source: reloadedIframe.contentWindow,
+            origin: SANDBOX_ORIGIN,
+            data: { type: "mcp-apps:guest-ready" },
+          }),
+        );
+      });
+
+      expect(reloadButton).not.toHaveAttribute("aria-busy");
+      expect(reloadButton).not.toHaveAttribute("data-state");
+      expect(
+        screen.queryByTestId("mcp-app-reload-indicator"),
+      ).not.toBeInTheDocument();
+      expect(reloadedIframe.style.opacity).toBe("");
+      expect(firstIframe.isConnected).toBe(false);
+    } finally {
+      fetchSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("exposes the Reload app button on the inline surface and shows progress until guest-ready", async () => {
+    const user = userEvent.setup();
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    installBridgeCollector(bridgeInstances);
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="inline"
+          preloadedResource={{ html: "<html><body>Inline App</body></html>" }}
+        />,
+      );
+    });
+
+    const firstIframe = document.querySelector("iframe");
+    if (!firstIframe) throw new Error("initial inline iframe did not mount");
+    await notifySandboxProxyReady(firstIframe);
+
+    const reloadButton = screen.getByRole("button", { name: /reload app/i });
+    expect(reloadButton).toBeInTheDocument();
+
+    await act(async () => {
+      await user.click(reloadButton);
+    });
+
+    expect(reloadButton).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByTestId("mcp-app-reload-indicator")).toBeInTheDocument();
+
+    const reloadedIframe = document.querySelectorAll("iframe")[0];
+    await notifySandboxProxyReady(reloadedIframe);
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: reloadedIframe.contentWindow,
+          origin: SANDBOX_ORIGIN,
+          data: { type: "mcp-apps:guest-ready" },
+        }),
+      );
+    });
+
+    expect(reloadButton).not.toHaveAttribute("aria-busy");
+    expect(
+      screen.queryByTestId("mcp-app-reload-indicator"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("buffers intermediate height reductions on the hidden incoming iframe during inline reload and applies the final settled height on mcp-apps:guest-ready", async () => {
+    const user = userEvent.setup();
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    installBridgeCollector(bridgeInstances);
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="inline"
+          preloadedResource={{ html: "<html><body>Inline App</body></html>" }}
+        />,
+      );
+    });
+
+    const firstIframe = document.querySelector("iframe");
+    if (!firstIframe) throw new Error("initial inline iframe did not mount");
+    await notifySandboxProxyReady(firstIframe);
+
+    // Initial guest reports 238px height
+    await act(async () => {
+      bridgeInstances[0].onsizechange?.({ width: 640, height: 238 });
+    });
+    expect(firstIframe.style.height).toBe("238px");
+
+    const reloadButton = screen.getByRole("button", { name: /reload app/i });
+    await act(async () => {
+      await user.click(reloadButton);
+    });
+
+    const iframes = Array.from(document.querySelectorAll("iframe"));
+    expect(iframes).toHaveLength(2);
+    const reloadedIframe = iframes[0];
+    expect(reloadedIframe.style.opacity).toBe("0");
+    expect(reloadedIframe.style.height).toBe("238px");
+    expect(firstIframe.style.height).toBe("238px");
+
+    await notifySandboxProxyReady(reloadedIframe);
+
+    // Incoming guest reports an intermediate unhydrated height (120px) before guest-ready:
+    // neither the visible outgoing iframe nor the hidden incoming iframe may shrink to 120px.
+    await act(async () => {
+      bridgeInstances[1].onsizechange?.({ width: 640, height: 120 });
+    });
+    expect(firstIframe.style.height).toBe("238px");
+    expect(reloadedIframe.style.height).toBe("238px");
+
+    // When mcp-apps:guest-ready arrives with the hydrated height (238px), the incoming
+    // iframe reveals cleanly at 238px with zero intermediate collapse.
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: reloadedIframe.contentWindow,
+          origin: SANDBOX_ORIGIN,
+          data: { type: "mcp-apps:guest-ready", height: 238 },
+        }),
+      );
+    });
+
+    expect(reloadedIframe.style.opacity).toBe("");
+    expect(reloadedIframe.style.height).toBe("238px");
+    expect(firstIframe.isConnected).toBe(false);
+  });
+
+  it("completes two-frame guest readiness with a restored control and nonzero measured height without canceling animation frames", async () => {
+    const proxyHtml = readFileSync(
+      join(__dirname, "../../../../backend/src/static/mcp-sandbox-proxy.html"),
+      "utf-8",
+    );
+    const bootstrapStart = proxyHtml.indexOf(
+      "function guestStateBootstrap(restored)",
+    );
+    const bootstrapEnd = proxyHtml.indexOf(
+      "function buildStatePreservationScript(restoredState)",
+    );
+    const bootstrapFnSource = `(${proxyHtml.slice(bootstrapStart, bootstrapEnd).trim()})`;
+
+    const guestReadyMessages: { height?: number }[] = [];
+    const onParentMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: unknown; height?: number } | null;
+      if (data?.type === "mcp-apps:guest-ready") {
+        guestReadyMessages.push({ height: data.height });
+      }
+    };
+    window.addEventListener("message", onParentMessage);
+
+    const hostFrame = document.createElement("iframe");
+    document.body.appendChild(hostFrame);
+    const guestWin = hostFrame.contentWindow as Window & typeof globalThis;
+    const guestDoc = hostFrame.contentDocument as Document;
+
+    let rafCounter = 0;
+    let rafRequestCount = 0;
+    let rafCancelCount = 0;
+    const rafTimers = new Map<number, ReturnType<typeof setTimeout>>();
+    guestWin.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      const id = ++rafCounter;
+      rafRequestCount++;
+      const timer = setTimeout(() => {
+        rafTimers.delete(id);
+        cb(performance.now());
+      }, 17);
+      rafTimers.set(id, timer);
+      return id;
+    }) as typeof guestWin.requestAnimationFrame;
+    guestWin.cancelAnimationFrame = ((id: number) => {
+      const timer = rafTimers.get(id);
+      if (timer) {
+        clearTimeout(timer);
+        rafTimers.delete(id);
+        rafCancelCount++;
+      }
+    }) as typeof guestWin.cancelAnimationFrame;
+
+    try {
+      guestDoc.body.innerHTML = `<input id="search-input" type="text" value="" />`;
+      guestDoc.documentElement.getBoundingClientRect = () =>
+        ({ height: 238 }) as DOMRect;
+
+      const restoreState = {
+        contentHeight: 238,
+        controls: {
+          "#search-input": {
+            kind: "form",
+            selector: "#search-input",
+            tag: "input",
+            type: "text",
+            value: "blue",
+          },
+        },
+      };
+
+      vm.runInNewContext(
+        `(${bootstrapFnSource})(${JSON.stringify(restoreState)})`,
+        {
+          window: guestWin,
+          document: guestDoc,
+          Element: guestWin.Element,
+          MutationObserver: guestWin.MutationObserver,
+          Event: guestWin.Event,
+          setTimeout: guestWin.setTimeout.bind(guestWin),
+          clearTimeout: guestWin.clearTimeout.bind(guestWin),
+          queueMicrotask: guestWin.queueMicrotask.bind(guestWin),
+          Object,
+          Array,
+          String,
+          Number,
+          JSON,
+          CSS: guestWin.CSS,
+        },
+      );
+
+      await new Promise((r) => setTimeout(r, 120));
+
+      const searchInput = guestDoc.getElementById(
+        "search-input",
+      ) as HTMLInputElement;
+      expect(searchInput.value).toBe("blue");
+      expect(guestReadyMessages).toEqual([{ height: 238 }]);
+      expect(rafRequestCount).toBe(2);
+      expect(rafCancelCount).toBe(0);
+    } finally {
+      for (const timer of rafTimers.values()) {
+        clearTimeout(timer);
+      }
+      window.removeEventListener("message", onParentMessage);
+      hostFrame.remove();
     }
   });
 });

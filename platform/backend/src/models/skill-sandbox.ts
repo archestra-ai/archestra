@@ -1,4 +1,14 @@
-import { and, desc, eq } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  notExists,
+  sql,
+} from "drizzle-orm";
 import {
   ownerColumnsFromUserId,
   userIdFromOwnerColumns,
@@ -246,6 +256,46 @@ class SkillSandboxModel {
         ),
       );
     return row ?? null;
+  }
+
+  /**
+   * Delete up to `batchSize` headless sandboxes (no conversation, no app)
+   * created before `olderThan` with no replay activity since then. Children
+   * cascade; exported files keep their rows with `sandbox_id` nulled.
+   */
+  static async deleteStaleHeadless(params: {
+    olderThan: Date;
+    batchSize: number;
+  }): Promise<number> {
+    const sandboxes = schema.skillSandboxesTable;
+    const events = schema.skillSandboxReplayEventsTable;
+    const stale = db
+      .select({ id: sandboxes.id })
+      .from(sandboxes)
+      .where(
+        and(
+          isNull(sandboxes.conversationId),
+          isNull(sandboxes.appId),
+          lt(sandboxes.createdAt, params.olderThan),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(events)
+              .where(
+                and(
+                  eq(events.sandboxId, sandboxes.id),
+                  gte(events.createdAt, params.olderThan),
+                ),
+              ),
+          ),
+        ),
+      )
+      .limit(params.batchSize);
+    const deleted = await db
+      .delete(sandboxes)
+      .where(inArray(sandboxes.id, stale))
+      .returning({ id: sandboxes.id });
+    return deleted.length;
   }
 }
 

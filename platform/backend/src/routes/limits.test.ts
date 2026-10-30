@@ -16,10 +16,11 @@ describe("limits routes", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeAdmin }) => {
+  beforeEach(async ({ makeOrganization, makeAdmin, makeMember }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeAdmin();
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

@@ -1,12 +1,16 @@
 import { once } from "node:events";
 import { createServer, type Server } from "node:http";
+import { connect as connectTcp } from "node:net";
 import { type WebSocket as ServerSocket, WebSocket, WebSocketServer } from "ws";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { enterpriseTier } from "@/enterprise-tier";
 import { InteractionModel } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import LimitModel from "@/models/limit";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import {
   accessGrants,
@@ -15,6 +19,7 @@ import {
   describe,
   expect,
   test,
+  vi,
 } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { handleRealtimeUpgrade } from "./openai-realtime-proxy";
@@ -63,6 +68,9 @@ describe("OpenAI realtime sessions through the Model Router", () => {
             );
           socket.send(JSON.stringify(RESPONSE_DONE));
         }
+        // Server voice detection answers a committed turn on its own.
+        if (event.type === "input_audio_buffer.commit")
+          socket.send(JSON.stringify(RESPONSE_DONE));
       });
     });
     await once(upstream, "listening");
@@ -174,6 +182,29 @@ describe("OpenAI realtime sessions through the Model Router", () => {
 
   const events = new WeakMap<WebSocket, Record<string, unknown>[]>();
 
+  /** Sends a raw upgrade request; resolves with the response once the socket closes. */
+  async function rawUpgrade(path: string, headers: Record<string, string>) {
+    const socket = connectTcp(Number(new URL(origin).port), "127.0.0.1");
+    await once(socket, "connect");
+    const chunks: Buffer[] = [];
+    socket.on("data", (chunk: Buffer) => chunks.push(chunk));
+    socket.write(
+      `GET ${path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\n${Object.entries(
+        headers,
+      )
+        .map(([name, value]) => `${name}: ${value}\r\n`)
+        .join("")}\r\n`,
+    );
+    await once(socket, "close");
+    return Buffer.concat(chunks).toString();
+  }
+
+  /** Sends a frame the session logs, then completes one response. */
+  async function respond(socket: WebSocket) {
+    socket.send(JSON.stringify({ type: "response.create" }));
+    return nextEvent(socket, "response.done");
+  }
+
   /** The next event of a type, whether it already arrived or is still to come. */
   function nextEvent(socket: WebSocket, type: string) {
     const received = events.get(socket) ?? [];
@@ -200,6 +231,10 @@ describe("OpenAI realtime sessions through the Model Router", () => {
   }) => {
     const admin = await makeAdmin();
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    // Logs keep media only when the organization turns it on.
+    await OrganizationModel.patch(agent.organizationId, {
+      keepMediaInLogs: true,
+    });
     const key = await mappedKey({
       organizationId: agent.organizationId,
       makeSecret,
@@ -361,6 +396,202 @@ describe("OpenAI realtime sessions through the Model Router", () => {
       await connect(`${base}?model=openai:gpt-realtime-translate`, key.value),
     ).toMatchObject({ status: 422 });
     expect(upstreamConnections).toHaveLength(0);
+  });
+
+  test("a deeply nested frame neither crashes the backend nor reaches the log whole", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const key = await mappedKey({
+      organizationId: agent.organizationId,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const opened = await connect(
+      `${origin}/v1/model-router/${agent.id}/realtime?model=openai:gpt-realtime-2.1`,
+      key.value,
+    );
+    if (!("socket" in opened)) throw new Error(`Refused: ${opened.body}`);
+    const { socket } = opened;
+    await nextEvent(socket, "session.created");
+
+    let nested = '{"voice":"alloy"}';
+    for (let index = 0; index < 20_000; index++) nested = `{"a":${nested}}`;
+    socket.send(`{"type":"session.update","session":{"tools":${nested}}}`);
+    await nextEvent(socket, "session.updated");
+    await respond(socket);
+    socket.close();
+    await drainBackgroundWork();
+
+    const [row] = await InteractionModel.getAllInteractionsForProfile(agent.id);
+    expect(JSON.stringify(row.request)).toContain("[nested too deeply to log]");
+  });
+
+  test("keeps a bounded share of the typed text for the log", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const key = await mappedKey({
+      organizationId: agent.organizationId,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const opened = await connect(
+      `${origin}/v1/model-router/${agent.id}/realtime?model=openai:gpt-realtime-2.1`,
+      key.value,
+    );
+    if (!("socket" in opened)) throw new Error(`Refused: ${opened.body}`);
+    const { socket } = opened;
+    await nextEvent(socket, "session.created");
+    for (let index = 0; index < 40; index++)
+      socket.send(
+        JSON.stringify({
+          type: "conversation.item.create",
+          item: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "x".repeat(65_536) }],
+          },
+        }),
+      );
+    await respond(socket);
+    socket.close();
+    await drainBackgroundWork();
+
+    const [row] = await InteractionModel.getAllInteractionsForProfile(agent.id);
+    const inputText = (row.request as { input_text: string }).input_text;
+    expect(inputText.length).toBeLessThan(70_000);
+    expect(inputText.endsWith("[input truncated]")).toBe(true);
+  });
+
+  test("checks the budget before each response, and ends a session whose response spent it", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const key = await mappedKey({
+      organizationId: agent.organizationId,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const budget = await LimitModel.create({
+      entityType: "virtual_key",
+      entityId: key.virtualKey.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      lastCleanup: new Date(),
+    });
+    const url = `${origin}/v1/model-router/${agent.id}/realtime?model=openai:gpt-realtime-2.1`;
+    const budgetRefusal = (socket: WebSocket) =>
+      expect(events.get(socket)).toContainEqual(
+        expect.objectContaining({
+          type: "error",
+          error: expect.objectContaining({ code: "budget_exceeded" }),
+        }),
+      );
+
+    // A response the client asks for waits for the check.
+    const asked = await connect(url, key.value);
+    if (!("socket" in asked)) throw new Error(`Refused: ${asked.body}`);
+    await nextEvent(asked.socket, "session.created");
+    await respond(asked.socket);
+    await drainBackgroundWork();
+    await LimitModel.patch(budget.id, { limitValue: 0 });
+    const askedClosed = once(asked.socket, "close");
+    asked.socket.send(JSON.stringify({ type: "response.create" }));
+    expect((await askedClosed)[0]).toBe(1008);
+    budgetRefusal(asked.socket);
+    await drainBackgroundWork();
+    expect(
+      await InteractionModel.getAllInteractionsForProfile(agent.id),
+    ).toHaveLength(1);
+
+    // A response the model starts on its own ends the session once settled.
+    await LimitModel.patch(budget.id, { limitValue: 100 });
+    const automatic = await connect(url, key.value);
+    if (!("socket" in automatic)) throw new Error(`Refused: ${automatic.body}`);
+    await nextEvent(automatic.socket, "session.created");
+    await LimitModel.patch(budget.id, { limitValue: 0 });
+    const automaticClosed = once(automatic.socket, "close");
+    automatic.socket.send(
+      JSON.stringify({ type: "input_audio_buffer.commit" }),
+    );
+    expect((await automaticClosed)[0]).toBe(1008);
+    budgetRefusal(automatic.socket);
+  });
+
+  test("refuses a session while throughput limits or enforced Guardrails apply", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const key = await mappedKey({
+      organizationId: agent.organizationId,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const url = `${origin}/v1/model-router/${agent.id}/realtime?model=openai:gpt-realtime-2.1`;
+
+    vi.spyOn(enterpriseTier, "isOpenappaActive").mockReturnValue(true);
+    await GuardrailsDeploymentModel.setEnabled(true);
+    expect(await connect(url, key.value)).toMatchObject({
+      status: 403,
+      body: expect.stringContaining("Guardrails"),
+    });
+    await GuardrailsDeploymentModel.setEnabled(false);
+    vi.restoreAllMocks();
+
+    await LimitModel.create({
+      entityType: "organization",
+      entityId: agent.organizationId,
+      limitType: "requests_per_minute",
+      limitValue: 10,
+    });
+    expect(await connect(url, key.value)).toMatchObject({
+      status: 400,
+      body: expect.stringContaining("throughput limits"),
+    });
+    expect(upstreamConnections).toHaveLength(0);
+  });
+
+  test("dials OpenAI only for a valid handshake, and closes it when the upgrade fails", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const key = await mappedKey({
+      organizationId: agent.organizationId,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const path = `/v1/model-router/${agent.id}/realtime?model=openai:gpt-realtime-2.1`;
+
+    const invalidKey = await rawUpgrade(path, {
+      Authorization: `Bearer ${key.value}`,
+      "Sec-WebSocket-Key": "not-a-key",
+    });
+    expect(invalidKey).toMatch(/^HTTP\/1\.1 400 /);
+    expect(upstreamConnections).toHaveLength(0);
+
+    // A handshake the WebSocket server still refuses after OpenAI answered.
+    const refused = await rawUpgrade(path, {
+      Authorization: `Bearer ${key.value}`,
+      "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+      "Sec-WebSocket-Protocol": ",",
+    });
+    expect(refused).toMatch(/^HTTP\/1\.1 400 /);
+    await vi.waitFor(() =>
+      expect(
+        upstreamConnections.map(({ socket }) => socket.readyState),
+      ).toEqual([WebSocket.CLOSED]),
+    );
   });
 });
 

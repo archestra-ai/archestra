@@ -1,11 +1,12 @@
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
-import { WebSocket, WebSocketServer } from "ws";
+import { type RawData, WebSocket, WebSocketServer } from "ws";
 import config from "@/config";
 import logger from "@/logging";
 import { InteractionModel } from "@/models";
 import { LimitValidationService } from "@/models/limit";
 import ProxyRequestContextModel from "@/models/proxy-request-context";
+import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
 import {
   mediaTariffCovers,
   priceOpenAiRealtime,
@@ -43,10 +44,14 @@ import { LoggedAudioClip } from "../utils/logged-audio";
  * so a client pointed at Archestra lands here. The upgrade is admitted like a
  * Model Router request: the virtual key or LLM OAuth token names the provider
  * key, the model resolves through the router, and the caller's budgets are
- * checked before OpenAI sees anything. Frames then pass through unchanged in
- * both directions; the proxy only reads OpenAI's server events, logging one
- * interaction per `response.done` with its transcripts, usage and cost, and
- * settling the cost against the budgets the way a chat completion is.
+ * checked before OpenAI sees anything, and again before each response the
+ * client asks for. Frames then pass through unchanged in both directions; the
+ * proxy only reads OpenAI's server events, logging one interaction per
+ * `response.done` with its transcripts, usage and cost, and settling the cost
+ * against the budgets the way a chat completion is. A session closes once a
+ * response spends what its budget allows. Guardrails cannot review a
+ * session's tool calls and throughput limits cannot meter it, so a caller
+ * either applies to is refused.
  */
 
 const REALTIME_PATH =
@@ -55,6 +60,14 @@ const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 15_000;
 /** Realtime sessions can run long; this only bounds a session nobody uses. */
 const IDLE_TIMEOUT_MS = 30 * 60_000;
+/** The typed text one logged response keeps; longer input is cut and marked. */
+const MAX_LOGGED_INPUT_CHARS = 64 * 1024;
+const INPUT_TRUNCATED = "\n[input truncated]";
+/** How deep a logged session setting or output item goes; deeper is replaced. */
+const MAX_LOGGED_DEPTH = 32;
+const NESTED_TOO_DEEPLY = "[nested too deeply to log]";
+/** The checks `ws` makes on an upgrade, made before OpenAI is dialed. */
+const WEBSOCKET_KEY = /^[+/0-9A-Za-z]{22}==$/;
 
 const acceptor = new WebSocketServer({
   noServer: true,
@@ -84,9 +97,17 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
   const url = new URL(request.url ?? "/", "http://archestra.local");
   const match = REALTIME_PATH.exec(url.pathname);
   if (!match) throw new ApiError(404, "Not found.");
+  if (!isWebSocketHandshake(request))
+    throw new ApiError(400, "Invalid WebSocket handshake.");
+  // A client that leaves while the session is admitted gets no OpenAI socket.
+  let clientGone = false;
+  const leave = () => {
+    clientGone = true;
+  };
+  socket.once("close", leave);
   const [, route, agentId] = match;
   if (url.searchParams.has("call_id"))
-    throw new ApiError(400, "SIP calls are not served through Archestra.");
+    throw new ApiError(400, "SIP calls are not served through this gateway.");
   const requestedModel = url.searchParams.get("model")?.trim();
   if (!requestedModel)
     throw new ApiError(
@@ -157,6 +178,19 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
     snapshot: requestContext,
   });
   if (violation) throw new ApiError(402, violation[1]);
+  if (requestContext.throughputRules.length > 0)
+    throw new ApiError(
+      400,
+      "Realtime sessions are not available while throughput limits apply to this caller.",
+    );
+  const guardrails = await getGuardrailsDeploymentFromSnapshot({
+    row: requestContext.guardrails,
+  });
+  if (guardrails.active)
+    throw new ApiError(
+      403,
+      "Realtime sessions are not available while Guardrails are enforced: Guardrails cannot review a realtime session's tool calls.",
+    );
 
   const billingEntities: BillingAttribution["entities"] = [
     { entityType: "organization", entityId: agent.organizationId },
@@ -178,6 +212,25 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
     identity,
     modelId: resolution.modelId,
     providerApiKeyId: credential.mappedApiKey.providerApiKeyId,
+    // Fresh reads each time: a settled response may have spent the budget.
+    budgetRefusal: async () => {
+      try {
+        const spent = await LimitValidationService.checkLimitsBeforeRequest({
+          unpricedMediaModel: priced ? undefined : resolution.modelId,
+          agentId: agent.id,
+          userId: identity.userId,
+          virtualKeyId: identity.virtualKeyId,
+          llmOauthClientId: identity.authenticatedApp?.id,
+          billingTeamId: identity.billingTeamId,
+          teamMemberUserId: identity.userId ?? null,
+          agent,
+        });
+        return spent?.[1];
+      } catch (error) {
+        if (error instanceof ApiError) return error.message;
+        throw error;
+      }
+    },
     billingAttribution: {
       organizationId: agent.organizationId,
       environmentId: agent.environmentId,
@@ -201,6 +254,7 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
     upstreamUrl.searchParams.set(name, value);
   upstreamUrl.searchParams.set("model", resolution.modelId);
   const beta = request.headers["openai-beta"];
+  if (clientGone) return;
   const upstream = new WebSocket(upstreamUrl, {
     headers: {
       authorization: `Bearer ${credential.apiKey}`,
@@ -212,11 +266,8 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
   });
   // OpenAI speaks first (`session.created`), possibly in the same read as the
   // handshake; keep what arrives before the client socket exists.
-  const backlog: Array<{
-    data: Buffer | ArrayBuffer | Buffer[];
-    isBinary: boolean;
-  }> = [];
-  const hold = (data: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) =>
+  const backlog: Array<{ data: RawData; isBinary: boolean }> = [];
+  const hold = (data: RawData, isBinary: boolean) =>
     backlog.push({ data, isBinary });
   upstream.on("message", hold);
   await new Promise<void>((resolve, reject) => {
@@ -243,10 +294,31 @@ async function admit(request: IncomingMessage, socket: Duplex, head: Buffer) {
     );
   });
 
+  socket.off("close", leave);
+  if (clientGone) {
+    upstream.terminate();
+    return;
+  }
+  // `ws` closes the socket without calling back when it refuses the upgrade.
+  const abandon = () => upstream.terminate();
+  socket.once("close", abandon);
   acceptor.handleUpgrade(request, socket, head, (client) => {
+    socket.off("close", abandon);
     upstream.off("message", hold);
     bridge({ client, upstream, session, backlog });
   });
+}
+
+function isWebSocketHandshake(request: IncomingMessage): boolean {
+  const key = request.headers["sec-websocket-key"];
+  const version = request.headers["sec-websocket-version"];
+  return (
+    request.method === "GET" &&
+    request.headers.upgrade?.toLowerCase() === "websocket" &&
+    typeof key === "string" &&
+    WEBSOCKET_KEY.test(key.trim()) &&
+    (version === "8" || version === "13")
+  );
 }
 
 /** Pipes frames both ways; the upstream's text events feed the session log. */
@@ -254,7 +326,7 @@ function bridge(params: {
   client: WebSocket;
   upstream: WebSocket;
   session: RealtimeSession;
-  backlog: Array<{ data: Buffer | ArrayBuffer | Buffer[]; isBinary: boolean }>;
+  backlog: Array<{ data: RawData; isBinary: boolean }>;
 }) {
   const { client, upstream, session } = params;
   let idle = setTimeout(() => close(1001, "Idle session"), IDLE_TIMEOUT_MS);
@@ -265,22 +337,63 @@ function bridge(params: {
   const close = (code: number, reason: string) => {
     clearTimeout(idle);
     const safeCode =
-      code === 1000 || (code >= 3000 && code <= 4999) ? code : 1000;
+      code === 1000 || code === 1008 || (code >= 3000 && code <= 4999)
+        ? code
+        : 1000;
     if (client.readyState === WebSocket.OPEN) client.close(safeCode, reason);
     else if (client.readyState === WebSocket.CONNECTING) client.terminate();
     if (upstream.readyState === WebSocket.OPEN)
       upstream.close(safeCode, reason);
     else if (upstream.readyState === WebSocket.CONNECTING) upstream.terminate();
   };
-  client.on("message", (data, isBinary) => {
-    touch();
-    if (!isBinary) session.onClientEvent(data.toString());
+  // The budget check before a response is asynchronous; frames still reach
+  // OpenAI in the order the client sent them.
+  let forwarding = Promise.resolve();
+  const refuseResponse = (message: string) => {
+    if (client.readyState === WebSocket.OPEN)
+      client.send(
+        JSON.stringify({
+          type: "error",
+          error: {
+            type: "invalid_request_error",
+            code: "budget_exceeded",
+            message,
+          },
+        }),
+      );
+    close(1008, "Budget exhausted");
+  };
+  session.onBudgetSpent = refuseResponse;
+  const forward = async (data: RawData, isBinary: boolean) => {
+    if (
+      !isBinary &&
+      session.onClientEvent(data.toString()) === "response.create"
+    ) {
+      const refusal = await session.refusalBeforeResponse();
+      if (refusal) return refuseResponse(refusal);
+    }
     if (upstream.readyState === WebSocket.OPEN)
       upstream.send(data, { binary: isBinary });
-  });
-  const relay = (data: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) => {
+  };
+  client.on("message", (data, isBinary) => {
     touch();
-    if (!isBinary) session.onUpstreamEvent(data.toString());
+    forwarding = forwarding
+      .then(() => forward(data, isBinary))
+      .catch((error: unknown) => {
+        logger.warn({ error }, "Could not process a realtime client event");
+        close(1011, "Could not process an event");
+      });
+  });
+  const relay = (data: RawData, isBinary: boolean) => {
+    touch();
+    if (!isBinary) {
+      // The log is best effort; a frame it cannot read still reaches the client.
+      try {
+        session.onUpstreamEvent(data.toString());
+      } catch (error) {
+        logger.warn({ error }, "Could not log a realtime server event");
+      }
+    }
     if (client.readyState === WebSocket.OPEN)
       client.send(data, { binary: isBinary });
   };
@@ -328,6 +441,8 @@ function callerIdentity(auth: ModelRouterAuth): CallerIdentity {
 
 /** What one session logs: its settings, and one row per completed response. */
 class RealtimeSession {
+  /** Called when a settled response leaves the budget spent. */
+  onBudgetSpent?: (message: string) => void;
   private turn = 0;
   private session?: Record<string, unknown>;
   private inputText?: string;
@@ -341,6 +456,8 @@ class RealtimeSession {
   private readonly replyAudio = new Map<string, LoggedAudioClip>();
   private outputPcm = true;
   private outputRate = 24_000;
+  /** The responses logged and settled so far, in order. */
+  private settled: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly params: {
@@ -349,22 +466,31 @@ class RealtimeSession {
       modelId: string;
       providerApiKeyId: string;
       billingAttribution: BillingAttribution;
+      /** Why the caller's budgets refuse another response, if they do. */
+      budgetRefusal: () => Promise<string | undefined>;
     },
   ) {}
 
-  onClientEvent(text: string) {
+  /** Notes what the client sent for the log; returns the event's type. */
+  onClientEvent(text: string): string | undefined {
     const event = parseEvent(text);
-    if (!event) return;
+    if (!event) return undefined;
     if (event.type === "session.update" && isRecord(event.session)) {
       this.session = withoutAudio(event.session);
       this.noteOutputFormat(event.session);
     }
     if (event.type === "conversation.item.create" && isRecord(event.item)) {
       const text = userInputText(event.item);
-      if (text)
-        this.inputText = this.inputText ? `${this.inputText}\n${text}` : text;
+      if (text) this.noteInputText(text);
     }
     if (event.type === "response.create") this.turnStartedAt = Date.now();
+    return event.type as string;
+  }
+
+  /** Settles the responses already done, then checks the budget again. */
+  async refusalBeforeResponse(): Promise<string | undefined> {
+    await this.settled;
+    return this.params.budgetRefusal();
   }
 
   onUpstreamEvent(text: string) {
@@ -405,22 +531,45 @@ class RealtimeSession {
       const turn = this.turn;
       const startedAt = this.turnStartedAt;
       this.turnStartedAt = Date.now();
+      const recorded = this.record({
+        response,
+        turn,
+        inputText,
+        inputTranscript,
+        replyAudio,
+        startedAt,
+      }).catch((error) => {
+        logger.warn(
+          { error, model: this.params.modelId },
+          "Could not log a realtime response",
+        );
+      });
+      this.settled = this.settled.then(() => recorded);
+      // Responses the model starts on its own, such as after the user stops
+      // speaking, ask for no check; a spent budget ends the session instead.
       trackBackgroundWork(
-        this.record({
-          response,
-          turn,
-          inputText,
-          inputTranscript,
-          replyAudio,
-          startedAt,
-        }).catch((error) => {
-          logger.warn(
-            { error, model: this.params.modelId },
-            "Could not log a realtime response",
-          );
-        }),
+        recorded
+          .then(() => this.params.budgetRefusal())
+          .then((refusal) => {
+            if (refusal) this.onBudgetSpent?.(refusal);
+          })
+          .catch((error) => {
+            logger.warn(
+              { error, model: this.params.modelId },
+              "Could not check a realtime session's budget",
+            );
+          }),
       );
     }
+  }
+
+  /** Keeps the typed text up to the log's limit, marking where it was cut. */
+  private noteInputText(text: string) {
+    const joined = this.inputText ? `${this.inputText}\n${text}` : text;
+    this.inputText =
+      joined.length > MAX_LOGGED_INPUT_CHARS
+        ? `${joined.slice(0, MAX_LOGGED_INPUT_CHARS)}${INPUT_TRUNCATED}`
+        : joined;
   }
 
   /** The session's output audio format, from either the GA or beta shape. */
@@ -571,19 +720,29 @@ function numberOr(value: unknown, fallback: number): number {
     : fallback;
 }
 
-/** Audio never enters the log: base64 `audio` and `data` fields are dropped at every depth. */
-function withoutAudio(value: Record<string, unknown>): Record<string, unknown> {
+/**
+ * Audio never enters the log: base64 `audio` and `data` fields are dropped at
+ * every depth, and content deeper than the log keeps is replaced.
+ */
+function withoutAudio(
+  value: Record<string, unknown>,
+  depth = 0,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
     if (key === "audio" && typeof item === "string") continue;
     if (key === "data" && typeof item === "string") continue;
-    out[key] = Array.isArray(item)
-      ? item.map((entry) => (isRecord(entry) ? withoutAudio(entry) : entry))
-      : isRecord(item)
-        ? withoutAudio(item)
-        : item;
+    out[key] = loggable(item, depth + 1);
   }
   return out;
+}
+
+function loggable(value: unknown, depth: number): unknown {
+  if (typeof value !== "object" || value === null) return value;
+  if (depth >= MAX_LOGGED_DEPTH) return NESTED_TOO_DEEPLY;
+  return Array.isArray(value)
+    ? value.map((item) => loggable(item, depth + 1))
+    : withoutAudio(value as Record<string, unknown>, depth);
 }
 
 /** The text of a user message item the client created (`input_text` parts). */

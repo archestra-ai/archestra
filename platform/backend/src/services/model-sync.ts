@@ -887,6 +887,7 @@ export function resolveModelCapabilities(params: {
         crossProviderMetadata?.contextLength ??
         null,
       outputLength:
+        fetched?.outputLength ??
         capabilities?.outputLength ??
         inferredCapabilities.outputLength ??
         crossProviderMetadata?.outputLength ??

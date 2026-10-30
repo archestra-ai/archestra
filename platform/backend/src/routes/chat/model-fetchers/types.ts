@@ -36,6 +36,8 @@ export function modelFetchError(
  */
 export interface FetchedModelCapabilities {
   contextLength?: number | null;
+  /** Maximum generation length published by the serving endpoint. */
+  outputLength?: number | null;
   supportsToolCalling?: boolean | null;
   /**
    * What the model accepts / emits, when the provider publishes it per model

@@ -136,4 +136,6 @@ Archestra fills in each model's prices, context window, and input types for you.
 | **Max output tokens** | How long one answer can be. Without it, a turn asks for 8,192 tokens, which can cut a long answer short. |
 | **Modalities** | Which files chat sends to the model, and which models you can pick for [embedding](/docs/knowledge/settings#embedding-model) and [OCR](/docs/knowledge/settings#document-ocr). A file the model cannot read goes to the conversation's **Files** panel instead. |
 
+For an OpenAI connection to a gateway, model refreshes import its published output-token limits. If no limit is available, set **Max output tokens** yourself.
+
 To change one, go to **Models**, edit the model, and open its **Pricing**, **Limits**, or **Modalities** tab. Your values stay through model refreshes. Clear a field to use the synced value again.

@@ -250,6 +250,94 @@ describe("OpenAI proxy reasoning effort", () => {
   });
 });
 
+describe("OpenAI proxy spoken replies", () => {
+  const server = useMswServer();
+
+  // A gpt-audio answer has no text content: its words are the transcript
+  // under `audio`, beside the base64 WAV. The client receives both; the log
+  // keeps the transcript and drops the audio, which would otherwise make
+  // every spoken turn's row the size of the recording.
+  test("returns the audio to the client and logs only its transcript", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Spoken Reply Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const wav = "UklGRiQAAABXQVZF".repeat(64);
+    server.use(
+      http.post("https://api.openai.com/v1/chat/completions", () =>
+        HttpResponse.json({
+          id: "chatcmpl-audio",
+          object: "chat.completion",
+          created: 1700000000,
+          model: "gpt-audio",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: null,
+                refusal: null,
+                audio: {
+                  id: "audio_1",
+                  data: wav,
+                  expires_at: 1700003600,
+                  transcript: "Hello from Archestra.",
+                },
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+          usage: { prompt_tokens: 16, completion_tokens: 60, total_tokens: 76 },
+        }),
+      ),
+    );
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": await makePassthroughCredential({
+            organizationId: agent.organizationId,
+            ownerId: owner.id,
+          }),
+        },
+        payload: {
+          model: "gpt-audio",
+          modalities: ["text", "audio"],
+          audio: { voice: "alloy", format: "wav" },
+          messages: [{ role: "user", content: "Say hello." }],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().choices[0].message.audio.data).toBe(wav);
+
+      const [row] = await InteractionModel.getAllInteractionsForProfile(
+        agent.id,
+      );
+      const logged = (
+        row.response as { choices: Array<{ message: { audio: unknown } }> }
+      ).choices[0].message.audio;
+      expect(logged).toEqual({
+        id: "audio_1",
+        expires_at: 1700003600,
+        transcript: "Hello from Archestra.",
+      });
+      expect(JSON.stringify(row)).not.toContain("UklGR");
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe("OpenAI proxy streaming", () => {
   let openAiStubOptions: { interruptAtChunk?: number };
 

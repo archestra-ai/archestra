@@ -260,15 +260,19 @@ class SkillSandboxModel {
 
   /**
    * Delete up to `batchSize` headless sandboxes (no conversation, no app)
-   * created before `olderThan` with no replay activity since then. Children
-   * cascade; exported files keep their rows with `sandbox_id` nulled.
+   * created more than `retentionDays` ago with no replay activity since then.
+   * Children cascade; exported files keep their rows with `sandbox_id` nulled.
+   *
+   * The cutoff is computed in SQL: `created_at` is `timestamp without time
+   * zone` stamped by the database, so a JS Date would shift by its offset.
    */
   static async deleteStaleHeadless(params: {
-    olderThan: Date;
+    retentionDays: number;
     batchSize: number;
   }): Promise<number> {
     const sandboxes = schema.skillSandboxesTable;
     const events = schema.skillSandboxReplayEventsTable;
+    const cutoff = sql`now()::timestamp - make_interval(days => ${params.retentionDays})`;
     const stale = db
       .select({ id: sandboxes.id })
       .from(sandboxes)
@@ -276,7 +280,7 @@ class SkillSandboxModel {
         and(
           isNull(sandboxes.conversationId),
           isNull(sandboxes.appId),
-          lt(sandboxes.createdAt, params.olderThan),
+          lt(sandboxes.createdAt, cutoff),
           notExists(
             db
               .select({ one: sql`1` })
@@ -284,7 +288,7 @@ class SkillSandboxModel {
               .where(
                 and(
                   eq(events.sandboxId, sandboxes.id),
-                  gte(events.createdAt, params.olderThan),
+                  gte(events.createdAt, cutoff),
                 ),
               ),
           ),

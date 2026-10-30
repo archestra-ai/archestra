@@ -51960,6 +51960,7 @@ export type GetConnectionHealthResponses = {
         mcp?: 'ok' | 'down';
         llm?: 'ok' | 'down';
         guardVersion: number;
+        mcpToolPrefix: string;
     };
 };
 

@@ -180,6 +180,7 @@ describe("A2AManager full task mode", () => {
       agentId: agent.id,
       actorKind: actor.kind,
       actorId: actor.id,
+      runtimeLimits: null,
       actorUserId: actor.id,
       title: "Recovered task",
       pinnedAt: null,

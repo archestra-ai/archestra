@@ -45,6 +45,17 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/organization.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/organization.query")>()),
+  // An administrator resized tier M; the form shows the organization's size.
+  useOrganization: () => ({
+    data: {
+      agentRuntimeTiers: {
+        M: { cpuRequest: "750m", memoryRequest: "2Gi", memoryLimit: "6Gi" },
+      },
+    },
+  }),
+}));
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
@@ -108,11 +119,7 @@ describe("AgentRuntimeFields", () => {
           defaultTtlHours: 36,
           defaultIdleTimeoutMinutes: 45,
           allowPrivileged: false,
-          resources: {
-            cpuRequest: "750m",
-            memoryRequest: "2Gi",
-            memoryLimit: "6Gi",
-          },
+          defaultTier: "M",
         };
       }
       return undefined;
@@ -156,6 +163,16 @@ describe("AgentRuntimeFields", () => {
       "placeholder",
       "6Gi (default)",
     );
+    // The largest size offers only sizes at or above the size, and a run may
+    // then ask for any of them.
+    await user.click(screen.getByLabelText("Largest size"));
+    expect(
+      screen.queryByRole("option", { name: /^S:/ }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /^L:/ }));
+    expect(
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}").maxTier,
+    ).toBe("L");
     expect(screen.getByLabelText("Ports to forward")).toHaveValue("");
     await user.type(screen.getByLabelText("Ports to forward"), "3000, 9000");
     expect(

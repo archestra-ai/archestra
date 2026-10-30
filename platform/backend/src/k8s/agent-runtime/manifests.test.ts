@@ -27,6 +27,8 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
   privileged: false,
   nodeSelector: {},
   resources: { cpuRequest: "500m", memoryRequest: "1Gi", memoryLimit: "4Gi" },
+  tier: null,
+  warmTiers: [],
   env: {
     ARCHESTRA_AGENT_RUNTIME_AGENT_ID: "11111111-2222-3333-4444-555555555555",
   },

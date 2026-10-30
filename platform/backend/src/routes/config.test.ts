@@ -242,7 +242,10 @@ describe("config routes", () => {
         name: "kubernetes",
         available: false,
         defaultTtlHours: config.agentRuntime.defaultTtlHours,
+        defaultTier: "M",
       });
+      // Tier sizes are organization settings, not public config.
+      expect(missing.features.agentRuntimeBackend).not.toHaveProperty("tiers");
 
       sandboxInstalled.mockReturnValue(true);
       const installed = (

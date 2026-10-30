@@ -101,6 +101,8 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
         ...specBase,
         taskId: task.id,
         frozenName: workloadName,
+        tier: null,
+        warmTiers: [],
         env: { ARCHESTRA_AGENT_RUNTIME_TASK_ID: task.id },
         command: [
           "/bin/sh",

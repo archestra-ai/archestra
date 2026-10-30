@@ -77,6 +77,9 @@ beforeEach(() => {
   vi.mocked(useAppName).mockReturnValue("Test Platform");
   vi.mocked(useAppIconLogo).mockReturnValue("/logo-icon.svg");
   server.use(
+    http.get(`${origin}/api/agent-runtime-templates`, () =>
+      HttpResponse.json([]),
+    ),
     http.get(`${origin}/api/organization`, () =>
       HttpResponse.json(organization),
     ),

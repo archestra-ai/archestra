@@ -92,7 +92,7 @@ class AgentRuntimeTemplateModel {
           },
         })
         .where(eq(schema.organizationsTable.id, params.organizationId))
-        .returning();
+        .returning(OrganizationModel.columns);
       return updated ?? null;
     });
     await OrganizationModel.invalidateSettingsCaches(params.organizationId);
@@ -107,6 +107,7 @@ class AgentRuntimeTemplateModel {
       popularAgentOverrides: settings.popularAgentOverrides,
       templates: settings.templates.map(({ runtime, ...template }) => ({
         ...template,
+        icon: template.icon ? "(set)" : null,
         runtime: {
           ...runtime,
           environment:

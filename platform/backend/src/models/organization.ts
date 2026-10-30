@@ -9,7 +9,7 @@ import {
   type SupportedProvider,
   TimeInMs,
 } from "@archestra/shared";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, isNull } from "drizzle-orm";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
@@ -29,7 +29,32 @@ export type IntegrationOverrideColumns = {
   knowledgeConnectorOverrides: KnowledgeConnectorOverrides | null;
 };
 
+const {
+  runtimeTemplateSettings: _runtimeTemplateSettings,
+  ...organizationColumns
+} = getTableColumns(schema.organizationsTable);
+
 class OrganizationModel {
+<<<<<<< HEAD
+=======
+  /** General organization reads must not load private runtime configurations. */
+  static readonly columns = organizationColumns;
+  /** Read only when provisioning a new personal assistant or gateway. */
+  static async getDefaultPersonalAgentAccessAllTools(
+    organizationId: string,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({
+        accessAllTools:
+          schema.organizationsTable.defaultPersonalAgentAccessAllTools,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, organizationId))
+      .limit(1);
+    return row?.accessAllTools ?? true;
+  }
+
+>>>>>>> 4397412e2 (fix(agents): isolate runtime template data and recover stale settings)
   /**
    * Process-local cache for {@link getAppearanceSettings}. The appearance
    * settings back white-labeling on the unauthenticated login page (and every
@@ -79,7 +104,7 @@ class OrganizationModel {
    */
   static async findWithAnonymousSkillMarketplace(): Promise<Organization | null> {
     const [organization] = await db
-      .select()
+      .select(OrganizationModel.columns)
       .from(schema.organizationsTable)
       .where(
         eq(schema.organizationsTable.skillMarketplaceAnonymousAccess, true),
@@ -98,7 +123,7 @@ class OrganizationModel {
   static async getFirst(): Promise<Organization | null> {
     logger.debug("OrganizationModel.getFirst: fetching first organization");
     const [organization] = await db
-      .select()
+      .select(OrganizationModel.columns)
       .from(schema.organizationsTable)
       .limit(1);
     logger.debug(
@@ -178,7 +203,7 @@ class OrganizationModel {
         })
         // A concurrently booting replica may have created it first.
         .onConflictDoNothing()
-        .returning();
+        .returning(OrganizationModel.columns);
       if (!organization) return null;
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -298,6 +323,23 @@ class OrganizationModel {
     return updatedOrganization || null;
   }
 
+<<<<<<< HEAD
+=======
+  /** Used by the browser policy's cluster fence; cache invalidation follows commit. */
+  static async patchInTransaction(params: {
+    id: string;
+    data: Partial<Organization>;
+    tx?: Transaction;
+  }): Promise<Organization | null> {
+    const [row] = await (params.tx ?? db)
+      .update(schema.organizationsTable)
+      .set(params.data)
+      .where(eq(schema.organizationsTable.id, params.id))
+      .returning(OrganizationModel.columns);
+    return row ?? null;
+  }
+
+>>>>>>> 4397412e2 (fix(agents): isolate runtime template data and recover stale settings)
   static async invalidateSettingsCaches(id: string): Promise<void> {
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
@@ -509,7 +551,7 @@ class OrganizationModel {
   static async getById(id: string): Promise<Organization | null> {
     logger.debug({ id }, "OrganizationModel.getById: fetching organization");
     const [organization] = await db
-      .select()
+      .select(OrganizationModel.columns)
       .from(schema.organizationsTable)
       .where(eq(schema.organizationsTable.id, id))
       .limit(1);

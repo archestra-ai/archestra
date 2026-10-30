@@ -321,7 +321,7 @@ describe("run tools", () => {
     });
     const sendMessage = vi.spyOn(A2AManager.prototype, "sendMessage");
     for (const [limits, message] of [
-      [{ tier: "L" }, "Tier L is above this Agent's tier M"],
+      [{ tier: "L" }, "Tier L is above this Agent's largest tier M"],
       [
         { max_duration_hours: 24 },
         "maximum duration of 24 hours is above this Agent's 12",
@@ -336,6 +336,65 @@ describe("run tools", () => {
       expect((result.content[0] as { text: string }).text).toContain(message);
     }
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  test("a run moves its work to a larger run of its own Agent, up to the Agent's largest tier", async ({
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    // A lite worker: runs start at M and may ask for up to L.
+    const worker = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        tier: "M",
+        maxTier: "L",
+        environment: null,
+        credentials: [],
+        ttlHours: 12,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    // Like the Lobster workers, it holds the run tools itself.
+    await seedAndAssignArchestraTools(worker.id);
+    // The launch itself is out of scope: stop right after the hand-off.
+    const sendMessage = vi
+      .spyOn(A2AManager.prototype, "sendMessage")
+      .mockRejectedValue(new Error("launch skipped in this test"));
+    // The caller is a run of that same Agent.
+    const fromWorker = {
+      ...context,
+      agent: { id: worker.id, name: worker.name },
+      agentId: worker.id,
+    };
+    const result = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: worker.id,
+        message:
+          "Continue on branch feature/x at L: the build needs more memory",
+        limits: { tier: "L" },
+      },
+      fromWorker,
+    );
+    // It failed only in the stubbed launch, after every rule let it through.
+    expect((result.content[0] as { text: string }).text).toContain(
+      "while starting the run",
+    );
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0]?.[0]).toMatchObject({
+      agentId: worker.id,
+      systemParams: { runtimeLimits: { tier: "L" } },
+    });
   });
 
   test("start_agent_run refuses an Agent without Agent Runtime and starts nothing", async ({

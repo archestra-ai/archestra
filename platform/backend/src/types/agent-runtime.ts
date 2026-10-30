@@ -268,6 +268,12 @@ export const AgentRuntimeSchema = z.object({
    * means M. Explicit `resources` replace the tier for custom images.
    */
   tier: AgentRuntimeTierSchema.nullable().optional(),
+  /**
+   * Largest tier a caller may ask for when it starts a run, so a run can move
+   * its work to a larger run of the same Agent. Absent means the Agent's
+   * tier; a value below it counts as the Agent's tier.
+   */
+  maxTier: AgentRuntimeTierSchema.nullable().optional(),
   /** Container ports users can forward from an active workspace. */
   ports: z.array(z.number().int().min(1).max(65_535)).max(20).optional(),
   environment: z.array(AgentRuntimeEnvironmentEntrySchema).nullable(),

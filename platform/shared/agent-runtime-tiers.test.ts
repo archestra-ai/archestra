@@ -10,30 +10,30 @@ describe("resolveAgentRuntimeTiers", () => {
   test("gives the code defaults when the organization sets nothing", () => {
     expect(resolveAgentRuntimeTiers(null)).toEqual(DEFAULT_AGENT_RUNTIME_TIERS);
     expect(DEFAULT_AGENT_RUNTIME_TIERS.L).toEqual({
-      cpuRequest: "4",
+      cpuRequest: "8",
       cpuLimit: null,
-      memoryRequest: "8Gi",
-      memoryLimit: "16Gi",
+      memoryRequest: "16Gi",
+      memoryLimit: "32Gi",
       warmPoolSize: 0,
     });
   });
 
   test("replaces only the fields an administrator set", () => {
     const tiers = resolveAgentRuntimeTiers({
-      L: { cpuRequest: "6", memoryLimit: "24Gi", warmPoolSize: 1 },
-      S: { cpuLimit: "1" },
+      L: { cpuRequest: "12", memoryLimit: "48Gi", warmPoolSize: 1 },
+      S: { cpuLimit: "2" },
     });
     expect(tiers.L).toEqual({
-      cpuRequest: "6",
+      cpuRequest: "12",
       cpuLimit: null,
-      memoryRequest: "8Gi",
-      memoryLimit: "24Gi",
+      memoryRequest: "16Gi",
+      memoryLimit: "48Gi",
       warmPoolSize: 1,
     });
-    expect(tiers.S.cpuLimit).toBe("1");
+    expect(tiers.S.cpuLimit).toBe("2");
     expect(tiers.M).toEqual(DEFAULT_AGENT_RUNTIME_TIERS.M);
     // The defaults themselves are never mutated.
-    expect(DEFAULT_AGENT_RUNTIME_TIERS.L.cpuRequest).toBe("4");
+    expect(DEFAULT_AGENT_RUNTIME_TIERS.L.cpuRequest).toBe("8");
   });
 
   test("ignores stored values that do not validate", () => {
@@ -89,27 +89,27 @@ describe("agentRuntimeTierProblems", () => {
   });
 
   test("names a larger tier whose memory or CPU limit is lower than the tier below it", () => {
-    // M requests more than S but would cap a promoted S run at 6Gi instead of S's 8Gi.
+    // M requests more than S but would cap a promoted S run at 10Gi instead of S's 12Gi.
     expect(
       agentRuntimeTierProblems(
         resolveAgentRuntimeTiers({
-          S: { memoryLimit: "8Gi" },
-          M: { memoryLimit: "6Gi" },
+          S: { memoryLimit: "12Gi" },
+          M: { memoryLimit: "10Gi" },
         }),
       ),
     ).toEqual(["Tier M has a lower memory limit than tier S"]);
     // A CPU limit on M where S has none, or a lower one than S's, is lower too.
     expect(
       agentRuntimeTierProblems(
-        resolveAgentRuntimeTiers({ M: { cpuLimit: "4" } }),
+        resolveAgentRuntimeTiers({ M: { cpuLimit: "6" } }),
       ),
     ).toEqual(["Tier M limits CPU and tier S does not"]);
     expect(
       agentRuntimeTierProblems(
         resolveAgentRuntimeTiers({
-          S: { cpuLimit: "2" },
-          M: { cpuLimit: "1500m" },
-          L: { cpuLimit: "8" },
+          S: { cpuLimit: "4" },
+          M: { cpuLimit: "3500m" },
+          L: { cpuLimit: "16" },
         }),
       ),
     ).toEqual([
@@ -120,9 +120,9 @@ describe("agentRuntimeTierProblems", () => {
     expect(
       agentRuntimeTierProblems(
         resolveAgentRuntimeTiers({
-          S: { cpuLimit: "1" },
-          M: { cpuLimit: "2" },
-          L: { cpuLimit: "4" },
+          S: { cpuLimit: "2" },
+          M: { cpuLimit: "4" },
+          L: { cpuLimit: "8" },
         }),
       ),
     ).toEqual([]);
@@ -130,7 +130,7 @@ describe("agentRuntimeTierProblems", () => {
 
   test("compares binary and decimal units by value", () => {
     const tiers = resolveAgentRuntimeTiers({
-      M: { memoryRequest: "4096Mi", memoryLimit: "8G" },
+      M: { memoryRequest: "8192Mi", memoryLimit: "16G" },
     });
     expect(agentRuntimeTierProblems(tiers)).toEqual([]);
   });

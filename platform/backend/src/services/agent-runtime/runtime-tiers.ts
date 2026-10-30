@@ -45,7 +45,7 @@ export function tierResources(
   };
 }
 
-type SizedRuntime = Pick<AgentRuntime, "resources" | "tier">;
+type SizedRuntime = Pick<AgentRuntime, "resources" | "tier" | "maxTier">;
 
 /** The tier an Agent's runs get, or null when it sizes them with explicit resources. */
 export function agentRuntimeTier(
@@ -53,6 +53,19 @@ export function agentRuntimeTier(
 ): AgentRuntimeTier | null {
   if (runtime.resources) return null;
   return runtime.tier ?? DEFAULT_AGENT_RUNTIME_TIER;
+}
+
+/**
+ * The largest tier a caller may ask for: the Agent's `maxTier`, never below
+ * its own tier. Null when the Agent sizes its runs with explicit resources.
+ */
+export function agentRuntimeMaxTier(
+  runtime: SizedRuntime,
+): AgentRuntimeTier | null {
+  const tier = agentRuntimeTier(runtime);
+  if (tier === null) return null;
+  const max = runtime.maxTier ?? tier;
+  return tierRank(max) > tierRank(tier) ? max : tier;
 }
 
 function tierRank(tier: AgentRuntimeTier): number {
@@ -107,13 +120,19 @@ export function warmPoolReplicas(
 export function resolveAgentRunLimits(params: {
   runtime: Pick<
     AgentRuntime,
-    "resources" | "tier" | "idleTimeoutMinutes" | "ttlHours" | "maxCostUsd"
+    | "resources"
+    | "tier"
+    | "maxTier"
+    | "idleTimeoutMinutes"
+    | "ttlHours"
+    | "maxCostUsd"
   >;
   requested?: AgentRunLimitsRequest | null;
 }): AgentRunLimits {
   const { runtime } = params;
   const requested = params.requested ?? {};
   const agentTier = agentRuntimeTier(runtime);
+  const maxTier = agentRuntimeMaxTier(runtime);
   const idleTimeoutMinutes =
     runtime.idleTimeoutMinutes ?? config.agentRuntime.defaultIdleTimeoutMinutes;
   const maxDurationHours =
@@ -125,10 +144,10 @@ export function resolveAgentRunLimits(params: {
         400,
         "This Agent sizes its runs with explicit resources, so a run cannot choose a tier",
       );
-    if (tierRank(requested.tier) > tierRank(agentTier))
+    if (maxTier !== null && tierRank(requested.tier) > tierRank(maxTier))
       throw new ApiError(
         400,
-        `Tier ${requested.tier} is above this Agent's tier ${agentTier}`,
+        `Tier ${requested.tier} is above this Agent's largest tier ${maxTier}`,
       );
   }
   if (

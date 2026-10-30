@@ -5,6 +5,7 @@ import {
 import { afterEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import {
+  agentRuntimeMaxTier,
   agentRuntimeTier,
   resolveAgentRunLimits,
   resolveRunResources,
@@ -29,14 +30,14 @@ describe("runtime tiers", () => {
     ).toBeNull();
     const tiers = DEFAULT_AGENT_RUNTIME_TIERS;
     expect(resolveRunResources(DEFAULTS, "S", tiers)).toEqual({
-      cpuRequest: "1",
-      memoryRequest: "2Gi",
-      memoryLimit: "4Gi",
-    });
-    expect(resolveRunResources(DEFAULTS, null, tiers)).toEqual({
       cpuRequest: "2",
       memoryRequest: "4Gi",
       memoryLimit: "8Gi",
+    });
+    expect(resolveRunResources(DEFAULTS, null, tiers)).toEqual({
+      cpuRequest: "4",
+      memoryRequest: "8Gi",
+      memoryLimit: "16Gi",
     });
     expect(
       resolveRunResources(
@@ -49,14 +50,47 @@ describe("runtime tiers", () => {
 
   test("a run gets its tier's size in the organization, CPU limit included when an administrator set one", () => {
     const tiers = resolveAgentRuntimeTiers({
-      L: { cpuRequest: "6", cpuLimit: "8", memoryLimit: "24Gi" },
+      L: { cpuRequest: "12", cpuLimit: "16", memoryLimit: "48Gi" },
     });
     expect(resolveRunResources(DEFAULTS, "L", tiers)).toEqual({
-      cpuRequest: "6",
-      cpuLimit: "8",
-      memoryRequest: "8Gi",
-      memoryLimit: "24Gi",
+      cpuRequest: "12",
+      cpuLimit: "16",
+      memoryRequest: "16Gi",
+      memoryLimit: "48Gi",
     });
+  });
+
+  test("a run may ask for any tier up to the Agent's largest tier, which never falls below the Agent's own", () => {
+    // A lite worker: runs start at M, and a run can move its work to S or L.
+    const worker = { ...DEFAULTS, tier: "M" as const, maxTier: "L" as const };
+    expect(agentRuntimeMaxTier(worker)).toBe("L");
+    expect(resolveAgentRunLimits({ runtime: worker }).tier).toBe("M");
+    expect(
+      resolveAgentRunLimits({ runtime: worker, requested: { tier: "L" } }).tier,
+    ).toBe("L");
+    expect(
+      resolveAgentRunLimits({ runtime: worker, requested: { tier: "S" } }).tier,
+    ).toBe("S");
+    // Without a largest tier the Agent's own tier is the ceiling, as before.
+    expect(agentRuntimeMaxTier({ ...DEFAULTS, tier: "S" })).toBe("S");
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: { ...DEFAULTS, tier: "S" },
+        requested: { tier: "M" },
+      }),
+    ).toThrow("Tier M is above this Agent's largest tier S");
+    // A largest tier below the Agent's own tier counts as the Agent's tier.
+    expect(agentRuntimeMaxTier({ ...DEFAULTS, tier: "M", maxTier: "S" })).toBe(
+      "M",
+    );
+    // Explicit resources: no tiers at all.
+    expect(
+      agentRuntimeMaxTier({
+        ...DEFAULTS,
+        resources: { cpuRequest: "7" },
+        maxTier: "L",
+      }),
+    ).toBeNull();
   });
 
   test("a warm Sandbox may come from the requested tier, then the larger neighbour within the Agent's, never a smaller one", () => {
@@ -161,7 +195,7 @@ describe("runtime tiers", () => {
         runtime: { ...DEFAULTS, tier: "M" },
         requested: { tier: "L" },
       }),
-    ).toThrow("Tier L is above this Agent's tier M");
+    ).toThrow("Tier L is above this Agent's largest tier M");
     expect(() =>
       resolveAgentRunLimits({
         runtime: { ...DEFAULTS, resources: { cpuRequest: "7" } },

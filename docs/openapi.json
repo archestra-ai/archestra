@@ -61728,6 +61728,15 @@
                                           "L"
                                         ]
                                       },
+                                      "maxTier": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "S",
+                                          "M",
+                                          "L"
+                                        ]
+                                      },
                                       "ports": {
                                         "maxItems": 20,
                                         "type": "array",
@@ -63484,6 +63493,15 @@
                                   "L"
                                 ]
                               },
+                              "maxTier": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "S",
+                                  "M",
+                                  "L"
+                                ]
+                              },
                               "ports": {
                                 "maxItems": 20,
                                 "type": "array",
@@ -64594,6 +64612,15 @@
                           "L"
                         ]
                       },
+                      "maxTier": {
+                        "nullable": true,
+                        "type": "string",
+                        "enum": [
+                          "S",
+                          "M",
+                          "L"
+                        ]
+                      },
                       "ports": {
                         "maxItems": 20,
                         "type": "array",
@@ -65407,6 +65434,15 @@
                           "additionalProperties": false
                         },
                         "tier": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "S",
+                            "M",
+                            "L"
+                          ]
+                        },
+                        "maxTier": {
                           "nullable": true,
                           "type": "string",
                           "enum": [
@@ -67066,6 +67102,15 @@
                               "L"
                             ]
                           },
+                          "maxTier": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "S",
+                              "M",
+                              "L"
+                            ]
+                          },
                           "ports": {
                             "maxItems": 20,
                             "type": "array",
@@ -67714,6 +67759,15 @@
                                 "additionalProperties": false
                               },
                               "tier": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "S",
+                                  "M",
+                                  "L"
+                                ]
+                              },
+                              "maxTier": {
                                 "nullable": true,
                                 "type": "string",
                                 "enum": [
@@ -68408,6 +68462,15 @@
                                 "additionalProperties": false
                               },
                               "tier": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "S",
+                                  "M",
+                                  "L"
+                                ]
+                              },
+                              "maxTier": {
                                 "nullable": true,
                                 "type": "string",
                                 "enum": [
@@ -69251,6 +69314,15 @@
                                 "additionalProperties": false
                               },
                               "tier": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "S",
+                                  "M",
+                                  "L"
+                                ]
+                              },
+                              "maxTier": {
                                 "nullable": true,
                                 "type": "string",
                                 "enum": [
@@ -70735,6 +70807,15 @@
                             "L"
                           ]
                         },
+                        "maxTier": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "S",
+                            "M",
+                            "L"
+                          ]
+                        },
                         "ports": {
                           "maxItems": 20,
                           "type": "array",
@@ -72180,6 +72261,15 @@
                                 "L"
                               ]
                             },
+                            "maxTier": {
+                              "nullable": true,
+                              "type": "string",
+                              "enum": [
+                                "S",
+                                "M",
+                                "L"
+                              ]
+                            },
                             "ports": {
                               "maxItems": 20,
                               "type": "array",
@@ -73298,6 +73388,15 @@
                             "L"
                           ]
                         },
+                        "maxTier": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "S",
+                            "M",
+                            "L"
+                          ]
+                        },
                         "ports": {
                           "maxItems": 20,
                           "type": "array",
@@ -74340,6 +74439,15 @@
                           "L"
                         ]
                       },
+                      "maxTier": {
+                        "nullable": true,
+                        "type": "string",
+                        "enum": [
+                          "S",
+                          "M",
+                          "L"
+                        ]
+                      },
                       "ports": {
                         "maxItems": 20,
                         "type": "array",
@@ -74888,6 +74996,15 @@
                           "additionalProperties": false
                         },
                         "tier": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "S",
+                            "M",
+                            "L"
+                          ]
+                        },
+                        "maxTier": {
                           "nullable": true,
                           "type": "string",
                           "enum": [
@@ -77645,6 +77762,15 @@
                             "L"
                           ]
                         },
+                        "maxTier": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "S",
+                            "M",
+                            "L"
+                          ]
+                        },
                         "ports": {
                           "maxItems": 20,
                           "type": "array",
@@ -78872,6 +78998,15 @@
                           "additionalProperties": false
                         },
                         "tier": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "S",
+                            "M",
+                            "L"
+                          ]
+                        },
+                        "maxTier": {
                           "nullable": true,
                           "type": "string",
                           "enum": [
@@ -86918,6 +87053,15 @@
                           "additionalProperties": false
                         },
                         "tier": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "S",
+                            "M",
+                            "L"
+                          ]
+                        },
+                        "maxTier": {
                           "nullable": true,
                           "type": "string",
                           "enum": [
@@ -154218,6 +154362,15 @@
                                   "L"
                                 ]
                               },
+                              "maxTier": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "S",
+                                  "M",
+                                  "L"
+                                ]
+                              },
                               "ports": {
                                 "maxItems": 20,
                                 "type": "array",
@@ -155236,6 +155389,15 @@
                                   "additionalProperties": false
                                 },
                                 "tier": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "S",
+                                    "M",
+                                    "L"
+                                  ]
+                                },
+                                "maxTier": {
                                   "nullable": true,
                                   "type": "string",
                                   "enum": [
@@ -157320,6 +157482,15 @@
                                       "L"
                                     ]
                                   },
+                                  "maxTier": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "enum": [
+                                      "S",
+                                      "M",
+                                      "L"
+                                    ]
+                                  },
                                   "ports": {
                                     "maxItems": 20,
                                     "type": "array",
@@ -158338,6 +158509,15 @@
                                       "additionalProperties": false
                                     },
                                     "tier": {
+                                      "nullable": true,
+                                      "type": "string",
+                                      "enum": [
+                                        "S",
+                                        "M",
+                                        "L"
+                                      ]
+                                    },
+                                    "maxTier": {
                                       "nullable": true,
                                       "type": "string",
                                       "enum": [

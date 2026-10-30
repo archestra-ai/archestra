@@ -1653,8 +1653,8 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `attachments[].name` | `string` | Yes |  |
 | `attachments[].contentType` | `string` | Yes |  |
 | `attachments[].contentBase64` | `string` | Yes |  |
-| `limits` | `object` | No | Limits for this run, each at or below the Agent's own; a larger value is refused with the maximum named. Omit to take the Agent's defaults. |
-| `limits.tier` | `"S" \| "M" \| "L"` | No | Container size: S (a review or a script), M (a dev stack and tests) or L (a full stack with Docker), as the organization sizes them. At or below the Agent's tier. |
+| `limits` | `object` | No | Limits for this run, each at or below the Agent's own (for the tier, its largest tier); a larger value is refused with the maximum named. Omit to take the Agent's defaults. |
+| `limits.tier` | `"S" \| "M" \| "L"` | No | Container size, as the organization sizes them: S (a review, a script, light edits), M (a dev stack and tests; the usual default) or L (large builds and test suites, or work that ran out of memory at M). At or below the Agent's largest tier ($ARCHESTRA_AGENT_RUNTIME_MAX_TIER inside a run). To move work to another size, start a run of the same Agent at that tier and hand over the branch. |
 | `limits.idle_timeout_minutes` | `integer` | No |  |
 | `limits.max_duration_hours` | `integer` | No | Hours until the run and its saved files end. Keep it short for work that nobody continues. |
 | `limits.max_cost_usd` | `integer` | No |  |
@@ -1903,6 +1903,7 @@ Required RBAC permission: [`agent:create`](/docs/reference/permissions#agent:cre
 | `runtime.privileged` | `boolean` | No |  |
 | `runtime.resources` | `object \| null` | No |  |
 | `runtime.tier` | `"S" \| "M" \| "L" \| null` | No |  |
+| `runtime.maxTier` | `"S" \| "M" \| "L" \| null` | No |  |
 | `runtime.ports` | `integer[]` | No |  |
 | `runtime.environment` | `object[] \| null` | No |  |
 | `runtime.credentials` | `object[] \| null` | No |  |
@@ -1975,6 +1976,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `runtime.resources.cpuLimit` | `string` | No |  |
 | `runtime.resources.memoryLimit` | `string` | No |  |
 | `runtime.tier` | `"S" \| "M" \| "L" \| null` | No |  |
+| `runtime.maxTier` | `"S" \| "M" \| "L" \| null` | No |  |
 | `runtime.ports` | `integer[]` | No |  |
 | `runtime.environment` | `object[] \| null` | Yes |  |
 | `runtime.environment[].key` | `string` | Yes |  |

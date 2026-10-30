@@ -619,7 +619,7 @@ describe("Agent Runtime routes", () => {
     });
     expect(refused.statusCode, refused.body).toBe(400);
     expect(refused.json().error.message).toContain(
-      "Tier L is above this Agent's tier M",
+      "Tier L is above this Agent's largest tier M",
     );
     expect(startDetachedAgentTask).not.toHaveBeenCalled();
 

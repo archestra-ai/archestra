@@ -72,6 +72,8 @@ export type AgentRuntimeConfig = {
   } | null;
   /** Size of a run's container while resources is null; absent means M. */
   tier?: AgentRuntimeTier;
+  /** Largest size a run may ask for; absent means the same as `tier`. */
+  maxTier?: AgentRuntimeTier;
   ports?: number[];
   environment: Array<{ key: string; value: string }> | null;
   credentials: Array<{
@@ -597,6 +599,12 @@ function AgentRuntimeContainerOptions({
   const tiers = resolveAgentRuntimeTiers(organization?.agentRuntimeTiers);
   const [open, setOpen] = useState(false);
   const selectedTier = value.tier ?? runtimeDefaults?.defaultTier ?? "M";
+  // Never below the size: a smaller value counts as the size itself.
+  const largestTier =
+    value.maxTier &&
+    TIER_ORDER.indexOf(value.maxTier) > TIER_ORDER.indexOf(selectedTier)
+      ? value.maxTier
+      : selectedTier;
   const tierResources = tiers[selectedTier];
   return (
     <Collapsible
@@ -646,7 +654,33 @@ function AgentRuntimeContainerOptions({
           </Select>
           <FieldDescription>
             CPU and memory of a run's container. A caller that starts a run can
-            ask for a smaller size. Custom values below replace the size.
+            ask for another size up to the largest size. Custom values below
+            replace the size.
+          </FieldDescription>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="agent-runtime-max-tier">Largest size</Label>
+          <Select
+            value={largestTier}
+            onValueChange={(maxTier: AgentRuntimeTier) => update({ maxTier })}
+          >
+            <SelectTrigger id="agent-runtime-max-tier" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TIER_ORDER.slice(TIER_ORDER.indexOf(selectedTier)).map(
+                (tier) => (
+                  <SelectItem key={tier} value={tier}>
+                    {tierLabel(tier, tiers[tier])}
+                  </SelectItem>
+                ),
+              )}
+            </SelectContent>
+          </Select>
+          <FieldDescription>
+            The largest size a run may ask for. A run whose work needs more CPU
+            or memory starts a run of this agent at a larger size and hands its
+            work over.
           </FieldDescription>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -963,10 +997,14 @@ function containerOptionsSummary(
     resources.memoryRequest && `Memory ${resources.memoryRequest}`,
     resources.memoryLimit && `Memory limit ${resources.memoryLimit}`,
   ].filter(Boolean);
+  const size = config.tier ?? runtimeDefaults?.defaultTier ?? "M";
+  const upTo =
+    config.maxTier &&
+    TIER_ORDER.indexOf(config.maxTier) > TIER_ORDER.indexOf(size)
+      ? `, up to ${config.maxTier}`
+      : "";
   const parts = [
-    ...(custom.length
-      ? custom
-      : [`Size ${config.tier ?? runtimeDefaults?.defaultTier ?? "M"}`]),
+    ...(custom.length ? custom : [`Size ${size}${upTo}`]),
     config.ports?.length &&
       `${config.ports.length === 1 ? "Port" : "Ports"} ${config.ports.join(", ")}`,
     config.privileged && "Privileged",

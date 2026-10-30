@@ -163,6 +163,16 @@ describe("AgentRuntimeFields", () => {
       "placeholder",
       "6Gi (default)",
     );
+    // The largest size offers only sizes at or above the size, and a run may
+    // then ask for any of them.
+    await user.click(screen.getByLabelText("Largest size"));
+    expect(
+      screen.queryByRole("option", { name: /^S:/ }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /^L:/ }));
+    expect(
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}").maxTier,
+    ).toBe("L");
     expect(screen.getByLabelText("Ports to forward")).toHaveValue("");
     await user.type(screen.getByLabelText("Ports to forward"), "3000, 9000");
     expect(

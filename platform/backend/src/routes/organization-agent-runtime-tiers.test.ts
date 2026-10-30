@@ -43,27 +43,27 @@ describe("PATCH /api/organization/agent-settings: Agent Runtime tiers", () => {
 
   test("an administrator resizes a tier; runs and pools then get that size, and null restores the defaults", async () => {
     expect((await organizationAgentRuntimeTiers(organizationId)).L).toEqual({
-      cpuRequest: "4",
+      cpuRequest: "8",
       cpuLimit: null,
-      memoryRequest: "8Gi",
-      memoryLimit: "16Gi",
+      memoryRequest: "16Gi",
+      memoryLimit: "32Gi",
       warmPoolSize: 0,
     });
 
     const response = await patch({
       agentRuntimeTiers: {
-        L: { cpuRequest: "6", memoryLimit: "24Gi", warmPoolSize: 1 },
+        L: { cpuRequest: "12", memoryLimit: "48Gi", warmPoolSize: 1 },
       },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().agentRuntimeTiers).toEqual({
-      L: { cpuRequest: "6", memoryLimit: "24Gi", warmPoolSize: 1 },
+      L: { cpuRequest: "12", memoryLimit: "48Gi", warmPoolSize: 1 },
     });
     expect((await organizationAgentRuntimeTiers(organizationId)).L).toEqual({
-      cpuRequest: "6",
+      cpuRequest: "12",
       cpuLimit: null,
-      memoryRequest: "8Gi",
-      memoryLimit: "24Gi",
+      memoryRequest: "16Gi",
+      memoryLimit: "48Gi",
       warmPoolSize: 1,
     });
 
@@ -75,7 +75,7 @@ describe("PATCH /api/organization/agent-settings: Agent Runtime tiers", () => {
 
   test("refuses a limit below its request, tiers out of order, and values that are not Kubernetes quantities", async () => {
     const limitBelowRequest = await patch({
-      agentRuntimeTiers: { M: { memoryLimit: "2Gi" } },
+      agentRuntimeTiers: { M: { memoryLimit: "6Gi" } },
     });
     expect(limitBelowRequest.statusCode).toBe(400);
     expect(limitBelowRequest.json().error.message).toContain(

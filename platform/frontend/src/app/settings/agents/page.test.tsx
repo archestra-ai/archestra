@@ -376,11 +376,11 @@ describe("Runtime tiers", () => {
     ).toBeVisible();
     expect(screen.getByLabelText("Tier L CPU request")).toHaveAttribute(
       "placeholder",
-      "4",
+      "8",
     );
     expect(screen.getByLabelText("Tier L Memory limit")).toHaveAttribute(
       "placeholder",
-      "16Gi",
+      "32Gi",
     );
     expect(screen.getByLabelText("Tier L Warm spares")).toHaveAttribute(
       "placeholder",

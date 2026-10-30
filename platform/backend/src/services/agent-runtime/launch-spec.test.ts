@@ -200,6 +200,64 @@ describe("buildAgentRunLaunchSpec", () => {
     }
   });
 
+  test("tells the run its size and the largest tier it may move to, and offers it the larger warm pool", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    // A lite worker: M by default, may move its work up to L.
+    const sized = {
+      ...runtime(setup.agent, "openai_responses"),
+      tier: "M" as const,
+      maxTier: "L" as const,
+    };
+    const { spec } = await buildAgentRunLaunchSpec({
+      limits: resolveAgentRunLimits({ runtime: sized }),
+      runtime: {
+        ...sized,
+        // Reserved: the Agent cannot claim another size.
+        environment: [{ key: "ARCHESTRA_AGENT_RUNTIME_MAX_TIER", value: "S" }],
+      },
+      taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      runMode: "one_shot",
+    });
+    expect(spec.env).toMatchObject({
+      ARCHESTRA_AGENT_RUNTIME_TIER: "M",
+      ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
+      ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
+      ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
+    });
+    expect(spec.resources).toEqual({
+      cpuRequest: "4",
+      memoryRequest: "8Gi",
+      memoryLimit: "16Gi",
+    });
+    expect(spec.warmTiers.map(({ tier }) => tier)).toEqual(["M", "L"]);
+  });
+
   test("routes the Agent's selected model through its scoped model router", async ({
     makeOrganization,
     makeAdmin,

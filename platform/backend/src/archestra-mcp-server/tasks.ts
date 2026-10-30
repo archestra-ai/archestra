@@ -788,7 +788,7 @@ const registry = defineArchestraTools([
         .object({
           // The same fields and bounds as the REST route's `limits`, in snake case.
           tier: AgentRunLimitsRequestSchema.shape.tier.describe(
-            "Container size: S (a review or a script), M (a dev stack and tests) or L (a full stack with Docker), as the organization sizes them. At or below the Agent's tier.",
+            "Container size, as the organization sizes them: S (a review, a script, light edits), M (a dev stack and tests; the usual default) or L (large builds and test suites, or work that ran out of memory at M). At or below the Agent's largest tier ($ARCHESTRA_AGENT_RUNTIME_MAX_TIER inside a run). To move work to another size, start a run of the same Agent at that tier and hand over the branch.",
           ),
           idle_timeout_minutes:
             AgentRunLimitsRequestSchema.shape.idleTimeoutMinutes,
@@ -800,7 +800,7 @@ const registry = defineArchestraTools([
         })
         .optional()
         .describe(
-          "Limits for this run, each at or below the Agent's own; a larger value is refused with the maximum named. Omit to take the Agent's defaults.",
+          "Limits for this run, each at or below the Agent's own (for the tier, its largest tier); a larger value is refused with the maximum named. Omit to take the Agent's defaults.",
         ),
     }),
     outputSchema: StartRunOutputSchema,

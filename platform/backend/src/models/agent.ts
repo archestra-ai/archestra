@@ -5490,6 +5490,7 @@ class AgentModel {
             privileged: row.runtime.privileged,
             resources: row.runtime.resources,
             tier: row.runtime.tier ?? null,
+            maxTier: row.runtime.maxTier ?? null,
             environmentKeys: (row.runtime.environment ?? [])
               .map((entry) => entry.key)
               .sort(),

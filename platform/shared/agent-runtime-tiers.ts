@@ -24,31 +24,31 @@ export interface AgentRuntimeTierSize {
  * organization's settings (`agentRuntimeTiers`); `resolveAgentRuntimeTiers`
  * gives the sizes in effect. No CPU limit by default: throttling an agent loop
  * mid-turn produces confusing timeouts rather than back-pressure. L keeps no
- * warm spares: its runs are rare, and an idle L spare holds 4 CPU and 8 GiB.
+ * warm spares: its runs are rare, and an idle L spare holds 8 CPU and 16 GiB.
  */
 export const DEFAULT_AGENT_RUNTIME_TIERS: Record<
   AgentRuntimeTierName,
   AgentRuntimeTierSize
 > = {
   S: {
-    cpuRequest: "1",
-    cpuLimit: null,
-    memoryRequest: "2Gi",
-    memoryLimit: "4Gi",
-    warmPoolSize: null,
-  },
-  M: {
     cpuRequest: "2",
     cpuLimit: null,
     memoryRequest: "4Gi",
     memoryLimit: "8Gi",
     warmPoolSize: null,
   },
-  L: {
+  M: {
     cpuRequest: "4",
     cpuLimit: null,
     memoryRequest: "8Gi",
     memoryLimit: "16Gi",
+    warmPoolSize: null,
+  },
+  L: {
+    cpuRequest: "8",
+    cpuLimit: null,
+    memoryRequest: "16Gi",
+    memoryLimit: "32Gi",
     warmPoolSize: 0,
   },
 };

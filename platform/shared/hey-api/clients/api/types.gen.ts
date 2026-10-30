@@ -16976,6 +16976,7 @@ export type GetAgentCatalogResponses = {
                         memoryLimit?: string;
                     } | null;
                     tier?: 'S' | 'M' | 'L';
+                    maxTier?: 'S' | 'M' | 'L';
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -17366,6 +17367,7 @@ export type GetAgentsResponses = {
                     memoryLimit?: string;
                 } | null;
                 tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -17523,6 +17525,7 @@ export type CreateAgentData = {
                 memoryLimit?: string;
             } | null;
             tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -17792,6 +17795,7 @@ export type CreateAgentResponses = {
                 memoryLimit?: string;
             } | null;
             tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -18187,6 +18191,7 @@ export type GetChatAgentRosterResponses = {
                 memoryLimit?: string;
             } | null;
             tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -18335,6 +18340,7 @@ export type GetChatAgentRosterPageResponses = {
                     memoryLimit?: string;
                 } | null;
                 tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18504,6 +18510,7 @@ export type GetAgentOptionsResponses = {
                     memoryLimit?: string;
                 } | null;
                 tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18691,6 +18698,7 @@ export type GetAgentOptionsPageResponses = {
                     memoryLimit?: string;
                 } | null;
                 tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -19071,6 +19079,7 @@ export type GetDefaultMcpGatewayResponses = {
                 memoryLimit?: string;
             } | null;
             tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19380,6 +19389,7 @@ export type ImportAgentResponses = {
                     memoryLimit?: string;
                 } | null;
                 tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -19698,6 +19708,7 @@ export type GetAgentResponses = {
                 memoryLimit?: string;
             } | null;
             tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19837,6 +19848,7 @@ export type UpdateAgentData = {
                 memoryLimit?: string;
             } | null;
             tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20015,6 +20027,7 @@ export type UpdateAgentResponses = {
                 memoryLimit?: string;
             } | null;
             tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20607,6 +20620,7 @@ export type RestoreAgentVersionResponses = {
                 memoryLimit?: string;
             } | null;
             tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20854,6 +20868,7 @@ export type CloneAgentResponses = {
                 memoryLimit?: string;
             } | null;
             tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -23340,6 +23355,7 @@ export type RestoreAgentResponses = {
                 memoryLimit?: string;
             } | null;
             tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -41529,6 +41545,7 @@ export type GetNewChatBootstrapResponses = {
                     memoryLimit?: string;
                 } | null;
                 tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -41706,6 +41723,7 @@ export type GetNewChatBootstrapResponses = {
                         memoryLimit?: string;
                     } | null;
                     tier?: 'S' | 'M' | 'L';
+                    maxTier?: 'S' | 'M' | 'L';
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -42092,6 +42110,7 @@ export type GetConversationBootstrapResponses = {
                         memoryLimit?: string;
                     } | null;
                     tier?: 'S' | 'M' | 'L';
+                    maxTier?: 'S' | 'M' | 'L';
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -42269,6 +42288,7 @@ export type GetConversationBootstrapResponses = {
                             memoryLimit?: string;
                         } | null;
                         tier?: 'S' | 'M' | 'L';
+                        maxTier?: 'S' | 'M' | 'L';
                         ports?: Array<number>;
                         environment: Array<{
                             key: string;

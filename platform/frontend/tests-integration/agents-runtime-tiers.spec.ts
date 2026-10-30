@@ -41,7 +41,7 @@ test("an administrator resizes a runtime tier: problems block Save, and only the
   const heading = page.getByRole("heading", { name: "Runtime tiers" });
   await heading.scrollIntoViewIfNeeded();
   const cpu = page.getByLabel("Tier L CPU request");
-  await expect(cpu).toHaveAttribute("placeholder", "4");
+  await expect(cpu).toHaveAttribute("placeholder", "8");
   await expect(page.getByLabel("Tier L Memory limit")).toHaveValue("24Gi");
   await expect(page.getByLabel("Tier M Warm spares")).toHaveAttribute(
     "placeholder",

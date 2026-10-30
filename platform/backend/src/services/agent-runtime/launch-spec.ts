@@ -54,12 +54,15 @@ import {
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
 import {
+  AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_MAX_TIER_ENV,
+  AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   AGENT_RUNTIME_STEER_FIFO,
   AGENT_RUNTIME_TIER_ENV,
   constructStableRunName,
 } from "./runtime-contract";
 import {
-  agentRuntimeTier,
+  agentRuntimeMaxTier,
   organizationAgentRuntimeTiers,
   resolveRunResources,
   tierResources,
@@ -297,6 +300,13 @@ export async function buildAgentRunLaunchSpec(params: {
   const modelOutputLength = selectedModel
     ? ModelModel.resolveEffectiveOutputLength(selectedModel)
     : null;
+  const tiers = await organizationAgentRuntimeTiers(params.organizationId);
+  const resources = resolveRunResources(
+    params.runtime,
+    params.limits.tier,
+    tiers,
+  );
+  const maxTier = agentRuntimeMaxTier(params.runtime);
   const nonSecretEnv: Record<string, string> = {
     // The Agent Runtime run's own environment goes first: the addresses below must win.
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
@@ -337,8 +347,17 @@ export async function buildAgentRunLaunchSpec(params: {
     ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS: String(
       params.limits.idleTimeoutMinutes * 60,
     ),
+    // The run's size, so the agent can tell when its work needs a larger
+    // run of the same Agent (up to the largest tier) and how much it has.
     ...(params.limits.tier
       ? { [AGENT_RUNTIME_TIER_ENV]: params.limits.tier }
+      : {}),
+    ...(maxTier ? { [AGENT_RUNTIME_MAX_TIER_ENV]: maxTier } : {}),
+    ...(resources.cpuRequest
+      ? { [AGENT_RUNTIME_CPU_REQUEST_ENV]: resources.cpuRequest }
+      : {}),
+    ...(resources.memoryLimit
+      ? { [AGENT_RUNTIME_MEMORY_LIMIT_ENV]: resources.memoryLimit }
       : {}),
     ARCHESTRA_LLM_PROXY_URL: proxyUrl,
     ARCHESTRA_LLM_PROXY_PROTOCOL: params.runtime.inferenceProtocol,
@@ -448,7 +467,6 @@ export async function buildAgentRunLaunchSpec(params: {
       : {}),
   };
 
-  const tiers = await organizationAgentRuntimeTiers(params.organizationId);
   return {
     virtualApiKeyId: virtualKey?.virtualKey.id ?? null,
     gatewayTokenId: accountToken?.id ?? null,
@@ -463,12 +481,12 @@ export async function buildAgentRunLaunchSpec(params: {
       image: params.runtime.image,
       command: params.runtime.command ?? null,
       privileged: params.runtime.privileged,
-      resources: resolveRunResources(params.runtime, params.limits.tier, tiers),
+      resources,
       tier: params.limits.tier,
       warmTiers: params.limits.tier
         ? warmTierCandidates(
             params.limits.tier,
-            agentRuntimeTier(params.runtime) ?? params.limits.tier,
+            maxTier ?? params.limits.tier,
           ).map((tier) => ({ tier, resources: tierResources(tiers[tier]) }))
         : [],
       env: nonSecretEnv,
@@ -503,6 +521,9 @@ function runBanner(appName: string): string {
 
 const RESERVED_RUNTIME_ENV_KEYS = new Set([
   AGENT_RUNTIME_TIER_ENV,
+  AGENT_RUNTIME_MAX_TIER_ENV,
+  AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_BASE_URL",

@@ -2,7 +2,7 @@
 title: Costs & Limits
 description: See what every model call costs and cap spend, tokens, or requests before bills climb
 order: 3
-lastUpdated: 2026-10-26
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -37,8 +37,16 @@ Both metered and subscription traffic count toward [token and request limits](/d
 Archestra syncs per-million-token prices (input, output, cache read, and cache write) for common models automatically.
 
 - **OpenRouter:** when OpenRouter returns `usage.cost` on a response, Archestra records that exact amount instead of recalculating from the price table.
-- **Custom or self-hosted models:** go to **Models**, edit the model, and open its **Pricing** tab to view or set rates per million tokens (see [Model Pricing, Limits, and Modalities](/docs/llm-proxy/providers#model-pricing-limits-and-modalities)). Unlisted models default to `$1.00` per million input and output tokens until you set a price.
+- **Custom or self-hosted models:** go to **Models**, edit the model, and open its **Pricing** tab to view or set rates per million tokens (see [Model Pricing, Limits, and Modalities](/docs/llm-proxy/providers#model-pricing-limits-and-modalities)). Until you set a price, Archestra charges `$50` per million input and output tokens, or `$30` for `mini`, `nano`, and `haiku` models. vLLM and Ollama models cost `$0`.
 - **Prompt caching:** cached input tokens are priced at the model's cache read and cache write rates.
+
+### When a Price Is Missing
+
+A request runs even when its model lacks a price for some of the tokens it uses. Archestra estimates the missing rate and charges the request in full. The spend then shows **Includes estimates** in [Limits](/docs/llm-proxy/costs-and-limits/limits) and on the virtual key's spend cap.
+
+- **Cache tokens:** Archestra charges a cache read at half the model's input price, and a cache write at the full input price. Anthropic, Amazon Bedrock, OpenAI, Gemini, and DeepSeek models get their provider's standard cache rates instead.
+- **Input or output:** when a provider key lists prices for a model but leaves out its input or output rate, Archestra uses the model's own price.
+- **To correct an estimate:** set the missing price on the model, then [recompute its past costs](#recompute-past-costs-after-a-price-change).
 
 ## Recompute Past Costs After a Price Change
 
@@ -53,4 +61,4 @@ The recompute runs in the background. Reopen **Pricing** to see its progress and
 
 - **OpenRouter:** past requests keep their recorded cost, because many of them carry the amount OpenRouter actually charged.
 - **LiteLLM:** when your LiteLLM gateway prices a model per API key, set a custom input and output price first (and cache prices, if its requests used the cache). Every recomputed request uses those prices.
-- **Already settled:** requests settled under [`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE=enforce`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE) keep the cost they were charged. Subscription requests are recomputed but stay `$0` billed.
+- **Limits:** recompute also corrects the spend limits a request was charged to, while the charge is still in their current window. Subscription requests stay `$0` billed.

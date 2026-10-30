@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.0-rc.15](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.14...platform-v1.5.0-rc.15) (2026-10-30)
+
+
+### Bug Fixes
+
+* **frontend:** show immediate progress and prevent viewport jump on app reload ([#9895](https://github.com/archestra-ai/archestra/issues/9895)) ([9ea91fa](https://github.com/archestra-ai/archestra/commit/9ea91fa8226795ef92357c8da1d54ccb18011b8e))
+* **rbac:** resolve service account permissions for custom roles ([#9901](https://github.com/archestra-ai/archestra/issues/9901)) ([d319ab9](https://github.com/archestra-ai/archestra/commit/d319ab91c94ed40238b66b3a72cfc5b1303c1f83))
+
 ## [1.5.0-rc.14](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.13...platform-v1.5.0-rc.14) (2026-10-30)
 
 

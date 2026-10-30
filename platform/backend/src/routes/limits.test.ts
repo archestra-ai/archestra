@@ -965,6 +965,27 @@ describe("limits routes", () => {
         cost: 0,
         estimatedUsage: false,
       });
+      const records = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(
+          and(
+            eq(schema.auditLogsTable.resourceId, limit.id),
+            eq(schema.auditLogsTable.action, "limit.reset"),
+          ),
+        );
+      expect(records).toEqual([
+        expect.objectContaining({
+          outcome: "success",
+          resourceType: "limit",
+          before: expect.objectContaining({
+            lastCleanup: limit.lastCleanup?.toISOString(),
+          }),
+          after: expect.objectContaining({
+            lastCleanup: reset.json().lastCleanup,
+          }),
+        }),
+      ]);
     });
 
     test("refuses limits that recover on their own schedule", async () => {

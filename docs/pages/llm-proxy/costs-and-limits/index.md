@@ -48,6 +48,8 @@ A request runs even when its model lacks a price for some of the tokens it uses.
 - **Input or output:** when a provider key lists prices for a model but leaves out its input or output rate, Archestra uses the model's own price.
 - **To correct an estimate:** set the missing price on the model, then [recompute its past costs](#recompute-past-costs-after-a-price-change).
 
+Audio calls, and Azure image calls and file uploads, have no price. Archestra does not estimate them: they record no cost and do not count toward spend. Instead, a hard spend limit that covers them refuses the request.
+
 ## Recompute Past Costs After a Price Change
 
 A new price applies to new requests at once. To correct requests already recorded at a wrong or `$0` price, recompute them when you save the price, and [Costs](/docs/llm-proxy/costs-and-limits/costs) and [Limits](/docs/llm-proxy/costs-and-limits/limits) show what they should have cost.

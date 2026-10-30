@@ -421,7 +421,6 @@ class LimitModel {
       knownCost: sql<string>`coalesce(sum(${interactions.cost}) FILTER (WHERE ${interactions.cost} IS NOT NULL AND NOT ${costUnavailable}), 0)::text`,
       unpricedTokensIn: sql<number>`coalesce(sum(${interactions.inputTokens}) FILTER (WHERE ${interactions.cost} IS NULL AND NOT ${costUnavailable}), 0)::bigint`,
       unpricedTokensOut: sql<number>`coalesce(sum(${interactions.outputTokens}) FILTER (WHERE ${interactions.cost} IS NULL AND NOT ${costUnavailable}), 0)::bigint`,
-      unavailable: sql<boolean>`bool_or(${costUnavailable})`,
     };
     // Mirrors getDefaultUserLimitUsage: an environment filter uses the
     // environment snapshotted on the interaction; the organization-wide sum
@@ -477,7 +476,6 @@ class LimitModel {
     const costs = new Map<string, string>();
     const estimated = new Set<string>();
     for (const group of groups) {
-      if (group.unavailable) estimated.add(group.userId);
       let groupCost = group.knownCost;
       if (group.model) {
         const modelPricing = ModelModel.getEffectivePricing(
@@ -1424,6 +1422,7 @@ class LimitModel {
       toolName: row.toolName ?? null,
       model: row.model ?? null,
       cleanupInterval: row.cleanupInterval ?? null,
+      lastCleanup: row.lastCleanup?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -2705,12 +2704,10 @@ async function getDefaultUserLimitUsage(params: {
   let cost = "0.0000000000";
   let tokensIn = 0;
   let tokensOut = 0;
-  let unavailableMediaCost = false;
   for (const interaction of interactions) {
-    if (interaction.costUnavailable) {
-      unavailableMediaCost = true;
-      continue;
-    }
+    // Media with no cost is not counted, and no price would change that, so
+    // it is not an estimate either.
+    if (interaction.costUnavailable) continue;
     const inputTokens = interaction.inputTokens ?? 0;
     const outputTokens = interaction.outputTokens ?? 0;
     tokensIn += inputTokens;
@@ -2756,7 +2753,7 @@ async function getDefaultUserLimitUsage(params: {
   cost = sumMoney([cost, settled?.cost ?? "0"]);
   return {
     cost: Number(cost),
-    estimated: Boolean(settled?.estimated) || unavailableMediaCost,
+    estimated: Boolean(settled?.estimated),
     tokensIn,
     tokensOut,
   };

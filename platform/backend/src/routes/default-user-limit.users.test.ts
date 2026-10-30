@@ -196,9 +196,9 @@ describe("user limit usage routes", () => {
     expect(inProduction.data.map((row) => row.name)).toEqual(["Prod Pat"]);
   });
 
-  // Enforcement treats unpriced media as exhausting the limit, so the listing
-  // must too, but only for such calls inside the current window.
-  test("a call whose media cost is unavailable flags the user's spend as estimated without exhausting the limit", async ({
+  // A media call with no cost is left out of the spend. No price would change
+  // that, so it does not mark the spend as estimated either.
+  test("a call whose media cost is unavailable is neither counted nor flagged as estimated", async ({
     makeUser,
     makeMember,
     makeInteraction,
@@ -209,21 +209,12 @@ describe("user limit usage routes", () => {
       limitValue: 100,
       cleanupInterval: "calendar_month",
     });
-    const unpriced = { __mediaUsage: { costAvailable: false } } as never;
     const media = await member({ makeUser, makeMember }, "Media Mo");
     await makeInteraction(agentId, { userId: media.id, cost: "2" });
     await makeInteraction(agentId, {
       userId: media.id,
       cost: "30",
-      response: unpriced,
-    });
-    const earlier = await member({ makeUser, makeMember }, "Earlier Eli");
-    await makeInteraction(agentId, { userId: earlier.id, cost: "1" });
-    await makeInteraction(agentId, {
-      userId: earlier.id,
-      cost: "30",
-      response: unpriced,
-      createdAt: new Date(Date.now() - 62 * 24 * 60 * 60 * 1000),
+      response: { __mediaUsage: { costAvailable: false } } as never,
     });
 
     const body = await list();
@@ -231,14 +222,7 @@ describe("user limit usage routes", () => {
     expect(body.data.find((row) => row.name === "Media Mo")).toMatchObject({
       status: "ok",
       percent: 2,
-      // The unpriced call's recorded cost is not counted as spend.
       spent: 2,
-      estimatedUsage: true,
-    });
-    // Outside the window, the unpriced call no longer marks the spend.
-    expect(body.data.find((row) => row.name === "Earlier Eli")).toMatchObject({
-      status: "ok",
-      spent: 1,
       estimatedUsage: false,
     });
   });

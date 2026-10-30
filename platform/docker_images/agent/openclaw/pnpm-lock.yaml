@@ -19,8 +19,8 @@ importers:
   .:
     dependencies:
       openclaw:
-        specifier: 2026.10.5
-        version: 2026.10.5
+        specifier: 2026.10.6
+        version: 2026.10.6
 
 packages:
 
@@ -459,8 +459,8 @@ packages:
     resolution: {integrity: sha512-juG5VWh4qAivzTAeMzvY9xs9HY5rAcr2E4I7tiSSCokRFi7XIZCAu92ZkSTsIj1OPceCifL3cpfteP3pDT9/QQ==}
     engines: {node: '>=14.0.0'}
 
-  '@openclaw/ai@2026.10.5':
-    resolution: {integrity: sha512-s7lEbpIUsWN+wBmzjeGTJxmODY1WsEkCOLsQ0uWQ3mOpQowvLr8c4bqDA53jiomyWhoYeRmPSHMturVxLi4rtg==}
+  '@openclaw/ai@2026.10.6':
+    resolution: {integrity: sha512-cSsfmzCkv3F3GLNkwZ9vL2QVLnrBSV0S4h3v5u48tgpUf6y/ivyhrv0hokPHpWNApQmLTGAAXChKkUTvzAg4tg==}
     engines: {node: '>=22.19.0'}
 
   '@openclaw/fs-safe-darwin-arm64@0.25.0':
@@ -1443,9 +1443,9 @@ packages:
       zod:
         optional: true
 
-  openclaw@2026.10.5:
-    resolution: {integrity: sha512-9rCuXMweqVKZIK3KBtGcLzesz9G6+FmQ30lvwomRhmcNWDcOtlBoqdLbPditoJMuTP55jPqXpt1AA0L8tSzFHg==}
-    engines: {node: '>=24.16.0 <25 || >=26.1.0'}
+  openclaw@2026.10.6:
+    resolution: {integrity: sha512-jSpQPa2Jw5rG0J2GC07j9+qHtVYIuoHjgccU88JeS+p7188sBCnvIJeuaiNPHj1zsWkuHcBv443QiEUh7qrxwA==}
+    engines: {node: '>=24.22.1 <25 || >=26.12.1'}
     hasBin: true
     bundledDependencies:
       - chrome-devtools-mcp
@@ -1801,18 +1801,6 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
-  ws@8.21.0:
-    resolution: {integrity: sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==}
-    engines: {node: '>=10.0.0'}
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: '>=5.0.2'
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
-
   ws@8.22.0:
     resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
     engines: {node: '>=10.0.0'}
@@ -2035,7 +2023,7 @@ snapshots:
       google-auth-library: 10.9.1
       p-retry: 4.6.2
       protobufjs: 7.6.6
-      ws: 8.21.0
+      ws: 8.22.0
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.32.0(zod@4.6.6)
     transitivePeerDependencies:
@@ -2171,7 +2159,7 @@ snapshots:
   '@mistralai/mistralai@2.7.0':
     dependencies:
       '@opentelemetry/semantic-conventions': 1.43.0
-      ws: 8.21.0
+      ws: 8.22.0
       zod: 4.6.6
       zod-to-json-schema: 3.25.2(zod@4.6.6)
     transitivePeerDependencies:
@@ -2202,7 +2190,7 @@ snapshots:
 
   '@mozilla/readability@0.6.0': {}
 
-  '@openclaw/ai@2026.10.5(@modelcontextprotocol/sdk@1.32.0(zod@4.6.6))(undici@8.12.2)(ws@8.22.0)(zod@4.6.6)':
+  '@openclaw/ai@2026.10.6(@modelcontextprotocol/sdk@1.32.0(zod@4.6.6))(undici@8.12.2)(ws@8.22.0)(zod@4.6.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.131.0(zod@4.6.6)
       '@google/genai': 2.27.0(@modelcontextprotocol/sdk@1.32.0(zod@4.6.6))
@@ -3041,7 +3029,7 @@ snapshots:
   node-edge-tts@1.2.10:
     dependencies:
       https-proxy-agent: 7.0.6
-      ws: 8.21.0
+      ws: 8.22.0
       yargs: 17.7.3
     transitivePeerDependencies:
       - bufferutil
@@ -3089,7 +3077,7 @@ snapshots:
       ws: 8.22.0
       zod: 4.6.6
 
-  openclaw@2026.10.5:
+  openclaw@2026.10.6:
     dependencies:
       '@agentclientprotocol/sdk': 1.7.0(zod@4.6.6)
       '@anthropic-ai/sdk': 0.131.0(zod@4.6.6)
@@ -3106,7 +3094,7 @@ snapshots:
       '@mistralai/mistralai': 2.7.0
       '@modelcontextprotocol/sdk': 1.32.0(zod@4.6.6)
       '@mozilla/readability': 0.6.0
-      '@openclaw/ai': 2026.10.5(@modelcontextprotocol/sdk@1.32.0(zod@4.6.6))(undici@8.12.2)(ws@8.22.0)(zod@4.6.6)
+      '@openclaw/ai': 2026.10.6(@modelcontextprotocol/sdk@1.32.0(zod@4.6.6))(undici@8.12.2)(ws@8.22.0)(zod@4.6.6)
       '@openclaw/fs-safe': 0.25.0
       '@openclaw/proxyline': 0.4.0(undici@8.12.2)
       '@silvia-odwyer/photon-node': 0.3.4
@@ -3596,8 +3584,6 @@ snapshots:
       strip-ansi: 6.0.1
 
   wrappy@1.0.2: {}
-
-  ws@8.21.0: {}
 
   ws@8.22.0: {}
 

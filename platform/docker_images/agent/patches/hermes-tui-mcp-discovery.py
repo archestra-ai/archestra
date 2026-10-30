@@ -47,13 +47,16 @@ PATCH = '''    # Archestra image patch: see docker_images/agent/patches/hermes-t
 '''
 
 # Locate without importing: importing these modules runs startup code.
-server = Path(importlib.util.find_spec("tui_gateway").origin).with_name("server.py")
+gateway = Path(importlib.util.find_spec("tui_gateway").origin).parent
+# v0.22.5 moved agent construction into a module bound to server's namespace.
+server = gateway / "agent_factory.py"
 mcp_startup = Path(importlib.util.find_spec("hermes_cli").origin).with_name("mcp_startup.py")
 discovery = Path(importlib.util.find_spec("tools").origin).with_name("mcp_tool_discovery.py")
 server_source = server.read_text()
 if (
     server_source.count(ANCHOR) != 1
-    or "\nimport subprocess\n" not in server_source
+    or "\nimport subprocess\n" not in (gateway / "server.py").read_text()
+    or "bind_module(globals(), server)" not in server_source
     or "def join_mcp_discovery(" not in mcp_startup.read_text()
     or "def start_background_mcp_discovery(" not in mcp_startup.read_text()
     or "def _resolve_discovery_timeout(" not in mcp_startup.read_text()

@@ -4292,13 +4292,6 @@
       "when": 1793380271955,
       "tag": "0612_red_landau",
       "breakpoints": true
-    },
-    {
-      "idx": 613,
-      "version": "7",
-      "when": 1793387710342,
-      "tag": "0613_bright_gwen_stacy",
-      "breakpoints": true
     }
   ]
 }

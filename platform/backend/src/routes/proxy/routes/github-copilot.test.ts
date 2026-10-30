@@ -20,10 +20,8 @@ import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import {
   type ModelsDevApiResponse,
-  type ModelsDevCost,
   modelsDevClient,
 } from "@/clients/models-dev-client";
-import captured from "@/clients/models-dev-client.test-data.json";
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
@@ -35,6 +33,7 @@ import InteractionModel from "@/models/interaction";
 import InteractionBillingModel from "@/models/interaction-billing";
 import LimitModel from "@/models/limit";
 import { modelSyncService } from "@/services/model-sync";
+import captured from "@/services/vendor-published-pricing.test-data.json";
 import {
   accessGrants,
   afterEach,
@@ -624,11 +623,28 @@ describe("GitHub Copilot long-context accounting", () => {
     | "makeSecret"
     | "makeLlmProviderApiKey"
   >;
+  type CapturedCost = {
+    input?: number;
+    output?: number;
+    cache_read?: number;
+    cache_write?: number;
+    tiers?: Array<{
+      input?: number;
+      output?: number;
+      cache_read?: number;
+      cache_write?: number;
+      tier: { size: number };
+    }>;
+  };
   async function setup(f: Fixtures, syncInitially = true) {
     const org = await f.makeOrganization();
     const user = await f.makeUser();
     await f.makeMember(user.id, org.id);
-    const agent = await f.makeAgent({ organizationId: org.id });
+    const agent = await f.makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
     const token = uniqueGithubToken();
     stubTokenExchange();
     const key = syncInitially
@@ -829,9 +845,23 @@ describe("GitHub Copilot long-context accounting", () => {
       });
     };
     if (syncInitially) await sync();
+    const storedKey = key
+      ? (
+          await VirtualApiKeyModel.create({
+            organizationId: org.id,
+            name: "Published schedule proof",
+            authorId: user.id,
+            ...accessGrants("personal"),
+            providerApiKeys: [
+              { provider: "github-copilot", providerApiKeyId: key.id },
+            ],
+          })
+        ).value
+      : null;
     const app = createFastifyInstance();
     apps.push(app);
     await app.register(githubCopilotProxyRoutes);
+    await app.register(modelRouterProxyRoutes);
     return {
       cap,
       agent,
@@ -849,6 +879,7 @@ describe("GitHub Copilot long-context accounting", () => {
           write?: number;
           stream?: boolean;
           responses?: boolean;
+          storedKey?: boolean;
         } = {},
       ) {
         prompt = tokens;
@@ -856,20 +887,22 @@ describe("GitHub Copilot long-context accounting", () => {
         write = options.write ?? 0;
         const response = await app.inject({
           method: "POST",
-          url: `/v1/github-copilot/${agent.id}/${options.responses ? "responses" : "chat/completions"}`,
-          headers: {
-            authorization: `Bearer ${token}`,
-            "x-archestra-virtual-key": passthrough,
-          },
+          url: `/v1/${options.storedKey ? "model-router" : "github-copilot"}/${agent.id}/${options.responses ? "responses" : "chat/completions"}`,
+          headers: options.storedKey
+            ? { authorization: `Bearer ${storedKey}` }
+            : {
+                authorization: `Bearer ${token}`,
+                "x-archestra-virtual-key": passthrough,
+              },
           payload: options.responses
             ? {
-                model,
+                model: options.storedKey ? `github-copilot:${model}` : model,
                 input: "Say OK.",
                 max_output_tokens: 4,
                 stream: options.stream ?? false,
               }
             : {
-                model,
+                model: options.storedKey ? `github-copilot:${model}` : model,
                 messages: [{ role: "user", content: "Say OK." }],
                 max_tokens: 4,
                 stream: options.stream ?? false,
@@ -912,7 +945,7 @@ describe("GitHub Copilot long-context accounting", () => {
 
   test.for(
     boundaryCases,
-  )("imports and settles %j at exact prompt boundaries", async (scenario, {
+  )("settles published prices for %j at exact prompt boundaries", async (scenario, {
     makeOrganization,
     makeAgent,
     makeUser,
@@ -929,7 +962,7 @@ describe("GitHub Copilot long-context accounting", () => {
       makeLlmProviderApiKey,
     });
     const catalogModel = c.catalog["github-copilot"].models[scenario.model];
-    const cost = catalogModel.cost as ModelsDevCost;
+    const cost = catalogModel.cost as CapturedCost;
     const tier = cost.tiers?.[0];
     expect(tier?.tier.size).toBe(scenario.threshold);
     let total = 0;
@@ -988,7 +1021,7 @@ describe("GitHub Copilot long-context accounting", () => {
     expect(c.calls()).toBe(before);
   });
 
-  test("sync refresh/removal preserves settled history; no-tier usage and replay settle correctly", async ({
+  test("catalog changes preserve published pricing and settled history; no-tier usage and replay settle correctly", async ({
     makeOrganization,
     makeAgent,
     makeUser,
@@ -1030,13 +1063,24 @@ describe("GitHub Copilot long-context accounting", () => {
     const counters = await db.select().from(schema.limitBillingUsageTable);
     const legacyCounters = await db.select().from(schema.limitModelUsageTable);
     const next = structuredClone(c.catalog);
-    const cost = next["github-copilot"].models[id].cost;
+    const cost = next["github-copilot"].models[id].cost as CapturedCost;
     if (!cost?.tiers?.[0]) throw new Error("Missing captured tier");
     cost.tiers[0].input = 0.7;
     c.changeCatalog(next);
     await c.sync();
     delete cost.tiers;
+    cost.input = 99;
     await c.sync();
+    expect(
+      Number(
+        ModelModel.getEffectivePricing(
+          await ModelModel.findById(row.id),
+          id,
+          "github-copilot",
+          100_001,
+        ).pricePerMillionInput,
+      ),
+    ).toBe(0.5);
     expect(await InteractionBillingModel.findMany([original.id])).toEqual([
       receipt,
     ]);
@@ -1133,9 +1177,19 @@ describe("GitHub Copilot long-context accounting", () => {
     });
     await verify(120_000, [0.1, 0.5, 0.02, 0.04]);
     await verify(150_001, [2, 3, 0.2, 2.5]);
+    await ModelModel.update(row.id, {
+      customPricePerMillionCacheRead: null,
+      customPricePerMillionCacheWrite: null,
+      longContextThreshold: null,
+      longContextPricePerMillionInput: null,
+      longContextPricePerMillionOutput: null,
+      longContextPricePerMillionCacheRead: null,
+      longContextPricePerMillionCacheWrite: null,
+    });
+    await verify(100_003, [0.5, 2.5, 0.05, 0.625]);
   });
 
-  test("passthrough discovery and registry refresh price already-known Copilot models without stored keys", async ({
+  test("existing rows and raw passthrough use the published schedule without a catalog", async ({
     makeOrganization,
     makeAgent,
     makeUser,
@@ -1154,90 +1208,76 @@ describe("GitHub Copilot long-context accounting", () => {
       },
       false,
     );
-    const modelId = "claude-haiku-5.5";
-    expect(
-      await ModelModel.findByProviderAndModelId("github-copilot", modelId),
-    ).toBeNull();
-    expect(
-      (await c.send(modelId, 100_001, { read: 500, write: 100 })).statusCode,
-    ).toBe(200);
-    const row = await ModelModel.findByProviderAndModelId(
-      "github-copilot",
-      modelId,
-    );
-    if (!row) throw new Error("Missing discovered model");
-    expect(row.discoveredViaLlmProxy).toBe(true);
-    expect(row.syncedLongContextThreshold).toBe(100_000);
-    const [original] = await db
-      .select()
-      .from(schema.interactionsTable)
-      .where(eq(schema.interactionsTable.profileId, c.agent.id));
-    expect(original.cost).toBe("0.0497980000");
-    const [receipt] = await InteractionBillingModel.findMany([original.id]);
-    expect(receipt.usage.cost).toBe(original.cost);
-    const counters = await db.select().from(schema.limitBillingUsageTable);
-    const legacyCounters = await db.select().from(schema.limitModelUsageTable);
-
-    // Simulate a row discovered before tier metadata existed. Registry refresh
-    // must upgrade future pricing without a stored credential or history rewrite.
-    const oldRow = await ModelModel.ensureModelExists(
+    c.changeCatalog({});
+    const old = await ModelModel.ensureModelExists(
       "gpt-6.1-sol",
       "github-copilot",
     );
-    expect(oldRow?.syncedLongContextThreshold).toBeNull();
-    await ModelModel.update(row.id, {
-      customPricePerMillionInput: "0.03",
-      customPricePerMillionOutput: "0.07",
-    });
-    const next = structuredClone(c.catalog);
-    const tier = next["github-copilot"].models[modelId].cost?.tiers?.[0];
-    if (!tier) throw new Error("Missing fixture tier");
-    tier.input = 0.7;
-    c.changeCatalog(next);
-    modelsDevClient.clearFetchCache();
-    expect(await modelsDevClient.syncModelMetadata(true)).toBe(2);
-    const refreshed = await ModelModel.findById(row.id);
-    expect(Number(refreshed?.syncedLongContextPromptPricePerToken)).toBe(
-      0.0000007,
-    );
-    expect(Number(refreshed?.customPricePerMillionInput)).toBe(0.03);
-    expect(refreshed?.discoveredViaLlmProxy).toBe(true);
-    expect(
-      (
-        await ModelModel.findByProviderAndModelId(
-          "github-copilot",
-          "gpt-6.1-sol",
-        )
-      )?.syncedLongContextThreshold,
-    ).toBe(272_000);
-    expect(
-      await ModelModel.findByProviderAndModelId("github-copilot", "grok-4.7"),
-    ).toBeNull();
+    expect(old).not.toBeNull();
+    for (const [model, tokens, expected] of [
+      ["claude-haiku-5.5", 100_001, "0.0497980000"],
+      ["gpt-6.1-sol", 272_001, "1.0862640000"],
+    ] as const) {
+      expect(
+        (await c.send(model, tokens, { read: 500, write: 100 })).statusCode,
+      ).toBe(200);
+      const [log] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.model, model));
+      expect(log.cost).toBe(expected);
+      const [receipt] = await InteractionBillingModel.findMany([log.id]);
+      expect(receipt.usage.cost).toBe(expected);
+      expect(receipt.usage.components[0].prices.source).toBe("provider");
+    }
     expect(await db.select().from(schema.llmProviderApiKeysTable)).toEqual([]);
+  });
 
-    delete next["github-copilot"].models[modelId].cost?.tiers;
-    c.changeCatalog(next);
+  test("stored-key model-router and raw passthrough settle the same published quote", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const c = await setup({
+      makeOrganization,
+      makeAgent,
+      makeUser,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    c.changeCatalog({});
     modelsDevClient.clearFetchCache();
-    await modelsDevClient.syncModelMetadata(true);
+    for (const storedKey of [true, false]) {
+      const response = await c.send("claude-haiku-5.5", 100_001, {
+        read: 500,
+        write: 100,
+        storedKey,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    }
+    const logs = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.profileId, c.agent.id));
+    expect(logs).toHaveLength(2);
+    expect(logs.map((row) => row.cost)).toEqual([
+      "0.0497980000",
+      "0.0497980000",
+    ]);
+    const receipts = await InteractionBillingModel.findMany(
+      logs.map((row) => row.id),
+    );
+    expect(receipts.map((row) => row.usage.cost)).toEqual([
+      "0.0497980000",
+      "0.0497980000",
+    ]);
     expect(
-      (await ModelModel.findById(row.id))?.syncedLongContextThreshold,
-    ).toBeNull();
-    expect((await InteractionBillingModel.findMany([original.id]))[0]).toEqual(
-      receipt,
-    );
-    expect(await db.select().from(schema.limitBillingUsageTable)).toEqual(
-      counters,
-    );
-    expect(await db.select().from(schema.limitModelUsageTable)).toEqual(
-      legacyCounters,
-    );
-    expect(
-      (
-        await db
-          .select()
-          .from(schema.interactionsTable)
-          .where(eq(schema.interactionsTable.id, original.id))
-      )[0].cost,
-    ).toBe(original.cost);
+      (await LimitModel.getModelUsageBreakdowns([c.cap.id])).get(c.cap.id)?.[0]
+        .cost,
+    ).toBeCloseTo(0.099596, 10);
   });
 });

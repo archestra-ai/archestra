@@ -1,8 +1,5 @@
 import { PROVIDERS_BILLING_NO_TOKEN_RATE } from "@archestra/shared";
-import {
-  type ModelsDevApiResponse,
-  modelsDevLongContextToColumns,
-} from "@/clients/models-dev-client";
+import type { ModelsDevApiResponse } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { resolveDiscoveredModelRegistryEntry } from "@/services/cross-provider-pricing";
@@ -53,11 +50,6 @@ export async function enrichDiscoveredModel(params: {
   // describes the model rather than where it is served.
   const selfHosted = PROVIDERS_BILLING_NO_TOKEN_RATE.has(model.provider);
   await ModelModel.applyRegistryCapabilities(model.id, {
-    ...(model.provider === "github-copilot"
-      ? modelsDevLongContextToColumns(
-          modelsDevData["github-copilot"]?.models[model.modelId]?.cost,
-        )
-      : {}),
     promptPricePerToken: selfHosted
       ? null
       : (prices?.promptPricePerToken ?? published?.promptPricePerToken ?? null),

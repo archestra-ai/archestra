@@ -3,9 +3,11 @@ import { describe, expect, test } from "vitest";
 import type { ModelsDevApiResponse } from "@/clients/models-dev-client";
 import { buildModelsToUpsert } from "./model-sync";
 import {
+  resolveVendorPublishedPriceSchedule,
   resolveVendorPublishedPrices,
   VENDOR_PUBLISHED_PRICE_IDS,
 } from "./vendor-published-pricing";
+import captured from "./vendor-published-pricing.test-data.json";
 
 function resolve(modelId: string) {
   return resolveVendorPublishedPrices({ provider: "openai", modelId });
@@ -212,5 +214,75 @@ describe("an id the registry keys with its suffix intact", () => {
       promptPricePerToken: "7.2e-7",
       completionPricePerToken: "7.2e-7",
     });
+  });
+});
+
+describe("published Copilot context schedules", () => {
+  test("matches the source-dated prices and exact thresholds for every supported model", () => {
+    for (const [modelId, model] of Object.entries(
+      captured.catalog["github-copilot"].models,
+    )) {
+      if (!("tiers" in model.cost)) continue;
+      const schedule = resolveVendorPublishedPriceSchedule({
+        provider: "github-copilot",
+        modelId,
+      });
+      expect(schedule, modelId).not.toBeNull();
+      expect(schedule?.threshold, modelId).toBe(model.cost.tiers[0].tier.size);
+      for (const [actual, expected] of [
+        [schedule?.short, model.cost],
+        [schedule?.long, model.cost.tiers[0]],
+      ] as const) {
+        expect(Number(actual?.promptPricePerToken) * 1e6).toBeCloseTo(
+          expected.input,
+          10,
+        );
+        expect(Number(actual?.completionPricePerToken) * 1e6).toBeCloseTo(
+          expected.output,
+          10,
+        );
+        expect(Number(actual?.cacheReadPricePerToken) * 1e6).toBeCloseTo(
+          expected.cache_read,
+          10,
+        );
+        if ("cache_write" in expected)
+          expect(Number(actual?.cacheWritePricePerToken) * 1e6).toBeCloseTo(
+            expected.cache_write,
+            10,
+          );
+        else expect(actual?.cacheWritePricePerToken).toBeNull();
+      }
+    }
+  });
+
+  test("does not infer another provider, alias, dated variant, or missing model's schedule", () => {
+    for (const provider of [
+      "openai",
+      "anthropic",
+      "openrouter",
+      "vllm",
+    ] as const) {
+      expect(
+        resolveVendorPublishedPriceSchedule({
+          provider,
+          modelId: "claude-haiku-5.5",
+        }),
+      ).toBeNull();
+    }
+    for (const modelId of [
+      "gpt-5-mini",
+      "gpt-6.1",
+      "gpt-6.1-sol-2026-10-30",
+      "github-copilot/gpt-6.1-sol",
+      "constructor",
+      "toString",
+    ]) {
+      expect(
+        resolveVendorPublishedPriceSchedule({
+          provider: "github-copilot",
+          modelId,
+        }),
+      ).toBeNull();
+    }
   });
 });

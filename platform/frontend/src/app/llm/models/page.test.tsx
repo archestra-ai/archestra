@@ -95,11 +95,6 @@ const model = {
   pricePerMillionCacheRead: null,
   pricePerMillionCacheWrite: null,
   longContextThreshold: null,
-  syncedLongContextThreshold: null,
-  syncedLongContextPromptPricePerToken: null,
-  syncedLongContextCompletionPricePerToken: null,
-  syncedLongContextCacheReadPricePerToken: null,
-  syncedLongContextCacheWritePricePerToken: null,
   longContextPricePerMillionInput: null,
   longContextPricePerMillionOutput: null,
   longContextPricePerMillionCacheRead: null,
@@ -351,7 +346,7 @@ describe("ModelsPage", () => {
     );
   });
 
-  it("shows synced tiers without turning them into custom prices and saves complete custom tiers", async () => {
+  it("saves long-context pricing only as a complete set", async () => {
     keyCreated = true;
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -359,18 +354,6 @@ describe("ModelsPage", () => {
     } as unknown as ReturnType<typeof useHasPermissions>);
     const updates: archestraApiTypes.UpdateModelData["body"][] = [];
     server.use(
-      http.get(`${API_ORIGIN}/api/llm-models`, () =>
-        HttpResponse.json([
-          {
-            ...model,
-            syncedLongContextThreshold: 100_000,
-            syncedLongContextPromptPricePerToken: "0.0000005",
-            syncedLongContextCompletionPricePerToken: "0.0000025",
-            syncedLongContextCacheReadPricePerToken: "0.00000005",
-            syncedLongContextCacheWritePricePerToken: null,
-          },
-        ]),
-      ),
       http.get(`${API_ORIGIN}/api/llm-provider-models/labels/keys`, () =>
         HttpResponse.json([]),
       ),
@@ -410,28 +393,6 @@ describe("ModelsPage", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: "Pricing" }));
-    expect(
-      screen.getByRole("heading", { name: "Synced long-context prices" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Above 100,000 prompt tokens, including cached tokens/),
-    ).toBeInTheDocument();
-    expect(screen.getByText("$0.50")).toBeInTheDocument();
-    expect(screen.getByText("Not published")).toBeInTheDocument();
-    expect(screen.getByLabelText("Above prompt tokens")).toHaveValue("");
-    expect(screen.getByLabelText("Long input")).toHaveValue("");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(updates).toHaveLength(1));
-    expect(updates[0]).toEqual(
-      expect.objectContaining({
-        longContextThreshold: null,
-        longContextPricePerMillionInput: null,
-      }),
-    );
-    await user.click(
-      await screen.findByRole("button", { name: `Edit ${model.modelId}` }),
-    );
-    await user.click(screen.getByRole("button", { name: "Pricing" }));
     await user.type(screen.getByLabelText("Above prompt tokens"), "200000");
     await user.type(screen.getByLabelText("Long input"), "6");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
@@ -440,14 +401,14 @@ describe("ModelsPage", () => {
     ).toHaveTextContent(
       "Set the threshold and all four long-context prices, or leave all empty",
     );
-    expect(updates).toHaveLength(1);
+    expect(updates).toHaveLength(0);
 
     await user.type(screen.getByLabelText("Long output"), "22.5");
     await user.type(screen.getByLabelText("Long cache read"), "0.6");
     await user.type(screen.getByLabelText("Long cache write"), "7.5");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() =>
-      expect(updates.slice(1)).toEqual([
+      expect(updates).toEqual([
         expect.objectContaining({
           longContextThreshold: 200_000,
           longContextPricePerMillionInput: "6",

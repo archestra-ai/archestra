@@ -66,8 +66,8 @@ const RETRY_CONFIG = {
 /**
  * Cost information for a model (prices per million tokens in USD)
  *
- * Input/output + cache_read/cache_write are persisted and used in cost
- * calculation, including Copilot context tiers. Intentionally NOT persisted:
+ * Only input/output + cache_read/cache_write are persisted and used in cost
+ * calculation. Intentionally NOT persisted:
  * - `reasoning`: reasoning/thinking tokens are a subset of output tokens and are
  *   billed at the output rate (reasoning === output for current models), so a
  *   separate reasoning price would double-count what output pricing already covers.
@@ -86,8 +86,6 @@ export type ModelsDevCost = {
   cache_write?: number;
   input_audio?: number;
   output_audio?: number;
-  tiers?: (ModelsDevCost & { tier: { type: "context"; size: number } })[];
-  context_over_200k?: ModelsDevCost;
 };
 
 /**
@@ -160,28 +158,17 @@ export type ModelsDevApiResponse = Record<string, ModelsDevProvider>;
 // Zod schemas for API response validation
 // ============================================================================
 
-const ModelsDevBaseCostSchema = z.object({
-  input: z.number().nonnegative().optional(),
-  output: z.number().nonnegative().optional(),
-  reasoning: z.number().optional(),
-  cache_read: z.number().nonnegative().optional(),
-  cache_write: z.number().nonnegative().optional(),
-  input_audio: z.number().optional(),
-  output_audio: z.number().optional(),
-});
-const ModelsDevCostSchema = ModelsDevBaseCostSchema.extend({
-  tiers: z
-    .array(
-      ModelsDevBaseCostSchema.extend({
-        tier: z.object({
-          type: z.literal("context"),
-          size: z.number().int().positive().max(2_147_483_647),
-        }),
-      }),
-    )
-    .optional(),
-  context_over_200k: ModelsDevBaseCostSchema.optional(),
-}).optional();
+const ModelsDevCostSchema = z
+  .object({
+    input: z.number().optional(),
+    output: z.number().optional(),
+    reasoning: z.number().optional(),
+    cache_read: z.number().optional(),
+    cache_write: z.number().optional(),
+    input_audio: z.number().optional(),
+    output_audio: z.number().optional(),
+  })
+  .optional();
 
 const ModelsDevLimitSchema = z
   .object({
@@ -231,43 +218,6 @@ const ModelsDevApiResponseSchema = z.record(
   z.string(),
   ModelsDevProviderSchema,
 );
-
-/** Copilot currently publishes one long-context tier. Never guess a boundary from a model name. */
-export function modelsDevLongContextToColumns(cost: ModelsDevCost | undefined) {
-  // The API client can return raw data when an unrelated model fails validation.
-  // Validate the pricing subset again before trusting it for persisted charges.
-  cost = ModelsDevCostSchema.parse(cost);
-  // The legacy field is also emitted for 272K tiers; explicit tiers are authoritative.
-  if ((cost?.tiers?.length ?? 0) > 1) {
-    throw new Error("Multiple Copilot context price tiers are not supported");
-  }
-  const tier =
-    cost?.tiers !== undefined
-      ? cost.tiers[0]
-      : cost?.context_over_200k
-        ? {
-            ...cost.context_over_200k,
-            tier: { type: "context" as const, size: 200_000 },
-          }
-        : undefined;
-  const rates = modelsDevCostToPerToken(tier);
-  if (
-    tier &&
-    (rates.promptPricePerToken === null ||
-      rates.completionPricePerToken === null)
-  ) {
-    throw new Error(
-      "Copilot context tier must provide input and output prices",
-    );
-  }
-  return {
-    syncedLongContextThreshold: tier?.tier.size ?? null,
-    syncedLongContextPromptPricePerToken: rates.promptPricePerToken,
-    syncedLongContextCompletionPricePerToken: rates.completionPricePerToken,
-    syncedLongContextCacheReadPricePerToken: rates.cacheReadPricePerToken,
-    syncedLongContextCacheWritePricePerToken: rates.cacheWritePricePerToken,
-  };
-}
 
 /**
  * Convert a models.dev `cost` object (prices per million tokens) into our
@@ -613,32 +563,14 @@ export class ModelsDevClient {
       await ModelModel.bulkUpsert(uniqueModelsToSync);
     }
 
-    // Copilot availability is account-specific, so never create models from
-    // this catalog. Refresh prices for already-known rows, including models
-    // discovered through passthrough credentials with no stored provider key.
-    const copilotCatalog = apiResponse["github-copilot"]?.models ?? {};
-    const knownCopilot = await ModelModel.findByProviderAndModelIds(
-      "github-copilot",
-      Object.keys(copilotCatalog),
-    );
-    // Validate all schedules before writing any Copilot price changes.
-    const copilotPrices = [...knownCopilot.values()].map((model) => ({
-      id: model.id,
-      prices: {
-        ...modelsDevCostToPerToken(copilotCatalog[model.modelId].cost),
-        ...modelsDevLongContextToColumns(copilotCatalog[model.modelId].cost),
-      },
-    }));
-    for (const { id, prices } of copilotPrices) {
-      await ModelModel.applyRegistryCapabilities(id, prices);
-    }
-
     await this.updateSyncTimestamp();
 
-    const syncedCount = uniqueModelsToSync.length + copilotPrices.length;
-    logger.info({ syncedCount }, "models.dev model metadata sync completed");
+    logger.info(
+      { syncedCount: uniqueModelsToSync.length },
+      "models.dev model metadata sync completed",
+    );
 
-    return syncedCount;
+    return uniqueModelsToSync.length;
   }
 
   /**

@@ -1,4 +1,5 @@
 import type { SupportedProvider } from "@archestra/shared";
+import type { ProviderModelPricing } from "@/types/provider-model-pricing";
 import { registryLookupCandidates } from "./cross-provider-pricing";
 
 /**
@@ -117,4 +118,129 @@ export const VENDOR_PUBLISHED_PRICE_IDS = Object.keys(PUBLISHED_PRICES);
 
 function perToken(perMillion: number): string {
   return Number.parseFloat((perMillion / 1_000_000).toFixed(12)).toString();
+}
+
+/**
+ * Complete, provider-scoped schedules where the stored flat catalog cannot
+ * express a context tier. Exact IDs only: a reseller or a similarly named
+ * model must never inherit another service's rates.
+ *
+ * GitHub Copilot USD/M-token prices verified 2026-10-30:
+ * https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing
+ * Refresh by reviewing that table and releasing the updated snapshot. Model
+ * refresh does not update this data. Keep short and long rates together so a
+ * changed flat catalog cannot be combined with an older surcharge.
+ * Null cache write means unpublished, not zero.
+ */
+type PublishedRates = {
+  input: number;
+  output: number;
+  cacheRead: number | null;
+  cacheWrite: number | null;
+};
+const PUBLISHED_CONTEXT_PRICES: Partial<
+  Record<
+    SupportedProvider,
+    Record<
+      string,
+      {
+        threshold: number;
+        short: PublishedRates;
+        long: PublishedRates;
+      }
+    >
+  >
+> = {
+  "github-copilot": {
+    "claude-haiku-5.5": {
+      threshold: 100000,
+      short: { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
+      long: { input: 0.5, output: 2.5, cacheRead: 0.05, cacheWrite: 0.625 },
+    },
+    "gpt-5.6-luna": {
+      threshold: 200000,
+      short: { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0.25 },
+      long: { input: 0.4, output: 1.8, cacheRead: 0.04, cacheWrite: 0.5 },
+    },
+    "gpt-5.6-sol": {
+      threshold: 272000,
+      short: { input: 4, output: 20, cacheRead: 0.4, cacheWrite: 5 },
+      long: { input: 8, output: 30, cacheRead: 0.8, cacheWrite: 10 },
+    },
+    "gpt-5.6-terra": {
+      threshold: 272000,
+      short: { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 2.5 },
+      long: { input: 4, output: 18, cacheRead: 0.4, cacheWrite: 5 },
+    },
+    "gpt-6-astra": {
+      threshold: 272000,
+      short: { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 },
+      long: { input: 20, output: 75, cacheRead: 2, cacheWrite: 25 },
+    },
+    "gpt-6-luna": {
+      threshold: 272000,
+      short: { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
+      long: { input: 0.2, output: 0.75, cacheRead: 0.02, cacheWrite: 0.25 },
+    },
+    "gpt-6-sol": {
+      threshold: 272000,
+      short: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
+      long: { input: 4, output: 15, cacheRead: 0.4, cacheWrite: 5 },
+    },
+    "gpt-6.1-sol": {
+      threshold: 272000,
+      short: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 },
+      long: { input: 4, output: 15, cacheRead: 0.2, cacheWrite: 5 },
+    },
+    "gpt-6.1-terra": {
+      threshold: 272000,
+      short: { input: 1, output: 5, cacheRead: 0.05, cacheWrite: 1.25 },
+      long: { input: 2, output: 7.5, cacheRead: 0.1, cacheWrite: 2.5 },
+    },
+    "grok-4.5": {
+      threshold: 200000,
+      short: { input: 2, output: 6, cacheRead: 0.5, cacheWrite: null },
+      long: { input: 4, output: 12, cacheRead: 1, cacheWrite: null },
+    },
+    "grok-4.6": {
+      threshold: 200000,
+      short: { input: 2, output: 6, cacheRead: 0.5, cacheWrite: null },
+      long: { input: 4, output: 12, cacheRead: 1, cacheWrite: null },
+    },
+    "grok-4.7": {
+      threshold: 200000,
+      short: { input: 2, output: 6, cacheRead: 0.5, cacheWrite: null },
+      long: { input: 4, output: 12, cacheRead: 1, cacheWrite: null },
+    },
+  },
+};
+
+/** A published schedule is evaluated at quote time, including raw passthrough. */
+export function resolveVendorPublishedPriceSchedule(params: {
+  provider: SupportedProvider;
+  modelId: string;
+}): {
+  threshold: number;
+  short: ProviderModelPricing;
+  long: ProviderModelPricing;
+} | null {
+  const catalog = PUBLISHED_CONTEXT_PRICES[params.provider];
+  const schedule =
+    catalog && Object.hasOwn(catalog, params.modelId)
+      ? catalog[params.modelId]
+      : undefined;
+  if (!schedule) return null;
+  const convert = (rates: PublishedRates): ProviderModelPricing => ({
+    promptPricePerToken: perToken(rates.input),
+    completionPricePerToken: perToken(rates.output),
+    cacheReadPricePerToken:
+      rates.cacheRead === null ? null : perToken(rates.cacheRead),
+    cacheWritePricePerToken:
+      rates.cacheWrite === null ? null : perToken(rates.cacheWrite),
+  });
+  return {
+    threshold: schedule.threshold,
+    short: convert(schedule.short),
+    long: convert(schedule.long),
+  };
 }

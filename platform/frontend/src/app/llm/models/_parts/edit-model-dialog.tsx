@@ -585,58 +585,11 @@ export function EditModelDialog({
             )}
           </div>
           <div className="space-y-2 pt-2">
-            {model.syncedLongContextThreshold !== null && (
-              <div className="space-y-2 pb-3">
-                <h3 className="text-sm font-medium">
-                  Synced long-context prices
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Above {formatThousands(model.syncedLongContextThreshold)}{" "}
-                  prompt tokens, including cached tokens. Prices per million
-                  tokens.
-                </p>
-                <dl className="grid grid-cols-2 gap-2 text-sm">
-                  {(
-                    [
-                      ["Input", model.syncedLongContextPromptPricePerToken],
-                      [
-                        "Output",
-                        model.syncedLongContextCompletionPricePerToken,
-                      ],
-                      [
-                        "Cache read",
-                        model.syncedLongContextCacheReadPricePerToken,
-                      ],
-                      [
-                        "Cache write",
-                        model.syncedLongContextCacheWritePricePerToken,
-                      ],
-                    ] as const
-                  ).map(([label, rate]) => (
-                    <div key={label}>
-                      <dt className="text-muted-foreground">{label}</dt>
-                      <dd className="tabular-nums">
-                        {rate === null
-                          ? "Not published"
-                          : `$${formatPricePerMillion(String(Number(rate) * 1_000_000))}`}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-                <p className="text-xs text-muted-foreground">
-                  Custom input/output and cache prices take priority. A custom
-                  long-context schedule replaces these synced prices.
-                </p>
-              </div>
-            )}
             <div className="flex min-h-7 items-center">
               <span className="text-sm font-medium">
-                Custom long-context prices ($/M tokens)
+                Long-context Pricing ($/M tokens)
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Leave all five fields empty to use the default pricing schedule.
-            </p>
             <FormField
               control={form.control}
               name="longContextThreshold"

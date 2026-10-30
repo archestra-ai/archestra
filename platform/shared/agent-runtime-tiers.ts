@@ -135,8 +135,9 @@ export function resolveAgentRuntimeTiers(
 
 /**
  * Problems with a set of tiers in effect, for the settings form and the API:
- * each limit at or above its request, and S, M and L in increasing order, so a
- * run that falls back to a neighbouring tier's pool moves one size up or down.
+ * each limit at or above its request, and S, M and L in increasing order of
+ * requests and limits, so a run that falls back to the next larger tier's pool
+ * never gets less than its own tier gives.
  */
 export function agentRuntimeTierProblems(
   tiers: Record<AgentRuntimeTierName, AgentRuntimeTierSize>,
@@ -164,6 +165,17 @@ export function agentRuntimeTierProblems(
         memoryBytes(tiers[smaller].memoryRequest)
     )
       problems.push(`Tier ${larger} requests less than tier ${smaller}`);
+    const largerCpu = tiers[larger].cpuLimit;
+    const smallerCpu = tiers[smaller].cpuLimit;
+    if (
+      memoryBytes(tiers[larger].memoryLimit) <
+        memoryBytes(tiers[smaller].memoryLimit) ||
+      // No CPU limit is the most a tier can allow.
+      (largerCpu !== null &&
+        (smallerCpu === null ||
+          cpuMillicores(largerCpu) < cpuMillicores(smallerCpu)))
+    )
+      problems.push(`Tier ${larger} has a lower limit than tier ${smaller}`);
   }
   return problems;
 }

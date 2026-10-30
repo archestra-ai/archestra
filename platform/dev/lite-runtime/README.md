@@ -152,10 +152,14 @@ runs on an `n2d-standard-8` node instead of one.
 
 Tier M, the lite image's size: request 2 CPU and 4 GiB, limit 8 GiB, no CPU
 limit, `privileged: false`, no Docker volume. That fits three runs on the same
-node. Tier L, the full image's size for the rare Kubernetes work: request 4 CPU
-and 8 GiB, limit 16 GiB. That limit is below the p90 above (16.8 GiB, measured
-before the Tilt stack's overhead was trimmed), so a long full-stack session can
-still reach it.
+node. Tier L, the full image's size for the rare Kubernetes work, defaults to a
+request of 4 CPU and 8 GiB with a 16 GiB limit. It is chosen for occasional
+runs, not density: one L run per 8-vCPU node, and the scheduler only reserves 8
+GiB for it, so a session that grows past that uses spare node memory. The limit
+is below the p90 above (16.8 GiB, measured before the Tilt stack's overhead was
+trimmed), so a long full-stack session can still reach it. These sizes are
+defaults; administrators change any tier under Settings > Agents > Runtime
+tiers, for example back to 3.5 CPU and 12 GiB when L runs become frequent.
 The frontend dev server is the largest and most variable consumer; a
 production build (`next build` and `next start`) would cut it to a few hundred
 MB for preview-only runs at the cost of a build per start, and is a candidate

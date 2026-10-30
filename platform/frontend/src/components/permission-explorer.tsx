@@ -518,5 +518,6 @@ const actionLabels: Record<Action | "manage-permissions", string> = {
   query: "Query",
   impersonate: "Impersonate",
   "full-view": "Full view",
+  "configure-runtime": "Configure runtime",
   admin: "Admin",
 };

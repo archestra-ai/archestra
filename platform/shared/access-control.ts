@@ -28,7 +28,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
   // Agents
-  agent: ["read", "create", "delete"],
+  agent: ["read", "create", "delete", "configure-runtime"],
   skill: ["read", "create", "delete"],
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
@@ -334,6 +334,8 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:read":
     "Open Agents, and use the code sandboxes and files of agents you can use",
   "agent:create": "Create new agents",
+  "agent:configure-runtime":
+    "Create runtime-backed agents and change or remove their runtime configuration",
   "agent:delete": "Open the trash of deleted agents",
   "skill:read": "Open Skills",
   "skill:create": "Create new agent skills",

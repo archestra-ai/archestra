@@ -1798,12 +1798,13 @@ export function mapProviderError(
       error.finishReason === "length"
         ? "The model reached its output limit before producing a reply. Try a smaller task, lower the reasoning effort, or ask an administrator to increase the output-token limit."
         : ChatErrorMessages[code];
+    const brandedMessage = archestraMcpBranding.brandBuiltInText(message);
     return {
       ...createErrorResponse(
         code,
         provider,
         undefined,
-        archestraMcpBranding.brandBuiltInText(message),
+        brandedMessage,
         "EmptyModelResponseError",
         {
           finishReason: error.finishReason,
@@ -1811,7 +1812,7 @@ export function mapProviderError(
           attempts: error.attempts,
         },
       ),
-      message: archestraMcpBranding.brandBuiltInText(message),
+      message: brandedMessage,
     };
   }
 

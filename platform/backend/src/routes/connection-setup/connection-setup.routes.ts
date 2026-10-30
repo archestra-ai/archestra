@@ -16,6 +16,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import {
+  CONNECTION_SETUP_TOKEN_TTL_MS,
   defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   INSTALLER_CLIENT_LABELS,
@@ -45,7 +46,6 @@ import {
   UserModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import {
   buildSetupCommand,

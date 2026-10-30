@@ -1,9 +1,16 @@
+import { once } from "node:events";
+import { createConnection } from "node:net";
 import { setImmediate } from "node:timers/promises";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, expect, test } from "vitest";
 import { trackBackgroundWork } from "@/utils/background-work";
-import { registerLlmProxyDrain } from "./llm-proxy-drain";
+import {
+  drainLlmProxyRequests,
+  registerLlmProxyDrain,
+  registerShutdownStream,
+  withDrainContinuation,
+} from "./llm-proxy-drain";
 
 const apps: FastifyInstance[] = [];
 const releases: (() => void)[] = [];
@@ -117,7 +124,7 @@ test("rejects new proxy work and readiness while an admitted JSON request finish
   expect(rejected.headers.get("retry-after")).toBe("1");
   expect((await fetch(`${url}/ready`)).status).toBe(503);
   expect((await fetch(`${url}/health`)).status).toBe(200);
-  expect((await fetch(`${url}/v1/mcp/test`)).status).toBe(200);
+  expect((await fetch(`${url}/v1/mcp/test`)).status).toBe(503);
   expect(calls).toBe(1);
   const close = app.close();
   finish.resolve();
@@ -325,3 +332,195 @@ function gate() {
   releases.push(resolve);
   return { promise, resolve };
 }
+
+test("drains mixed MCP and LLM calls while admitting only MCP replies and cancellation", async () => {
+  const app = createApp();
+  const drain = registerLlmProxyDrain(app, 1000);
+  const entered = gate();
+  const modelEntered = gate();
+  const finish = gate();
+  let calls = 0;
+  app.post("/v1/mcp/test", async (request) => {
+    const body = request.body as { method?: string };
+    if (body.method === "tools/call") {
+      calls++;
+      entered.resolve();
+      await finish.promise;
+    }
+    return { completed: true };
+  });
+  app.get("/v1/openai/completion", async () => {
+    modelEntered.resolve();
+    await finish.promise;
+    return { completed: true };
+  });
+  const url = await app.listen({ host: "127.0.0.1", port: 0 });
+  const post = (body: object) =>
+    fetch(`${url}/v1/mcp/test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const original = post({ method: "tools/call" });
+  await entered.promise;
+  const model = fetch(`${url}/v1/openai/completion`);
+  await modelEntered.promise;
+  drain.beginShutdown();
+  const draining = drainLlmProxyRequests(app);
+  expect((await post({ method: "tools/call" })).status).toBe(503);
+  expect((await post({ method: "tools/list" })).status).toBe(503);
+  expect(
+    (await post({ jsonrpc: "2.0", id: "pending", result: { answer: "yes" } }))
+      .status,
+  ).toBe(200);
+  expect(
+    (
+      await post({
+        method: "notifications/cancelled",
+        params: { requestId: 1 },
+      })
+    ).status,
+  ).toBe(200);
+  expect(calls).toBe(1);
+  finish.resolve();
+  expect((await original).status).toBe(200);
+  expect((await model).status).toBe(200);
+  await draining;
+  await app.close();
+});
+
+test("ends notification streams after calls finish instead of waiting for their lifetime", async () => {
+  const app = createApp();
+  registerLlmProxyDrain(app, 1000);
+  const entered = gate(),
+    finish = gate();
+  app.post("/v1/mcp/test", async () => {
+    entered.resolve();
+    await finish.promise;
+    return { completed: true };
+  });
+  await app.register(async (routes) => {
+    routes.get("/v1/mcp/test", (request, reply) => {
+      reply.hijack();
+      reply.raw.writeHead(200, { "Content-Type": "text/event-stream" });
+      reply.raw.write("data: first\n\n");
+      registerShutdownStream(request, reply, () =>
+        reply.raw.end("data: closed\n\n"),
+      );
+      return reply;
+    });
+  });
+  const url = await app.listen({ host: "127.0.0.1", port: 0 });
+  const response = await fetch(`${url}/v1/mcp/test`);
+  const body = response.text();
+  const call = fetch(`${url}/v1/mcp/test`, { method: "POST" });
+  await entered.promise;
+  const draining = drainLlmProxyRequests(app);
+  finish.resolve();
+  expect((await call).status).toBe(200);
+  await draining;
+  expect(await body).toBe("data: first\n\ndata: closed\n\n");
+  await app.close();
+});
+
+test("preserves both admitted pipelined responses on one socket", async () => {
+  const app = createApp();
+  registerLlmProxyDrain(app, 1000);
+  const firstEntered = gate(),
+    secondEntered = gate(),
+    first = gate(),
+    second = gate();
+  app.get("/v1/openai/first", async () => {
+    firstEntered.resolve();
+    await first.promise;
+    return { first: true };
+  });
+  app.get("/v1/openai/second", async () => {
+    secondEntered.resolve();
+    await second.promise;
+    return { second: true };
+  });
+  await app.listen({ host: "127.0.0.1", port: 0 });
+  const address = app.server.address();
+  if (!address || typeof address === "string") throw new Error("No listener");
+  const socket = createConnection({ host: "127.0.0.1", port: address.port });
+  let body = "";
+  socket.on("data", (chunk) => (body += chunk.toString()));
+  try {
+    await once(socket, "connect");
+    const ended = once(socket, "end");
+    socket.write(
+      "GET /v1/openai/first HTTP/1.1\r\nHost: localhost\r\n\r\nGET /v1/openai/second HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+    await Promise.all([firstEntered.promise, secondEntered.promise]);
+    const draining = drainLlmProxyRequests(app);
+    first.resolve();
+    await setImmediate();
+    expect(socket.destroyed).toBe(false);
+    second.resolve();
+    await draining;
+    await ended;
+    expect(body.match(/HTTP\/1.1 200/g)).toHaveLength(2);
+    expect(body).toContain('{"first":true}');
+    expect(body).toContain('{"second":true}');
+  } finally {
+    first.resolve();
+    second.resolve();
+    socket.destroy();
+    await app.close();
+  }
+});
+
+test("admits an acknowledged legacy message's one-time loopback hop and rejects forged tokens", async () => {
+  const app = createApp();
+  const drain = registerLlmProxyDrain(app, 1000);
+  const replay = gate(),
+    replayed = gate();
+  let url = "",
+    token = "";
+  let status = 0;
+  app.post("/v1/mcp/test", async () => ({ completed: true }));
+  app.post("/api/legacy-message", async (request) => {
+    trackBackgroundWork(
+      withDrainContinuation(request, async (admittedToken) => {
+        token = admittedToken ?? "";
+        await replay.promise;
+        status = (
+          await fetch(`${url}/v1/mcp/test`, {
+            method: "POST",
+            headers: { "x-archestra-drain-continuation": token },
+          })
+        ).status;
+        replayed.resolve();
+      }),
+    );
+    return { accepted: true };
+  });
+  url = await app.listen({ host: "127.0.0.1", port: 0 });
+  expect(
+    (await fetch(`${url}/api/legacy-message`, { method: "POST" })).status,
+  ).toBe(200);
+  drain.beginShutdown();
+  const draining = drainLlmProxyRequests(app);
+  expect(
+    (
+      await fetch(`${url}/v1/mcp/test`, {
+        method: "POST",
+        headers: { "x-archestra-drain-continuation": "forged" },
+      })
+    ).status,
+  ).toBe(503);
+  replay.resolve();
+  await replayed.promise;
+  expect(status).toBe(200);
+  await draining;
+  expect(
+    (
+      await fetch(`${url}/v1/mcp/test`, {
+        method: "POST",
+        headers: { "x-archestra-drain-continuation": token },
+      })
+    ).status,
+  ).toBe(503);
+  await app.close();
+});

@@ -1554,16 +1554,18 @@ function reportToolMetrics(params: {
 }
 
 /**
- * Context needed to fire the PreToolUse / PostToolUse lifecycle hooks against a
- * conversation's default sandbox. Hooks require a conversationId (the sandbox
- * session key) and the conversation's user id, so the caller passes both.
+ * Context needed to fire the PreToolUse / PostToolUse lifecycle hooks against
+ * the run's default sandbox: the conversation's in chat, the execution's
+ * (keyed by scopeKey) in headless runs.
  */
 interface ToolHookContext {
   agentId: string;
   organizationId: string;
-  /** Conversation user id — the default sandbox is keyed per org/user/conversation. */
+  /** Run user id — the default sandbox is keyed per org/user/run scope. */
   userId: string;
   conversationId?: string;
+  /** Per-run scope key; locates the execution's sandbox in headless runs. */
+  scopeKey?: string;
   /** Encrypted chats: hook dispatch is skipped (payloads persist). */
   suppressContentLogging?: boolean;
   /**
@@ -1578,7 +1580,7 @@ interface ToolHookContext {
  * Fires the PreToolUse lifecycle hook before a tool executes. Returns a block
  * reason string when a hook blocks (the caller must NOT execute the tool and
  * should return a tool-result describing the block); returns null to proceed.
- * Cheap no-op when no conversation context or no hooks. Fails open on error.
+ * Cheap no-op when the run has no sandbox scope or no hooks. Fails open on error.
  */
 async function firePreToolUseHook(params: {
   ctx: ToolHookContext;
@@ -1587,7 +1589,7 @@ async function firePreToolUseHook(params: {
   toolCallId?: string;
 }): Promise<string | null> {
   const { ctx, toolName, toolInput, toolCallId } = params;
-  if (!ctx.conversationId || ctx.suppressContentLogging) {
+  if ((!ctx.conversationId && !ctx.scopeKey) || ctx.suppressContentLogging) {
     // EncryptedChat: hook dispatch would hand tool args to the hook sandbox,
     // which persists its payloads into the durable replay log in plaintext.
     return null;
@@ -1596,6 +1598,7 @@ async function firePreToolUseHook(params: {
     const result = await hookDispatcherService.fire({
       event: "pre_tool_use",
       conversationId: ctx.conversationId,
+      isolationKey: ctx.scopeKey,
       agentId: ctx.agentId,
       organizationId: ctx.organizationId,
       userId: ctx.userId,
@@ -1698,7 +1701,7 @@ const POST_TOOL_USE_RESPONSE_CAP = 50_000;
  * Fires the PostToolUse lifecycle hook after a tool executes. When a hook blocks
  * and supplies a reason, returns hook feedback to append to the tool result;
  * otherwise returns null (return the result unchanged). Cheap no-op without
- * conversation context or hooks. Fails open on error.
+ * a run scope or hooks. Fails open on error.
  */
 async function firePostToolUseHook(params: {
   ctx: ToolHookContext;
@@ -1708,7 +1711,7 @@ async function firePostToolUseHook(params: {
   toolCallId?: string;
 }): Promise<string | null> {
   const { ctx, toolName, toolInput, toolResponse, toolCallId } = params;
-  if (!ctx.conversationId || ctx.suppressContentLogging) {
+  if ((!ctx.conversationId && !ctx.scopeKey) || ctx.suppressContentLogging) {
     // EncryptedChat: see firePreToolUseHook — hook payloads persist in plaintext.
     return null;
   }
@@ -1716,6 +1719,7 @@ async function firePostToolUseHook(params: {
     const result = await hookDispatcherService.fire({
       event: "post_tool_use",
       conversationId: ctx.conversationId,
+      isolationKey: ctx.scopeKey,
       agentId: ctx.agentId,
       organizationId: ctx.organizationId,
       userId: ctx.userId,
@@ -1862,7 +1866,12 @@ function ensureExplicitSchemaTypes(
   for (const key of SINGLE_SUBSCHEMA_KEYS) {
     const sub = result[key];
     if (isRecord(sub)) {
-      result[key] = ensureExplicitSchemaTypes(sub);
+      // `{}` and `true` both accept any member value; typing the bare node
+      // would narrow every map value to an object.
+      result[key] =
+        key === "additionalProperties" && Object.keys(sub).length === 0
+          ? true
+          : ensureExplicitSchemaTypes(sub);
     }
   }
 

@@ -2,12 +2,12 @@
 title: Limits
 description: Cap spend, tokens, and requests across your organization, teams, virtual keys, users, agents, OAuth clients, and environments
 order: 2
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Set budgets and rate limits in **Costs & Limits → Limits** so a busy key, runaway agent loop, or shared credential stops when it hits its allowance instead of running up your provider bill. Viewing limits requires [`llmLimit:read`](/docs/reference/permissions#llmLimit:read); creating, editing, or deleting limits requires [`llmLimit:create`](/docs/reference/permissions#llmLimit:create), [`llmLimit:update`](/docs/reference/permissions#llmLimit:update), or [`llmLimit:delete`](/docs/reference/permissions#llmLimit:delete).
+Set budgets and rate limits in **Costs & Limits → Limits** so a busy key, runaway agent loop, or shared credential stops when it hits its allowance instead of running up your provider bill. Organization-wide access to limits requires [`llmLimit:read`](/docs/reference/permissions#llmLimit:read); creating, editing, or deleting them requires [`llmLimit:create`](/docs/reference/permissions#llmLimit:create), [`llmLimit:update`](/docs/reference/permissions#llmLimit:update), or [`llmLimit:delete`](/docs/reference/permissions#llmLimit:delete). Team admins can also manage their own team's limits through **Settings → Teams**.
 
 ![Costs & Limits → Limits listing active spend, token, and request limits](/docs/automated_screenshots/llm-proxy_limits.webp)
 
@@ -37,6 +37,17 @@ When more than one rule matches a call, every matching hard rule must allow it:
 - **Every matching scope must allow the request.** A virtual key with remaining allowance is still blocked if its billing team or the organization has reached its cap.
 - **Model-specific and all-models rules both apply.** A call to `claude-sonnet-4-6` checks both any rule targeting `claude-sonnet-4-6` and any rule set to **All models** on the same scope.
 - **Multi-model rules share one pool.** Selecting multiple models on a single rule caps their combined spend, tokens, or requests together.
+- **A team limit counts only that team's calls.** A call counts toward a team when its credential bills that team, or when the signed-in person is in the team, directly or through a sub-team, and the agent is shared with it. Another team's limit on a shared agent never blocks you.
+
+<span id="team-limits-and-spend"></span>
+
+### Team Limits
+
+Open **Limits** in the sidebar to view usage against limits and manage spend, token and request limits for teams you administer. Use **Add Limit** and select your team. Without organization cost or limit permissions, this page shows only your administered teams; ordinary team members have no automatic limit-management access. See [team member and admin roles](/docs/admin/access-control#team-roles).
+
+Limits someone with organization limit permissions set on your team show **Set by your organization**: you see their usage, but cannot change or delete them. Your own limits on the team stack with them.
+
+Limits for organization, users, virtual keys, OAuth clients, agents, and environments still require the organization `llmLimit` permissions above. Organization-wide spend requires [`llmCost:read`](/docs/reference/permissions#llmCost:read).
 
 ## Limit Behavior
 
@@ -58,6 +69,14 @@ Each limit resets or recovers according to its **Interval**:
 | **Rolling** | **Every hour**, **Every 12 hours**, **Every 24 hours**, **Every week**, **Every month** | Resets once the full interval has elapsed since the previous reset. |
 | **Calendar** | **Calendar day**, **Calendar week (Sun)**, **Calendar week (Mon)**, **Calendar month** | Resets at `00:00` local server time at the start of the next day, Sunday, Monday, or month. |
 
+## Reset a Spend Limit
+
+Unblock a spend limit before its next scheduled reset. In **Explicit limits**, click **Reset usage** on the limit and confirm. Spend starts again at `$0`, and cost reports keep the past usage.
+
+- A **Calendar** interval keeps its schedule. A **Rolling** interval next resets one full interval after your reset.
+- Token, request, and per-minute limits have no **Reset usage**. They recover on their own schedule.
+- Resetting a limit needs [`llmLimit:update`](/docs/reference/permissions#llmLimit:update). Team admins can also reset the limits they set on their own team.
+
 ## Default User Spend Limits
 
 <span id="default-user-limits"></span>
@@ -70,7 +89,7 @@ At the top of **Costs & Limits → Limits**, the **Default user limit** card set
 
 ## How Usage Is Counted
 
-- **Spend (`$`):** counts metered API-key calls at the model's token prices. Calls on flat-rate subscriptions record `$0` spend and do not consume spend limits (see [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost)).
+- **Spend (`$`):** counts metered API-key calls at the model's token prices, cache reads and writes included. Calls on flat-rate subscriptions record `$0` spend and do not consume spend limits (see [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost)). A charge [estimated for a missing price](/docs/llm-proxy/costs-and-limits#when-a-price-is-missing) counts too, and the limit shows **Includes estimates**.
 - **Tokens:** counts newly processed input and output tokens reported by the provider after each call finishes (including cache writes and subscription traffic; reused cached input does not consume token limits). Because token counts arrive when a response completes, requests already in flight can push usage slightly past a token limit before subsequent requests are blocked.
 - **Requests:** counts one request when the proxy admits a model call, including subscription traffic.
 

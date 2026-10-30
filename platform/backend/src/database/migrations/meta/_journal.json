@@ -4271,6 +4271,20 @@
       "when": 1793228884954,
       "tag": "0609_absent_scourge",
       "breakpoints": true
+    },
+    {
+      "idx": 610,
+      "version": "7",
+      "when": 1793307994824,
+      "tag": "0610_team_sync_roles_and_team_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 611,
+      "version": "7",
+      "when": 1793317258802,
+      "tag": "0611_next_catseye",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,7 @@
 title: Helm
 description: Install, verify, scale, and upgrade Archestra on Kubernetes
 order: 1
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-29
 ---
 
 Install Archestra's web and worker pods, database, and workload permissions with the Helm chart. You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Check [Production](/docs/admin/deployment/production) before exposing a shared instance.
@@ -28,7 +28,7 @@ Keep deployment-specific settings in `values.yaml` so upgrades use the same conf
 1. Choose an exact version from [GitHub Releases](https://github.com/archestra-ai/archestra/releases) and download its chart defaults. Tags ending in `-rc.N` are release candidates:
 
    ```bash
-   export ARCHESTRA_VERSION="1.5.0-rc.13" # x-release-please-version
+   export ARCHESTRA_VERSION="1.5.0-rc.16" # x-release-please-version
    helm show values \
      oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" > values.yaml
@@ -104,8 +104,12 @@ Update `archestra.imageTag` in your values file too: an old values file or `--re
 
 ### Let Active Requests Finish
 
-Keep `archestra.terminationGracePeriodSeconds` at least **120**. During shutdown, Archestra rejects new model requests and gives active requests up to 60 seconds to finish; longer requests can lose their connection.
+Set `archestra.shutdown.requestDrainSeconds` above the longest request you want to preserve after shutdown starts. For example, `200` gives a request with 180 seconds remaining room to finish. Keep `archestra.terminationGracePeriodSeconds: null` to derive matching web and worker pod limits. See [shutdown settings](/docs/admin/deployment/configuration#shutdown) for cleanup budgets and environment overrides.
 
-For Docker, use `docker stop --time 120` or Compose's `stop_grace_period: 120s`.
+During shutdown, readiness returns 503 and new work is rejected. Admitted LLM and MCP calls can finish within the drain budget, including their persistence work; MCP replies and cancellations for active calls remain available. Notification streams close after active calls settle. At the deadline, remaining HTTP connections close and unfinished work may be interrupted.
+
+Reconnect notification streams to a live replica. An interrupted tool call can already have performed its side effect: retry only when the tool supports idempotency or after reconciling its result. The drain setting does not extend provider, MCP upstream or client timeouts; raise those separately when needed.
+
+For Docker, set the same [shutdown environment variables](/docs/admin/deployment/configuration#shutdown) and allow at least `max(drain, worker timeout) + cleanup + 40` seconds in `docker stop --time` or Compose's `stop_grace_period`.
 
 New companion and agent runtime images are published at `ghcr.io/archestra-ai`. The main platform image remains at `archestra/platform` on Docker Hub. If you mirror images internally, import the release’s companion images from GHCR and preserve your Helm registry overrides. Existing releases remain at their original addresses.

@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "v1.5.0-rc.13"
+    "version": "v1.5.0-rc.16"
   },
   "components": {
     "schemas": {
@@ -116498,6 +116498,7 @@
                 "knowledgeFile.bulk_deleted",
                 "limit.created",
                 "limit.updated",
+                "limit.reset",
                 "limit.deleted",
                 "limit.bulk_deleted",
                 "llmModel.updated",
@@ -116846,6 +116847,7 @@
                                   "knowledgeFile.bulk_deleted",
                                   "limit.created",
                                   "limit.updated",
+                                  "limit.reset",
                                   "limit.deleted",
                                   "limit.bulk_deleted",
                                   "llmModel.updated",
@@ -117830,6 +117832,7 @@
                             "knowledgeFile.bulk_deleted",
                             "limit.created",
                             "limit.updated",
+                            "limit.reset",
                             "limit.deleted",
                             "limit.bulk_deleted",
                             "llmModel.updated",
@@ -196297,6 +196300,9 @@
                           "spent": {
                             "type": "number"
                           },
+                          "estimatedUsage": {
+                            "type": "boolean"
+                          },
                           "percent": {
                             "nullable": true,
                             "type": "number"
@@ -196350,6 +196356,7 @@
                           "cleanupInterval",
                           "models",
                           "spent",
+                          "estimatedUsage",
                           "percent",
                           "status",
                           "customLimitId",
@@ -382471,7 +382478,16 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get all label keys used by limits\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:read`: View token usage limits",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "key",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -382720,11 +382736,11 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:read"
-          ]
-        }
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits.",
+          "permissions": []
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits."
       }
     },
     "/api/limits/labels/values": {
@@ -382733,7 +382749,6 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get all label values used by limits\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:read`: View token usage limits",
         "parameters": [
           {
             "schema": {
@@ -382741,8 +382756,7 @@
             },
             "in": "query",
             "name": "key",
-            "required": false,
-            "description": "Filter values by label key"
+            "required": false
           }
         ],
         "responses": {
@@ -382993,11 +383007,11 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:read"
-          ]
-        }
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits.",
+          "permissions": []
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits."
       }
     },
     "/api/limits": {
@@ -383006,7 +383020,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get all limits with optional filtering and per-model usage breakdown\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:read`: View token usage limits",
+        "description": "Get all limits with optional filtering and per-model usage breakdown\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read` for organization-wide access. A session-authenticated team admin receives only limits for teams they directly administer, with optional entity filters.",
         "parameters": [
           {
             "schema": {
@@ -383135,6 +383149,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "teamManaged": {
+                        "type": "boolean",
+                        "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                      },
                       "cleanupInterval": {
                         "type": "string",
                         "enum": [
@@ -383212,6 +383230,10 @@
                           "additionalProperties": false
                         }
                       },
+                      "estimatedUsage": {
+                        "description": "Spend limits only: part of the spend is estimated because a model had no price for some of the tokens a request used.",
+                        "type": "boolean"
+                      },
                       "modelUsage": {
                         "type": "array",
                         "items": {
@@ -383249,6 +383271,7 @@
                       "behavior",
                       "mcpServerName",
                       "toolName",
+                      "teamManaged",
                       "lastCleanup",
                       "createdAt",
                       "updatedAt",
@@ -383494,10 +383517,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:read"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin receives only limits for teams they directly administer, with optional entity filters.",
+          "permissions": []
         }
       },
       "post": {
@@ -383505,7 +383527,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Create a new limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:create`: Create new usage limits",
+        "description": "Create a new limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:create`, or a session-authenticated team admin creating a limit on their own team.",
         "requestBody": {
           "required": true,
           "content": {
@@ -383706,6 +383728,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "teamManaged": {
+                      "type": "boolean",
+                      "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                    },
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
@@ -383744,6 +383770,7 @@
                     "behavior",
                     "mcpServerName",
                     "toolName",
+                    "teamManaged",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt"
@@ -383987,10 +384014,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:create"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:create`, or a session-authenticated team admin creating a limit on their own team.",
+          "permissions": []
         }
       }
     },
@@ -384000,7 +384026,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get a limit by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:read`: View token usage limits",
+        "description": "Get a limit by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read`, or a session-authenticated team admin for a limit on their own team.",
         "parameters": [
           {
             "schema": {
@@ -384086,6 +384112,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "teamManaged": {
+                      "type": "boolean",
+                      "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                    },
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
@@ -384163,6 +384193,10 @@
                         "additionalProperties": false
                       }
                     },
+                    "estimatedUsage": {
+                      "description": "Spend limits only: part of the spend is estimated because a model had no price for some of the tokens a request used.",
+                      "type": "boolean"
+                    },
                     "modelUsage": {
                       "type": "array",
                       "items": {
@@ -384200,6 +384234,7 @@
                     "behavior",
                     "mcpServerName",
                     "toolName",
+                    "teamManaged",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt",
@@ -384444,10 +384479,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:read"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:read`, or a session-authenticated team admin for a limit on their own team.",
+          "permissions": []
         }
       },
       "patch": {
@@ -384455,7 +384489,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Update a limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:update`: Modify existing usage limits",
+        "description": "Update a limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:update`, or a session-authenticated team admin updating a limit on their own team.",
         "requestBody": {
           "required": true,
           "content": {
@@ -384524,9 +384558,6 @@
                       "calendar_month"
                     ]
                   },
-                  "lastCleanup": {
-                    "nullable": true
-                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -384556,6 +384587,13 @@
                         "value"
                       ]
                     }
+                  },
+                  "lastCleanup": {
+                    "type": "string",
+                    "nullable": true,
+                    "enum": [
+                      null
+                    ]
                   }
                 }
               }
@@ -384647,6 +384685,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "teamManaged": {
+                      "type": "boolean",
+                      "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                    },
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
@@ -384685,6 +384727,7 @@
                     "behavior",
                     "mcpServerName",
                     "toolName",
+                    "teamManaged",
                     "lastCleanup",
                     "createdAt",
                     "updatedAt"
@@ -384928,10 +384971,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:update"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:update`, or a session-authenticated team admin updating a limit on their own team.",
+          "permissions": []
         }
       },
       "delete": {
@@ -384939,7 +384981,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Delete a limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:delete`: Remove usage limits",
+        "description": "Delete a limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:delete`, or a session-authenticated team admin deleting a limit on their own team.",
         "parameters": [
           {
             "schema": {
@@ -385206,10 +385248,393 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:delete"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:delete`, or a session-authenticated team admin deleting a limit on their own team.",
+          "permissions": []
+        }
+      }
+    },
+    "/api/limits/{id}/reset": {
+      "post": {
+        "operationId": "resetLimitUsage",
+        "tags": [
+          "Limits"
+        ],
+        "description": "Reset a spend limit's current window to $0, so the requests it blocks run again. Cost reports keep the past spend. A calendar interval keeps its schedule. A rolling interval next resets one interval from now.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:update`, or a session-authenticated team admin resetting a limit on their own team.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "entityType": {
+                      "type": "string",
+                      "enum": [
+                        "organization",
+                        "team",
+                        "agent",
+                        "user",
+                        "virtual_key",
+                        "environment",
+                        "llm_oauth_client"
+                      ]
+                    },
+                    "entityId": {
+                      "type": "string"
+                    },
+                    "limitType": {
+                      "type": "string",
+                      "enum": [
+                        "token_cost",
+                        "requests",
+                        "tokens",
+                        "requests_per_minute",
+                        "tokens_per_minute",
+                        "mcp_server_calls",
+                        "tool_calls"
+                      ]
+                    },
+                    "limitValue": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "behavior": {
+                      "type": "string",
+                      "enum": [
+                        "hard",
+                        "soft"
+                      ]
+                    },
+                    "mcpServerName": {
+                      "nullable": true,
+                      "type": "string",
+                      "maxLength": 255
+                    },
+                    "toolName": {
+                      "nullable": true,
+                      "type": "string",
+                      "maxLength": 255
+                    },
+                    "model": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reason": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teamManaged": {
+                      "type": "boolean",
+                      "description": "Whether a team admin created this team limit. Team admins can change or delete only these."
+                    },
+                    "cleanupInterval": {
+                      "type": "string",
+                      "enum": [
+                        "minute",
+                        "1h",
+                        "12h",
+                        "24h",
+                        "1w",
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
+                      ]
+                    },
+                    "lastCleanup": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "entityType",
+                    "entityId",
+                    "limitType",
+                    "limitValue",
+                    "behavior",
+                    "mcpServerName",
+                    "toolName",
+                    "teamManaged",
+                    "lastCleanup",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:update`, or a session-authenticated team admin resetting a limit on their own team.",
+          "permissions": []
         }
       }
     },
@@ -385219,7 +385644,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Delete several limits in one request. Missing or out-of-organization ids are reported in `failed` while visible limits are deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:delete`: Remove usage limits",
+        "description": "Delete several limits in one request. Missing or out-of-organization ids are reported in `failed` while visible limits are deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:delete`, or a session-authenticated team admin deleting only limits for teams they administer. Unauthorized targets are reported as not found.",
         "requestBody": {
           "required": true,
           "content": {
@@ -385544,10 +385969,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:delete"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:delete`, or a session-authenticated team admin deleting only limits for teams they administer. Unauthorized targets are reported as not found.",
+          "permissions": []
         }
       }
     },
@@ -389639,11 +390063,6 @@
                         },
                         "recomputedCost": {
                           "type": "number"
-                        },
-                        "settledRequests": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991
                         }
                       },
                       "required": [
@@ -389651,8 +390070,7 @@
                         "subscriptionRequests",
                         "users",
                         "recordedCost",
-                        "recomputedCost",
-                        "settledRequests"
+                        "recomputedCost"
                       ],
                       "additionalProperties": false
                     }
@@ -389914,7 +390332,7 @@
         "tags": [
           "LLM Models"
         ],
-        "description": "Recompute the recorded cost of a model's past requests from `since` (all of them when null) at its current prices. Runs in the background; poll the GET endpoint for progress. Requests settled under an enforced cost limit keep their cost.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Recompute the recorded cost of a model's past requests from `since` (all of them when null) at its current prices. Runs in the background; poll the GET endpoint for progress. It also re-prices each request's settled receipt and corrects the spend limits whose current window holds the charge.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -391511,13 +391929,17 @@
                               },
                               "currentUsage": {
                                 "type": "number"
+                              },
+                              "estimatedUsage": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
                               "limitValue",
                               "cleanupInterval",
                               "limitId",
-                              "currentUsage"
+                              "currentUsage",
+                              "estimatedUsage"
                             ],
                             "additionalProperties": false
                           }
@@ -392342,13 +392764,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     },
@@ -393010,13 +393436,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     }
@@ -393792,13 +394222,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     },
@@ -430095,13 +430529,17 @@
                               },
                               "currentUsage": {
                                 "type": "number"
+                              },
+                              "estimatedUsage": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
                               "limitValue",
                               "cleanupInterval",
                               "limitId",
-                              "currentUsage"
+                              "currentUsage",
+                              "estimatedUsage"
                             ],
                             "additionalProperties": false
                           },
@@ -430996,13 +431434,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     },
@@ -431734,13 +432176,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     },
@@ -432550,13 +432996,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     },
@@ -538407,6 +538857,9 @@
                                 "syncedFromSso": {
                                   "type": "boolean"
                                 },
+                                "roleSyncedFromSso": {
+                                  "type": "boolean"
+                                },
                                 "createdAt": {
                                   "type": "string",
                                   "format": "date-time"
@@ -538418,6 +538871,7 @@
                                 "userId",
                                 "role",
                                 "syncedFromSso",
+                                "roleSyncedFromSso",
                                 "createdAt"
                               ],
                               "additionalProperties": false
@@ -538932,6 +539386,9 @@
                           "syncedFromSso": {
                             "type": "boolean"
                           },
+                          "roleSyncedFromSso": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -538943,6 +539400,7 @@
                           "userId",
                           "role",
                           "syncedFromSso",
+                          "roleSyncedFromSso",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -539359,6 +539817,9 @@
                           "syncedFromSso": {
                             "type": "boolean"
                           },
+                          "roleSyncedFromSso": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -539370,6 +539831,7 @@
                           "userId",
                           "role",
                           "syncedFromSso",
+                          "roleSyncedFromSso",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -539837,6 +540299,9 @@
                           "syncedFromSso": {
                             "type": "boolean"
                           },
+                          "roleSyncedFromSso": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -539848,6 +540313,7 @@
                           "userId",
                           "role",
                           "syncedFromSso",
+                          "roleSyncedFromSso",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -540822,6 +541288,9 @@
                       "syncedFromSso": {
                         "type": "boolean"
                       },
+                      "roleSyncedFromSso": {
+                        "type": "boolean"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -540844,6 +541313,7 @@
                       "userId",
                       "role",
                       "syncedFromSso",
+                      "roleSyncedFromSso",
                       "createdAt",
                       "name",
                       "email",
@@ -541160,6 +541630,9 @@
                     "syncedFromSso": {
                       "type": "boolean"
                     },
+                    "roleSyncedFromSso": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -541171,6 +541644,7 @@
                     "userId",
                     "role",
                     "syncedFromSso",
+                    "roleSyncedFromSso",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -541476,6 +541950,19 @@
           },
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "member"
+              ]
+            },
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "description": "Return only members with this team role."
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "path",
@@ -541511,6 +541998,9 @@
                           "syncedFromSso": {
                             "type": "boolean"
                           },
+                          "roleSyncedFromSso": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -541533,6 +542023,7 @@
                           "userId",
                           "role",
                           "syncedFromSso",
+                          "roleSyncedFromSso",
                           "createdAt",
                           "name",
                           "email",
@@ -541902,6 +542393,9 @@
                     "syncedFromSso": {
                       "type": "boolean"
                     },
+                    "roleSyncedFromSso": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -541913,6 +542407,7 @@
                     "userId",
                     "role",
                     "syncedFromSso",
+                    "roleSyncedFromSso",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -543016,6 +543511,17 @@
                       "groupIdentifier": {
                         "type": "string"
                       },
+                      "identityProviderId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "admin",
+                          "member"
+                        ]
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -543025,6 +543531,8 @@
                       "id",
                       "teamId",
                       "groupIdentifier",
+                      "identityProviderId",
+                      "role",
                       "createdAt"
                     ],
                     "additionalProperties": false
@@ -543278,7 +543786,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Add an external group mapping to a team for SSO team sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
+        "description": "Link an identity provider group to a team for Team Sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "requestBody": {
           "required": true,
           "content": {
@@ -543289,6 +543797,21 @@
                   "groupIdentifier": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "identityProviderId": {
+                    "description": "Match the group only for sign-ins through this identity provider. Omit to match it from any provider.",
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "default": "member",
+                    "description": "The team role members of this group receive.",
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "member"
+                    ]
                   }
                 },
                 "required": [
@@ -543325,6 +543848,17 @@
                     "groupIdentifier": {
                       "type": "string"
                     },
+                    "identityProviderId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "member"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -543334,6 +543868,8 @@
                     "id",
                     "teamId",
                     "groupIdentifier",
+                    "identityProviderId",
+                    "role",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -543588,7 +544124,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Remove an external group mapping from a team for SSO team sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
+        "description": "Unlink an identity provider group from a team's Team Sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -547624,13 +548160,17 @@
                               },
                               "currentUsage": {
                                 "type": "number"
+                              },
+                              "estimatedUsage": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
                               "limitValue",
                               "cleanupInterval",
                               "limitId",
-                              "currentUsage"
+                              "currentUsage",
+                              "estimatedUsage"
                             ],
                             "additionalProperties": false
                           }
@@ -548506,13 +549046,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     }
@@ -549063,13 +549607,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     }
@@ -549771,13 +550319,17 @@
                         },
                         "currentUsage": {
                           "type": "number"
+                        },
+                        "estimatedUsage": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "limitValue",
                         "cleanupInterval",
                         "limitId",
-                        "currentUsage"
+                        "currentUsage",
+                        "estimatedUsage"
                       ],
                       "additionalProperties": false
                     }

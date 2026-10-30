@@ -79,8 +79,8 @@ export function buildDaggerEgressPolicies(params: {
   capabilities?: K8sNetworkPolicyCapabilities | null;
   /**
    * Resolved by the caller; only the AWS ApplicationNetworkPolicy consumes it.
-   * Omitted (or empty) falls back to allowing DNS egress to any IP — the same
-   * degraded mode the MCP path uses when the cluster DNS IP can't be resolved.
+   * Omitted (or empty) adds no DNS bootstrap exception, matching the MCP
+   * path when the cluster resolver cannot be determined.
    */
   clusterDnsIps?: string[];
   /**

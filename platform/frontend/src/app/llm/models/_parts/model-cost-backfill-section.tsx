@@ -173,18 +173,6 @@ export function ModelCostBackfillSection({
       {effectiveMode !== "new" && (
         <StatStrip impact={impact ?? null} loading={activePreview.isFetching} />
       )}
-      {effectiveMode !== "new" && impact && impact.settledRequests > 0 && (
-        <p className="-mt-1 flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
-          <Info className="size-3 shrink-0" />
-          <span>
-            <span className="tabular-nums">
-              {impact.settledRequests.toLocaleString("en-US")}
-            </span>{" "}
-            more were settled under enforced cost limits and keep the cost they
-            were charged.
-          </span>
-        </p>
-      )}
 
       <RadioGroup
         value={effectiveMode}

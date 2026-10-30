@@ -1526,10 +1526,14 @@ class InteractionModel {
         );
         return;
       }
-      // A credential's billing team takes the place of the agent's teams.
+      // A credential's billing team takes the place of the agent's teams the
+      // caller belongs to.
       const teamIds = interaction.billingTeamId
         ? [interaction.billingTeamId]
-        : await AgentTeamModel.getTeamsForAgent(interaction.profileId);
+        : await AgentTeamModel.getCallerTeamsForAgent({
+            agentId: interaction.profileId,
+            userId: interaction.userId,
+          });
       if (teamIds.length === 0) {
         logger.warn(
           `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,
@@ -3678,25 +3682,11 @@ class InteractionModel {
                     await RoutingUsageModel.record(tx, routingUsage);
                   const created = await write(tx);
                   if (claimed && data.billingMode !== "subscription") {
-                    if (billingUsage.mode === "enforce") {
-                      await LimitModel.settleBillableUsage({
-                        tx,
-                        usage: billingUsage,
-                        attribution: billingAttribution,
-                      });
-                    } else {
-                      // Shadow records the candidate quote but posts only legacy counts.
-                      await LimitModel.recordInteractionTokenUsage({
-                        agentId: data.profileId ?? "",
-                        teamIds: [],
-                        entities: [],
-                        model: data.model ?? "",
-                        inputTokens: data.inputTokens ?? 0,
-                        outputTokens: data.outputTokens ?? 0,
-                        tx,
-                        attribution: billingAttribution,
-                      });
-                    }
+                    await LimitModel.settleBillableUsage({
+                      tx,
+                      usage: billingUsage,
+                      attribution: billingAttribution,
+                    });
                   }
                   return created;
                 }),

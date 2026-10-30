@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.5.0-rc.13" # x-release-please-version
+  imageTag: "1.5.0-rc.16" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -20,9 +20,16 @@ archestra:
   # as the HPA will manage the replica count dynamically
   replicaCount: 1
 
-  # Covers frontend stop, backend's 60s proxy drain / 80s shutdown deadline,
-  # and supervisord's 90s backend stop budget. Keep at least 120 seconds.
-  terminationGracePeriodSeconds: 120
+  # null derives max(request drain, worker timeout) + cleanup + 40 seconds.
+  # An explicit value must cover that budget. Applies to web and worker pods.
+  terminationGracePeriodSeconds: null
+  shutdown:
+    # null preserves envFrom, envFromSecrets and envWithValueFrom sources.
+    # Runtime defaults are 60s drain, 20s cleanup and 30s worker task timeout.
+    # Set explicit values here to override imported environment settings.
+    requestDrainSeconds: null
+    cleanupSeconds: null
+    workerTaskTimeoutSeconds: null
 
   # Optional database connection budgeting across all backend pods.
   # When configured, Helm divides the budget across peak web and worker pods,
@@ -536,7 +543,7 @@ archestra:
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
-    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.13" # x-release-please-version
+    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.16" # x-release-please-version
     baseImage: ""
 
     # Resource requests/limits applied to generated MCP server containers
@@ -630,6 +637,15 @@ archestra:
       # If not set, defaults to cluster.local
       clusterDomain: ""
 
+      # Cluster resolver IP(s) that MCP server, agent and sandbox egress policies
+      # allow DNS (port 53) to. Leave empty to discover the kube-system/kube-dns
+      # Service (see rbac.kubeDnsServiceRead). Set it when that Service is not the
+      # resolver (NodeLocal DNSCache, custom DNS) or cannot be read.
+      # Example:
+      #   clusterDnsIps:
+      #     - 172.20.0.10
+      clusterDnsIps: []
+
       # Kubeconfig configuration
       # Choose one of the following methods:
 
@@ -685,6 +701,13 @@ archestra:
         # external RBAC supplies a readable Role with that name in every runtime
         # namespace and deletes each Role during release uninstall.
         create: true
+
+        # Grant the platform ServiceAccount `get` on the kube-system/kube-dns
+        # Service (a Role + RoleBinding in kube-system, scoped to that one
+        # object). Egress policies pin DNS to its ClusterIP. Without this read,
+        # and with no clusterDnsIps set, the AWS ApplicationNetworkPolicy DNS rule
+        # omits the DNS bootstrap exception. Requires rbac.create.
+        kubeDnsServiceRead: true
 
         # Kubernetes namespaces backing deployment environments that the platform
         # may deploy MCP servers into. The platform ServiceAccount only gets

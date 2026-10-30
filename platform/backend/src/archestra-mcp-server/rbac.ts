@@ -150,7 +150,7 @@ export const TOOL_PERMISSIONS: Record<
   add_team_member: { resource: "team", action: "read" },
   update_team_member_role: { resource: "team", action: "read" },
   remove_team_member: { resource: "team", action: "read" },
-  // External group sync tools follow the same pattern as membership tools:
+  // Team Sync tools follow the same pattern as membership tools:
   // team:read as the coarse gate (matching the REST routes), with the finer
   // manage check (org-level team manager OR team admin) and the enterprise
   // license gate enforced in the handlers.
@@ -381,7 +381,7 @@ export async function checkToolPermission(
     // previous wording ("User context not available") read as an internal
     // fault rather than a fixable choice of credential.
     return errorResult(
-      `${toolName} requires an acting user, but the credential used to authenticate does not identify one. Team tokens, organization tokens, and OAuth client-credentials tokens act for an application, not a person. Re-authenticate with a personal token, a user OAuth token, or an Identity Provider JWT.`,
+      `${toolName} requires an acting user, but the credential used to authenticate does not identify one. Team tokens, organization tokens, and OAuth client-credentials tokens act for an application, not a person. Re-authenticate with a personal token, a service account API key, a user OAuth token, or an Identity Provider JWT.`,
     );
   }
 

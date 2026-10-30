@@ -70,6 +70,7 @@ vi.mock("@/lib/auth/use-is-authenticated", () => ({
 }));
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/limits-access");
 // Read only when a grant on one credential might open Settings.
 vi.mock("@/lib/runtime-credentials.query", () => ({
   useRuntimeCredentials: () => ({ data: [], isPending: false }),

@@ -18,6 +18,7 @@ import type {
   CostHistoryDay,
   CostWindowTotals,
   RecomputedCost,
+  SettledReceipt,
   TieredTokenSums,
   TokenSums,
 } from "@/models/interaction-cost-backfill";
@@ -26,6 +27,7 @@ import {
   priceCacheUsage,
   priceTokenUsage,
 } from "@/routes/proxy/utils/cost-optimization";
+import { quotedPrices } from "@/services/billable-usage";
 import { taskQueueService } from "@/task-queue";
 import { ApiError, type Model } from "@/types";
 import type {
@@ -35,7 +37,19 @@ import type {
   ModelCostBackfill,
   ModelCostBackfillPricing,
 } from "@/types/model-cost-backfill";
-import { promptTokens } from "@/utils/billable-usage";
+import {
+  componentCacheCosts,
+  estimateMissingPrices,
+  formatMoney,
+  hasEstimatedPrice,
+  moneyUnits,
+  PRICE_ISSUES,
+  type PricedBillingUsage,
+  type PricedComponent,
+  priceTokens,
+  promptTokens,
+  sumMoney,
+} from "@/utils/billable-usage";
 
 // Above the class: the exported singleton reads it while initializing.
 /** Long enough to absorb a burst of preview calls while prices are typed. */
@@ -117,7 +131,6 @@ class ModelCostBackfillService {
           provider: model.provider,
           tokens: window.tokens,
         }),
-        settledRequests: window.settledRequests,
       },
     };
   }
@@ -318,7 +331,7 @@ class ModelCostBackfillService {
       const owned = await withDbTransaction(async (tx) => {
         if (!(await ModelCostBackfillModel.lockOwned(lease, tx))) return false;
         const updated = await InteractionCostBackfillModel.applyBatch(
-          rows.map((row) => recompute(row, pricing)),
+          rows.map((row) => recompute(row, pricing, scope)),
           tx,
         );
         return ModelCostBackfillModel.advance(
@@ -627,11 +640,17 @@ function tierPrices(
  * long-context tier above its threshold, the base prices otherwise.
  */
 function pricesFor(pricing: BackfillPricing, row: CostBackfillRow) {
-  const prompt = promptTokens({
-    inputTokens: row.inputTokens ?? 0,
-    cacheReadTokens: row.cacheReadTokens ?? 0,
-    cacheWriteTokens: row.cacheWriteTokens ?? 0,
-  });
+  return pricesForPrompt(
+    pricing,
+    promptTokens({
+      inputTokens: row.inputTokens ?? 0,
+      cacheReadTokens: row.cacheReadTokens ?? 0,
+      cacheWriteTokens: row.cacheWriteTokens ?? 0,
+    }),
+  );
+}
+
+function pricesForPrompt(pricing: BackfillPricing, prompt: number) {
   const { longContext } = pricing;
   return longContext && isLongContextPrompt(longContext.threshold, prompt)
     ? longContext.prices
@@ -668,6 +687,7 @@ function tierMayOverflow(params: {
   const none = {
     id: "",
     createdAt: "",
+    receipt: null,
     inputTokens: 0,
     outputTokens: 0,
     cacheReadTokens: 0,
@@ -708,8 +728,145 @@ function tierMayOverflow(params: {
 function recompute(
   row: CostBackfillRow,
   pricing: ModelCostBackfillPricing,
+  scope: BackfillScope,
 ): RecomputedCost {
+  if (row.receipt)
+    return recomputeReceipt({
+      id: row.id,
+      receipt: row.receipt,
+      pricing,
+      scope,
+    });
   return recomputeAt(row, pricesFor(pricing, row), pricing.provider);
+}
+
+/**
+ * A settled request re-priced from its receipt, as settlement prices it: each
+ * of this model's components at its own prompt size, missing rates estimated.
+ * Components of other models, and charges a provider reported, keep their
+ * cost. The difference moves into the budgets the request was charged to.
+ */
+function recomputeReceipt(params: {
+  id: string;
+  receipt: SettledReceipt;
+  pricing: ModelCostBackfillPricing;
+  scope: BackfillScope;
+}): RecomputedCost {
+  const { receipt, pricing, scope } = params;
+  const before = receipt.usage;
+  // A provider-reported charge is OpenRouter's, whose models are never
+  // recomputed, so a "provider" source here is a per-key price list.
+  const ours = (component: PricedComponent) =>
+    component.model === scope.modelId && component.provider === scope.provider;
+  const components = before.components.map((component) => {
+    if (!ours(component)) return component;
+    const resolved = pricesForPrompt(pricing, promptTokens(component));
+    const quoted = quotedPrices({
+      model: component.model,
+      provider: component.provider,
+      pricing: resolved,
+      instancePriced: false,
+    });
+    const estimate = estimateMissingPrices({
+      usage: component,
+      prices: quoted.prices,
+      provider: component.provider,
+    });
+    try {
+      return {
+        ...component,
+        prices: quoted.prices,
+        cost: priceTokens(component, estimate.prices),
+      };
+    } catch {
+      // Invalid token counts keep the charge settlement made; only the known
+      // rates move, so a price set since then clears its estimate.
+      return { ...component, prices: quoted.prices };
+    }
+  });
+  // Price findings are per receipt, so they are redone from every
+  // component's known rates, including other models' components.
+  const flags = components.map(estimatedRates);
+  const issues = [
+    ...before.issues.filter((issue) => !PRICE_ISSUES.has(issue)),
+    ...(flags.some((flag) => flag.model) ? ["estimated_model_price"] : []),
+    ...(flags.some((flag) => flag.cache) ? ["estimated_cache_price"] : []),
+  ];
+  const status = issues.length
+    ? ("incomplete" as const)
+    : ("complete" as const);
+  const usage: PricedBillingUsage = {
+    ...before,
+    status,
+    issues,
+    components,
+    cost: sumMoney(components.map((component) => component.cost)),
+  };
+
+  const costOf = (list: PricedComponent[]) =>
+    moneyUnits(sumMoney(list.filter(ours).map((component) => component.cost)));
+  const costDelta = costOf(components) - costOf(before.components);
+  const estimatedDelta =
+    Number(hasEstimatedPrice(usage)) - Number(hasEstimatedPrice(before));
+  // Settlement flagged the receipt on every model it charged, so a change in
+  // the flag moves on each of them; the cost moves only on this model.
+  const entities = receipt.entities;
+  const budgetChanges =
+    entities?.length && receipt.billingMode !== "subscription"
+      ? [...new Set(before.components.map((component) => component.model))]
+          .map((model) => ({
+            model,
+            delta: model === scope.modelId ? costDelta : 0n,
+          }))
+          .filter(({ delta }) => delta !== 0n || estimatedDelta !== 0)
+          .map(({ model, delta }) => ({
+            chargedAt: receipt.createdAt,
+            entities,
+            model,
+            costDelta: formatMoney(delta),
+            estimatedDelta,
+          }))
+      : [];
+
+  const cached = components.some(
+    (component) =>
+      component.cacheReadTokens > 0 || component.cacheWriteTokens > 0,
+  );
+  const cache = components.map(componentCacheCosts);
+  const total = (key: "cacheCost" | "cacheSavings") =>
+    cache.reduce((sum, item) => sum + item[key], 0).toFixed(10);
+  return {
+    id: params.id,
+    cost: usage.cost,
+    cacheCost: cached ? total("cacheCost") : null,
+    cacheSavings: cached ? total("cacheSavings") : null,
+    receipt: { usage, budgetChanges },
+  };
+}
+
+/**
+ * Which kinds of rate a priced component needed but its receipt lacks, read
+ * from the rates the receipt kept, as settlement flags them. A charge the
+ * provider reported is exact.
+ */
+function estimatedRates(component: PricedComponent): {
+  model: boolean;
+  cache: boolean;
+} {
+  if (
+    component.provider === "openrouter" &&
+    component.prices.source === "provider"
+  )
+    return { model: false, cache: false };
+  const { model, cache } = estimateMissingPrices({
+    usage: component,
+    prices: component.prices,
+    provider: component.provider,
+  });
+  const placeholder =
+    component.prices.source === "default" &&
+    (component.prices.input !== "0.00" || component.prices.output !== "0.00");
+  return { model: model || placeholder, cache };
 }
 
 function recomputeAt(

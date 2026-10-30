@@ -719,6 +719,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "limit",
     fetchById: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
   },
+  // A reset changes only the window start, so before/after shows lastCleanup
+  // moving.
+  "/api/limits/:id/reset": {
+    resourceType: "limit",
+    action: "limit.reset",
+    fetchById: (id, orgId) => LimitModel.findByIdForAudit(id, orgId),
+  },
 
   // Default user limits (per-environment + org-wide)
   "/api/default-user-limits": {
@@ -1316,7 +1323,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
   },
 
-  // Team membership & external-group mappings live in join tables the team
+  // Team membership & Team Sync group links live in join tables the team
   // snapshot reflects; the parent team survives member/mapping removal, so pin
   // team.updated on both the POST (add) and the per-child DELETE.
   "/api/teams/:id/members": {

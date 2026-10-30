@@ -163,7 +163,8 @@ test.describe("studio sidebar navigation", () => {
     await setPermissions({ mswControl }, { llmCost: [] });
     await page.goto("/agents");
 
-    const row = page.getByRole("link", { name: /^Costs & Limits/ });
+    // Named for the only page it opens, so it does not promise costs.
+    const row = page.getByRole("link", { name: /^Limits/ });
     await expect(row).toHaveAttribute("href", "/llm/limits");
   });
 

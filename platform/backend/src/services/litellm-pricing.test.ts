@@ -108,60 +108,57 @@ test("syncs LiteLLM alias prices and uses the selected instance for accounting",
     [a, 0.0074],
     [b, 0.0094],
   ] as const) {
-    for (const mode of ["off", "enforce"] as const) {
-      const costs = await calculateInteractionCosts({
+    const costs = await calculateInteractionCosts({
+      actualModel: "team-chat",
+      providerName: "openai",
+      providerApiKeyId: key.id,
+      usage: {
+        inputTokens: 1000,
+        outputTokens: 500,
+        cacheReadTokens: 400,
+        cacheWriteTokens: 400,
+      },
+    });
+    expect(costs.actualCost).toBeCloseTo(expected, 10);
+    const saved = await InteractionModel.create(
+      buildInteractionRecord({
+        agent,
         actualModel: "team-chat",
-        providerName: "openai",
-        providerApiKeyId: key.id,
-        usageAccountingMode: mode,
+        providerType: "openai:chatCompletions",
+        billingMode: "metered",
+        billingAttribution: {
+          organizationId: org.id,
+          environmentId: agent.environmentId,
+          entities: [
+            { entityType: "organization", entityId: org.id },
+            { entityType: "agent", entityId: agent.id },
+          ],
+        },
         usage: {
           inputTokens: 1000,
           outputTokens: 500,
           cacheReadTokens: 400,
           cacheWriteTokens: 400,
         },
-      });
-      expect(costs.actualCost).toBeCloseTo(expected, 10);
-      const saved = await InteractionModel.create(
-        buildInteractionRecord({
-          agent,
-          actualModel: "team-chat",
-          providerType: "openai:chatCompletions",
-          billingMode: "metered",
-          billingAttribution: {
-            organizationId: org.id,
-            environmentId: agent.environmentId,
-            entities: [
-              { entityType: "organization", entityId: org.id },
-              { entityType: "agent", entityId: agent.id },
-            ],
-          },
-          usage: {
-            inputTokens: 1000,
-            outputTokens: 500,
-            cacheReadTokens: 400,
-            cacheWriteTokens: 400,
-          },
-          request: { model: "team-chat", messages: [] },
-          processedRequest: null,
-          response: {
-            id: "fixture",
-            model: "team-chat",
-            choices: [],
-            object: "chat.completion",
-            created: 1,
-          },
-          costs,
-        }),
-      );
-      expect(Number(saved.cost)).toBeCloseTo(expected, 10);
-    }
+        request: { model: "team-chat", messages: [] },
+        processedRequest: null,
+        response: {
+          id: "fixture",
+          model: "team-chat",
+          choices: [],
+          object: "chat.completion",
+          created: 1,
+        },
+        costs,
+      }),
+    );
+    expect(Number(saved.cost)).toBeCloseTo(expected, 10);
   }
   const stats = await StatisticsModel.getCostSavingsStatistics({
     organizationId: org.id,
     timeframe: "24h",
   });
-  expect(stats.totalActualCost).toBeCloseTo(0.0336, 10);
+  expect(stats.totalActualCost).toBeCloseTo(0.0168, 10);
 });
 
 test("refreshes instance rates while preserving overrides, zero and unknown prices", async ({
@@ -256,14 +253,16 @@ test("refreshes instance rates while preserving overrides, zero and unknown pric
     providerApiKeyId: key.id,
     usage: { inputTokens: 1000, outputTokens: 500 },
   };
-  expect((await calculateInteractionCosts(missing)).actualCost).toBeUndefined();
-  const enforced = await calculateInteractionCosts({
-    ...missing,
-    usageAccountingMode: "enforce",
-  });
-  expect(enforced.billingUsage).toMatchObject({
+  // The instance's missing input rate is estimated at the model's own catalog
+  // rate (here the placeholder for an unlisted model), so the request is
+  // still charged and its budgets say so.
+  const estimated = await calculateInteractionCosts(missing);
+  expect(estimated.billingUsage).toMatchObject({
     status: "incomplete",
-    issues: ["unpriced_usage"],
+    issues: ["estimated_model_price"],
+    // The receipt keeps the rates the key published; the estimate is in the cost.
     components: [{ prices: { input: null, output: "8" } }],
   });
+  // 1000 * 50 + 500 * 8, per million
+  expect(estimated.actualCost).toBeCloseTo(0.054, 10);
 });

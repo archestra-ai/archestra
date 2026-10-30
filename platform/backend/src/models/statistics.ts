@@ -3002,11 +3002,15 @@ const billingModelFacts = sql`LATERAL (
     sum((component->>'cacheReadTokens')::bigint) AS cache_read_tokens,
     sum((component->>'cacheWriteTokens')::bigint) AS cache_write_tokens,
     sum((component->>'cost')::numeric) AS cost,
+    -- A cache direction with no known rate adds no savings, as in
+    -- componentCacheCosts.
     sum(round((
-      ((component->>'cacheReadTokens')::numeric + (component->>'cacheWriteTokens')::numeric) * (component->'prices'->>'input')::numeric
-      - (component->>'cacheReadTokens')::numeric * COALESCE((component->'prices'->>'cacheRead')::numeric, 0)
-      - ((component->>'cacheWriteTokens')::numeric - (component->>'cacheWrite1hTokens')::numeric) * COALESCE((component->'prices'->>'cacheWrite')::numeric, 0)
-      - (component->>'cacheWrite1hTokens')::numeric * COALESCE((component->'prices'->>'cacheWrite1h')::numeric, 0)
+      COALESCE((component->>'cacheReadTokens')::numeric * ((component->'prices'->>'input')::numeric - (component->'prices'->>'cacheRead')::numeric), 0)
+      + CASE WHEN component->'prices'->>'cacheWrite' IS NULL THEN 0 ELSE
+          (component->>'cacheWriteTokens')::numeric * (component->'prices'->>'input')::numeric
+          - ((component->>'cacheWriteTokens')::numeric - (component->>'cacheWrite1hTokens')::numeric) * (component->'prices'->>'cacheWrite')::numeric
+          - (component->>'cacheWrite1hTokens')::numeric * COALESCE((component->'prices'->>'cacheWrite1h')::numeric, 0)
+        END
     ) / 1000000, 10)) AS cache_savings
   FROM jsonb_array_elements(${schema.interactionBillingTable.usage}->'components') AS component
   GROUP BY component->>'model'

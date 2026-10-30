@@ -29,7 +29,11 @@ import { ClientMarkTile } from "@/components/client-mark-tile";
 import { CATALOG_AGENT_MARKS } from "@/components/client-marks";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
@@ -227,13 +231,15 @@ export function AgentCatalog({
         {canConfigureRuntime === false && (
           <InlineNotice variant="info">
             <Info className="size-4 shrink-0" />
-            <span className="font-medium">
-              Configure runtime permission required
-            </span>
-            <InlineNoticeText>
-              You can still create ordinary agents. Ask an administrator to
-              enable runtime configuration for your role.
-            </InlineNoticeText>
+            <InlineNoticeBody>
+              <span className="font-medium">
+                Configure runtime permission required
+              </span>
+              <InlineNoticeText>
+                You can still create ordinary agents. Ask an administrator to
+                enable runtime configuration for your role.
+              </InlineNoticeText>
+            </InlineNoticeBody>
           </InlineNotice>
         )}
         {runtimeAvailable === false && <AgentRuntimeUnavailableNotice />}

@@ -67,6 +67,73 @@ describe("custom role routes", () => {
     await app.close();
   });
 
+  for (const method of ["POST", "PUT"] as const) {
+    for (const scenario of [
+      "admin",
+      "custom",
+      "limited",
+      "foreign",
+      "disabled",
+    ] as const) {
+      test(`${method} resolves ${scenario} service-account grants without permitting escalation`, async ({
+        makeServiceAccount,
+        makeCustomRole,
+        makeOrganization,
+      }) => {
+        const limitedRole = await makeCustomRole(organizationId, {
+          permission: { ac: ["create", "update"], agent: ["read"] },
+        });
+        const account = await makeServiceAccount(
+          scenario === "foreign"
+            ? (await makeOrganization()).id
+            : organizationId,
+          {
+            role:
+              scenario === "limited" || scenario === "custom"
+                ? limitedRole.role
+                : "admin",
+            disabled: scenario === "disabled",
+          },
+        );
+        authenticatedUser = { ...user, id: `service-account:${account.id}` };
+        const target = await makeCustomRole(organizationId, {
+          permission: { agent: ["read"] },
+        });
+        const allowed = scenario === "admin" || scenario === "custom";
+        const payload = {
+          name: "Automation Role",
+          permission: {
+            agent: scenario === "custom" ? ["read"] : ["read", "create"],
+          },
+        };
+        const response = await app.inject({
+          method,
+          url: method === "POST" ? "/api/roles" : `/api/roles/${target.id}`,
+          payload,
+        });
+
+        expect(response.statusCode).toBe(allowed ? 200 : 403);
+        if (allowed) {
+          expect(response.json().permission).toEqual(payload.permission);
+        } else {
+          expect(response.json().error.message).toContain("agent:create");
+          expect(
+            (await OrganizationRoleModel.getById(target.id, organizationId))
+              ?.permission,
+          ).toEqual({ agent: ["read"] });
+          if (method === "POST") {
+            expect(
+              await OrganizationRoleModel.getByIdentifier(
+                "automation_role",
+                organizationId,
+              ),
+            ).toBeNull();
+          }
+        }
+      });
+    }
+  }
+
   /**
    * Regression: role creation used to be delegated to better-auth's
    * `createOrgRole`, which re-checked every `resource:action` pair against

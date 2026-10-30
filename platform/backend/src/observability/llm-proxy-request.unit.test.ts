@@ -185,6 +185,26 @@ test("only allowlisted attribution reaches OTEL and model/consumer values do not
   ).not.toMatch(/private|secret credential|authorization/);
 });
 
+test("a settlement failure supersedes an earlier policy denial", async () => {
+  const telemetry = new LlmProxyRequestTelemetry({
+    provider: "openai",
+    operation: "chat",
+    stream: true,
+  });
+  telemetry.fail({ statusCode: 403, origin: "archestra", outcome: "denied" });
+  telemetry.fail({ statusCode: 503, origin: "archestra", outcome: "error" });
+  telemetry.finish({ statusCode: 200, headersSent: true, disconnected: false });
+  expect(await counts()).toEqual([
+    expect.objectContaining({
+      value: 1,
+      labels: expect.objectContaining({ status_code: "200", outcome: "error" }),
+    }),
+  ]);
+  expect(exporter.getFinishedLogRecords()[0].attributes["error.type"]).toBe(
+    "503",
+  );
+});
+
 test("export failures never alter request behavior and an unfinished disconnected stream is cancelled", async () => {
   vi.spyOn(logs, "getLogger").mockImplementation(() => {
     throw new Error("export unavailable");

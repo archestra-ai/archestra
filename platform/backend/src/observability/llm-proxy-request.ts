@@ -73,7 +73,9 @@ export class LlmProxyRequestTelemetry {
 
   fail(failure: ProxyRequestFailure): void {
     // Preserve the original failure if a response mapper rethrows a generic ApiError.
-    this.failure ??= failure;
+    // A later operational failure does supersede a policy denial while settling the response.
+    if (!this.failure || this.failure.outcome === "denied")
+      this.failure = failure;
   }
 
   setTraceContext(traceContext: Context): void {

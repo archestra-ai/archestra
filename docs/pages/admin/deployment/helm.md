@@ -2,7 +2,7 @@
 title: Helm
 description: Install, verify, scale, and upgrade Archestra on Kubernetes
 order: 1
-lastUpdated: 2026-10-29
+lastUpdated: 2026-10-30
 ---
 
 Install Archestra's web and worker pods, database, and workload permissions with the Helm chart. You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Check [Production](/docs/admin/deployment/production) before exposing a shared instance.
@@ -28,7 +28,7 @@ Keep deployment-specific settings in `values.yaml` so upgrades use the same conf
 1. Choose an exact version from [GitHub Releases](https://github.com/archestra-ai/archestra/releases) and download its chart defaults. Tags ending in `-rc.N` are release candidates:
 
    ```bash
-   export ARCHESTRA_VERSION="1.5.0-rc.14" # x-release-please-version
+   export ARCHESTRA_VERSION="1.5.0-rc.16" # x-release-please-version
    helm show values \
      oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" > values.yaml
@@ -58,6 +58,26 @@ archestra:
     existingSecretsEncryptionSecretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
     existingOfferSigningSecretKey: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
 ```
+
+### DNS Discovery
+
+In-cluster installations can discover the DNS resolver from the platform pod's DNS configuration without creating resources in `kube-system`. Environment egress policies use that resolver to allow DNS lookups for MCP servers, agents, and sandboxes.
+
+If workloads use a different resolver or discovery fails, configure verified addresses:
+
+```yaml
+archestra:
+  orchestrator:
+    kubernetes:
+      clusterDnsIps:
+        - 172.20.0.10 # Replace with your cluster's resolver IP.
+```
+
+Alternatively, set `archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead: true` to grant the platform service account `get` on the `kube-system/kube-dns` Service. This creates a Role and RoleBinding in `kube-system`; the installer and any GitOps project must permit managing both resources there. Creating the platform service account alone does not grant the installer this access.
+
+Disabling an existing DNS reader grant does not guarantee Helm removes its Role and RoleBinding when the installer lacks access to `kube-system`. Have an operator with access to that namespace remove the release's DNS reader objects.
+
+On EKS Auto Mode, check that workload DNS lookups succeed after deployment. If no resolver can be determined, [egress policies](/docs/admin/deployment/networking#enforce-workload-egress) omit the DNS bootstrap exception rather than allowing port 53 to arbitrary destinations.
 
 ### Verify the Installation
 
@@ -97,6 +117,8 @@ archestra:
 Agent Runtime pods scale separately from web and worker pods. See [production runtime capacity](/docs/admin/deployment/production#agent-runtime) for node autoscaling and [Runtime Setup](/docs/agents/runtime/setup) for cluster prerequisites.
 
 ## Upgrade
+
+<!-- Describe the current chart behavior and supported upgrade procedure here. Do not add version-specific migration histories or before/after release narratives; those belong in release notes. -->
 
 Use the installation command with the selected version and your current values after completing the [production release checks](/docs/admin/deployment/production#releases-and-backups).
 

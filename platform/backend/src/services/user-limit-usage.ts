@@ -213,8 +213,7 @@ export async function listUserLimitUsage(params: {
       };
     }
 
-    const spent =
-      (environmentSpend ?? organizationSpend).get(user.userId)?.cost ?? 0;
+    const usage = (environmentSpend ?? organizationSpend).get(user.userId);
     return {
       ...base,
       source: "none",
@@ -223,7 +222,8 @@ export async function listUserLimitUsage(params: {
       limitValue: null,
       cleanupInterval: null,
       models: null,
-      spent: Number.isFinite(spent) ? spent : 0,
+      spent: usage?.cost ?? 0,
+      estimatedUsage: usage?.estimated ?? false,
       percent: null,
       status: "ok",
       customLimitId: null,
@@ -281,11 +281,7 @@ export async function listUserLimitUsage(params: {
           ([userId]) => !customByUser.has(userId) && memberIds.has(userId),
         )
         .map(([, usage]) =>
-          statusFor(
-            usage.incomplete
-              ? 100
-              : (usage.cost / override.override.limitValue) * 100,
-          ),
+          statusFor((usage.cost / override.override.limitValue) * 100),
         );
       return {
         environmentId: environment.id,
@@ -402,7 +398,7 @@ export async function resetUserLimitUsage(params: {
 // ===
 // Internal helpers
 
-type Usage = { cost: number; incomplete: boolean };
+type Usage = { cost: number; estimated: boolean };
 
 type Candidate = {
   source: "custom" | "environment_default" | "organization_default";
@@ -454,7 +450,7 @@ function defaultCandidate(params: {
     limitValue: params.limit.limitValue,
     cleanupInterval: params.limit.cleanupInterval,
     models: params.limit.model ?? null,
-    usage: params.usage ?? { cost: 0, incomplete: false },
+    usage: params.usage ?? { cost: 0, estimated: false },
     environmentId: params.limit.environmentId,
     environmentName: params.environmentName,
     customLimitId: null,
@@ -474,7 +470,7 @@ function closestCustomLimit(params: {
       limitValue: limit.limitValue,
       cleanupInterval: limit.cleanupInterval ?? "calendar_month",
       models: limit.model ?? null,
-      usage: params.totals.get(limit.id) ?? { cost: 0, incomplete: false },
+      usage: params.totals.get(limit.id) ?? { cost: 0, estimated: false },
       environmentId: null,
       environmentName: null,
       customLimitId: limit.id,
@@ -488,16 +484,12 @@ function closestCustomLimit(params: {
 }
 
 function describeLimit(candidate: Candidate & { now: Date }) {
-  // Unpriced media blocks enforcement outright, so it reads as at the limit.
-  const percent = candidate.usage.incomplete
-    ? 100
-    : candidate.limitValue > 0
+  const percent =
+    candidate.limitValue > 0
       ? (candidate.usage.cost / candidate.limitValue) * 100
       : 100;
   const window = calendarWindow(candidate.cleanupInterval, candidate.now);
-  const spent = roundCents(
-    Number.isFinite(candidate.usage.cost) ? candidate.usage.cost : 0,
-  );
+  const spent = roundCents(candidate.usage.cost);
   return {
     source: candidate.source,
     environmentId: candidate.environmentId,
@@ -506,6 +498,7 @@ function describeLimit(candidate: Candidate & { now: Date }) {
     cleanupInterval: candidate.cleanupInterval,
     models: candidate.models,
     spent,
+    estimatedUsage: candidate.usage.estimated,
     percent: Math.round(percent * 10) / 10,
     status: statusFor(percent),
     customLimitId: candidate.customLimitId,
@@ -522,7 +515,6 @@ function byPercentDesc(a: Candidate, b: Candidate) {
 }
 
 function percentOf(candidate: Candidate) {
-  if (candidate.usage.incomplete) return Number.POSITIVE_INFINITY;
   return candidate.limitValue > 0
     ? candidate.usage.cost / candidate.limitValue
     : Number.POSITIVE_INFINITY;

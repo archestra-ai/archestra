@@ -57,7 +57,7 @@ export class BedrockPartialEmbeddingError extends PartialEmbeddingError {
  * resolution (IAM/IRSA, static SigV4, or bearer key) as Bedrock chat.
  *
  * Two request paths, dispatched on the configured model:
- *   - Multimodal models (Titan Multimodal G1, Cohere Embed v3) are driven over
+ *   - Multimodal models (Titan Multimodal G1, Cohere Embed v3/v4) are driven over
  *     raw InvokeModel via `BedrockClient` — the AI SDK's Bedrock embedding path
  *     only produces text-shaped request bodies.
  *   - Everything else keeps the AI SDK `embedMany` path and rejects image
@@ -81,11 +81,14 @@ export async function callBedrockEmbedding(params: {
   if (entry?.inputModalities.includes("image")) {
     const client = buildBedrockClient({ apiKey, baseUrl });
     try {
-      const { embeddings, tokens } = entry.modelId.startsWith("cohere.")
+      const { embeddings, tokens } = entry.cohereRequest
         ? await embedWithCohere({
             client,
             model,
             inputs,
+            request: entry.cohereRequest,
+            dimensions,
+            onRequestDimensions: entry.onRequestDimensions,
             maxInputTextChars: entry.maxInputTextChars,
             purpose,
           })
@@ -246,21 +249,43 @@ async function embedWithTitanMultimodal(params: {
 }
 
 /**
- * Embed via Cohere Embed v3 on Bedrock. Texts are batched (the API takes up to
- * 96 per call); each image is its own call (the API takes exactly one image per
- * request, as a data URI, under `input_type: "image"`). Results are reassembled
- * in input order. Token usage comes from the `X-Amzn-Bedrock-Input-Token-Count`
- * response header (the response body carries none).
+ * Embed via Cohere Embed v3 or v4 on Bedrock. Texts are batched (the API takes
+ * up to 96 per call); each image is its own call, as a data URI. Results are
+ * reassembled in input order. Token usage comes from the
+ * `X-Amzn-Bedrock-Input-Token-Count` response header (the response body
+ * carries none).
+ *
+ * The two generations differ in three request fields: v3 truncates with
+ * "END" and embeds images under `input_type: "image"`; v4 truncates with
+ * "RIGHT", has no image input type (an image takes the same purpose as text),
+ * and accepts `output_dimension`.
  */
 async function embedWithCohere(params: {
   client: BedrockClient;
   model: string;
   inputs: EmbeddingInput[];
+  request: "v3" | "v4";
+  dimensions?: number;
+  onRequestDimensions?: readonly number[];
   maxInputTextChars?: number;
   purpose?: EmbeddingPurpose;
 }): Promise<{ embeddings: number[][]; tokens: number }> {
-  const { client, model, inputs, maxInputTextChars, purpose } = params;
+  const {
+    client,
+    model,
+    inputs,
+    request,
+    dimensions,
+    onRequestDimensions,
+    maxInputTextChars,
+    purpose,
+  } = params;
   const embeddings = new Array<number[]>(inputs.length);
+  const inputType = purpose ?? "search_document";
+  const outputDimension =
+    dimensions !== undefined && onRequestDimensions?.includes(dimensions)
+      ? { output_dimension: dimensions }
+      : {};
 
   const textEntries: Array<{ index: number; text: string }> = [];
   const imageEntries: Array<{ index: number; dataUri: string }> = [];
@@ -305,13 +330,14 @@ async function embedWithCohere(params: {
         const { body: response, inputTokenCount } =
           await client.invokeJsonWithHeaders<CohereEmbeddingResponse>(model, {
             texts: batch.map((entry) => entry.text),
-            input_type: purpose ?? "search_document",
+            input_type: inputType,
             // Texts are already clamped to the request schema's character cap
-            // above; "END" remains as the token-level backstop (Cohere embeds at
-            // most 512 tokens per text) so a cap-fitting chunk that still
+            // above; truncation remains as the token-level backstop (v3 embeds
+            // at most 512 tokens per text) so a cap-fitting chunk that still
             // exceeds the token limit degrades to a truncated vector instead of
             // failing the whole document.
-            truncate: "END",
+            truncate: request === "v4" ? "RIGHT" : "END",
+            ...outputDimension,
           });
         const vectors = cohereVectors(response, model, batch.length);
         batch.forEach((entry, i) => {
@@ -326,7 +352,8 @@ async function embedWithCohere(params: {
         const { body: response, inputTokenCount } =
           await client.invokeJsonWithHeaders<CohereEmbeddingResponse>(model, {
             images: [entry.dataUri],
-            input_type: "image",
+            input_type: request === "v4" ? inputType : "image",
+            ...outputDimension,
           });
         embeddings[entry.index] = cohereVectors(response, model, 1)[0];
         tokens += inputTokenCount ?? 0;
@@ -436,7 +463,7 @@ const DEFAULT_ON_REQUEST_DIMENSIONS: readonly number[] = [256, 512, 1024];
 /** Bound the per-input fan-out (one InvokeModel call per value). */
 const BEDROCK_EMBEDDING_MAX_PARALLEL = 8;
 
-/** Cohere Embed v3 on Bedrock takes at most 96 texts per InvokeModel call. */
+/** Cohere Embed on Bedrock takes at most 96 texts per InvokeModel call. */
 const COHERE_MAX_TEXTS_PER_CALL = 96;
 
 /** Cohere's documented per-image limit (base64-decoded size). */

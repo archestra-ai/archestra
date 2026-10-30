@@ -2,13 +2,14 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
-import { handleApiError, throwOnApiError } from "@/lib/utils/api";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const {
   getLimits,
   createLimit,
   getLimit,
   updateLimit,
+  resetLimitUsage,
   deleteLimit,
   bulkDeleteLimits,
 } = archestraApiSdk;
@@ -119,6 +120,25 @@ export function useDeleteLimit() {
       await queryClient.invalidateQueries({ queryKey: limitKeys.all });
       queryClient.removeQueries({ queryKey: limitKeys.detail(variables.id) });
       toast.success("Limit deleted successfully");
+    },
+  });
+}
+
+/** Start a spend limit's window over from $0. */
+export function useResetLimitUsage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data, error } = await resetLimitUsage({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: limitKeys.all });
+      toast.success("Usage reset");
     },
   });
 }

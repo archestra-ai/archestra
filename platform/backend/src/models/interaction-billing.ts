@@ -47,7 +47,11 @@ export default class InteractionBillingModel {
             ...new Set(
               usage.issues.filter(
                 (issue) =>
-                  !["estimated_model_price", "unpriced_usage"].includes(issue),
+                  ![
+                    "estimated_model_price",
+                    "estimated_cache_price",
+                    "unpriced_usage",
+                  ].includes(issue),
               ),
             ),
           ].sort(),
@@ -95,6 +99,10 @@ export default class InteractionBillingModel {
         // First settlement owns the snapshot; mutable labels are deliberately
         // excluded from the billing identity used to recognize retries.
         attributionLabels: params.attributionLabels,
+        entities: attribution.entities.map(({ entityType, entityId }) => ({
+          entityType,
+          entityId,
+        })),
       })
       .onConflictDoNothing()
       .returning({ id: schema.interactionBillingTable.interactionId });

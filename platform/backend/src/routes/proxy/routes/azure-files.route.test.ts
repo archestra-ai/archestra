@@ -317,17 +317,6 @@ test.for([
   expect(files.calls).toHaveLength(0);
 });
 
-test("blocks file uploads under enforced accounting", async ({ files }) => {
-  config.llmProxy.usageAccountingMode = "enforce";
-  await expect(
-    files.client.files.create({
-      file: await toFile(Buffer.from("fixture"), "fixture.bin"),
-      purpose: "user_data",
-    }),
-  ).rejects.toMatchObject({ status: 422 });
-  expect(files.calls).toHaveLength(0);
-});
-
 test("account configuration changes and expired handles fail before upstream reads", async ({
   files,
 }) => {

@@ -162,7 +162,7 @@ export function PermissionExplorer({
             {visible.map((group) => (
               <section key={group.name} aria-label={`${group.name} resources`}>
                 <div
-                  className="hidden grid-cols-[minmax(8rem,1fr)_repeat(5,5rem)_minmax(4rem,0.8fr)] items-center gap-1 border-b pb-2 text-[11px] text-muted-foreground lg:grid"
+                  className="hidden grid-cols-[minmax(8rem,1fr)_repeat(5,5rem)_minmax(9rem,1fr)] items-center gap-1 border-b pb-2 text-[11px] text-muted-foreground lg:grid"
                   aria-hidden="true"
                 >
                   <span>Resource</span>
@@ -184,7 +184,7 @@ export function PermissionExplorer({
                     return (
                       <fieldset
                         key={resource}
-                        className="grid min-w-0 gap-y-2 py-3 lg:grid-cols-[minmax(8rem,1fr)_repeat(5,5rem)_minmax(4rem,0.8fr)] lg:items-center lg:gap-x-1 lg:py-1"
+                        className="grid min-w-0 gap-y-2 py-3 lg:grid-cols-[minmax(8rem,1fr)_repeat(5,5rem)_minmax(9rem,1fr)] lg:items-center lg:gap-x-1 lg:py-1"
                         aria-label={`${label} actions`}
                       >
                         <div className="flex min-w-0 items-center gap-2">
@@ -440,7 +440,7 @@ function PermissionAction({
             htmlFor={controlId}
             className={cn(
               "flex min-h-8 items-center gap-1.5 rounded px-1.5 text-xs transition-colors lg:min-h-7 lg:justify-center",
-              named && "lg:justify-start",
+              named && "whitespace-nowrap lg:justify-start",
               disabled
                 ? "cursor-not-allowed text-muted-foreground"
                 : "cursor-pointer hover:bg-muted/60",
@@ -518,5 +518,6 @@ const actionLabels: Record<Action | "manage-permissions", string> = {
   query: "Query",
   impersonate: "Impersonate",
   "full-view": "Full view",
+  "configure-runtime": "Configure runtime",
   admin: "Admin",
 };

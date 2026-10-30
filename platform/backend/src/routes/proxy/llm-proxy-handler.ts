@@ -321,6 +321,7 @@ export interface LLMProxyContext<TRequest> {
 /** How a request is spread across its model pool's members. */
 export interface ModelPoolRouting {
   plan: ModelPoolPlan;
+  checkLimits: (member: PlannedMember) => Promise<void>;
   transportFor: (
     member: PlannedMember,
     signal: AbortSignal,
@@ -1236,6 +1237,20 @@ export async function handleLLMProxy<
   const upstreamAttempt: UpstreamAttempt = {
     providerApiKeyId: perKeyChatApiKeyId,
   };
+  const limitContext = {
+    unpricedMediaModel: provider.unavailableUsageAccounting
+      ? actualModel
+      : undefined,
+    agentId: resolvedAgentId,
+    userId,
+    virtualKeyId,
+    passthroughVirtualKeyId,
+    llmOauthClientId: authenticatedApp?.id,
+    billingTeamId,
+    teamMemberUserId: authenticatedUserId ?? null,
+    agent: resolvedAgent,
+    snapshot: requestContext,
+  };
   try {
     // A redacted audit context cannot retain an enforceable trajectory safely.
     if (
@@ -1254,6 +1269,55 @@ export async function handleLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
+    // A request for a model pool's name is served by the pool's members when
+    // the caller may use the pool (see `mayUseModelPool`). Members on a wire
+    // the client's can't reach are left out of the plan.
+    const poolWire = openAiCodexPassthrough
+      ? null
+      : inboundPoolWire(provider.interactionType);
+    // A chat or agent set to a pool names it, and sends one of its members'
+    // models. Any other platform call runs on the key and model it names.
+    const chatModelPoolHeader = internalCall
+      ? headersForExtraction[MODEL_POOL_ID_HEADER.toLowerCase()]
+      : undefined;
+    const chatModelPoolId =
+      typeof chatModelPoolHeader === "string" && chatModelPoolHeader
+        ? chatModelPoolHeader
+        : undefined;
+    const modelPoolPlan =
+      poolWire && (!internalCall || chatModelPoolId)
+        ? await planModelPool({
+            organizationId: resolvedAgent.organizationId,
+            name: actualModel,
+            poolId: chatModelPoolId,
+            inbound: poolWire,
+            caller: {
+              virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
+              providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
+            },
+            grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
+            sessionId,
+          })
+        : null;
+    // A user's chat or agent call on the organization default model, from an
+    // agent with no model of its own, is routed across the organization trio.
+    // The router picks the session's tier and key, which the call is sent with
+    // the way a pool member is, even when the tier is the default model
+    // itself: the call's own key when it serves the tier, else the user's
+    // ranked one. A call the router cannot route runs on the model it names.
+    // A pooled call is accounted for by its pool; it is never also routed.
+    const autoRouteWire =
+      internalCall &&
+      config.autoRouting.enabled &&
+      headersForExtraction[AUTO_ROUTABLE_HEADER.toLowerCase()] === "true" &&
+      followsOrganizationRouting(resolvedAgent) &&
+      !modelPoolPlan
+        ? poolWire
+        : null;
+    const autoRouteUser = autoRouteWire ? resolvedUser : null;
+    // Model-scoped budgets wait until the pool member or routed tier is known.
+    const deferModelScopedLimits =
+      modelPoolPlan != null || autoRouteUser != null;
     // Check usage limits. Media without a known cost is refused only when a
     // spend budget applies to it.
     logger.debug(
@@ -1262,18 +1326,9 @@ export async function handleLLMProxy<
     );
     const limitViolation =
       await LimitValidationService.checkLimitsBeforeRequest({
-        unpricedMediaModel: provider.unavailableUsageAccounting
-          ? requestAdapter.getModel()
-          : undefined,
-        agentId: resolvedAgentId,
-        userId,
-        virtualKeyId,
-        passthroughVirtualKeyId,
-        llmOauthClientId: authenticatedApp?.id,
-        billingTeamId,
-        teamMemberUserId: authenticatedUserId ?? null,
-        agent: resolvedAgent,
-        snapshot: requestContext,
+        ...limitContext,
+        model: deferModelScopedLimits ? undefined : actualModel,
+        deferModelScopedLimits,
       });
 
     if (limitViolation) {
@@ -1341,56 +1396,12 @@ export async function handleLLMProxy<
       }
     }
 
-    // A request for a model pool's name is served by the pool's members when
-    // the caller may use the pool (see `mayUseModelPool`). Members on a wire
-    // the client's can't reach are left out of the plan.
-    const poolWire = openAiCodexPassthrough
-      ? null
-      : inboundPoolWire(provider.interactionType);
-    // A chat or agent set to a pool names it, and sends one of its members'
-    // models. Any other platform call runs on the key and model it names.
-    const chatModelPoolHeader = internalCall
-      ? headersForExtraction[MODEL_POOL_ID_HEADER.toLowerCase()]
-      : undefined;
-    const chatModelPoolId =
-      typeof chatModelPoolHeader === "string" && chatModelPoolHeader
-        ? chatModelPoolHeader
-        : undefined;
-    const modelPoolPlan =
-      poolWire && (!internalCall || chatModelPoolId)
-        ? await planModelPool({
-            organizationId: resolvedAgent.organizationId,
-            name: actualModel,
-            poolId: chatModelPoolId,
-            inbound: poolWire,
-            caller: {
-              virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
-              providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
-            },
-            grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
-            sessionId,
-          })
-        : null;
-    // A user's chat or agent call on the organization default model, from an
-    // agent with no model of its own, is routed across the organization trio.
-    // The router picks the session's tier and key, which the call is sent with
-    // the way a pool member is, even when the tier is the default model
-    // itself: the call's own key when it serves the tier, else the user's
-    // ranked one. A call the router cannot route runs on the model it names.
-    const autoRouteWire = poolWire;
     const autoRoute =
-      internalCall &&
-      config.autoRouting.enabled &&
-      headersForExtraction[AUTO_ROUTABLE_HEADER.toLowerCase()] === "true" &&
-      followsOrganizationRouting(resolvedAgent) &&
-      resolvedUser &&
-      // A pooled call is accounted for by its pool; it is never also routed.
-      !modelPoolPlan &&
-      autoRouteWire
+      autoRouteUser && autoRouteWire
         ? await routeInternalAutoSession({
             request,
             organizationId: resolvedAgent.organizationId,
-            userId: resolvedUser.id,
+            userId: autoRouteUser.id,
             named: { provider: providerName, modelId: actualModel },
             callApiKeyId: perKeyChatApiKeyId ?? null,
             sessionId,
@@ -1412,6 +1423,24 @@ export async function handleLLMProxy<
     if (sessionId === null && derivedSessionKey) {
       sessionId = derivedSessionKey;
       sessionSource = "auto_routing";
+    }
+    // Budgets scoped to a model apply to the model the call runs on: the
+    // routed tier's, or the one it names when the router left it alone.
+    if (autoRouteUser) {
+      const routedLimitViolation =
+        await LimitValidationService.checkLimitsBeforeRequest({
+          ...limitContext,
+          model: autoRoutedMember
+            ? stripClaudeContextVariantSuffix(autoRoutedMember.modelId)
+            : actualModel,
+        });
+      if (routedLimitViolation) {
+        logger.info(
+          { resolvedAgentId, reason: "token_cost_limit_exceeded" },
+          `${providerName} request blocked due to token cost limit`,
+        );
+        return sendUsageLimitRefusal(reply, routedLimitViolation);
+      }
     }
 
     // A credential let in only for a pool has no key for this provider, so
@@ -1951,12 +1980,56 @@ export async function handleLLMProxy<
           });
 
     // Each pool member is reached with its own provider's client.
+    let preparedMember:
+      | { value: Awaited<ReturnType<typeof memberCredential>> }
+      | { error: unknown }
+      | undefined;
     const modelPool: ModelPoolRouting | undefined =
       modelPoolPlan && poolWire
         ? {
             plan: modelPoolPlan,
-            transportFor: (member, signal) =>
-              reachMember(poolWire, member, signal),
+            checkLimits: async (member) => {
+              const model = stripClaudeContextVariantSuffix(member.modelId);
+              const violation =
+                await LimitValidationService.checkLimitsBeforeRequest({
+                  ...limitContext,
+                  model,
+                });
+              if (violation) throw new ModelBudgetExceededError(violation);
+              try {
+                preparedMember = { value: await memberCredential(member) };
+              } catch (error) {
+                // Keep unavailable credentials on the existing member-failover path.
+                preparedMember = { error };
+                return;
+              }
+              billingMode = preparedMember.value.billingMode;
+              try {
+                await throughput.admitSpendForModel(
+                  model,
+                  billingMode === "subscription",
+                );
+              } catch (error) {
+                if (error instanceof ThroughputError && error.status === 402)
+                  throw new ModelBudgetExceededError(
+                    [error.message, error.message],
+                    error.quota,
+                  );
+                throw error;
+              }
+            },
+            transportFor: async (member, signal) => {
+              if (!preparedMember || "error" in preparedMember)
+                throw preparedMember && "error" in preparedMember
+                  ? preparedMember.error
+                  : new ApiError(500, "Model pool member was not prepared");
+              return reachMember(
+                poolWire,
+                member,
+                signal,
+                preparedMember.value,
+              );
+            },
             recordFailedAttempt: async (attempt) => {
               const cutOff = attempt.cutOff
                 ? await estimateCutOffAttemptUsage({
@@ -1997,10 +2070,12 @@ export async function handleLLMProxy<
                   outputTokens: 0,
                   cost: cutOff ? cutOff.cost : "0",
                   baselineCost: cutOff?.cost,
+                  billingMode,
                 },
                 encryptedChat,
                 streamTiming,
                 attributionLabels,
+                throughput,
                 // A failed attempt has no usage to attribute to its routing decision.
                 autoRouting: undefined,
                 upstreamAttempt: attempt,
@@ -2127,6 +2202,22 @@ export async function handleLLMProxy<
       requestAdapter.getOriginalRequest(),
       claudeCodeAgentId,
     );
+    const throughput = new LlmThroughput({
+      entities: [...uniqueBillingEntities.values()],
+      model: autoRoutedMember?.modelId ?? actualModel,
+      provider: autoRoutedMember?.provider ?? providerName,
+      subscription: billingMode === "subscription",
+      rules: modelPool
+        ? requestContext.throughputRules.filter(
+            (rule) => rule.limitType !== "token_cost",
+          )
+        : requestContext.throughputRules,
+      attemptSpendRules: modelPool
+        ? requestContext.throughputRules.filter(
+            (rule) => rule.limitType === "token_cost",
+          )
+        : undefined,
+    });
     const ctx: LLMProxyContext<TRequest> = {
       authorizeA2AOAuthAttempt: oauthExecution
         ? () =>
@@ -2138,13 +2229,7 @@ export async function handleLLMProxy<
       attributionLabels,
       // Read again: an "Auto" platform call records its decision above.
       autoRouting: autoRoutingContext(request),
-      throughput: new LlmThroughput({
-        entities: [...uniqueBillingEntities.values()],
-        model: autoRoutedMember?.modelId ?? actualModel,
-        provider: autoRoutedMember?.provider ?? providerName,
-        subscription: billingMode === "subscription",
-        rules: requestContext.throughputRules,
-      }),
+      throughput,
       providerApiKeyId: perKeyChatApiKeyId,
       upstreamAttempt,
       ...(modelPool ? { modelPool } : {}),
@@ -2233,6 +2318,12 @@ export async function handleLLMProxy<
         );
       }
     }
+    if (lifecycleError instanceof ModelBudgetExceededError)
+      return sendUsageLimitRefusal(
+        reply,
+        lifecycleError.violation,
+        lifecycleError.quota,
+      );
     if (
       (lifecycleError instanceof ObservedProviderUsageError &&
         lifecycleError.billingRecorded) ||
@@ -2465,18 +2556,16 @@ async function handleStreaming<
   const carriesStreamTerminal = provider.carriesStreamTerminal;
   let terminalSent = false;
 
-  // Every byte to the client goes through here so the keep-alive knows when
-  // the stream last spoke. The keep-alive itself only ever writes to a stream
-  // that is already committed and idle (see StreamKeepAlive) — it is armed
-  // now, before the upstream call, so it also covers a stream committed
-  // during preflight and a slow post-stream plugin ruling, but it cannot
-  // itself turn a pending upstream error into a 200.
+  // Comments cannot commit a response until the upstream accepted it. Pools
+  // wait for member selection, and buffered policy responses retain their
+  // existing lazy commit. Already committed streams still get idle comments.
   const keepAlive = new StreamKeepAlive(
     reply.raw,
     config.llmProxy.streamKeepAliveIntervalMs,
     streamAdapter
       .getSSEHeaders()
       ["Content-Type"]?.startsWith("text/event-stream") ?? false,
+    ensureStreamHeaders,
   );
   keepAlive.start();
   const writeToClient = (data: string | Uint8Array) => {
@@ -2811,13 +2900,31 @@ async function handleStreaming<
           await ctx.throughput?.cancelBeforeSend();
           throw new ApiError(499, "Client disconnected before inference");
         }
+        const onAccepted = () => {
+          if (
+            !ctx.modelPool &&
+            !bufferModelResponse &&
+            !ctx.connectionVerification
+          )
+            keepAlive.allowCommit();
+        };
         const stream = await openUpstream({
           ctx,
-          transport: ownTransport(provider, client),
-          open: async (transport) =>
-            withFirstChunk(
-              (await transport.executeStream(request)) as AsyncIterable<TChunk>,
-            ),
+          transport: ownTransport(provider, client, onAccepted),
+          onAccepted,
+          open: async (transport) => {
+            keepAlive.suspendCommit();
+            try {
+              return await withFirstChunk(
+                (await transport.executeStream(
+                  request,
+                )) as AsyncIterable<TChunk>,
+              );
+            } catch (error) {
+              keepAlive.suspendCommit();
+              throw error;
+            }
+          },
           memberTimeoutMs:
             ctx.modelPool?.plan.streamTimeoutMs ??
             MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
@@ -2834,6 +2941,8 @@ async function handleStreaming<
               model: actualModel,
             }),
         });
+        if (!bufferModelResponse && !ctx.connectionVerification)
+          keepAlive.allowCommit();
         billingMode = getBillingMode();
 
         // Record request duration at stream establishment for providers whose
@@ -3327,6 +3436,16 @@ async function handleStreaming<
       logger.warn(
         { err: pluginError },
         "Plugin cleanup failed while handling proxy error",
+      );
+    }
+    if (lifecycleError instanceof ModelBudgetExceededError) {
+      // This member never dispatched. Earlier failed pool attempts already
+      // have their own records; do not finalize an empty stream for this one.
+      accountingFinalized = true;
+      return sendUsageLimitRefusal(
+        reply,
+        lifecycleError.violation,
+        lifecycleError.quota,
       );
     }
     if (codexError?.isIncompleteTerminal) {
@@ -4480,6 +4599,8 @@ function planDispatchRewrites(params: {
 async function openUpstream<TRequest, T>(params: {
   ctx: LLMProxyContext<TRequest>;
   transport: MemberTransport;
+  /** Bound to a routed tier's stream the way `transport` binds its own. */
+  onAccepted?: () => void;
   open: (transport: MemberTransport) => Promise<T>;
   /** Moves past a silent pool member; see openThroughModelPool. */
   memberTimeoutMs?: number;
@@ -4491,9 +4612,12 @@ async function openUpstream<TRequest, T>(params: {
     error: unknown;
   }) => void;
 }): Promise<T> {
-  const { ctx, transport, open, memberTimeoutMs, ...retry } = params;
+  const { ctx, transport, onAccepted, open, memberTimeoutMs, ...retry } =
+    params;
+  let dispatched = false;
   const authorizedOpen = async (attemptTransport: MemberTransport) => {
     await ctx.authorizeA2AOAuthAttempt?.();
+    dispatched = true;
     return open(attemptTransport);
   };
   const routed = ctx.autoRoutedTier;
@@ -4502,7 +4626,12 @@ async function openUpstream<TRequest, T>(params: {
     ctx.providerApiKeyId = routed.member.providerApiKeyId;
     const routedTransport = await routed.transport();
     return openUpstreamWithRetry({
-      open: () => authorizedOpen(routedTransport),
+      open: () =>
+        authorizedOpen({
+          execute: routedTransport.execute,
+          executeStream: (request) =>
+            routedTransport.executeStream(request, onAccepted),
+        }),
       ...retry,
     });
   }
@@ -4518,11 +4647,20 @@ async function openUpstream<TRequest, T>(params: {
       plan: pool.plan,
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
+      beforeAttempt: (member) => pool.checkLimits(member),
       open: authorizedOpen,
       memberTimeoutMs,
       recordFailedAttempt: pool.recordFailedAttempt,
       ...retry,
     });
+  } catch (error) {
+    if (
+      (error instanceof ModelBudgetExceededError ||
+        error instanceof ThroughputError) &&
+      !dispatched
+    )
+      await ctx.throughput?.cancelBeforeSend();
+    throw error;
   } finally {
     ctx.providerApiKeyId = ctx.upstreamAttempt.providerApiKeyId;
     pool.setResponseHeaders(ctx.upstreamAttempt);
@@ -4551,10 +4689,12 @@ function ownTransport(
     "execute" | "executeStream"
   >,
   client: unknown,
+  onAccepted?: () => void,
 ): MemberTransport {
   return {
     execute: (request) => provider.execute(client, request),
-    executeStream: (request) => provider.executeStream(client, request),
+    executeStream: (request) =>
+      provider.executeStream(client, request, onAccepted),
   };
 }
 
@@ -4820,12 +4960,16 @@ async function readProxyRequestState(
 export function sendUsageLimitRefusal(
   reply: FastifyReply,
   [_refusalMessage, contentMessage, limitMetadata]: LimitViolationResponse,
+  quota?: ThroughputError["quota"],
 ) {
+  if (quota?.retryAfter != null && !quota.oversized)
+    reply.header("Retry-After", quota.retryAfter);
   return reply.status(402).send({
     error: {
       message: contentMessage,
       type: "usage_limit_exceeded",
       code: "token_cost_limit_exceeded",
+      ...(quota ? { quota } : {}),
       usage_limit: limitMetadata
         ? {
             limit_type: limitMetadata.limitType,
@@ -4836,6 +4980,15 @@ export function sendUsageLimitRefusal(
         : undefined,
     },
   });
+}
+
+class ModelBudgetExceededError extends ApiError {
+  constructor(
+    readonly violation: LimitViolationResponse,
+    readonly quota?: ThroughputError["quota"],
+  ) {
+    super(402, violation[1]);
+  }
 }
 
 function withClaudeSubagentMetadata<TRequest>(

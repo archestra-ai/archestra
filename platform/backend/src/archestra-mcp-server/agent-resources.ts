@@ -921,10 +921,13 @@ async function resolveRuntimeAndModelForWrite(params: {
           input: runtimeInput,
           organizationId: context.organizationId,
         });
-  requireAgentRuntimePermission({
+  await requireAgentRuntimePermission({
     agentType: params.agentType,
     runtime,
     isAdmin: params.isAgentAdmin,
+    userId: context.userId,
+    organizationId: context.organizationId,
+    previous: existing?.runtime,
   });
   await assertCanBindRuntimeCredentials({
     organizationId: context.organizationId,

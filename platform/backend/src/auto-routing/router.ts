@@ -163,9 +163,10 @@ export async function resolveAutoModel(params: {
     text,
     client: metadata.client,
     beforeScoring: async () =>
-      LimitValidationService.checkLimitsBeforeRequest(
-        modelRouterLimitScope(auth, params.agent),
-      ),
+      LimitValidationService.checkLimitsBeforeRequest({
+        ...modelRouterLimitScope(auth, params.agent),
+        deferModelScopedLimits: true,
+      }),
   });
   switch (decided.kind) {
     case "usage_limited":

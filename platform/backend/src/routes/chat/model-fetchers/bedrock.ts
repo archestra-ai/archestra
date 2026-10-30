@@ -203,7 +203,9 @@ async function fetchBedrockFoundationModels(
 }
 
 /**
- * Add on-demand chat models that have no inference profile. AWS publishes system
+ * Add on-demand chat models that have no inference profile, plus the
+ * supported embedding models that are discovered rather than injected (see
+ * `staticInject`) where this region offers them on demand. AWS publishes system
  * inference profiles only for part of the catalog, so a model that is invocable
  * by its bare id (openai.gpt-oss-*, and other on-demand-only families) is absent
  * from /inference-profiles entirely and was therefore unselectable.
@@ -224,24 +226,33 @@ function mergeOnDemandFoundationModels(
     .filter((model) => !seen.has(model.modelId as string))
     .filter((model) => (model.modelLifecycle?.status ?? "ACTIVE") === "ACTIVE")
     .filter((model) => model.inferenceTypesSupported?.includes("ON_DEMAND"))
-    // ListFoundationModels carries the authoritative modality, which excludes
-    // embedding, image, and video models. Rerankers still need the name
-    // patterns: AWS reports their relevance scores as TEXT output.
-    .filter((model) => model.outputModalities?.includes("TEXT"))
-    .filter((model) => !isNonChatBedrockModel(model.modelId as string))
+    // Keep supported embeddings and chat models. Rerankers still need the
+    // name patterns because AWS reports their relevance scores as TEXT output.
+    .filter(
+      (model) =>
+        (model.outputModalities?.includes("TEXT") &&
+          !isNonChatBedrockModel(model.modelId as string)) ||
+        discoveredEmbeddingModel(model) !== undefined,
+    )
     .filter((model) => {
       if (allowedProviders.length === 0) return true;
       return allowedProviders.some((provider) =>
         (model.modelId as string).startsWith(`${provider}.`),
       );
     })
-    .map((model) => ({
-      id: model.modelId as string,
-      displayName: model.modelName
-        ? `${model.modelName}${model.providerName ? ` (${model.providerName})` : ""}`
-        : (model.modelId as string),
-      provider: "bedrock" as const,
-    }));
+    .map((model) => {
+      const embedding = discoveredEmbeddingModel(model);
+      return {
+        id: model.modelId as string,
+        displayName: model.modelName
+          ? `${model.modelName}${model.providerName ? ` (${model.providerName})` : ""}`
+          : (model.modelId as string),
+        provider: "bedrock" as const,
+        ...(embedding
+          ? { capabilities: { embeddingDimensions: embedding.dimensions } }
+          : {}),
+      };
+    });
 
   if (injected.length > 0) {
     logger.info(
@@ -251,6 +262,19 @@ function mergeOnDemandFoundationModels(
   }
 
   return injected.length > 0 ? [...discovered, ...injected] : discovered;
+}
+
+/**
+ * The supported embedding model a foundation-model summary describes, when it
+ * is one discovery must find for itself. Statically injected models are left
+ * to `mergeStaticEmbeddingModels`, which already lists them by bare id.
+ */
+function discoveredEmbeddingModel(model: BedrockFoundationModel) {
+  if (!model.modelId || !model.outputModalities?.includes("EMBEDDING")) {
+    return undefined;
+  }
+  const embedding = findBedrockEmbeddingModel(model.modelId);
+  return embedding && !embedding.staticInject ? embedding : undefined;
 }
 
 function mapInferenceProfilesToModels(
@@ -298,7 +322,8 @@ function mapInferenceProfilesToModels(
       // model has an opaque ARN id the embedding client cannot dispatch on — it
       // would take the text-model path and send the wrong request body — so
       // those fall through untagged and are dropped by the non-chat filter
-      // below. The bare on-demand ids stay selectable via static injection.
+      // below. The bare on-demand ids stay selectable via static injection or
+      // ListFoundationModels discovery.
       const embedding = findBedrockEmbeddingModel(base.id);
       if (embedding) {
         return {

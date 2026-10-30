@@ -15,7 +15,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { delay, HttpResponse, http } from "msw";
-import { vi } from "vitest";
+import { onTestFinished, vi } from "vitest";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import { type Trio, tiersFingerprint } from "@/auto-routing/tiers";
@@ -47,6 +47,7 @@ import {
   type RoutingDecision,
   RoutingSessionKeySchema,
 } from "@/types/auto-routing";
+import { STREAM_KEEPALIVE_SSE_COMMENT } from "../stream-keepalive";
 import modelRouterProxyRoutes from "./model-router";
 import openAiProxyRoutes from "./openai";
 
@@ -377,7 +378,7 @@ describe("Model Router auto model", () => {
       entityId: key.id,
       limitType: "token_cost",
       limitValue: 1,
-      model: [org.trio[2].modelId],
+      model: null,
       lastCleanup: new Date(),
     });
     await LimitModel.updateTokenLimitUsage(
@@ -486,6 +487,44 @@ describe("Model Router auto model", () => {
     expect(upstreamModels).toEqual([org.trio[2].modelId]);
     expect(await decisions(org.organizationId)).toHaveLength(1);
   });
+
+  for (const scopedTier of [0, 2] as const) {
+    test(`auto checks the selected tier, not the incoming alias or unrelated tier ${scopedTier}`, async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+      await LimitModel.create({
+        entityType: "organization",
+        entityId: org.organizationId,
+        limitType: "token_cost",
+        limitValue: 0,
+        model: [org.trio[scopedTier].modelId],
+        lastCleanup: new Date(),
+      });
+
+      const response = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "scoped-budget",
+      });
+
+      expect(response.statusCode, response.body).toBe(
+        scopedTier === 2 ? 402 : 200,
+      );
+      expect(jevCalls).toBe(1);
+      expect(upstreamModels).toEqual(
+        scopedTier === 2 ? [] : [org.trio[2].modelId],
+      );
+      expect(await decisions(org.organizationId)).toHaveLength(1);
+    });
+  }
 
   test("auto wins over a model pool of the same name", async ({
     makeOrganization,
@@ -904,6 +943,7 @@ describe("Model Router auto model", () => {
         internal?: boolean;
         /** The key the call names; the organization's shared key by default. */
         callKeyId?: string;
+        stream?: boolean;
       },
     ) {
       const app = createApp();
@@ -927,6 +967,7 @@ describe("Model Router auto model", () => {
           // The organization default model, auto routing's normal tier.
           model: params.model ?? org.trio[1].modelId,
           messages: [{ role: "user", content: PROMPT }],
+          ...(params.stream ? { stream: true } : {}),
         },
       });
     }
@@ -1168,6 +1209,112 @@ describe("Model Router auto model", () => {
         (await LlmThroughputModel.usage([smartOnly])).get(smartOnly.id)
           ?.currentUsage,
       ).toBe(1);
+    });
+
+    for (const scopedTier of [1, 2] as const) {
+      test(`a budget on tier ${scopedTier}'s model applies to the calls that run on it`, async ({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeUser,
+        makeMember,
+      }) => {
+        const org = await setupOrganization({
+          makeOrganization,
+          makeSecret,
+          makeLlmProviderApiKey,
+        });
+        await publishPlan(org);
+        const userId = await member(org, makeUser, makeMember);
+        await LimitModel.create({
+          entityType: "organization",
+          entityId: org.organizationId,
+          limitType: "token_cost",
+          limitValue: 0,
+          model: [org.trio[scopedTier].modelId],
+          lastCleanup: new Date(),
+        });
+
+        const plain = await sendPlatformCall(org, { userId, routable: false });
+        const routed = await sendPlatformCall(org, { userId });
+
+        expect(plain.statusCode, plain.body).toBe(scopedTier === 1 ? 402 : 200);
+        expect(routed.statusCode, routed.body).toBe(
+          scopedTier === 2 ? 402 : 200,
+        );
+        expect(upstreamModels).toEqual(
+          scopedTier === 2 ? [org.trio[1].modelId] : [org.trio[2].modelId],
+        );
+        expect(await decisions(org.organizationId)).toHaveLength(1);
+      });
+    }
+
+    test("a routed stream is kept alive while the tier is silent before its first event", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const interval = config.llmProxy.streamKeepAliveIntervalMs;
+      onTestFinished(() => {
+        config.llmProxy.streamKeepAliveIntervalMs = interval;
+      });
+      config.llmProxy.streamKeepAliveIntervalMs = 20;
+      server.use(
+        http.post(`${UPSTREAM}/chat/completions`, async ({ request }) => {
+          const body = (await request.json()) as { model: string };
+          upstreamModels.push(body.model);
+          const chunk = {
+            id: "chatcmpl-auto",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: body.model,
+            choices: [
+              {
+                index: 0,
+                delta: { role: "assistant", content: "Done" },
+                finish_reason: "stop",
+              },
+            ],
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 1,
+              total_tokens: 13,
+            },
+          };
+          const encoder = new TextEncoder();
+          return new HttpResponse(
+            new ReadableStream({
+              async start(controller) {
+                await delay(200);
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`,
+                  ),
+                );
+                controller.close();
+              },
+            }),
+            { headers: { "content-type": "text/event-stream" } },
+          );
+        }),
+      );
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+
+      const response = await sendPlatformCall(org, { userId, stream: true });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamModels).toEqual([org.trio[2].modelId]);
+      const keepAlive = response.body.indexOf(STREAM_KEEPALIVE_SSE_COMMENT);
+      expect(keepAlive).toBeGreaterThanOrEqual(0);
+      expect(keepAlive).toBeLessThan(response.body.indexOf("data:"));
     });
 
     test("a tier served only on the Responses API keeps the call on the default model, undecided", async ({

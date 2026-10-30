@@ -114,6 +114,7 @@ export function createOpenAiCompatibleAdapterFactory(
     async executeStream(
       client: unknown,
       request: Request,
+      onAccepted?: () => void,
     ): Promise<AsyncIterable<StreamChunk>> {
       const openaiClient = client as OpenAIProvider;
       const params = {
@@ -121,7 +122,9 @@ export function createOpenAiCompatibleAdapterFactory(
         stream: true,
         stream_options: { include_usage: true },
       } as unknown as ChatCompletionCreateParamsStreaming;
-      const stream = await openaiClient.chat.completions.create(params);
+      const pending = openaiClient.chat.completions.create(params);
+      const stream = await pending;
+      if (typeof pending.asResponse === "function") onAccepted?.();
 
       return {
         [Symbol.asyncIterator]: async function* () {

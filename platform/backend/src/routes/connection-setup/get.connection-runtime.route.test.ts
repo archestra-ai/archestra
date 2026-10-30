@@ -6,6 +6,7 @@ import db, { schema, withDbTransaction } from "@/database";
 import AgentModel from "@/models/agent";
 import ConnectedClientModel from "@/models/connected-client";
 import ConnectionSetupModel from "@/models/connection-setup";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
@@ -13,6 +14,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { issueConnectionInstructionsToken } from "@/services/connection-instructions-token";
 import { issueConnectionRuntimeToken } from "@/services/connection-runtime-token";
+import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -654,6 +656,199 @@ test("revoking the last model publishes an empty catalog instead of the installe
     expect(source).not.toContain(credential);
   }
   expect(revoked.json().artifacts["repair.cjs"].source).toBeTypeOf("string");
+  expect(await rowCounts()).toEqual(before);
+});
+
+test.for([
+  { clientId: "opencode", includeFutureProviders: false },
+  { clientId: "opencode", includeFutureProviders: true },
+  { clientId: "kilo", includeFutureProviders: false },
+  { clientId: "kilo", includeFutureProviders: true },
+] as const)("$clientId launch discovers only the owner's new primary credential (automatic=$includeFutureProviders)", async ({
+  clientId,
+  includeFutureProviders,
+}, { makeMember, makeAgent, makeUser, makeSecret, makeLlmProviderApiKey }) => {
+  await makeMember(ctx.user.id, ctx.organizationId);
+  const proxy = await makeAgent({
+    organizationId: ctx.organizationId,
+    authorId: ctx.user.id,
+    agentType: "llm_proxy",
+  });
+  const shared = await makeLlmProviderApiKey(
+    ctx.organizationId,
+    (await makeSecret()).id,
+    { provider: "xai", isPrimary: true },
+  );
+  const sharedModel = await ModelModel.create({
+    provider: "xai",
+    modelId: "fixture/shared/launch",
+    externalId: "fixture-shared-launch",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    supportsToolCalling: true,
+  });
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(shared.id, [
+    sharedModel.id,
+  ]);
+  const { virtualKey, value } = await VirtualApiKeyModel.create({
+    organizationId: ctx.organizationId,
+    name: "Managed launch catalog",
+    scope: "personal",
+    authorId: ctx.user.id,
+    includeFutureProviders,
+    providerApiKeys: includeFutureProviders
+      ? []
+      : [{ provider: "xai", providerApiKeyId: shared.id }],
+  });
+  const { setup, rawToken } = await ConnectionSetupModel.create({
+    organizationId: ctx.organizationId,
+    userId: ctx.user.id,
+    clientId,
+    baseUrl: "https://deployment.example.com/v1",
+    llmProxyId: proxy.id,
+    provider: "xai",
+    proxyAuth: "primary-providers",
+    virtualApiKeyId: virtualKey.id,
+    expiresAt: new Date(Date.now() + 60000),
+  });
+  await ConnectionSetupModel.claimByToken({ rawToken });
+  const credential = tokenFor(setup.id);
+  const storedMappings = await VirtualApiKeyModel.getProviderApiKeys(
+    virtualKey.id,
+  );
+  const before = await rowCounts();
+  const initial = await fetchRuntime(credential);
+  expect(initial.statusCode, initial.body).toBe(200);
+  expect(initial.json().artifacts["routing-v1.mjs"].source).not.toContain(
+    "fixture/copilot/owner",
+  );
+
+  const other = await makeUser();
+  await makeMember(other.id, ctx.organizationId);
+  const keys = [];
+  for (const [userId, suffix] of [
+    [ctx.user.id, "owner"],
+    [other.id, "other"],
+  ] as const) {
+    const providerKey = await makeLlmProviderApiKey(
+      ctx.organizationId,
+      (await makeSecret()).id,
+      {
+        provider: "github-copilot",
+        userId,
+        isPrimary: true,
+        access: "org",
+      },
+    );
+    const model = await ModelModel.create({
+      provider: "github-copilot",
+      modelId: `fixture/copilot/${suffix}`,
+      externalId: `fixture-copilot-${suffix}`,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+      model.id,
+    ]);
+    keys.push(providerKey);
+  }
+  const ownerKey = keys[0];
+  const refreshed = await fetchRuntime(credential);
+  expect(refreshed.statusCode, refreshed.body).toBe(200);
+  for (const name of ["routing-v1.mjs", "routing-v2.mjs"]) {
+    const source = refreshed.json().artifacts[name].source as string;
+    expect(source).toContain("fixture/shared/launch");
+    expect(source).toContain("fixture/copilot/owner");
+    expect(source).not.toContain("fixture/copilot/other");
+    expect(source).not.toContain(value);
+    expect(source).not.toContain(credential);
+  }
+  expect(
+    (await resolveVirtualKeyProviderMappings(virtualKey.id)).map(
+      (mapping) => mapping.providerApiKeyId,
+    ),
+  ).toEqual(expect.arrayContaining([shared.id, ownerKey.id]));
+  expect(
+    (await resolveVirtualKeyProviderMappings(virtualKey.id)).map(
+      (mapping) => mapping.providerApiKeyId,
+    ),
+  ).not.toContain(keys[1].id);
+  expect(await VirtualApiKeyModel.getProviderApiKeys(virtualKey.id)).toEqual(
+    storedMappings,
+  );
+  expect(await rowCounts()).toEqual(before);
+  const again = await fetchRuntime(credential);
+  expect(again.statusCode, again.body).toBe(200);
+  expect(again.json().artifacts).toEqual(refreshed.json().artifacts);
+
+  const policyKey = {
+    organizationId: ctx.organizationId,
+    resource: "llmVirtualKey" as const,
+    scope: virtualKey.id,
+  };
+  const policy = await ResourcePermissionPolicyModel.find(policyKey);
+  const sharedPolicy = await ResourcePermissionPolicyModel.replace({
+    ...policyKey,
+    revision: policy?.revision ?? 0,
+    grants: [
+      ...(policy?.grants ?? []),
+      { subject: { type: "user", id: other.id }, actions: ["use"] },
+    ],
+  });
+  const sharedRefresh = await fetchRuntime(credential);
+  expect(sharedRefresh.statusCode, sharedRefresh.body).toBe(200);
+  expect(sharedRefresh.json().artifacts["routing-v1.mjs"].source).not.toContain(
+    "fixture/copilot/owner",
+  );
+  expect(sharedRefresh.json().artifacts["routing-v1.mjs"].source).toContain(
+    "fixture/shared/launch",
+  );
+  await ResourcePermissionPolicyModel.replace({
+    ...policyKey,
+    revision: sharedPolicy?.revision ?? 0,
+    grants: policy?.grants ?? [],
+  });
+
+  await LlmProviderApiKeyModel.setRequiresReauthentication({
+    id: ownerKey.id,
+    requiresReauthentication: true,
+  });
+  const revoked = await fetchRuntime(credential);
+  expect(revoked.statusCode, revoked.body).toBe(200);
+  expect(revoked.json().artifacts["routing-v1.mjs"].source).not.toContain(
+    "fixture/copilot/owner",
+  );
+  expect(
+    (await resolveVirtualKeyProviderMappings(virtualKey.id)).map(
+      (mapping) => mapping.providerApiKeyId,
+    ),
+  ).toEqual([shared.id]);
+  await LlmProviderApiKeyModel.setRequiresReauthentication({
+    id: ownerKey.id,
+    requiresReauthentication: false,
+  });
+  await LlmProviderApiKeyModel.update(ownerKey.id, { isPrimary: false });
+  const nonPrimary = await fetchRuntime(credential);
+  expect(nonPrimary.statusCode, nonPrimary.body).toBe(200);
+  expect(nonPrimary.json().artifacts["routing-v1.mjs"].source).not.toContain(
+    "fixture/copilot/owner",
+  );
+  await LlmProviderApiKeyModel.update(ownerKey.id, { isPrimary: true });
+  const restored = await fetchRuntime(credential);
+  expect(restored.statusCode, restored.body).toBe(200);
+  expect(restored.json().artifacts["routing-v1.mjs"].source).toContain(
+    "fixture/copilot/owner",
+  );
+  expect(await LlmProviderApiKeyModel.delete(ownerKey.id)).toBe(true);
+  const deleted = await fetchRuntime(credential);
+  expect(deleted.statusCode, deleted.body).toBe(200);
+  expect(deleted.json().artifacts["routing-v1.mjs"].source).toContain(
+    "fixture/shared/launch",
+  );
+  expect(deleted.json().artifacts["routing-v1.mjs"].source).not.toContain(
+    "fixture/copilot/owner",
+  );
   expect(await rowCounts()).toEqual(before);
 });
 

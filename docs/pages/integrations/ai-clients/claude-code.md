@@ -2,7 +2,7 @@
 title: Claude Code
 description: Connect Claude Code with subscription or API-key inference
 order: 1
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -40,3 +40,4 @@ What to know:
 - The rule covers every tool on the gateway. A Claude Code rule cannot match a tool's arguments, so it cannot be narrower.
 - Your access rules and [Guardrails](/docs/agents/guardrails) still apply to each call.
 - To approve each call yourself, run `/permissions` in Claude Code and add the same rule as an ask rule. An ask rule wins over an allow rule.
+- When white-labeling changes the gateway's tool names, the [launch check](/docs/get-started/connect#startup-guard) moves the rules setup added to the new names. Rules you added yourself stay as they are.

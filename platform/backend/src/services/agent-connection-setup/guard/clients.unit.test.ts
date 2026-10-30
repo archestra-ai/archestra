@@ -1521,6 +1521,112 @@ describe("Claude APPA permission cleanup on MCP disconnect", () => {
   });
 });
 
+const BRANDED_ALLOW = OWNED_ALLOW.map((rule) =>
+  rule.replace("__archestra__", "__acme__"),
+);
+
+function syncInvoke(healthBody: string, healthState = "ok"): string {
+  return [
+    "already_disconnected() { return 1; }",
+    `HEALTH_STATE=${JSON.stringify(healthState)}`,
+    `HEALTH_BODY=${JSON.stringify(healthBody)}`,
+    "sync_tool_prefix",
+  ].join("\n");
+}
+
+describe("Claude APPA permission prefix sync at launch", () => {
+  test("moves owned rules to the reported prefix and keeps every other rule", async () => {
+    const { code, files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"guardVersion":10,"mcpToolPrefix":"acme__"}'),
+      files: { [SETTINGS_REL]: claudeSettings(), [LEDGER_REL]: claudeLedger() },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expect(code).toBe(0);
+    expectOwnedRulesRemoved(files[SETTINGS_REL] ?? "", [
+      ...BRANDED_ALLOW,
+      ...USER_ALLOW,
+      ...OTHER_ALLOW,
+    ]);
+    expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+      prod_gateway: BRANDED_ALLOW,
+      other_gateway: OTHER_ALLOW,
+      schemaVersion: 1,
+    });
+  });
+
+  test("leaves a new-prefix rule the user added as theirs", async () => {
+    const userBranded = BRANDED_ALLOW[0];
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
+      files: {
+        [SETTINGS_REL]: claudeSettings([userBranded, ...OWNED_ALLOW]),
+        [LEDGER_REL]: claudeLedger({ prod_gateway: OWNED_ALLOW }),
+      },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    const settings = JSON.parse(files[SETTINGS_REL] ?? "") as {
+      permissions: { allow: string[] };
+    };
+    expect(settings.permissions.allow).toEqual(BRANDED_ALLOW);
+    expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+      prod_gateway: BRANDED_ALLOW.slice(1),
+    });
+  });
+
+  test.each([
+    {
+      name: "the prefix already matches",
+      body: '{"mcpToolPrefix":"archestra__"}',
+    },
+    { name: "an older instance omits the prefix", body: '{"guardVersion":9}' },
+    {
+      name: "the prefix is not a tool prefix",
+      body: '{"mcpToolPrefix":"acme__run_tool,Bash(*)__"}',
+    },
+  ])("writes nothing when $name", async ({ body }) => {
+    const settings = claudeSettings();
+    const ledger = claudeLedger();
+    const { code, files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke(body),
+      files: { [SETTINGS_REL]: settings, [LEDGER_REL]: ledger },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expect(code).toBe(0);
+    expect(files[SETTINGS_REL]).toBe(settings);
+    expect(files[LEDGER_REL]).toBe(ledger);
+  });
+
+  test("writes nothing while the instance is unreachable", async () => {
+    const settings = claudeSettings();
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcpToolPrefix":"acme__"}', "down"),
+      files: { [SETTINGS_REL]: settings, [LEDGER_REL]: claudeLedger() },
+      readFiles: [SETTINGS_REL],
+    });
+
+    expect(files[SETTINGS_REL]).toBe(settings);
+  });
+
+  test("runs after the health check on both launch paths", async () => {
+    const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
+    await expectValidBash(script);
+    expect(
+      script.match(/launch_refreshed_guard "\$@"\n\s*sync_tool_prefix/g),
+    ).toHaveLength(2);
+  });
+});
+
 function pwshBin(): string | null {
   const candidates = [
     ...(process.platform === "win32" ? ["powershell.exe"] : []),
@@ -1626,6 +1732,123 @@ async function runWindowsMcpCleanup(params: {
     await rm(dir, { recursive: true, force: true });
   }
 }
+
+async function runWindowsPrefixSync(params: {
+  files: Record<string, string>;
+  readFiles: string[];
+  toolPrefix: string;
+}): Promise<Record<string, string | null>> {
+  const sync = extractPowerShellFunction(
+    renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT),
+    "Sync-ArchClaudeAppaPermissions",
+  );
+  const dir = await mkdtemp(path.join(tmpdir(), "archestra-appa-ps-sync-"));
+  const home = path.join(dir, "home");
+  try {
+    for (const [relpath, content] of Object.entries(params.files)) {
+      const target = path.join(home, relpath);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, content, "utf8");
+    }
+    const driver = path.join(dir, "driver.ps1");
+    await writeFile(
+      driver,
+      [
+        "$ErrorActionPreference = 'Stop'",
+        "$McpServerName = 'prod_gateway'",
+        `$archToolPrefix = ${psSingleQuote(params.toolPrefix)}`,
+        sync,
+        "Sync-ArchClaudeAppaPermissions",
+      ].join("\n"),
+      "utf8",
+    );
+    await execFileAsync(
+      powershellBin ?? "pwsh",
+      ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driver],
+      {
+        env: {
+          ...process.env,
+          HOME: home,
+          USERPROFILE: home,
+          CLAUDE_CONFIG_DIR: "",
+        },
+        timeout: 30_000,
+      },
+    );
+    const out: Record<string, string | null> = {};
+    for (const relpath of params.readFiles) {
+      try {
+        out[relpath] = await readFile(path.join(home, relpath), "utf8");
+      } catch {
+        out[relpath] = null;
+      }
+    }
+    return out;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+describe.skipIf(!powershellBin)(
+  "Claude APPA permission prefix sync at Windows launch",
+  () => {
+    test("moves owned rules to the reported prefix and keeps every other rule", async () => {
+      const files = await runWindowsPrefixSync({
+        files: {
+          [SETTINGS_REL]: claudeSettings(),
+          [LEDGER_REL]: claudeLedger(),
+        },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix: "acme__",
+      });
+
+      expectOwnedRulesRemoved(files[SETTINGS_REL] ?? "", [
+        ...BRANDED_ALLOW,
+        ...USER_ALLOW,
+        ...OTHER_ALLOW,
+      ]);
+      expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+        prod_gateway: BRANDED_ALLOW,
+        other_gateway: OTHER_ALLOW,
+        schemaVersion: 1,
+      });
+    });
+
+    test("a single moved rule stays a JSON array", async () => {
+      const files = await runWindowsPrefixSync({
+        files: {
+          [SETTINGS_REL]: claudeSettings([OWNED_ALLOW[0]]),
+          [LEDGER_REL]: claudeLedger({ prod_gateway: [OWNED_ALLOW[0]] }),
+        },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix: "acme__",
+      });
+
+      expect(JSON.parse(files[SETTINGS_REL] ?? "").permissions.allow).toEqual([
+        BRANDED_ALLOW[0],
+      ]);
+      expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+        prod_gateway: [BRANDED_ALLOW[0]],
+      });
+    });
+
+    test.each([
+      "archestra__",
+      "acme__run_tool,Bash(*)__",
+    ])("writes nothing for the prefix %j", async (toolPrefix) => {
+      const settings = claudeSettings();
+      const ledger = claudeLedger();
+      const files = await runWindowsPrefixSync({
+        files: { [SETTINGS_REL]: settings, [LEDGER_REL]: ledger },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix,
+      });
+
+      expect(files[SETTINGS_REL]).toBe(settings);
+      expect(files[LEDGER_REL]).toBe(ledger);
+    });
+  },
+);
 
 describe.skipIf(!powershellBin)(
   "Claude APPA permission cleanup on Windows MCP disconnect",

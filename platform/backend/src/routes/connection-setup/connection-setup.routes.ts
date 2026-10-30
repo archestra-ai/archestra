@@ -291,6 +291,13 @@ const ConnectionHealthResponseSchema = z.object({
    * omits it simply skips the check.
    */
   guardVersion: z.number().int().nonnegative(),
+  /**
+   * The prefix of the gateway's built-in tool names, e.g. `archestra__`.
+   * White-labeling changes it after connect, and the startup guard moves the
+   * client's allow rules for those tools to it. Non-secret: it derives from
+   * the app name the sign-in page already shows.
+   */
+  mcpToolPrefix: z.string(),
 });
 
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -460,6 +467,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         mcp: statusOf(mcpExists),
         llm: statusOf(llmExists),
         guardVersion: STARTUP_GUARD_FORMAT_VERSION,
+        mcpToolPrefix: archestraMcpBranding.toolPrefix,
       };
     },
   );

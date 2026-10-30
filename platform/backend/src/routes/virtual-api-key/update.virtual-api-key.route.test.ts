@@ -1,5 +1,6 @@
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { grantEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
@@ -34,6 +35,89 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("owners can replace their own personal Copilot mapping", async ({
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeVirtualApiKey,
+  }) => {
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "member" });
+    const secret = await makeSecret({ secret: { apiKey: "gho_own" } });
+    const original = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    const replacement = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    const key = await makeVirtualApiKey(organizationId, {
+      authorId: user.id,
+      access: "personal",
+      providerApiKeys: [
+        { provider: original.provider, providerApiKeyId: original.id },
+      ],
+    });
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-virtual-keys/${key.id}`,
+      payload: {
+        name: "Own replacement",
+        providerApiKeys: [
+          { provider: replacement.provider, providerApiKeyId: replacement.id },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({ authorId: user.id });
+    expect(await VirtualApiKeyModel.getProviderApiKeys(key.id)).toEqual([
+      expect.objectContaining({ providerApiKeyId: replacement.id }),
+    ]);
+  });
+
+  test("human administrators cannot retain another owner's personal Copilot mapping", async ({
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeVirtualApiKey,
+  }) => {
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
+    const secret = await makeSecret({ secret: { apiKey: "gho_owner" } });
+    const credential = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "github-copilot",
+      userId: owner.id,
+    });
+    const key = await makeVirtualApiKey(organizationId, {
+      authorId: owner.id,
+      access: "personal",
+      providerApiKeys: [
+        { provider: credential.provider, providerApiKeyId: credential.id },
+      ],
+    });
+    const before = await VirtualApiKeyModel.findByIdForAudit(
+      key.id,
+      organizationId,
+    );
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-virtual-keys/${key.id}`,
+      payload: {
+        name: "Not authorized",
+        providerApiKeys: [
+          { provider: credential.provider, providerApiKeyId: credential.id },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(403);
+    expect(
+      await VirtualApiKeyModel.findByIdForAudit(key.id, organizationId),
+    ).toEqual(before);
   });
 
   test("PATCH /api/llm-virtual-keys/:id updates the name and provider mappings without re-exposing the token", async ({

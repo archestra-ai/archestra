@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
+  componentCacheCosts,
+  estimateCachePrices,
   mergeAnthropicUsage,
   moneyUnits,
   normalizeAnthropicUsage,
@@ -189,5 +191,118 @@ describe("cumulative provider accounting", () => {
         rates,
       ),
     ).toThrow();
+  });
+});
+
+describe("missing cache rates", () => {
+  const usage = {
+    inputTokens: 10,
+    outputTokens: 10,
+    cacheReadTokens: 1000,
+    cacheWriteTokens: 300,
+    cacheWrite1hTokens: 100,
+  };
+  const unpriced: TokenPrices = {
+    input: "0.90",
+    output: "0.90",
+    cacheRead: null,
+    cacheWrite: null,
+    cacheWrite1h: null,
+    source: "custom",
+  };
+
+  test("use the provider's cache multipliers of the input rate", () => {
+    expect(
+      estimateCachePrices({ usage, prices: unpriced, provider: "anthropic" }),
+    ).toEqual({
+      prices: {
+        ...unpriced,
+        cacheRead: "0.0900000000",
+        cacheWrite: "1.1250000000",
+        cacheWrite1h: "1.8000000000",
+      },
+      estimated: true,
+    });
+  });
+
+  test("read at half and write at the full input rate without provider multipliers", () => {
+    expect(
+      estimateCachePrices({ usage, prices: unpriced, provider: "vllm" }),
+    ).toEqual({
+      prices: {
+        ...unpriced,
+        cacheRead: "0.4500000000",
+        cacheWrite: "0.9000000000",
+        cacheWrite1h: "0.9000000000",
+      },
+      estimated: true,
+    });
+  });
+
+  test("keep known rates and report nothing for unused or free cache tokens", () => {
+    expect(
+      estimateCachePrices({ usage, prices: rates, provider: "vllm" }),
+    ).toEqual({ prices: rates, estimated: false });
+    expect(
+      estimateCachePrices({
+        usage: {
+          ...usage,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cacheWrite1hTokens: 0,
+        },
+        prices: unpriced,
+        provider: "vllm",
+      }).estimated,
+    ).toBe(false);
+    expect(
+      estimateCachePrices({
+        usage,
+        prices: { ...unpriced, input: "0" },
+        provider: "vllm",
+      }),
+    ).toMatchObject({
+      prices: { cacheRead: "0.0000000000" },
+      estimated: false,
+    });
+  });
+});
+
+describe("cache cost and savings", () => {
+  const component = {
+    id: "primary",
+    model: "fireworks-model",
+    kind: "message" as const,
+    provider: "vllm" as const,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 1_000_000,
+    cacheWriteTokens: 1_000_000,
+    cacheWrite1hTokens: 0,
+    cost: "0",
+  };
+
+  test("count an estimated rate in the cache cost but claim no savings from it", () => {
+    expect(
+      componentCacheCosts({
+        ...component,
+        prices: {
+          ...rates,
+          input: "0.90",
+          cacheRead: null,
+          cacheWrite: null,
+          cacheWrite1h: null,
+        },
+      }),
+    ).toEqual({ cacheCost: 1.35, cacheSavings: 0, cacheReadSavings: 0 });
+  });
+
+  test("compare known rates with the uncached input price", () => {
+    // Reads at $0.10 save $0.90; writes at $1.25 cost $0.25 more than input.
+    expect(componentCacheCosts({ ...component, prices: rates })).toEqual({
+      cacheCost: 1.35,
+      cacheSavings: 0.65,
+      cacheReadSavings: 0.9,
+    });
   });
 });

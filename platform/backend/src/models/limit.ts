@@ -30,7 +30,11 @@ import type {
   BillingAttribution,
   PricedBillingUsage,
 } from "@/utils/billable-usage";
-import { priceTokens, sumMoney } from "@/utils/billable-usage";
+import {
+  hasEstimatedPrice,
+  priceTokens,
+  sumMoney,
+} from "@/utils/billable-usage";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import AgentModel from "./agent";
 import AgentTeamModel, { type AgentTeamSource } from "./agent-team";
@@ -370,11 +374,15 @@ class LimitModel {
         ? { ...patchData, lastCleanup: sql`now()` }
         : patchData;
 
-      const updatedLimits = await tx
-        .update(schema.limitsTable)
-        .set(limitPatchData)
-        .where(eq(schema.limitsTable.id, id))
-        .returning();
+      // A labels-only edit changes no column.
+      const updatedLimits =
+        Object.keys(limitPatchData).length === 0
+          ? [existingLimit]
+          : await tx
+              .update(schema.limitsTable)
+              .set(limitPatchData)
+              .where(eq(schema.limitsTable.id, id))
+              .returning();
 
       if (shouldResetUsage) {
         await tx
@@ -759,18 +767,9 @@ class LimitModel {
           coveredTokensIn: total.input,
           coveredTokensOut: total.output,
           cost: total.cost,
-          incomplete: usage.status === "incomplete" ? 1 : 0,
-        });
-      }
-      // An unmatched unknown model must still block the budget until reset.
-      if (usage.status === "incomplete" && !matched.length) {
-        const model =
-          "urn:archestra:billing:incomplete:5707b463-67d0-4e54-a8f4-2c3897e186ba";
-        legacyRows.push({ limitId: limit.id, model });
-        settledRows.push({
-          limitId: limit.id,
-          model,
-          incomplete: 1,
+          // No budget check reads this count. Later releases read it as
+          // the budget's estimated-spend flag, so it counts price estimates.
+          incomplete: hasEstimatedPrice(usage) ? 1 : 0,
         });
       }
     }
@@ -1082,6 +1081,7 @@ class LimitModel {
       toolName: row.toolName ?? null,
       model: row.model ?? null,
       cleanupInterval: row.cleanupInterval ?? null,
+      lastCleanup: row.lastCleanup?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -1677,9 +1677,9 @@ export class LimitValidationService {
 
           totalTokensIn = usageCosts.tokensIn;
           totalTokensOut = usageCosts.tokensOut;
-          comparisonValue = usageCosts.incomplete
-            ? Number.POSITIVE_INFINITY
-            : usageCosts.cost;
+          // Only spend blocks: an estimated or partial charge counts at
+          // its recorded cost.
+          comparisonValue = usageCosts.cost;
           limitDescription = "cost_dollars";
 
           logger.debug(
@@ -1987,11 +1987,9 @@ function computeModelUsageCosts(
   let cost = "0.0000000000";
   let tokensIn = 0;
   let tokensOut = 0;
-  let incomplete = false;
   const breakdown = modelUsages.map((usage) => {
     tokensIn += usage.currentUsageTokensIn;
     tokensOut += usage.currentUsageTokensOut;
-    incomplete ||= (usage.incomplete ?? 0) > 0;
     const pricing = ModelModel.getEffectivePricing(
       modelEntriesByModelId.get(usage.model) ?? null,
       usage.model,
@@ -2028,8 +2026,20 @@ function computeModelUsageCosts(
       cost: Number(modelCost),
     };
   });
-  return { breakdown, cost: Number(cost), tokensIn, tokensOut, incomplete };
+  return {
+    // Earlier releases recorded an unpriced request under a placeholder model
+    // with no cost, to block the budget; it no longer counts for anything.
+    breakdown: breakdown.filter(
+      (item) => item.model !== RETIRED_INCOMPLETE_MARKER_MODEL,
+    ),
+    cost: Number(cost),
+    tokensIn,
+    tokensOut,
+  };
 }
+
+const RETIRED_INCOMPLETE_MARKER_MODEL =
+  "urn:archestra:billing:incomplete:5707b463-67d0-4e54-a8f4-2c3897e186ba";
 
 async function getDefaultUserLimitUsage(params: {
   organizationId: string;
@@ -2115,7 +2125,6 @@ async function getDefaultUserLimitUsage(params: {
       cost: sql<string>`COALESCE(sum((component->>'cost')::numeric) FILTER (WHERE ${componentMatches}), 0)::text`,
       tokensIn: sql<number>`COALESCE(sum((component->>'inputTokens')::bigint) FILTER (WHERE ${componentMatches}), 0)::bigint`,
       tokensOut: sql<number>`COALESCE(sum((component->>'outputTokens')::bigint) FILTER (WHERE ${componentMatches}), 0)::bigint`,
-      incomplete: sql<number>`count(*) FILTER (WHERE ${receipt.usage}->>'status' = 'incomplete')::integer`,
     })
     .from(receipt)
     .leftJoin(
@@ -2186,7 +2195,7 @@ async function getDefaultUserLimitUsage(params: {
   tokensOut += Number(settled?.tokensOut ?? 0);
   cost = sumMoney([cost, settled?.cost ?? "0"]);
   return {
-    cost: settled?.incomplete ? Number.POSITIVE_INFINITY : Number(cost),
+    cost: Number(cost),
     tokensIn,
     tokensOut,
   };
@@ -2301,17 +2310,6 @@ function buildLimitViolationResponse(params: {
   const ruleLine = `Rule: ${scopeLabel} cost limit ($${params.limitValue.toFixed(2)}), applied to ${modelScope}${
     resetWindow ? `, resets ${resetWindow}` : ""
   }.`;
-  if (!Number.isFinite(params.comparisonValue))
-    return [
-      "Usage accounting is incomplete.",
-      `The ${archestraMcpBranding.appName} budget has incomplete billing usage. ${identityLine} ${ruleLine} Ask an administrator to review provider usage and model prices before resetting the budget.`,
-      {
-        entityType: params.entityType,
-        limitType: "token_cost",
-        entityName: params.entityName,
-        source: params.source,
-      },
-    ];
   const totalTokens = params.totalTokensIn + params.totalTokensOut;
   const remaining = Math.max(0, params.limitValue - params.comparisonValue);
   // Human-readable description of the exact rule that fired, so both the LLM

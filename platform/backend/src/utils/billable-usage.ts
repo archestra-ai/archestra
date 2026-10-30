@@ -1,4 +1,7 @@
-import type { SupportedProvider } from "@archestra/shared/model-constants";
+import {
+  CACHE_PRICE_MULTIPLIERS,
+  type SupportedProvider,
+} from "@archestra/shared/model-constants";
 import type { UsageView } from "@/types/llm-provider";
 
 export interface BillingAttribution {
@@ -211,6 +214,65 @@ export function sumMoney(values: string[]): string {
   );
 }
 
+/**
+ * Receipt issues that a price change resolves. They stay out of a receipt's
+ * identity, and only they mark a budget's spend as estimated.
+ */
+export const PRICE_ISSUES = new Set([
+  "estimated_model_price",
+  "estimated_cache_price",
+  "unpriced_usage",
+]);
+
+/** Whether part of a receipt's charge was estimated for a missing price. */
+export function hasEstimatedPrice(usage: { issues: string[] }): boolean {
+  return usage.issues.some((issue) => PRICE_ISSUES.has(issue));
+}
+
+/**
+ * Fill every cache rate that a billed token count needs but the quote lacks,
+ * so a request is always charged and never blocks a budget for being
+ * unpriced. Cache rates derive from the input rate: by the provider's own
+ * cache multipliers when it has them, otherwise by `DEFAULT_CACHE_ESTIMATE`.
+ *
+ * `estimated` reports a rate estimated for tokens the request used. A free
+ * rate derived from a free input rate is exact and not reported.
+ */
+export function estimateCachePrices(params: {
+  usage: UsageTokens;
+  prices: TokenPrices;
+  provider: SupportedProvider;
+}): { prices: TokenPrices; estimated: boolean } {
+  const { usage } = params;
+  const multiplier =
+    CACHE_PRICE_MULTIPLIERS[params.provider] ?? DEFAULT_CACHE_ESTIMATE;
+  const prices = { ...params.prices };
+  const freeInput = moneyUnits(prices.input) === 0n;
+  let estimated = false;
+  for (const [key, count, factor] of [
+    ["cacheRead", usage.cacheReadTokens, multiplier.read],
+    [
+      "cacheWrite",
+      usage.cacheWriteTokens - usage.cacheWrite1hTokens,
+      multiplier.write,
+    ],
+    [
+      "cacheWrite1h",
+      usage.cacheWrite1hTokens,
+      multiplier.write1h ?? multiplier.write,
+    ],
+  ] as const) {
+    if (prices[key] !== null) continue;
+    prices[key] = scalePrice(
+      prices.input,
+      BigInt(Math.round(factor * 100)),
+      100n,
+    );
+    if (count > 0 && !freeInput) estimated = true;
+  }
+  return { prices, estimated };
+}
+
 /** Round once per component, half up, after summing all token categories. */
 export function priceTokens(usage: UsageTokens, prices: TokenPrices): string {
   const counts = [
@@ -247,54 +309,76 @@ export function priceTokens(usage: UsageTokens, prices: TokenPrices): string {
  * Savings can be negative when cache writes cost more than uncached input.
  */
 export function componentCacheCosts(component: PricedComponent) {
-  const prices = {
-    ...component.prices,
-    cacheRead: component.prices.cacheRead ?? "0",
-    cacheWrite: component.prices.cacheWrite ?? "0",
-    cacheWrite1h: component.prices.cacheWrite1h ?? "0",
+  const { prices } = component;
+  // Token counts that cannot be priced have no cache figures either.
+  const counts = [
+    component.cacheReadTokens,
+    component.cacheWriteTokens - component.cacheWrite1hTokens,
+    component.cacheWrite1hTokens,
+  ];
+  if (counts.some((count) => !Number.isSafeInteger(count) || count < 0))
+    return { cacheCost: 0, cacheSavings: 0, cacheReadSavings: 0 };
+  const none: UsageTokens = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    cacheWrite1hTokens: 0,
   };
-  const cacheCost = priceTokens(
-    { ...component, inputTokens: 0, outputTokens: 0 },
+  const free: TokenPrices = {
+    input: "0",
+    output: "0",
+    cacheRead: "0",
+    cacheWrite: "0",
+    cacheWrite1h: "0",
+    source: prices.source,
+  };
+  const units = (usage: Partial<UsageTokens>, rates: Partial<TokenPrices>) =>
+    moneyUnits(priceTokens({ ...none, ...usage }, { ...free, ...rates }));
+  const read = component.cacheReadTokens;
+  const writes = component.cacheWriteTokens;
+  const write1h = component.cacheWrite1hTokens;
+  // The charge includes estimated cache rates, so the cache cost does too.
+  const charged = estimateCachePrices({
+    usage: component,
     prices,
-  );
-  const baseline = priceTokens(
+    provider: component.provider,
+  }).prices;
+  const cacheCost = units(
     {
-      inputTokens: component.cacheReadTokens + component.cacheWriteTokens,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      cacheWrite1hTokens: 0,
+      cacheReadTokens: read,
+      cacheWriteTokens: writes,
+      cacheWrite1hTokens: write1h,
     },
-    prices,
-  );
-  const readBaseline = priceTokens(
     {
-      inputTokens: component.cacheReadTokens,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      cacheWrite1hTokens: 0,
+      cacheRead: charged.cacheRead,
+      cacheWrite: charged.cacheWrite,
+      cacheWrite1h: charged.cacheWrite1h,
     },
-    prices,
   );
-  const readCost = priceTokens(
-    {
-      ...component,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheWriteTokens: 0,
-      cacheWrite1hTokens: 0,
-    },
-    prices,
-  );
+  // Savings need a known rate: against an estimated rate they would only
+  // repeat the estimate's own discount.
+  const uncached = (tokens: number) =>
+    units({ inputTokens: tokens }, { input: prices.input });
+  const readSavings =
+    prices.cacheRead === null
+      ? 0n
+      : uncached(read) -
+        units({ cacheReadTokens: read }, { cacheRead: prices.cacheRead });
+  const writeSurcharge =
+    prices.cacheWrite === null
+      ? 0n
+      : units(
+          { cacheWriteTokens: writes, cacheWrite1hTokens: write1h },
+          {
+            cacheWrite: prices.cacheWrite,
+            cacheWrite1h: prices.cacheWrite1h ?? "0",
+          },
+        ) - uncached(writes);
   return {
-    cacheCost: Number(cacheCost),
-    cacheSavings: Number(
-      formatMoney(moneyUnits(baseline) - moneyUnits(cacheCost)),
-    ),
-    cacheReadSavings: Number(
-      formatMoney(moneyUnits(readBaseline) - moneyUnits(readCost)),
-    ),
+    cacheCost: Number(formatMoney(cacheCost)),
+    cacheSavings: Number(formatMoney(readSavings - writeSurcharge)),
+    cacheReadSavings: Number(formatMoney(readSavings)),
   };
 }
 
@@ -382,3 +466,6 @@ function decimal(value: string, scale: number): bigint {
     (Number(digits[scale]) >= 5 ? 1n : 0n)
   );
 }
+
+/** Cache estimate, as a fraction of the input rate, for a provider without multipliers. */
+const DEFAULT_CACHE_ESTIMATE = { read: 0.5, write: 1, write1h: 1 };

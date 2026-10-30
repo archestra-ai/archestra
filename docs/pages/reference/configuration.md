@@ -596,6 +596,9 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Values: `0` turns it off
   - Keep it below the shortest stall timeout of your clients. Claude Code reports a stall after 20 seconds.
   - Bedrock and Ollama native streams get no keep-alive.
+  - OpenAI Chat Completions and Responses, OpenAI-compatible chat providers using the shared transport, and Anthropic Messages also receive comments before the first event, once the upstream has accepted the HTTP request. No additional setting is needed.
+  - Comments cannot cover a provider or ingress that delays its HTTP response headers. They do not extend upstream timeouts or absolute request deadlines; intervening proxies must forward streaming bytes without buffering.
+  - Buffered policy responses and connection probes keep their existing commit behavior. Other transports keep their existing behavior until the first client event.
 
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Records traffic sent with a subscription credential, such as a Claude Pro or Max login, as subscription usage with $0 billed spend.
   - Default: `true`
@@ -965,6 +968,9 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 - **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Largest file the sandbox can read, save, or export to the conversation's Files panel, and the largest chat attachment it can stage, in bytes.
   - Default: `52428800` (50 MiB), equal to the [`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`](/docs/reference/configuration#ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT) default
   - Chat still stores a larger attachment; it is not staged in the sandbox.
+
+- **`ARCHESTRA_SKILLS_SANDBOX_HEADLESS_RETENTION_DAYS`** - Days a sandbox from a run without a conversation, such as an A2A task, is kept after its last command, upload or skill mount before it is deleted. Files it exported are kept. `0` keeps them forever.
+  - Default: `7`
 
 - **`ARCHESTRA_DAGGER_RUNTIME_CLI_BIN`** - Path to the Dagger CLI executable used by the sandbox.
   - Default: unset (uses the bundled or discovered CLI)

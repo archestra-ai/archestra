@@ -166,11 +166,24 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         // entityType/entityId are immutable: changing the target entity would
-        // bypass the create-time org-scoping guard.
+        // bypass the create-time org-scoping guard. Resets own lastCleanup:
+        // setting it here would move the schedule without clearing usage.
         body: UpdateLimitSchema.omit({
           entityType: true,
           entityId: true,
-        }).partial(),
+          lastCleanup: true,
+        })
+          .partial()
+          .extend({
+            // Null is what older generated clients send for an untouched
+            // field; it is accepted and ignored.
+            lastCleanup: z
+              .null({
+                error:
+                  "lastCleanup cannot be edited. To reset a spend limit's window, use POST /api/limits/{id}/reset.",
+              })
+              .optional(),
+          }),
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
@@ -183,12 +196,51 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Limit not found");
       }
 
-      const limit = await LimitModel.patch(id, body);
+      const { lastCleanup: _resetOwned, ...changes } = body;
+      const limit = await LimitModel.patch(id, changes);
 
       if (!limit) {
         throw new ApiError(404, "Limit not found");
       }
 
+      return reply.send(limit);
+    },
+  );
+
+  fastify.post(
+    "/api/limits/:id/reset",
+    {
+      schema: {
+        operationId: RouteId.ResetLimitUsage,
+        description:
+          "Reset a spend limit's current window to $0, so the requests it blocks run again. Cost reports keep the past spend. A calendar interval keeps its schedule. A rolling interval next resets one interval from now.",
+        tags: ["Limits"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectLimitSchema),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      const existing = await LimitModel.findByIdInOrganization(
+        id,
+        organizationId,
+      );
+      if (!existing) {
+        throw new ApiError(404, "Limit not found");
+      }
+      if (existing.limitType !== "token_cost") {
+        throw new ApiError(
+          400,
+          "Only spend limits can be reset. Other limits recover on their own schedule.",
+        );
+      }
+
+      await LimitModel.resetLimitsUsage([id]);
+      const limit = await LimitModel.findByIdInOrganization(id, organizationId);
+      if (!limit) {
+        throw new ApiError(404, "Limit not found");
+      }
       return reply.send(limit);
     },
   );

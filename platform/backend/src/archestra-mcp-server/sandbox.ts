@@ -2180,33 +2180,24 @@ async function resolveTarget(params: {
     return { sandboxId: asSandboxId(sandbox.id) };
   }
 
-  // default sandbox — scoped to the conversation, or to the execution when
-  // there is no conversation (headless A2A/ChatOps/schedule/email runs).
-  if (conversationId) {
-    try {
-      const sandbox = await SkillSandboxModel.findOrCreateDefault({
-        organizationId: userCtx.organizationId,
-        userId: userCtx.userId,
-        conversationId,
-        defaultCwd: SKILL_SANDBOX_HOME,
-      });
-      return { sandboxId: asSandboxId(sandbox.id) };
-    } catch (error) {
-      if (error instanceof SkillSandboxConversationGoneError) {
-        return { error: CONVERSATION_GONE_ERROR };
-      }
-      throw error;
-    }
-  }
-  if (isolationKey) {
-    const sandbox = await executionSandboxRegistry.getOrCreateDefault({
+  let sandbox: Awaited<
+    ReturnType<typeof executionSandboxRegistry.getOrCreateRunDefault>
+  >;
+  try {
+    sandbox = await executionSandboxRegistry.getOrCreateRunDefault({
       organizationId: userCtx.organizationId,
       userId: userCtx.userId,
+      conversationId,
       isolationKey,
       defaultCwd: SKILL_SANDBOX_HOME,
     });
-    return { sandboxId: asSandboxId(sandbox.id) };
+  } catch (error) {
+    if (error instanceof SkillSandboxConversationGoneError) {
+      return { error: CONVERSATION_GONE_ERROR };
+    }
+    throw error;
   }
+  if (sandbox) return { sandboxId: asSandboxId(sandbox.id) };
   return {
     error:
       "No conversation context for the default sandbox. Pass `target: { fresh: true }` or `target: { id }`.",

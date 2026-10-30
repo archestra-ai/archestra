@@ -1251,9 +1251,11 @@ export class OpenAIStreamAdapter
     }
 
     // Audio and transcript deltas are the reply itself: relay each as it
-    // arrives, like text.
+    // arrives, like text. Tool calls riding the same chunk wait for policy
+    // evaluation, as they do beside text.
     if (audio && sseData === null) {
-      sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+      const outbound = delta.tool_calls ? withoutToolCallDeltas(chunk) : chunk;
+      sseData = `data: ${JSON.stringify(outbound)}\n\n`;
     }
 
     // Handle tool calls
@@ -1295,7 +1297,9 @@ export class OpenAIStreamAdapter
       }
 
       this.state.rawToolCallEvents.push(
-        delta.content || hasReasoning ? onlyToolCallDeltas(chunk) : chunk,
+        delta.content || hasReasoning || audio
+          ? onlyToolCallDeltas(chunk)
+          : chunk,
       );
       isToolCallChunk = true;
     }

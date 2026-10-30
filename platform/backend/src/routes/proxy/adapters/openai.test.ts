@@ -1348,6 +1348,43 @@ describe("OpenAIStreamAdapter", () => {
     });
   });
 
+  test("relays spoken audio without the tool call it carries, which waits for policy evaluation", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    const result = adapter.processChunk({
+      id: "chatcmpl-audio-tool",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-audio",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            audio: { id: "audio_1", data: "AAAA", transcript: "Checking." },
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "blocked_tool", arguments: '{"x":1}' },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    } as unknown as Chunk);
+
+    expect(result.sseData).not.toContain("blocked_tool");
+    expect(deltaOf(result.sseData)).toEqual({
+      audio: { id: "audio_1", data: "AAAA", transcript: "Checking." },
+    });
+    expect(result.isToolCallChunk).toBe(true);
+    // Only the call is held, so releasing it does not replay the audio.
+    expect(deltaOf(adapter.getRawToolCallEvents()[0])).toEqual({
+      tool_calls: [expect.objectContaining({ id: "call_1" })],
+    });
+  });
+
   test("keeps reasoning when a trajectory prefix and tool call share the opening chunk", () => {
     const adapter = openaiAdapterFactory.createStreamAdapter();
     adapter.setTextSuffix?.(() => "[appa] protected child trajectory");

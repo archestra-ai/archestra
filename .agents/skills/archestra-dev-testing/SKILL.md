@@ -257,6 +257,12 @@ what it covers:
 The question is never "is this duplicated" but "does the second copy have its
 own way to fail".
 
+## Associate tests with their implementation
+
+Before creating a new unit/integration test file, look for the existing implementation suite and reuse its harness. A test uses its implementation basename with optional topic/project suffixes, or the backend endpoint convention. `pnpm check:test-associations` from `platform/` enforces this across backend, frontend and shared. Preserve `.unit`/`.rollback` project selection and enterprise suffixes when renaming.
+
+A genuine cross-module contract, dependency regression or test of an off-directory script can name concrete owners with a reason in `platform/scripts/test-associations.json`. Do not use a broad exemption, invent an implementation file, or move a test outside its runner's discovery roots to make lint pass. Both Playwright projects are excluded. Naming establishes ownership, not assertion quality or permission to duplicate setup.
+
 ## Reuse setup without hiding the behavior
 
 Before copying setup into a new test, check the existing fixtures and data

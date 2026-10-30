@@ -1,7 +1,8 @@
+import type { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { getMcpServersMock } = vi.hoisted(() => ({
   getMcpServersMock: vi.fn(),
@@ -23,7 +24,14 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-1" } } }),
 }));
 
-import { useMcpServersGroupedByCatalog } from "./mcp-server.query";
+import {
+  useMcpServers,
+  useMcpServersGroupedByCatalog,
+} from "./mcp-server.query";
+
+beforeEach(() => {
+  getMcpServersMock.mockReset();
+});
 
 describe("installs of the catalogs on screen", () => {
   it("keep the installs already known while the catalogs on screen change", async () => {
@@ -44,12 +52,7 @@ describe("installs of the catalogs on screen", () => {
         });
       },
     );
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const wrapper = ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
+    const wrapper = createQueryWrapper();
 
     const { result, rerender } = renderHook(
       ({ ids }: { ids: string[] }) =>
@@ -89,12 +92,7 @@ describe("installs of the catalogs on screen", () => {
         });
       },
     );
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const wrapper = ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
+    const wrapper = createQueryWrapper();
 
     const { result, rerender } = renderHook(
       ({ scope }: { scope: "personal" | "team" }) =>
@@ -116,3 +114,53 @@ describe("installs of the catalogs on screen", () => {
     );
   });
 });
+
+it("keeps compact issue data separate from the full server roster", async () => {
+  const server = {
+    id: "server-1",
+    name: "Test server",
+    assignedAgents: [{ id: "agent-1", name: "Test agent" }],
+  };
+  getMcpServersMock.mockImplementation((async (options) => ({
+    data: [
+      {
+        ...server,
+        assignedAgents:
+          options?.query?.includeAssignedAgents === false
+            ? []
+            : server.assignedAgents,
+      },
+    ],
+  })) as typeof archestraApiSdk.getMcpServers);
+  const wrapper = createQueryWrapper();
+  const { result } = renderHook(
+    () => ({
+      compact: useMcpServers({ includeAssignedAgents: false }),
+      unspecified: useMcpServers(),
+      full: useMcpServers({ includeAssignedAgents: true }),
+    }),
+    { wrapper },
+  );
+  await waitFor(() => {
+    expect(result.current.compact.isSuccess).toBe(true);
+    expect(result.current.unspecified.isSuccess).toBe(true);
+    expect(result.current.full.isSuccess).toBe(true);
+  });
+  expect(result.current.compact.data).toEqual([
+    { ...server, assignedAgents: [] },
+  ]);
+  expect(result.current.full.data).toEqual([server]);
+  // Agent usage is opt-in: a caller that does not ask shares the compact
+  // request instead of making one of its own.
+  expect(result.current.unspecified.data).toEqual(result.current.compact.data);
+  expect(getMcpServersMock).toHaveBeenCalledTimes(2);
+});
+
+function createQueryWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}

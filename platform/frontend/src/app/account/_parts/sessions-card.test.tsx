@@ -93,7 +93,7 @@ describe("SessionsCard", () => {
       await screen.findByText(/sign in again to manage your sessions/i),
     ).toBeInTheDocument();
     // The copy must state the concrete freshness window — Better Auth's 24h
-    // freshAge default, pinned by backend/src/auth/list-sessions-freshness.test.ts.
+    // freshAge default, pinned by backend/src/auth/better-auth.list-sessions-freshness.test.ts.
     expect(
       screen.getByText(/first 24\s+hours after you sign in/i),
     ).toBeInTheDocument();

@@ -22,7 +22,7 @@ import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra"
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
-import modelRouterRoutes from "./routes/model-router";
+import modelRouterRoutes from "./model-router";
 
 const native = vi.hoisted(() => ({
   initializeOpenappa: vi.fn(),

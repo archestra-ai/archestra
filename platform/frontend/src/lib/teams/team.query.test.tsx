@@ -5,7 +5,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { useMyTeams } from "./team.query";
+import { useAssignableTeams, useMyTeams, useTeams } from "./team.query";
 
 const origin = "http://localhost:9000";
 const server = setupServer();
@@ -51,3 +51,157 @@ describe("useMyTeams", () => {
     expect(offsets).toEqual([0, 100]);
   });
 });
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+const team = {
+  id: "team-one",
+  name: "Operations",
+  description: "Shared resources",
+};
+function setup() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
+  });
+  client.setQueryData(["auth", "session"], { user: { id: "viewer" } });
+  client.setQueryData(["config"], { features: {} });
+  return {
+    client,
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  };
+}
+it("isolates compact and full caches while preserving request filters and full relations", async () => {
+  const requests: URLSearchParams[] = [];
+  server.use(
+    http.get(`${origin}/api/teams`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      requests.push(query);
+      return HttpResponse.json({
+        data: [
+          query.get("includeRelations") === "false"
+            ? team
+            : {
+                ...team,
+                members: [{ id: "membership", userId: "viewer" }],
+                labels: [],
+                descendantTeams: [],
+              },
+        ],
+      });
+    }),
+  );
+  const { result } = renderHook(
+    () => ({
+      full: useTeams({ mine: true, name: " Ops ", labels: "tier:one" }),
+      light: useTeams({
+        mine: true,
+        name: " Ops ",
+        labels: "tier:one",
+        includeRelations: false,
+      }),
+    }),
+    setup(),
+  );
+  await waitFor(() =>
+    expect(
+      result.current.full.isSuccess && result.current.light.isSuccess,
+    ).toBe(true),
+  );
+  expect(requests).toHaveLength(2);
+  expect(requests.map((q) => q.get("includeRelations"))).toEqual(
+    expect.arrayContaining([null, "false"]),
+  );
+  for (const query of requests)
+    expect(Object.fromEntries(query)).toMatchObject({
+      mine: "true",
+      name: "Ops",
+      labels: "tier:one",
+      limit: "100",
+      offset: "0",
+    });
+  expect(result.current.full.data?.[0].members).toHaveLength(1);
+  expect(result.current.light.data?.[0]).toEqual(team);
+});
+it("keeps rows without members in their own cache entry", async () => {
+  const requests: URLSearchParams[] = [];
+  server.use(
+    http.get(`${origin}/api/teams`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      requests.push(query);
+      return HttpResponse.json({
+        data: [
+          {
+            ...team,
+            memberCount: 1,
+            labels: [],
+            descendantTeams: [],
+            ...(query.get("includeMembers") === "false"
+              ? {}
+              : { members: [{ id: "membership", userId: "viewer" }] }),
+          },
+        ],
+      });
+    }),
+  );
+  const { result } = renderHook(
+    () => ({
+      full: useTeams({ name: "Ops" }),
+      withoutMembers: useTeams({ name: "Ops", includeMembers: false }),
+    }),
+    setup(),
+  );
+  await waitFor(() =>
+    expect(
+      result.current.full.isSuccess && result.current.withoutMembers.isSuccess,
+    ).toBe(true),
+  );
+  expect(requests).toHaveLength(2);
+  expect(requests.map((q) => q.get("includeMembers"))).toEqual(
+    expect.arrayContaining([null, "false"]),
+  );
+  expect(result.current.full.data?.[0].members).toHaveLength(1);
+  expect(result.current.withoutMembers.data?.[0]).not.toHaveProperty("members");
+  expect(result.current.withoutMembers.data?.[0].memberCount).toBe(1);
+});
+it("requests the caller's teams without relations", async () => {
+  const requests: URLSearchParams[] = [];
+  server.use(
+    http.get(`${origin}/api/teams`, ({ request }) => {
+      requests.push(new URL(request.url).searchParams);
+      return HttpResponse.json({
+        data: [{ ...team, memberCount: 4, myRole: "admin" }],
+      });
+    }),
+  );
+  const { result } = renderHook(() => useMyTeams(), setup());
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  expect(requests).toHaveLength(1);
+  expect(requests[0].get("mine")).toBe("true");
+  expect(requests[0].get("includeRelations")).toBe("false");
+  expect(result.current.data?.[0].myRole).toBe("admin");
+});
+for (const isAdmin of [true, false]) {
+  it(`assignable-team selectors omit relations while preserving membership scope (admin=${isAdmin})`, async () => {
+    const requests: URLSearchParams[] = [];
+    server.use(
+      http.get(`${origin}/api/teams`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        requests.push(params);
+        return HttpResponse.json({ data: [team] });
+      }),
+    );
+    const { result } = renderHook(
+      () => useAssignableTeams({ isResourceAdmin: isAdmin }),
+      setup(),
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(requests).toHaveLength(1);
+    expect(requests[0].get("includeRelations")).toBe("false");
+    expect(requests[0].get("mine")).toBe(isAdmin ? null : "true");
+    expect(result.current.data?.map((row) => row.id)).toEqual([team.id]);
+  });
+}
+// SPDX-SnippetEnd

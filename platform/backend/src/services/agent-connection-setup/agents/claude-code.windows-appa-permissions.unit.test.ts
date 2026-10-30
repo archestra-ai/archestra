@@ -4,13 +4,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
+import { renderSetupScript } from "../index";
+import type { SetupScriptMcpSection } from "../types";
 import {
   CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING,
   claudeCodeAppaPermissionRules,
   claudeCodeAppaPermissionsAreLiteral,
-} from "./agents/claude-code";
-import { renderSetupScript } from "./index";
-import type { SetupScriptMcpSection } from "./types";
+} from "./claude-code";
 
 const execFileAsync = promisify(execFile);
 const powershellBin = [

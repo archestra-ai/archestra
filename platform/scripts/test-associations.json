@@ -1,0 +1,871 @@
+{
+  "platform/backend/scripts/billable-usage-postgres.test.ts": {
+    "targets": [
+      "platform/backend/src/models/interaction-billing.ts",
+      "platform/backend/src/models/limit.ts",
+      "platform/backend/src/utils/billable-usage.ts",
+      "platform/backend/src/database/migrations/0583_loud_zeigeist.sql"
+    ],
+    "reason": "Real PostgreSQL concurrency/rollback/reset contract spans receipt posting and limit accounting. Keep the explicit node:test/tsx script runner outside src; not a duplicate PGlite suite."
+  },
+  "platform/backend/scripts/database-retry-postgres.test.ts": {
+    "targets": [
+      "platform/backend/src/database/retry.ts"
+    ],
+    "reason": "Executes wrapPoolWithRetry against a PostgreSQL deadlock. Keep the explicit tsx/node:test PostgreSQL runner in scripts; relocation into src would accidentally enroll it in Vitest."
+  },
+  "platform/backend/scripts/migration-tag-upgrades.test.mjs": {
+    "targets": [
+      "platform/backend/src/database/migrations/meta/_journal.json"
+    ],
+    "reason": "Release-tag migration convergence contract consumes the authoritative migration journal and every SQL file it names. Keep the independent node:test release-history runner; the exact journal artifact is the ownership anchor, not an unrelated TypeScript module."
+  },
+  "platform/backend/scripts/migration-upgrades.test.mjs": {
+    "targets": [
+      "platform/backend/src/database/migrations/0464_repair_release_track_columns.sql",
+      "platform/backend/src/database/migrations/0459_team-role-composition.sql",
+      "platform/backend/src/database/migrations/0460_wet_arclight.sql",
+      "platform/backend/src/database/migrations/0461_worthless_christian_walker.sql"
+    ],
+    "reason": "Executes real repair SQL over stable/beta migration histories and proves configured values survive reapplication; retain independent node:test runner."
+  },
+  "platform/backend/scripts/request-shutdown.test.mjs": {
+    "targets": [
+      "platform/backend/src/server.ts",
+      "platform/backend/src/server/llm-proxy-drain.ts",
+      "platform/backend/src/utils/background-work.ts",
+      "platform/backend/src/observability/tracing/sdk.ts"
+    ],
+    "reason": "Subprocess harness extracts the production shutdown coordinator and verifies real request drain/background work/telemetry ordering. Keep explicit script execution and its child harness; do not move into Vitest."
+  },
+  "platform/backend/scripts/resource-permissions-upgrade.test.mjs": {
+    "targets": [
+      "platform/backend/src/services/resource-permissions-cutover.ts",
+      "platform/backend/src/models/startup-migration.ts"
+    ],
+    "reason": "Real PostgreSQL concurrent-replica and interrupted-upgrade contract exercises startup ownership plus permission cutover. Keep explicit script runner and all race scenarios."
+  },
+  "platform/backend/scripts/runtime-failure-window-postgres.test.ts": {
+    "targets": [
+      "platform/backend/src/models/agent-run.ts"
+    ],
+    "reason": "Real node-postgres timestamp/timezone contract for failed-turn cutoffs; retain its standalone PostgreSQL runner rather than enrolling it in PGlite/Vitest."
+  },
+  "platform/backend/scripts/shutdown-startup.test.mjs": {
+    "targets": [
+      "platform/backend/src/server.ts",
+      "platform/backend/src/config.ts"
+    ],
+    "reason": "Runs actual web/worker entrypoint subprocesses to reject an invalid imported shutdown budget before serving; keep the dedicated node:test runner outside src."
+  },
+  "platform/backend/src/archestra-mcp-server/skill-tool-text.test.ts": {
+    "targets": [
+      "platform/backend/src/archestra-mcp-server/skills.ts",
+      "platform/backend/src/archestra-mcp-server/sandbox.ts"
+    ],
+    "reason": "One intentional snapshot matrix pins the LLM-facing text/schema contract across both tool surfaces. Retain filename and snapshot identity rather than misattribute to one surface."
+  },
+  "platform/backend/src/archestra-mcp-server/tool-exclusions.test.ts": {
+    "targets": [
+      "platform/backend/src/archestra-mcp-server/dynamic-tools.ts",
+      "platform/backend/src/archestra-mcp-server/index.ts",
+      "platform/backend/src/archestra-mcp-server/search-tools.ts",
+      "platform/backend/src/archestra-mcp-server/run-tool.ts",
+      "platform/backend/src/services/agent-tool-exclusions.ts"
+    ],
+    "reason": "Explicit five-surface contract: dynamic discovery/resolution, built-in dispatch, search_tools and run_tool must agree on exclusions. Preserve the shared setup and every entrypoint assertion."
+  },
+  "platform/backend/src/auth/github-sso.ee.test.ts": {
+    "targets": [
+      "platform/patches/ee/@better-auth__sso@1.6.22.patch",
+      "platform/backend/src/auth/better-auth.ts"
+    ],
+    "reason": "GitHub OAuth-only SSO/verified-email flow explicitly guards the committed SSO dependency patch through the configured auth instance; retain enterprise suffix."
+  },
+  "platform/backend/src/auth/legacy-oauth-verification.unit.test.ts": {
+    "targets": [
+      "platform/patches/better-auth@1.7.7.patch"
+    ],
+    "reason": "Direct SDK contract test imports legacy better-auth/oauth2 verifyAccessToken; the committed patch supplies this compatibility export and exact-scope verifier. Keep unit classification."
+  },
+  "platform/backend/src/body-parser-security.unit.test.ts": {
+    "targets": [
+      "platform/pnpm-workspace.yaml",
+      "platform/pnpm-lock.yaml"
+    ],
+    "reason": "Direct transitive SDK/Express body-parser security contract has no local parser implementation or committed parser patch. Exact dependency override/lock artifacts own version selection; retain isolated child-process unit test."
+  },
+  "platform/backend/src/clients/azure-chat-responses.test.ts": {
+    "targets": [
+      "platform/backend/src/clients/llm-client.ts",
+      "platform/backend/src/routes/proxy/routes/azure.ts"
+    ],
+    "reason": "End-to-end client/proxy Responses wire contract streams tools and replays next-turn state through real Azure proxy route. Both sides are intentional owners."
+  },
+  "platform/backend/src/clients/gemini-tool-call-ids.unit.test.ts": {
+    "targets": [
+      "platform/patches/@ai-sdk__google@3.0.43.patch"
+    ],
+    "reason": "Direct @ai-sdk/google tool-call ID roundtrip contract guards the committed patch preserving functionCall/functionResponse IDs."
+  },
+  "platform/backend/src/clients/ollama-native-reasoning-order.unit.test.ts": {
+    "targets": [
+      "platform/patches/ollama-ai-provider-v2@3.6.0.patch"
+    ],
+    "reason": "Direct Ollama provider generation/streaming reasoning ordering contract explicitly documents and exercises this committed patch."
+  },
+  "platform/backend/src/clients/openai-chat-responses.test.ts": {
+    "targets": [
+      "platform/backend/src/clients/llm-client.ts",
+      "platform/backend/src/routes/proxy/routes/openai.ts"
+    ],
+    "reason": "Real client/proxy Responses contract verifies encrypted reasoning survives the subsequent tool step across both boundaries."
+  },
+  "platform/backend/src/clients/xai-interleaved-reasoning.unit.test.ts": {
+    "targets": [
+      "platform/patches/@ai-sdk__xai@3.0.67.patch"
+    ],
+    "reason": "Direct xAI SDK streaming regression test verifies resumed reasoning produces distinct stream parts; exact committed patch owns the behavior."
+  },
+  "platform/backend/src/knowledge-base/connectors/perforce/perforce-sync.integration.test.ts": {
+    "targets": [
+      "platform/backend/src/knowledge-base/connectors/perforce/perforce-connector.ts",
+      "platform/backend/src/knowledge-base/connector-sync.ts",
+      "platform/backend/src/task-queue/handlers/batch-embedding-handler.ts"
+    ],
+    "reason": "Integration fixture exercises connector ingestion through orchestration and embedding, including resumable cursors. Preserve cross-module integration identity."
+  },
+  "platform/backend/src/knowledge-base/openrouter-embedding-cost.test.ts": {
+    "targets": [
+      "platform/backend/src/knowledge-base/embedding-clients/index.ts",
+      "platform/backend/src/knowledge-base/kb-interaction.ts",
+      "platform/backend/src/services/model-sync.ts"
+    ],
+    "reason": "Embedding request usage must use synchronized OpenRouter rates and persist correct KB cost; deliberate client/pricing/accounting contract."
+  },
+  "platform/backend/src/middleware/audit-log-snapshot-scope.test.ts": {
+    "targets": [
+      "platform/backend/src/models/agent.ts",
+      "platform/backend/src/models/chatops-channel-binding.ts",
+      "platform/backend/src/models/internal-mcp-catalog.ts",
+      "platform/backend/src/models/knowledge-base-connector.ts",
+      "platform/backend/src/models/limit.ts",
+      "platform/backend/src/models/llm-oauth-client.ts",
+      "platform/backend/src/models/member.ts",
+      "platform/backend/src/models/organization-role.ts",
+      "platform/backend/src/models/team-token.ts",
+      "platform/backend/src/models/user-token.ts",
+      "platform/backend/src/models/virtual-api-key.ts"
+    ],
+    "reason": "Table-driven cross-model findByIdForAudit/findByNameForAudit organization-scope contract. Each model has its own leak failure mode; retain all rows rather than consolidate away coverage."
+  },
+  "platform/backend/src/middleware/audit-log-snapshot.test.ts": {
+    "targets": [
+      "platform/backend/src/models/agent.ts",
+      "platform/backend/src/models/agent-excluded-subagent.ts",
+      "platform/backend/src/models/agent-tool.ts",
+      "platform/backend/src/models/api-key.ts",
+      "platform/backend/src/models/internal-mcp-catalog.ts",
+      "platform/backend/src/models/knowledge-base.ts",
+      "platform/backend/src/models/llm-provider-api-key.ts",
+      "platform/backend/src/models/mcp-server.ts",
+      "platform/backend/src/models/model.ts",
+      "platform/backend/src/models/organization.ts",
+      "platform/backend/src/models/schedule-trigger.ts",
+      "platform/backend/src/models/skill.ts",
+      "platform/backend/src/models/team.ts",
+      "platform/backend/src/middleware/audit-decisions.ts",
+      "platform/backend/src/middleware/audit-log-registry.ts"
+    ],
+    "reason": "Intentional audit snapshot/redaction matrix spans separately implemented model fetchers and registry/decision contracts; keep all field, secret-redaction and tenant-isolation scenarios."
+  },
+  "platform/backend/src/models/caller-lookups.test.ts": {
+    "targets": [
+      "platform/backend/src/auth/request-scope.ts",
+      "platform/backend/src/models/member.ts",
+      "platform/backend/src/models/resource-permission-subject.ts",
+      "platform/backend/src/models/role-composition.ts",
+      "platform/backend/src/models/team.ts",
+      "platform/backend/src/models/user.ts"
+    ],
+    "reason": "Request-scope memoization contract spans membership, subject/role/team composition and session user lookups; no single model owns all query-budget and write-freshness assertions."
+  },
+  "platform/backend/src/models/credential-billing.rollback.test.ts": {
+    "targets": [
+      "platform/backend/src/models/interaction.ts",
+      "platform/backend/src/models/limit.ts",
+      "platform/backend/src/models/llm-oauth-client.ts",
+      "platform/backend/src/models/statistics.ts"
+    ],
+    "reason": "Billing-team assignment, usage attribution, spend caps and statistics must agree across independent models. Preserve rollback suffix and cross-model harness."
+  },
+  "platform/backend/src/models/credential-grants.test.ts": {
+    "targets": [
+      "platform/backend/src/models/llm-provider-api-key.ts",
+      "platform/backend/src/models/resource-permission-policy.ts",
+      "platform/backend/src/models/virtual-api-key.ts",
+      "platform/backend/src/services/openai-codex-credentials.ts"
+    ],
+    "reason": "Credential grant semantics span provider keys, virtual keys and personal credentials; preserve discovery/use/revocation matrix across these distinct surfaces."
+  },
+  "platform/backend/src/models/knowledge-granular-access.test.ts": {
+    "targets": [
+      "platform/backend/src/models/kb-chunk.ts",
+      "platform/backend/src/models/kb-document.ts",
+      "platform/backend/src/models/kb-file.ts",
+      "platform/backend/src/models/knowledge-base.ts",
+      "platform/backend/src/models/knowledge-base-connector.ts",
+      "platform/backend/src/models/resource-permission-policy.ts",
+      "platform/backend/src/knowledge-base/source-access-control.ts"
+    ],
+    "reason": "Knowledge grants and source restrictions must agree from object listing to indexed content without reindexing; deliberate cross-model access-control contract."
+  },
+  "platform/backend/src/models/llm-quota-periods.test.ts": {
+    "targets": [
+      "platform/backend/src/models/limit.ts",
+      "platform/backend/src/models/llm-throughput.ts",
+      "platform/backend/src/services/llm-throughput.ts",
+      "platform/backend/src/types/limit.ts"
+    ],
+    "reason": "Quota unit/interval changes span schema acceptance, budget cleanup, throughput epochs and receipt settlement; preserve all combinations and stale-receipt scenarios."
+  },
+  "platform/backend/src/models/permission-sync-isolation.test.ts": {
+    "targets": [
+      "platform/backend/src/models/connector-run.ts",
+      "platform/backend/src/models/task.ts",
+      "platform/backend/src/task-queue/task-queue.ts"
+    ],
+    "reason": "Content/permission isolation contract tests separate run leases and queue lanes/worker caps; no single model owns both mechanisms."
+  },
+  "platform/backend/src/models/proxy-bookkeeping.test.ts": {
+    "targets": [
+      "platform/backend/src/models/model.ts",
+      "platform/backend/src/models/virtual-api-key.ts"
+    ],
+    "reason": "Two distinct proxy bookkeeping contracts share query-budget fixtures: virtual-key timestamp refresh and model discovery reads; preserve both owners."
+  },
+  "platform/backend/src/models/roster-batch-reads.test.ts": {
+    "targets": [
+      "platform/backend/src/models/agent-suggested-prompt.ts",
+      "platform/backend/src/models/resource-permission-policy.ts"
+    ],
+    "reason": "One large-UUID batch contract independently covers prompt batch retrieval and policy scope batches; preserve both entrypoints."
+  },
+  "platform/backend/src/models/soft-limits.test.ts": {
+    "targets": [
+      "platform/backend/src/models/limit.ts",
+      "platform/backend/src/models/llm-throughput.ts",
+      "platform/backend/src/models/environment-default-user-limit.ts",
+      "platform/backend/src/services/llm-throughput.ts"
+    ],
+    "reason": "Soft/hard limit contract spans default overrides, hierarchical admission, usage settlement and metrics; retain cross-module suite."
+  },
+  "platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters.test.ts": {
+    "targets": [
+      "platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/chat.ts",
+      "platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/claude-code.ts",
+      "platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/codex.ts",
+      "platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/opencode.ts",
+      "platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/trajectory.ts",
+      "platform/backend/src/proxy/plugins/appa-plugin-archestra/session-identity.ts"
+    ],
+    "reason": "Intentional adapter conformance matrix spans native clients, child identity, receipts and trajectory transitions; directory has no single adapters implementation file."
+  },
+  "platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/native-tool-identity.test.ts": {
+    "targets": [
+      "platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/claude-code.ts",
+      "platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/codex.ts",
+      "platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/opencode.ts"
+    ],
+    "reason": "Native tool-identity conformance matrix compares three independent adapters, including ask_user translation; retain shared cases."
+  },
+  "platform/backend/src/routes/a2a-remote-agent/a2a-tenant-isolation.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/a2a-remote-agent/a2a-remote-agent.routes.ts",
+      "platform/backend/src/routes/agent-tool.ts",
+      "platform/backend/src/routes/tool.ts",
+      "platform/backend/src/models/agent-tool.ts"
+    ],
+    "reason": "Tenant isolation deliberately spans generic tool listing, generic assignment rejection and remote-target discovery; all three independent routes are registered."
+  },
+  "platform/backend/src/routes/a2a/auth.route.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/a2a/v1.ts",
+      "platform/backend/src/routes/a2a/v2.ts",
+      "platform/backend/src/routes/mcp-gateway/utils.ts"
+    ],
+    "reason": "Authentication parity explicitly registers both A2A protocol versions and compares access behavior."
+  },
+  "platform/backend/src/routes/a2a/knowledge-app-credentials.route.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/a2a/v1.ts",
+      "platform/backend/src/routes/a2a/v2.ts",
+      "platform/backend/src/routes/mcp-gateway/utils.ts"
+    ],
+    "reason": "Both A2A protocol versions must preserve application identity through knowledge discovery and retrieval."
+  },
+  "platform/backend/src/routes/a2a/oauth-execution.route.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/a2a/v1.ts",
+      "platform/backend/src/routes/a2a/v2.ts",
+      "platform/backend/src/routes/mcp-gateway/utils.ts"
+    ],
+    "reason": "Both A2A versions execute OAuth-authorized tools and retain authorization through model execution and revocation."
+  },
+  "platform/backend/src/routes/a2a/oauth-runtime.route.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/a2a/v2.ts",
+      "platform/backend/src/agents/a2a/a2a-manager.ts",
+      "platform/backend/src/archestra-mcp-server/tasks.ts",
+      "platform/backend/src/routes/mcp-gateway/utils.ts"
+    ],
+    "reason": "Tests OAuth rejection before runtime side effects through v2 SendMessage, direct task resume and explicit delegation/run tools; no single route owns all entrypoints."
+  },
+  "platform/backend/src/routes/chat/compaction/compaction.rollback.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/chat/compaction/history.ts",
+      "platform/backend/src/routes/chat/compaction/message-text.ts",
+      "platform/backend/src/routes/chat/compaction/compact-messages.ts",
+      "platform/backend/src/routes/chat/normalization/estimate-message-tokens.ts"
+    ],
+    "reason": "Existing helper contract suite has separate behavioral assertions for history boundary selection, prompt/data-URL decoding, stream metadata and file token estimates. No single helper is an honest owner; retain rollback suffix and cases."
+  },
+  "platform/backend/src/routes/chat/normalization/file-part-provider-metadata.unit.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/chat/prepare-model-messages.ts",
+      "platform/backend/src/routes/chat/normalization/materialize-attachments.ts"
+    ],
+    "reason": "Dependency regression contract intentionally imports only AI SDK convertToModelMessages: Gemini thoughtSignature and Anthropic cacheControl file metadata must survive conversion. prepare-model-messages.ts calls that conversion and materialize-attachments.ts produces providerMetadata. These are affected consumers, not directly exercised functions; retain explicit dependency-contract rationale rather than pretend a local function is called. Keep every current case and unit discovery suffix; use an exact-path registry entry, not a wildcard."
+  },
+  "platform/backend/src/routes/credential-grants-auth.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/llm-provider-api-keys.ts",
+      "platform/backend/src/routes/virtual-api-key/virtual-api-key.routes.ts",
+      "platform/backend/src/auth/fastify-plugin/plugin.ts"
+    ],
+    "reason": "Real middleware and two independent credential route families jointly enforce scoped edit grants versus role permissions; keep both authorization surfaces."
+  },
+  "platform/backend/src/routes/proxy/adapters/approved-as-sent.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/adapters/azure-responses.ts",
+      "platform/backend/src/routes/proxy/adapters/bedrock.ts",
+      "platform/backend/src/routes/proxy/adapters/gemini.ts",
+      "platform/backend/src/routes/proxy/adapters/openai.ts",
+      "platform/backend/src/routes/proxy/adapters/openai-responses.ts",
+      "platform/backend/src/openappa/result-view.ts"
+    ],
+    "reason": "Cross-provider tool-result approval contract preserves original image bytes when policy approves the content and replaces them on rewrite."
+  },
+  "platform/backend/src/routes/proxy/adapters/opencode-review-transport.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/adapters/anthropic.ts",
+      "platform/backend/src/routes/proxy/adapters/openai.ts",
+      "platform/backend/src/routes/proxy/adapters/openai-responses.ts",
+      "platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/opencode-review.ts"
+    ],
+    "reason": "Cross-provider review transport preserves the same native question input and signed binding ID in three independent wire formats."
+  },
+  "platform/backend/src/routes/proxy/adapters/stream-text-suffix.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/adapters/anthropic.ts",
+      "platform/backend/src/routes/proxy/adapters/anthropic-openai.ts",
+      "platform/backend/src/routes/proxy/adapters/azure.ts",
+      "platform/backend/src/routes/proxy/adapters/azure-responses.ts",
+      "platform/backend/src/routes/proxy/adapters/bedrock-openai.ts",
+      "platform/backend/src/routes/proxy/adapters/cohere-openai.ts",
+      "platform/backend/src/routes/proxy/adapters/gemini-openai.ts",
+      "platform/backend/src/routes/proxy/adapters/openai.ts",
+      "platform/backend/src/routes/proxy/adapters/openai-responses.ts",
+      "platform/backend/src/routes/proxy/adapters/openai-responses-from-chat.ts",
+      "platform/backend/src/openappa/session-token.ts"
+    ],
+    "reason": "Adapter matrix pins trajectory receipt prefix/suffix insertion and terminal behavior across native and translated stream protocols."
+  },
+  "platform/backend/src/routes/proxy/adapters/streaming-usage.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/adapters/anthropic-openai.ts",
+      "platform/backend/src/routes/proxy/adapters/bedrock-openai-translator.ts",
+      "platform/backend/src/routes/proxy/adapters/cerebras.ts",
+      "platform/backend/src/routes/proxy/adapters/cohere-openai.ts",
+      "platform/backend/src/routes/proxy/adapters/gemini-openai.ts",
+      "platform/backend/src/routes/proxy/adapters/gemini-openai-translator.ts",
+      "platform/backend/src/routes/proxy/adapters/ollama.ts",
+      "platform/backend/src/routes/proxy/adapters/openai.ts",
+      "platform/backend/src/routes/proxy/adapters/perplexity.ts",
+      "platform/backend/src/routes/proxy/adapters/vllm.ts",
+      "platform/backend/src/routes/proxy/adapters/zhipuai.ts"
+    ],
+    "reason": "The exhaustive adapter roster pins usage accumulation and gross/cached prompt accounting in each independently synthesized final SSE."
+  },
+  "platform/backend/src/routes/proxy/adapters/tool-call-rewrite-sweep.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/adapters/anthropic.ts",
+      "platform/backend/src/routes/proxy/adapters/azure-responses.ts",
+      "platform/backend/src/routes/proxy/adapters/bedrock.ts",
+      "platform/backend/src/routes/proxy/adapters/bedrock-openai.ts",
+      "platform/backend/src/routes/proxy/adapters/cohere.ts",
+      "platform/backend/src/routes/proxy/adapters/gemini.ts",
+      "platform/backend/src/routes/proxy/adapters/minimax.ts",
+      "platform/backend/src/routes/proxy/adapters/ollama-native.ts",
+      "platform/backend/src/routes/proxy/adapters/openai.ts",
+      "platform/backend/src/routes/proxy/adapters/openai-responses.ts",
+      "platform/backend/src/routes/proxy/adapters/openai-responses-from-chat.ts"
+    ],
+    "reason": "Complementary wire-format matrix pins streaming and non-streaming tool-call rewrite serialization; the smaller rewrite suite covers other independent formats, so consolidation is not justified by shared setup alone."
+  },
+  "platform/backend/src/routes/proxy/adapters/tool-call-rewrite.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/adapters/anthropic.ts",
+      "platform/backend/src/routes/proxy/adapters/openai.ts",
+      "platform/backend/src/routes/proxy/adapters/zhipuai.ts"
+    ],
+    "reason": "OpenAI, Anthropic and ZhipuAI each implement their own tool-call rewrite frames and signed wire IDs; preserve all formats."
+  },
+  "platform/backend/src/routes/proxy/adapters/truncated-http-error.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/adapters/cohere.ts",
+      "platform/backend/src/routes/proxy/adapters/minimax.ts",
+      "platform/backend/src/routes/proxy/adapters/zhipuai.ts",
+      "platform/backend/src/clients/bedrock-client.ts",
+      "platform/backend/src/routes/proxy/llm-proxy-helpers.ts",
+      "platform/backend/src/routes/proxy/upstream-connection-retry.ts"
+    ],
+    "reason": "HTTP-error truncation matrix exercises Bedrock client and three independent adapter clients plus first-chunk retry classification; no one provider owns this contract."
+  },
+  "platform/backend/src/routes/proxy/llm-proxy-egress.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/routes/ollama.ts",
+      "platform/backend/src/routes/proxy/routes/ollama-native.ts",
+      "platform/backend/src/routes/proxy/llm-proxy-auth.ts",
+      "platform/backend/src/clients/llm-client.ts",
+      "platform/backend/src/clients/internal-call.ts"
+    ],
+    "reason": "Credential/provenance egress compares OpenAI-compatible generation and native Ollama metadata requests through a real listener, including createLLMModel internal proofs; preserve both independent transport paths."
+  },
+  "platform/backend/src/routes/proxy/routes/app-attribution-integration.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/routes/openai.ts",
+      "platform/backend/src/models/interaction.ts"
+    ],
+    "reason": "Route integration checks application attribution persisted on interactions."
+  },
+  "platform/backend/src/routes/proxy/routes/embeddings-routes.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/routes/gemini.ts",
+      "platform/backend/src/routes/proxy/routes/mistral.ts"
+    ],
+    "reason": "Provider-specific embeddings contract compares two independently registered native route families; do not choose one provider as the owner of the other."
+  },
+  "platform/backend/src/routes/proxy/routes/label-attribution-integration.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/routes/openai.ts",
+      "platform/backend/src/models/entity-labels.ts"
+    ],
+    "reason": "Route integration checks credential and team labels on recorded requests."
+  },
+  "platform/backend/src/routes/proxy/routes/limit-integration.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/routes/openai.ts",
+      "platform/backend/src/services/limit.ts",
+      "platform/backend/src/models/limit.ts"
+    ],
+    "reason": "Established route integration harness checks budget enforcement and persisted usage together."
+  },
+  "platform/backend/src/routes/proxy/routes/native-prompt-cache.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/routes/anthropic.ts",
+      "platform/backend/src/routes/proxy/routes/azure.ts",
+      "platform/backend/src/routes/proxy/routes/bedrock.ts",
+      "platform/backend/src/routes/proxy/routes/gemini.ts",
+      "platform/backend/src/routes/proxy/routes/openai.ts",
+      "platform/backend/src/routes/proxy/llm-proxy-handler.ts"
+    ],
+    "reason": "Native prompt-cache matrix intentionally spans five independent native request serializers and checks serialized usage and persisted billing for stream/JSON and agentless/agent requests."
+  },
+  "platform/backend/src/routes/proxy/routes/provider-matrix.rollback.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/routes/anthropic.ts",
+      "platform/backend/src/routes/proxy/routes/archestra.ts",
+      "platform/backend/src/routes/proxy/routes/azure.ts",
+      "platform/backend/src/routes/proxy/routes/bedrock.ts",
+      "platform/backend/src/routes/proxy/routes/cerebras.ts",
+      "platform/backend/src/routes/proxy/routes/cohere.ts",
+      "platform/backend/src/routes/proxy/routes/deepseek.ts",
+      "platform/backend/src/routes/proxy/routes/gemini.ts",
+      "platform/backend/src/routes/proxy/routes/github-copilot.ts",
+      "platform/backend/src/routes/proxy/routes/groq.ts",
+      "platform/backend/src/routes/proxy/routes/kimi.ts",
+      "platform/backend/src/routes/proxy/routes/kimi-code.ts",
+      "platform/backend/src/routes/proxy/routes/microsoft-365-copilot.ts",
+      "platform/backend/src/routes/proxy/routes/minimax.ts",
+      "platform/backend/src/routes/proxy/routes/mistral.ts",
+      "platform/backend/src/routes/proxy/routes/ollama.ts",
+      "platform/backend/src/routes/proxy/routes/ollama-native.ts",
+      "platform/backend/src/routes/proxy/routes/openai.ts",
+      "platform/backend/src/routes/proxy/routes/openrouter.ts",
+      "platform/backend/src/routes/proxy/routes/perplexity.ts",
+      "platform/backend/src/routes/proxy/routes/vllm.ts",
+      "platform/backend/src/routes/proxy/routes/xai.ts",
+      "platform/backend/src/routes/proxy/routes/zhipuai.ts"
+    ],
+    "reason": "Existing parameterized contract suite runs common request, usage, limit and streaming assertions across native provider routes."
+  },
+  "platform/backend/src/routes/proxy/routes/throughput-integration.test.ts": {
+    "targets": [
+      "platform/backend/src/routes/proxy/routes/openai.ts",
+      "platform/backend/src/routes/proxy/routes/anthropic.ts",
+      "platform/backend/src/services/llm-throughput.ts"
+    ],
+    "reason": "Cross-provider route suite exercises native throughput enforcement against an HTTP upstream."
+  },
+  "platform/backend/src/services/agent-runtime/agent-init.unit.test.ts": {
+    "targets": [
+      "platform/docker_images/agent/bin/archestra-agent-init"
+    ],
+    "reason": "Executes actual image init shell script to refresh Git auth/identity and report startup failure; retain backend src unit location for Vitest discovery."
+  },
+  "platform/backend/src/services/agent-runtime/attention-entrypoint.unit.test.ts": {
+    "targets": [
+      "platform/docker_images/agent/bin/archestra-agent-attention"
+    ],
+    "reason": "Executes actual image attention reporter, asserting tmux and HTTP transitions; retain backend src unit discovery."
+  },
+  "platform/backend/src/services/agent-runtime/claude-code-entrypoint.unit.test.ts": {
+    "targets": [
+      "platform/docker_images/agent/bin/archestra-claude-code",
+      "platform/docker_images/agent/bin/archestra-claude-background",
+      "platform/docker_images/agent/bin/archestra-agent-failure"
+    ],
+    "reason": "Executes Claude Code image entrypoint and generated/native hooks for failure and background-work completion; preserve backend Vitest unit harness."
+  },
+  "platform/backend/src/services/agent-runtime/claude-entrypoint.unit.test.ts": {
+    "targets": [
+      "platform/docker_images/agent/bin/archestra-claude-code",
+      "platform/docker_images/agent/bin/archestra-agent-attention"
+    ],
+    "reason": "Executes real attention reporter with native Claude notification hooks, unlike the other Claude failure suite which stubs attention. Keep distinct coverage and exact off-directory script owners."
+  },
+  "platform/backend/src/services/agent-runtime/codex-entrypoint.unit.test.ts": {
+    "targets": [
+      "platform/docker_images/agent/bin/archestra-codex",
+      "platform/backend/src/services/agent-runtime/failure-reason.ts"
+    ],
+    "reason": "Image entrypoint plus backend failure-decoder contract covers Unicode envelopes, protocol validation and runtime output; retain backend unit discovery."
+  },
+  "platform/backend/src/services/agent-runtime/grok-entrypoint.unit.test.ts": {
+    "targets": [
+      "platform/docker_images/agent/bin/archestra-agent-failure",
+      "platform/docker_images/agent/bin/archestra-agent-instructions",
+      "platform/docker_images/agent/bin/archestra-grok",
+      "platform/docker_images/agent/bin/archestra-grok-acp",
+      "platform/docker_images/agent/bin/archestra-grok-hook",
+      "platform/docker_images/agent/bin/archestra-grok-llm",
+      "platform/docker_images/agent/bin/archestra-grok-mcp",
+      "platform/docker_images/agent/bin/archestra-grok-transcript",
+      "platform/docker_images/agent/bin/archestra-grok-tui-start",
+      "platform/docker_images/agent/bin/archestra-grok-turn-failure",
+      "platform/docker_images/agent/bin/archestra-tui-run"
+    ],
+    "reason": "Executes grok image launcher, gateway bridge, native transcript/hooks and subprocess driver; exact tracked executable owners preserve the shared image integration harness under backend Vitest unit discovery."
+  },
+  "platform/backend/src/services/agent-runtime/hermes-entrypoint.unit.test.ts": {
+    "targets": [
+      "platform/docker_images/agent/bin/archestra-hermes"
+    ],
+    "reason": "Executes Hermes image entrypoint for config, protocol and attention behavior; retain backend Vitest unit discovery."
+  },
+  "platform/backend/src/services/agent-runtime/image-failure-entrypoints.unit.test.ts": {
+    "targets": [
+      "platform/docker_images/agent/bin/archestra-codex",
+      "platform/docker_images/agent/bin/archestra-hermes",
+      "platform/docker_images/agent/bin/archestra-opencode",
+      "platform/docker_images/agent/bin/archestra-openclaw",
+      "platform/docker_images/agent/bin/archestra-grok",
+      "platform/docker_images/agent/bin/archestra-kimi",
+      "platform/docker_images/agent/bin/archestra-agent-init",
+      "platform/docker_images/agent/bin/archestra-agent-failure"
+    ],
+    "reason": "Intentional cross-image failure-envelope/protocol contract runs real image entrypoints; preserve matrix and backend unit discovery."
+  },
+  "platform/backend/src/services/agent-runtime/kimi-entrypoint.unit.test.ts": {
+    "targets": [
+      "platform/docker_images/agent/bin/archestra-agent-failure",
+      "platform/docker_images/agent/bin/archestra-agent-instructions",
+      "platform/docker_images/agent/bin/archestra-kimi",
+      "platform/docker_images/agent/bin/archestra-kimi-gateway-state",
+      "platform/docker_images/agent/bin/archestra-kimi-hook",
+      "platform/docker_images/agent/bin/archestra-kimi-mcp",
+      "platform/docker_images/agent/bin/archestra-kimi-print",
+      "platform/docker_images/agent/bin/archestra-kimi-transcript",
+      "platform/docker_images/agent/bin/archestra-kimi-tui-start",
+      "platform/docker_images/agent/bin/archestra-kimi-turn-failure",
+      "platform/docker_images/agent/bin/archestra-tui-run"
+    ],
+    "reason": "Executes kimi image launcher, gateway bridge, native transcript/hooks and subprocess driver; exact tracked executable owners preserve the shared image integration harness under backend Vitest unit discovery."
+  },
+  "platform/backend/src/services/agent-runtime/native-session-continuation.unit.test.ts": {
+    "targets": [
+      "platform/docker_images/agent/bin/archestra-hermes",
+      "platform/docker_images/agent/bin/archestra-opencode",
+      "platform/docker_images/agent/bin/archestra-claude-code",
+      "platform/docker_images/agent/bin/archestra-codex"
+    ],
+    "reason": "Cross-image continuation matrix verifies native session markers are required for resume. Preserve per-client cases and backend Vitest unit discovery."
+  },
+  "platform/backend/src/services/agent-runtime/openclaw-entrypoint.unit.test.ts": {
+    "targets": [
+      "platform/docker_images/agent/bin/archestra-openclaw"
+    ],
+    "reason": "Executes OpenClaw image entrypoint and generated runtime plugins; retain backend unit discovery instead of moving outside src."
+  },
+  "platform/backend/src/services/agent-runtime/opencode-entrypoint.unit.test.ts": {
+    "targets": [
+      "platform/docker_images/agent/bin/archestra-opencode"
+    ],
+    "reason": "Executes OpenCode image entrypoint and generated runtime plugins; retain backend unit discovery instead of moving outside src."
+  },
+  "platform/backend/src/services/apps/app-sdk-runtime.unit.test.ts": {
+    "targets": [
+      "platform/backend/src/static/archestra-app-sdk.js"
+    ],
+    "reason": "Loads actual shipped static Apps SDK JavaScript under a window/message harness; preserve backend Vitest unit discovery and exact shipped-file ownership."
+  },
+  "platform/backend/src/services/credential-query-budget.test.ts": {
+    "targets": [
+      "platform/backend/src/services/credentials.ts",
+      "platform/backend/src/services/agent-runtime/credentials.ts",
+      "platform/backend/src/services/agent-runtime/runtime-credentials.ts"
+    ],
+    "reason": "Shared credential query-budget/revocation contract independently exercises MCP and runtime batching, plus service-account grants; retain all surfaces."
+  },
+  "platform/backend/src/services/model-capability-matrix.test.ts": {
+    "targets": [
+      "platform/backend/src/services/cross-provider-pricing.ts",
+      "platform/backend/src/services/discovered-model-enrichment.ts",
+      "platform/backend/src/services/model-sync.ts",
+      "platform/backend/src/services/vendor-published-pricing.ts"
+    ],
+    "reason": "Intentional provider capability/pricing matrix covers several independently called resolution paths and precedence tiers; preserve all table rows."
+  },
+  "platform/backend/src/services/sre-agent/sre-agent-visibility.test.ts": {
+    "targets": [
+      "platform/backend/src/auth/permission-gated.ts",
+      "platform/backend/src/models/agent.ts",
+      "platform/backend/src/models/internal-mcp-catalog.ts",
+      "platform/backend/src/models/tool.ts",
+      "platform/backend/src/agents/a2a-executor.ts",
+      "platform/backend/src/services/resource-permissions.ts",
+      "platform/backend/src/archestra-mcp-server/search-tools.ts"
+    ],
+    "reason": "SRE visibility is an intentional cross-surface authorization contract: agent/catalog/tool listings, assignments and A2A must all honor sre:read. Do not label as definition-only coverage."
+  },
+  "platform/backend/src/standalone-scripts/calculate-node-max-old-space-size.unit.test.ts": {
+    "targets": [
+      "platform/backend/scripts/calculate-node-max-old-space-size.sh"
+    ],
+    "reason": "Executes standalone memory sizing shell script; existing basename already identifies it, but it must remain under src for backend Vitest unit discovery."
+  },
+  "platform/backend/src/standalone-scripts/client-version-workflow.unit.test.ts": {
+    "targets": [
+      ".github/workflows/update-client-versions.yml",
+      "platform/backend/package.json",
+      "platform/backend/knip.config.ts",
+      "platform/backend/scripts/client-version-constant.mjs",
+      "platform/shared/model-constants.ts",
+      "platform/shared/subscription-credentials.ts"
+    ],
+    "reason": "Cross-file update-workflow contract reads exact workflow/package/knip/constant artifacts and checks provider/subscription completeness. Keep unit harness; root workflow requires repo-relative target resolution."
+  },
+  "platform/backend/src/standalone-scripts/update-agent-runtime-clis.unit.test.ts": {
+    "targets": [
+      "platform/backend/scripts/update-agent-runtime-clis.mjs"
+    ],
+    "reason": "Executes actual standalone updater script in a temporary fixture. Keep its existing descriptive basename under src so backend Vitest unit discovery and dependency boundaries remain unchanged."
+  },
+  "platform/backend/src/standalone-scripts/update-codex-models-client-version.unit.test.ts": {
+    "targets": [
+      "platform/backend/scripts/update-codex-models-client-version.mjs"
+    ],
+    "reason": "Executes actual standalone updater script in a temporary fixture. Keep its existing descriptive basename under src so backend Vitest unit discovery and dependency boundaries remain unchanged."
+  },
+  "platform/backend/src/standalone-scripts/update-copilot-chat-client-version.unit.test.ts": {
+    "targets": [
+      "platform/backend/scripts/update-copilot-chat-client-version.mjs"
+    ],
+    "reason": "Executes actual standalone updater script in a temporary fixture. Keep its existing descriptive basename under src so backend Vitest unit discovery and dependency boundaries remain unchanged."
+  },
+  "platform/backend/src/standalone-scripts/update-grok-client-version.unit.test.ts": {
+    "targets": [
+      "platform/backend/scripts/update-grok-client-version.mjs"
+    ],
+    "reason": "Executes actual standalone updater script in a temporary fixture. Keep its existing descriptive basename under src so backend Vitest unit discovery and dependency boundaries remain unchanged."
+  },
+  "platform/backend/src/standalone-scripts/update-vscode-client-version.unit.test.ts": {
+    "targets": [
+      "platform/backend/scripts/update-vscode-client-version.mjs"
+    ],
+    "reason": "Executes actual standalone updater script in a temporary fixture. Keep its existing descriptive basename under src so backend Vitest unit discovery and dependency boundaries remain unchanged."
+  },
+  "platform/backend/src/task-queue/handlers/schedule-runtime-blocking.test.ts": {
+    "targets": [
+      "platform/backend/src/task-queue/handlers/check-due-schedule-triggers-handler.ts",
+      "platform/backend/src/services/agent-runtime/reconciler.ts"
+    ],
+    "reason": "Schedule blocking/expiry/recovery contract spans scheduling decisions and reconciler workspace transitions; preserve both directions of the lifecycle."
+  },
+  "platform/backend/src/task-queue/handlers/schedule-trigger-runtime.test.ts": {
+    "targets": [
+      "platform/backend/src/task-queue/handlers/check-due-schedule-triggers-handler.ts",
+      "platform/backend/src/task-queue/handlers/schedule-trigger-run-handler.ts",
+      "platform/backend/src/services/agent-runtime/backends/kubernetes.ts"
+    ],
+    "reason": "Real scheduled-runtime flow spans due-trigger selection, trigger execution and Kubernetes backend launch; retain integration harness."
+  },
+  "platform/backend/src/test/agent-transcripts.postgres.ts": {
+    "targets": [
+      "platform/backend/src/models/agent-run-transcript.ts"
+    ],
+    "reason": "Explicit package-script runner verifies concurrent PostgreSQL transcript replacement through the shared concurrency harness."
+  },
+  "platform/backend/src/test/llm-limits/postgres.integration.ts": {
+    "targets": [
+      "platform/backend/src/models/limit.ts",
+      "platform/backend/src/models/llm-throughput.ts"
+    ],
+    "reason": "Explicit package-script runner verifies admission, contention and accounting across real PostgreSQL connections."
+  },
+  "platform/backend/src/types/llm-providers/chat-completion-compatibility.unit.test.ts": {
+    "targets": [
+      "platform/backend/src/types/llm-providers/cerebras/api.ts",
+      "platform/backend/src/types/llm-providers/github-copilot/api.ts",
+      "platform/backend/src/types/llm-providers/ollama/api.ts",
+      "platform/backend/src/types/llm-providers/openai/api.ts",
+      "platform/backend/src/types/llm-providers/vllm/api.ts",
+      "platform/backend/src/types/llm-providers/zhipuai/api.ts"
+    ],
+    "reason": "Conformance matrix validates chat-completion schema compatibility across six real provider schema modules; preserve each provider case."
+  },
+  "platform/backend/src/zod-sdk-compatibility.unit.test.ts": {
+    "targets": [
+      "platform/patches/@microsoft__agents-activity@1.9.1.patch",
+      "platform/patches/confluence.js@2.1.0.patch"
+    ],
+    "reason": "Direct SDK Zod compatibility suite validates both committed dependency patches with real activity parsing and authenticated Confluence HTTP middleware behavior."
+  },
+  "platform/frontend/src/app/connection/connect-loading.test.tsx": {
+    "targets": [
+      "platform/frontend/src/app/connection/use-gateway-servers.ts",
+      "platform/frontend/src/lib/skills/skill.query.ts",
+      "platform/frontend/src/lib/mcp/gateway-tool-preview.query.ts",
+      "platform/frontend/src/lib/agent-options.query.ts"
+    ],
+    "reason": "One MSW suite pins Connect loading budgets across four independently implemented surfaces: metadata-only skill pagination, deferred gateway tool names, opt-in schema previews and retained selector data after failures. No single implementation stem honestly owns all four cases; keep explicit owners."
+  },
+  "platform/frontend/src/app/knowledge/knowledge-bases/_parts/knowledge-base-access.test.tsx": {
+    "targets": [
+      "platform/frontend/src/app/knowledge/knowledge-bases/_parts/create-knowledge-base-dialog.tsx",
+      "platform/frontend/src/app/knowledge/knowledge-bases/_parts/edit-knowledge-base-dialog.tsx",
+      "platform/frontend/src/app/knowledge/knowledge-bases/_parts/knowledge-base-access-fields.tsx",
+      "platform/frontend/src/lib/knowledge/knowledge-base.query.ts",
+      "platform/frontend/src/components/resource-access-section.tsx"
+    ],
+    "reason": "The shared MSW setup tests both creation initial grants and editing an existing resource policy, including excluding retired sharing columns. These are separate dialog implementations; the similar knowledge-base-access-fields name covers creation only, so renaming the entire suite to that helper would misstate ownership."
+  },
+  "platform/frontend/src/app/mcp/registry/server-imports.test.ts": {
+    "targets": [
+      "platform/frontend/src/lib/mcp/mcp-registry.query.ts",
+      "platform/frontend/src/lib/auth/shell-seed.server.ts",
+      "platform/frontend/src/lib/auth/shell-seed.ts",
+      "platform/frontend/src/lib/agent-runs-query-keys.ts",
+      "platform/frontend/src/lib/app.query.ts",
+      "platform/frontend/src/lib/auth/auth.query.ts",
+      "platform/frontend/src/lib/chat/conversations-query-key.ts",
+      "platform/frontend/src/lib/chat/new-chat-seed.ts",
+      "platform/frontend/src/lib/environment.query.ts",
+      "platform/frontend/src/lib/projects/projects.query.ts",
+      "platform/frontend/src/lib/site-notification.query.ts",
+      "platform/frontend/src/app/mcp/registry/prefetch-first-page.ts",
+      "platform/frontend/src/components/table-card-view.server.ts"
+    ],
+    "reason": "Architecture suite scans exactly these 13 server-imported modules and compares their React value imports with the real React server build. It intentionally covers a module boundary spanning registry SSR and shell seeding, plus its local scanner check. Keep the source owners exactly aligned with SERVER_IMPORTED_MODULES."
+  },
+  "platform/frontend/src/app/server-pages-no-backend-calls.test.tsx": {
+    "targets": [
+      "platform/frontend/src/app/llm/logs/[id]/page.tsx",
+      "platform/frontend/src/app/mcp/gateways/page.tsx",
+      "platform/frontend/src/app/mcp/logs/[id]/page.tsx",
+      "platform/frontend/src/app/mcp/logs/page.tsx",
+      "platform/frontend/src/app/mcp/registry/page.tsx"
+    ],
+    "reason": "One existing rendering contract spans the listed server pages: navigation must not duplicate browser-owned backend requests."
+  },
+  "platform/frontend/src/components/github-app-setup/github-app-setup.test.tsx": {
+    "targets": [
+      "platform/frontend/src/components/github-app-setup/github-account-fields.tsx",
+      "platform/frontend/src/components/github-app-setup/github-app-choice.tsx",
+      "platform/frontend/src/components/github-app-setup/github-app-picker.tsx",
+      "platform/frontend/src/components/github-app-setup/manifest-row.tsx",
+      "platform/frontend/src/components/github-app-setup/access-summary.tsx",
+      "platform/frontend/src/components/github-app-setup/short-error.ts"
+    ],
+    "reason": "Feature suite independently exercises six GitHub App setup building blocks and parsing/error helpers. There is no github-app-setup implementation or index entrypoint and no matching pre-existing suites to consolidate into; retain explicit concrete owners instead of assigning all cases to one component."
+  },
+  "platform/frontend/src/components/paged-picker-search-race.test.tsx": {
+    "targets": [
+      "platform/frontend/src/components/remote-user-select.tsx",
+      "platform/frontend/src/components/chat/agent-quick-edit/agent-reach-browser.tsx",
+      "platform/frontend/src/components/chat/agent-quick-edit/subagents-view.tsx"
+    ],
+    "reason": "One parameterized held-request MSW scenario runs against three real pickers and proves an older Next response cannot advance a restored cached search. All three surfaces have independent UI state; one owner rename or dropping matrix rows would hide that coverage."
+  },
+  "platform/frontend/src/components/settings/popular-agents.test.tsx": {
+    "targets": [
+      "platform/frontend/src/components/settings/integration-availability-section.tsx",
+      "platform/frontend/src/components/agent-pages/agent-catalog.tsx",
+      "platform/frontend/src/components/agent-runtime-picker.tsx",
+      "platform/frontend/src/lib/organization.query.ts"
+    ],
+    "reason": "This is a real cross-surface flow: edit/save/cancel/reorder organization popular-agent settings, then verify both catalog and runtime picker consume the saved order/visibility, including restored caches, refresh errors and existing runtime fallback. Its shared MSW harness is intentional; no single component owns the contract."
+  },
+  "platform/frontend/src/lib/dev-launcher.test.ts": {
+    "targets": [
+      "platform/frontend/scripts/dev.mjs"
+    ],
+    "reason": "Dependency contract suite calls getDevNodeOptions and starts Node subprocesses that load Next launcher parsing, checking effective heap limits and flag precedence. The owner lives outside src, while frontend Vitest discovers only src/**/*.test.ts(x); retain this explicit owner and Node environment rather than moving it beside the script where it would stop running."
+  },
+  "platform/frontend/src/lib/knowledge/knowledge-sources-by-ids.test.tsx": {
+    "targets": [
+      "platform/frontend/src/lib/knowledge/connector.query.ts",
+      "platform/frontend/src/lib/knowledge/knowledge-base.query.ts",
+      "platform/frontend/src/lib/knowledge/fetch-in-id-chunks.ts"
+    ],
+    "reason": "The suite covers two by-id query implementations using their shared batching helper, including knowledge-base ID limits and connector polling/gating. Existing connector tests mock useQuery and knowledge-base tests cover organization configuration with different mocks; retain the explicit two-query contract rather than assigning all cases to either one."
+  },
+  "platform/frontend/src/lib/navigation-data.test.tsx": {
+    "targets": [
+      "platform/frontend/src/lib/agent.query.ts",
+      "platform/frontend/src/lib/app.query.ts",
+      "platform/frontend/src/lib/agent-catalog.query.ts"
+    ],
+    "reason": "MSW suite covers navigation cache reuse across server-seeded agent lists, intent-prefetched apps and restored catalog freshness. Each has a different implementation; existing owner suites mock SDK/auth or query internals and do not supply the same HTTP cancellation/prefetch harness. Keep explicit ownership for the common navigation contract."
+  },
+  "platform/frontend/src/lib/resource-permissions.bulk.integration.test.tsx": {
+    "targets": [
+      "platform/frontend/src/lib/resource-permissions.query.ts",
+      "platform/frontend/src/lib/knowledge/knowledge-file.query.ts"
+    ],
+    "reason": "Bulk knowledge access spans revision-aware permission merging and paginated/deduplicated directory selection, implemented in two separate query modules. Preserve both scenarios and shared MSW setup with exact owners; renaming solely to resource-permissions.query would hide the second independent owner."
+  },
+  "platform/frontend/src/next-config.test.ts": {
+    "targets": [
+      "platform/frontend/next.config.ts"
+    ],
+    "reason": "Next configuration/dependency contract: directly imports the root next.config and runs real Next redirect evaluation to preserve OAuth parameters, alongside rewrite/deployment-id checks. src/next-config is the valid discovered location/name under frontend conventions; moving outside src would disable discovery and introducing a production wrapper solely for naming is inappropriate. Record the root configuration owner explicitly."
+  },
+  "platform/shared/loopback-dial.test.ts": {
+    "targets": [
+      "platform/shared/consts.ts"
+    ],
+    "reason": "Existing source-wide architectural assertion for the loopback constant; inspected as a deliberate structural test, not a scenario suite."
+  }
+}

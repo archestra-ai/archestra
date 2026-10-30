@@ -8,6 +8,8 @@
   `<action>.<entity>.route.test.ts`
   (e.g. `/src/routes/users/create.users.route.test.ts`, `get.users.route.test.ts`).
 
+- Other unit/integration suites use the implementation basename followed by optional topic/project suffixes. Reuse existing suites before splitting out a scenario. `pnpm check:test-associations` from `platform/` enforces the relationship, including the existing flat `entity.ts` endpoint convention. Cross-module and external-script contracts need exact owners in `platform/scripts/test-associations.json`.
+
 ## Canonical reference
 - Routes file: match `/src/routes/virtual-api-key/virtual-api-key.routes.ts`.
   When adding an endpoint to any entity, copy its shape.

@@ -9,8 +9,8 @@ import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import { beforeEach, test } from "@/test";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
-import anthropicProxyRoutes from "./anthropic";
-import openaiProxyRoutes from "./openai";
+import anthropicProxyRoutes from "./routes/anthropic";
+import openaiProxyRoutes from "./routes/openai";
 
 describe("guardrail call disconnect", () => {
   let upstream: Server;

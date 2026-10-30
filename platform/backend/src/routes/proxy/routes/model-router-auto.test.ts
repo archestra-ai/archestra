@@ -902,6 +902,8 @@ describe("Model Router auto model", () => {
         model?: string;
         routable?: boolean;
         internal?: boolean;
+        /** The key the call names; the organization's shared key by default. */
+        callKeyId?: string;
       },
     ) {
       const app = createApp();
@@ -913,7 +915,7 @@ describe("Model Router auto model", () => {
         headers: {
           ...(params.internal === false ? {} : internalCallHeader()),
           authorization: "Bearer sk-openai",
-          [CHAT_API_KEY_ID_HEADER]: org.providerApiKeyId,
+          [CHAT_API_KEY_ID_HEADER]: params.callKeyId ?? org.providerApiKeyId,
           [USER_ID_HEADER]: params.userId,
           [PROVIDER_BASE_URL_HEADER]: UPSTREAM,
           "x-archestra-session-id": "chat-1",
@@ -1192,6 +1194,110 @@ describe("Model Router auto model", () => {
       expect(await decisions(org.organizationId)).toEqual([]);
     });
 
+    test("a session routed to a model that left the trio and the user's reach runs on normal", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+      const first = await sendPlatformCall(org, { userId });
+      expect(first.statusCode, first.body).toBe(200);
+
+      const replacement = await createModel(
+        "openai",
+        `smart-${crypto.randomUUID()}`,
+      );
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+        org.providerApiKeyId,
+        [replacement.id],
+      );
+      await setOrganizationTrio(org.organizationId, { smart: replacement });
+      await unlink(org, org.trio[2]);
+      const replay = await sendPlatformCall(org, { userId });
+
+      expect(replay.statusCode, replay.body).toBe(200);
+      expect(upstreamModels).toEqual([
+        org.trio[2].modelId,
+        org.trio[1].modelId,
+      ]);
+      const stored = await decisions(org.organizationId);
+      expect(stored).toEqual([
+        expect.objectContaining({ modelId: org.trio[2].id }),
+      ]);
+      expect(await usage(stored[0].id)).toHaveLength(1);
+    });
+
+    test("a tier only a lower-ranked key of the user serves is sent on that key", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+      // The personal key ranks above the shared one but serves no smart tier.
+      const personal = await personalKey(
+        org,
+        userId,
+        [org.trio[0], org.trio[1]],
+        {
+          makeSecret,
+          makeLlmProviderApiKey,
+        },
+      );
+
+      const response = await sendPlatformCall(org, {
+        userId,
+        callKeyId: personal,
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamModels).toEqual([org.trio[2].modelId]);
+      expect(await platformCalls(org.agentId)).toEqual([
+        { model: org.trio[2].modelId, providerApiKeyId: org.providerApiKeyId },
+      ]);
+    });
+
+    test("a call on the organization's key stays on it for a tier it serves, though the user's own key ranks first", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const userId = await member(org, makeUser, makeMember);
+      await personalKey(org, userId, org.trio, {
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+
+      const response = await sendPlatformCall(org, { userId });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(await platformCalls(org.agentId)).toEqual([
+        { model: org.trio[1].modelId, providerApiKeyId: org.providerApiKeyId },
+      ]);
+    });
+
     for (const [label, tier] of [
       ["a provider the client's wire cannot reach", "gemini"],
       ["a per-user provider", "github-copilot"],
@@ -1404,6 +1510,42 @@ async function publishPlan(
   });
   if (published.kind !== "recorded") throw new Error("plan was not published");
   return published.plan;
+}
+
+/** A personal OpenAI key of `userId` on the test upstream, linked to `models`. */
+async function personalKey(
+  org: Org,
+  userId: string,
+  models: readonly Model[],
+  fixtures: {
+    makeSecret: MakeSecret;
+    makeLlmProviderApiKey: MakeLlmProviderApiKey;
+  },
+): Promise<string> {
+  const secret = await fixtures.makeSecret({
+    secret: { apiKey: "sk-personal" },
+  });
+  const key = await fixtures.makeLlmProviderApiKey(
+    org.organizationId,
+    secret.id,
+    { provider: "openai", baseUrl: UPSTREAM, userId },
+  );
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+    key.id,
+    models.map((model) => model.id),
+  );
+  return key.id;
+}
+
+/** The model and key each platform call on `agentId` was sent with. */
+function platformCalls(agentId: string) {
+  return db
+    .select({
+      model: schema.interactionsTable.model,
+      providerApiKeyId: schema.interactionsTable.providerApiKeyId,
+    })
+    .from(schema.interactionsTable)
+    .where(eq(schema.interactionsTable.profileId, agentId));
 }
 
 async function unlink(org: Org, model: Model) {

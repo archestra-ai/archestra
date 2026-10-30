@@ -208,6 +208,8 @@ export async function routeInternalAutoSession(params: {
   userId: string;
   /** The model the call names; only a call on the normal tier is routed. */
   named: { provider: Model["provider"]; modelId: string };
+  /** The key the call names; a tier it serves is sent on it, not the user's ranked key. */
+  callApiKeyId: string | null;
   sessionId: string | null;
   /** The body as the platform sent it, in OpenAI or Anthropic message shapes. */
   body: unknown;
@@ -241,23 +243,16 @@ export async function routeInternalAutoSession(params: {
       `the client's wire cannot reach the "${unreachable.provider}/${unreachable.modelId}" tier`,
     );
   }
-  // A tier is sent on its provider's chat wire, which a Responses-only model
-  // does not serve.
-  const responsesOnly = trio.find((model) =>
-    modelRequiresResponses({
-      provider: model.provider,
-      modelId: model.modelId,
-      supportedEndpoints: model.supportedEndpoints ?? null,
-    }),
-  );
-  if (responsesOnly) {
+  const chatless = trio.find(responsesOnly);
+  if (chatless) {
     return unroutable(
-      `the "${responsesOnly.provider}/${responsesOnly.modelId}" tier is served only on the Responses API`,
+      `the "${chatless.provider}/${chatless.modelId}" tier is served only on the Responses API`,
     );
   }
   const auth = await userModelRouterAuth({
     organizationId,
     userId: params.userId,
+    preferredApiKeyId: params.callApiKeyId,
   });
   const eligibility = await checkTrio({ auth, endpoint: null, trio });
   const ineligible = eligibility.find((tier) => !tier.eligible);
@@ -282,24 +277,46 @@ export async function routeInternalAutoSession(params: {
     client: null,
     beforeScoring: async () => null,
   });
-  if (decided.kind !== "decided") {
-    return {
-      model: trio[NORMAL_TIER],
-      providerApiKeyId: tiers[NORMAL_TIER].providerApiKeyId,
-    };
-  }
-  const routed = await routeByDecision({
-    request,
+  const onNormal = {
+    model: trio[NORMAL_TIER],
+    providerApiKeyId: tiers[NORMAL_TIER].providerApiKeyId,
+  };
+  if (decided.kind !== "decided") return onNormal;
+  const { decision } = decided;
+  const target = await decisionTarget({
     auth,
     endpoint: null,
     trio,
     tiers,
-    decision: decided.decision,
+    decision,
+  });
+  // A stored decision may name a model that has since left the trio; a call
+  // that cannot follow it runs on normal rather than failing.
+  const unfollowable =
+    target.kind === "unavailable"
+      ? target.error.message
+      : !params.reachable(target.model.provider)
+        ? "the client's wire cannot reach its provider"
+        : responsesOnly(target.model)
+          ? "it is served only on the Responses API"
+          : null;
+  if (unfollowable !== null || target.kind === "unavailable") {
+    logger.warn(
+      { organizationId, decisionId: decision.id, reason: unfollowable },
+      "[AutoRouting] The session's routed model cannot serve this call; it runs on the normal tier",
+    );
+    return onNormal;
+  }
+  attachDecision({
+    request,
+    trio,
+    tiers,
+    decision,
     derivedSessionKey: params.sessionId ? null : sessionKey,
   });
   return {
-    model: routed.model,
-    providerApiKeyId: routed.tier.providerApiKeyId,
+    model: target.model,
+    providerApiKeyId: target.tier.providerApiKeyId,
   };
 }
 
@@ -513,7 +530,6 @@ function checkTrio(params: {
   );
 }
 
-/** Re-checks a decision's model unless it is one of the tiers checked for this request. */
 async function routeByDecision(params: {
   request: FastifyRequest;
   auth: ModelRouterAuth;
@@ -523,18 +539,64 @@ async function routeByDecision(params: {
   decision: RoutingDecision;
   derivedSessionKey: RoutingSessionKey | null;
 }): Promise<{ model: Model; tier: EligibleTier }> {
+  const target = await decisionTarget(params);
+  if (target.kind === "unavailable") throw target.error;
+  attachDecision(params);
+  return target;
+}
+
+type DecisionTarget =
+  | { kind: "eligible"; model: Model; tier: EligibleTier }
+  | { kind: "unavailable"; error: ApiError };
+
+/** Re-checks a decision's model unless it is one of the tiers checked for this request. */
+async function decisionTarget(params: {
+  auth: ModelRouterAuth;
+  endpoint: ModelRouterEndpoint | null;
+  trio: Trio;
+  tiers: readonly [EligibleTier, EligibleTier, EligibleTier];
+  decision: RoutingDecision;
+}): Promise<DecisionTarget> {
   const { decision, trio } = params;
   const tier = trio.findIndex((model) => model.id === decision.modelId);
-  const { model, eligibility } =
-    tier === -1
-      ? await checkDecisionModel(params)
-      : { model: trio[tier], eligibility: params.tiers[tier] };
-  if (!eligibility.eligible) {
-    throw tierUnavailable(TIER_NAMES[decision.tierIndex], eligibility);
+  if (tier !== -1) {
+    return { kind: "eligible", model: trio[tier], tier: params.tiers[tier] };
   }
-  const smart = trio[2];
+  const model = await ModelModel.findById(decision.modelId);
+  if (!model) {
+    // The decision's model is gone; the FK cascade removes the decision too.
+    return {
+      kind: "unavailable",
+      error: new ApiError(
+        400,
+        "The model this session was routed to no longer exists.",
+      ),
+    };
+  }
+  const eligibility = await checkAutoTierEligibility({
+    auth: params.auth,
+    endpoint: params.endpoint,
+    model,
+  });
+  return eligibility.eligible
+    ? { kind: "eligible", model, tier: eligibility }
+    : {
+        kind: "unavailable",
+        error: tierUnavailable(TIER_NAMES[decision.tierIndex], eligibility),
+      };
+}
+
+/** Records the decision on `request` for the interaction write. */
+function attachDecision(params: {
+  request: FastifyRequest;
+  trio: Trio;
+  tiers: readonly [EligibleTier, EligibleTier, EligibleTier];
+  decision: RoutingDecision;
+  derivedSessionKey: RoutingSessionKey | null;
+}): void {
+  const smart = params.trio[2];
   setAutoRoutingContext(params.request, {
-    decisionId: decision.id,
+    decisionId: params.decision.id,
     smartModel: {
       modelId: smart.modelId,
       provider: smart.provider,
@@ -542,30 +604,15 @@ async function routeByDecision(params: {
     },
     derivedSessionKey: params.derivedSessionKey,
   });
-  return { model, tier: eligibility };
 }
 
-async function checkDecisionModel(params: {
-  auth: ModelRouterAuth;
-  endpoint: ModelRouterEndpoint | null;
-  decision: RoutingDecision;
-}): Promise<{ model: Model; eligibility: TierEligibility }> {
-  const model = await ModelModel.findById(params.decision.modelId);
-  if (!model) {
-    // The decision's model is gone; the FK cascade removes the decision too.
-    throw new ApiError(
-      400,
-      "The model this session was routed to no longer exists.",
-    );
-  }
-  return {
-    model,
-    eligibility: await checkAutoTierEligibility({
-      auth: params.auth,
-      endpoint: params.endpoint,
-      model,
-    }),
-  };
+/** A tier is sent on its provider's chat wire, which a Responses-only model does not serve. */
+function responsesOnly(model: Model): boolean {
+  return modelRequiresResponses({
+    provider: model.provider,
+    modelId: model.modelId,
+    supportedEndpoints: model.supportedEndpoints ?? null,
+  });
 }
 
 function requireEligible([fast, normal, smart]: TierEligibility[]): readonly [

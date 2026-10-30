@@ -85,16 +85,27 @@ export async function checkAutoTierEligibility(params: {
   };
 }
 
-/** `userId` as an OAuth user of the Model Router, with every key they may use. */
+/**
+ * `userId` as an OAuth user of the Model Router, with every key they may use.
+ * `preferredApiKeyId`, when the user may use it, is tried first for any model
+ * it serves.
+ */
 export async function userModelRouterAuth(params: {
   organizationId: string;
   userId: string;
+  preferredApiKeyId?: string | null;
 }): Promise<ModelRouterUserOAuthAuth> {
+  const mappings = await userProviderKeyMappings(params);
+  const preferred = (mapping: { providerApiKeyId: string }) =>
+    mapping.providerApiKeyId === params.preferredApiKeyId;
   return {
     authMethod: "oauth_user",
     organizationId: params.organizationId,
     userId: params.userId,
-    providerApiKeys: await userProviderKeyMappings(params),
+    providerApiKeys: [
+      ...mappings.filter(preferred),
+      ...mappings.filter((mapping) => !preferred(mapping)),
+    ],
     oauthClient: null,
   };
 }

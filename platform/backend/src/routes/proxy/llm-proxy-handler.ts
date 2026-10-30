@@ -1375,7 +1375,8 @@ export async function handleLLMProxy<
     // agent with no model of its own, is routed across the organization trio.
     // The router picks the session's tier and key, which the call is sent with
     // the way a pool member is, even when the tier is the default model
-    // itself. A call the router cannot route runs on the model it names.
+    // itself: the call's own key when it serves the tier, else the user's
+    // ranked one. A call the router cannot route runs on the model it names.
     const autoRouteWire = poolWire;
     const autoRoute =
       internalCall &&
@@ -1391,6 +1392,7 @@ export async function handleLLMProxy<
             organizationId: resolvedAgent.organizationId,
             userId: resolvedUser.id,
             named: { provider: providerName, modelId: actualModel },
+            callApiKeyId: perKeyChatApiKeyId ?? null,
             sessionId,
             body: requestAdapter.getOriginalRequest(),
             reachable: (tierProvider) =>

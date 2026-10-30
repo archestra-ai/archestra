@@ -4,7 +4,7 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import config from "@/config";
-import { ModelModel } from "@/models";
+import { AgentModel, ModelModel } from "@/models";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { ApiError } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
@@ -99,4 +99,37 @@ export function getClaudeCodeCloudProvider(params: {
     return "vertex";
   }
   return null;
+}
+
+/** Rejects an organization default model an inheriting Agent Runtime agent cannot run. */
+export async function assertRuntimeAgentsSupportOrganizationDefault(params: {
+  organizationId: string;
+  modelId: string | null;
+}): Promise<void> {
+  if (!params.modelId) return;
+  const [model, agents] = await Promise.all([
+    ModelModel.findById(params.modelId),
+    AgentModel.findRuntimeAgentsInheritingOrganizationDefault(
+      params.organizationId,
+    ),
+  ]);
+  if (!model) {
+    throw new ApiError(404, "Default model not found");
+  }
+  const incompatible = agents.find((agent) => {
+    if (!agent.runtime) return false;
+    return !getAgentRuntimeModelCompatibility({
+      inferenceProtocol: agent.runtime.inferenceProtocol,
+      runtimeCommand: agent.runtime.command,
+      provider: model.provider,
+      modelId: model.modelId,
+      supportedEndpoints: model.supportedEndpoints,
+    }).compatible;
+  });
+  if (incompatible) {
+    throw new ApiError(
+      409,
+      `The proposed default model is incompatible with Agent Runtime Agent "${incompatible.name}". Update that Agent's runtime or choose a compatible default model.`,
+    );
+  }
 }

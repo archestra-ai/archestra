@@ -5,9 +5,10 @@ import AutoRoutingSettingsModel, {
   mergeSettings,
 } from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
-import { ApiError, type Model } from "@/types";
+import { ApiError } from "@/types";
 import type {
   AutoRoutingSettings,
+  AutoRoutingTrio,
   RoutingPlanRecord,
   RoutingPlanTrigger,
 } from "@/types/auto-routing";
@@ -54,18 +55,9 @@ export async function updateAutoRoutingSettings(
   body: UpdateAutoRoutingSettingsBody,
 ): Promise<AutoRoutingSettingsChangeResponse> {
   await AgentModel.getOrgLlmProxy(organizationId);
-  await assertTierModels(
-    TIER_NAMES.flatMap((tier) => {
-      const id = body[TIER_FIELDS[tier]];
-      return id === undefined ? [] : [{ tier, id }];
-    }),
-  );
   const update = {
     enabled: body.enabled,
     budgetUsdPerDay: body.budgetUsdPerDay?.toFixed(2),
-    fastModelId: body.fastModelId,
-    normalModelId: body.normalModelId,
-    smartModelId: body.smartModelId,
   };
   // The feasibility fit runs outside the routing-plan lock; the write then
   // applies only over the settings it checked, retrying when they moved.
@@ -93,6 +85,41 @@ export async function updateAutoRoutingSettings(
   }
   if (updated.enabled) await scanOnFirstEnable(organizationId);
   return fitAndDescribe(organizationId, "settings");
+}
+
+/**
+ * Writes a change of the organization's model trio with `write`. While auto
+ * routing is on, the trio must stay routable: every tier set, one long-context
+ * threshold, and a budget the new tiers can meet. The plan is then re-fitted.
+ */
+export async function writeOrganizationTrio<T>(params: {
+  organizationId: string;
+  /** The tiers the write sets, merged over the current row under the lock. */
+  patch: Partial<AutoRoutingTrio>;
+  write: (tx: Transaction) => Promise<T>;
+}): Promise<T> {
+  const { organizationId, patch, write } = params;
+  const checked = await AutoRoutingSettingsModel.find(organizationId);
+  // With the deployment's auto routing off, an organization's enabled flag
+  // routes nothing and cannot be turned off, so it constrains no trio.
+  const routed = config.autoRouting.enabled;
+  if (routed && checked?.enabled) {
+    await assertFeasibleBudget(organizationId, { ...checked, ...patch });
+  }
+  return AutoRoutingSettingsModel.updateTrio({
+    organizationId,
+    patch,
+    write,
+    validate: async (next, tx, current) => {
+      if (current.generation !== checked?.generation) {
+        throw new ApiError(
+          409,
+          "Auto routing settings changed concurrently; try again.",
+        );
+      }
+      if (routed) await assertValidSettings(next, tx);
+    },
+  });
 }
 
 /** Fits a new plan at the current settings, unless the active plan was fitted on exactly what a fit would read now. */
@@ -178,59 +205,40 @@ async function fitAndDescribe(
   return { ...described, status: { ...described.status, lastFitError }, fit };
 }
 
-/** A tier runs agent sessions, so it must chat and call tools — the subagent-tier rule. */
-function isTierCandidate(model: Model): boolean {
-  return (
-    ModelModel.supportsTextChat(model) && model.supportsToolCalling !== false
-  );
-}
-
-async function assertTierModels(
-  tiers: { tier: (typeof TIER_NAMES)[number]; id: string }[],
-) {
-  const byId = new Map(
-    (await ModelModel.findByIds(tiers.map(({ id }) => id))).map((model) => [
-      model.id,
-      model,
-    ]),
-  );
-  for (const { tier, id } of tiers) {
-    const model = byId.get(id);
-    if (!model)
-      throw new ApiError(400, `The ${tier} tier model does not exist.`);
-    if (!isTierCandidate(model)) {
-      throw new ApiError(
-        400,
-        `The ${tier} tier model "${model.provider}/${model.modelId}" is not a tool-capable chat model.`,
-      );
-    }
-  }
-}
-
-/** Settings that can be stored: tiers share a long-context threshold, and enabling needs every tier and a budget. */
+/** Enabled settings need every tier, one long-context threshold across the tiers, and a budget. */
 async function assertValidSettings(
   next: AutoRoutingSettings,
   tx: Transaction,
 ): Promise<void> {
+  if (!next.enabled) return;
   const ids = TIER_NAMES.flatMap((tier) => {
     const id = next[TIER_FIELDS[tier]];
     return id === null ? [] : [id];
   });
-  const shared = sharedLongContextThreshold(
-    await ModelModel.findByIds(ids, tx),
+  const models = await ModelModel.findByIds(ids, tx);
+  const unfit = models.find(
+    (model) =>
+      !ModelModel.supportsTextChat(model) ||
+      model.supportsToolCalling === false,
   );
+  if (unfit) {
+    throw new ApiError(
+      400,
+      `Auto routing tier "${unfit.provider}/${unfit.modelId}" is not a tool-capable chat model.`,
+    );
+  }
+  const shared = sharedLongContextThreshold(models);
   if (shared.kind === "mismatched") {
     throw new ApiError(
       400,
       `The tier models have different long-context thresholds (${shared.thresholds.join(", ")}). Auto routing needs every tier with long-context prices to use the same threshold.`,
     );
   }
-  if (!next.enabled) return;
   const missing = TIER_NAMES.find((tier) => next[TIER_FIELDS[tier]] === null);
   if (missing) {
     throw new ApiError(
       400,
-      `Configure the ${missing} tier model before enabling auto routing.`,
+      `Set the organization's default ${missing} model before enabling auto routing.`,
     );
   }
   if (next.budgetUsdPerDay === null) {
@@ -260,13 +268,15 @@ async function describe(
   fitted: FitSessions | null = null,
 ): Promise<AutoRoutingSettingsResponse> {
   const tierIds = TIER_NAMES.map((tier) => settings[TIER_FIELDS[tier]]);
-  const [models, active, latest, scorerVersion, scorer] = await Promise.all([
-    ModelModel.findByIds(tierIds.filter((id): id is string => id !== null)),
-    RoutingPlanModel.findActive(organizationId),
-    RoutingPlanModel.findLatestOutcome(organizationId),
-    activeSourceVersion(),
-    scorerState(organizationId),
-  ]);
+  const [models, active, latest, scorerVersion, scorer, routedAgentCount] =
+    await Promise.all([
+      ModelModel.findByIds(tierIds.filter((id): id is string => id !== null)),
+      RoutingPlanModel.findActive(organizationId),
+      RoutingPlanModel.findLatestOutcome(organizationId),
+      activeSourceVersion(),
+      scorerState(organizationId),
+      AgentModel.countFollowingOrganizationRouting(organizationId),
+    ]);
   const byId = new Map(models.map((model) => [model.id, model]));
   const tierModel = (id: string | null) => {
     const model = id ? byId.get(id) : undefined;
@@ -282,6 +292,7 @@ async function describe(
         ? null
         : Number(settings.budgetUsdPerDay),
     tiers: { fast, normal, smart },
+    routedAgentCount,
     generation: settings.generation,
     plannedGeneration: settings.plannedGeneration,
     status: {

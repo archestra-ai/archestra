@@ -534,9 +534,12 @@ class OrganizationModel {
   /**
    * Get an organization by ID
    */
-  static async getById(id: string): Promise<Organization | null> {
+  static async getById(
+    id: string,
+    tx?: Transaction,
+  ): Promise<Organization | null> {
     logger.debug({ id }, "OrganizationModel.getById: fetching organization");
-    const [organization] = await db
+    const [organization] = await (tx ?? db)
       .select()
       .from(schema.organizationsTable)
       .where(eq(schema.organizationsTable.id, id))

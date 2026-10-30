@@ -472,6 +472,15 @@ export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
  */
 export const MODEL_POOL_ID_HEADER = "X-Archestra-Model-Pool-Id";
 
+/**
+ * Header marking a chat or agent call that runs on its agent's own selection,
+ * with no pool or explicit subagent tier. When that agent inherits the
+ * organization default and the call names the default model, the proxy routes
+ * the session across the organization's model trio. Like
+ * MODEL_POOL_ID_HEADER, it is only honored with the in-process proof.
+ */
+export const AUTO_ROUTABLE_HEADER = "X-Archestra-Auto-Routable";
+
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 
 export const TimeInMs = {

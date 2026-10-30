@@ -68,6 +68,7 @@ function makeSettings(
       normal: tier("claude-sonnet", 2),
       smart: tier("claude-opus", 3),
     },
+    routedAgentCount: 2,
     generation: 3,
     plannedGeneration: 3,
     status: {
@@ -208,31 +209,6 @@ describe("AutoRoutingOverviewPage", () => {
     await waitFor(() => expect(updates).toEqual([{ budgetUsdPerDay: 55.5 }]));
   });
 
-  it("saves a tier change while disabled routing has no budget", async () => {
-    settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
-    const toolModel = catalogModel(
-      "00000000-0000-4000-8000-000000000201",
-      "claude-haiku-next",
-      true,
-    );
-    server.use(
-      http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
-        HttpResponse.json([toolModel]),
-      ),
-    );
-    const user = userEvent.setup();
-    renderPage();
-    await screen.findByLabelText("Daily budget (USD)");
-    const [fastTier] = screen.getAllByRole("combobox");
-    await user.click(fastTier);
-    await user.click(await screen.findByText("claude-haiku-next"));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() =>
-      expect(updates).toEqual([{ fastModelId: toolModel.dbId }]),
-    );
-  });
-
   it("re-plans on the saved settings while the form is clean", async () => {
     let replans = 0;
     server.use(
@@ -330,34 +306,45 @@ describe("AutoRoutingOverviewPage", () => {
     expect(updates).toEqual([]);
   });
 
-  it("offers only tool-capable models as tiers, keeping a saved one shown", async () => {
-    const savedFast = makeSettings().tiers.fast;
+  it("counts the agents on the organization default that routing applies to", async () => {
+    settings = makeSettings({ routedAgentCount: 7 });
+    renderPage();
+
+    expect(await screen.findByText(/\b7 agents\b/)).toBeInTheDocument();
+  });
+
+  it("shows the organization trio read-only, with a link to edit it", async () => {
+    settings = makeSettings({
+      tiers: { ...makeSettings().tiers, smart: null },
+    });
     server.use(
       http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
         HttpResponse.json([
-          catalogModel(savedFast?.id ?? "", "claude-haiku", false),
-          catalogModel(
-            "00000000-0000-4000-8000-000000000201",
-            "claude-sonnet-next",
-            true,
-          ),
-          catalogModel(
-            "00000000-0000-4000-8000-000000000202",
-            "text-only-model",
-            false,
-          ),
+          {
+            ...catalogModel(
+              settings.tiers.fast?.id ?? "",
+              "claude-haiku",
+              true,
+            ),
+            displayName: "Claude Haiku",
+          },
         ]),
       ),
     );
-    const user = userEvent.setup();
     renderPage();
     await screen.findByLabelText("Daily budget (USD)");
-    const [, normalTier] = screen.getAllByRole("combobox");
-    await user.click(normalTier);
 
-    expect(await screen.findByText("claude-sonnet-next")).toBeInTheDocument();
-    expect(screen.queryByText("text-only-model")).not.toBeInTheDocument();
-    expect(screen.getAllByText("claude-haiku").length).toBeGreaterThan(0);
+    const tierValue = (label: string) =>
+      screen.getByText(label).closest("div")?.querySelector("dd");
+    await waitFor(() =>
+      expect(tierValue("Fast model")).toHaveTextContent("Claude Haiku"),
+    );
+    expect(tierValue("Normal model")).toHaveTextContent("claude-sonnet");
+    expect(tierValue("Smart model")).toHaveTextContent("Not set");
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    expect(
+      screen.getByRole("link", { name: /Settings → Agents/ }),
+    ).toHaveAttribute("href", "/settings/agents");
   });
 
   it("rejects a budget below a cent without saving", async () => {

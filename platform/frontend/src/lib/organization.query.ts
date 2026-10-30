@@ -70,6 +70,7 @@ export const organizationKeys = {
   activeMemberRole: (organizationId: string | undefined) =>
     [...organizationKeys.activeOrg(), "member-role", organizationId] as const,
   details: () => [...organizationKeys.all, "details"] as const,
+  defaultModel: () => [...organizationKeys.all, "default-model"] as const,
   onboardingStatus: () =>
     [...organizationKeys.all, "onboarding-status"] as const,
   memberSignupStatus: (userIds?: string[]) =>
@@ -380,6 +381,23 @@ export function useOrganization(
 }
 
 /**
+ * What "Organization default" runs on, readable by every member: the default
+ * model, or the trio auto routing routes it across.
+ */
+export function useOrganizationDefaultModelSummary(enabled = true) {
+  return useQuery({
+    queryKey: organizationKeys.defaultModel(),
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getOrganizationDefaultModel();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    enabled,
+  });
+}
+
+/**
  * Check if organization onboarding is complete
  * Only polls when enabled
  */
@@ -579,6 +597,9 @@ export function useUpdateAgentSettings(
     onSuccess: (updatedOrganization) => {
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.defaultModel(),
+      });
       toast.success(onSuccessMessage);
     },
   });

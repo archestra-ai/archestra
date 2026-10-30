@@ -50,7 +50,6 @@ import {
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
-  LlmProviderApiKeyModel,
   MemberModel,
   OrganizationModel,
   ProjectModel,
@@ -789,10 +788,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Cannot create an agent in another organization",
         );
       }
-      requireAgentRuntimePermission({
+      await requireAgentRuntimePermission({
         agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(agentType),
+        userId: user.id,
+        organizationId,
       });
       await assertCanBindRuntimeCredentials({
         organizationId,
@@ -1281,6 +1282,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
       }
+
+      await requireAgentRuntimePermission({
+        agentType: sourceAgent.agentType,
+        runtime: sourceAgent.runtime,
+        isAdmin: checker.isAdmin(sourceAgent.agentType),
+        userId: user.id,
+        organizationId,
+      });
 
       // The copy is the caller's own Agent, so the credentials it reads are
       // checked as if they had attached them.
@@ -2174,10 +2183,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         throw error;
       }
-      requireAgentRuntimePermission({
+      await requireAgentRuntimePermission({
         agentType: existingAgent.agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(existingAgent.agentType),
+        userId: user.id,
+        organizationId,
+        previous: existingAgent.runtime,
       });
       await assertCanBindRuntimeCredentials({
         organizationId,

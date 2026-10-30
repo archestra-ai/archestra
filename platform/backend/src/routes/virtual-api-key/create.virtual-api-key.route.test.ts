@@ -46,6 +46,34 @@ describe("POST /api/llm-virtual-keys", () => {
     await app.close();
   });
 
+  test("human administrators cannot delegate another owner's personal Copilot mapping", async ({
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    grantEverywhere(["llmVirtualKey"]);
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
+    const secret = await makeSecret({ secret: { apiKey: "gho_owner" } });
+    const credential = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "github-copilot",
+      userId: owner.id,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Delegated mapping",
+        ownerId: owner.id,
+        providerApiKeys: [
+          { provider: credential.provider, providerApiKeyId: credential.id },
+        ],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(403);
+  });
+
   test("per-user provider (github-copilot): allows a personal self-mapped virtual key", async ({
     makeLlmProviderApiKey,
     makeSecret,

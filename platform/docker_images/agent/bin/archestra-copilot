@@ -143,7 +143,7 @@ def client_environment(home, gate):
 def client_args(session_id, descriptor):
     return ["copilot", "--session-id", session_id, "--allow-all",
             "--disable-builtin-mcps", "--no-auto-update", "--disable-client-telemetry",
-            "--no-remote-export", "--additional-mcp-config", f"@/dev/fd/{descriptor.fileno()}",
+            "--sync-session", "off", "--additional-mcp-config", f"@/dev/fd/{descriptor.fileno()}",
             "--secret-env-vars", "ARCHESTRA_VIRTUAL_KEY,ARCHESTRA_MCP_GATEWAY_TOKEN,ARCHESTRA_AGENT_RUNTIME_BINDING,COPILOT_PROVIDER_API_KEY"]
 
 

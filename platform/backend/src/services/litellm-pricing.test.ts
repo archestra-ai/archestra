@@ -217,8 +217,8 @@ test("refreshes instance rates while preserving overrides, zero and unknown pric
   };
   await sync();
   expect(ModelModel.toCapabilities(await projected())).toMatchObject({
-    pricePerMillionInput: "7.00",
-    pricePerMillionOutput: "9.00",
+    pricePerMillionInput: "7.00000000",
+    pricePerMillionOutput: "9.00000000",
     priceSource: "custom",
     pricePerMillionCacheRead: "0",
     pricePerMillionCacheWrite: null,

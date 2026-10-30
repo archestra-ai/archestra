@@ -15,6 +15,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import {
   CreatedByModel,
@@ -543,6 +544,7 @@ async function createVirtualApiKey(params: {
     mappings: body.providerApiKeys,
     organizationId,
     userId: user.id,
+    ownerId,
   });
 
   await validateVirtualKeyInitialGrants({
@@ -719,6 +721,7 @@ async function updateVirtualApiKey(params: {
       mappings: body.providerApiKeys,
       organizationId,
       userId: user.id,
+      ownerId: accessContext.authorId,
     });
     await assertCanGrantModelPools({
       modelPoolIds: body.modelPoolIds,
@@ -884,6 +887,7 @@ async function validateProviderApiKeys(params: {
   mappings: Array<{ provider: SupportedProvider; providerApiKeyId: string }>;
   organizationId: string;
   userId: string;
+  ownerId: string | null;
 }): Promise<void> {
   const { mappings, organizationId, userId } = params;
   if (mappings.length === 0) {
@@ -934,17 +938,35 @@ async function validateProviderApiKeys(params: {
     // other providers in an own model-router key. Ownership is re-checked per
     // mapping at request time in `llm-proxy-auth`.
     const secret = secretsById.get(mapping.providerApiKeyId);
+    let delegatedCopilotMapping = false;
     if (
       credentialRequiresPerUserScope({
         provider: mapping.provider,
         apiKey: secret,
       })
     ) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      delegatedCopilotMapping =
+        mapping.provider === "github-copilot" &&
+        isServiceAccountUserId(userId) &&
+        params.ownerId != null &&
+        apiKey.userId === params.ownerId &&
+        !!(await MemberModel.getByUserId(params.ownerId, organizationId)) &&
+        (await ResourcePermissions.allows({
+          organizationId,
+          userId,
+          resource: "llmVirtualKey",
+          scope: "*",
+          action: "update",
+        }));
+      // SPDX-SnippetEnd
       const label = perUserCredentialLabel({
         provider: mapping.provider,
         apiKey: secret,
       });
-      if (apiKey.userId !== userId) {
+      if (apiKey.userId !== userId && !delegatedCopilotMapping) {
         throw new ApiError(
           403,
           `You can only map your own personal ${label} key.`,
@@ -952,6 +974,7 @@ async function validateProviderApiKeys(params: {
       }
     }
     if (
+      !delegatedCopilotMapping &&
       !params.retainedProviderApiKeyIds?.includes(apiKey.id) &&
       !(await LlmProviderApiKeyModel.canUseKey(
         apiKey,

@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "v1.5.0-rc.15"
+    "version": "v1.5.0-rc.16"
   },
   "components": {
     "schemas": {
@@ -152483,7 +152483,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -390551,23 +390552,19 @@
                     "properties": {
                       "input": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "output": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "cacheRead": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "cacheWrite": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -390956,23 +390953,19 @@
                     "properties": {
                       "input": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "output": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "cacheRead": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "cacheWrite": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -463610,7 +463603,8 @@
                                   "query",
                                   "impersonate",
                                   "full-view",
-                                  "admin"
+                                  "admin",
+                                  "configure-runtime"
                                 ]
                               }
                             }
@@ -463969,7 +463963,8 @@
                           "query",
                           "impersonate",
                           "full-view",
-                          "admin"
+                          "admin",
+                          "configure-runtime"
                         ]
                       }
                     }
@@ -464022,7 +464017,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -464369,7 +464365,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -464680,7 +464677,8 @@
                           "query",
                           "impersonate",
                           "full-view",
-                          "admin"
+                          "admin",
+                          "configure-runtime"
                         ]
                       }
                     }
@@ -464755,7 +464753,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -546352,7 +546351,8 @@
                               "query",
                               "impersonate",
                               "full-view",
-                              "admin"
+                              "admin",
+                              "configure-runtime"
                             ]
                           }
                         }
@@ -546636,7 +546636,8 @@
                         "query",
                         "impersonate",
                         "full-view",
-                        "admin"
+                        "admin",
+                        "configure-runtime"
                       ]
                     }
                   }

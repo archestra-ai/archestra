@@ -128,6 +128,7 @@ export function createOpenAiCompatibleAdapterFactory(
     async executeStream(
       client: unknown,
       request: Request,
+      onAccepted?: () => void,
     ): Promise<AsyncIterable<StreamChunk>> {
       const openaiClient = client as OpenAIProvider;
       const params = {
@@ -137,6 +138,7 @@ export function createOpenAiCompatibleAdapterFactory(
       } as unknown as ChatCompletionCreateParamsStreaming;
       return streamChatCompletionChunks<StreamChunk>(
         openaiClient.chat.completions.create(params),
+        onAccepted,
       );
     },
 

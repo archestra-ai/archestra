@@ -18,6 +18,8 @@ A run uses the agent's instructions, tools, skills, and permissions. Its model c
 
 ## Create an Agent With a Dedicated Runtime
 
+Creating, cloning, changing, or removing a dedicated runtime requires **Configure runtime** ([`agent:configure-runtime`](/docs/reference/permissions#agent:configure-runtime)), in addition to access to create or edit the agent. Admin and Platform Admin roles include it; Editor, Member, and existing custom roles do not. Grant it explicitly to custom roles that need runtime configuration. Ordinary edits preserve an existing runtime, and read and run access is unchanged.
+
 1. Go to **Agents** and click **Add Agent**.
 2. Under **Agent Runtimes**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, **OpenClaw**, **Grok Build**, or **Kimi Code**. The agent opens prefilled.
 3. Review **Runtime** on the **Configuration** step. An attention icon marks a setting you must fix. Hover over it to see what to change.

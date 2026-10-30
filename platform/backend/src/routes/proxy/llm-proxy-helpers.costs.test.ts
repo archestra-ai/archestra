@@ -109,10 +109,10 @@ describe("calculateInteractionCosts pricing quote", () => {
     });
     const result = await costs(mixedUsage(601), "custom-long");
     expect(result.billingUsage?.components[0].prices).toEqual({
-      input: "6.00",
-      output: "22.50",
-      cacheRead: "0.60",
-      cacheWrite: "7.50",
+      input: "6.00000000",
+      output: "22.50000000",
+      cacheRead: "0.60000000",
+      cacheWrite: "7.50000000",
       cacheWrite1h: "12.0000000000",
       source: "custom",
     });
@@ -140,8 +140,8 @@ describe("calculateInteractionCosts pricing quote", () => {
     const result = await costs(usage, "executor");
     const [executor, advisor] = result.billingUsage?.components ?? [];
     expect([executor.prices.input, advisor.prices.input]).toEqual([
-      "3.00",
-      "6.00",
+      "3.00000000",
+      "6.00000000",
     ]);
     // 500*3 + 10*15 + 2000*6 + 10*22.5
     expect(result.actualCost).toBeCloseTo(0.013875, 10);

@@ -1,4 +1,5 @@
 import type {
+  AgentRuntimeTierSettings,
   ContextualRetrievalMode,
   KnowledgeConnectorOverrides,
   MessagingChannelOverrides,
@@ -465,6 +466,15 @@ const organizationsTable = pgTable("organization", {
    * environment. NULL falls back to built-in unrestricted behavior.
    */
   defaultNetworkPolicy: jsonb("default_network_policy").$type<NetworkPolicy>(),
+
+  /**
+   * Administrator overrides of the Agent Runtime tiers' CPU, memory and warm
+   * spares, per tier and per field. NULL or an omitted field keeps the code
+   * default (`DEFAULT_AGENT_RUNTIME_TIERS` in @archestra/shared).
+   */
+  agentRuntimeTiers: jsonb(
+    "agent_runtime_tiers",
+  ).$type<AgentRuntimeTierSettings>(),
 
   /**
    * ALLOWLIST regex (JS source, no delimiters/flags) for the implicit "default"

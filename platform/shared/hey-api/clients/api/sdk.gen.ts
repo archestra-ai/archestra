@@ -10558,7 +10558,7 @@ export const updateSkillsSettings = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Update agent settings (default model, default agent, skill slash commands)
+ * Update agent settings (default model, default agent, skill slash commands, Agent Runtime tiers)
  *
  * Authentication:
  *

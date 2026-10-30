@@ -24,6 +24,7 @@ let mockRuntimeBackend: {
     memoryLimit: string;
   };
 } | null = null;
+let mockRuntimeEnabled: boolean | undefined;
 const mockAgentSelector = vi.fn(
   ({ value, placeholder }: { value: string; placeholder?: string }) => (
     <div>{value || placeholder}</div>
@@ -74,16 +75,19 @@ vi.mock("@/components/settings/settings-block", () => ({
     title,
     description,
     control,
+    notice,
     children,
   }: {
     title: React.ReactNode;
     description?: React.ReactNode;
     control: React.ReactNode;
+    notice?: React.ReactNode;
     children?: React.ReactNode;
   }) => (
     <section>
       <h2>{title}</h2>
       {description ? <p>{description}</p> : null}
+      {notice ? <div>{notice}</div> : null}
       <div>{control}</div>
       {children}
     </section>
@@ -91,8 +95,23 @@ vi.mock("@/components/settings/settings-block", () => ({
   SettingsSectionStack: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  SettingsSaveBar: ({ hasChanges }: { hasChanges: boolean }) =>
-    hasChanges ? <div>Unsaved changes</div> : null,
+  SettingsSaveBar: ({
+    hasChanges,
+    disabledSave,
+    onSave,
+  }: {
+    hasChanges: boolean;
+    disabledSave?: boolean;
+    onSave: () => void;
+  }) =>
+    hasChanges ? (
+      <div>
+        Unsaved changes
+        <button type="button" disabled={disabledSave} onClick={onSave}>
+          Save
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("@/components/agent-selector", () => ({
@@ -124,7 +143,11 @@ vi.mock("@/components/ui/select", () => ({
 
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: (feature: string) =>
-    feature === "agentRuntimeBackend" ? mockRuntimeBackend : undefined,
+    feature === "agentRuntimeBackend"
+      ? mockRuntimeBackend
+      : feature === "agentRuntime"
+        ? mockRuntimeEnabled
+        : undefined,
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
@@ -197,6 +220,7 @@ beforeEach(() => {
     },
   ];
   mockRuntimeBackend = null;
+  mockRuntimeEnabled = undefined;
 
   vi.mocked(useIsGlobalAdmin).mockReturnValue({
     isGlobalAdmin: true,
@@ -318,5 +342,103 @@ describe("AgentSettingsPage", () => {
     renderPage();
 
     expect(screen.getByText("Free models only")).toBeInTheDocument();
+  });
+});
+
+describe("Runtime tiers", () => {
+  const enableRuntime = () => {
+    mockRuntimeEnabled = true;
+    mockRuntimeBackend = {
+      name: "kubernetes",
+      available: true,
+      defaultTtlHours: 24,
+      defaultIdleTimeoutMinutes: 60,
+      allowPrivileged: false,
+      resources: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
+    };
+  };
+
+  it("shows the defaults as placeholders and saves only the fields an administrator filled in", async () => {
+    enableRuntime();
+    mutateAsync.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: "Runtime tiers" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Tier L CPU request")).toHaveAttribute(
+      "placeholder",
+      "8",
+    );
+    expect(screen.getByLabelText("Tier L Memory limit")).toHaveAttribute(
+      "placeholder",
+      "32Gi",
+    );
+    expect(screen.getByLabelText("Tier L Warm spares")).toHaveAttribute(
+      "placeholder",
+      "0",
+    );
+    expect(screen.getByLabelText("Tier M Warm spares")).toHaveAttribute(
+      "placeholder",
+      "Deployment",
+    );
+    expect(screen.getByLabelText("Tier S CPU limit")).toHaveAttribute(
+      "placeholder",
+      "No limit",
+    );
+
+    await user.type(screen.getByLabelText("Tier L CPU request"), "6");
+    await user.type(screen.getByLabelText("Tier L Warm spares"), "1");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      agentRuntimeTiers: { L: { cpuRequest: "6", warmPoolSize: 1 } },
+    });
+  });
+
+  it("names an invalid value or a tier out of order and keeps Save disabled", async () => {
+    enableRuntime();
+    const user = userEvent.setup();
+    renderPage();
+    const cpu = screen.getByLabelText("Tier L CPU request");
+
+    await user.type(cpu, "4 cores");
+    expect(
+      screen.getByRole("alert", { name: "Runtime tier problems" }),
+    ).toHaveTextContent(
+      "Tier L CPU request: enter a CPU amount such as 2 or 500m",
+    );
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+    await user.clear(cpu);
+    await user.type(cpu, "1");
+    expect(
+      screen.getByRole("alert", { name: "Runtime tier problems" }),
+    ).toHaveTextContent("Tier L requests less than tier M");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("shows the saved values and locks the fields for anyone but an administrator", () => {
+    enableRuntime();
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        ...mockOrganization,
+        agentRuntimeTiers: { L: { memoryLimit: "24Gi" } },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useIsGlobalAdmin).mockReturnValue({
+      isGlobalAdmin: false,
+      isLoading: false,
+    });
+    renderPage();
+
+    const memoryLimit = screen.getByLabelText("Tier L Memory limit");
+    expect(memoryLimit).toHaveValue("24Gi");
+    expect(memoryLimit).toBeDisabled();
+    expect(
+      screen.getByText("Only administrators can change the tiers."),
+    ).toBeVisible();
   });
 });

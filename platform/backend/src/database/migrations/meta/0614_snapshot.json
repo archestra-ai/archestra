@@ -1,5 +1,5 @@
 {
-  "id": "1df8e592-4b38-45fb-9064-3f833542bf19",
+  "id": "4a30b75c-6331-4335-8fc8-be857ea8f82e",
   "prevId": "ff571b73-9331-41b8-9af2-6ce99b4b8be3",
   "version": "7",
   "dialect": "postgresql",
@@ -3552,6 +3552,12 @@
         "active_deadline_seconds": {
           "name": "active_deadline_seconds",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "runtime_limits": {
+          "name": "runtime_limits",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -16480,12 +16486,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "output_length": {
-          "name": "output_length",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "provider_pricing": {
           "name": "provider_pricing",
           "type": "jsonb",
@@ -21647,6 +21647,12 @@
         },
         "default_network_policy": {
           "name": "default_network_policy",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "agent_runtime_tiers": {
+          "name": "agent_runtime_tiers",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

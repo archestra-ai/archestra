@@ -2506,7 +2506,7 @@ const config = {
     /** Fallback lifetime cap for Agent Runtime runs whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS,
-      72,
+      24,
     ),
     /**
      * Fallback idle stop for Agent Runtime runs whose agent sets none. An idle run is
@@ -2515,22 +2515,8 @@ const config = {
      */
     defaultIdleTimeoutMinutes: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES,
-      180,
+      60,
     ),
-    resources: {
-      cpuRequest:
-        process.env.ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST?.trim() || "500m",
-      memoryRequest:
-        process.env.ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST?.trim() || "1Gi",
-      /**
-       * No CPU limit by default, matching the MCP server runtime: throttling
-       * an agent mid-turn surfaces as confusing timeouts rather than
-       * back-pressure. Memory is limited because a runaway agent process
-       * should die rather than take the node with it.
-       */
-      memoryLimit:
-        process.env.ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT?.trim() || "4Gi",
-    },
     workspaceStorageSize: parseK8sResourceQuantity({
       envName: "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE",
       value: process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE,

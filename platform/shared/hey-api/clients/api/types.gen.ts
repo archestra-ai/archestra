@@ -16973,6 +16973,8 @@ export type GetAgentCatalogResponses = {
                         cpuLimit?: string;
                         memoryLimit?: string;
                     } | null;
+                    tier?: 'S' | 'M' | 'L';
+                    maxTier?: 'S' | 'M' | 'L';
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -17360,6 +17362,8 @@ export type GetAgentsResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -17514,6 +17518,8 @@ export type CreateAgentData = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -17780,6 +17786,8 @@ export type CreateAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -18174,6 +18182,8 @@ export type GetChatAgentRosterResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -18321,6 +18331,8 @@ export type GetChatAgentRosterPageResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18489,6 +18501,8 @@ export type GetAgentOptionsResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18675,6 +18689,8 @@ export type GetAgentOptionsPageResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -19052,6 +19068,8 @@ export type GetDefaultMcpGatewayResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19358,6 +19376,8 @@ export type ImportAgentResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -19673,6 +19693,8 @@ export type GetAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19809,6 +19831,8 @@ export type UpdateAgentData = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19984,6 +20008,8 @@ export type UpdateAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20565,6 +20591,8 @@ export type RestoreAgentVersionResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20809,6 +20837,8 @@ export type CloneAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -23292,6 +23322,8 @@ export type RestoreAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -24948,6 +24980,12 @@ export type GetAgentRunsResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: 'S' | 'M' | 'L';
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -24988,6 +25026,12 @@ export type StartAgentRunData = {
             contentType: string;
             contentBase64: string;
         }>;
+        limits?: {
+            tier?: 'S' | 'M' | 'L';
+            idleTimeoutMinutes?: number;
+            maxDurationHours?: number;
+            maxCostUsd?: number;
+        };
     };
     path: {
         id: string;
@@ -25077,6 +25121,12 @@ export type StartAgentRunResponses = {
         prompt: string;
         projectId: string | null;
         createdAt: string;
+        limits: {
+            tier: 'S' | 'M' | 'L';
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+        } | null;
     };
 };
 
@@ -25182,6 +25232,12 @@ export type GetMyAgentRunsResponses = {
             workloadName: string;
             backend: 'kubernetes';
             runtimeScope: string;
+            runtimeLimits: {
+                tier: 'S' | 'M' | 'L';
+                idleTimeoutMinutes: number;
+                maxDurationHours: number;
+                maxCostUsd: number | null;
+            } | null;
             attentionState: 'input_required' | 'auth_required' | null;
             virtualApiKeyId: string | null;
             gatewayTokenId: string | null;
@@ -25404,6 +25460,12 @@ export type GetMyAgentRunResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: 'S' | 'M' | 'L';
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -25551,6 +25613,12 @@ export type UpdateAgentRunResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: 'S' | 'M' | 'L';
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -25677,6 +25745,12 @@ export type ContinueAgentRunResponses = {
         prompt: string;
         projectId: string | null;
         createdAt: string;
+        limits: {
+            tier: 'S' | 'M' | 'L';
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+        } | null;
     };
 };
 
@@ -26173,6 +26247,8 @@ export type GetRuntimeTemplateSettingsResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -26258,6 +26334,8 @@ export type SaveRuntimeTemplateSettingsData = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -26415,6 +26493,8 @@ export type SaveRuntimeTemplateSettingsResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -26578,6 +26658,8 @@ export type GetAgentRuntimeTemplateResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
+            maxTier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -41812,6 +41894,11 @@ export type GetBootstrapResponses = {
                 allowedDomains: Array<string>;
                 allowedCidrs: Array<string>;
             } | null;
+            agentRuntimeTiers: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            } | null;
             defaultEnvironmentValidationRegex: string | null;
             defaultEnvironmentTrustedImageRegistries: Array<string> | null;
             skillToolsEnabled: boolean;
@@ -41848,11 +41935,7 @@ export type GetBootstrapResponses = {
                     defaultTtlHours: number;
                     defaultIdleTimeoutMinutes: number;
                     allowPrivileged: boolean;
-                    resources: {
-                        cpuRequest: string;
-                        memoryRequest: string;
-                        memoryLimit: string;
-                    };
+                    defaultTier: 'S' | 'M' | 'L';
                 };
                 plugins: boolean;
                 sandboxArtifactBytesLimit: number;
@@ -42062,6 +42145,8 @@ export type GetNewChatBootstrapResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
+                maxTier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -42236,6 +42321,8 @@ export type GetNewChatBootstrapResponses = {
                         cpuLimit?: string;
                         memoryLimit?: string;
                     } | null;
+                    tier?: 'S' | 'M' | 'L';
+                    maxTier?: 'S' | 'M' | 'L';
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -42621,6 +42708,8 @@ export type GetConversationBootstrapResponses = {
                         cpuLimit?: string;
                         memoryLimit?: string;
                     } | null;
+                    tier?: 'S' | 'M' | 'L';
+                    maxTier?: 'S' | 'M' | 'L';
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -42795,6 +42884,8 @@ export type GetConversationBootstrapResponses = {
                             cpuLimit?: string;
                             memoryLimit?: string;
                         } | null;
+                        tier?: 'S' | 'M' | 'L';
+                        maxTier?: 'S' | 'M' | 'L';
                         ports?: Array<number>;
                         environment: Array<{
                             key: string;
@@ -51549,11 +51640,7 @@ export type GetConfigResponses = {
                 defaultTtlHours: number;
                 defaultIdleTimeoutMinutes: number;
                 allowPrivileged: boolean;
-                resources: {
-                    cpuRequest: string;
-                    memoryRequest: string;
-                    memoryLimit: string;
-                };
+                defaultTier: 'S' | 'M' | 'L';
             };
             plugins: boolean;
             sandboxArtifactBytesLimit: number;
@@ -119928,6 +120015,11 @@ export type GetOrganizationResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -120381,6 +120473,11 @@ export type UpdateAppearanceSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -120601,6 +120698,11 @@ export type UpdateSecuritySettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -120818,6 +120920,11 @@ export type UpdateMcpSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -121034,6 +121141,11 @@ export type UpdateSkillsSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -121047,6 +121159,29 @@ export type UpdateSkillsSettingsResponse = UpdateSkillsSettingsResponses[keyof U
 
 export type UpdateAgentSettingsData = {
     body: {
+        agentRuntimeTiers?: {
+            S?: {
+                cpuRequest?: string;
+                cpuLimit?: string | null;
+                memoryRequest?: string;
+                memoryLimit?: string;
+                warmPoolSize?: number | null;
+            };
+            M?: {
+                cpuRequest?: string;
+                cpuLimit?: string | null;
+                memoryRequest?: string;
+                memoryLimit?: string;
+                warmPoolSize?: number | null;
+            };
+            L?: {
+                cpuRequest?: string;
+                cpuLimit?: string | null;
+                memoryRequest?: string;
+                memoryLimit?: string;
+                warmPoolSize?: number | null;
+            };
+        } | null;
         defaultModelId?: string | null;
         defaultLlmApiKeyId?: string | null;
         defaultAgentId?: string | null;
@@ -121252,6 +121387,11 @@ export type UpdateAgentSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -121491,6 +121631,11 @@ export type UpdateConnectionSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -121756,6 +121901,11 @@ export type UpdateIntegrationSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -121982,6 +122132,11 @@ export type UpdateDefaultEnvironmentResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -122202,6 +122357,11 @@ export type UpdateAuthSettingsResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -122426,6 +122586,11 @@ export type UpdateKnowledgeSettingsResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
+        } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
@@ -122638,6 +122803,11 @@ export type DropEmbeddingConfigResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -123213,6 +123383,11 @@ export type CompleteOnboardingResponses = {
             domainPreset: 'none' | 'common_dependencies' | 'package_managers';
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
+        } | null;
+        agentRuntimeTiers: {
+            [key: string]: {
+                [key: string]: unknown;
+            };
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -128631,6 +128806,12 @@ export type GetProjectRunsResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: 'S' | 'M' | 'L';
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;

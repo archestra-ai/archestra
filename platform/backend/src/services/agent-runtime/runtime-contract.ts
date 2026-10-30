@@ -6,6 +6,15 @@ export const AGENT_RUNTIME_CREDENTIALS_FILE = `${AGENT_RUNTIME_CREDENTIALS_DIR}/
 export const AGENT_RUNTIME_CREDENTIALS_SECRET_KEY =
   "ARCHESTRA_AGENT_RUNTIME_RENEWABLE_CREDENTIALS";
 export const AGENT_RUNTIME_STEER_FIFO = `${AGENT_RUNTIME_DIR}/steer`;
+/** The tier (S, M or L) the Pod runs at; unset for an Agent with explicit resources. */
+export const AGENT_RUNTIME_TIER_ENV = "ARCHESTRA_AGENT_RUNTIME_TIER";
+/** The largest tier a run of this Agent may ask for; unset with explicit resources. */
+export const AGENT_RUNTIME_MAX_TIER_ENV = "ARCHESTRA_AGENT_RUNTIME_MAX_TIER";
+/** The Pod's CPU request and memory limit, so tools and models can size their work. */
+export const AGENT_RUNTIME_CPU_REQUEST_ENV =
+  "ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST";
+export const AGENT_RUNTIME_MEMORY_LIMIT_ENV =
+  "ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT";
 /** Stable command that joins the interactive session from any exec client. */
 export const AGENT_RUNTIME_ATTACH_SCRIPT = `${AGENT_RUNTIME_DIR}/attach`;
 /** Startup hook used by interactive shells opened directly in an Agent Runtime pod. */

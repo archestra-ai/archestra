@@ -15,6 +15,8 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
   privileged: false,
   nodeSelector: {},
   resources: null,
+  tier: null,
+  warmTiers: [],
   env: {},
   secretEnv: {},
   activeDeadlineSeconds: 3600,

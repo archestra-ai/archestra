@@ -82,7 +82,8 @@ describe("agentRuntimeTierProblems", () => {
     expect(agentRuntimeTierProblems(tiers)).toEqual([
       "Tier M: the CPU limit is below the CPU request",
       "Tier M: the memory limit is below the memory request",
-      "Tier M has a lower limit than tier S",
+      "Tier M has a lower memory limit than tier S",
+      "Tier M limits CPU and tier S does not",
       "Tier L requests less than tier M",
     ]);
   });
@@ -96,13 +97,13 @@ describe("agentRuntimeTierProblems", () => {
           M: { memoryLimit: "6Gi" },
         }),
       ),
-    ).toEqual(["Tier M has a lower limit than tier S"]);
+    ).toEqual(["Tier M has a lower memory limit than tier S"]);
     // A CPU limit on M where S has none, or a lower one than S's, is lower too.
     expect(
       agentRuntimeTierProblems(
         resolveAgentRuntimeTiers({ M: { cpuLimit: "4" } }),
       ),
-    ).toEqual(["Tier M has a lower limit than tier S"]);
+    ).toEqual(["Tier M limits CPU and tier S does not"]);
     expect(
       agentRuntimeTierProblems(
         resolveAgentRuntimeTiers({
@@ -113,7 +114,7 @@ describe("agentRuntimeTierProblems", () => {
       ),
     ).toEqual([
       "Tier M: the CPU limit is below the CPU request",
-      "Tier M has a lower limit than tier S",
+      "Tier M has a lower CPU limit than tier S",
     ]);
     // Limits that grow with the tiers are fine.
     expect(

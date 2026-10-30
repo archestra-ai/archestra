@@ -165,17 +165,26 @@ export function agentRuntimeTierProblems(
         memoryBytes(tiers[smaller].memoryRequest)
     )
       problems.push(`Tier ${larger} requests less than tier ${smaller}`);
-    const largerCpu = tiers[larger].cpuLimit;
-    const smallerCpu = tiers[smaller].cpuLimit;
     if (
       memoryBytes(tiers[larger].memoryLimit) <
-        memoryBytes(tiers[smaller].memoryLimit) ||
-      // No CPU limit is the most a tier can allow.
-      (largerCpu !== null &&
-        (smallerCpu === null ||
-          cpuMillicores(largerCpu) < cpuMillicores(smallerCpu)))
+      memoryBytes(tiers[smaller].memoryLimit)
     )
-      problems.push(`Tier ${larger} has a lower limit than tier ${smaller}`);
+      problems.push(
+        `Tier ${larger} has a lower memory limit than tier ${smaller}`,
+      );
+    // No CPU limit is the most a tier can allow.
+    const largerCpu = tiers[larger].cpuLimit;
+    const smallerCpu = tiers[smaller].cpuLimit;
+    if (largerCpu !== null && smallerCpu === null)
+      problems.push(`Tier ${larger} limits CPU and tier ${smaller} does not`);
+    else if (
+      largerCpu !== null &&
+      smallerCpu !== null &&
+      cpuMillicores(largerCpu) < cpuMillicores(smallerCpu)
+    )
+      problems.push(
+        `Tier ${larger} has a lower CPU limit than tier ${smaller}`,
+      );
   }
   return problems;
 }

@@ -110,7 +110,7 @@ Set these under **Limits** on the agent's **Agent Runtime** tab. A field you lea
 | **Metered LLM budget** | Blocks metered model calls once the run spends this amount. Subscription usage does not count. |
 | **Size** | The tier of the run's container: **S** (1 CPU, 2 GiB), **M** (2 CPU, 4 GiB, the default) or **L** (3.5 CPU, 12 GiB). Custom CPU and memory values replace the tier. |
 
-A caller that starts a run can ask for less than the agent allows: a smaller size, a shorter idle timeout, a shorter maximum duration or a lower budget. The [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) tool and the `POST /api/agents/{id}/runs` endpoint take these as `limits`; a value above the agent's is refused with the maximum named. The run shows what it got. When a run's size has no ready warm container, a neighbouring size serves it, so the run can start at the next size up or down.
+A caller that starts a run can ask for less than the agent allows: a smaller size, a shorter idle timeout, a shorter maximum duration or a lower budget. The [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) tool and the [`POST /api/agents/{id}/runs`](/docs/reference/api#/Agents/startAgentRun) endpoint take these as `limits`; a value above the agent's is refused with the maximum named. The run shows what it got. When a run's size has no ready warm container, a neighbouring size serves it, so the run can start at the next size up or down.
 
 <span id="environments-and-network-egress"></span>
 

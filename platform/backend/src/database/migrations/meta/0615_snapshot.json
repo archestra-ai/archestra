@@ -1,5 +1,5 @@
 {
-  "id": "f8f5659e-554c-4011-81c8-ee82040610e1",
+  "id": "d8ad2628-1f77-4048-a1b1-dab34db2519f",
   "prevId": "4a30b75c-6331-4335-8fc8-be857ea8f82e",
   "version": "7",
   "dialect": "postgresql",
@@ -16486,6 +16486,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "output_length": {
+          "name": "output_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "provider_pricing": {
           "name": "provider_pricing",
           "type": "jsonb",
@@ -21259,13 +21265,6 @@
         },
         "allow_unauthenticated_llm_proxy_requests": {
           "name": "allow_unauthenticated_llm_proxy_requests",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "keep_media_in_logs": {
-          "name": "keep_media_in_logs",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

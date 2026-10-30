@@ -208,6 +208,12 @@ class ModelSyncService {
       const pricingByModelId = new Map(
         providerModels.map((m) => [m.id, m.providerPricing]),
       );
+      const outputLengthByModelId = new Map(
+        providerModels.map((model) => [
+          model.id,
+          model.capabilities?.outputLength,
+        ]),
+      );
       const azureByModelId = new Map(
         providerModels.map((m) => [m.id, m.azureCapabilities]),
       );
@@ -230,6 +236,7 @@ class ModelSyncService {
                 }
               : null,
           providerPricing: pricingByModelId.get(m.modelId) ?? null,
+          outputLength: outputLengthByModelId.get(m.modelId) ?? null,
           id: m.id,
           modelId: m.modelId,
           recommendedForAgents: verdictByProviderModelId.get(m.modelId) ?? null,

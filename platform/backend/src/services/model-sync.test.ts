@@ -987,6 +987,7 @@ describe("ModelSyncService", () => {
       },
       fetched: {
         contextLength: 64000,
+        outputLength: 4096,
         supportsToolCalling: true,
         promptPricePerToken: "0",
         completionPricePerToken: "0",
@@ -1001,7 +1002,7 @@ describe("ModelSyncService", () => {
     // models.dev still fills fields the fetcher does not carry.
     expect(capabilities.description).toBe("DeepSeek V3.1");
     expect(capabilities.inputModalities).toEqual(["text"]);
-    // outputLength has no fetcher tier, so the models.dev value flows through.
+    // Endpoint output caps belong to the API-key/model link, not this shared row.
     expect(capabilities.outputLength).toBe(16384);
   });
 

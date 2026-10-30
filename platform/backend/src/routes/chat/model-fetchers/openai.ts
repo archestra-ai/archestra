@@ -10,7 +10,7 @@ import { decodeOpenAiCodexCredential } from "@/services/openai-codex-credentials
 import { createOpenAiCodexFetch } from "@/services/openai-codex-token";
 import { ApiError, type OpenAi } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
-import { fetchLiteLlmPricing } from "./litellm";
+import { fetchLiteLlmMetadata, readOutputTokenLimit } from "./litellm";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import {
   type FetchedModelCapabilities,
@@ -35,7 +35,9 @@ const CodexModelsResponseSchema = z.object({
 });
 
 export function mapOpenAiModelToModelInfo(
-  model: OpenAi.Types.Model | OpenAi.Types.OrlandoModel,
+  model: (OpenAi.Types.Model | OpenAi.Types.OrlandoModel) & {
+    max_output_tokens?: unknown;
+  },
 ): ModelInfo {
   let provider: ModelInfo["provider"] = "openai";
 
@@ -46,6 +48,7 @@ export function mapOpenAiModelToModelInfo(
       provider = "gemini";
     }
   }
+  const outputLength = readOutputTokenLimit(model.max_output_tokens);
 
   return {
     id: model.id,
@@ -55,6 +58,7 @@ export function mapOpenAiModelToModelInfo(
       "created" in model
         ? new Date(model.created * 1000).toISOString()
         : undefined,
+    ...(outputLength !== undefined ? { capabilities: { outputLength } } : {}),
   };
 }
 
@@ -130,7 +134,9 @@ export async function fetchOpenAiModels(
 
   const baseUrl = baseUrlOverride || config.llm.openai.baseUrl;
   const data = await fetchModelsWithBearerAuth<{
-    data: (OpenAi.Types.Model | OpenAi.Types.OrlandoModel)[];
+    data: ((OpenAi.Types.Model | OpenAi.Types.OrlandoModel) & {
+      max_output_tokens?: unknown;
+    })[];
   }>({
     url: joinBaseUrl(baseUrl, "/models"),
     apiKey,
@@ -138,7 +144,11 @@ export async function fetchOpenAiModels(
     extraHeaders,
   });
 
-  const pricing = await fetchLiteLlmPricing({ baseUrl, apiKey, extraHeaders });
+  const { prices, outputLimits } = await fetchLiteLlmMetadata({
+    baseUrl,
+    apiKey,
+    extraHeaders,
+  });
   return data.data.flatMap((model) => {
     // Classification wins over the chat-name filter: transcription ids pass
     // it, audio chat ids fail it.
@@ -148,13 +158,21 @@ export async function fetchOpenAiModels(
     if (!classified && !isChatModelId(model.id)) {
       return [];
     }
-    const capabilities = classified ?? openAiSearchCapabilities(model.id);
+    const mapped = mapOpenAiModelToModelInfo(model);
+    const limits = [
+      mapped.capabilities?.outputLength,
+      outputLimits.get(model.id),
+    ].filter((limit): limit is number => typeof limit === "number");
+    const capabilities: FetchedModelCapabilities = {
+      ...(classified ?? openAiSearchCapabilities(model.id)),
+      ...(limits.length ? { outputLength: Math.min(...limits) } : {}),
+    };
     return [
       {
-        ...mapOpenAiModelToModelInfo(model),
-        ...(capabilities ? { capabilities } : {}),
-        ...(pricing.has(model.id)
-          ? { providerPricing: pricing.get(model.id) }
+        ...mapped,
+        ...(Object.keys(capabilities).length ? { capabilities } : {}),
+        ...(prices.has(model.id)
+          ? { providerPricing: prices.get(model.id) }
           : {}),
       },
     ];

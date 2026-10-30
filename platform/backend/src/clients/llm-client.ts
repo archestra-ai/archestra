@@ -151,11 +151,13 @@ export function createDirectLLMModel({
   apiKey,
   modelName,
   baseUrl,
+  chatApiKeyId,
 }: {
   provider: SupportedProvider;
   apiKey: string | undefined;
   modelName: string;
   baseUrl: string | null;
+  chatApiKeyId?: string;
 }): LLMModel {
   const cfg = providerModelConfigs[provider];
   if (!cfg) {
@@ -195,7 +197,7 @@ export function createDirectLLMModel({
         provider === "openrouter" ? createResponseHealingFetch() : undefined,
       direct: true,
     }),
-    { provider, modelName },
+    { provider, modelName, chatApiKeyId },
   );
 }
 
@@ -334,7 +336,7 @@ export function createLLMModel(params: {
       supportedEndpoints,
       azureCapabilities: params.azureCapabilities,
     }),
-    { provider, modelName },
+    { provider, modelName, chatApiKeyId },
   );
 }
 
@@ -1423,7 +1425,11 @@ function createOllamaNativeFetch(
  */
 function withCatalogOutputBudget(
   model: LLMModel,
-  target: { provider: SupportedProvider; modelName: string },
+  target: {
+    provider: SupportedProvider;
+    modelName: string;
+    chatApiKeyId?: string;
+  },
 ): LLMModel {
   // Plain ids and v2 providers (Ollama) keep their provider default.
   if (typeof model === "string" || model.specificationVersion !== "v3")

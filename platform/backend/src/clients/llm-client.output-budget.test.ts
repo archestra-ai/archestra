@@ -1,9 +1,182 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { generateText } from "ai";
-import { describe, expect, test, vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { describe, expect, vi } from "vitest";
+import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { createDirectLLMModel } from "@/clients/llm-client";
+import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
-import { ModelModel } from "@/models";
+import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
+import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
+import { buildModelsToUpsert, modelSyncService } from "@/services/model-sync";
+import { test } from "@/test";
+import { useMswServer } from "@/test/msw";
+import { resolveModelOutputBudget } from "@/utils/llm-resolution";
+
+// biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper
+const server = useMswServer();
+
+describe("gateway-discovered output budget", () => {
+  test.for([
+    { listed: 64000, detailed: 64000, expected: 32768 },
+    { listed: undefined, detailed: 64000, expected: 32768 },
+    { listed: 64000, detailed: undefined, expected: 32768 },
+    { listed: 64000, detailed: 4096, expected: 4096 },
+    { listed: 4096, detailed: 64000, expected: 4096 },
+    { listed: 64000, detailed: 64000, custom: 4096, expected: 4096 },
+    { listed: 4096, detailed: 4096, custom: 128000, expected: 4096 },
+    { listed: undefined, detailed: undefined, expected: 8192 },
+  ])("sends $expected tokens for listing=$listed and detail=$detailed", async ({
+    listed,
+    detailed,
+    custom,
+    expected,
+  }, { makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret();
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    const modelId = "gateway-model";
+    server.use(
+      http.get("https://gateway.example.test/v1/models", () =>
+        HttpResponse.json({
+          data: [{ id: modelId, max_output_tokens: listed }],
+        }),
+      ),
+      http.get("https://gateway.example.test/v1/model/info", () =>
+        HttpResponse.json({
+          data: [
+            {
+              model_name: modelId,
+              model_info: { max_output_tokens: detailed },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const discovered = await fetchOpenAiModels(
+      "fixture-key",
+      "https://gateway.example.test/v1",
+    );
+    const [synced] = buildModelsToUpsert({
+      provider: "openai",
+      models: discovered,
+      modelsDevData: {},
+    });
+    const stored = await ModelModel.create({
+      ...synced,
+      customOutputLength: custom,
+    });
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      key.id,
+      [
+        {
+          id: stored.id,
+          modelId,
+          outputLength: discovered[0].capabilities?.outputLength ?? null,
+        },
+      ],
+      "openai",
+    );
+    expect(stored.outputLength).toBeNull();
+    const budget = resolveAgentMaxOutputTokens({
+      provider: "openai",
+      outputLength: await LlmProviderApiKeyModelLinkModel.resolveOutputLength(
+        stored,
+        key.id,
+      ),
+      ceiling: config.chat.maxOutputTokensCeiling,
+    });
+
+    expect(budget).toBe(expected);
+    expect(
+      await sentMaxTokens({
+        provider: "openai",
+        modelName: modelId,
+        chatApiKeyId: key.id,
+        maxOutputTokens: budget,
+      }),
+    ).toBe(expected);
+  });
+});
+
+describe("connection-local output limits", () => {
+  test.for([
+    { order: [0, 1] },
+    { order: [1, 0] },
+  ])("keeps both gateway budgets correct after sync order $order", async ({
+    order,
+  }, { makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret();
+    const modelId = "shared-gateway-alias";
+    const limits = [8192, 64000];
+    const bases = [
+      "https://small.example.test/v1",
+      "https://large.example.test/v1",
+    ];
+    const keys = [];
+    modelsDevClient.clearFetchCache();
+    server.use(
+      http.get("https://models.dev/api.json", () => HttpResponse.json({})),
+    );
+    for (let i = 0; i < bases.length; i++) {
+      keys.push(
+        await makeLlmProviderApiKey(org.id, secret.id, {
+          provider: "openai",
+          baseUrl: bases[i],
+        }),
+      );
+      server.use(
+        http.get(`${bases[i]}/models`, () =>
+          HttpResponse.json({ data: [{ id: modelId }] }),
+        ),
+        http.get(`${bases[i]}/model/info`, () =>
+          HttpResponse.json({
+            data: [
+              {
+                model_name: modelId,
+                model_info: { max_output_tokens: limits[i] },
+              },
+            ],
+          }),
+        ),
+      );
+    }
+    for (const i of order) {
+      await modelSyncService.syncModelsForApiKey({
+        apiKeyId: keys[i].id,
+        provider: "openai",
+        apiKeyValue: "fixture-key",
+        baseUrl: bases[i],
+      });
+    }
+    const shared = await ModelModel.findByProviderAndModelId("openai", modelId);
+    expect(shared?.outputLength).toBeNull();
+    for (let i = 0; i < keys.length; i++) {
+      const expected = Math.min(limits[i], config.chat.maxOutputTokensCeiling);
+      expect(
+        (
+          await resolveModelOutputBudget({
+            provider: "openai",
+            modelName: modelId,
+            chatApiKeyId: keys[i].id,
+          })
+        ).tokens,
+      ).toBe(expected);
+      expect(
+        await sentMaxTokens({
+          provider: "openai",
+          modelName: modelId,
+          chatApiKeyId: keys[i].id,
+          baseUrl: bases[i],
+        }),
+      ).toBe(expected);
+    }
+  });
+});
 
 describe("default output budget", () => {
   test("a catalogued model gets its catalog budget on every provider", async () => {
@@ -131,6 +304,8 @@ async function sentMaxTokens(params: {
   provider: SupportedProvider;
   modelName: string;
   maxOutputTokens?: number;
+  chatApiKeyId?: string;
+  baseUrl?: string;
 }): Promise<number | undefined> {
   const body = await sentBody(params);
   const generationConfig = body.generationConfig as
@@ -148,6 +323,8 @@ async function sentBody(params: {
   provider: SupportedProvider;
   modelName: string;
   maxOutputTokens?: number;
+  chatApiKeyId?: string;
+  baseUrl?: string;
   providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
 }): Promise<Record<string, unknown>> {
   const sent: Array<Record<string, unknown>> = [];
@@ -164,7 +341,8 @@ async function sentBody(params: {
       provider: params.provider,
       apiKey: "test-key",
       modelName: params.modelName,
-      baseUrl: null,
+      baseUrl: params.baseUrl ?? null,
+      chatApiKeyId: params.chatApiKeyId,
     }),
     prompt: "hi",
     maxOutputTokens: params.maxOutputTokens,

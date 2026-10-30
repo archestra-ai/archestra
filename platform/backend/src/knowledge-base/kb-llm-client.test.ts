@@ -666,6 +666,7 @@ describe("resolveOcrConfig", () => {
       apiKey: "sk-ant-api-key",
       modelName: "claude-sonnet-5",
       baseUrl: "https://api.anthropic.com",
+      chatApiKeyId: chatApiKey.id,
     });
   });
 

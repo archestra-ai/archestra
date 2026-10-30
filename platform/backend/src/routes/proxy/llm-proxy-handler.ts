@@ -3233,8 +3233,12 @@ async function handleStreaming<
         "Plugin cleanup failed while handling proxy error",
       );
     }
-    if (lifecycleError instanceof ModelBudgetExceededError)
+    if (lifecycleError instanceof ModelBudgetExceededError) {
+      // This member never dispatched. Earlier failed pool attempts already
+      // have their own records; do not finalize an empty stream for this one.
+      accountingFinalized = true;
       return sendUsageLimitRefusal(reply, lifecycleError.violation);
+    }
     if (codexError?.isIncompleteTerminal) {
       // Preserve Chat's legal partial terminal only after failure cleanup.
       childStream.dropModel();

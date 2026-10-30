@@ -191,6 +191,26 @@ describe("Model pools - LLM Proxy", () => {
           expect(
             (await LlmThroughputModel.usage([rpm])).get(rpm.id)?.currentUsage,
           ).toBeCloseTo(cappedModel === "model-a" ? 0 : 1, 2);
+          const rows = await db.select().from(schema.interactionsTable);
+          expect(
+            rows.map(({ model, attempt, attemptOutcome, failureReason }) => ({
+              model,
+              attempt,
+              attemptOutcome,
+              failureReason,
+            })),
+          ).toEqual(
+            cappedModel === "model-a"
+              ? []
+              : [
+                  {
+                    model: "model-a",
+                    attempt: 1,
+                    attemptOutcome: "failed_over",
+                    failureReason: "rate_limited (429)",
+                  },
+                ],
+          );
           const unrelated = await app.inject({
             method: "POST",
             url: `/v1/openai/${proxy.id}/chat/completions`,

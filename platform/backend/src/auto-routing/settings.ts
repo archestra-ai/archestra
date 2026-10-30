@@ -100,7 +100,10 @@ export async function writeOrganizationTrio<T>(params: {
 }): Promise<T> {
   const { organizationId, patch, write } = params;
   const checked = await AutoRoutingSettingsModel.find(organizationId);
-  if (checked?.enabled) {
+  // With the deployment's auto routing off, an organization's enabled flag
+  // routes nothing and cannot be turned off, so it constrains no trio.
+  const routed = config.autoRouting.enabled;
+  if (routed && checked?.enabled) {
     await assertFeasibleBudget(organizationId, { ...checked, ...patch });
   }
   return AutoRoutingSettingsModel.updateTrio({
@@ -114,7 +117,7 @@ export async function writeOrganizationTrio<T>(params: {
           "Auto routing settings changed concurrently; try again.",
         );
       }
-      await assertValidSettings(next, tx);
+      if (routed) await assertValidSettings(next, tx);
     },
   });
 }

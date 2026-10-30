@@ -145,6 +145,21 @@ describe("writeOrganizationTrio", () => {
       (await AutoRoutingSettingsModel.find(organizationId))?.fastModelId,
     ).toBeNull();
   });
+
+  test("with auto routing off for the deployment, an enabled organization may change its trio freely", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    await configureAutoRouting(organizationId);
+    config.autoRouting.enabled = false;
+
+    await patchTrio(organizationId, { fastModelId: null });
+
+    expect(await AutoRoutingSettingsModel.find(organizationId)).toMatchObject({
+      enabled: true,
+      fastModelId: null,
+    });
+  });
 });
 
 function withThreshold(threshold: number) {

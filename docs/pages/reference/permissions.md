@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-30
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -99,6 +99,7 @@ A [custom role](/docs/admin/access-control#custom-roles) can hold any of these p
 | <span id="agent:read"></span>`agent:read` | Open Agents, and use the code sandboxes and files of agents you can use |
 | <span id="agent:create"></span>`agent:create` | Create new agents |
 | <span id="agent:delete"></span>`agent:delete` | Open the trash of deleted agents |
+| <span id="agent:configure-runtime"></span>`agent:configure-runtime` | Create runtime-backed agents and change or remove their runtime configuration |
 | <span id="apiKey:read"></span>`apiKey:read` | View API keys |
 | <span id="apiKey:create"></span>`apiKey:create` | Create API keys |
 | <span id="apiKey:delete"></span>`apiKey:delete` | Delete API keys |

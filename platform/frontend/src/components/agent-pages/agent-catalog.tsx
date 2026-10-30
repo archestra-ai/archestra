@@ -36,6 +36,7 @@ import {
   useResolveRuntimeTemplate,
   useRuntimeTemplateCatalog,
 } from "@/lib/agent-runtime-templates.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
@@ -213,6 +214,9 @@ export function AgentCatalog({
   const resolver = useResolveRuntimeTemplate();
   const appName = useAppName();
   const appIconLogo = useAppIconLogo();
+  const { data: canConfigureRuntime } = useHasPermissions({
+    agent: ["configure-runtime"],
+  });
   return (
     <div className="space-y-10">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -288,11 +292,16 @@ export function AgentCatalog({
                   else onSelect(item);
                 }}
                 disabled={
-                  !canCreateAgent || !runtimeAvailable || resolver.isPending
+                  !canCreateAgent ||
+                  !canConfigureRuntime ||
+                  !runtimeAvailable ||
+                  resolver.isPending
                 }
                 disabledReason={
                   canCreateAgent
-                    ? "Requires the Agent Sandbox controller."
+                    ? !canConfigureRuntime
+                      ? "Requires Configure runtime permission."
+                      : "Requires the Agent Sandbox controller."
                     : "Requires permission to create agents."
                 }
               />
@@ -302,10 +311,14 @@ export function AgentCatalog({
               title="Custom image"
               description="Run your own container image and command."
               onClick={onStartFromImage}
-              disabled={!canCreateAgent || !runtimeAvailable}
+              disabled={
+                !canCreateAgent || !canConfigureRuntime || !runtimeAvailable
+              }
               disabledReason={
                 canCreateAgent
-                  ? "Requires the Agent Sandbox controller."
+                  ? !canConfigureRuntime
+                    ? "Requires Configure runtime permission."
+                    : "Requires the Agent Sandbox controller."
                   : "Requires permission to create agents."
               }
             />

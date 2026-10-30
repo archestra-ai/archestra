@@ -3043,6 +3043,47 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
+  it("keeps saved runtime settings read-only without Configure runtime", () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.agent?.includes("configure-runtime"),
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    render(
+      <AgentForm agentType="agent" agent={baseAgent} activeSection="runtime" />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Enable runtime" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/Configure runtime permission is required/),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the saved runtime when an ordinary editor changes an agent name", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.agent?.includes("configure-runtime"),
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    const runtime = {
+      ...defaultAgentRuntime(),
+      image: "example.test/worker:v1",
+    };
+    render(<AgentForm agentType="agent" agent={{ ...baseAgent, runtime }} />);
+    await user.type(
+      await screen.findByDisplayValue("Existing Agent"),
+      " renamed",
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(updateAgent.mock.calls[0][0].data).not.toHaveProperty("runtime");
+  });
+
   it("hides existing runtime settings when another form panel is active", () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const { rerender } = render(
@@ -3052,10 +3093,8 @@ describe("AgentForm save payload and failure handling", () => {
         activeSection="configuration"
       />,
     );
-    // The runtime fields render their own sections, so the panel is the
-    // wrapper directly around them.
     const runtimePanel = () =>
-      screen.getByTestId("agent-runtime").parentElement;
+      screen.getByTestId("agent-runtime").closest("fieldset")?.parentElement;
     expect(runtimePanel()).toHaveClass("hidden");
     rerender(
       <AgentForm agentType="agent" agent={baseAgent} activeSection="runtime" />,

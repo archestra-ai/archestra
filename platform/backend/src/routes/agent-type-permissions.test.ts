@@ -205,7 +205,9 @@ describe("agent type permission isolation (routes)", () => {
     }) => {
       await makeCustomRole(organizationId, {
         role: "agent_only",
-        permission: { agent: ["read", "create", "update", "delete"] },
+        permission: {
+          agent: ["read", "create", "update", "delete", "configure-runtime"],
+        },
       });
       await makeMember(memberUser.id, organizationId, { role: "agent_only" });
       const memberApp = await createAppForUser(memberUser);

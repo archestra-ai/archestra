@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -18,6 +18,14 @@ async function backdateSandbox(sandboxId: string, createdAt: Date) {
   await db
     .update(schema.skillSandboxesTable)
     .set({ createdAt })
+    .where(eq(schema.skillSandboxesTable.id, sandboxId));
+}
+
+// Stamps the age the way column defaults do: relative to the database's now().
+async function backdateInDatabaseClock(sandboxId: string, age: string) {
+  await db
+    .update(schema.skillSandboxesTable)
+    .set({ createdAt: sql`now()::timestamp - ${age}::interval` })
     .where(eq(schema.skillSandboxesTable.id, sandboxId));
 }
 
@@ -143,6 +151,34 @@ describe("handleHeadlessSandboxCleanup", () => {
 
     for (const kept of [recent, active, conversationSandbox, appSandbox]) {
       expect(await SkillSandboxModel.findById(kept.id)).not.toBeNull();
+    }
+  });
+
+  test("measures retention in the database clock when its time zone is not UTC", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const base = {
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: null,
+      defaultCwd: "/home/sandbox",
+    };
+    await db.execute(sql`SET TIME ZONE 'Etc/GMT+12'`);
+    try {
+      const fresh = await SkillSandboxModel.create(base);
+      const stale = await SkillSandboxModel.create(base);
+      await backdateInDatabaseClock(fresh.id, "6 days 18 hours");
+      await backdateInDatabaseClock(stale.id, "7 days 6 hours");
+
+      await handleHeadlessSandboxCleanup();
+
+      expect(await SkillSandboxModel.findById(fresh.id)).not.toBeNull();
+      expect(await SkillSandboxModel.findById(stale.id)).toBeNull();
+    } finally {
+      await db.execute(sql`RESET TIME ZONE`);
     }
   });
 

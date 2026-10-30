@@ -467,14 +467,10 @@ describe("service-account owner-matched Copilot mappings", () => {
         apiKey: "sk-shared",
       },
     });
-    const sharedKey = await makeLlmProviderApiKey(
-      organizationId,
-      secret.id,
-      {
-        provider: "openai",
-        access: "org",
-      },
-    );
+    const sharedKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+      access: "org",
+    });
     expect(
       await LlmProviderApiKeyModel.canUseKey(
         sharedKey,

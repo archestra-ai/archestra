@@ -343,10 +343,10 @@ class AgentWarmPoolManager {
   /**
    * Claim a warm Sandbox for the run. The requested tier's pool serves it
    * while that pool has a ready Sandbox. When it is drained or missing, the
-   * next larger tier within the Agent's serves it if that pool has a ready
-   * Sandbox, and the run runs at that tier; a smaller tier never does. When
-   * neither has one, the run claims from its own pool and waits for it to
-   * refill. Null means a cold start.
+   * next larger tier, up to the Agent's largest tier, serves it if that pool
+   * has a ready Sandbox, and the run runs at that tier; a smaller tier never
+   * does. When neither has one, the run claims from its own pool and waits for
+   * it to refill. Null means a cold start.
    */
   async claim(params: {
     api: CustomObjectsApi;

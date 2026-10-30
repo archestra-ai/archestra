@@ -97,18 +97,91 @@ describe("applyPendingNormalTiers", () => {
     );
     expect(await pendingTiers()).toEqual([]);
   });
+
+  test("a default model an admin changed since the migration is kept and the tier dropped", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    await configureAutoRouting(organizationId);
+    await AutoRoutingSettingsModel.update(organizationId, { enabled: false });
+    const tier = await makeRoutingModel();
+    const key = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "openai",
+    });
+    await stash({ organizationId, tier, apiKeyId: key.id });
+    const chosen = await makeRoutingModel();
+    await OrganizationModel.patch(organizationId, {
+      defaultModelId: chosen.id,
+      defaultLlmApiKeyId: key.id,
+    });
+
+    await applyPendingNormalTiers();
+
+    expect(await OrganizationModel.getById(organizationId)).toMatchObject({
+      defaultModelId: chosen.id,
+      defaultLlmApiKeyId: key.id,
+    });
+    expect((await AutoRoutingSettingsModel.find(organizationId))?.enabled).toBe(
+      false,
+    );
+    expect(await pendingTiers()).toEqual([]);
+  });
+
+  test("auto routing an admin turned back on since the migration keeps its trio and the tier is dropped", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const [, normal] = await configureAutoRouting(organizationId);
+    const tier = await makeRoutingModel();
+    const key = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "openai",
+    });
+    await stash({ organizationId, tier, apiKeyId: key.id });
+
+    await applyPendingNormalTiers();
+
+    expect(await AutoRoutingSettingsModel.find(organizationId)).toMatchObject({
+      enabled: true,
+      normalModelId: normal.id,
+    });
+    expect(await pendingTiers()).toEqual([]);
+  });
+
+  test("a move that fails leaves the tier for the next startup", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const [, normal] = await configureAutoRouting(organizationId);
+    await AutoRoutingSettingsModel.update(organizationId, { enabled: false });
+    const tier = await makeRoutingModel();
+    // No such key: the default's key reference rejects the write.
+    await stash({ organizationId, tier, apiKeyId: randomUUID() });
+
+    await applyPendingNormalTiers();
+
+    expect(
+      (await OrganizationModel.getById(organizationId))?.defaultModelId,
+    ).toBe(normal.id);
+    expect(await pendingTiers()).toMatchObject([{ organizationId }]);
+  });
 });
 
+/** Stashes `tier` as the migration does, over the organization's current default. */
 async function stash(params: {
   organizationId: string;
   tier: Pick<Model, "id">;
   apiKeyId: string;
 }) {
+  const organization = await OrganizationModel.getById(params.organizationId);
   await db.insert(schema.orgTrioPendingNormalTierTable).values({
     organizationId: params.organizationId,
     normalModelId: params.tier.id,
     apiKeyId: params.apiKeyId,
     autoRoutingWasEnabled: true,
+    expectedDefaultModelId: organization?.defaultModelId ?? null,
+    expectedDefaultLlmApiKeyId: organization?.defaultLlmApiKeyId ?? null,
   });
 }
 

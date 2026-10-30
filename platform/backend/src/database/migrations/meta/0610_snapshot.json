@@ -20976,6 +20976,18 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true
+        },
+        "expected_default_model_id": {
+          "name": "expected_default_model_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expected_default_llm_api_key_id": {
+          "name": "expected_default_llm_api_key_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},

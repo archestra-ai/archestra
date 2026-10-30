@@ -1,58 +1,108 @@
-import db, { schema } from "@/database";
+import { withDbTransaction } from "@/database";
 import logger from "@/logging";
+import AutoRoutingSettingsModel, {
+  lockRoutingPlan,
+} from "@/models/auto-routing-settings";
 import OrganizationModel from "@/models/organization";
+import OrgTrioPendingNormalTierModel, {
+  type PendingNormalTier,
+} from "@/models/org-trio-pending-normal-tier";
 import { assertRuntimeAgentsSupportOrganizationDefault } from "@/services/agent-runtime/model-compatibility";
-import { updateAutoRoutingSettings, writeOrganizationTrio } from "./settings";
-
-type PendingNormalTier =
-  typeof schema.orgTrioPendingNormalTierTable.$inferSelect;
+import { ApiError } from "@/types";
+import { updateAutoRoutingSettings } from "./settings";
 
 /**
  * Moves each auto-routing normal tier the org-trio migration stashed into the
  * organization's default model when the Agent Runtime agents inheriting it can
- * run it, and re-enables the auto routing the migration disabled. The delete
- * hands each row to exactly one booting replica.
+ * run it, and re-enables the auto routing the migration disabled. A row is
+ * consumed with its outcome in one transaction, by one replica; a transient
+ * failure leaves it for the next startup.
  */
 export async function applyPendingNormalTiers(): Promise<void> {
-  const pending = await db
-    .delete(schema.orgTrioPendingNormalTierTable)
-    .returning();
-  for (const tier of pending) await applyPendingNormalTier(tier);
+  for (const tier of await OrgTrioPendingNormalTierModel.findAll()) {
+    await applyPendingNormalTier(tier).catch((error: unknown) => {
+      logger.warn(
+        { err: error, organizationId: tier.organizationId },
+        "[AutoRouting] The migrated auto-routing normal tier waits for the next startup",
+      );
+    });
+  }
 }
 
-async function applyPendingNormalTier(tier: PendingNormalTier) {
-  const { organizationId, normalModelId, apiKeyId } = tier;
+// === Internal ===
+
+type Outcome =
+  | { kind: "claimed" }
+  | { kind: "incompatible"; reason: ApiError }
+  | { kind: "superseded" }
+  | { kind: "moved"; tier: PendingNormalTier };
+
+async function applyPendingNormalTier(stashed: PendingNormalTier) {
+  const { organizationId, normalModelId } = stashed;
+  const incompatibility = await runtimeIncompatibility(stashed);
+  const outcome = await withDbTransaction(async (tx): Promise<Outcome> => {
+    await lockRoutingPlan(tx, organizationId);
+    const tier = await OrgTrioPendingNormalTierModel.claim(organizationId, tx);
+    if (!tier) return { kind: "claimed" };
+    await OrgTrioPendingNormalTierModel.delete(organizationId, tx);
+    if (incompatibility) return { kind: "incompatible", reason: incompatibility };
+    await OrganizationModel.lockRowForUpdate(organizationId, tx);
+    const organization = await OrganizationModel.getById(organizationId, tx);
+    const settings = await AutoRoutingSettingsModel.find(organizationId, tx);
+    const untouched =
+      organization?.defaultModelId === tier.expectedDefaultModelId &&
+      organization?.defaultLlmApiKeyId === tier.expectedDefaultLlmApiKeyId &&
+      settings?.enabled === false;
+    if (!untouched) return { kind: "superseded" };
+    await OrganizationModel.patchInTransaction({
+      id: organizationId,
+      data: { defaultModelId: tier.normalModelId, defaultLlmApiKeyId: tier.apiKeyId },
+      tx,
+    });
+    await AutoRoutingSettingsModel.bumpGeneration(organizationId, tx);
+    return { kind: "moved", tier };
+  });
+  switch (outcome.kind) {
+    case "claimed":
+      return;
+    case "incompatible":
+      logger.warn(
+        { err: outcome.reason, organizationId, normalModelId },
+        "[AutoRouting] Kept the default model instead of the migrated auto-routing normal tier",
+      );
+      return;
+    case "superseded":
+      logger.info(
+        { organizationId, normalModelId },
+        "[AutoRouting] Dropped the migrated auto-routing normal tier: the default model or auto routing changed since the migration",
+      );
+      return;
+    case "moved":
+      await OrganizationModel.invalidateSettingsCaches(organizationId);
+      if (!outcome.tier.autoRoutingWasEnabled) return;
+      await updateAutoRoutingSettings(organizationId, { enabled: true }).catch(
+        (error: unknown) => {
+          logger.warn(
+            { err: error, organizationId },
+            "[AutoRouting] Auto routing stays disabled after the migrated normal tier moved",
+          );
+        },
+      );
+  }
+}
+
+/** Why an inheriting Agent Runtime agent cannot run the tier; other errors are transient. */
+async function runtimeIncompatibility(
+  tier: PendingNormalTier,
+): Promise<ApiError | null> {
   try {
     await assertRuntimeAgentsSupportOrganizationDefault({
-      organizationId,
-      modelId: normalModelId,
+      organizationId: tier.organizationId,
+      modelId: tier.normalModelId,
     });
-    await writeOrganizationTrio({
-      organizationId,
-      patch: { normalModelId },
-      write: (tx) =>
-        OrganizationModel.patchInTransaction({
-          id: organizationId,
-          data: { defaultModelId: normalModelId, defaultLlmApiKeyId: apiKeyId },
-          tx,
-        }),
-    }).finally(() =>
-      OrganizationModel.invalidateSettingsCaches(organizationId),
-    );
+    return null;
   } catch (error) {
-    logger.warn(
-      { err: error, organizationId, normalModelId },
-      "[AutoRouting] Kept the default model instead of the migrated auto-routing normal tier",
-    );
-    return;
+    if (error instanceof ApiError) return error;
+    throw error;
   }
-  if (!tier.autoRoutingWasEnabled) return;
-  await updateAutoRoutingSettings(organizationId, { enabled: true }).catch(
-    (error: unknown) => {
-      logger.warn(
-        { err: error, organizationId },
-        "[AutoRouting] Auto routing stays disabled after the migrated normal tier moved",
-      );
-    },
-  );
 }

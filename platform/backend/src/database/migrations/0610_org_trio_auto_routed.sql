@@ -25,7 +25,9 @@ CREATE TABLE "org_trio_pending_normal_tier" (
 	"organization_id" text PRIMARY KEY NOT NULL,
 	"normal_model_id" text NOT NULL,
 	"api_key_id" text NOT NULL,
-	"auto_routing_was_enabled" boolean NOT NULL
+	"auto_routing_was_enabled" boolean NOT NULL,
+	"expected_default_model_id" text,
+	"expected_default_llm_api_key_id" text
 );
 --> statement-breakpoint
 ALTER TABLE "org_trio_pending_normal_tier" ADD CONSTRAINT "org_trio_pending_normal_tier_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -35,6 +37,8 @@ WITH "candidate" AS (
     a."auto_routing_normal_model_id" AS "normal_model_id",
     k."id" AS "api_key_id",
     a."auto_routing_enabled" AS "enabled",
+    org."default_model_id" AS "expected_default_model_id",
+    org."default_llm_api_key_id" AS "expected_default_llm_api_key_id",
     EXISTS (
       SELECT 1 FROM "agents" AS r
       WHERE r."organization_id" = a."organization_id"
@@ -70,7 +74,8 @@ WITH "candidate" AS (
   WHERE o."id" = c."organization_id" AND NOT c."runtime_inherits"
 )
 INSERT INTO "org_trio_pending_normal_tier"
-SELECT "organization_id", "normal_model_id", "api_key_id", "enabled"
+SELECT "organization_id", "normal_model_id", "api_key_id", "enabled",
+  "expected_default_model_id", "expected_default_llm_api_key_id"
 FROM "candidate"
 WHERE "runtime_inherits";--> statement-breakpoint
 -- Fail closed: an enabled organization whose trio is not exactly the tiers it

@@ -105,6 +105,17 @@ describe("withoutLoggedMedia", () => {
         image: { format: "png", source: { bytes: PNG } },
       }),
     ).toEqual({ image: { format: "png", source: { bytes: MEDIA_NOT_KEPT } } });
+    for (const format of ["txt", "csv", "docx", "pdf"])
+      expect(
+        withoutLoggedMedia({
+          document: { format, name: "document", source: { bytes: PNG } },
+        }).document.source.bytes,
+      ).toBe(MEDIA_NOT_KEPT);
+    expect(
+      withoutLoggedMedia({
+        video: { format: "mp4", source: { bytes: PNG } },
+      }).video.source.bytes,
+    ).toBe(MEDIA_NOT_KEPT);
     expect(
       withoutLoggedMedia({
         messages: [{ role: "user", content: "hi", images: [PNG] }],
@@ -266,6 +277,8 @@ describe("withoutLoggedMedia", () => {
       source: { type: "text", media_type: "text/plain", data: "hello" },
     };
     expect(withoutLoggedMedia(document)).toBe(document);
+    const settings = { format: "json", source: { data: "hello" } };
+    expect(withoutLoggedMedia(settings)).toBe(settings);
   });
 
   it("bounds nesting, also inside JSON text, and the result serializes", () => {

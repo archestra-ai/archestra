@@ -146,14 +146,15 @@ function strip(value: unknown, walk: Walk): unknown {
 
 /**
  * Whether an object is media: a part typed as media, an object naming a media
- * type, or anything inside one (Bedrock's `image.source.bytes`). A source
- * typed as text or a URL holds no bytes.
+ * type, a Bedrock image, document or video block, or anything inside one. A
+ * source typed as text or a URL holds no bytes.
  */
 function isMedia(object: Record<string, unknown>, inMedia: boolean): boolean {
   if (object.type === "text" || object.type === "url") return false;
   return (
     inMedia ||
     (typeof object.type === "string" && MEDIA_PART_TYPES.has(object.type)) ||
+    isBedrockMediaBlock(object) ||
     MEDIA_TYPE_KEYS.some(
       (typeKey) =>
         typeof object[typeKey] === "string" &&
@@ -176,6 +177,20 @@ function mediaBytes(
     (field === "blob" && typeof object.uri === "string") ||
     // A Responses image generation returns its image as `result`.
     (field === "result" && object.type === "image_generation_call")
+  );
+}
+
+/**
+ * Bedrock's image, document and video blocks: a format beside source bytes,
+ * whatever the format (`txt`, `csv` and `docx` documents included).
+ */
+function isBedrockMediaBlock(object: Record<string, unknown>): boolean {
+  const source = object.source;
+  return (
+    typeof object.format === "string" &&
+    typeof source === "object" &&
+    source !== null &&
+    typeof (source as Record<string, unknown>).bytes === "string"
   );
 }
 

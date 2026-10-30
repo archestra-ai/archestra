@@ -206,7 +206,6 @@ const {
   ),
   useAgentRuntimePreflightMock: vi.fn(() => ({ data: undefined })),
   useOrganizationDefaultModelMock: vi.fn(() => ({
-    isSet: false,
     model: null,
     label: null,
   })),
@@ -2870,7 +2869,6 @@ describe("AgentForm save payload and failure handling", () => {
     useLlmModelsByProviderMock.mockReturnValue({ modelsByProvider: {} });
     useAgentRuntimePreflightMock.mockReturnValue({ data: undefined });
     useOrganizationDefaultModelMock.mockReturnValue({
-      isSet: false,
       model: null,
       label: null,
     });
@@ -3603,7 +3601,6 @@ describe("AgentForm save payload and failure handling", () => {
 
   it("blocks an Anthropic runtime when the inherited organization model is Gemini", async () => {
     useOrganizationDefaultModelMock.mockReturnValue({
-      isSet: true,
       label: "Google · Gemini 2.5 Pro",
       model: {
         dbId: "gemini-default",
@@ -4526,7 +4523,6 @@ describe("AgentForm save payload and failure handling", () => {
       },
     });
     useOrganizationDefaultModelMock.mockReturnValue({
-      isSet: true,
       model: {
         dbId: "gpt-default",
         id: "gpt-5.6-luna",

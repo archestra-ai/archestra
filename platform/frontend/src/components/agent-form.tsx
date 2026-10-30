@@ -1566,9 +1566,11 @@ export function AgentForm({
   // The provider key + model pair: internal agents, built-in ones included.
   const showsModelControl = isInternalAgent || isBuiltIn;
   // Which model "Organization default" currently means, so the control can
-  // say so instead of leaving the reader to look it up.
+  // say so instead of leaving the reader to look it up. Agent Runtime agents
+  // are never auto routed, so they are shown the default model alone.
   const organizationDefaultModel = useOrganizationDefaultModel({
     enabled: showsModelControl,
+    followsRouting: !runtime,
   });
   // General now holds the four fields the reader came for — name, model,
   // description and instructions — so it is shown whenever any of them

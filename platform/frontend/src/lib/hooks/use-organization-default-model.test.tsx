@@ -39,9 +39,6 @@ const TIERS = {
 let summary: Summary;
 
 const server = setupServer(
-  http.get(`${API_ORIGIN}/api/organization`, () =>
-    HttpResponse.json({ id: "org-1", defaultModelId: TIERS.normal.id }),
-  ),
   http.get(`${API_ORIGIN}/api/organization/default-model`, () =>
     HttpResponse.json(summary),
   ),
@@ -69,14 +66,16 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-function renderDefaultModel() {
+function renderDefaultModel(followsRouting?: boolean) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-  return renderHook(() => useOrganizationDefaultModel(), { wrapper });
+  return renderHook(() => useOrganizationDefaultModel({ followsRouting }), {
+    wrapper,
+  });
 }
 
 describe("useOrganizationDefaultModel", () => {
@@ -96,6 +95,16 @@ describe("useOrganizationDefaultModel", () => {
     await waitFor(() =>
       expect(result.current.label).toBe("Anthropic · Sonnet"),
     );
-    expect(result.current.isSet).toBe(true);
+  });
+
+  it("names only the default model for an agent auto routing skips", async () => {
+    summary = {
+      model: TIERS.normal,
+      autoRouting: { active: true, tiers: TIERS },
+    };
+    const { result } = renderDefaultModel(false);
+    await waitFor(() =>
+      expect(result.current.label).toBe("Anthropic · Sonnet"),
+    );
   });
 });

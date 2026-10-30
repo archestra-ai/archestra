@@ -30,6 +30,23 @@ export function handleServerError(
     return reply.status(499).send();
   }
 
+  // A stream can fail before committing its headers. The error body is JSON,
+  // not the file or range the route originally prepared to send.
+  if (!reply.raw.headersSent) {
+    reply.type("application/json");
+    for (const header of [
+      "content-length",
+      "content-range",
+      "content-encoding",
+      "content-disposition",
+      "accept-ranges",
+      "etag",
+      "last-modified",
+    ]) {
+      reply.removeHeader(header);
+    }
+  }
+
   // Handle response serialization errors (when response doesn't match schema)
   if (isResponseSerializationError(error)) {
     const issues = error.cause?.issues ?? [];

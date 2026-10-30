@@ -173,6 +173,19 @@ class ModelSyncService {
         : await ModelModel.bulkUpsert(modelsToUpsert, {
             fromProviderCatalog: true,
           });
+      // A normal sync keeps the modalities and tool support a row already has.
+      // A model the fetcher classified from its id is rewritten in full, so an
+      // older build's classification (a realtime model stored as a chat model)
+      // does not survive the upgrade.
+      const authoritativeIds = new Set(
+        providerModels
+          .filter((model) => model.capabilities?.authoritative)
+          .map((model) => model.id),
+      );
+      if (!forceRefresh && authoritativeIds.size > 0)
+        await ModelModel.bulkUpsertFull(
+          modelsToUpsert.filter((model) => authoritativeIds.has(model.modelId)),
+        );
 
       logger.info(
         { provider, apiKeyId, upsertedCount: upsertedModels.length },

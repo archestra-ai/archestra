@@ -201,6 +201,7 @@ function openAiAudioChatCapabilities(
         inputModalities: ["text", "audio"],
         outputModalities: ["text", "audio"],
         supportsToolCalling: true,
+        authoritative: true,
       }
     : null;
 }
@@ -211,7 +212,7 @@ function openAiAudioChatCapabilities(
  */
 function openAiSearchCapabilities(id: string): FetchedModelCapabilities | null {
   return /-search-(?:preview|api)(?:-|$)/i.test(id)
-    ? { supportsToolCalling: false }
+    ? { supportsToolCalling: false, authoritative: true }
     : null;
 }
 
@@ -219,5 +220,10 @@ function mediaCapabilities(
   inputModalities: ModelInputModality[],
   outputModalities: ModelOutputModality[],
 ): FetchedModelCapabilities {
-  return { inputModalities, outputModalities, supportsToolCalling: false };
+  return {
+    inputModalities,
+    outputModalities,
+    supportsToolCalling: false,
+    authoritative: true,
+  };
 }

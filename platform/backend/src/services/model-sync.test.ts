@@ -305,6 +305,18 @@ describe("ModelSyncService", () => {
       ),
     );
 
+    // An older build synced this realtime model as a chat model; a normal
+    // sync keeps stored modalities unless the fetcher's classification wins.
+    await ModelModel.upsert({
+      externalId: "openai/gpt-realtime-2.1",
+      provider: "openai",
+      modelId: "gpt-realtime-2.1",
+      inputModalities: ["text", "audio", "image"],
+      outputModalities: ["text", "audio"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+
     await modelSyncService.syncModelsForApiKey({
       apiKeyId: apiKey.id,
       provider: "openai",
@@ -338,6 +350,7 @@ describe("ModelSyncService", () => {
       "audio",
     ]);
     expect(byId.get("gpt-realtime-2.1")?.outputModalities).toEqual(["audio"]);
+    expect(byId.get("gpt-realtime-2.1")?.supportsToolCalling).toBe(false);
     expect(byId.get("gpt-image-1")?.outputModalities).toEqual(["image"]);
     // Audio chat models answer chat turns in text or speech; they stay chat models.
     expect(byId.get("gpt-audio")?.inputModalities).toEqual(["text", "audio"]);

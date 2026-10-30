@@ -620,31 +620,11 @@ class AgentRuntimeManager {
     const interruptedTierSwitch =
       sandbox.metadata.annotations?.[AGENT_RUNTIME_TIER_SWITCH_ANNOTATION] ===
       session.taskId;
-    if (interruptedTierSwitch) {
-      const recovered = await McpDeploymentLeaseModel.withLease(
-        { scope: AGENT_RUNTIME_TIER_SWITCH_LEASE_SCOPE, key: session.id },
-        async () => {
-          const podSpec = sandbox.spec.podTemplate.spec;
-          if (podSpec)
-            await this.patchSandbox(
-              session,
-              sandbox.metadata.name ?? session.workloadName,
-              {
-                spec: {
-                  podTemplate: {
-                    spec: withTurnResume(podSpec, session.taskId),
-                  },
-                },
-              },
-            );
-          return true;
-        },
-      ).catch((error) => {
-        if (error instanceof ClusterLeaseHeldError) return false;
-        throw error;
-      });
-      if (!recovered) return;
-    }
+    if (
+      interruptedTierSwitch &&
+      !(await this.takeOverTierSwitch(session, { wake: false }))
+    )
+      return;
     // The initial turn is already part of the Sandbox's bootstrap contract.
     if (
       !pending &&
@@ -1306,6 +1286,24 @@ class AgentRuntimeManager {
         }
         const pod = await this.findPod(params.session);
         if (params.abortSignal?.aborted) break;
+        // A tier switch stopped this turn's Pod. If the replica running it
+        // is gone, its lease is free: finish the switch from here so the
+        // turn does not wait on a stopped workspace.
+        if (
+          pod?.status?.phase !== "Running" &&
+          sandbox.metadata?.annotations?.[
+            AGENT_RUNTIME_TIER_SWITCH_ANNOTATION
+          ] === params.session.taskId
+        )
+          await this.takeOverTierSwitch(params.session, { wake: true }).catch(
+            (error) => {
+              // Observation continues; the next poll retries the takeover.
+              logger.warn(
+                { error, taskId: params.session.taskId },
+                "Could not finish an abandoned runtime tier switch",
+              );
+            },
+          );
         if (pod?.status?.phase === "Running" && pod.metadata?.name) {
           const result = await this.execInPod({
             session: params.session,
@@ -1551,6 +1549,7 @@ class AgentRuntimeManager {
       ? await this.waitForRunningPod({
           session,
           timeoutMessage: "The workspace was not running",
+          stop: lease.signal,
         })
       : null;
     // Every step re-checks the lease: recovery may take over a switch whose
@@ -1612,14 +1611,14 @@ class AgentRuntimeManager {
       }
       await applyTemplate(spec, tier, session.taskId);
       await lease.assertOwned();
-      await this.wakeAfterTierSwitch(session, sandboxName);
+      await this.wakeAfterTierSwitch(session, sandboxName, lease.signal);
       // Ended while the Pod started: stop the continuation it just began.
       if (!(await params.shouldResume())) await this.cancelTurnInPod(session);
     };
     try {
       await lease.assertOwned();
       await this.suspendWorkspace(session);
-      await this.waitForPodRemoval(session);
+      await this.waitForPodRemoval(session, lease.signal);
       await wake(
         withAgentRuntimeTier({
           podSpec,
@@ -1662,7 +1661,7 @@ class AgentRuntimeManager {
       // wait until the volume is free before the previous template comes back.
       await params.lease.assertOwned();
       await this.suspendWorkspace(params.session);
-      await this.waitForPodRemoval(params.session);
+      await this.waitForPodRemoval(params.session, params.lease.signal);
       await params.restore();
     } catch (error) {
       if (error instanceof ClusterLeaseLostError) return;
@@ -1679,6 +1678,52 @@ class AgentRuntimeManager {
         );
       });
     }
+  }
+
+  /**
+   * Finish a tier switch whose process is gone: name the turn in whichever
+   * template it left, and with `wake`, start the workspace and clear the
+   * mark. False while the switch still holds its lease (it wakes the
+   * workspace itself) or when there is no switch of this turn to finish.
+   */
+  private async takeOverTierSwitch(
+    session: AgentRunRecord,
+    options: { wake: boolean },
+  ): Promise<boolean> {
+    return McpDeploymentLeaseModel.withLease(
+      { scope: AGENT_RUNTIME_TIER_SWITCH_LEASE_SCOPE, key: session.id },
+      async () => {
+        const sandbox = await readWorkspaceSandbox({
+          api: this.requireClients().customObjectsApi,
+          namespace: session.runtimeScope,
+          name: session.workloadName,
+        });
+        const podSpec = sandbox.spec.podTemplate.spec;
+        if (
+          !podSpec ||
+          sandbox.metadata.annotations?.[
+            AGENT_RUNTIME_TIER_SWITCH_ANNOTATION
+          ] !== session.taskId
+        )
+          return false;
+        const sandboxName = sandbox.metadata.name ?? session.workloadName;
+        logger.info(
+          { taskId: session.taskId, workloadName: session.workloadName },
+          "Finishing a runtime tier switch whose process ended",
+        );
+        await this.patchSandbox(session, sandboxName, {
+          spec: {
+            podTemplate: { spec: withTurnResume(podSpec, session.taskId) },
+            ...(options.wake ? { operatingMode: "Running" } : {}),
+          },
+        });
+        if (options.wake) await this.clearTierSwitchMark(session, sandboxName);
+        return true;
+      },
+    ).catch((error) => {
+      if (error instanceof ClusterLeaseHeldError) return false;
+      throw error;
+    });
   }
 
   /** The turn's cancel marker, as `stopRun` writes it in a running Pod. */
@@ -1774,10 +1819,12 @@ class AgentRuntimeManager {
    */
   private async waitForPodRemoval(
     session: Pick<AgentRunRecord, "runtimeScope" | "workloadName">,
+    stop?: AbortSignal,
   ): Promise<void> {
     const clients = this.requireClients();
     const deadline = Date.now() + AGENT_RUNTIME_POD_REMOVAL_TIMEOUT_MS;
     while (Date.now() < deadline) {
+      stop?.throwIfAborted();
       const pods = await clients.coreApi.listNamespacedPod({
         namespace: session.runtimeScope,
         labelSelector: `${AGENT_RUNTIME_WORKSPACE_LABEL}=${session.workloadName}`,
@@ -1793,6 +1840,7 @@ class AgentRuntimeManager {
   private async wakeAfterTierSwitch(
     session: AgentRunRecord,
     sandboxName: string,
+    stop?: AbortSignal,
   ): Promise<void> {
     await this.patchSandbox(session, sandboxName, {
       spec: { operatingMode: "Running" },
@@ -1800,7 +1848,9 @@ class AgentRuntimeManager {
     const podName = await this.waitForRunningPod({
       session,
       timeoutMessage: "The workspace did not start on its new runtime tier",
+      stop,
     });
+    stop?.throwIfAborted();
     if (podName) await this.projectWarmCredentials(session, podName);
     await this.clearTierSwitchMark(session, sandboxName);
   }
@@ -2190,6 +2240,8 @@ done`
     session: AgentRunRecord;
     timeoutMessage: string;
     onProgress?: AgentRuntimeStartupProgressReporter;
+    /** Ends the wait early, rethrowing the signal's reason. */
+    stop?: AbortSignal;
   }): Promise<string | null> {
     // A claimed warm workspace can still need scheduling and an image pull.
     // Give it the same startup budget as a workspace created on demand.
@@ -2198,6 +2250,7 @@ done`
     let lastProgress: AgentRuntimeStartupProgress | null = null;
     let lastPod: k8s.V1Pod | null = null;
     while (Date.now() < deadline) {
+      params.stop?.throwIfAborted();
       const pod = await this.findPod(params.session);
       lastPod = pod;
       const phase = pod?.status?.phase;

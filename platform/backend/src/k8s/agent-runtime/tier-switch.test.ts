@@ -255,6 +255,61 @@ describe("switchWorkspaceTier", () => {
   }, 30_000);
 });
 
+describe("waitForCompletion", () => {
+  test("finishes a tier switch whose replica went away", async () => {
+    const cluster = fakeCluster();
+    cluster.sandbox.spec.operatingMode = "Suspended";
+    cluster.sandbox.metadata.annotations = {
+      [AGENT_RUNTIME_TIER_ANNOTATION]: "full",
+      [AGENT_RUNTIME_TIER_SWITCH_ANNOTATION]: TASK_ID,
+    };
+    cluster.pods.length = 0;
+    try {
+      const outcome = await manager.waitForCompletion({
+        session: SESSION,
+        pollIntervalMs: 20,
+        abortSignal: AbortSignal.timeout(500),
+      });
+      expect(outcome.outcome).toBe("aborted");
+      expect(cluster.sandbox.spec.operatingMode).toBe("Running");
+      expect(cluster.pods).toHaveLength(1);
+      expect(agentContainer(cluster.sandbox)?.env).toContainEqual({
+        name: "ARCHESTRA_AGENT_RUNTIME_RESUME_TURN",
+        value: TASK_ID,
+      });
+      expect(cluster.sandbox.metadata.annotations).toEqual({
+        [AGENT_RUNTIME_TIER_ANNOTATION]: "full",
+      });
+    } finally {
+      cluster.restore();
+    }
+  });
+
+  test("leaves a switch that still holds its lease alone", async () => {
+    const cluster = fakeCluster();
+    cluster.sandbox.spec.operatingMode = "Suspended";
+    cluster.sandbox.metadata.annotations = {
+      [AGENT_RUNTIME_TIER_SWITCH_ANNOTATION]: TASK_ID,
+    };
+    cluster.pods.length = 0;
+    try {
+      await McpDeploymentLeaseModel.withLease(
+        { scope: "agent-run-tier-switch", key: SESSION.id },
+        () =>
+          manager.waitForCompletion({
+            session: SESSION,
+            pollIntervalMs: 20,
+            abortSignal: AbortSignal.timeout(300),
+          }),
+      );
+      expect(cluster.sandbox.spec.operatingMode).toBe("Suspended");
+      expect(cluster.events).toEqual([]);
+    } finally {
+      cluster.restore();
+    }
+  });
+});
+
 describe("recoverRun", () => {
   test("leaves a Sandbox to a tier switch that is still running", async () => {
     const cluster = fakeCluster();

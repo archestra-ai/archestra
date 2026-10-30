@@ -1,9 +1,11 @@
 import {
+  AGENT_CATALOG_IDS,
   AGENT_CATALOG_IMAGE_REGISTRY,
   AGENT_CATALOG_NAMES,
   type AgentCatalogId,
   buildAgentCatalogRuntime,
   buildAgentCatalogSystemPrompt,
+  buildCustomAgentRuntime,
   getAgentCatalogImages,
   MESSAGING_CHANNEL_LABELS,
   orderedPopularAgentIds,
@@ -20,6 +22,7 @@ import {
 import Image from "next/image";
 import type { ReactNode } from "react";
 import type { AgentFormInitialValues } from "@/components/agent-form";
+import { AgentIcon } from "@/components/agent-icon";
 import { CATALOG_AGENT_ICONS } from "@/components/agent-icon.utils";
 import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
@@ -29,13 +32,18 @@ import { CATALOG_AGENT_MARKS } from "@/components/client-marks";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  useResolveRuntimeTemplate,
+  useRuntimeTemplateCatalog,
+} from "@/lib/agent-runtime-templates.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
 import { useOrganization } from "@/lib/organization.query";
 
 export interface AgentCatalogTemplate {
-  id: AgentCatalogId;
+  id: string;
+  customTemplateId?: string;
   name: string;
   description: string;
   /** What the catalog card says: how it runs and who pays for it. */
@@ -125,17 +133,61 @@ export function useAvailableAgentCatalogTemplates() {
     refetch,
   } = useOrganization(true, { fresh: true });
   const catalog = getAgentCatalogTemplates(images, appName);
+  const custom = useRuntimeTemplateCatalog();
+  const builtIns = orderedPopularAgentIds(
+    organization?.popularAgentOverrides ?? null,
+    AGENT_CATALOG_IDS,
+  ).flatMap((id) => catalog.filter((item) => item.id === id));
   const templates =
-    organization && !isError && !isFetching
-      ? orderedPopularAgentIds(
-          organization.popularAgentOverrides ?? null,
-          catalog.map((item) => item.id),
-        ).flatMap((id) => catalog.filter((item) => item.id === id))
+    organization &&
+    !isError &&
+    !custom.isError &&
+    !isFetching &&
+    !custom.isFetching
+      ? [
+          ...builtIns,
+          ...(custom.data ?? [])
+            .filter((item) => !item.hidden)
+            .map(
+              (item): AgentCatalogTemplate => ({
+                id: item.id,
+                customTemplateId: item.id,
+                name: item.name,
+                description: item.description,
+                summary:
+                  item.description ||
+                  "Run an agent from this custom runtime template.",
+                icon: item.icon,
+                initialValues: {
+                  name: item.name,
+                  description: item.description,
+                  icon: item.icon,
+                  accessAllTools: true,
+                  runtime: buildCustomAgentRuntime({ image: item.image }),
+                },
+              }),
+            ),
+        ].sort((a, b) => {
+          const position = (id: string) =>
+            custom.data?.find((item) => item.id === id)?.position ??
+            organization.popularAgentOverrides?.[id as AgentCatalogId]
+              ?.position ??
+            AGENT_CATALOG_IDS.indexOf(id as AgentCatalogId);
+          return position(a.id) - position(b.id);
+        })
       : [];
-  // Nothing to offer yet: the first read has not answered, or a fresh one is
-  // still on its way.
-  const isLoading = isFetching || (!organization && !isError);
-  return { templates, isError, isFetching, isLoading, refetch };
+  const isLoading =
+    isFetching ||
+    custom.isFetching ||
+    (!organization && !isError) ||
+    custom.isPending;
+  return {
+    templates,
+    isError: isError || custom.isError,
+    isFetching: isFetching || custom.isFetching,
+    isLoading,
+    refetch: () => Promise.all([refetch(), custom.refetch()]),
+  };
 }
 
 export function AgentCatalog({
@@ -158,6 +210,7 @@ export function AgentCatalog({
 }) {
   const { templates, isError, isLoading, refetch } =
     useAvailableAgentCatalogTemplates();
+  const resolver = useResolveRuntimeTemplate();
   const appName = useAppName();
   const appIconLogo = useAppIconLogo();
   return (
@@ -211,11 +264,32 @@ export function AgentCatalog({
             {templates.map((item) => (
               <CatalogSourceCard
                 key={item.id}
-                icon={<CatalogAgentIcon id={item.id} />}
+                icon={
+                  item.customTemplateId ? (
+                    <AgentIcon icon={item.icon} size={22} />
+                  ) : (
+                    <CatalogAgentIcon id={item.id as AgentCatalogId} />
+                  )
+                }
                 title={item.name}
                 description={item.summary}
-                onClick={() => onSelect(item)}
-                disabled={!canCreateAgent || !runtimeAvailable}
+                onClick={() => {
+                  if (item.customTemplateId)
+                    resolver.mutate(item.customTemplateId, {
+                      onSuccess: (template) =>
+                        onSelect({
+                          ...item,
+                          initialValues: {
+                            ...item.initialValues,
+                            runtime: template.runtime,
+                          },
+                        }),
+                    });
+                  else onSelect(item);
+                }}
+                disabled={
+                  !canCreateAgent || !runtimeAvailable || resolver.isPending
+                }
                 disabledReason={
                   canCreateAgent
                     ? "Requires the Agent Sandbox controller."
@@ -298,7 +372,7 @@ export function CatalogAgentIcon({
 }
 
 function template(params: {
-  id: AgentCatalogTemplate["id"];
+  id: AgentCatalogId;
   name: string;
   description: string;
   summary: string;

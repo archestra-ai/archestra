@@ -1,4 +1,8 @@
 export const RouteId = {
+  ListAgentRuntimeTemplates: "listAgentRuntimeTemplates",
+  GetAgentRuntimeTemplate: "getAgentRuntimeTemplate",
+  GetRuntimeTemplateSettings: "getRuntimeTemplateSettings",
+  SaveRuntimeTemplateSettings: "saveRuntimeTemplateSettings",
   AnnotateGuardrailsTool: "annotateGuardrailsTool",
   GetOpenAppaPolicyTests: "getOpenAppaPolicyTests",
   InspectOpenAppaPolicyTests: "inspectOpenAppaPolicyTests",

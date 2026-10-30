@@ -384,6 +384,7 @@ const InternalSelectOrganizationSchema = createSelectSchema(
   extendedFields,
 );
 export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
+  runtimeTemplateSettings: true,
   analyticsInstanceStartedAt: true,
   analyticsInstanceLastHeartbeatAt: true,
   // Preset feature removed; columns retained in DB (non-destructive) but no
@@ -400,6 +401,7 @@ export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
 ).omit({
+  runtimeTemplateSettings: true,
   // Preset feature removed; columns retained in DB (non-destructive) but no
   // longer accepted by the API, mirroring SelectOrganizationSchema.
   presetEntityName: true,

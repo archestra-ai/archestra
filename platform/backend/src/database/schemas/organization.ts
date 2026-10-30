@@ -30,6 +30,7 @@ import type {
   OrganizationChatLink,
   TrustedImageRegistries,
 } from "@/types";
+import type { RuntimeTemplateSettings } from "@/types/agent-runtime-template";
 import modelsTable from "./model";
 
 const organizationsTable = pgTable("organization", {
@@ -394,6 +395,11 @@ const organizationsTable = pgTable("organization", {
   knowledgeConnectorOverrides: jsonb(
     "knowledge_connector_overrides",
   ).$type<KnowledgeConnectorOverrides>(),
+
+  /** Private template configurations, served only through dedicated routes. */
+  runtimeTemplateSettings: jsonb(
+    "runtime_template_settings",
+  ).$type<RuntimeTemplateSettings>(),
 
   /** Controls template visibility on Create Agent; existing runtimes are unaffected. */
   popularAgentOverrides: jsonb(

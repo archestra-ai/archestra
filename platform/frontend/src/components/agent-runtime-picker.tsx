@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AGENT_CATALOG_IDS,
   type AgentCatalogId,
   E2eTestId,
   getAgentRuntimeAllowedProtocols,
@@ -34,11 +35,12 @@ import {
   radioCardClass,
 } from "@/components/ui/radio-group";
 
+import { useResolveRuntimeTemplate } from "@/lib/agent-runtime-templates.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils/tailwind";
 
-export type AgentRuntimeSelection = "chat" | "custom" | AgentCatalogId;
+export type AgentRuntimeSelection = string;
 
 export function AgentRuntimePicker({
   selectedId,
@@ -70,6 +72,7 @@ export function AgentRuntimePicker({
   const id = useId();
   const appName = useAppName();
   const runtimeEnabled = useFeature("agentRuntime");
+  const resolver = useResolveRuntimeTemplate();
   const { templates, isError, isFetching, refetch } =
     useAvailableAgentCatalogTemplates();
   const options: Array<{
@@ -163,7 +166,13 @@ export function AgentRuntimePicker({
           className="flex flex-wrap gap-2"
           onValueChange={(nextId) => {
             const option = options.find((item) => item.id === nextId);
-            if (option) onSelect(option.id, option.runtime);
+            if (!option || resolver.isPending) return;
+            const template = templates.find((item) => item.id === option.id);
+            if (template?.customTemplateId)
+              resolver.mutate(template.customTemplateId, {
+                onSuccess: (resolved) => onSelect(option.id, resolved.runtime),
+              });
+            else onSelect(option.id, option.runtime);
           }}
         >
           {options.map((option) => (
@@ -180,9 +189,10 @@ export function AgentRuntimePicker({
                 id={`${id}-option-${option.id}`}
                 value={option.id}
                 disabled={
-                  runtimeEnabled !== true &&
-                  option.id !== "chat" &&
-                  option.id !== selectedId
+                  resolver.isPending ||
+                  (runtimeEnabled !== true &&
+                    option.id !== "chat" &&
+                    option.id !== selectedId)
                 }
               />
               <span
@@ -324,8 +334,9 @@ function RuntimeOptionIcon({
   const appIconLogo = useAppIconLogo();
   if (id === "chat")
     return <PlatformAgentIcon appIconLogo={appIconLogo} size={size} />;
-  if (id === "custom") return <Code className="size-4" />;
-  return <CatalogAgentIcon id={id} size={size} />;
+  if (!AGENT_CATALOG_IDS.includes(id as AgentCatalogId))
+    return <Code className="size-4" />;
+  return <CatalogAgentIcon id={id as AgentCatalogId} size={size} />;
 }
 
 function defaultExpandedRows(id: AgentRuntimeSelection): string[] {

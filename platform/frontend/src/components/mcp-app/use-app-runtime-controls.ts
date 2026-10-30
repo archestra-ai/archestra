@@ -17,6 +17,7 @@ type ResourceState = "unknown" | "renderable" | "empty" | "error";
 export function useAppRuntimeControls(initialHtml?: string) {
   const [displayMode, setDisplayMode] = useState<McpUiDisplayMode>("inline");
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [isReloading, setIsReloading] = useState(false);
   const [resourceState, setResourceState] = useState<ResourceState>(() =>
     initialHtml === undefined
       ? "unknown"
@@ -29,14 +30,22 @@ export function useAppRuntimeControls(initialHtml?: string) {
     () => setDisplayMode((m) => (m === "fullscreen" ? "inline" : "fullscreen")),
     [],
   );
-  const reload = useCallback(() => setReloadNonce((n) => n + 1), []);
+  const reload = useCallback(() => {
+    setIsReloading(true);
+    setReloadNonce((n) => n + 1);
+  }, []);
+  const completeReload = useCallback(() => {
+    setIsReloading(false);
+  }, []);
 
   return {
     displayMode,
     setDisplayMode,
     toggleFullscreen,
     reloadNonce,
+    isReloading,
     reload,
+    completeReload,
     resourceState,
     setResourceState,
   };

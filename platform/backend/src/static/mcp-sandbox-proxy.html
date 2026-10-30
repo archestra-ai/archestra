@@ -220,7 +220,9 @@ function guestStateBootstrap(restored) {
   var RESTORE_WINDOW_MS = 8000;
   var TOGGLE_RPC_GATE_MAX_MS = 2500;
   // Matches SANDBOX_REVEAL_FALLBACK_MS in platform/frontend/src/components/mcp-app/mcp-app-view.tsx
-  var GUEST_READY_FALLBACK_MS = 900;
+  var GUEST_READY_FALLBACK_MS = 1200;
+  var MAX_GUEST_READY_RESTORE_RETRIES = 40;
+  var MAX_GUEST_READY_HYDRATION_RETRIES = 20;
   var MAX_RESTORE_ATTEMPTS_PER_CONTROL = 4;
 
   var DATA_KEY_ATTRS = [
@@ -304,10 +306,18 @@ function guestStateBootstrap(restored) {
   var toggleGateExpired = false;
   var guestReadySent = false;
   var guestReadyRetryCount = 0;
+  var restoredContentHeight =
+    restored &&
+    typeof restored.contentHeight === "number" &&
+    restored.contentHeight > 0
+      ? restored.contentHeight
+      : 0;
+  var currentContentHeight = restoredContentHeight;
   var lastSentJson = "";
   var syncTimer = null;
   var restoreTimer = null;
   var guestReadyTimer = null;
+  var guestReadyRafId = null;
 
   var localStore = {};
   if (
@@ -947,6 +957,26 @@ function guestStateBootstrap(restored) {
     currentControls = nextControls;
   }
 
+  function measureContentHeight() {
+    try {
+      var docEl = document.documentElement;
+      if (!docEl || !document.body) return 0;
+      var M = typeof Math !== "undefined" ? Math : window.Math;
+      var prevWidth = docEl.style.width;
+      var prevHeight = docEl.style.height;
+      docEl.style.width = "fit-content";
+      docEl.style.height = "max-content";
+      var rect = docEl.getBoundingClientRect();
+      docEl.style.width = prevWidth;
+      docEl.style.height = prevHeight;
+      return M && typeof M.ceil === "function"
+        ? M.ceil(rect.height)
+        : rect.height;
+    } catch (e) {
+      return 0;
+    }
+  }
+
   function postSync() {
     var payload = {
       controls: currentControls,
@@ -956,6 +986,9 @@ function guestStateBootstrap(restored) {
       urlSearch: currentUrlSearch,
       historyState: currentHistoryState,
     };
+    if (currentContentHeight > 0) {
+      payload.contentHeight = currentContentHeight;
+    }
     var serialized = "";
     try {
       serialized = JSON.stringify(payload);
@@ -979,6 +1012,12 @@ function guestStateBootstrap(restored) {
     if (isRestoringNow) return;
     captureUrlState();
     snapshotControls();
+    if (!hasPendingRestorations()) {
+      var measured = measureContentHeight();
+      if (measured > 0) {
+        currentContentHeight = measured;
+      }
+    }
     postSync();
   }
 
@@ -1120,7 +1159,7 @@ function guestStateBootstrap(restored) {
     }
   }
 
-  function runRestorePass() {
+  function runRestorePass(fromReadyCheck) {
     if (
       !hasRestoredControls ||
       userInteracted ||
@@ -1283,7 +1322,9 @@ function guestStateBootstrap(restored) {
     } finally {
       isRestoringNow = false;
       if (
+        !fromReadyCheck &&
         !guestReadySent &&
+        guestReadyRafId === null &&
         restoreReady &&
         (activeRpcCount === 0 || toggleGateExpired) &&
         !hasPendingRestorations()
@@ -1303,6 +1344,12 @@ function guestStateBootstrap(restored) {
     );
   }
 
+  function hasPendingHydration() {
+    if (userInteracted || restoredContentHeight <= 0) return false;
+    var currentH = measureContentHeight();
+    return currentH > 0 && currentH + 24 < restoredContentHeight;
+  }
+
   function notifyGuestReady() {
     if (guestReadySent) return;
     guestReadySent = true;
@@ -1310,9 +1357,24 @@ function guestStateBootstrap(restored) {
       clearTimeout(guestReadyTimer);
       guestReadyTimer = null;
     }
+    if (
+      guestReadyRafId !== null &&
+      typeof window.cancelAnimationFrame === "function"
+    ) {
+      try {
+        window.cancelAnimationFrame(guestReadyRafId);
+      } catch (e) {}
+      guestReadyRafId = null;
+    }
     try {
       if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: "mcp-apps:guest-ready" }, "*");
+        var readyMsg = { type: "mcp-apps:guest-ready" };
+        var measured = measureContentHeight();
+        if (measured > 0) {
+          currentContentHeight = measured;
+          readyMsg.height = measured;
+        }
+        window.parent.postMessage(readyMsg, "*");
       }
     } catch (e) {}
   }
@@ -1320,6 +1382,15 @@ function guestStateBootstrap(restored) {
   function scheduleGuestReady(delayMs) {
     if (guestReadySent) return;
     if (guestReadyTimer) clearTimeout(guestReadyTimer);
+    if (
+      guestReadyRafId !== null &&
+      typeof window.cancelAnimationFrame === "function"
+    ) {
+      try {
+        window.cancelAnimationFrame(guestReadyRafId);
+      } catch (e) {}
+      guestReadyRafId = null;
+    }
     guestReadyTimer = setTimeout(
       function () {
         guestReadyTimer = null;
@@ -1330,11 +1401,44 @@ function guestStateBootstrap(restored) {
           restorationActive &&
           restoreReady
         ) {
-          runRestorePass();
+          runRestorePass(true);
         }
-        if (hasPendingRestorations() && guestReadyRetryCount < 8) {
+        if (
+          hasPendingRestorations() &&
+          guestReadyRetryCount < MAX_GUEST_READY_RESTORE_RETRIES
+        ) {
           guestReadyRetryCount++;
           scheduleGuestReady(30);
+          return;
+        }
+        if (
+          hasPendingHydration() &&
+          guestReadyRetryCount < MAX_GUEST_READY_HYDRATION_RETRIES
+        ) {
+          guestReadyRetryCount++;
+          scheduleGuestReady(30);
+          return;
+        }
+        var currentH = measureContentHeight();
+        if (
+          currentH > 0 &&
+          typeof window.requestAnimationFrame === "function"
+        ) {
+          guestReadyRafId = window.requestAnimationFrame(function () {
+            guestReadyRafId = window.requestAnimationFrame(function () {
+              guestReadyRafId = null;
+              if (activeRpcCount > 0 && !toggleGateExpired) return;
+              if (
+                hasRestoredControls &&
+                !userInteracted &&
+                restorationActive &&
+                restoreReady
+              ) {
+                runRestorePass(true);
+              }
+              notifyGuestReady();
+            });
+          });
           return;
         }
         notifyGuestReady();
@@ -1497,6 +1601,16 @@ function guestStateBootstrap(restored) {
         runRestorePass();
         scheduleRestore();
       }
+      if (
+        !guestReadySent &&
+        guestReadyRafId === null &&
+        restoreReady &&
+        (activeRpcCount === 0 || toggleGateExpired) &&
+        !hasPendingRestorations() &&
+        !hasPendingHydration()
+      ) {
+        scheduleGuestReady(24);
+      }
       if (userInteracted || !hasRestoredControls || !restorationActive) {
         scheduleMutationCapture();
       }
@@ -1544,12 +1658,22 @@ function guestStateBootstrap(restored) {
         }
       }, 250);
       setTimeout(function () {
+        if (activeRpcCount === 0 && !hasPendingRestorations()) {
+          restoreReady = true;
+          if (hasRestoredControls) {
+            runRestoreMicrotask();
+          }
+          notifyGuestReady();
+        }
+      }, GUEST_READY_FALLBACK_MS);
+      setTimeout(function () {
+        toggleGateExpired = true;
         restoreReady = true;
-        if (hasRestoredControls) {
+        if (hasRestoredControls && !userInteracted && restorationActive) {
           runRestoreMicrotask();
         }
         notifyGuestReady();
-      }, GUEST_READY_FALLBACK_MS);
+      }, TOGGLE_RPC_GATE_MAX_MS);
     }
     if (hasRestoredControls) {
       setTimeout(function () {

@@ -48,7 +48,7 @@ GRAFANA_URL=https://grafana.example.com GRAFANA_TOKEN=glsa_xxx \
 
 <span id="exemplars"></span>
 
-The installer is idempotent and upserts every dashboard into the `Archestra` folder (`archestra-dashboards`) using stable UIDs—including `archestra-genai-observability` for **LLM Proxy**, `archestra-application-metrics` for **Platform Health**, and `archestra-agent-sessions` for **Session Investigation**—so existing links and alert rules stay intact. For external databases on **Platform Health**, pass `--postgres-provider otel` (or `cloudsql`, `azure`; defaults to `helm` for the Bitnami `postgres_exporter` sidecar). To link upstream latency spikes on **LLM Proxy** and **MCP Monitoring** to Tempo traces, enable Prometheus exemplars with `--enable-feature=exemplar-storage`.
+The installer is idempotent and upserts every dashboard into the `Archestra` folder (`archestra-dashboards`) using stable UIDs—including `archestra-genai-observability` for **LLM Proxy**, `archestra-application-metrics` for **Platform Health**, and `archestra-agent-sessions` for **Session Investigation**—so existing dashboard links stay intact. For external databases on **Platform Health**, pass `--postgres-provider otel` (or `cloudsql`, `azure`; defaults to `helm` for the Bitnami `postgres_exporter` sidecar). To link upstream latency spikes on **LLM Proxy** and **MCP Monitoring** to Tempo traces, enable Prometheus exemplars with `--enable-feature=exemplar-storage`.
 
 To preselect data sources during import, pass their Grafana UIDs:
 

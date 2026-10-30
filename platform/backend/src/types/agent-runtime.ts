@@ -331,6 +331,11 @@ export const SelectAgentRunListItemSchema = SelectAgentRunSchema.extend({
 /** A user's durable run session as rendered in Chat and its sidebar. */
 export const SelectAgentRunSessionSchema = SelectAgentRunSchema.extend({
   sessionId: z.string().uuid(),
+  llmSessionId: z
+    .string()
+    .describe(
+      "Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends",
+    ),
   prompt: z.string(),
   agent: z.object({
     id: z.string().uuid(),

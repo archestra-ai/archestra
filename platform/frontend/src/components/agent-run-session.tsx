@@ -352,9 +352,9 @@ export function AgentRunChatSession({
                     <span>View Agent</span>
                   </Link>
                 </DropdownMenuItem>
-                {canReadLogs && run.sessionId ? (
+                {canReadLogs && run.llmSessionId ? (
                   <DropdownMenuItem asChild>
-                    <Link href={llmSessionHref(run.sessionId)}>
+                    <Link href={llmSessionHref(run.llmSessionId)}>
                       <Activity className="size-4" />
                       <span>View trace</span>
                     </Link>

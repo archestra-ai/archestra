@@ -1,4 +1,11 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  isSpecCompliantSkillCompatibility,
+  isSpecCompliantSkillDescription,
+  isSpecCompliantSkillName,
+  MAX_SKILL_COMPATIBILITY_LENGTH,
+  MAX_SKILL_DESCRIPTION_LENGTH,
+} from "@archestra/shared";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 
 type Skill = archestraApiTypes.GetSkillResponses["200"];
@@ -86,13 +93,19 @@ export async function buildChatgptPlugin({
       omitted.push(skill.name);
       continue;
     }
-    if (
-      !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill.name) ||
-      skill.name.length > 64 ||
-      names.has(skill.name)
-    ) {
+    if (!isSpecCompliantSkillName(skill.name) || names.has(skill.name)) {
       throw new Error(
         `Skill names must be unique portable names: ${skill.name}`,
+      );
+    }
+    if (!isSpecCompliantSkillDescription(skill.description)) {
+      throw new Error(
+        `Skill ${skill.name}: description must contain 1–${MAX_SKILL_DESCRIPTION_LENGTH} characters. Update the skill before downloading.`,
+      );
+    }
+    if (!isSpecCompliantSkillCompatibility(skill.compatibility)) {
+      throw new Error(
+        `Skill ${skill.name}: compatibility must contain at most ${MAX_SKILL_COMPATIBILITY_LENGTH} characters. Update the skill before downloading.`,
       );
     }
     names.add(skill.name);

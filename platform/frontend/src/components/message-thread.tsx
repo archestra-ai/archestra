@@ -8,8 +8,15 @@ import {
   type PartialUIMessage,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
-import { Check, Paperclip, RefreshCcwIcon, TriangleAlert } from "lucide-react";
-import { Fragment, useMemo } from "react";
+import {
+  Check,
+  FileAudio,
+  ImageOff,
+  Paperclip,
+  RefreshCcwIcon,
+  TriangleAlert,
+} from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -36,6 +43,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { AttachmentAudio } from "@/components/chat/attachment-content";
 import {
   isBlankReasoningPart,
   stripAssistantProtocolMarkers,
@@ -48,6 +56,10 @@ import {
 import { MessageActions } from "@/components/chat/message-actions";
 import { UserMessageText } from "@/components/chat/user-message-text";
 import Divider from "@/components/divider";
+import {
+  type EmbeddingPartData,
+  EmbeddingVectors,
+} from "@/components/embedding-vectors";
 import { Button } from "@/components/ui/button";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -281,38 +293,19 @@ const MessageThread = ({
                             );
                           }
                           case "file": {
-                            const filePart = part as {
-                              type: "file";
-                              url: string;
-                              mediaType: string;
-                              filename?: string;
-                            };
-                            if (filePart.mediaType?.startsWith("image/")) {
-                              return (
-                                <div
-                                  key={partKey}
-                                  className="py-1 flex justify-start"
-                                >
-                                  <img
-                                    src={filePart.url}
-                                    alt={filePart.filename || "Image"}
-                                    className="max-h-32 rounded-lg object-cover"
-                                  />
-                                </div>
-                              );
-                            }
                             return (
-                              <div
+                              <LoggedFilePart
                                 key={partKey}
-                                className="py-1 flex justify-start"
-                              >
-                                <div className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2">
-                                  <Paperclip className="size-4 text-muted-foreground" />
-                                  <span className="truncate">
-                                    {filePart.filename || "Attached file"}
-                                  </span>
-                                </div>
-                              </div>
+                                part={
+                                  part as {
+                                    url: string;
+                                    mediaType: string;
+                                    filename?: string;
+                                  }
+                                }
+                                fromUser={message.role === "user"}
+                                conversationId={conversationId}
+                              />
                             );
                           }
                           case "tool-invocation":
@@ -449,6 +442,28 @@ const MessageThread = ({
                               </Reasoning>
                             );
                           default: {
+                            if (part.type === "data-embedding") {
+                              return (
+                                <div key={partKey} className="py-1">
+                                  <EmbeddingVectors
+                                    data={
+                                      (part as { data: EmbeddingPartData }).data
+                                    }
+                                  />
+                                </div>
+                              );
+                            }
+                            if (part.type === "data-missing-media") {
+                              return (
+                                <MissingMedia
+                                  key={partKey}
+                                  media={
+                                    (part as { data: MissingMediaData }).data
+                                  }
+                                  fromUser={message.role === "user"}
+                                />
+                              );
+                            }
                             // Handle custom blocked-tool type
                             if (_isBlockedToolPart(part)) {
                               const blockedPart = part as BlockedToolPart;
@@ -727,4 +742,117 @@ function isCancelledToolOutput(output: unknown): boolean {
 
 function isPendingToolState(state: string | undefined): boolean {
   return state === "input-available" || state === "input-streaming";
+}
+
+// ============================================================================
+// Logged media
+// ============================================================================
+
+type MissingMediaData = {
+  kind: "audio" | "image";
+  label: string;
+  reason: string;
+};
+
+/**
+ * A file a logged call carried: an image shown inline, audio in the chat's
+ * player, anything else as a named chip. The caption (format, size, length)
+ * is one grey line under the media. A user's media sits on their side.
+ */
+function LoggedFilePart({
+  part,
+  fromUser,
+  conversationId,
+}: {
+  part: { url: string; mediaType: string; filename?: string };
+  fromUser: boolean;
+  conversationId: string | undefined;
+}) {
+  const isImage = part.mediaType?.startsWith("image/");
+  const isAudio = part.mediaType?.startsWith("audio/");
+  if (!isImage && !isAudio) {
+    return (
+      <div
+        className={cn("flex py-1", fromUser ? "justify-end" : "justify-start")}
+      >
+        <div className="flex items-center gap-2 rounded-lg border bg-muted/50 p-2 text-sm">
+          <Paperclip className="size-4 text-muted-foreground" />
+          <span className="truncate">{part.filename || "Attached file"}</span>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <figure
+      className={cn(
+        "flex flex-col gap-1.5 py-1",
+        fromUser ? "items-end" : "items-start",
+      )}
+    >
+      {isImage ? (
+        <LoggedImage url={part.url} alt={part.filename || "Image"} />
+      ) : (
+        <AttachmentAudio
+          url={part.url}
+          conversationId={conversationId}
+          label={part.filename || "Audio"}
+        />
+      )}
+      {part.filename ? (
+        <figcaption className="text-xs text-muted-foreground tabular-nums">
+          {part.filename}
+        </figcaption>
+      ) : null}
+    </figure>
+  );
+}
+
+/** An image, or a note when its link no longer loads (provider links expire). */
+function LoggedImage({ url, alt }: { url: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <MissingMedia
+        media={{
+          kind: "image",
+          label: alt,
+          reason: "The provider's link to this image no longer loads",
+        }}
+        fromUser={false}
+      />
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt={alt}
+      onError={() => setFailed(true)}
+      className="max-h-64 max-w-full rounded-lg border object-contain"
+    />
+  );
+}
+
+/** Media the call carried that the log did not keep, named, with the reason. */
+function MissingMedia({
+  media,
+  fromUser,
+}: {
+  media: MissingMediaData;
+  fromUser: boolean;
+}) {
+  const Icon = media.kind === "audio" ? FileAudio : ImageOff;
+  return (
+    <div
+      className={cn("flex py-1", fromUser ? "justify-end" : "justify-start")}
+    >
+      <div className="flex max-w-full items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+        <Icon
+          aria-hidden="true"
+          className="size-4 shrink-0 text-muted-foreground"
+        />
+        <span className="truncate font-medium tabular-nums">{media.label}</span>
+        <span className="truncate text-muted-foreground">{media.reason}</span>
+      </div>
+    </div>
+  );
 }

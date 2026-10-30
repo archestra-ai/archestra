@@ -49,7 +49,7 @@ describe("OpenAiChatCompletionInteraction", () => {
     );
   });
 
-  it("shows a spoken reply by its transcript", () => {
+  it("plays a spoken reply and shows its transcript", () => {
     // gpt-audio answers with `content: null` and the speech under `audio`.
     const interaction = new OpenAiChatCompletionInteraction({
       type: "openai:chatCompletions",
@@ -89,8 +89,14 @@ describe("OpenAiChatCompletionInteraction", () => {
     const messages = interaction.mapToUiMessages();
     expect(messages.at(-1)).toMatchObject({
       role: "assistant",
-      parts: [{ type: "text", text: "Hello there from Archestra!" }],
+      parts: [
+        {
+          type: "file",
+          mediaType: "audio/wav",
+          url: "data:audio/wav;base64,UklGRiQAAABXQVZF",
+        },
+        { type: "text", text: "Hello there from Archestra!" },
+      ],
     });
-    expect(JSON.stringify(messages)).not.toContain("UklGR");
   });
 });

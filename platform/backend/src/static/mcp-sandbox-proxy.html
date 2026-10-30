@@ -1159,7 +1159,7 @@ function guestStateBootstrap(restored) {
     }
   }
 
-  function runRestorePass() {
+  function runRestorePass(fromReadyCheck) {
     if (
       !hasRestoredControls ||
       userInteracted ||
@@ -1322,7 +1322,9 @@ function guestStateBootstrap(restored) {
     } finally {
       isRestoringNow = false;
       if (
+        !fromReadyCheck &&
         !guestReadySent &&
+        guestReadyRafId === null &&
         restoreReady &&
         (activeRpcCount === 0 || toggleGateExpired) &&
         !hasPendingRestorations()
@@ -1399,7 +1401,7 @@ function guestStateBootstrap(restored) {
           restorationActive &&
           restoreReady
         ) {
-          runRestorePass();
+          runRestorePass(true);
         }
         if (
           hasPendingRestorations() &&
@@ -1432,7 +1434,7 @@ function guestStateBootstrap(restored) {
                 restorationActive &&
                 restoreReady
               ) {
-                runRestorePass();
+                runRestorePass(true);
               }
               notifyGuestReady();
             });
@@ -1601,6 +1603,7 @@ function guestStateBootstrap(restored) {
       }
       if (
         !guestReadySent &&
+        guestReadyRafId === null &&
         restoreReady &&
         (activeRpcCount === 0 || toggleGateExpired) &&
         !hasPendingRestorations() &&

@@ -1379,7 +1379,6 @@ function SandboxIframe({
               setError(null);
               setConnectedBridge(appBridge);
               onConnectedRef.current?.();
-              scheduleRevealFallback();
             }
           })
           .catch((err) => {

@@ -41,6 +41,12 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import {
+  getArchestraToolArgsSchema,
+  getArchestraToolInputSchema,
+} from "@/archestra-mcp-server";
+import { repairEnvelopedToolArgs } from "@/archestra-mcp-server/run-tool";
+import { repairStringifiedToolCallArgs } from "@/archestra-mcp-server/tool-args-repair";
 import { assertNotAutoOnNativeRoute } from "@/auto-routing/router";
 import { a2aOAuthExecutionReference } from "@/clients/a2a-oauth-execution";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
@@ -3122,13 +3128,14 @@ async function handleStreaming<
     let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
 
     if (toolCalls.length > 0) {
-      rewrittenToolCalls = planDispatchRewrites({
+      const planned = planDispatchRewrites({
         supported: streamAdapter.formatToolCallsSSE !== undefined,
         toolCalls,
         enabledToolNames,
         toolIdentity,
         providerName,
       });
+      rewrittenToolCalls = planned.client;
 
       logger.info(
         {
@@ -3141,7 +3148,7 @@ async function handleStreaming<
       const policyOutcome = await evaluateProxyPluginToolCalls(
         ctx.pluginRegistry,
         ctx.pluginContext,
-        rewrittenToolCalls ?? toolCalls,
+        planned.policy,
         streamAdapter.formatToolCallsSSE !== undefined,
         streamAdapter.supportsToolCallReview === true &&
           typeof streamAdapter.formatToolCallsSSE === "function",
@@ -3920,18 +3927,19 @@ async function handleNonStreaming<
       // The namespace the model called the tool in, on a wire that has them.
       ...(toolCall.namespace ? { namespace: toolCall.namespace } : {}),
     }));
-    rewrittenToolCalls = planDispatchRewrites({
+    const planned = planDispatchRewrites({
       supported: responseAdapter.withRewrittenToolCalls !== undefined,
       toolCalls: emittedToolCalls,
       enabledToolNames,
       toolIdentity,
       providerName,
     });
+    rewrittenToolCalls = planned.client;
 
     const policyOutcome = await evaluateProxyPluginToolCalls(
       ctx.pluginRegistry,
       ctx.pluginContext,
-      rewrittenToolCalls ?? emittedToolCalls,
+      planned.policy,
       responseAdapter.withRewrittenToolCalls !== undefined,
       responseAdapter.supportsToolCallReview === true &&
         typeof responseAdapter.withRewrittenToolCalls === "function",
@@ -4546,12 +4554,15 @@ async function holdProxyPluginHostedToolCalls(
 
 /**
  * Plan the dispatch-mode repair for one turn's tool calls, and record it when
- * there is one. Shared by the streaming and non-streaming paths so the two
+ * there is one, then apply the argument repairs a built-in would apply at
+ * execution (`run_tool`'s envelope unwrap, then the JSON-text reparse). Shared by the streaming and non-streaming paths so the two
  * surfaces stay in step.
  *
  * `supported` is the adapter's ability to re-emit the rewritten calls in its
- * own wire format; without it the repair could never reach the client, so that
- * provider keeps the pre-existing refusal-with-steer behavior.
+ * own wire format. Without it `client` is null: the dispatch repair is skipped,
+ * so that provider keeps the pre-existing refusal-with-steer behavior, and the
+ * client runs the calls as written while the plugins rule on the reparsed
+ * arguments the executor derives from them.
  */
 function planDispatchRewrites(params: {
   supported: boolean;
@@ -4562,16 +4573,14 @@ function planDispatchRewrites(params: {
     "canonicalize" | "spellingOf" | "attestationOf"
   >;
   providerName: string;
-}): AccumulatedToolCall[] | null {
-  if (!params.supported) {
-    return null;
-  }
-
-  const rewritten = planDispatchModeToolCallRewrites({
-    toolCalls: params.toolCalls,
-    enabledToolNames: params.enabledToolNames,
-    toolIdentity: params.toolIdentity,
-  });
+}): { policy: AccumulatedToolCall[]; client: AccumulatedToolCall[] | null } {
+  const rewritten = params.supported
+    ? planDispatchModeToolCallRewrites({
+        toolCalls: params.toolCalls,
+        enabledToolNames: params.enabledToolNames,
+        toolIdentity: params.toolIdentity,
+      })
+    : null;
 
   if (rewritten) {
     logger.info(
@@ -4582,7 +4591,22 @@ function planDispatchRewrites(params: {
       "Re-addressing direct tool calls through run_tool (dispatch mode)",
     );
   }
-  return rewritten;
+  const repaired = repairStringifiedToolCallArgs(
+    rewritten ?? params.toolCalls,
+    {
+      canonicalize: params.toolIdentity.canonicalize,
+      argsSchemaOf: getArchestraToolArgsSchema,
+      unwrapEnvelopes: (toolName, toolArgs) =>
+        repairEnvelopedToolArgs({
+          toolArgs,
+          schema: getArchestraToolInputSchema(toolName),
+        }).toolArgs,
+    },
+  );
+  return {
+    policy: repaired ?? rewritten ?? params.toolCalls,
+    client: params.supported ? (repaired ?? rewritten) : null,
+  };
 }
 
 /**

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import JSZip from "jszip";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { makeSkillDetail } from "@/mocks/data/skills";
 import { buildChatgptPlugin } from "./chatgpt-plugin";
 
@@ -10,6 +10,26 @@ const params = {
 };
 
 describe("ChatGPT plugin archive", () => {
+  it("downloads from an HTTP dashboard without browser Web Crypto", async () => {
+    const expected = await buildChatgptPlugin({ ...params, skills: [] });
+    const cryptoDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "crypto",
+    );
+    try {
+      vi.stubGlobal("crypto", undefined);
+      const result = await buildChatgptPlugin({ ...params, skills: [] });
+      expect(result.filename).toBe(expected.filename);
+      expect(
+        (await JSZip.loadAsync(result.bytes)).file("mcp.json"),
+      ).not.toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+      if (cryptoDescriptor)
+        Object.defineProperty(globalThis, "crypto", cryptoDescriptor);
+    }
+  });
+
   it("packages OAuth MCP and complete portable skill files without account metadata", async () => {
     const skill = makeSkillDetail("example-skill");
     skill.files.push({

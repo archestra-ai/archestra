@@ -13,13 +13,15 @@ export async function buildChatgptPlugin({
   skills: Skill[];
 }) {
   validateChatgptGatewayUrl(gatewayUrl);
-  const { default: JSZip } = await import("jszip");
+  const [{ default: JSZip }, { Sha256 }] = await Promise.all([
+    import("jszip"),
+    import("@aws-crypto/sha256-js"),
+  ]);
   const zip = new JSZip();
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(new URL(gatewayUrl).href),
-  );
-  const endpointId = [...new Uint8Array(digest)]
+  // The dashboard can run on HTTP even when the MCP gateway uses HTTPS.
+  const hash = new Sha256();
+  hash.update(new URL(gatewayUrl).href);
+  const endpointId = [...(await hash.digest())]
     .slice(0, 6)
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");

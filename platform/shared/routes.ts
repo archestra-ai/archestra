@@ -602,6 +602,8 @@ export const RouteId = {
   DownloadAgentWorkspaceTransfer: "downloadAgentWorkspaceTransfer",
   UploadAgentWorkspaceTransfer: "uploadAgentWorkspaceTransfer",
   DeleteAgentRun: "deleteAgentRun",
+  BulkDeleteAgentRuns: "bulkDeleteAgentRuns",
+  BulkCancelAgentRuns: "bulkCancelAgentRuns",
 
   // Saved browser login routes (Playwright)
   GetBrowserStorageStates: "getBrowserStorageStates",

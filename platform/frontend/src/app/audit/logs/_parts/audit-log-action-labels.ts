@@ -37,6 +37,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "agentRun.canceled": "Agent run canceled",
   "agentRun.updated": "Agent run renamed",
   "agentRun.deleted": "Agent run deleted",
+  "agentRun.bulk_canceled": "Agent runs bulk canceled",
+  "agentRun.bulk_deleted": "Agent runs bulk deleted",
   "agentRun.reviewDecided": "OpenAPPA review decided",
   "agentRun.shared": "Agent run shared",
   "agentRun.unshared": "Agent run unshared",

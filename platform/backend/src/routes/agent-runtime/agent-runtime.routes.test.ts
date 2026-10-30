@@ -1208,6 +1208,134 @@ describe("Agent Runtime routes", () => {
     );
   });
 
+  test("bulk stop and delete act only on the caller's runs in the right state and audit each batch", async ({
+    makeAdmin,
+    makeMember,
+  }) => {
+    const finished = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Finished review",
+    });
+    await AgentRunModel.close({ id: finished.id });
+    const active = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: user.id,
+      title: "Active review",
+    });
+    const colleague = await makeAdmin();
+    await makeMember(colleague.id, organizationId, { role: "admin" });
+    const colleagueRun = await createRun({
+      taskId: (await createTask(agent.id)).id,
+      actorUserId: colleague.id,
+      title: "Colleague review",
+    });
+    await AgentRunModel.close({ id: colleagueRun.id });
+    vi.mocked(cancelDetachedAgentTask).mockImplementation(
+      async ({ taskId }) => {
+        await db
+          .update(schema.a2aTasksTable)
+          .set({ state: "TASK_STATE_CANCELED" })
+          .where(eq(schema.a2aTasksTable.id, taskId));
+        return {
+          id: taskId,
+          contextId: "context",
+          status: { state: "TASK_STATE_CANCELED" },
+        };
+      },
+    );
+
+    const stopped = await app.inject({
+      method: "POST",
+      url: "/api/agent-runs/bulk-cancel",
+      payload: { ids: [active.taskId, finished.taskId] },
+    });
+    expect(stopped.statusCode).toBe(200);
+    expect(stopped.json()).toEqual({
+      succeeded: [{ id: active.taskId, name: "Active review" }],
+      failed: [
+        {
+          id: finished.taskId,
+          name: "Finished review",
+          error: "The run has already ended",
+        },
+      ],
+    });
+    expect(cancelDetachedAgentTask).toHaveBeenCalledTimes(1);
+    expect(cancelDetachedAgentTask).toHaveBeenCalledWith({
+      actor: { id: user.id, kind: "user", organizationId },
+      agentId: agent.id,
+      taskId: active.taskId,
+    });
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: "/api/agent-runs/bulk",
+      payload: {
+        ids: [finished.taskId, active.taskId, colleagueRun.taskId, "nope"],
+      },
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json()).toEqual({
+      succeeded: [{ id: finished.taskId, name: "Finished review" }],
+      failed: [
+        {
+          id: active.taskId,
+          name: "Active review",
+          error: "Stop the run before deleting it",
+        },
+        { id: colleagueRun.taskId, name: null, error: "Run not found" },
+        { id: "nope", name: null, error: "Run not found" },
+      ],
+    });
+    expect(await A2ATaskModel.findById(finished.taskId)).toBeNull();
+    expect(await A2ATaskModel.findById(colleagueRun.taskId)).not.toBeNull();
+
+    const audits = await db
+      .select({
+        action: schema.auditLogsTable.action,
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.resourceType, "agentRun"));
+    const runEntry = (run: typeof finished, state: string) => ({
+      taskId: run.taskId,
+      agentId: agent.id,
+      title: run.title,
+      state,
+    });
+    expect(audits).toEqual(
+      expect.arrayContaining([
+        {
+          action: "agentRun.bulk_canceled",
+          before: {
+            runs: [
+              runEntry(active, "TASK_STATE_SUBMITTED"),
+              runEntry(finished, "TASK_STATE_SUBMITTED"),
+            ].sort((a, b) => a.taskId.localeCompare(b.taskId)),
+          },
+          after: {
+            runs: [
+              runEntry(active, "TASK_STATE_CANCELED"),
+              runEntry(finished, "TASK_STATE_SUBMITTED"),
+            ].sort((a, b) => a.taskId.localeCompare(b.taskId)),
+          },
+        },
+        {
+          action: "agentRun.bulk_deleted",
+          before: {
+            runs: [
+              runEntry(active, "TASK_STATE_CANCELED"),
+              runEntry(finished, "TASK_STATE_SUBMITTED"),
+            ].sort((a, b) => a.taskId.localeCompare(b.taskId)),
+          },
+          after: { runs: [runEntry(active, "TASK_STATE_CANCELED")] },
+        },
+      ]),
+    );
+  });
+
   test("preflight distinguishes missing personal credentials from missing shared configuration", async () => {
     const response = await app.inject({
       method: "GET",

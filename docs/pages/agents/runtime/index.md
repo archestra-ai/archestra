@@ -81,8 +81,10 @@ What to know:
 Select the agent in Chat or in a [Project](/docs/chat/projects) and send a task. This starts a **run**: a container that works on your task. Follow-ups continue the same run. The live terminal opens and shows startup progress. Attach files before you send, and the agent reads them in its container.
 
 - **Leave and come back:** the run keeps working. Reopen it from the sidebar and send a follow-up.
-- **Past runs:** the agent's **Runs** tab lists live and finished runs. Select the **Open full view** expand icon for the larger terminal and run controls. For a retained run you started, select **Resume** to reopen it without sending a message.
-- **Stop a run:** the person who started it can select **Stop** in Chat or on the agent's **Runs** tab. Confirm with **Stop run**. Saved files and history remain available.
+- **Past runs:** the agent's **Runs** tab lists live and finished runs. Select a run to open it, then select the **Open full view** expand icon for the larger terminal and run controls. For a retained run you started, select **Resume** to reopen it without sending a message.
+- **Stop a run:** the person who started it can select **Stop** in Chat or in the open run. Confirm with **Stop run**. Saved files and history remain available.
+- **Delete a run:** after it ends, the person who started it can select **More run actions → Delete run**. Deleting removes its history and output, and you cannot undo it.
+- **Several runs at once:** on the **Runs** tab, tick the runs you started, then select **Stop** or **Delete**. **Stop** applies to the live runs and **Delete** to the finished ones.
 - **Copy text:** select **Select text** to copy text with the browser. Select **Type** to use the running app's controls again.
 - **Follow-ups** reach the agent between its turns. To type them into its terminal instead, set **Steering** to **Terminal input** on the **Agent Runtime** tab.
 - **Open a web app:** for a run you started, select **Open full view**, then **More run actions → View connection details** for the agent's port forwarding command.

@@ -25,6 +25,12 @@ import {
   ProjectModel,
 } from "@/models";
 import ResourcePermissionAccessModel from "@/models/resource-permission-access";
+import {
+  BulkDeleteBodySchema,
+  BulkIdsSchema,
+  BulkOutcomeSchema,
+  runBulk,
+} from "@/routes/bulk-route";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
 import {
   isAnyAgentRuntimeBackendDriverEnabled,
@@ -1032,6 +1038,93 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.delete(
+    "/api/agent-runs/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteAgentRuns,
+        description:
+          "Delete several finished Agent Runtime sessions started by this " +
+          "user. A run that is still active, or that this user did not " +
+          "start, is reported in `failed` and leaves the rest of the batch " +
+          "applied.",
+        tags: ["Agents"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "agent runs bulk delete",
+        notFoundMessage: "Run not found",
+        unexpectedMessage: "Could not delete this run",
+        load: (ids) => loadOwnedRuns(request, ids),
+        describe: (run) => run.title,
+        // The same refusal the single-run delete gives.
+        authorize: (run) => {
+          if (!run.endedAt) {
+            throw new ApiError(409, "Stop the run before deleting it");
+          }
+        },
+        applyEach: async (run) => {
+          await A2ATaskModel.delete(run.taskId);
+        },
+        audit: {
+          target: request,
+          snapshot: (ids) => snapshotOwnedRuns(request, ids),
+        },
+      });
+      return reply.send(outcome);
+    },
+  );
+
+  fastify.post(
+    "/api/agent-runs/bulk-cancel",
+    {
+      schema: {
+        operationId: RouteId.BulkCancelAgentRuns,
+        description:
+          "Cancel several active Agent Runtime sessions started by this " +
+          "user. A run that has already ended, or that this user did not " +
+          "start, is reported in `failed` and leaves the rest of the batch " +
+          "applied.",
+        tags: ["Agents"],
+        body: z.object({ ids: BulkIdsSchema }),
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const actor = {
+        ...actorFromUserId(request.user.id),
+        organizationId: request.organizationId,
+      };
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "agent runs bulk cancel",
+        notFoundMessage: "Run not found",
+        unexpectedMessage: "Could not stop this run",
+        load: (ids) => loadOwnedRuns(request, ids),
+        describe: (run) => run.title,
+        authorize: (run) => {
+          if (run.endedAt) throw new ApiError(409, "The run has already ended");
+        },
+        applyEach: async (run) => {
+          await cancelDetachedAgentTask({
+            actor,
+            agentId: run.agentId,
+            taskId: run.taskId,
+          });
+        },
+        audit: {
+          target: request,
+          snapshot: (ids) => snapshotOwnedRuns(request, ids),
+        },
+      });
+      return reply.send(outcome);
+    },
+  );
+
   // Transfer bodies are raw bytes bound for a Pod, so they must never be
   // parsed or buffered into a value.
   fastify.addContentTypeParser(
@@ -1214,6 +1307,47 @@ async function requireOwnedRun(request: OwnedRunRequest) {
   });
   if (!run) throw new ApiError(404, "Run not found");
   return run;
+}
+
+/**
+ * The runs of a batch the caller started, resolved the way `requireOwnedRun`
+ * resolves one. An id that is not a uuid names no run, so it is left out and
+ * reported as not found rather than reaching the uuid casts in the lookup.
+ */
+async function loadOwnedRuns(
+  request: { user: { id: string }; organizationId: string },
+  ids: string[],
+): Promise<Map<string, AgentRunSession>> {
+  const runs = new Map<string, AgentRunSession>();
+  for (const taskId of ids) {
+    if (!z.string().uuid().safeParse(taskId).success) continue;
+    const run = await AgentRunModel.findCurrentSessionForActor({
+      taskId,
+      actorUserId: request.user.id,
+      organizationId: request.organizationId,
+    });
+    if (run) runs.set(taskId, run);
+  }
+  return runs;
+}
+
+/** What a bulk run action changes, safe to store in the audit log. */
+async function snapshotOwnedRuns(
+  request: { user: { id: string }; organizationId: string },
+  ids: string[],
+) {
+  const runs = await loadOwnedRuns(request, ids);
+  return {
+    runs: [...runs.values()]
+      .map(({ taskId, agentId, title, state }) => ({
+        taskId,
+        agentId,
+        title,
+        state,
+      }))
+      // Sorted so an unchanged batch snapshots identically on both sides.
+      .sort((a, b) => a.taskId.localeCompare(b.taskId)),
+  };
 }
 
 async function requireReadableProject(params: {

@@ -93,7 +93,7 @@ test("keeps a long run owner and the access details inside the phone viewport", 
       agent: { id: agent.id, name: agent.name, icon: null },
     },
   });
-  await page.goto(`/agents/${agent.id}?section=runs`);
+  await page.goto(`/agents/${agent.id}?section=runs&run=${run.taskId}`);
   const details = page.getByRole("button", { name: "Details", exact: true });
   await details.click();
   const inspector = page.getByRole("complementary", { name: "Run details" });

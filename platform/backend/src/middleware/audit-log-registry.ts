@@ -1541,6 +1541,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     actionByMethod: { DELETE: "role.bulk_deleted" },
   },
+  "/api/agent-runs/bulk": {
+    resourceType: "agentRun",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "agentRun.bulk_deleted" },
+  },
+  "/api/agent-runs/bulk-cancel": {
+    resourceType: "agentRun",
+    resourceIdSource: "organizationContext",
+    action: "agentRun.bulk_canceled",
+  },
   "/api/teams/bulk": {
     resourceType: "team",
     resourceIdSource: "organizationContext",

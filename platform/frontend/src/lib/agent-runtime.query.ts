@@ -19,11 +19,14 @@ import {
   myAgentRunsPageQuery,
   myAgentRunsQueryKey,
 } from "@/lib/agent-runs-query-keys";
+import { reportBulkOutcome, toBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { validateUploadFile } from "@/lib/files/file-upload";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
+  bulkCancelAgentRuns,
+  bulkDeleteAgentRuns,
   cancelAgentRun,
   continueAgentRun,
   deleteAgentRun,
@@ -385,13 +388,80 @@ export function useDeleteAgentRun() {
       if (error) throw reportApiError(error);
       return data;
     },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["agent-runs"] }),
-        queryClient.invalidateQueries({ queryKey: ["projects"] }),
-      ]);
+    // Not awaited: the caller leaves the deleted run's page on success, and
+    // holding its dialog open for the list refresh only delays that.
+    onSuccess: (_data, taskId) => {
+      void invalidateRunLists(queryClient, [taskId]);
     },
   });
+}
+
+/** Stop several of the viewer's active runs; the toast names any it could not. */
+export function useBulkCancelAgentRuns() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (taskIds: string[]) => {
+      const { data, error } = await bulkCancelAgentRuns({
+        body: { ids: taskIds },
+      });
+      if (error) throw reportApiError(error);
+      return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+    },
+    onSuccess: (outcome) =>
+      reportBulkOutcome({
+        outcome,
+        verb: "Stopped",
+        failureVerb: "stop",
+        failureParticiple: "stopped",
+        noun: "run",
+      }),
+    onSettled: () => invalidateRunLists(queryClient),
+  });
+}
+
+/** Delete several of the viewer's finished runs; the toast names any it could not. */
+export function useBulkDeleteAgentRuns() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (taskIds: string[]) => {
+      const { data, error } = await bulkDeleteAgentRuns({
+        body: { ids: taskIds },
+      });
+      if (error) throw reportApiError(error);
+      return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+    },
+    onSuccess: (outcome) =>
+      reportBulkOutcome({
+        outcome,
+        verb: "Deleted",
+        failureVerb: "delete",
+        noun: "run",
+      }),
+    onSettled: (_outcome, _error, taskIds) =>
+      invalidateRunLists(queryClient, taskIds),
+  });
+}
+
+/**
+ * Every list a run appears in: an Agent's Runs tab, the sidebar, projects.
+ * A deleted run's own read is skipped: refetching it only retries a 404.
+ */
+function invalidateRunLists(
+  queryClient: ReturnType<typeof useQueryClient>,
+  deletedTaskIds: readonly string[] = [],
+) {
+  return Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: ["agents"],
+      predicate: ({ queryKey }) => queryKey[2] === "runs",
+    }),
+    queryClient.invalidateQueries({
+      queryKey: ["agent-runs"],
+      predicate: ({ queryKey }) =>
+        !deletedTaskIds.includes(queryKey[1] as string),
+    }),
+    queryClient.invalidateQueries({ queryKey: ["projects"] }),
+  ]);
 }
 
 function runAttachmentFromFile(file: FileUIPart): {

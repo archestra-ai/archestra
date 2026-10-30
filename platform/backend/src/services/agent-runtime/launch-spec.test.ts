@@ -21,6 +21,7 @@ import ServiceAccountModel from "@/models/service-account";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import { resolveModelRoute } from "@/routes/proxy/model-router-resolver";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
+import { resolveAgentRunLimits } from "@/services/agent-runtime/runtime-tiers";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import {
   accessGrants,
@@ -85,6 +86,9 @@ describe("buildAgentRunLaunchSpec", () => {
     const launch = () =>
       buildAgentRunLaunchSpec({
         runtime: { ...runtime(setup.agent, "openai_chat"), ttlHours: 1 },
+        limits: resolveAgentRunLimits({
+          runtime: { ...runtime(setup.agent, "openai_chat"), ttlHours: 1 },
+        }),
         taskId: crypto.randomUUID(),
         runId: crypto.randomUUID(),
         agentId: setup.agent.id,
@@ -157,6 +161,9 @@ describe("buildAgentRunLaunchSpec", () => {
     });
     const launch = () =>
       buildAgentRunLaunchSpec({
+        limits: resolveAgentRunLimits({
+          runtime: runtime(setup.agent, "openai_responses"),
+        }),
         runtime: {
           ...runtime(setup.agent, "openai_responses"),
           // The switch is the platform's to report, not the Agent's to fake.
@@ -232,6 +239,9 @@ describe("buildAgentRunLaunchSpec", () => {
     const runId = crypto.randomUUID();
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
+      limits: resolveAgentRunLimits({
+        runtime: runtime(setup.agent, "openai_responses"),
+      }),
       runtime: {
         ...runtime(setup.agent, "openai_responses"),
         ports: [3000, 9000, 3000],
@@ -358,6 +368,9 @@ describe("buildAgentRunLaunchSpec", () => {
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: runtime(agent, "openai_responses"),
+      limits: resolveAgentRunLimits({
+        runtime: runtime(agent, "openai_responses"),
+      }),
       taskId: crypto.randomUUID(),
       runId: crypto.randomUUID(),
       agentId: agent.id,
@@ -405,6 +418,9 @@ describe("buildAgentRunLaunchSpec", () => {
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: runtime(setup.agent, "openai_responses"),
+      limits: resolveAgentRunLimits({
+        runtime: runtime(setup.agent, "openai_responses"),
+      }),
       taskId: crypto.randomUUID(),
       runId: crypto.randomUUID(),
       agentId: setup.agent.id,
@@ -457,6 +473,9 @@ describe("buildAgentRunLaunchSpec", () => {
 
     const { spec } = await buildAgentRunLaunchSpec({
       runtime: runtime(setup.agent, "anthropic"),
+      limits: resolveAgentRunLimits({
+        runtime: runtime(setup.agent, "anthropic"),
+      }),
       taskId: crypto.randomUUID(),
       runId: crypto.randomUUID(),
       agentId: setup.agent.id,
@@ -503,6 +522,9 @@ describe("buildAgentRunLaunchSpec", () => {
     await expect(
       buildAgentRunLaunchSpec({
         runtime: runtime(setup.agent, "anthropic"),
+        limits: resolveAgentRunLimits({
+          runtime: runtime(setup.agent, "anthropic"),
+        }),
         taskId: crypto.randomUUID(),
         runId: crypto.randomUUID(),
         agentId: setup.agent.id,
@@ -542,6 +564,9 @@ describe("buildAgentRunLaunchSpec", () => {
     await expect(
       buildAgentRunLaunchSpec({
         runtime: runtime(setup.agent, "openai_chat"),
+        limits: resolveAgentRunLimits({
+          runtime: runtime(setup.agent, "openai_chat"),
+        }),
         taskId: crypto.randomUUID(),
         runId: crypto.randomUUID(),
         agentId: setup.agent.id,
@@ -598,6 +623,7 @@ describe("buildAgentRunLaunchSpec", () => {
 
     const { spec } = await buildAgentRunLaunchSpec({
       runtime: configuredRuntime,
+      limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
       taskId: crypto.randomUUID(),
       runId: crypto.randomUUID(),
       agentId: setup.agent.id,
@@ -678,6 +704,7 @@ describe("buildAgentRunLaunchSpec", () => {
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: configuredRuntime,
+      limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
       taskId,
       runId,
       agentId: setup.agent.id,
@@ -795,6 +822,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const taskId = crypto.randomUUID();
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: configuredRuntime,
+      limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
       taskId,
       runId: crypto.randomUUID(),
       agentId: setup.agent.id,
@@ -896,6 +924,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const taskId = crypto.randomUUID();
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: configuredRuntime,
+      limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
       taskId,
       runId: crypto.randomUUID(),
       agentId: setup.agent.id,
@@ -964,6 +993,7 @@ describe("buildAgentRunLaunchSpec", () => {
     await expect(
       buildAgentRunLaunchSpec({
         runtime: configuredRuntime,
+        limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
         taskId: crypto.randomUUID(),
         runId: crypto.randomUUID(),
         agentId: setup.agent.id,
@@ -1103,6 +1133,7 @@ describe("buildAgentRunLaunchSpec", () => {
 
       const launch = buildAgentRunLaunchSpec({
         runtime: configuredRuntime,
+        limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
         taskId: crypto.randomUUID(),
         runId: crypto.randomUUID(),
         agentId: setup.agent.id,
@@ -1168,6 +1199,7 @@ describe("buildAgentRunLaunchSpec", () => {
     await expect(
       buildAgentRunLaunchSpec({
         runtime: configuredRuntime,
+        limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
         taskId: crypto.randomUUID(),
         runId: crypto.randomUUID(),
         agentId: setup.agent.id,
@@ -1226,6 +1258,7 @@ describe("buildAgentRunLaunchSpec", () => {
     await expect(
       buildAgentRunLaunchSpec({
         runtime: configuredRuntime,
+        limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
         taskId: crypto.randomUUID(),
         runId: crypto.randomUUID(),
         agentId: setup.agent.id,

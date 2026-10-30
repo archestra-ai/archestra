@@ -10,7 +10,13 @@ import {
 } from "@/k8s/shared";
 import logger from "@/logging";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
+import {
+  AGENT_RUNTIME_TIER_RESOURCES,
+  agentRuntimeTier,
+  resolveRunResources,
+} from "@/services/agent-runtime/runtime-tiers";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
+import type { AgentRuntimeTier } from "@/types";
 import { usesFloatingAgentImageTag } from "./image-pull-policy";
 import {
   AGENT_SANDBOX_API,
@@ -158,12 +164,15 @@ class AgentWarmPoolManager {
           environmentNetworkPolicy: agent.environmentPolicy,
           defaultNetworkPolicy: agent.defaultPolicy,
         });
+        const tier = agentRuntimeTier(runtime);
         const template = warmPoolTemplate({
           poolScope: `${agent.organizationId}:${agent.environmentId ?? "default"}`,
           namespace,
           image: runtime.image,
           privileged: runtime.privileged,
-          resources: runtime.resources ?? config.agentRuntime.resources,
+          resources: resolveRunResources(runtime, tier),
+          tier,
+          warmTiers: [],
           workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
           workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
           nodeSelector: config.agentRuntime.nodeSelector,
@@ -316,10 +325,16 @@ class AgentWarmPoolManager {
     }
   }
 
+  /**
+   * Claim a warm Sandbox for the run. The requested tier's pool serves it
+   * whenever that pool exists (the claim waits for a Sandbox). A neighbouring
+   * tier's pool serves it only while it reports a ready, unclaimed Sandbox;
+   * the run then runs at that tier. Null means a cold start.
+   */
   async claim(params: {
     api: CustomObjectsApi;
     spec: KubernetesAgentRunLaunchSpec;
-  }): Promise<boolean> {
+  }): Promise<{ tier: AgentRuntimeTier | null } | null> {
     // A pre-started Sandbox keeps the image it pulled when capacity was
     // created. Floating tags must cold-start so every new workspace resolves
     // the current image instead of claiming stale warm capacity.
@@ -328,20 +343,46 @@ class AgentWarmPoolManager {
       !params.spec.poolScope ||
       usesFloatingAgentImageTag(params.spec.image)
     )
-      return false;
+      return null;
     const { api, spec } = params;
     const namespace = spec.namespace;
-    const template = warmPoolTemplate(spec);
-    try {
-      await api.getNamespacedCustomObject({
-        ...POOL_API,
-        namespace,
-        name: template.name,
-      });
-    } catch (error) {
-      if (isK8sNotFoundError(error)) return false;
-      throw error;
+    const candidates: Array<AgentRuntimeTier | null> = spec.tier
+      ? spec.warmTiers.length
+        ? spec.warmTiers
+        : [spec.tier]
+      : [null];
+    for (const tier of candidates) {
+      const sized =
+        tier === null || tier === spec.tier
+          ? spec
+          : { ...spec, tier, resources: AGENT_RUNTIME_TIER_RESOURCES[tier] };
+      const template = warmPoolTemplate(sized);
+      let pool: { status?: { readyReplicas?: number } };
+      try {
+        pool = (await api.getNamespacedCustomObject({
+          ...POOL_API,
+          namespace,
+          name: template.name,
+        })) as typeof pool;
+      } catch (error) {
+        if (isK8sNotFoundError(error)) continue;
+        throw error;
+      }
+      if (tier !== spec.tier && !((pool.status?.readyReplicas ?? 0) > 0))
+        continue;
+      await this.createClaim({ api, spec, templateName: template.name });
+      return { tier };
     }
+    return null;
+  }
+
+  private async createClaim(params: {
+    api: CustomObjectsApi;
+    spec: KubernetesAgentRunLaunchSpec;
+    templateName: string;
+  }): Promise<void> {
+    const { api, spec } = params;
+    const namespace = spec.namespace;
     const labels = {
       ...agentRuntimeLabels(spec),
       [AGENT_RUNTIME_WORKSPACE_LABEL]: spec.frozenName,
@@ -360,7 +401,7 @@ class AgentWarmPoolManager {
             ownerReferences: spec.ownerReferences,
           },
           spec: {
-            warmPoolRef: { name: template.name },
+            warmPoolRef: { name: params.templateName },
             additionalPodMetadata: {
               labels: Object.fromEntries(
                 Object.entries(labels).filter(([key]) => key.includes("/")),
@@ -382,7 +423,6 @@ class AgentWarmPoolManager {
       .catch((error) => {
         if (!isK8sConflictError(error)) throw error;
       });
-    return true;
   }
   private async reconcileSafely() {
     try {

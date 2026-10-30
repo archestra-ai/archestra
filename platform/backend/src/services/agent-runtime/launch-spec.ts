@@ -40,7 +40,11 @@ import type {
   EffectiveNetworkPolicy,
   ResolvedAgentRuntime,
 } from "@/types";
-import { AgentRuntimeCredentialsRequiredError, ApiError } from "@/types";
+import {
+  type AgentRunLimits,
+  AgentRuntimeCredentialsRequiredError,
+  ApiError,
+} from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import type { AgentRunLaunchSpec } from "./backends";
 import { resolveAgentRuntimeCredentials } from "./credentials";
@@ -51,8 +55,14 @@ import {
 } from "./model-compatibility";
 import {
   AGENT_RUNTIME_STEER_FIFO,
+  AGENT_RUNTIME_TIER_ENV,
   constructStableRunName,
 } from "./runtime-contract";
+import {
+  agentRuntimeTier,
+  resolveRunResources,
+  warmTierCandidates,
+} from "./runtime-tiers";
 
 /**
  * Everything a runtime backend needs to carry one A2A task, resolved for
@@ -65,6 +75,8 @@ import {
  */
 export async function buildAgentRunLaunchSpec(params: {
   runtime: ResolvedAgentRuntime;
+  /** The run's tier and limits, resolved against the Agent's settings. */
+  limits: AgentRunLimits;
   /** The A2A task this run carries; its id names the workload. */
   taskId: string;
   /** The user-facing Agent run id used by /chat/runs/:id and telemetry. */
@@ -240,13 +252,13 @@ export async function buildAgentRunLaunchSpec(params: {
         requiredSubscriptionKind: isCodexRuntime ? "chatgpt" : null,
       });
   const virtualKeyValue = virtualKey?.value ?? "";
-  if (params.runtime.maxCostUsd && virtualKey) {
+  if (params.limits.maxCostUsd && virtualKey) {
     try {
       await LimitModel.create({
         entityType: "virtual_key",
         entityId: virtualKey.virtualKey.id,
         limitType: "token_cost",
-        limitValue: params.runtime.maxCostUsd,
+        limitValue: params.limits.maxCostUsd,
         model: null,
         cleanupInterval: "1m",
       });
@@ -321,9 +333,11 @@ export async function buildAgentRunLaunchSpec(params: {
     // The finish contract: a session that has done its work parks this long
     // for further direction, then exits so the run and task settle.
     ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS: String(
-      (params.runtime.idleTimeoutMinutes ??
-        config.agentRuntime.defaultIdleTimeoutMinutes) * 60,
+      params.limits.idleTimeoutMinutes * 60,
     ),
+    ...(params.limits.tier
+      ? { [AGENT_RUNTIME_TIER_ENV]: params.limits.tier }
+      : {}),
     ARCHESTRA_LLM_PROXY_URL: proxyUrl,
     ARCHESTRA_LLM_PROXY_PROTOCOL: params.runtime.inferenceProtocol,
     // Clients that hide tools from the wire (Codex's tool search and code
@@ -355,7 +369,7 @@ export async function buildAgentRunLaunchSpec(params: {
         1,
         Math.ceil((boundWorkspace.expiresAt.getTime() - Date.now()) / 1000),
       )
-    : (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) * 3600;
+    : params.limits.maxDurationHours * 3600;
   let accountToken: Awaited<
     ReturnType<typeof ServiceAccountModel.createToken>
   > | null = null;
@@ -446,20 +460,20 @@ export async function buildAgentRunLaunchSpec(params: {
       image: params.runtime.image,
       command: params.runtime.command ?? null,
       privileged: params.runtime.privileged,
-      resources: params.runtime.resources ?? {
-        cpuRequest: config.agentRuntime.resources.cpuRequest,
-        memoryRequest: config.agentRuntime.resources.memoryRequest,
-        memoryLimit: config.agentRuntime.resources.memoryLimit,
-      },
+      resources: resolveRunResources(params.runtime, params.limits.tier),
+      tier: params.limits.tier,
+      warmTiers: params.limits.tier
+        ? warmTierCandidates(
+            params.limits.tier,
+            agentRuntimeTier(params.runtime) ?? params.limits.tier,
+          )
+        : [],
       env: nonSecretEnv,
       secretEnv,
       ...(Object.keys(credentials.renewableCredentials).length
         ? { renewableCredentials: credentials.renewableCredentials }
         : {}),
-      activeDeadlineSeconds:
-        (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) *
-        60 *
-        60,
+      activeDeadlineSeconds: params.limits.maxDurationHours * 60 * 60,
       workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
       workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
       nodeSelector: config.agentRuntime.nodeSelector,
@@ -485,6 +499,7 @@ function runBanner(appName: string): string {
 }
 
 const RESERVED_RUNTIME_ENV_KEYS = new Set([
+  AGENT_RUNTIME_TIER_ENV,
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_BASE_URL",

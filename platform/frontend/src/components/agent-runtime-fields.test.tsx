@@ -108,10 +108,15 @@ describe("AgentRuntimeFields", () => {
           defaultTtlHours: 36,
           defaultIdleTimeoutMinutes: 45,
           allowPrivileged: false,
-          resources: {
-            cpuRequest: "750m",
-            memoryRequest: "2Gi",
-            memoryLimit: "6Gi",
+          defaultTier: "M",
+          tiers: {
+            S: { cpuRequest: "1", memoryRequest: "2Gi", memoryLimit: "4Gi" },
+            M: { cpuRequest: "750m", memoryRequest: "2Gi", memoryLimit: "6Gi" },
+            L: {
+              cpuRequest: "3500m",
+              memoryRequest: "12Gi",
+              memoryLimit: "18Gi",
+            },
           },
         };
       }

@@ -242,6 +242,8 @@ describe("config routes", () => {
         name: "kubernetes",
         available: false,
         defaultTtlHours: config.agentRuntime.defaultTtlHours,
+        defaultTier: "M",
+        tiers: { M: { cpuRequest: "2", memoryLimit: "8Gi" } },
       });
 
       sandboxInstalled.mockReturnValue(true);

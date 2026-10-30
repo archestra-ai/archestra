@@ -14,8 +14,8 @@
      watcher (`ARCHESTRA_DEV_BACKEND_WATCH` defaults to false there). After
      changing backend code run `tilt trigger pnpm-dev-backend` to rebuild and
      restart it (about 20 s). The frontend dev server reloads on its own.
-   - Without Docker or Kubernetes (an Agent Runtime's Lite tier,
-     `ARCHESTRA_AGENT_RUNTIME_TIER=light`), run the stack as plain processes:
+   - Without Docker or Kubernetes (a lite Agent Runtime image), run the
+     stack as plain processes:
      `scripts/dev-lite.sh up` (PostgreSQL 18, backend :9000, frontend :3000;
      `status`, `logs <component>`, `up --e2e` then `e2e` for the Playwright
      lite projects, `down`). After backend changes run

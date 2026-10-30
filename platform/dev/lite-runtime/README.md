@@ -11,15 +11,13 @@ the Playwright lite projects. Work that needs Kubernetes stays on the full
 image: MCP server installs (the orchestrator), nested Agent Runtime, the Dagger
 code runtime, Vault, and the Keycloak-backed identity-provider specs.
 
-An Agent can use both. Its primary runtime settings name this image (the Lite
-tier) and `runtime.fullTier` names the full image with its privilege and
-resources (the Full tier). A run starts on the Lite tier and moves its own
-workspace with a `POST` of `{"tier": "full"}` or `{"tier": "light"}` to
-`$ARCHESTRA_AGENT_RUNTIME_TIER_URL`, sending `$ARCHESTRA_AGENT_RUNTIME_BINDING`
-in the `X-Archestra-Runtime-Binding` header. The platform replaces the Pod on
-the same volume and continues the running turn there as a native
-continuation: files, the checkout and the conversation stay, running
-processes stop. `$ARCHESTRA_AGENT_RUNTIME_TIER` names the Pod's current tier.
+Lite is the default: a Lobster Agent runs this kind of image, unprivileged, at
+runtime tier M (2 CPU, 4 GiB, 8 GiB limit). Work that needs Kubernetes goes to
+a separate "Full" twin Agent that runs the full image, privileged, at tier L.
+A run promotes by handing its branch to that Agent with `start_agent_run`
+and continues with what comes back; nothing switches a running workspace in
+place. `$ARCHESTRA_AGENT_RUNTIME_TIER` names the Pod's size (S, M or L), not
+its kind of image.
 
 ## What the image adds to the public agent image
 

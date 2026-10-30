@@ -61,6 +61,7 @@ import {
   SPAWN_TARGET_MISMATCH,
   UNVERIFIED_RUNTIME_SESSION,
 } from "@/services/agent-runtime/runtime-crossing";
+import { resolveAgentRunLimits } from "@/services/agent-runtime/runtime-tiers";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
@@ -76,6 +77,8 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
   AgentRunAttentionStateSchema,
+  type AgentRunLimits,
+  type AgentRunLimitsRequest,
   AgentWorkspaceStateSchema,
   ApiError,
 } from "@/types";
@@ -105,6 +108,7 @@ export async function startDelegatedTask(params: {
   agentId: string;
   message: string;
   attachments?: A2AAttachment[];
+  limits?: AgentRunLimitsRequest;
   context: ArchestraContext;
 }) {
   const { result, outcome } = await launchDelegatedTask(params);
@@ -116,6 +120,7 @@ async function launchDelegatedTask(params: {
   agentId: string;
   message: string;
   attachments?: A2AAttachment[];
+  limits?: AgentRunLimitsRequest;
   context: ArchestraContext;
 }): Promise<{ result: CallToolResult; outcome?: RuntimeLaunchOutcome }> {
   const { agentId, message, context } = params;
@@ -165,6 +170,16 @@ async function launchDelegatedTask(params: {
             : `Agent "${agent.name}" has no Agent Runtime, so it cannot run in the background. Delegate to it with its agent tool instead.`,
         ),
       );
+    }
+    // Refuse a limit above the Agent's before a task exists: the caller hears
+    // the maximum and can ask again within it.
+    let limits: AgentRunLimits;
+    try {
+      limits = resolveAgentRunLimits({ runtime, requested: params.limits });
+    } catch (error) {
+      if (error instanceof ApiError)
+        return failedLaunch("refused", errorResult(error.message));
+      throw error;
     }
     await prepareAgentRuntimeBackendDriver(runtime.backend);
     const crossing = await runtimeCrossingForStart(context);
@@ -217,6 +232,7 @@ async function launchDelegatedTask(params: {
           ? RouteCategory.CHATOPS
           : RouteCategory.A2A,
         completionTarget,
+        runtimeLimits: limits,
         ...(crossing ? { runtimeCrossing: crossing } : {}),
       },
     });
@@ -245,6 +261,7 @@ async function launchDelegatedTask(params: {
       result: structuredSuccessResult({
         run,
         run_url: agentRunUrl(taskRow.id),
+        limits: runLimitsOutput(limits),
         next_step: submittedRunNextStep({ reportsToThread }),
       }),
       outcome: {
@@ -302,17 +319,48 @@ const RunSummarySchema = z.object({
   state_changed_at: z.string().describe("ISO 8601 of the last transition."),
 });
 
+const RunLimitsSchema = z
+  .object({
+    tier: z
+      .enum(["S", "M", "L"])
+      .nullable()
+      .describe(
+        "Container size the run has: S (1 CPU, 2 GiB), M (2 CPU, 4 GiB) or L (3.5 CPU, 12 GiB). Null when the Agent sizes its runs with explicit resources.",
+      ),
+    idle_timeout_minutes: z.number(),
+    max_duration_hours: z
+      .number()
+      .describe(
+        "The run and its saved files end this many hours after the start.",
+      ),
+    max_cost_usd: z.number().nullable(),
+  })
+  .describe("The tier and limits the run got, within the Agent's own.");
+
+function runLimitsOutput(limits: AgentRunLimits | null) {
+  return limits
+    ? {
+        tier: limits.tier,
+        idle_timeout_minutes: limits.idleTimeoutMinutes,
+        max_duration_hours: limits.maxDurationHours,
+        max_cost_usd: limits.maxCostUsd,
+      }
+    : null;
+}
+
 const StartRunOutputSchema = z.object({
   run: RunSummarySchema,
   run_url: z
     .string()
     .describe("Open the run and its workspace in the browser."),
+  limits: RunLimitsSchema.nullable(),
   next_step: z.string().describe("What to do now."),
 });
 
 const GetRunOutputSchema = z.object({
   run: RunSummarySchema,
   run_url: z.string().nullable(),
+  limits: RunLimitsSchema.nullable(),
   requests: z
     .array(z.object({ text: z.string(), truncated: z.boolean() }))
     .describe(
@@ -735,6 +783,30 @@ const registry = defineArchestraTools([
       attachments: agentRunAttachmentsSchema().describe(
         "Input files staged before the first turn. For repository work, include a patch for uncommitted changes and identify the base commit in message. Never include credentials.",
       ),
+      limits: z
+        .object({
+          tier: z
+            .enum(["S", "M", "L"])
+            .optional()
+            .describe(
+              "Container size: S (1 CPU, 2 GiB, for a review or a script), M (2 CPU, 4 GiB, a dev stack and tests) or L (3.5 CPU, 12 GiB, a full stack with Docker). At or below the Agent's tier.",
+            ),
+          idle_timeout_minutes: z.number().int().min(1).max(1440).optional(),
+          max_duration_hours: z
+            .number()
+            .int()
+            .min(1)
+            .max(720)
+            .optional()
+            .describe(
+              "Hours until the run and its saved files end. Keep it short for work that nobody continues.",
+            ),
+          max_cost_usd: z.number().int().min(1).max(100_000).optional(),
+        })
+        .optional()
+        .describe(
+          "Limits for this run, each at or below the Agent's own; a larger value is refused with the maximum named. Omit to take the Agent's defaults.",
+        ),
     }),
     outputSchema: StartRunOutputSchema,
     handler: ({ args, context }) =>
@@ -742,6 +814,16 @@ const registry = defineArchestraTools([
         agentId: args.agent_id,
         message: args.message,
         attachments: args.attachments,
+        ...(args.limits
+          ? {
+              limits: {
+                tier: args.limits.tier,
+                idleTimeoutMinutes: args.limits.idle_timeout_minutes,
+                maxDurationHours: args.limits.max_duration_hours,
+                maxCostUsd: args.limits.max_cost_usd,
+              },
+            }
+          : {}),
         context,
       }),
   }),
@@ -844,6 +926,7 @@ const registry = defineArchestraTools([
             runId: args.run_id,
             narrow: await isGuardrailsV2Active(),
           }),
+          limits: runLimitsOutput(session?.runtimeLimits ?? null),
           run_url: session ? agentRunUrl(args.run_id) : null,
           requests,
           // The tail: the newest output is what a poller wants to see.

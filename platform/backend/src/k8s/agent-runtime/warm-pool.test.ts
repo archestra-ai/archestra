@@ -2,6 +2,7 @@ import { CustomObjectsApi, KubeConfig } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
 import { expect, test } from "vitest";
 import config from "@/config";
+import { AGENT_RUNTIME_TIER_RESOURCES } from "@/services/agent-runtime/runtime-tiers";
 import { useMswServer } from "@/test/msw";
 import type { KubernetesAgentRunLaunchSpec } from "./manifests";
 import { agentWarmPoolManager, readWorkspaceSandbox } from "./warm-pool";
@@ -65,9 +66,9 @@ test("falls back to direct Sandbox creation when extensions or a compatible pool
       () => HttpResponse.json({ code: 404 }, { status: 404 }),
     ),
   );
-  expect(await agentWarmPoolManager.claim({ api: api(), spec: SPEC })).toBe(
-    false,
-  );
+  expect(
+    await agentWarmPoolManager.claim({ api: api(), spec: SPEC }),
+  ).toBeNull();
 });
 
 test("cold-starts a floating image instead of claiming a potentially stale pool", async () => {
@@ -80,7 +81,7 @@ test("cold-starts a floating image instead of claiming a potentially stale pool"
         image: "registry.example.test/agent-claude-code:latest",
       },
     }),
-  ).toBe(false);
+  ).toBeNull();
 });
 
 test("claims without environment or disk overrides that would force an upstream cold start", async () => {
@@ -99,12 +100,57 @@ test("claims without environment or disk overrides that would force an upstream 
       },
     ),
   );
-  expect(await agentWarmPoolManager.claim({ api: api(), spec: SPEC })).toBe(
-    true,
-  );
+  expect(await agentWarmPoolManager.claim({ api: api(), spec: SPEC })).toEqual({
+    tier: null,
+  });
   expect(submitted?.spec).not.toHaveProperty("env");
   expect(submitted?.spec).not.toHaveProperty("volumeClaimTemplates");
   expect(JSON.stringify(submitted)).not.toContain("secret-value");
+});
+
+test("serves a run from a neighbouring tier's pool only while that pool has a ready Sandbox", async () => {
+  config.agentRuntime.warmPoolSize = 1;
+  const sized = (tier: "S" | "M") => ({
+    ...SPEC,
+    tier,
+    warmTiers: ["S" as const, "M" as const],
+    resources: AGENT_RUNTIME_TIER_RESOURCES[tier],
+  });
+  const poolOfM = warmPoolTemplate(sized("M")).name;
+  let readyInM = 1;
+  let submitted: { spec?: { warmPoolRef?: { name: string } } } | undefined;
+  server.use(
+    http.get(
+      `${ORIGIN}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/test/sandboxwarmpools/:name`,
+      ({ params }) =>
+        params.name === poolOfM
+          ? HttpResponse.json({ status: { readyReplicas: readyInM } })
+          : HttpResponse.json({ code: 404 }, { status: 404 }),
+    ),
+    http.post(
+      `${ORIGIN}/apis/extensions.agents.x-k8s.io/v1beta1/namespaces/test/sandboxclaims`,
+      async ({ request }) => {
+        submitted = (await request.json()) as typeof submitted;
+        return HttpResponse.json(submitted, { status: 201 });
+      },
+    ),
+  );
+  // No S pool: the M pool has a ready Sandbox, so the run starts at M.
+  expect(
+    await agentWarmPoolManager.claim({ api: api(), spec: sized("S") }),
+  ).toEqual({ tier: "M" });
+  expect(submitted?.spec?.warmPoolRef?.name).toBe(poolOfM);
+  // The same M pool, empty: a neighbour never gets a waiting claim.
+  readyInM = 0;
+  submitted = undefined;
+  expect(
+    await agentWarmPoolManager.claim({ api: api(), spec: sized("S") }),
+  ).toBeNull();
+  expect(submitted).toBeUndefined();
+  // The requested tier's own pool serves even while it is refilling.
+  expect(
+    await agentWarmPoolManager.claim({ api: api(), spec: sized("M") }),
+  ).toEqual({ tier: "M" });
 });
 
 test("rejects a claim pointing at another workspace's Sandbox", async () => {
@@ -157,6 +203,8 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
   command: ["echo", "hello"],
   privileged: false,
   resources: { cpuRequest: "500m", memoryRequest: "1Gi" },
+  tier: null,
+  warmTiers: [],
   env: {},
   secretEnv: { PRIVATE: "secret-value" },
   inputFileCount: 0,

@@ -232,12 +232,16 @@ class AgentRuntimeManager {
       }),
     );
 
-    if (
-      await agentWarmPoolManager.claim({
-        api: clients.customObjectsApi,
-        spec: withOwner,
-      })
-    ) {
+    const claimed = await agentWarmPoolManager.claim({
+      api: clients.customObjectsApi,
+      spec: withOwner,
+    });
+    if (claimed) {
+      if (claimed.tier !== withOwner.tier)
+        await AgentRunModel.updateRuntimeLimitsTier({
+          taskId: spec.taskId,
+          tier: claimed.tier,
+        });
       const deadline =
         Date.now() + config.agentRuntime.podStartTimeoutSeconds * 1000;
       let pollDelayMs = 250;

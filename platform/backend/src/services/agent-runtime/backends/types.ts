@@ -8,6 +8,7 @@ import type {
   AgentRuntimeBackend,
   AgentRuntimeResources,
   AgentRuntimeSteerMode,
+  AgentRuntimeTier,
   EffectiveNetworkPolicy,
 } from "@/types";
 import type { A2ATaskFailure } from "@/types/a2a-task";
@@ -37,6 +38,10 @@ export type AgentRunLaunchSpec = {
   command: string[] | null;
   privileged: boolean;
   resources: AgentRuntimeResources | null;
+  /** Tier the run asked for; null when its Agent sizes runs with explicit resources. */
+  tier: AgentRuntimeTier | null;
+  /** Tiers whose warm pool may serve the run, the requested one first. */
+  warmTiers: AgentRuntimeTier[];
   env: Record<string, string>;
   secretEnv: Record<string, string>;
   renewableCredentials?: Record<string, RenewableCredential>;

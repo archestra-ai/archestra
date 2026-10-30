@@ -1016,24 +1016,14 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
   - Default: [`ARCHESTRA_INTERNAL_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_INTERNAL_API_BASE_URL)
   - When neither is set, runs fail to start.
 
-- **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS`** - Default maximum lifetime of a run, in hours.
-  - Default: `72`
+- **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS`** - Default maximum duration of a run, in hours. A run's files are kept for the same time.
+  - Default: `24`
 
 - **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES`** - Default time an idle run waits for the next instruction before it stops, in minutes.
-  - Default: `180`
+  - Default: `60`
   - Custom images must implement the wait, using the `ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS` variable passed to the pod.
 
-- **`ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`** - Default CPU request for a run's pod. Runs have no CPU limit.
-  - Default: `500m`
-  - Values: Kubernetes quantity
-
-- **`ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST`** - Default memory request for a run's pod.
-  - Default: `1Gi`
-  - Values: Kubernetes quantity
-
-- **`ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT`** - Default memory limit for a run's pod.
-  - Default: `4Gi`
-  - Values: Kubernetes quantity
+- **Runtime tiers** - A run's pod gets the CPU and memory of its tier. The tiers are fixed: `S` requests 1 CPU and 2Gi with a 4Gi memory limit, `M` requests 2 CPU and 4Gi with an 8Gi limit, `L` requests 3.5 CPU and 12Gi with an 18Gi limit. Runs have no CPU limit. An agent names its tier under **Resources and access**; `M` applies when it names none. A caller that starts a run may ask for a smaller tier. Explicit CPU and memory values on an agent replace the tier. The pod sees its tier in `ARCHESTRA_AGENT_RUNTIME_TIER`. The former `ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`, `ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST` and `ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT` variables are no longer read.
 
 - **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Size of each run's persistent volume, which holds `/home/node` and, for privileged runs, `/var/lib/docker`.
   - Default: `20Gi`

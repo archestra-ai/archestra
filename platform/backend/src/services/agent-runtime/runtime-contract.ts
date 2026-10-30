@@ -6,6 +6,8 @@ export const AGENT_RUNTIME_CREDENTIALS_FILE = `${AGENT_RUNTIME_CREDENTIALS_DIR}/
 export const AGENT_RUNTIME_CREDENTIALS_SECRET_KEY =
   "ARCHESTRA_AGENT_RUNTIME_RENEWABLE_CREDENTIALS";
 export const AGENT_RUNTIME_STEER_FIFO = `${AGENT_RUNTIME_DIR}/steer`;
+/** The tier (S, M or L) the Pod runs at; unset for an Agent with explicit resources. */
+export const AGENT_RUNTIME_TIER_ENV = "ARCHESTRA_AGENT_RUNTIME_TIER";
 /** Stable command that joins the interactive session from any exec client. */
 export const AGENT_RUNTIME_ATTACH_SCRIPT = `${AGENT_RUNTIME_DIR}/attach`;
 /** Startup hook used by interactive shells opened directly in an Agent Runtime pod. */

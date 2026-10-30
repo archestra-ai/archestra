@@ -296,6 +296,48 @@ describe("run tools", () => {
     ).toEqual([]);
   });
 
+  test("start_agent_run refuses limits above the Agent's before starting anything", async ({
+    makeAgent,
+  }) => {
+    const target = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        tier: "M",
+        environment: null,
+        credentials: [],
+        ttlHours: 12,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    const sendMessage = vi.spyOn(A2AManager.prototype, "sendMessage");
+    for (const [limits, message] of [
+      [{ tier: "L" }, "Tier L is above this Agent's tier M"],
+      [
+        { max_duration_hours: 24 },
+        "maximum duration of 24 hours is above this Agent's 12",
+      ],
+    ] as const) {
+      const result = await executeArchestraTool(
+        TOOL_START_AGENT_RUN_FULL_NAME,
+        { agent_id: target.id, message: "Review the change", limits },
+        context,
+      );
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as { text: string }).text).toContain(message);
+    }
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
   test("start_agent_run refuses an Agent without Agent Runtime and starts nothing", async ({
     makeAgent,
   }) => {

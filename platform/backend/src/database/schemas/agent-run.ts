@@ -12,6 +12,7 @@ import type {
   AgentRunActorKind,
   AgentRunAttentionState,
   AgentRunCompletionTarget,
+  AgentRunLimits,
   AgentRuntimeBackend,
 } from "@/types/agent-runtime";
 import a2aTasksTable from "./a2a-task";
@@ -65,6 +66,8 @@ const agentRunsTable = pgTable(
     runtimeScope: text("runtime_scope").notNull(),
     /** Frozen Kubernetes Job lifetime so the UI shows the actual deadline. */
     activeDeadlineSeconds: integer("active_deadline_seconds"),
+    /** The tier and the idle, duration and spend limits this run got. */
+    runtimeLimits: jsonb("runtime_limits").$type<AgentRunLimits>(),
     /** Native-client signal that the live process needs a person's attention. */
     attentionState: text("attention_state").$type<AgentRunAttentionState>(),
     /** Revoked when the session ends; a live key outliving its runtime keeps billing. */

@@ -47,10 +47,15 @@ export function makeConfig(
         defaultTtlHours: 24,
         defaultIdleTimeoutMinutes: 60,
         allowPrivileged: false,
-        resources: {
-          cpuRequest: "500m",
-          memoryRequest: "1Gi",
-          memoryLimit: "4Gi",
+        defaultTier: "M",
+        tiers: {
+          S: { cpuRequest: "1", memoryRequest: "2Gi", memoryLimit: "4Gi" },
+          M: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
+          L: {
+            cpuRequest: "3500m",
+            memoryRequest: "12Gi",
+            memoryLimit: "18Gi",
+          },
         },
       },
       plugins: false,

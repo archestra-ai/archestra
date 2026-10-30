@@ -30,9 +30,13 @@ import { OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
+import {
+  AGENT_RUNTIME_TIER_RESOURCES,
+  DEFAULT_AGENT_RUNTIME_TIER,
+} from "@/services/agent-runtime/runtime-tiers";
 import { devFeedbackService } from "@/services/dev-feedback";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
-import { EmailProviderTypeSchema } from "@/types";
+import { AgentRuntimeTierSchema, EmailProviderTypeSchema } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
 export const publicConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -118,11 +122,17 @@ export const ConfigResponseSchema = z.strictObject({
       defaultTtlHours: z.number(),
       defaultIdleTimeoutMinutes: z.number(),
       allowPrivileged: z.boolean(),
-      resources: z.object({
-        cpuRequest: z.string(),
-        memoryRequest: z.string(),
-        memoryLimit: z.string(),
-      }),
+      /** The tier a run gets when its Agent names none. */
+      defaultTier: AgentRuntimeTierSchema,
+      /** CPU and memory of each tier. Runs have no CPU limit. */
+      tiers: z.record(
+        AgentRuntimeTierSchema,
+        z.object({
+          cpuRequest: z.string(),
+          memoryRequest: z.string(),
+          memoryLimit: z.string(),
+        }),
+      ),
     }),
     plugins: z.boolean(),
     // Max size of a file the sandbox can stage. The chat composer caps
@@ -242,7 +252,8 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
         defaultIdleTimeoutMinutes:
           config.agentRuntime.defaultIdleTimeoutMinutes,
         allowPrivileged: config.agentRuntime.allowPrivileged,
-        resources: config.agentRuntime.resources,
+        defaultTier: DEFAULT_AGENT_RUNTIME_TIER,
+        tiers: AGENT_RUNTIME_TIER_RESOURCES,
       },
       plugins: true,
       sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,

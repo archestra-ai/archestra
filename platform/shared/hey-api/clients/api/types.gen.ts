@@ -16975,6 +16975,7 @@ export type GetAgentCatalogResponses = {
                         cpuLimit?: string;
                         memoryLimit?: string;
                     } | null;
+                    tier?: 'S' | 'M' | 'L';
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -17364,6 +17365,7 @@ export type GetAgentsResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -17520,6 +17522,7 @@ export type CreateAgentData = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -17788,6 +17791,7 @@ export type CreateAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -18182,6 +18186,7 @@ export type GetChatAgentRosterResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -18329,6 +18334,7 @@ export type GetChatAgentRosterPageResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18497,6 +18503,7 @@ export type GetAgentOptionsResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18683,6 +18690,7 @@ export type GetAgentOptionsPageResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -19062,6 +19070,7 @@ export type GetDefaultMcpGatewayResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19370,6 +19379,7 @@ export type ImportAgentResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -19687,6 +19697,7 @@ export type GetAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19825,6 +19836,7 @@ export type UpdateAgentData = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20002,6 +20014,7 @@ export type UpdateAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20593,6 +20606,7 @@ export type RestoreAgentVersionResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20839,6 +20853,7 @@ export type CloneAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -23324,6 +23339,7 @@ export type RestoreAgentResponses = {
                 cpuLimit?: string;
                 memoryLimit?: string;
             } | null;
+            tier?: 'S' | 'M' | 'L';
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -24980,6 +24996,12 @@ export type GetAgentRunsResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: 'S' | 'M' | 'L';
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -25020,6 +25042,12 @@ export type StartAgentRunData = {
             contentType: string;
             contentBase64: string;
         }>;
+        limits?: {
+            tier?: 'S' | 'M' | 'L';
+            idleTimeoutMinutes?: number;
+            maxDurationHours?: number;
+            maxCostUsd?: number;
+        };
     };
     path: {
         id: string;
@@ -25109,6 +25137,12 @@ export type StartAgentRunResponses = {
         prompt: string;
         projectId: string | null;
         createdAt: string;
+        limits: {
+            tier: 'S' | 'M' | 'L';
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+        } | null;
     };
 };
 
@@ -25214,6 +25248,12 @@ export type GetMyAgentRunsResponses = {
             workloadName: string;
             backend: 'kubernetes';
             runtimeScope: string;
+            runtimeLimits: {
+                tier: 'S' | 'M' | 'L';
+                idleTimeoutMinutes: number;
+                maxDurationHours: number;
+                maxCostUsd: number | null;
+            } | null;
             attentionState: 'input_required' | 'auth_required' | null;
             virtualApiKeyId: string | null;
             gatewayTokenId: string | null;
@@ -25436,6 +25476,12 @@ export type GetMyAgentRunResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: 'S' | 'M' | 'L';
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -25583,6 +25629,12 @@ export type UpdateAgentRunResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: 'S' | 'M' | 'L';
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;
@@ -25709,6 +25761,12 @@ export type ContinueAgentRunResponses = {
         prompt: string;
         projectId: string | null;
         createdAt: string;
+        limits: {
+            tier: 'S' | 'M' | 'L';
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+        } | null;
     };
 };
 
@@ -41255,10 +41313,13 @@ export type GetBootstrapResponses = {
                     defaultTtlHours: number;
                     defaultIdleTimeoutMinutes: number;
                     allowPrivileged: boolean;
-                    resources: {
-                        cpuRequest: string;
-                        memoryRequest: string;
-                        memoryLimit: string;
+                    defaultTier: 'S' | 'M' | 'L';
+                    tiers: {
+                        [key: string]: {
+                            cpuRequest: string;
+                            memoryRequest: string;
+                            memoryLimit: string;
+                        };
                     };
                 };
                 plugins: boolean;
@@ -41469,6 +41530,7 @@ export type GetNewChatBootstrapResponses = {
                     cpuLimit?: string;
                     memoryLimit?: string;
                 } | null;
+                tier?: 'S' | 'M' | 'L';
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -41645,6 +41707,7 @@ export type GetNewChatBootstrapResponses = {
                         cpuLimit?: string;
                         memoryLimit?: string;
                     } | null;
+                    tier?: 'S' | 'M' | 'L';
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -42030,6 +42093,7 @@ export type GetConversationBootstrapResponses = {
                         cpuLimit?: string;
                         memoryLimit?: string;
                     } | null;
+                    tier?: 'S' | 'M' | 'L';
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -42206,6 +42270,7 @@ export type GetConversationBootstrapResponses = {
                             cpuLimit?: string;
                             memoryLimit?: string;
                         } | null;
+                        tier?: 'S' | 'M' | 'L';
                         ports?: Array<number>;
                         environment: Array<{
                             key: string;
@@ -50960,10 +51025,13 @@ export type GetConfigResponses = {
                 defaultTtlHours: number;
                 defaultIdleTimeoutMinutes: number;
                 allowPrivileged: boolean;
-                resources: {
-                    cpuRequest: string;
-                    memoryRequest: string;
-                    memoryLimit: string;
+                defaultTier: 'S' | 'M' | 'L';
+                tiers: {
+                    [key: string]: {
+                        cpuRequest: string;
+                        memoryRequest: string;
+                        memoryLimit: string;
+                    };
                 };
             };
             plugins: boolean;
@@ -127809,6 +127877,12 @@ export type GetProjectRunsResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        runtimeLimits: {
+            tier: 'S' | 'M' | 'L';
+            idleTimeoutMinutes: number;
+            maxDurationHours: number;
+            maxCostUsd: number | null;
+        } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         gatewayTokenId: string | null;

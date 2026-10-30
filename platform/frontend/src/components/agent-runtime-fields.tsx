@@ -53,6 +53,8 @@ import {
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
 
+export type AgentRuntimeTier = "S" | "M" | "L";
+
 export type AgentRuntimeConfig = {
   image: string;
   command: string[] | null;
@@ -66,6 +68,8 @@ export type AgentRuntimeConfig = {
     cpuLimit?: string;
     memoryLimit?: string;
   } | null;
+  /** Size of a run's container while resources is null; absent means M. */
+  tier?: AgentRuntimeTier;
   ports?: number[];
   environment: Array<{ key: string; value: string }> | null;
   credentials: Array<{
@@ -587,6 +591,8 @@ function AgentRuntimeContainerOptions({
     onChange({ ...value, ...patch });
   const runtimeDefaults = useFeature("agentRuntimeBackend");
   const [open, setOpen] = useState(false);
+  const selectedTier = value.tier ?? runtimeDefaults?.defaultTier ?? "M";
+  const tierResources = runtimeDefaults?.tiers[selectedTier];
   return (
     <Collapsible
       open={open}
@@ -603,7 +609,7 @@ function AgentRuntimeContainerOptions({
               Resources and access
             </span>
             <span className="block truncate text-xs text-muted-foreground">
-              {containerOptionsSummary(value)}
+              {containerOptionsSummary(value, runtimeDefaults)}
             </span>
           </span>
           <ChevronDown
@@ -616,12 +622,34 @@ function AgentRuntimeContainerOptions({
         </UnstyledButton>
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-5 border-t px-4 py-4">
+        <div className="space-y-2">
+          <Label htmlFor="agent-runtime-tier">Size</Label>
+          <Select
+            value={selectedTier}
+            onValueChange={(tier: AgentRuntimeTier) => update({ tier })}
+          >
+            <SelectTrigger id="agent-runtime-tier" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TIER_ORDER.map((tier) => (
+                <SelectItem key={tier} value={tier}>
+                  {tierLabel(tier, runtimeDefaults?.tiers[tier])}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FieldDescription>
+            CPU and memory of a run's container. A caller that starts a run can
+            ask for a smaller size. Custom values below replace the size.
+          </FieldDescription>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <ResourceField
             id="agent-runtime-cpu-request"
             label="CPU request"
             placeholder={installationDefaultPlaceholder(
-              runtimeDefaults?.resources.cpuRequest,
+              tierResources?.cpuRequest,
             )}
             value={value.resources?.cpuRequest}
             onChange={(cpuRequest) =>
@@ -639,7 +667,7 @@ function AgentRuntimeContainerOptions({
             id="agent-runtime-memory-request"
             label="Memory request"
             placeholder={installationDefaultPlaceholder(
-              runtimeDefaults?.resources.memoryRequest,
+              tierResources?.memoryRequest,
             )}
             value={value.resources?.memoryRequest}
             onChange={(memoryRequest) =>
@@ -650,7 +678,7 @@ function AgentRuntimeContainerOptions({
             id="agent-runtime-memory-limit"
             label="Memory limit"
             placeholder={installationDefaultPlaceholder(
-              runtimeDefaults?.resources.memoryLimit,
+              tierResources?.memoryLimit,
             )}
             value={value.resources?.memoryLimit}
             onChange={(memoryLimit) =>
@@ -903,20 +931,40 @@ function ResourceField({
   );
 }
 
-function containerOptionsSummary(config: AgentRuntimeConfig): string {
+const TIER_ORDER: AgentRuntimeTier[] = ["S", "M", "L"];
+
+function tierLabel(
+  tier: AgentRuntimeTier,
+  resources?: {
+    cpuRequest: string;
+    memoryRequest: string;
+    memoryLimit: string;
+  },
+): string {
+  if (!resources) return tier;
+  return `${tier}: ${resources.cpuRequest} CPU, ${resources.memoryRequest} memory (${resources.memoryLimit} limit)`;
+}
+
+function containerOptionsSummary(
+  config: AgentRuntimeConfig,
+  runtimeDefaults?: { defaultTier: AgentRuntimeTier } | null,
+): string {
   const resources = config.resources ?? {};
-  const parts = [
+  const custom = [
     resources.cpuRequest && `CPU ${resources.cpuRequest}`,
     resources.cpuLimit && `CPU limit ${resources.cpuLimit}`,
     resources.memoryRequest && `Memory ${resources.memoryRequest}`,
     resources.memoryLimit && `Memory limit ${resources.memoryLimit}`,
+  ].filter(Boolean);
+  const parts = [
+    ...(custom.length
+      ? custom
+      : [`Size ${config.tier ?? runtimeDefaults?.defaultTier ?? "M"}`]),
     config.ports?.length &&
       `${config.ports.length === 1 ? "Port" : "Ports"} ${config.ports.join(", ")}`,
     config.privileged && "Privileged",
   ].filter(Boolean);
-  return parts.length
-    ? parts.join(" · ")
-    : "Installation default CPU and memory, no forwarded ports";
+  return parts.join(" · ");
 }
 
 function updateResource(

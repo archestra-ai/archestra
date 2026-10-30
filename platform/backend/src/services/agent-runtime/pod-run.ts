@@ -36,7 +36,7 @@ import type {
   AgentRunRecord,
   ResolvedAgentRuntime,
 } from "@/types";
-import { ApiError } from "@/types";
+import { type AgentRunLimits, ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import {
   prepareAgentRuntimeBackendDriver,
@@ -60,6 +60,7 @@ import {
   runtimeOpenAppaSession,
   stampRuntimeBinding,
 } from "./runtime-identity";
+import { resolveAgentRunLimits } from "./runtime-tiers";
 import { generateAgentRunTitle } from "./title";
 import { agentRunTranscriptStore } from "./transcript-store";
 
@@ -77,6 +78,8 @@ import { agentRunTranscriptStore } from "./transcript-store";
  */
 async function startAgentRunSession(params: {
   runtime: ResolvedAgentRuntime;
+  /** The caller's resolved limits; absent means the Agent's own. */
+  limits?: AgentRunLimits | null;
   taskId: string;
   agentId: string;
   actor: A2AActor;
@@ -156,9 +159,16 @@ async function startAgentRunSession(params: {
     task = promptWithContract(task, contract);
   }
 
+  // A continuation keeps the first turn's tier and limits; its workspace
+  // already has that size and that expiry.
+  const limits =
+    priorRun?.runtimeLimits ??
+    params.limits ??
+    resolveAgentRunLimits({ runtime: params.runtime });
   const { spec, virtualApiKeyId, gatewayTokenId } =
     await buildAgentRunLaunchSpec({
       runtime: params.runtime,
+      limits,
       taskId: params.taskId,
       runId,
       agentId: params.agentId,
@@ -217,6 +227,7 @@ async function startAgentRunSession(params: {
     backend: backend.name,
     runtimeScope,
     activeDeadlineSeconds: spec.activeDeadlineSeconds,
+    runtimeLimits: limits,
     virtualApiKeyId,
     gatewayTokenId,
     completionTarget: params.completionTarget,
@@ -410,6 +421,7 @@ export function resolveAgentRuntime(
  */
 export async function runTaskInAgentRuntime(params: {
   runtime: ResolvedAgentRuntime;
+  limits?: AgentRunLimits | null;
   taskId: string;
   agentId: string;
   actor: A2AActor;

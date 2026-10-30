@@ -69,6 +69,8 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
       command: ["/bin/sh", "-c", "printf after >> /home/node/image-move"],
       privileged: false,
       resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
+      tier: null,
+      warmTiers: [],
       env: { ARCHESTRA_AGENT_RUNTIME_TASK_ID: task.id },
       secretEnv: {},
       activeDeadlineSeconds: 600,

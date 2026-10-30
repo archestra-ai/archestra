@@ -37,6 +37,7 @@ import {
   OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
+import OrganizationModel from "@/models/organization";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
@@ -264,6 +265,10 @@ describe("OpenAI proxy spoken replies", () => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);
     const agent = await makeAgent({ name: "Spoken Reply Agent" });
+    // Logs keep media only when the organization turns it on.
+    await OrganizationModel.patch(agent.organizationId, {
+      keepMediaInLogs: true,
+    });
     const owner = await makeUser();
     await makeMember(owner.id, agent.organizationId);
     const wav = "UklGRiQAAABXQVZF".repeat(64);

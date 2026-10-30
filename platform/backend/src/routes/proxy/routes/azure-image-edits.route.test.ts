@@ -15,6 +15,7 @@ import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import { InteractionModel, VirtualApiKeyModel } from "@/models";
 import LimitModel from "@/models/limit";
+import OrganizationModel from "@/models/organization";
 import { test as baseTest, expect } from "@/test";
 import azureRoutes from "./azure";
 
@@ -103,6 +104,10 @@ const test = baseTest.extend<{
     config.llm.azure.baseUrl = "https://unselected.example/openai/v1";
     config.llmProxy.plugins = [];
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    // Logs keep media only when the organization turns it on.
+    await OrganizationModel.patch(agent.organizationId, {
+      keepMediaInLogs: true,
+    });
     const secret = await makeSecret({
       secret: { apiKey: "fixture-image-provider-key" },
     });

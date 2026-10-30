@@ -21368,7 +21368,7 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": true
+          "default": false
         },
         "allow_tool_auto_assignment": {
           "name": "allow_tool_auto_assignment",

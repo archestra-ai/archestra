@@ -21,7 +21,7 @@ import { MediaInLogsSection } from "./media-in-logs-section";
 beforeEach(() => {
   vi.clearAllMocks();
   mockUpdateSecurityMutateAsync.mockResolvedValue({});
-  mockOrganization = { keepMediaInLogs: true };
+  mockOrganization = { keepMediaInLogs: false };
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
     isPending: false,
@@ -43,32 +43,32 @@ beforeEach(() => {
 });
 
 describe("MediaInLogsSection", () => {
-  it("is on by default and saves it off", async () => {
+  it("is off by default and saves it on", async () => {
     mockOrganization = {};
     render(<MediaInLogsSection />);
     const toggle = screen.getByRole("switch", { name: "Keep media in logs" });
-    expect(toggle).toBeChecked();
+    expect(toggle).not.toBeChecked();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
 
     await userEvent.click(toggle);
-    expect(toggle).not.toBeChecked();
+    expect(toggle).toBeChecked();
     await userEvent.click(await screen.findByRole("button", { name: "Save" }));
     expect(mockUpdateSecurityMutateAsync).toHaveBeenCalledWith({
-      keepMediaInLogs: false,
+      keepMediaInLogs: true,
     });
   });
 
   it("shows the stored setting and discards an unsaved change", async () => {
-    mockOrganization = { keepMediaInLogs: false };
+    mockOrganization = { keepMediaInLogs: true };
     render(<MediaInLogsSection />);
     const toggle = screen.getByRole("switch", { name: "Keep media in logs" });
-    expect(toggle).not.toBeChecked();
+    expect(toggle).toBeChecked();
 
     await userEvent.click(toggle);
     await userEvent.click(
       await screen.findByRole("button", { name: "Cancel" }),
     );
-    expect(toggle).not.toBeChecked();
+    expect(toggle).toBeChecked();
     expect(mockUpdateSecurityMutateAsync).not.toHaveBeenCalled();
   });
 });

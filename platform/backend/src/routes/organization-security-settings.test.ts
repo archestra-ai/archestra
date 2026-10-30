@@ -117,17 +117,17 @@ describe("PATCH /api/organization/security-settings", () => {
     });
   });
 
-  test("media in logs is kept by default, and an administrator can turn it off, audited", async () => {
-    expect(await OrganizationModel.keepsMediaInLogs({ organizationId })).toBe(
-      true,
-    );
-
-    const response = await patch({ keepMediaInLogs: false });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json().keepMediaInLogs).toBe(false);
+  test("media in logs is off by default, and an administrator can turn it on, audited", async () => {
     expect(await OrganizationModel.keepsMediaInLogs({ organizationId })).toBe(
       false,
+    );
+
+    const response = await patch({ keepMediaInLogs: true });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().keepMediaInLogs).toBe(true);
+    expect(await OrganizationModel.keepsMediaInLogs({ organizationId })).toBe(
+      true,
     );
     await vi.waitFor(async () => {
       const { data } = await AuditLogModel.findPaginated({
@@ -138,8 +138,8 @@ describe("PATCH /api/organization/security-settings", () => {
       });
       expect(data[0]).toMatchObject({
         action: "organization.updated",
-        before: { keepMediaInLogs: true },
-        after: { keepMediaInLogs: false },
+        before: { keepMediaInLogs: false },
+        after: { keepMediaInLogs: true },
       });
     });
   });

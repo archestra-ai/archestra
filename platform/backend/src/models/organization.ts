@@ -649,8 +649,8 @@ class OrganizationModel {
    * straight from the row on each log write, like the proxy's credential
    * setting, so a change applies to the very next row on every replica. The
    * organization is found from whichever owner the row names (agent, app,
-   * knowledge connector or environment), in one query; a row that names none
-   * keeps its media.
+   * knowledge connector or environment), in one query. Media is kept only
+   * when that organization turned it on; a row that names none keeps none.
    */
   static async keepsMediaInLogs(owner: {
     organizationId?: string | null;
@@ -677,7 +677,7 @@ class OrganizationModel {
       .from(schema.organizationsTable)
       .where(sql`${schema.organizationsTable.id} = ${organizationId}`)
       .limit(1);
-    return row?.keep ?? true;
+    return row?.keep ?? false;
   }
 
   /**

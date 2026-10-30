@@ -6,6 +6,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import logger from "@/logging";
 import { InteractionModel } from "@/models";
 import LimitModel from "@/models/limit";
+import OrganizationModel from "@/models/organization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { PROXY_BODY_LIMIT } from "../common";
@@ -91,6 +92,10 @@ describe.each([
       `http://127.0.0.1:${address.port}${provider === "azure" ? "/openai/v1" : "/v1"}`;
     config.llmProxy.plugins = [];
     const agent = await makeAgent({ isDefault: true, agentType: "llm_proxy" });
+    // Logs keep media only when the organization turns it on.
+    await OrganizationModel.patch(agent.organizationId, {
+      keepMediaInLogs: true,
+    });
     agentId = agent.id;
     const user = await makeUser();
     await makeMember(user.id, agent.organizationId);

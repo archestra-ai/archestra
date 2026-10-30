@@ -10,6 +10,7 @@ import {
   ModelModel,
   VirtualApiKeyModel,
 } from "@/models";
+import OrganizationModel from "@/models/organization";
 import { accessGrants, describe, expect, test, vi } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import modelRouterRoutes from "./model-router";
@@ -117,6 +118,10 @@ describe.each([
     if (!address || typeof address === "string")
       throw new Error("No upstream port");
     const agent = await makeAgent({ isDefault: true, agentType: "llm_proxy" });
+    // Logs keep media only when the organization turns it on.
+    await OrganizationModel.patch(agent.organizationId, {
+      keepMediaInLogs: true,
+    });
     const mappings = [];
     const modelIds = [];
     for (const provider of ["azure", "openai", "gemini"] as const) {

@@ -11,8 +11,8 @@ import {
 
 /**
  * Whether LLM proxy and MCP gateway logs keep the images, audio and files
- * each call carried. On by default. Off, new rows mark where media was and
- * keep everything else.
+ * each call carried. Off by default: new rows mark where media was and keep
+ * everything else.
  */
 export function MediaInLogsSection() {
   const { data: organization } = useOrganization();
@@ -21,7 +21,7 @@ export function MediaInLogsSection() {
     "Failed to update log settings",
   );
 
-  const saved = organization?.keepMediaInLogs ?? true;
+  const saved = organization?.keepMediaInLogs ?? false;
   const [kept, setKept] = useState(saved);
 
   // Adopt the server value once it arrives, and again after a save replaces it.

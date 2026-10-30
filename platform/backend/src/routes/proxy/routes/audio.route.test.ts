@@ -11,6 +11,7 @@ import type { AzureOpenAI } from "openai";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import { InteractionModel, VirtualApiKeyModel } from "@/models";
+import OrganizationModel from "@/models/organization";
 import { describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 
@@ -119,6 +120,10 @@ describe.each([
       const agent = await makeAgent({
         isDefault: true,
         agentType: "llm_proxy",
+      });
+      // Logs keep media only when the organization turns it on.
+      await OrganizationModel.patch(agent.organizationId, {
+        keepMediaInLogs: true,
       });
       const user = await makeUser();
       await makeMember(user.id, agent.organizationId);

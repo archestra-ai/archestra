@@ -1,9 +1,9 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 /**
- * Contract under test: with an organization's "Keep media in logs" off, no
- * image, audio or file bytes reach the LLM or MCP log tables, whoever wrote
- * the row; the text, usage and the media's place stay. On, the default, rows
- * keep their media.
+ * Contract under test: with an organization's "Keep media in logs" off, the
+ * default, no image, audio or file bytes reach the LLM or MCP log tables,
+ * whoever wrote the row; the text, usage and the media's place stay. Turned
+ * on, rows keep their media.
  */
 import { MEDIA_NOT_KEPT } from "@archestra/shared";
 import { sql } from "drizzle-orm";
@@ -137,7 +137,7 @@ describe("LLM interactions", () => {
     ).not.toContain(PNG);
   });
 
-  test("on, the default, a row keeps its media, and turning it back on applies to the next row", async ({
+  test("off by default; turned on, the next row keeps its media, and turned off again, the next does not", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent();
@@ -153,15 +153,15 @@ describe("LLM interactions", () => {
 
     expect(
       JSON.stringify(await rawRow("interactions", (await write()).id)),
-    ).toContain(PNG);
-    await setKeepMedia(organizationId, false);
-    expect(
-      JSON.stringify(await rawRow("interactions", (await write()).id)),
     ).not.toContain(PNG);
     await setKeepMedia(organizationId, true);
     expect(
       JSON.stringify(await rawRow("interactions", (await write()).id)),
     ).toContain(PNG);
+    await setKeepMedia(organizationId, false);
+    expect(
+      JSON.stringify(await rawRow("interactions", (await write()).id)),
+    ).not.toContain(PNG);
   });
 });
 
@@ -224,10 +224,9 @@ describe("MCP tool calls", () => {
     ).not.toContain(PNG);
   });
 
-  test("on, the default, a tool's screenshot is stored", async ({
-    makeAgent,
-  }) => {
+  test("turned on, a tool's screenshot is stored", async ({ makeAgent }) => {
     const agent = await makeAgent();
+    await setKeepMedia(await organizationOf(agent.id), true);
     const created = await McpToolCallModel.create({
       agentId: agent.id,
       mcpServerName: "browser",

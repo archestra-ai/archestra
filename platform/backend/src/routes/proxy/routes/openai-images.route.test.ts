@@ -3,6 +3,7 @@ import sharp from "sharp";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import { InteractionModel, ModelModel } from "@/models";
+import OrganizationModel from "@/models/organization";
 import { describe, expect, test } from "@/test";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { useMswServer } from "@/test/msw";
@@ -123,6 +124,10 @@ describe.each([
     config.llm.openai.baseUrl = "https://openai.example/v1";
     config.llmProxy.plugins = [];
     const agent = await makeAgent({ isDefault: true, agentType: "llm_proxy" });
+    // Logs keep media only when the organization turns it on.
+    await OrganizationModel.patch(agent.organizationId, {
+      keepMediaInLogs: true,
+    });
     const user = await makeUser();
     await makeMember(user.id, agent.organizationId);
     const token = await makePassthroughCredential({

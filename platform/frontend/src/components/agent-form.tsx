@@ -1079,6 +1079,9 @@ export function AgentForm({
   // overwriting them with the empty default.
   const shouldLoadKnowledgeSources = showToolsSections;
   const shouldLoadLlmConfiguration = agentType === "agent";
+  const { data: canConfigureRuntime } = useHasPermissions({
+    agent: ["configure-runtime"],
+  });
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canReadAgentTriggers } = useHasPermissions({
     organizationSettings: ["read"],
@@ -2905,6 +2908,7 @@ export function AgentForm({
     !needsClaudeProviderKey &&
     !needsRuntimeContainer &&
     !runtimeModelIncompatibility &&
+    (!runtimeHasLocalChanges || canConfigureRuntime === true) &&
     mcpEnvConflicts.length === 0 &&
     !environmentConflicts.blocksSave &&
     !(showGitHubActionsAccess && gitHubActionsAccessError(githubActionsAccess));
@@ -2971,7 +2975,7 @@ export function AgentForm({
   const setClaudeAuthentication = (
     authentication: "provider" | "subscription",
   ) => {
-    if (!runtime) return;
+    if (!runtime || canConfigureRuntime !== true) return;
     setAgentRuntime({
       ...runtime,
       claudeCode: {
@@ -3142,44 +3146,46 @@ export function AgentForm({
               </p>
             ))}
           {isClaudeCodeRuntime ? (
-            <ClaudeCodeInferenceSettings
-              agentId={agent?.id ?? ""}
-              authentication={
-                usesClaudeSubscription ? "subscription" : "provider"
-              }
-              onAuthenticationChange={setClaudeAuthentication}
-              model={runtime?.claudeCode?.model}
-              onModelChange={(model) => {
-                if (!runtime) return;
-                setAgentRuntime({
-                  ...runtime,
-                  claudeCode: {
-                    authentication: "subscription",
-                    model,
-                  },
-                  credentials:
-                    runtime.credentials?.filter(
-                      ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
-                    ) ?? null,
-                });
-              }}
-              provider={
-                selectedApiKey?.provider ??
-                effectiveLlmModelRow?.provider ??
-                null
-              }
-              vertexEnabled={anthropicVertexAiEnabled}
-              apiKeySelector={claudeConnectionControl}
-              modelSelector={modelControl}
-              showModelSelector={
-                !!llmApiKeyId ||
-                availableApiKeys.some(
-                  (key) =>
-                    !isPersonalSubscription(key) &&
-                    runtimeProviderFilter(key.provider),
-                )
-              }
-            />
+            <fieldset disabled={canConfigureRuntime !== true}>
+              <ClaudeCodeInferenceSettings
+                agentId={agent?.id ?? ""}
+                authentication={
+                  usesClaudeSubscription ? "subscription" : "provider"
+                }
+                onAuthenticationChange={setClaudeAuthentication}
+                model={runtime?.claudeCode?.model}
+                onModelChange={(model) => {
+                  if (!runtime || canConfigureRuntime !== true) return;
+                  setAgentRuntime({
+                    ...runtime,
+                    claudeCode: {
+                      authentication: "subscription",
+                      model,
+                    },
+                    credentials:
+                      runtime.credentials?.filter(
+                        ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
+                      ) ?? null,
+                  });
+                }}
+                provider={
+                  selectedApiKey?.provider ??
+                  effectiveLlmModelRow?.provider ??
+                  null
+                }
+                vertexEnabled={anthropicVertexAiEnabled}
+                apiKeySelector={claudeConnectionControl}
+                modelSelector={modelControl}
+                showModelSelector={
+                  !!llmApiKeyId ||
+                  availableApiKeys.some(
+                    (key) =>
+                      !isPersonalSubscription(key) &&
+                      runtimeProviderFilter(key.provider),
+                  )
+                }
+              />
+            </fieldset>
           ) : (
             <>
               <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -3361,6 +3367,7 @@ export function AgentForm({
                   {!agent &&
                     isInternalAgent &&
                     agentRuntimeEnabled &&
+                    canConfigureRuntime === true &&
                     !runsOnBuiltInHarness && (
                       <div className="space-y-4 border-t pt-6">
                         <AgentRuntimePicker
@@ -3863,10 +3870,20 @@ export function AgentForm({
             runtimeEditable &&
             !isBuiltIn && (
               <div className={cn(!isActiveSection("runtime") && "hidden")}>
-                <AgentRuntimeFields
-                  value={runtime}
-                  onChange={setAgentRuntime}
-                />
+                {!canConfigureRuntime && (
+                  <InlineNotice variant="info">
+                    <InlineNoticeText>
+                      Configure runtime permission is required to change this
+                      agent's runtime. Existing settings are preserved.
+                    </InlineNoticeText>
+                  </InlineNotice>
+                )}
+                <fieldset disabled={canConfigureRuntime !== true}>
+                  <AgentRuntimeFields
+                    value={runtime}
+                    onChange={setAgentRuntime}
+                  />
+                </fieldset>
               </div>
             )}
 

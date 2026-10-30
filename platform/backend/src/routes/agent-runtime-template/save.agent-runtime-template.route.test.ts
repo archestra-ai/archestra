@@ -43,6 +43,17 @@ describe("PUT /api/agent-runtime-templates/settings", () => {
       popularAgentOverrides: overrides,
     });
     expect(
+      await OrganizationModel.getById(ctx.organizationId),
+    ).not.toHaveProperty("runtimeTemplateSettings");
+    expect(await OrganizationModel.getFirst()).not.toHaveProperty(
+      "runtimeTemplateSettings",
+    );
+    expect(
+      await OrganizationModel.patch(ctx.organizationId, {
+        name: "Updated organization",
+      }),
+    ).not.toHaveProperty("runtimeTemplateSettings");
+    expect(
       (await OrganizationModel.getById(ctx.organizationId))
         ?.popularAgentOverrides,
     ).toEqual(overrides);
@@ -74,7 +85,9 @@ describe("PUT /api/agent-runtime-templates/settings", () => {
   });
 
   test("rejects a stale revision and redacts environment values from audit snapshots", async () => {
-    const template = makeTemplate();
+    const template = makeTemplate({
+      icon: "data:image/png;base64,dGVzdC1pY29u",
+    });
     const body = {
       revision: 0,
       templates: [template],
@@ -96,6 +109,8 @@ describe("PUT /api/agent-runtime-templates/settings", () => {
       expect(data.some((item) => item.outcome === "success")).toBe(true);
       expect(JSON.stringify(data)).not.toContain("test-private-setting");
       expect(JSON.stringify(data)).toContain("[REDACTED]");
+      expect(JSON.stringify(data)).not.toContain(template.icon);
+      expect(JSON.stringify(data)).toContain("(set)");
     });
   });
 

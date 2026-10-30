@@ -59,6 +59,7 @@ const server = setupServer(
         return HttpResponse.json(
           {
             error: {
+              type: "api_conflict_error",
               message:
                 "Runtime templates changed. Reload the settings before saving again.",
             },
@@ -116,6 +117,44 @@ function mount() {
 }
 
 describe("RuntimeTemplateSection", () => {
+  it("refreshes after a conflict and lets Cancel start the next edit from the latest revision", async () => {
+    mount();
+    const user = userEvent.setup();
+    const actions = await screen.findByRole("button", {
+      name: "Actions for Codex",
+    });
+    await waitFor(() => expect(actions).toBeEnabled());
+    await user.click(actions);
+    await user.click(
+      screen.getByRole("menuitem", { name: "Remove from list" }),
+    );
+    // Another administrator changes the list while this draft is open.
+    settings = {
+      ...settings,
+      revision: 1,
+      popularAgentOverrides: { opencode: { hidden: true } },
+    };
+    overrides = settings.popularAgentOverrides;
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Save" })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Actions for OpenCode" }),
+      ).not.toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole("button", { name: "Actions for Codex" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Remove from list" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(settings.revision).toBe(2));
+    expect(settings.popularAgentOverrides?.opencode?.hidden).toBe(true);
+    expect(settings.popularAgentOverrides?.codex?.hidden).toBe(true);
+  });
+
   it("validates, cancels, adds and persists a custom runtime across a fresh mount", async () => {
     const user = userEvent.setup();
     settings.popularAgentOverrides = { codex: { hidden: true, position: 3 } };

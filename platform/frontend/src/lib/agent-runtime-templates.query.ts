@@ -48,10 +48,16 @@ export function useSaveRuntimeTemplateSettings() {
     mutationFn: async (
       body: archestraApiTypes.SaveRuntimeTemplateSettingsData["body"],
     ) => {
-      const { data, error } = await archestraApiSdk.saveRuntimeTemplateSettings(
-        { body },
-      );
+      const { data, error, response } =
+        await archestraApiSdk.saveRuntimeTemplateSettings({ body });
       if (error) {
+        if (response?.status === 409) {
+          await Promise.all([
+            client.invalidateQueries({ queryKey: settingsKey }),
+            client.invalidateQueries({ queryKey: catalogKey }),
+            client.invalidateQueries({ queryKey: organizationKeys.details() }),
+          ]);
+        }
         handleApiError(error);
         throw toApiError(error);
       }

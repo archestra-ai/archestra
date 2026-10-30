@@ -140,12 +140,15 @@ export async function fetchOpenAiModels(
 
   const pricing = await fetchLiteLlmPricing({ baseUrl, apiKey, extraHeaders });
   return data.data.flatMap((model) => {
-    // Media classification wins: transcription ids pass the chat-name filter.
-    const media = openAiMediaCapabilities(model.id);
-    if (!media && !isChatModelId(model.id)) {
+    // Classification wins over the chat-name filter: transcription ids pass
+    // it, audio chat ids fail it.
+    const classified =
+      openAiMediaCapabilities(model.id) ??
+      openAiAudioChatCapabilities(model.id);
+    if (!classified && !isChatModelId(model.id)) {
       return [];
     }
-    const capabilities = media ?? openAiSearchCapabilities(model.id);
+    const capabilities = classified ?? openAiSearchCapabilities(model.id);
     return [
       {
         ...mapOpenAiModelToModelInfo(model),
@@ -177,6 +180,24 @@ function openAiMediaCapabilities(id: string): FetchedModelCapabilities | null {
     return mediaCapabilities(["audio"], ["text"]);
   }
   return null;
+}
+
+/**
+ * Audio chat models (`gpt-audio`, `gpt-audio-mini` and the `*-audio-preview`
+ * snapshots) answer `/chat/completions` with text, or with speech when the
+ * request asks for the audio modality, and call tools like any chat model.
+ * Both modalities are recorded so chat pickers and the Model Router keep them.
+ */
+function openAiAudioChatCapabilities(
+  id: string,
+): FetchedModelCapabilities | null {
+  return /^gpt-audio(?:-|$)|audio-preview/.test(id.toLowerCase())
+    ? {
+        inputModalities: ["text", "audio"],
+        outputModalities: ["text", "audio"],
+        supportsToolCalling: true,
+      }
+    : null;
 }
 
 /**

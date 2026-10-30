@@ -12,6 +12,7 @@ import type {
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import { priceOpenAiAudioChat } from "@/services/media-pricing";
 import {
   decodeOpenAiCodexCredential,
   isOpenAiCodexCredential,
@@ -948,14 +949,18 @@ export class OpenAIResponseAdapter
     }
     const { input, output, cacheRead, cacheWrite, cacheWrite1h, reasoning } =
       getUsageTokens(this.response.usage);
-    return {
-      inputTokens: input,
-      outputTokens: output,
-      cacheReadTokens: cacheRead,
-      cacheWriteTokens: cacheWrite,
-      cacheWrite1hTokens: cacheWrite1h,
-      reasoningTokens: reasoning,
-    };
+    return withAudioTokenCost(
+      {
+        inputTokens: input,
+        outputTokens: output,
+        cacheReadTokens: cacheRead,
+        cacheWriteTokens: cacheWrite,
+        cacheWrite1hTokens: cacheWrite1h,
+        reasoningTokens: reasoning,
+      },
+      this.response.model,
+      this.response.usage,
+    );
   }
 
   getOriginalResponse(): OpenAiResponse {
@@ -1140,14 +1145,18 @@ export class OpenAIStreamAdapter
     // when stream_options.include_usage is true
     if (chunk.usage) {
       const tokens = getUsageTokens(chunk.usage);
-      this.state.usage = {
-        inputTokens: tokens.input,
-        outputTokens: tokens.output,
-        cacheReadTokens: tokens.cacheRead,
-        cacheWriteTokens: tokens.cacheWrite,
-        cacheWrite1hTokens: tokens.cacheWrite1h,
-        reasoningTokens: tokens.reasoning,
-      };
+      this.state.usage = withAudioTokenCost(
+        {
+          inputTokens: tokens.input,
+          outputTokens: tokens.output,
+          cacheReadTokens: tokens.cacheRead,
+          cacheWriteTokens: tokens.cacheWrite,
+          cacheWrite1hTokens: tokens.cacheWrite1h,
+          reasoningTokens: tokens.reasoning,
+        },
+        chunk.model,
+        chunk.usage,
+      );
     }
 
     // `choices` can be entirely absent (not just empty) on some
@@ -1507,6 +1516,23 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
     cacheWrite1h: details?.cache_write_1h_tokens,
     reasoning,
   };
+}
+
+/**
+ * An audio chat response (`gpt-audio`) counts its audio tokens inside the
+ * prompt and completion totals, which the per-token chat price would bill as
+ * text. When the audio tariff covers the model, its cost is recorded instead;
+ * the token counts stay as reported.
+ */
+function withAudioTokenCost(
+  usage: UsageView,
+  model: string,
+  reported: OpenAi.Types.Usage,
+): UsageView {
+  const cost = priceOpenAiAudioChat({ model, usage: reported });
+  return cost === undefined
+    ? usage
+    : { ...usage, providerReportedCost: cost, mediaTariff: true };
 }
 
 export const openaiAdapterFactory: LLMProvider<

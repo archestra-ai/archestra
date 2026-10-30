@@ -281,6 +281,8 @@ describe("ModelSyncService", () => {
           object: "list",
           data: [
             "gpt-4o",
+            "gpt-audio",
+            "gpt-4o-mini-audio-preview",
             "gpt-image-1",
             "tts-1",
             "gpt-4o-mini-tts",
@@ -316,9 +318,11 @@ describe("ModelSyncService", () => {
     const byId = new Map(rows.map(({ model }) => [model.modelId, model]));
     expect([...byId.keys()].sort()).toEqual([
       "gpt-4o",
+      "gpt-4o-mini-audio-preview",
       "gpt-4o-mini-tts",
       "gpt-4o-search-preview",
       "gpt-4o-transcribe",
+      "gpt-audio",
       "gpt-image-1",
       "gpt-live-transcribe",
       "gpt-transcribe",
@@ -327,6 +331,10 @@ describe("ModelSyncService", () => {
       "whisper-1",
     ]);
     expect(byId.get("gpt-image-1")?.outputModalities).toEqual(["image"]);
+    // Audio chat models answer chat turns in text or speech; they stay chat models.
+    expect(byId.get("gpt-audio")?.inputModalities).toEqual(["text", "audio"]);
+    expect(byId.get("gpt-audio")?.outputModalities).toEqual(["text", "audio"]);
+    expect(byId.get("gpt-audio")?.supportsToolCalling).toBe(true);
     expect(byId.get("gpt-4o-mini-tts")?.outputModalities).toEqual(["audio"]);
     // Transcription ids pass the chat-name filter, so they used to sync as chat.
     expect(byId.get("gpt-4o-transcribe")?.inputModalities).toEqual(["audio"]);
@@ -338,7 +346,12 @@ describe("ModelSyncService", () => {
       .filter(({ model }) => ModelModel.supportsTextChat(model))
       .map(({ model }) => model.modelId)
       .sort();
-    expect(chatModels).toEqual(["gpt-4o", "gpt-4o-search-preview"]);
+    expect(chatModels).toEqual([
+      "gpt-4o",
+      "gpt-4o-mini-audio-preview",
+      "gpt-4o-search-preview",
+      "gpt-audio",
+    ]);
 
     await expect(
       resolveModelRoute({

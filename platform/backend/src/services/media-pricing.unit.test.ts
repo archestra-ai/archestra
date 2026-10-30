@@ -4,6 +4,7 @@ import {
   mediaTariffCovers,
   priceGeminiImage,
   priceOpenAiAudio,
+  priceOpenAiAudioChat,
   priceOpenAiImage,
 } from "./media-pricing";
 
@@ -178,6 +179,42 @@ describe("priceOpenAiAudio", () => {
   });
 });
 
+describe("priceOpenAiAudioChat", () => {
+  test("prices the audio tokens of an audio chat response apart from its text", () => {
+    // gpt-audio: $2.50/M text in, $32/M audio in, $10/M text out, $64/M audio out.
+    expect(
+      priceOpenAiAudioChat({
+        model: "gpt-audio-2025-08-28",
+        usage: {
+          prompt_tokens: 120,
+          completion_tokens: 260,
+          prompt_tokens_details: { audio_tokens: 100, text_tokens: 20 },
+          completion_tokens_details: { audio_tokens: 250, text_tokens: 10 },
+        },
+      }),
+    ).toBe(0.01935);
+  });
+
+  test("leaves a text-only response and an unknown model to the chat price", () => {
+    expect(
+      priceOpenAiAudioChat({
+        model: "gpt-audio",
+        usage: { prompt_tokens: 12, completion_tokens: 8 },
+      }),
+    ).toBeUndefined();
+    expect(
+      priceOpenAiAudioChat({
+        model: "gpt-4o-audio-preview",
+        usage: {
+          prompt_tokens: 12,
+          completion_tokens: 8,
+          prompt_tokens_details: { audio_tokens: 10 },
+        },
+      }),
+    ).toBeUndefined();
+  });
+});
+
 describe("mediaTariffCovers", () => {
   test("covers the request shapes whose responses report what is billed", () => {
     expect(
@@ -250,6 +287,17 @@ describe("mediaPricingFor", () => {
         { kind: "image", usd: 10 },
       ],
       output: [{ kind: "image", usd: 40 }],
+    });
+    expect(mediaPricingFor("openai", "gpt-audio-mini")).toEqual({
+      per: "million_tokens",
+      input: [
+        { kind: "text", usd: 0.6 },
+        { kind: "audio", usd: 10 },
+      ],
+      output: [
+        { kind: "text", usd: 2.4 },
+        { kind: "audio", usd: 20 },
+      ],
     });
     expect(mediaPricingFor("azure", "tts-1-hd-1106")).toEqual({
       per: "million_characters",

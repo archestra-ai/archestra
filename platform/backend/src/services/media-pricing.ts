@@ -208,6 +208,47 @@ export function priceOpenAiAudio(params: {
   return undefined;
 }
 
+/** Chat Completions usage, as OpenAI reports it for an audio chat model. */
+interface OpenAiChatUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  prompt_tokens_details?: {
+    audio_tokens?: number;
+    text_tokens?: number;
+  } | null;
+  completion_tokens_details?: {
+    audio_tokens?: number;
+    text_tokens?: number;
+  } | null;
+}
+
+/**
+ * Cost of an OpenAI audio chat response (`gpt-audio`): the audio tokens
+ * inside the prompt and completion counts are priced at the audio rates, the
+ * rest at the model's text rates. A response without audio tokens is left to
+ * the per-token chat price, so `undefined` means "not an audio response"
+ * as well as "not priced here".
+ */
+export function priceOpenAiAudioChat(params: {
+  model: string;
+  usage: OpenAiChatUsage | undefined;
+}): number | undefined {
+  const tariff = lookup(OPENAI_AUDIO_CHAT, params.model);
+  const usage = params.usage;
+  if (!tariff || !usage) return;
+  const audioIn = usage.prompt_tokens_details?.audio_tokens ?? 0;
+  const audioOut = usage.completion_tokens_details?.audio_tokens ?? 0;
+  if (audioIn + audioOut === 0) return;
+  const textIn = Math.max(0, (usage.prompt_tokens ?? 0) - audioIn);
+  const textOut = Math.max(0, (usage.completion_tokens ?? 0) - audioOut);
+  return perMillion(
+    textIn * tariff.textInput +
+      audioIn * tariff.audioInput +
+      textOut * tariff.textOutput +
+      audioOut * tariff.audioOutput,
+  );
+}
+
 /**
  * A model's media rates as its vendor publishes them, for display beside the
  * per-token prices of chat models; `null` for a model these tables do not
@@ -244,6 +285,19 @@ export function mediaPricingFor(
         ...(image.textOutput === undefined
           ? []
           : [{ kind: "text" as const, usd: image.textOutput }]),
+      ],
+    };
+  const audioChat = lookup(OPENAI_AUDIO_CHAT, model);
+  if (audioChat)
+    return {
+      per: "million_tokens",
+      input: [
+        { kind: "text", usd: audioChat.textInput },
+        { kind: "audio", usd: audioChat.audioInput },
+      ],
+      output: [
+        { kind: "text", usd: audioChat.textOutput },
+        { kind: "audio", usd: audioChat.audioOutput },
       ],
     };
   const speech = lookup(OPENAI_SPEECH, model);
@@ -319,6 +373,30 @@ const GEMINI_IMAGE: Record<
     imageOutput: 30,
   },
   "gemini-nano-banana-2.1": { input: 1.5, textOutput: 7.5, imageOutput: 30 },
+};
+
+/** Audio chat models: text and audio tokens on both sides, priced apart. */
+const OPENAI_AUDIO_CHAT: Record<
+  string,
+  {
+    textInput: number;
+    textOutput: number;
+    audioInput: number;
+    audioOutput: number;
+  }
+> = {
+  "gpt-audio": {
+    textInput: 2.5,
+    textOutput: 10,
+    audioInput: 32,
+    audioOutput: 64,
+  },
+  "gpt-audio-mini": {
+    textInput: 0.6,
+    textOutput: 2.4,
+    audioInput: 10,
+    audioOutput: 20,
+  },
 };
 
 const OPENAI_SPEECH: Record<

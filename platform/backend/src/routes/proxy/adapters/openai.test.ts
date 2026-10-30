@@ -293,6 +293,40 @@ describe("OpenAIResponseAdapter", () => {
   });
 
   describe("getUsage", () => {
+    test("prices an audio chat response's audio tokens at the audio tariff", () => {
+      // gpt-audio: 20 text + 100 audio tokens in, 10 text + 250 audio out.
+      const response = {
+        ...createMockResponse(
+          { role: "assistant", content: "Hello" },
+          {
+            prompt_tokens: 120,
+            completion_tokens: 260,
+            prompt_tokens_details: { audio_tokens: 100, text_tokens: 20 },
+            completion_tokens_details: { audio_tokens: 250, text_tokens: 10 },
+          },
+        ),
+        model: "gpt-audio-2025-08-28",
+      };
+      const usage = openaiAdapterFactory
+        .createResponseAdapter(response)
+        .getUsage();
+      expect(usage).toMatchObject({
+        inputTokens: 120,
+        outputTokens: 260,
+        providerReportedCost: 0.01935,
+        mediaTariff: true,
+      });
+      // A text-only turn on the same model keeps the per-token chat price.
+      const textOnly = openaiAdapterFactory
+        .createResponseAdapter({
+          ...createMockResponse({ role: "assistant", content: "Hello" }),
+          model: "gpt-audio-2025-08-28",
+        })
+        .getUsage();
+      expect(textOnly.providerReportedCost).toBeUndefined();
+      expect(textOnly.mediaTariff).toBeUndefined();
+    });
+
     test("extracts usage tokens from response", () => {
       const response = createMockResponse(
         { role: "assistant", content: "Test" },

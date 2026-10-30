@@ -6,9 +6,10 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { syncSystemRoleForRoleHolders } from "@/auth/system-role-sync";
+import { getPermissionsForUserContext } from "@/auth/utils";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
-import { OrganizationRoleModel, UserModel } from "@/models";
+import { OrganizationRoleModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -73,10 +74,10 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { organizationId, user } = request;
 
       // Get user's permissions to validate they can grant these permissions
-      const userPermissions = await UserModel.getUserPermissions(
-        user.id,
+      const userPermissions = await getPermissionsForUserContext({
+        userId: user.id,
         organizationId,
-      );
+      });
 
       const validation = OrganizationRoleModel.validateRolePermissions(
         userPermissions,
@@ -167,10 +168,10 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate permissions if being changed
       if (permission) {
-        const userPermissions = await UserModel.getUserPermissions(
-          user.id,
+        const userPermissions = await getPermissionsForUserContext({
+          userId: user.id,
           organizationId,
-        );
+        });
 
         const validation = OrganizationRoleModel.validateRolePermissions(
           userPermissions,

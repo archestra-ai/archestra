@@ -333,6 +333,95 @@ describe("GitHub Copilot organization subscription setup", () => {
     );
   });
 
+  test("connects an organization GitHub hides behind its enterprise's sign-in", async () => {
+    // Anonymous API reads of an Enterprise Managed Users organization get a
+    // 404, as for a missing account; only its web profile tells them apart.
+    // The App's own calls see the organization, as GitHub spells it.
+    const github = githubFake({ appId });
+    const webProfiles: Record<string, Response> = {
+      "https://github.com/My-Org": new Response(null, {
+        status: 302,
+        headers: {
+          location:
+            "https://github.com/enterprises/acme/sso?return_to=https%3A%2F%2Fgithub.com%2FMy-Org",
+        },
+      }),
+      "https://github.com/offsite-org": new Response(null, {
+        status: 302,
+        headers: { location: "https://example.com/enterprises/acme/sso" },
+      }),
+      "https://github.com/no-such-org": new Response(null, { status: 404 }),
+      "https://github.com/limited-org": new Response(null, { status: 429 }),
+      "https://github.com/down-org": new Response(null, { status: 503 }),
+    };
+    vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (/\/users\/[^/]+$/.test(url))
+        return Response.json({ message: "Not Found" }, { status: 404 });
+      if (url === "https://github.com/unreachable-org")
+        throw new TypeError("fetch failed");
+      return webProfiles[url]?.clone() ?? github(input, init);
+    });
+
+    const checked = await post("/api/github-copilot-app/organization/check", {
+      organization: "My-Org",
+    });
+    expect(checked.statusCode, checked.body).toBe(200);
+    expect(checked.json()).toEqual({ organization: "My-Org" });
+
+    const started = await post("/api/github-copilot-app/manifest", {
+      organization: "https://github.com/My-Org",
+    });
+    expect(started.statusCode, started.body).toBe(200);
+    const url = new URL(started.json().url);
+    expect(url.pathname).toBe("/organizations/My-Org/settings/apps/new");
+    const completed = await post("/api/github-copilot-app/manifest/complete", {
+      code: "one-time-code",
+      state: url.searchParams.get("state"),
+    });
+    expect(completed.statusCode, completed.body).toBe(200);
+    expect(completed.json()).toMatchObject({ account: "my-org" });
+    const installed = await post("/api/github-copilot-app/install");
+    expect(installed.statusCode, installed.body).toBe(200);
+    expect(installed.json()).toMatchObject({
+      status: "installed",
+      organization: "my-org",
+    });
+
+    // Reconnecting reads the stored organization, never the public profile.
+    const reconnected = await post("/api/github-copilot-app/existing", {
+      appId,
+      privateKey,
+      replaceKeyId: installed.json().id,
+    });
+    expect(reconnected.statusCode, reconnected.body).toBe(200);
+    expect(reconnected.json()).toMatchObject({
+      status: "installed",
+      id: installed.json().id,
+    });
+
+    for (const organization of ["no-such-org", "offsite-org"]) {
+      const missing = await post("/api/github-copilot-app/organization/check", {
+        organization,
+      });
+      expect(missing.statusCode, organization).toBe(400);
+      expect(missing.json().error.message).toBe(
+        `GitHub has no account named ${organization}.`,
+      );
+    }
+    // Without an answer from the web profile, it's unknown, not missing.
+    for (const organization of ["unreachable-org", "limited-org", "down-org"]) {
+      const unanswered = await post(
+        "/api/github-copilot-app/organization/check",
+        { organization },
+      );
+      expect(unanswered.statusCode, organization).toBe(502);
+      expect(unanswered.json().error.message).toBe(
+        `GitHub didn't return the ${organization} account.`,
+      );
+    }
+  });
+
   test("refuses a personal GitHub account", async () => {
     vi.stubGlobal("fetch", githubFake({ appId, accountType: "User" }));
 

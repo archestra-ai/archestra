@@ -58,6 +58,7 @@ import {
   selectMappedProviderKey,
 } from "@/utils/provider-key-mappings";
 import { type ModelPoolCaller, mayUseModelPool } from "./model-pool-failover";
+import type { PassthroughIdentity } from "./passthrough-log";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
 export function isJwtLike(token: string): boolean {
@@ -774,13 +775,21 @@ export async function assertPlatformAuthenticated(params: {
  */
 export function createPassthroughAuthenticator(
   provider: SupportedProvider,
-): (params: { request: FastifyRequest; agentId?: string }) => Promise<void> {
+): (params: {
+  request: FastifyRequest;
+  agentId?: string;
+}) => Promise<PassthroughIdentity | undefined> {
   return async ({ request, agentId }) => {
     try {
-      await authenticatePassthroughProxyRequest({ request, provider, agentId });
+      return await authenticatePassthroughProxyRequest({
+        request,
+        provider,
+        agentId,
+      });
     } catch (error) {
       if (!(error instanceof ApiError) || error.statusCode !== 401) throw error;
       if (!(await allowsUnauthenticatedForAgent(agentId))) throw error;
+      return { agent: await resolveAgent(agentId), authMethod: "unknown" };
     }
   };
 }
@@ -1389,7 +1398,7 @@ async function authenticatePassthroughProxyRequest(params: {
   request: FastifyRequest;
   provider: SupportedProvider;
   agentId?: string;
-}): Promise<void> {
+}): Promise<PassthroughIdentity | undefined> {
   const { request, provider, agentId } = params;
 
   // In-process callers that carry the internal proof are trusted, matching the
@@ -1425,13 +1434,20 @@ async function authenticatePassthroughProxyRequest(params: {
     ip: request.ip,
     credential: presentedCredential,
   });
-  const authenticate = async (): Promise<void> => {
+  const authenticate = async (): Promise<PassthroughIdentity> => {
     if (passthroughToken) {
-      await validatePassthroughVirtualKey({
+      const agent = await resolveAgent(agentId);
+      const resolved = await validatePassthroughVirtualKey({
         tokenValue: passthroughToken,
-        agent: await resolveAgent(agentId),
+        agent,
       });
-      return;
+      return {
+        agent,
+        authMethod: "passthrough_virtual_key",
+        userId: resolved.userId,
+        passthroughVirtualKeyId: resolved.passthroughVirtualKeyId,
+        billingTeamId: resolved.billingTeamId,
+      };
     }
     if (!bearerToken) {
       throw unauthenticated;
@@ -1452,43 +1468,71 @@ async function authenticatePassthroughProxyRequest(params: {
           ));
         if (!member) throw unauthenticated;
         authenticatedBearer = true;
-        return;
+        return {
+          agent,
+          authMethod: "personal_token",
+          userId: personalToken.userId,
+        };
       }
       // Token validity and expiry are the whole bar here. A key that maps a
       // key of this provider also has it forwarded upstream, as the handled
       // endpoints do; a key that maps none still passes and forwards nothing.
-      await validateVirtualApiKeyToken(bearerToken);
+      const { virtualKey } = await validateVirtualApiKeyToken(bearerToken);
       authenticatedBearer = true;
+      const agent = await resolveAgent(agentId);
       providerApiKey = await passthroughProviderApiKey({
         tokenValue: bearerToken,
         provider,
-        organizationId: (await resolveAgent(agentId)).organizationId,
+        organizationId: agent.organizationId,
         requestedModel: requestedModelFromBody(request),
       });
-      return;
+      return {
+        agent,
+        authMethod: "virtual_key",
+        virtualKeyId: virtualKey.id,
+        userId: (await VirtualApiKeyModel.isPersonal(virtualKey))
+          ? (virtualKey.authorId ?? undefined)
+          : undefined,
+        serviceAccountId: virtualKey.createdByServiceAccountId ?? undefined,
+        billingTeamId: virtualKey.billingTeamId ?? undefined,
+      };
     }
 
     const agent = await resolveAgent(agentId);
-    if (await attemptJwksAuth(request, agent, provider)) {
+    const jwks = await attemptJwksAuth(request, agent, provider);
+    if (jwks) {
       authenticatedBearer = true;
-      return;
+      return { agent, authMethod: "jwks", userId: jwks.userId };
     }
-    if (
-      await validateLlmOAuthAccessToken({
-        tokenValue: bearerToken,
-        expectedProvider: provider,
-        agent,
-        requestedModel: requestedModelFromBody(request),
-      })
-    ) {
+    const oauth = await validateLlmOAuthAccessToken({
+      tokenValue: bearerToken,
+      expectedProvider: provider,
+      agent,
+      requestedModel: requestedModelFromBody(request),
+    });
+    if (oauth) {
       authenticatedBearer = true;
-      return;
+      return {
+        agent,
+        authMethod: oauth.authMethod,
+        userId: oauth.userId,
+        serviceAccountId: oauth.serviceAccountId,
+        ...(oauth.authenticatedApp
+          ? {
+              authenticatedApp: {
+                id: oauth.authenticatedApp.id,
+                name: oauth.authenticatedApp.name,
+              },
+            }
+          : {}),
+        billingTeamId: oauth.billingTeamId,
+      };
     }
     throw unauthenticated;
   };
 
   try {
-    await authenticate();
+    const identity = await authenticate();
     if (authenticatedBearer && bearerToken) {
       stripAuthenticatedBearer(request, bearerToken);
       if (providerApiKey) {
@@ -1502,6 +1546,7 @@ async function authenticatePassthroughProxyRequest(params: {
     await virtualKeyRateLimiter.recordSuccess({
       credential: presentedCredential,
     });
+    return identity;
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 401) {
       await virtualKeyRateLimiter.recordFailure({

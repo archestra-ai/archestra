@@ -26,6 +26,7 @@ import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import OpenAiEmbeddingInteraction from "./llmProviders/openai-embedding";
 import OpenAiResponsesInteraction from "./llmProviders/openai-responses";
 import OpenrouterChatCompletionInteraction from "./llmProviders/openrouter";
+import PassthroughInteraction from "./llmProviders/passthrough";
 import PerplexityChatCompletionInteraction from "./llmProviders/perplexity";
 import PerplexityResponsesInteraction from "./llmProviders/perplexity-responses";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
@@ -77,6 +78,8 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "azure:realtime": (i) => new AzureChatCompletionInteraction(i),
   "azure:images": (i) => new AzureImagesInteraction(i),
   "openai:images": (i) => new AzureImagesInteraction(i),
+  "openai:passthrough": (i) => new PassthroughInteraction(i),
+  "anthropic:passthrough": (i) => new PassthroughInteraction(i),
   "azure:audio": (i) => new AudioInteraction(i),
   "openai:audio": (i) => new AudioInteraction(i),
   "azure:responses": (i) => new AzureResponsesInteraction(i),

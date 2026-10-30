@@ -49,6 +49,7 @@ import {
   virtualKeyRateLimiter,
 } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { passthroughReplyOptions } from "../passthrough-log";
 import { registerAudioRoutes } from "./audio";
 import {
   extractBearerToken,
@@ -84,12 +85,14 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     upstream: config.llm.openai.baseUrl,
     prefix: API_PREFIX,
     rewritePrefix: "",
+    replyOptions: passthroughReplyOptions(),
     preHandler: createProxyPreHandler({
       apiPrefix: API_PREFIX,
       endpointSuffix: OPENAI_HANDLED_ENDPOINT_SUFFIXES,
       upstream: config.llm.openai.baseUrl,
       providerName: "OpenAI",
       authenticate: createPassthroughAuthenticator("openai"),
+      logProvider: "openai",
     }),
   });
 

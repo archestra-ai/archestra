@@ -71987,6 +71987,126 @@ export type GetInteractionsResponses = {
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            runId: string | null;
+            userId: string | null;
+            serviceAccountId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            providerApiKeyId: string | null;
+            modelPoolId: string | null;
+            attempt: number | null;
+            attemptOutcome: string | null;
+            failureReason: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            billingTeamId: string | null;
+            attributionLabels: {
+                [key: string]: string;
+            } | null;
+            request: {
+                method: string;
+                path: string;
+                query?: string;
+                content_type?: string;
+                content_length?: number;
+                body?: unknown;
+                truncated?: boolean;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                method: string;
+                path: string;
+                query?: string;
+                content_type?: string;
+                content_length?: number;
+                body?: unknown;
+                truncated?: boolean;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                status: number;
+                content_type?: string;
+                bytes: number;
+                body?: unknown;
+                truncated?: boolean;
+                streamed?: boolean;
+            } | {
+                error: string;
+            } | LogContentNotStored | {
+                __encryptedChatSealed: string;
+            } | {
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+            };
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'openai:passthrough' | 'anthropic:passthrough';
+            model: string | null;
+            baselineModel: string | null;
+            durationMs: number | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -72120,7 +72240,7 @@ export type GetInteractionSummariesResponses = {
             attributionLabels?: {
                 [key: string]: string;
             } | null;
-            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'kimi-code:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'azure:images' | 'azure:audio' | 'openai:audio' | 'openai:images' | 'openai:passthrough' | 'anthropic:passthrough' | 'azure:realtime' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
             source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -82738,6 +82858,126 @@ export type GetInteractionResponses = {
         } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        runId: string | null;
+        userId: string | null;
+        serviceAccountId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        providerApiKeyId: string | null;
+        modelPoolId: string | null;
+        attempt: number | null;
+        attemptOutcome: string | null;
+        failureReason: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'kilo:main' | 'kilo:subagent' | 'kilo:title' | 'kilo:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'guardrail:hitl_summary' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'chatops:jira' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        billingTeamId: string | null;
+        attributionLabels: {
+            [key: string]: string;
+        } | null;
+        request: {
+            method: string;
+            path: string;
+            query?: string;
+            content_type?: string;
+            content_length?: number;
+            body?: unknown;
+            truncated?: boolean;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            method: string;
+            path: string;
+            query?: string;
+            content_type?: string;
+            content_length?: number;
+            body?: unknown;
+            truncated?: boolean;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            status: number;
+            content_type?: string;
+            bytes: number;
+            body?: unknown;
+            truncated?: boolean;
+            streamed?: boolean;
+        } | {
+            error: string;
+        } | LogContentNotStored | {
+            __encryptedChatSealed: string;
+        } | {
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
+        };
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'openai:passthrough' | 'anthropic:passthrough';
+        model: string | null;
+        baselineModel: string | null;
+        durationMs: number | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     };
 };

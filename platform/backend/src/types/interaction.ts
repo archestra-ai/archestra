@@ -39,6 +39,10 @@ import {
   Xai,
   Zhipuai,
 } from "./llm-providers";
+import {
+  PassthroughRequestSchema,
+  PassthroughResponseSchema,
+} from "./passthrough";
 import { VirtualApiKeyTypeSchema } from "./virtual-api-key";
 import { ResourceVisibilityScopeSchema } from "./visibility";
 
@@ -209,6 +213,7 @@ export const InteractionRequestSchema = z.union([
   Azure.API.ImageGenerationRequestSchema,
   Azure.API.RealtimeTurnRequestSchema,
   Jev.API.DecisionsRequestSchema,
+  PassthroughRequestSchema,
 ]);
 
 /**
@@ -266,6 +271,7 @@ export const InteractionResponseSchema = z.union([
   Azure.API.ImageGenerationResponseSchema,
   Jev.API.DecisionsResponseSchema,
   InteractionErrorResponseSchema,
+  PassthroughResponseSchema,
 ]);
 
 /**
@@ -869,6 +875,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .optional(),
     response: withErrorResponse(Jev.API.DecisionsResponseSchema),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["openai:passthrough", "anthropic:passthrough"]),
+    request: withReadFallback(PassthroughRequestSchema),
+    processedRequest: withReadFallback(PassthroughRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(PassthroughResponseSchema),
+    requestType: RequestTypeSchema.optional(),
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
 ]);

@@ -54,7 +54,7 @@ describe("createPassthroughAuthenticator", () => {
     });
     await expect(
       authenticate({ request: requestWith({}), agentId: agent.id }),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ authMethod: "unknown" });
   });
 
   // Resolving the agent before the credential check would answer 404 for an
@@ -88,7 +88,7 @@ describe("createPassthroughAuthenticator", () => {
         }),
         agentId: agent.id,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ authMethod: "passthrough_virtual_key" });
   });
 
   test("accepts a personal platform token of a member of the proxy's organization", async ({
@@ -109,7 +109,7 @@ describe("createPassthroughAuthenticator", () => {
         request: requestWith({ authorization: `Bearer ${tokenValue}` }),
         agentId: agent.id,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ authMethod: "personal_token" });
   });
 
   test("rejects a personal platform token issued for another organization", async ({
@@ -222,7 +222,7 @@ describe("createPassthroughAuthenticator", () => {
       const request = requestWith({ authorization: `Bearer ${token}` });
       await expect(
         authenticate({ request, agentId: agent.id }),
-      ).resolves.toBeUndefined();
+      ).resolves.toMatchObject({ authMethod: "virtual_key" });
       expect(request.headers.authorization).toBeUndefined();
     });
   });

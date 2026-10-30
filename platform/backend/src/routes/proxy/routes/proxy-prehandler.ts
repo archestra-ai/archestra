@@ -1,4 +1,5 @@
 import { Readable } from "node:stream";
+import type { SupportedProvider } from "@archestra/shared";
 import {
   errorCodes,
   type FastifyReply,
@@ -13,6 +14,11 @@ import {
   sanitizeForwardedRequest,
 } from "@/openappa/request";
 import { ThroughputError } from "@/services/llm-throughput";
+import {
+  beginPassthroughLog,
+  notePassthroughRequestBody,
+  type PassthroughIdentity,
+} from "../passthrough-log";
 import { captureClientRuntimeEvidence } from "../utils/client-runtime-evidence";
 import { removeMarkersFromBody } from "../utils/gateway-tool-declarations";
 
@@ -50,9 +56,17 @@ export function createProxyPreHandler(params: {
   authenticate?: (params: {
     request: FastifyRequest;
     agentId?: string;
-  }) => Promise<void>;
+  }) => Promise<PassthroughIdentity | undefined>;
+  /** When set, every forwarded call is logged as a `<provider>:passthrough` interaction. */
+  logProvider?: SupportedProvider;
 }) {
   const { apiPrefix, endpointSuffix, upstream, providerName } = params;
+  const beforeCleanBody = params.logProvider
+    ? async (request: FastifyRequest, body: unknown) => {
+        notePassthroughRequestBody(request, body);
+        await params.beforeCleanBody?.(request, body);
+      }
+    : params.beforeCleanBody;
   const rewritePrefix = params.rewritePrefix ?? "";
   const skipErrorResponse = params.skipErrorResponse ?? {
     error: {
@@ -150,7 +164,7 @@ export function createProxyPreHandler(params: {
 
     // Strip last: the body hooks (e.g. Claude Code's count observer) still
     // read X-Archestra-* headers such as the agent id.
-    cleanForwardedBody(request, params.beforeCleanBody).then(() => {
+    cleanForwardedBody(request, beforeCleanBody).then(() => {
       stripArchestraRequestHeaders(request);
       next();
     }, next);
@@ -167,7 +181,15 @@ export function createProxyPreHandler(params: {
     // the rewrite reaches Fastify instead of becoming an unhandled rejection.
     Promise.resolve()
       .then(async () => {
-        await authenticate?.({ request, agentId });
+        const identity = await authenticate?.({ request, agentId });
+        if (params.logProvider) {
+          const relative = request.url.replace(apiPrefix, "");
+          beginPassthroughLog(request, {
+            provider: params.logProvider,
+            identity,
+            pathAndQuery: relative.match(UUID_REGEX)?.[2] ?? relative,
+          });
+        }
         // Raw passthrough has neither resolved billing ownership nor a usage
         // adapter. Fail explicitly rather than let it evade configured quotas.
         // Metadata, stored results, file transfer and cancellation do not start

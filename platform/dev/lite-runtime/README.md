@@ -58,9 +58,8 @@ In a checkout inside the runtime:
 archestra-dev-lite up            # PostgreSQL, migrations, backend :9000, frontend :3000
 archestra-dev-lite status        # processes with RSS, cgroup memory, disk, URLs
 archestra-dev-lite logs backend  # or db, migrate, frontend, wiremock, a2a
-archestra-dev-lite up --e2e      # also WireMock :9092 and the A2A fixture :9191
-archestra-dev-lite warm          # compile the routes the Playwright specs open
-archestra-dev-lite e2e           # warm, then Playwright chromium + api projects against this stack
+archestra-dev-lite up --e2e      # also WireMock :9092 and the A2A fixture :9191; frontend as a production build
+archestra-dev-lite e2e           # Playwright chromium + api projects against this stack
 archestra-dev-lite restart       # down, then up
 archestra-dev-lite down          # stop; data and caches stay
 ```
@@ -201,9 +200,14 @@ still running until its 15 s cap. It now counts only live processes, and caps a
 backend stop at 5 s like Tilt's backend runner. With a PID 1 that reaps, the
 reload took 16 s.
 
-At 2 CPU the Playwright agents and chat specs first timed out on pages
-compiling for the first time (3 of 23). `archestra-dev-lite e2e` now compiles
-the routes the specs open before they start, and on 2 to 4 CPUs runs fewer
+At 2 CPU and 8 GiB the Playwright suite against the Next dev server first
+timed out on pages compiling for the first time, and once the specs had
+opened their pages the dev server held about 5 GB, so Chromium and the dev
+server were killed for memory. With `--e2e` the frontend is therefore a
+production build served by its standalone server, as CI and the released image
+serve it: it compiles nothing while the specs run and holds a few hundred MB.
+After frontend edits in e2e mode, `reload frontend` rebuilds it; `restart`
+without `--e2e` returns to the dev server. On 2 to 4 CPUs `e2e` also runs fewer
 workers with scaled timeouts (`E2E_WORKERS`, `E2E_TIMEOUT_SCALE`).
 
 ## Not covered

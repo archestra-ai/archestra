@@ -19,11 +19,10 @@
 #   scripts/dev-lite.sh e2e [playwright args]  run the Playwright lite projects
 #                              against this stack (needs --e2e). --e2e rewrites
 #                              platform/.env for the suite; delete the file to
-#                              get the defaults back on the next up. Compiles
-#                              the routes the specs open first, and scales the
-#                              timeouts and workers to the CPUs available
-#   scripts/dev-lite.sh warm                   compile the routes the specs open,
-#                              so no test waits on a first compile
+#                              get the defaults back on the next up. With
+#                              --e2e the frontend is a production build, as CI
+#                              serves it; e2e scales the timeouts and workers to
+#                              the CPUs available
 #   scripts/dev-lite.sh restart [options]      down, then up again
 #   scripts/dev-lite.sh reload backend|frontend  restart one component; the backend
 #                              is rebuilt first when the watcher is off
@@ -70,6 +69,9 @@ PLATFORM_DIR="$(dirname "$SCRIPT_DIR")"
 STATE_DIR="${ARCHESTRA_DEV_LITE_STATE_DIR:-$HOME/.archestra-dev-lite}"
 LOG_DIR="$STATE_DIR/logs"
 ENV_FILE="$PLATFORM_DIR/.env"
+# The standalone server of a production frontend build (next.config.ts sets
+# output "standalone" with platform/ as the tracing root).
+STANDALONE_DIR="$PLATFORM_DIR/frontend/.next/standalone/frontend"
 PGDATA="$STATE_DIR/postgres"
 DB_PORT="${ARCHESTRA_DEV_LITE_DB_PORT:-5432}"
 DB_USER=archestra
@@ -415,16 +417,46 @@ frontend_env() {
   done
 }
 
+# The frontend runs the Next dev server, or for the e2e suite (e2e=1) a
+# production build served by its standalone server, as CI and the released
+# image serve it. Once the specs have opened their pages the dev server holds
+# about 5 GB, which leaves too little of a 2-CPU, 8 GiB Pod for Chromium and
+# the backend; the standalone server holds a few hundred MB and compiles
+# nothing while the specs run.
 start_frontend() {
+  local e2e="${1:-0}"
   if session_alive frontend; then
     log "frontend already running"
     return 0
   fi
   free_ports "$FRONTEND_PORT"
+  if [ "$e2e" = 1 ]; then
+    build_frontend
+    start_session frontend "$STANDALONE_DIR" \
+      "exec env PORT=$FRONTEND_PORT HOSTNAME=127.0.0.1 NODE_ENV=production $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") server.js"
+    return 0
+  fi
   # Next reads ARCHESTRA_* from its environment (Tilt exports .env); Node's
   # --env-file does the same here, and explicit variables take precedence.
   start_session frontend "$PLATFORM_DIR/frontend" \
     "exec env PORT=$FRONTEND_PORT ARCHESTRA_DEV_BUNDLER=${ARCHESTRA_DEV_BUNDLER:-turbopack} $(frontend_env)node --env-file=$(printf '%q' "$ENV_FILE") scripts/dev.mjs"
+}
+
+# `next build` with the e2e environment, then the static assets and public
+# files next to the standalone server, as the platform image lays them out.
+build_frontend() {
+  local started=$SECONDS
+  log "building the frontend for e2e (production build, as CI serves it); log in $LOG_DIR/frontend-build.log"
+  (
+    cd "$PLATFORM_DIR/frontend"
+    # shellcheck disable=SC2046 # frontend_env prints NAME=value words
+    env $(frontend_env) node --env-file="$ENV_FILE" ./node_modules/.bin/next build --turbopack
+  ) > "$LOG_DIR/frontend-build.log" 2>&1 \
+    || { tail -n 30 "$LOG_DIR/frontend-build.log" >&2; die "frontend build failed"; }
+  rm -rf "$STANDALONE_DIR/.next/static" "$STANDALONE_DIR/public"
+  cp -R "$PLATFORM_DIR/frontend/.next/static" "$STANDALONE_DIR/.next/static"
+  cp -R "$PLATFORM_DIR/frontend/public" "$STANDALONE_DIR/public"
+  log "frontend built in $((SECONDS - started)) s"
 }
 
 start_e2e_deps() {
@@ -531,7 +563,7 @@ cmd_start() {
       || { tail -n 20 "$LOG_DIR/seed-mock-data.log" >&2; die "mock data seed failed"; }
   fi
   start_backend
-  start_frontend
+  start_frontend "$e2e"
   [ "$e2e" = 1 ] && start_e2e_deps
   log "started; logs in $LOG_DIR"
   if [ "$wait" = 1 ]; then
@@ -626,46 +658,9 @@ available_cpus() {
   nproc
 }
 
-# Routes the Playwright specs open (goto and goToPage literals). A trailing
-# slash means an id follows: any id compiles that dynamic route.
-warm_routes() {
-  # shellcheck disable=SC2016 # JavaScript, not shell
-  node -e '
-    const fs = require("node:fs");
-    const path = require("node:path");
-    const routes = new Set();
-    const pattern = /(?:goToPage\(\s*\w+,\s*|goto\(\s*)[`"\x27](\/[^`"\x27$?#]*)/g;
-    const walk = (dir) => {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const file = path.join(dir, entry.name);
-        if (entry.isDirectory()) walk(file);
-        else if (file.endsWith(".ts"))
-          for (const [, route] of fs.readFileSync(file, "utf8").matchAll(pattern))
-            if (route !== "/") routes.add(route.endsWith("/") ? `${route}warm` : route);
-      }
-    };
-    walk(process.argv[1]);
-    console.log([...routes].sort().join("\n"));
-  ' "$PLATFORM_DIR/e2e-tests/tests"
-}
-
-# Next's dev server compiles a route on its first request. At 2 CPUs that
-# takes up to 40 s, longer than the specs' navigation and assertion timeouts,
-# so compile the routes the specs open before they start.
-cmd_warm() {
-  http_ok "http://127.0.0.1:$FRONTEND_PORT/chat" 600 || die "frontend is not ready"
-  local routes started=$SECONDS
-  routes="$(warm_routes)"
-  log "compiling $(printf '%s\n' "$routes" | wc -l) routes the specs open"
-  printf '%s\n' "$routes" | xargs -P 2 -I{} \
-    curl -s -o /dev/null -m 600 -w "  %{http_code} %{time_total}s {}\n" "http://127.0.0.1:$FRONTEND_PORT{}" || true
-  log "routes compiled in $((SECONDS - started)) s"
-}
-
 cmd_e2e() {
   e2e_enabled || die "start the stack with --e2e first"
   http_ok "http://127.0.0.1:$BACKEND_PORT/ready" || die "backend is not ready"
-  [ "${ARCHESTRA_DEV_LITE_E2E_WARM:-1}" = 0 ] || cmd_warm
   # The browser, both dev servers and PostgreSQL share these CPUs: fewer
   # workers and longer timeouts on a small Pod. E2E_* set by hand win.
   local cpus
@@ -707,9 +702,10 @@ cmd_reload() {
       start_backend
       ;;
     frontend)
+      # In e2e mode this rebuilds the production frontend.
       log "reloading the frontend"
       stop_session frontend
-      start_frontend
+      if e2e_enabled; then start_frontend 1; else start_frontend; fi
       ;;
     *) die "reload: expected backend or frontend" ;;
   esac
@@ -725,7 +721,6 @@ case "${1:-}" in
   status) cmd_status ;;
   logs) shift; cmd_logs "$@" ;;
   e2e) shift; cmd_e2e "$@" ;;
-  warm) cmd_warm ;;
   down) cmd_down ;;
   reset) cmd_reset ;;
   -h|--help|help) usage 0 ;;

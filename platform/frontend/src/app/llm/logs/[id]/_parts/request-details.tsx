@@ -260,6 +260,9 @@ function RequestOverview({
   ];
   const cacheShare = input > 0 && cacheInsideInput ? read / input : 0;
 
+  // A pass-through call or a model without a tariff records no cost at all,
+  // which is not the same as costing nothing.
+  const costRecorded = row.cost != null;
   const cost = Number(row.cost ?? 0);
   const baseline = Number(row.baselineCost ?? row.cost ?? 0);
   const onPlan = row.billingMode === "subscription";
@@ -440,13 +443,13 @@ function RequestOverview({
                 <TooltipTrigger asChild>
                   <span className="cursor-default">
                     <BigFigure
-                      value={formatRequestCost(billed)}
-                      muted={onPlan}
+                      value={costRecorded ? formatRequestCost(billed) : "—"}
+                      muted={onPlan || !costRecorded}
                     />
                   </span>
                 </TooltipTrigger>
                 <TooltipContent className="tabular-nums">
-                  {formatCost(billed)}
+                  {costRecorded ? formatCost(billed) : "No cost recorded"}
                 </TooltipContent>
               </Tooltip>
             </span>
@@ -457,7 +460,11 @@ function RequestOverview({
               {onPlan ? "Subscription plan" : "Metered"}
             </OverviewCell>
             <OverviewCell label="List price">
-              <span title={formatCost(cost)}>{formatRequestCost(cost)}</span>
+              {costRecorded ? (
+                <span title={formatCost(cost)}>{formatRequestCost(cost)}</span>
+              ) : (
+                <span>Not recorded</span>
+              )}
             </OverviewCell>
             <OverviewCell label="Routing">
               {rerouted && row.baselineModel ? (

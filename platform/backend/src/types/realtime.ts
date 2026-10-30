@@ -11,6 +11,8 @@ export const RealtimeInteractionRequestSchema = z.object({
   turn: z.number().int().positive(),
   /** The client's `session.update` settings, without audio data. */
   session: z.record(z.string(), z.unknown()).optional(),
+  /** Text the client sent as user items for this turn (`conversation.item.create`). */
+  input_text: z.string().optional(),
   /** Transcript of the audio the client sent for this turn, when OpenAI returned one. */
   input_transcript: z.string().optional(),
 });

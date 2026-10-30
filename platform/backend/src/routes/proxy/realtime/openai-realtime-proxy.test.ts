@@ -181,11 +181,13 @@ describe("OpenAI realtime sessions through the Model Router", () => {
   }
 
   test("forwards the session with the mapped key, logs each response with its transcript and cost, and settles it", async ({
+    makeAdmin,
     makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
     config.llmProxy.usageAccountingMode = "enforce";
+    const admin = await makeAdmin();
     const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
     const key = await mappedKey({
       organizationId: agent.organizationId,
@@ -220,6 +222,16 @@ describe("OpenAI realtime sessions through the Model Router", () => {
       }),
     );
     await nextEvent(socket, "session.updated");
+    socket.send(
+      JSON.stringify({
+        type: "conversation.item.create",
+        item: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "Say hello." }],
+        },
+      }),
+    );
     socket.send(JSON.stringify({ type: "response.create" }));
     const done = await nextEvent(socket, "response.done");
     expect(done).toMatchObject({ response: { id: "resp_1" } });
@@ -241,6 +253,7 @@ describe("OpenAI realtime sessions through the Model Router", () => {
         model: "gpt-realtime-2.1",
         turn: 1,
         session: { voice: "alloy", instructions: "Be brief." },
+        input_text: "Say hello.",
       },
       response: {
         id: "resp_1",
@@ -248,6 +261,16 @@ describe("OpenAI realtime sessions through the Model Router", () => {
         output_transcript: "Hello there",
       },
     });
+    // The sessions list titles the session by what the user typed.
+    const sessions = await InteractionModel.getSessions(
+      { limit: 100, offset: 0 },
+      admin.id,
+      true,
+      {},
+    );
+    expect(
+      sessions.data.map((session) => session.lastUserMessagePreview),
+    ).toContain("Say hello.");
     // Audio never enters the log; the mapped key never leaves the proxy.
     const stored = JSON.stringify(rows[0]);
     expect(stored).not.toContain("QUJD");

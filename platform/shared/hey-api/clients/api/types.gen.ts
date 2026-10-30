@@ -72021,6 +72021,7 @@ export type GetInteractionsResponses = {
                 session?: {
                     [key: string]: unknown;
                 };
+                input_text?: string;
                 input_transcript?: string;
             } | {
                 [key: string]: unknown;
@@ -72031,6 +72032,7 @@ export type GetInteractionsResponses = {
                 session?: {
                     [key: string]: unknown;
                 };
+                input_text?: string;
                 input_transcript?: string;
             } | {
                 [key: string]: unknown;
@@ -83014,6 +83016,7 @@ export type GetInteractionResponses = {
             session?: {
                 [key: string]: unknown;
             };
+            input_text?: string;
             input_transcript?: string;
         } | {
             [key: string]: unknown;
@@ -83024,6 +83027,7 @@ export type GetInteractionResponses = {
             session?: {
                 [key: string]: unknown;
             };
+            input_text?: string;
             input_transcript?: string;
         } | {
             [key: string]: unknown;

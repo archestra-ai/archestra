@@ -1105,7 +1105,11 @@ function RequestRow({
               Plan
             </span>
           ) : null}
-          {formatRequestCost(Number(row.cost ?? 0))}
+          {row.cost == null ? (
+            <span>—</span>
+          ) : (
+            <span>{formatRequestCost(Number(row.cost))}</span>
+          )}
         </span>
       }
     />

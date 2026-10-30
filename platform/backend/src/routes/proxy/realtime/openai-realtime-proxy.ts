@@ -331,6 +331,7 @@ function callerIdentity(auth: ModelRouterAuth): CallerIdentity {
 class RealtimeSession {
   private turn = 0;
   private session?: Record<string, unknown>;
+  private inputText?: string;
   private inputTranscript?: string;
   private turnStartedAt = Date.now();
 
@@ -349,6 +350,11 @@ class RealtimeSession {
     if (!event) return;
     if (event.type === "session.update" && isRecord(event.session))
       this.session = withoutAudio(event.session);
+    if (event.type === "conversation.item.create" && isRecord(event.item)) {
+      const text = userInputText(event.item);
+      if (text)
+        this.inputText = this.inputText ? `${this.inputText}\n${text}` : text;
+    }
     if (event.type === "response.create") this.turnStartedAt = Date.now();
   }
 
@@ -362,21 +368,27 @@ class RealtimeSession {
       this.inputTranscript = event.transcript;
     if (event.type === "response.done" && isRecord(event.response)) {
       const response = event.response;
+      const inputText = this.inputText;
       const inputTranscript = this.inputTranscript;
+      this.inputText = undefined;
       this.inputTranscript = undefined;
       this.turn += 1;
       const turn = this.turn;
       const startedAt = this.turnStartedAt;
       this.turnStartedAt = Date.now();
       trackBackgroundWork(
-        this.record({ response, turn, inputTranscript, startedAt }).catch(
-          (error) => {
-            logger.warn(
-              { error, model: this.params.modelId },
-              "Could not log a realtime response",
-            );
-          },
-        ),
+        this.record({
+          response,
+          turn,
+          inputText,
+          inputTranscript,
+          startedAt,
+        }).catch((error) => {
+          logger.warn(
+            { error, model: this.params.modelId },
+            "Could not log a realtime response",
+          );
+        }),
       );
     }
   }
@@ -384,6 +396,7 @@ class RealtimeSession {
   private async record(params: {
     response: Record<string, unknown>;
     turn: number;
+    inputText: string | undefined;
     inputTranscript: string | undefined;
     startedAt: number;
   }) {
@@ -419,6 +432,7 @@ class RealtimeSession {
       model: modelId,
       turn: params.turn,
       ...(this.session ? { session: this.session } : {}),
+      ...(params.inputText ? { input_text: params.inputText } : {}),
       ...(params.inputTranscript
         ? { input_transcript: params.inputTranscript }
         : {}),
@@ -512,6 +526,17 @@ function withoutAudio(value: Record<string, unknown>): Record<string, unknown> {
         : item;
   }
   return out;
+}
+
+/** The text of a user message item the client created (`input_text` parts). */
+function userInputText(item: Record<string, unknown>): string {
+  if (item.role !== "user" || !Array.isArray(item.content)) return "";
+  const parts: string[] = [];
+  for (const part of item.content) {
+    if (!isRecord(part) || part.type !== "input_text") continue;
+    if (typeof part.text === "string" && part.text) parts.push(part.text);
+  }
+  return parts.join("\n");
 }
 
 function outputTranscript(output: Record<string, unknown>[]): string {

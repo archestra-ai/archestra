@@ -97,6 +97,23 @@ describe("describeModelOrigin", () => {
     ).toEqual({ kind: "unknown", name: "Meta" });
   });
 
+  it("credits a first-party provider with an id no vendor pattern knows", () => {
+    // OpenAI serves only its own models, so an unfamiliar id on its endpoint
+    // (a moderation or speech model) is still OpenAI's.
+    expect(
+      describeModelOrigin({
+        model: "omni-moderation-latest",
+        interactionType: "openai:passthrough",
+      }),
+    ).toEqual({ kind: "maker", provider: "openai", name: "OpenAI" });
+    expect(
+      describeModelOrigin({
+        model: "omni-moderation-latest",
+        interactionType: null,
+      }),
+    ).toEqual({ kind: "unknown", name: "Self-hosted" });
+  });
+
   it.each([
     ["qwen/qwen3-coder", "Qwen"],
     ["acme-labs/widget-1", "Acme"],

@@ -7,6 +7,7 @@ export default class RealtimeInteraction implements InteractionUtils {
   private readonly request: {
     model?: string;
     turn?: number;
+    input_text?: string;
     input_transcript?: string;
   };
   private readonly response: {
@@ -31,11 +32,12 @@ export default class RealtimeInteraction implements InteractionUtils {
   getToolNamesRequested() {
     return [];
   }
+  /** What the user said this turn: typed text, else the transcript of their audio. */
   getLastUserMessage() {
+    const said = this.request.input_text || this.request.input_transcript;
+    if (said) return said;
     const turn = this.request.turn ? ` ${this.request.turn}` : "";
-    return this.request.input_transcript
-      ? `Realtime turn${turn}: ${this.request.input_transcript}`
-      : `Realtime turn${turn}`;
+    return `Realtime turn${turn}`;
   }
   getLastAssistantResponse() {
     if (this.response.error) return "Realtime response failed.";

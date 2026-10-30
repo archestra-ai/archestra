@@ -277769,6 +277769,9 @@
                                         "type": "object",
                                         "additionalProperties": {}
                                       },
+                                      "input_text": {
+                                        "type": "string"
+                                      },
                                       "input_transcript": {
                                         "type": "string"
                                       }
@@ -277803,6 +277806,9 @@
                                       "session": {
                                         "type": "object",
                                         "additionalProperties": {}
+                                      },
+                                      "input_text": {
+                                        "type": "string"
                                       },
                                       "input_transcript": {
                                         "type": "string"
@@ -331815,6 +331821,9 @@
                                   "type": "object",
                                   "additionalProperties": {}
                                 },
+                                "input_text": {
+                                  "type": "string"
+                                },
                                 "input_transcript": {
                                   "type": "string"
                                 }
@@ -331849,6 +331858,9 @@
                                 "session": {
                                   "type": "object",
                                   "additionalProperties": {}
+                                },
+                                "input_text": {
+                                  "type": "string"
                                 },
                                 "input_transcript": {
                                   "type": "string"

@@ -97,10 +97,12 @@ describe("pass-through logging", () => {
   }
 
   test("logs a moderation call with its bodies, the key it ran as, and no charge", async ({
+    makeAdmin,
     makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
+    const admin = await makeAdmin();
     const agent = await makeAgent();
     const key = await standardKey({
       organizationId: agent.organizationId,
@@ -156,6 +158,16 @@ describe("pass-through logging", () => {
     const stored = JSON.stringify(rows[0]);
     expect(stored).not.toContain("sk-openai-mapped");
     expect(stored).not.toContain(key.value);
+    // The sessions list titles the session by the call, not "API session".
+    const sessions = await InteractionModel.getSessions(
+      { limit: 100, offset: 0 },
+      admin.id,
+      true,
+      {},
+    );
+    expect(
+      sessions.data.map((session) => session.lastUserMessagePreview),
+    ).toContain("POST /moderations?foo=bar");
   });
 
   test("records a listing without a model or cost, a refusal with its status, and reported tokens", async ({

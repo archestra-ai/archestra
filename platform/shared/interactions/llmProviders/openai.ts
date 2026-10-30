@@ -88,7 +88,8 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
   }
 
   getLastAssistantResponse(): string {
-    return this.response.choices[0]?.message?.content ?? "";
+    const message = this.response.choices[0]?.message;
+    return message?.content ?? audioTranscriptOf(message) ?? "";
   }
 
   private mapToUiMessage(
@@ -154,6 +155,12 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
             }
           }
         }
+      }
+      // A spoken reply (gpt-audio, the audio-preview models) has no text
+      // content: its transcript stands in for it.
+      const transcript = audioTranscriptOf(message);
+      if (transcript && !parts.some((part) => part.type === "text")) {
+        parts.unshift({ type: "text", text: transcript });
       }
     } else if (message.role === "tool") {
       // Handle tool response messages
@@ -299,3 +306,12 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
 }
 
 export default OpenAiChatCompletionInteraction;
+
+/** The transcript of a spoken reply, when the message carries one. */
+function audioTranscriptOf(message: unknown): string | undefined {
+  if (typeof message !== "object" || message === null) return undefined;
+  const audio = (message as { audio?: unknown }).audio;
+  if (typeof audio !== "object" || audio === null) return undefined;
+  const transcript = (audio as { transcript?: unknown }).transcript;
+  return typeof transcript === "string" && transcript ? transcript : undefined;
+}

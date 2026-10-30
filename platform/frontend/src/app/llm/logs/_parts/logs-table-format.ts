@@ -74,7 +74,18 @@ export function describeModelOrigin(params: {
   if (aggregator) {
     return { kind: "aggregator", provider: aggregator };
   }
-  return { kind: "unknown", name: unrecognisedVendorName(params.model) };
+  const vendor = unrecognisedVendorName(params.model);
+  if (vendor) return { kind: "unknown", name: vendor };
+  // A first-party provider serves only its own models, so an id no pattern
+  // knows (omni-moderation-latest, tts-1) is still its maker's.
+  if (servedBy && isModelMaker(servedBy)) {
+    return {
+      kind: "maker",
+      provider: servedBy,
+      name: MODEL_MAKER_NAMES[servedBy],
+    };
+  }
+  return { kind: "unknown", name: "Self-hosted" };
 }
 
 /**
@@ -343,7 +354,12 @@ function makerProviderForModel(model: string): ModelMakerProvider | null {
   return null;
 }
 
-function unrecognisedVendorName(model: string): string {
+function isModelMaker(provider: string): provider is ModelMakerProvider {
+  return provider in MODEL_MAKER_NAMES;
+}
+
+/** The vendor an id's prefix or family names; null when nothing in it says. */
+function unrecognisedVendorName(model: string): string | null {
   const id = model.toLowerCase();
   const prefix = id.includes("/") ? id.split("/")[0] : null;
   const base = id.split("/").pop() || id;
@@ -351,7 +367,7 @@ function unrecognisedVendorName(model: string): string {
     if ((prefix && pattern.test(prefix)) || pattern.test(base)) return name;
   }
   if (prefix) return capitalize(prefix.replace(/-.*$/, ""));
-  return "Self-hosted";
+  return null;
 }
 
 const OPEN_WEIGHT_VENDORS: ReadonlyArray<[RegExp, string]> = [

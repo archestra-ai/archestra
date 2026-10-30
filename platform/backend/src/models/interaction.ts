@@ -3002,7 +3002,13 @@ class InteractionModel {
             (hasOpenAiContent ||
               hasResponsesContent ||
               hasGeminiContent ||
-              isLogContentNotStored(interaction.request))
+              isLogContentNotStored(interaction.request) ||
+              // Media, realtime and pass-through rows carry no message
+              // array; they are turns when their request summarises to text.
+              buildLastUserMessagePreview(
+                interaction.request,
+                interaction.type,
+              ) !== null)
           ) {
             if (isGuardrail || isOpenCodeSideTurn) {
               if (isGuardrail) guardrailTip ??= interaction;
@@ -4073,11 +4079,19 @@ function buildSessionPreview(
     : findMarkers(request, SESSION_PREVIEW_MARKERS);
   const isTitleGeneration = hasTitleGenerationMarker(markers);
   const contentNotStored = isLogContentNotStored(request);
+  const lastUserMessagePreview = buildLastUserMessagePreview(
+    data.request,
+    data.type,
+  );
   return {
     hasContent:
       [request?.messages, request?.input, request?.contents].some(
         (value) => Array.isArray(value) && value.length > 0,
-      ) || contentNotStored,
+      ) ||
+      contentNotStored ||
+      // Media, realtime and pass-through rows carry no message array; they
+      // are turns when their request summarises to text.
+      lastUserMessagePreview !== null,
     isTitleGeneration,
     isPromptSuggestion: markers.has(PROMPT_SUGGESTION_MARKER),
     isOpenCodeSideTurn:
@@ -4090,10 +4104,7 @@ function buildSessionPreview(
       (isClaudeSessionSource(data.sessionSource ?? null) &&
         hasClaudeSubagentMarker(data.request)),
     contentNotStored,
-    lastUserMessagePreview: buildLastUserMessagePreview(
-      data.request,
-      data.type,
-    ),
+    lastUserMessagePreview,
     claudeCodeTitle: isTitleGeneration
       ? extractClaudeCodeTitle(data.response)
       : null,

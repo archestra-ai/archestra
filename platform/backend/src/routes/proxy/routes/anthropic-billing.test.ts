@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import Fastify from "fastify";
 import {
   serializerCompiler,
@@ -7,8 +7,7 @@ import {
 } from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
-import config from "@/config";
-import db, { schema } from "@/database";
+import db from "@/database";
 import LimitModel from "@/models/limit";
 import ModelModel from "@/models/model";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
@@ -53,25 +52,21 @@ const providerResponse = {
   usage: finalUsage,
 };
 
-for (const [mode, stream, large, truncated, settlementFails] of [
-  ["enforce", false, false, false, false],
-  ["enforce", true, false, false, false],
-  ["enforce", false, true, false, false],
-  ["enforce", true, false, true, false],
-  ["enforce", false, true, true, false],
-  ["enforce", true, false, false, true],
-  ["enforce", true, false, true, true],
-  ["shadow", false, false, false, false],
-  ["shadow", true, false, false, false],
-  ["shadow", false, true, false, false],
+for (const [stream, large, truncated, settlementFails] of [
+  [false, false, false, false],
+  [true, false, false, false],
+  [false, true, false, false],
+  [true, false, true, false],
+  [false, true, true, false],
+  [true, false, false, true],
+  [true, false, true, true],
 ] as const) {
-  test(`records advisor usage and applies the admitted accounting mode (mode=${mode}, stream=${stream}, large=${large}, truncated=${truncated}, settlementFails=${settlementFails})`, async ({
+  test(`records advisor usage and charges its budgets (stream=${stream}, large=${large}, truncated=${truncated}, settlementFails=${settlementFails})`, async ({
     makeOrganization,
     makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    config.llmProxy.usageAccountingMode = mode;
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
     const secret = await makeSecret({ secret: { apiKey: "sk-review-test" } });
@@ -110,8 +105,6 @@ for (const [mode, stream, large, truncated, settlementFails] of [
         "advisor-tool-2026-03-01",
       );
       upstreamCalls++;
-      // Configuration changes after admission cannot change this request's mode.
-      config.llmProxy.usageAccountingMode = "off";
       if (!stream && !large) return HttpResponse.json(providerResponse);
       const events = [
         {
@@ -203,44 +196,23 @@ for (const [mode, stream, large, truncated, settlementFails] of [
       const rows =
         (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id) ??
         [];
-      if (mode === "shadow") {
-        const receipts = await db
-          .select()
-          .from(schema.interactionBillingTable)
-          .where(eq(schema.interactionBillingTable.organizationId, org.id));
-        expect(receipts).toHaveLength(1);
-        expect(receipts[0].usage.mode).toBe("shadow");
-        expect(
-          receipts[0].usage.components.find((item) => item.model === advisor)
-            ?.cost,
-        ).toBe("3.0000000000");
-        expect(Number(receipts[0].usage.cost)).toBeGreaterThan(3);
-        expect(rows).toHaveLength(1);
-        expect(rows[0].model).toBe(executor);
-        expect(rows[0].tokensIn).toBe(1760);
-        expect(rows[0].tokensOut).toBe(531);
-        expect(rows[0].cost).toBeCloseTo(0.004415, 10);
-        config.llmProxy.usageAccountingMode = "shadow";
-        const second = await send();
-        expect(second.statusCode, second.body).toBe(200);
-        expect(upstreamCalls).toBe(2);
-        const after =
-          (await LimitModel.getModelUsageBreakdowns([limit.id])).get(
-            limit.id,
-          ) ?? [];
-        expect(after).toHaveLength(1);
-        expect(after[0].tokensIn).toBe(3520);
-        expect(after[0].tokensOut).toBe(1062);
-        expect(after[0].cost).toBeCloseTo(0.00883, 10);
-        await drainBackgroundWork();
-        return;
-      }
       expect(rows).toHaveLength(2);
       expect(rows.find((row) => row.model === advisor)?.cost).toBe(3);
       expect(rows.find((row) => row.model === executor)?.tokensIn).toBe(1760);
       const second = await send();
-      expect(second.statusCode, second.body).toBe(402);
-      expect(upstreamCalls).toBe(1);
+      if (truncated) {
+        // A partial charge counts but does not exhaust a budget it has not
+        // reached. No price would change it, so it is not flagged.
+        expect(second.statusCode, second.body).toBe(large ? 502 : 200);
+        expect(upstreamCalls).toBe(2);
+        expect(
+          (await LimitModel.getSpendUsage([limit.id])).get(limit.id)
+            ?.estimatedUsage,
+        ).toBe(false);
+      } else {
+        expect(second.statusCode, second.body).toBe(402);
+        expect(upstreamCalls).toBe(1);
+      }
       await drainBackgroundWork();
     } finally {
       if (settlementFails)

@@ -298,6 +298,8 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Requires `llmLimit:create`, or a session-authenticated team admin creating a limit on their own team.",
   [RouteId.UpdateLimit]:
     "Requires `llmLimit:update`, or a session-authenticated team admin updating a limit on their own team.",
+  [RouteId.ResetLimitUsage]:
+    "Requires `llmLimit:update`, or a session-authenticated team admin resetting a limit on their own team.",
   [RouteId.DeleteLimit]:
     "Requires `llmLimit:delete`, or a session-authenticated team admin deleting a limit on their own team.",
   [RouteId.BulkDeleteLimits]:

@@ -59,7 +59,6 @@ for (const provider of providers) {
             makeSecret,
             makeLlmProviderApiKey,
           }) => {
-            config.llmProxy.usageAccountingMode = withAgent ? "enforce" : "off";
             const origin = `https://${provider}.cache.example.test${provider === "azure" ? "/openai/v1" : ""}`;
             config.llm[provider].baseUrl = origin;
             if (provider === "bedrock")

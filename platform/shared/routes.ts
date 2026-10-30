@@ -664,6 +664,7 @@ export const RouteId = {
   CreateLimit: "createLimit",
   GetLimit: "getLimit",
   UpdateLimit: "updateLimit",
+  ResetLimitUsage: "resetLimitUsage",
   DeleteLimit: "deleteLimit",
   BulkDeleteLimits: "bulkDeleteLimits",
 

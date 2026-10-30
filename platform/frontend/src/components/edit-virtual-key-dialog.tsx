@@ -301,6 +301,7 @@ export function EditVirtualKeyDialog({
             onSpendCapChange={setSpendCap}
             capLocked={!!virtualKey.spendCap && !canManageLimits}
             currentUsage={virtualKey.spendCap?.currentUsage ?? null}
+            estimatedUsage={virtualKey.spendCap?.estimatedUsage ?? false}
           />
           <AdvancedLabelsSection
             attributionSource="credential"

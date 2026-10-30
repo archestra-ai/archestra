@@ -49,7 +49,6 @@ import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
-import { parseUsageAccountingMode } from "@/utils/billable-usage";
 import { isValidCidr } from "@/utils/network";
 
 type ProcessType = "web" | "worker" | "all";
@@ -94,6 +93,13 @@ const appVersion = getAppVersion();
 const devAutoAuthenticateEmail = isProduction
   ? undefined
   : process.env.ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL?.trim() || undefined;
+
+// Settlement is no longer optional; an old deployment may still set the mode.
+if (process.env.ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE !== undefined) {
+  logger.warn(
+    "[config] ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE is no longer used: every request is settled and charged to its budgets. Remove it from your configuration.",
+  );
+}
 
 if (devAutoAuthenticateEmail) {
   logger.warn(
@@ -3572,9 +3578,6 @@ const config = {
     // (see betaFeatureEnabled).
     modelPoolsEnabled: betaFeatureEnabled(
       process.env.ARCHESTRA_LLM_MODEL_POOLS_ENABLED,
-    ),
-    usageAccountingMode: parseUsageAccountingMode(
-      process.env.ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE,
     ),
     plugins: llmProxyPlugins,
     maxVirtualKeysPerApiKey: parsePositiveInt(

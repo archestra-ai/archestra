@@ -37,7 +37,6 @@ describe.each([
   ) => void;
   beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
     config.llmProxy.upstreamTimeoutMs = 600_000;
-    config.llmProxy.usageAccountingMode = "off";
     calls = 0;
     closed = false;
     handler = (response) => {
@@ -188,13 +187,8 @@ describe.each([
     ).toBe(403);
     expect(calls).toBe(0);
   });
-  test("fails closed for enforced accounting and an applicable budget", async () => {
+  test("fails closed when a spend budget applies to unpriced media", async () => {
     const payload = { model: "tts-alias", input: "Synthetic.", voice: "alloy" };
-    config.llmProxy.usageAccountingMode = "enforce";
-    await expect(client.audio.speech.create(payload)).rejects.toMatchObject({
-      status: 422,
-    });
-    config.llmProxy.usageAccountingMode = "off";
     await LimitModel.create({
       entityType: "agent",
       entityId: agentId,

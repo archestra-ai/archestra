@@ -1,6 +1,5 @@
 import {
   priceBillingUsage,
-  quoteUsagePricing,
   resolvePricingQuote,
 } from "@/services/billable-usage";
 import { ThroughputError } from "@/services/llm-throughput";
@@ -357,54 +356,30 @@ function isAlwaysDirectlyCallableBuiltIn(toolName: string): boolean {
   );
 }
 
-function usageCostTokens(usage: UsageView) {
-  return {
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    readTokens: usage.cacheReadTokens ?? 0,
-    writeTokens: usage.cacheWriteTokens ?? 0,
-    write1hTokens: usage.cacheWrite1hTokens ?? 0,
-  };
-}
-
 /**
  * The cost recorded for a response: what the provider says it billed when it
  * reports one (OpenRouter does on every response), otherwise the all-in cost
- * computed from the request's pricing quote.
+ * of every billed component at the request's quote, with any missing rate
+ * estimated.
  */
 export async function calculateUsageCost(params: {
   model: string;
   usage: UsageView;
   provider: SupportedProvider;
-  usageAccountingMode?: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
 }): Promise<number | undefined> {
   const { model, usage, provider } = params;
   if (usage.usageUnavailable || usage.costUnavailable) return undefined;
-  if (params.usageAccountingMode === "enforce")
-    return Number(
-      (
-        await priceBillingUsage({
-          model,
-          usage,
-          provider,
-          mode: "enforce",
-          providerApiKeyId: params.providerApiKeyId,
-        })
-      ).cost,
-    );
-  if (usage.providerReportedCost !== undefined) {
-    return usage.providerReportedCost;
-  }
-  const pricing = await quoteUsagePricing({
-    model,
-    usage,
-    provider,
-    providerApiKeyId: params.providerApiKeyId,
-  });
-  return utils.costOptimization.costFromQuote(
-    pricing.request,
-    usageCostTokens(usage),
+  return Number(
+    (
+      await priceBillingUsage({
+        model,
+        usage,
+        provider,
+        mode: "enforce",
+        providerApiKeyId: params.providerApiKeyId,
+      })
+    ).cost,
   );
 }
 
@@ -415,13 +390,13 @@ export interface InteractionBaseline {
 }
 
 /**
- * Calculate the costs recorded on an interaction.
+ * Calculate the costs recorded on an interaction, and the settled usage that
+ * charges its budgets.
  */
 export async function calculateInteractionCosts(params: {
   actualModel: string;
   usage: UsageView;
   providerName: SupportedProvider;
-  usageAccountingMode?: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
   autoRouting?: AutoRoutingRequestContext;
 }): Promise<{
@@ -440,76 +415,34 @@ export async function calculateInteractionCosts(params: {
       cacheReadSavings: undefined,
     };
   }
-  const billingUsage =
-    params.usageAccountingMode && params.usageAccountingMode !== "off"
-      ? await priceBillingUsage({
-          model: params.actualModel,
-          usage: params.usage,
-          provider: params.providerName,
-          mode: params.usageAccountingMode,
-          providerApiKeyId: params.providerApiKeyId,
-        })
-      : undefined;
-  const actualCost =
-    billingUsage?.mode === "enforce"
-      ? Number(billingUsage.cost)
-      : await calculateUsageCost({
-          model: params.actualModel,
-          usage: params.usage,
-          provider: params.providerName,
-          providerApiKeyId: params.providerApiKeyId,
-        });
-  const tokens = usageCostTokens(params.usage);
-  const cacheBreakdown =
-    billingUsage?.mode === "enforce" ||
-    (!tokens.readTokens && !tokens.writeTokens)
-      ? undefined
-      : utils.costOptimization.cacheCostFromQuote(
-          (
-            await quoteUsagePricing({
-              model: params.actualModel,
-              usage: params.usage,
-              provider: params.providerName,
-              providerApiKeyId: params.providerApiKeyId,
-            })
-          ).request,
-          tokens,
-        );
-  const componentsCache =
-    billingUsage?.mode === "enforce"
-      ? billingUsage.components.map(componentCacheCosts)
-      : undefined;
+  const billingUsage = await priceBillingUsage({
+    model: params.actualModel,
+    usage: params.usage,
+    provider: params.providerName,
+    mode: "enforce",
+    providerApiKeyId: params.providerApiKeyId,
+  });
+  const actualCost = Number(billingUsage.cost);
+  const componentsCache = billingUsage.components.map(componentCacheCosts);
   const smartCost = params.autoRouting
     ? await smartBaselineCost({
         smart: params.autoRouting.smartModel,
         usage: params.usage,
-        billingUsage:
-          billingUsage?.mode === "enforce" ? billingUsage : undefined,
+        billingUsage,
       })
     : null;
+  const cached =
+    (params.usage.cacheReadTokens ?? 0) > 0 ||
+    (params.usage.cacheWriteTokens ?? 0) > 0;
+  const total = (key: keyof (typeof componentsCache)[number]) =>
+    componentsCache.reduce((sum, item) => sum + item[key], 0);
   return {
     billingUsage,
     actualCost,
-    ...(componentsCache
-      ? {
-          cacheCost: componentsCache.reduce(
-            (sum, item) => sum + item.cacheCost,
-            0,
-          ),
-          cacheSavings: componentsCache.reduce(
-            (sum, item) => sum + item.cacheSavings,
-            0,
-          ),
-          cacheReadSavings: componentsCache.reduce(
-            (sum, item) => sum + item.cacheReadSavings,
-            0,
-          ),
-        }
-      : {
-          cacheCost: cacheBreakdown?.cacheCost,
-          cacheSavings: cacheBreakdown?.cacheSavings,
-          cacheReadSavings: cacheBreakdown?.cacheReadSavings,
-        }),
+    // A request that used no cache records no cache figures.
+    cacheCost: cached ? total("cacheCost") : undefined,
+    cacheSavings: cached ? total("cacheSavings") : undefined,
+    cacheReadSavings: cached ? total("cacheReadSavings") : undefined,
     ...(params.autoRouting && smartCost !== null
       ? {
           baseline: {
@@ -523,36 +456,16 @@ export async function calculateInteractionCosts(params: {
 
 /**
  * What a routed request would have cost on the smart tier, on the same usage.
- * In enforce mode only the executor's components are repriced, whatever model
+ * Only the executor's components are repriced, whatever model
  * id the provider reported for them; advisor components keep their own prices.
  * Null when the smart tier has no configured or synced price for that usage.
  */
 async function smartBaselineCost(params: {
   smart: AutoRoutingRequestContext["smartModel"];
   usage: UsageView;
-  billingUsage?: PricedBillingUsage;
+  billingUsage: PricedBillingUsage;
 }): Promise<string | null> {
   const { smart, usage, billingUsage } = params;
-  if (!billingUsage) {
-    const quote = await resolvePricingQuote({
-      model: smart.modelId,
-      provider: smart.provider,
-      providerApiKeyId: smart.providerApiKeyId,
-      usage: { ...usage, billingUsage: undefined, billingQuote: undefined },
-    });
-    const tokens = usageCostTokens(usage);
-    const cost = utils.costOptimization.costFromQuote(quote.request, tokens);
-    return cost !== undefined &&
-      smartPriceKnown(quote.request, {
-        inputTokens: tokens.inputTokens,
-        outputTokens: tokens.outputTokens,
-        cacheReadTokens: tokens.readTokens,
-        cacheWriteTokens: tokens.writeTokens,
-        cacheWrite1hTokens: tokens.write1hTokens,
-      })
-      ? cost.toFixed(10)
-      : null;
-  }
   const routed = billingUsage.components
     .filter(servedByExecutor)
     .map((item) => ({

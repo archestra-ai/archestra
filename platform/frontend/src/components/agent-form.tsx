@@ -3748,6 +3748,10 @@ export function AgentForm({
               <div className={cn(!isActiveSection("runtime") && "hidden")}>
                 {!canConfigureRuntime && (
                   <InlineNotice variant="info">
+                    <InfoIcon className="size-4 shrink-0" />
+                    <span className="font-medium">
+                      Runtime settings are read-only
+                    </span>
                     <InlineNoticeText>
                       Configure runtime permission is required to change this
                       agent's runtime. Existing settings are preserved.

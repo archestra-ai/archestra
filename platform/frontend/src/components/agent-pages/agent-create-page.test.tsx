@@ -205,6 +205,9 @@ describe("AgentCreatePage", () => {
     );
     renderAgentCreatePage();
     expect(
+      screen.getByText("Configure runtime permission required"),
+    ).toBeVisible();
+    expect(
       screen.getByRole("button", { name: /new archestra agent/i }),
     ).toBeEnabled();
     for (const name of [/codex/i, /custom image/i]) {

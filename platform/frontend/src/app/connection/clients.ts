@@ -543,6 +543,42 @@ claude`,
     },
   },
   {
+    id: "chatgpt",
+    label: "ChatGPT",
+    sub: "Desktop, Chat and Work",
+    ...markFields(OPENAI_MARK),
+    mcp: {
+      kind: "custom",
+      supportedAuth: "oauth",
+      configFile: "MCP server URL",
+      language: "json",
+      steps: [
+        {
+          title: "Add a custom MCP server in ChatGPT",
+          body: 'Open Plugins, select the plus button, then "Add custom MCP server". Your account and workspace must permit custom MCP servers. If this option is missing, ask your workspace administrator.',
+        },
+        {
+          title: "Enter the gateway URL",
+          body: "Give the plugin a name. Under Connection, use the public HTTPS URL below, including its full path. For a private gateway, use Secure MCP Tunnel with your administrator's help; localhost and private network URLs cannot be reached directly by ChatGPT.",
+          buildCommand: ({ url }) => url,
+        },
+        {
+          title: "Connect with OAuth",
+          body: 'Choose OAuth, review the requested access, then select "I understand and want to continue" and "Create as a plugin". Sign in to the gateway and approve access. Client registration is automatic by default; if your deployment disables it, ask your administrator for a registered MCP OAuth client.',
+        },
+        {
+          title: "Install the plugin and try a tool",
+          body: "Review the discovered tools and install the resulting plugin. Start a new Chat or Work conversation in ChatGPT desktop, type @ and select the plugin, then ask which tools are available. For a dot, enable the plugin in that dot's configuration if available. A dot's access depends on its plugin settings and workspace policy.",
+        },
+      ],
+    },
+    proxy: {
+      kind: "unsupported",
+      reason:
+        "ChatGPT uses OpenAI's model service and does not expose a custom LLM proxy endpoint. This connection provides MCP tools only; Codex setup is separate.",
+    },
+  },
+  {
     id: "codex",
     label: NATIVE_SESSION_CLIENT_LABELS.codex,
     sub: "OpenAI CLI",

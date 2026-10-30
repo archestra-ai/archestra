@@ -194,7 +194,8 @@ export function ConnectPage() {
   const routed = parts.proxy && choices.proxy;
   const servers = choices.tools ? data.servers : [];
   const tools = choices.tools ? data.totalTools : 0;
-  const skills = data.skillsEnabled ? skillsSorted : [];
+  const skills =
+    data.skillsEnabled && client.id !== "chatgpt" ? skillsSorted : [];
   const plugins = parts.plugins
     ? data.keptPlugins(client, picks.pluginIds)
     : [];
@@ -759,7 +760,11 @@ function ConnectArea({
           className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-300"
         >
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-foreground">
-            <span>Copy each block into {nameOf(client)}, top to bottom.</span>
+            <span>
+              {client.id === "chatgpt"
+                ? "Add the gateway as a plugin in ChatGPT."
+                : `Copy each block into ${nameOf(client)}, top to bottom.`}
+            </span>
           </div>
           <ManualSteps client={client} data={data} />
         </div>
@@ -1209,7 +1214,7 @@ function ProfileCard({
   // Servers and skills show whenever the org offers them, even empty, so
   // the card keeps its shape; then they say so in place of a list. Plugins
   // only show once this agent has one.
-  const skillsOn = data.skillsEnabled;
+  const skillsOn = data.skillsEnabled && client.id !== "chatgpt";
   const pluginsOn = data.partsFor(client).plugins;
   const proxyOn = data.partsFor(client).proxy;
   const guardrailsDocsUrl = getFrontendDocsUrl(

@@ -385,9 +385,11 @@ export function useConnectPageData({
   const hasClientOrder = !!org?.connectionClientOrder?.length;
   const featuredClients = hasClientOrder
     ? clients.filter((client) => client.id !== "generic")
-    : INSTALLER_CLIENT_IDS.map((id) => clients.find((c) => c.id === id)).filter(
-        (c): c is ConnectClient => !!c,
-      );
+    : INSTALLER_CLIENT_IDS.flatMap((id) =>
+        id === "codex" ? [id, "chatgpt"] : [id],
+      )
+        .map((id) => clients.find((c) => c.id === id))
+        .filter((c): c is ConnectClient => !!c);
 
   const skills = skillPage?.data ?? [];
   const totalSkills = skillPage?.pagination.total ?? 0;
@@ -474,7 +476,7 @@ export function useConnectPageData({
   }, [listedTools, preview?.tokenCount]);
   const partsFor = (client: ConnectClient): ConnectChoices => ({
     tools: toolsAvailable,
-    skills: skillsAvailable,
+    skills: skillsAvailable && client.id !== "chatgpt",
     proxy: proxyAvailable && client.proxy.kind !== "unsupported",
     // Plugins come with the installer; other agents set themselves up.
     plugins: !usesGenericInstructions(client) && pluginsFor(client).length > 0,

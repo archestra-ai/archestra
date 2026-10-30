@@ -418,10 +418,12 @@ function HowToDisconnect({
           data={data}
           client={client}
           revoke={
-            <p className="text-muted-foreground">
-              Once it's connected, open Manage on this page, press Disconnect,
-              then Revoke access.
-            </p>
+            client.id === "chatgpt" ? null : (
+              <p className="text-muted-foreground">
+                Once it's connected, open Manage on this page, press Disconnect,
+                then Revoke access.
+              </p>
+            )
           }
         />
         <DialogFooter>
@@ -453,17 +455,32 @@ function RevokeEffect({ client }: { client: ConnectClient }) {
   );
 }
 
-/** What the setup added to this agent, and the prompt that removes it. */
-function DisconnectSteps({
-  data,
-  client,
-  revoke,
-}: {
+interface DisconnectStepsProps {
   data: ConnectPageData;
   client: ConnectClient;
   /** Step 2's body: how, or the button, to revoke access. */
   revoke: ReactNode | null;
-}) {
+}
+
+function DisconnectSteps(props: DisconnectStepsProps) {
+  if (props.client.id === "chatgpt") {
+    return (
+      <DialogBody className="space-y-3 text-sm">
+        <h3 className="font-medium">Remove the plugin connection in ChatGPT</h3>
+        <p className="text-muted-foreground">
+          Open ChatGPT Plugins and remove the gateway's plugin connection. Also
+          remove it from any dot that uses it. This setup added no local
+          configuration, shared skills, or startup scripts to this computer.
+        </p>
+        {props.revoke}
+      </DialogBody>
+    );
+  }
+  return <LocalDisconnectSteps {...props} />;
+}
+
+/** What the setup added to this agent, and the prompt that removes it. */
+function LocalDisconnectSteps({ data, client, revoke }: DisconnectStepsProps) {
   const manualOnly = !readsPrompts(client);
   const skills = data.footprintFor(client).skillsInstalled;
   const guard = startupGuardStem(client.id);

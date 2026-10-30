@@ -501,6 +501,90 @@ describe("ModelSyncService", () => {
     expect(afterForceRefresh?.outputModalities).toBeNull();
   });
 
+  test("correcting a stale classification keeps admin overrides until a full refresh", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    server.use(
+      http.get("https://api.openai.com/v1/models", () =>
+        HttpResponse.json({
+          object: "list",
+          data: [
+            {
+              id: "gpt-realtime-2.1",
+              object: "model",
+              owned_by: "openai",
+              created: 1,
+            },
+          ],
+        }),
+      ),
+    );
+
+    // An older build stored this realtime model as a chat model, and an
+    // administrator then priced it and set its limits.
+    const stale = await ModelModel.upsert({
+      externalId: "openai/gpt-realtime-2.1",
+      provider: "openai",
+      modelId: "gpt-realtime-2.1",
+      inputModalities: ["text", "audio", "image"],
+      outputModalities: ["text", "audio"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    const overrides = {
+      customPricePerMillionInput: "4.00",
+      customPricePerMillionOutput: "16.00",
+      customPricePerMillionCacheRead: "0.40",
+      customPricePerMillionCacheWrite: "5.00",
+      customContextLength: 32000,
+      customOutputLength: 4096,
+    };
+    await ModelModel.update(stale.id, overrides);
+    const sync = (forceRefresh: boolean) =>
+      modelSyncService.syncModelsForApiKey({
+        apiKeyId: apiKey.id,
+        provider: "openai",
+        apiKeyValue: "test-key",
+        baseUrl: "https://api.openai.com/v1",
+        forceRefresh,
+      });
+    const realtimeClassification = {
+      inputModalities: ["text", "audio"],
+      outputModalities: ["audio"],
+      supportsToolCalling: false,
+    };
+
+    await sync(false);
+    expect(await ModelModel.findById(stale.id)).toMatchObject({
+      ...realtimeClassification,
+      customPricePerMillionInput: "4.00000000",
+      customPricePerMillionOutput: "16.00000000",
+      customPricePerMillionCacheRead: "0.40000000",
+      customPricePerMillionCacheWrite: "5.00000000",
+      customContextLength: 32000,
+      customOutputLength: 4096,
+    });
+
+    // Resetting the row to what the provider says is the full refresh's job.
+    await sync(true);
+    expect(await ModelModel.findById(stale.id)).toMatchObject({
+      ...realtimeClassification,
+      customPricePerMillionInput: null,
+      customPricePerMillionOutput: null,
+      customPricePerMillionCacheRead: null,
+      customPricePerMillionCacheWrite: null,
+      customContextLength: null,
+      customOutputLength: null,
+    });
+  });
+
   test("infers Gemini modalities and backfills missing values without overwriting user edits", async ({
     makeOrganization,
     makeSecret,

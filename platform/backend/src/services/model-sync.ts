@@ -174,16 +174,17 @@ class ModelSyncService {
             fromProviderCatalog: true,
           });
       // A normal sync keeps the modalities and tool support a row already has.
-      // A model the fetcher classified from its id is rewritten in full, so an
-      // older build's classification (a realtime model stored as a chat model)
-      // does not survive the upgrade.
+      // For a model the fetcher classified from its id those are rewritten, so
+      // an older build's classification (a realtime model stored as a chat
+      // model) does not survive the upgrade. Only those: an administrator's
+      // custom prices and limits stay until a full refresh resets them.
       const authoritativeIds = new Set(
         providerModels
           .filter((model) => model.capabilities?.authoritative)
           .map((model) => model.id),
       );
       if (!forceRefresh && authoritativeIds.size > 0)
-        await ModelModel.bulkUpsertFull(
+        await ModelModel.applyAuthoritativeCapabilities(
           modelsToUpsert.filter((model) => authoritativeIds.has(model.modelId)),
         );
 

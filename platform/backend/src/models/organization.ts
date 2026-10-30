@@ -35,26 +35,8 @@ const {
 } = getTableColumns(schema.organizationsTable);
 
 class OrganizationModel {
-<<<<<<< HEAD
-=======
   /** General organization reads must not load private runtime configurations. */
   static readonly columns = organizationColumns;
-  /** Read only when provisioning a new personal assistant or gateway. */
-  static async getDefaultPersonalAgentAccessAllTools(
-    organizationId: string,
-  ): Promise<boolean> {
-    const [row] = await db
-      .select({
-        accessAllTools:
-          schema.organizationsTable.defaultPersonalAgentAccessAllTools,
-      })
-      .from(schema.organizationsTable)
-      .where(eq(schema.organizationsTable.id, organizationId))
-      .limit(1);
-    return row?.accessAllTools ?? true;
-  }
-
->>>>>>> 4397412e2 (fix(agents): isolate runtime template data and recover stale settings)
   /**
    * Process-local cache for {@link getAppearanceSettings}. The appearance
    * settings back white-labeling on the unauthenticated login page (and every
@@ -313,7 +295,7 @@ class OrganizationModel {
       .update(schema.organizationsTable)
       .set(data)
       .where(eq(schema.organizationsTable.id, id))
-      .returning();
+      .returning(OrganizationModel.columns);
 
     logger.debug(
       { id, updated: !!updatedOrganization },
@@ -323,23 +305,6 @@ class OrganizationModel {
     return updatedOrganization || null;
   }
 
-<<<<<<< HEAD
-=======
-  /** Used by the browser policy's cluster fence; cache invalidation follows commit. */
-  static async patchInTransaction(params: {
-    id: string;
-    data: Partial<Organization>;
-    tx?: Transaction;
-  }): Promise<Organization | null> {
-    const [row] = await (params.tx ?? db)
-      .update(schema.organizationsTable)
-      .set(params.data)
-      .where(eq(schema.organizationsTable.id, params.id))
-      .returning(OrganizationModel.columns);
-    return row ?? null;
-  }
-
->>>>>>> 4397412e2 (fix(agents): isolate runtime template data and recover stale settings)
   static async invalidateSettingsCaches(id: string): Promise<void> {
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));

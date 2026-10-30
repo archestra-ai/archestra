@@ -11,10 +11,10 @@ import ModelModel from "@/models/model";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { beforeEach, test } from "@/test";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
-import { STREAM_KEEPALIVE_SSE_COMMENT } from "../stream-keepalive";
-import anthropicProxyRoutes from "./anthropic";
-import deepseekProxyRoutes from "./deepseek";
-import openaiProxyRoutes from "./openai";
+import anthropicProxyRoutes from "./routes/anthropic";
+import deepseekProxyRoutes from "./routes/deepseek";
+import openaiProxyRoutes from "./routes/openai";
+import { STREAM_KEEPALIVE_SSE_COMMENT } from "./stream-keepalive";
 
 function deferred() {
   let resolve!: () => void;

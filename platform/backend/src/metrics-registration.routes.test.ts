@@ -27,7 +27,7 @@ import {
   registerMetricsPlugin,
   registerStandaloneMetricsEndpoint,
 } from "@/metrics-registration";
-import { HEALTH_PATH, METRICS_PATH } from "./route-paths";
+import { HEALTH_PATH, METRICS_PATH } from "./routes/route-paths";
 
 describe("metrics routes", () => {
   afterEach(() => {

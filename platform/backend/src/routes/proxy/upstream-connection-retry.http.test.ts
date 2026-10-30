@@ -7,9 +7,9 @@ import InteractionModel from "@/models/interaction";
 import ModelModel from "@/models/model";
 import { beforeEach, test } from "@/test";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
-import anthropicProxyRoutes from "./anthropic";
-import geminiProxyRoutes from "./gemini";
-import openaiProxyRoutes from "./openai";
+import anthropicProxyRoutes from "./routes/anthropic";
+import geminiProxyRoutes from "./routes/gemini";
+import openaiProxyRoutes from "./routes/openai";
 
 const MODEL = "claude-3-5-sonnet-20241022";
 const MESSAGE = {

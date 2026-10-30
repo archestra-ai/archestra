@@ -33,7 +33,7 @@ describe("GET /api/schedule-triggers/:id/runs — project member access", () => 
     });
 
     const { default: scheduleTriggerRoutes } = await import(
-      "../schedule-trigger"
+      "./schedule-trigger"
     );
     await app.register(scheduleTriggerRoutes);
   });

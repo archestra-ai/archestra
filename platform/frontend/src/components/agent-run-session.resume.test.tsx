@@ -15,7 +15,7 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { AgentRunChatSession } from "./page.client";
+import { AgentRunChatSession } from "./agent-run-session";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");

@@ -10,7 +10,7 @@ import { AgentToolModel, ToolModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-import agentToolRoutes from "../agent-tool";
+import agentToolRoutes from "./agent-tool";
 
 describe("POST /api/agents/:agentId/delegations/:targetAgentId", () => {
   let app: FastifyInstanceWithZod;

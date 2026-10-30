@@ -5,6 +5,7 @@ import { priceBillingUsage } from "@/services/billable-usage";
 import { expect, test } from "@/test";
 import type { InsertInteraction } from "@/types/interaction";
 import {
+  componentCacheCosts,
   normalizeAnthropicUsage,
   type PricedBillingUsage,
 } from "@/utils/billable-usage";
@@ -146,6 +147,78 @@ test("settles once across replay, keeps historical rates, and replay after reset
   );
 });
 
+test("a retry across a release or a price fix keeps the receipt's identity", async ({
+  makeAgent,
+  makeOrganization,
+  makeUser,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const data = await record({ agent, userId: user.id, cacheOnly: true });
+  const withIssues = (issues: string[]) => {
+    const attempt = structuredClone(data);
+    attempt.billingUsage = {
+      ...(attempt.billingUsage as PricedBillingUsage),
+      status: "incomplete",
+      issues,
+    };
+    return attempt;
+  };
+  // An older pod recorded the cache as unpriced; the retry estimates it.
+  await InteractionModel.create(withIssues(["unpriced_usage"]));
+  await InteractionModel.create(withIssues(["estimated_cache_price"]));
+  expect(
+    await InteractionBillingModel.findMany([data.id as string]),
+  ).toHaveLength(1);
+});
+
+test("an estimated cache rate is charged but claims no cache savings", async ({
+  makeAgent,
+  makeOrganization,
+  makeUser,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  await ModelModel.create({
+    externalId: "vllm/fireworks-model",
+    provider: "vllm",
+    modelId: "fireworks-model",
+    customPricePerMillionInput: "0.90",
+    customPricePerMillionOutput: "0.90",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+  });
+  const priced = await priceBillingUsage({
+    model: "fireworks-model",
+    provider: "vllm",
+    mode: "enforce",
+    usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 1_000_000 },
+  });
+  // 1M cache reads at half the $0.90 input rate.
+  expect(priced.cost).toBe("0.4500000000");
+  expect(componentCacheCosts(priced.components[0])).toEqual({
+    cacheCost: 0.45,
+    cacheSavings: 0,
+    cacheReadSavings: 0,
+  });
+  const interaction = await record({ agent, userId: user.id, cacheOnly: true });
+  interaction.billingUsage = priced;
+  interaction.cost = priced.cost;
+  await InteractionModel.create(interaction);
+  const costs = await StatisticsModel.getCostStatistics({
+    timeframe: "24h",
+    organizationId: org.id,
+    requestingUserId: user.id,
+    canReadAllUsers: true,
+  });
+  expect(
+    costs.models.find((item) => item.model === "fireworks-model")?.cost,
+  ).toBe(0.45);
+  expect(costs.costSavings.totalCacheSavings).toBe(0);
+});
+
 test("a failed interaction write rolls back the receipt and budget updates", async ({
   makeAgent,
   makeOrganization,
@@ -270,6 +343,36 @@ test("default model-scoped caps include advisor charges while subscription and t
       userId: user.id,
     }),
   ).not.toBeNull();
+});
+
+test("a default user limit counts an incomplete receipt at its cost instead of blocking", async ({
+  makeAgent,
+  makeOrganization,
+  makeUser,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  await EnvironmentDefaultUserLimitModel.create({
+    organizationId: org.id,
+    environmentId: null,
+    limitValue: 100,
+    cleanupInterval: "calendar_month",
+  });
+  const interaction = await record({ agent, userId: user.id, cacheOnly: true });
+  // As an earlier release settled a cache hit with no cache price.
+  interaction.billingUsage = {
+    ...(interaction.billingUsage as PricedBillingUsage),
+    status: "incomplete",
+    issues: ["unpriced_usage"],
+  };
+  await InteractionModel.create(interaction);
+  expect(
+    await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      userId: user.id,
+    }),
+  ).toBeNull();
 });
 
 test("mixed shadow and enforced completions preserve uncovered legacy usage, including after reset", async ({

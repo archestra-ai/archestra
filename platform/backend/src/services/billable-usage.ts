@@ -5,6 +5,7 @@ import {
 import ModelModel from "@/models/model";
 import type { UsageView } from "@/types/llm-provider";
 import {
+  estimateCachePrices,
   formatMoney,
   moneyUnits,
   type PricedBillingUsage,
@@ -72,23 +73,22 @@ export async function priceBillingUsage(params: {
     ) {
       issues.push("estimated_model_price");
     }
+    // A missing cache rate is estimated, never left unpriced: an unpriced
+    // charge would leave its budgets unable to say what was spent.
     let cost = "0.0000000000";
     try {
-      const missing =
-        (component.cacheReadTokens > 0 && prices.cacheRead === null) ||
-        (component.cacheWriteTokens > component.cacheWrite1hTokens &&
-          prices.cacheWrite === null) ||
-        (component.cacheWrite1hTokens > 0 && prices.cacheWrite1h === null);
-      if (missing && !authoritative) issues.push("unpriced_usage");
-      cost = priceTokens(component, {
-        ...prices,
-        cacheRead: prices.cacheRead ?? "0",
-        cacheWrite: prices.cacheWrite ?? "0",
-        cacheWrite1h: prices.cacheWrite1h ?? "0",
+      const estimate = estimateCachePrices({
+        usage: component,
+        prices,
+        provider,
       });
+      if (!authoritative && estimate.estimated)
+        issues.push("estimated_cache_price");
+      cost = priceTokens(component, estimate.prices);
     } catch {
       if (!authoritative) issues.push("unpriced_usage");
     }
+    // The receipt keeps the rates that were known; the estimate is in the cost.
     components.push({ ...component, provider, prices, cost });
   }
   if (usage.inputTokensEstimated) issues.push("estimated_input_tokens");

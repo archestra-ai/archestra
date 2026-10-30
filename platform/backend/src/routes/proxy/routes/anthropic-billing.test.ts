@@ -239,8 +239,15 @@ for (const [mode, stream, large, truncated, settlementFails] of [
       expect(rows.find((row) => row.model === advisor)?.cost).toBe(3);
       expect(rows.find((row) => row.model === executor)?.tokensIn).toBe(1760);
       const second = await send();
-      expect(second.statusCode, second.body).toBe(402);
-      expect(upstreamCalls).toBe(1);
+      if (truncated) {
+        // A partial charge counts but does not exhaust a budget it has not
+        // reached.
+        expect(second.statusCode, second.body).toBe(large ? 502 : 200);
+        expect(upstreamCalls).toBe(2);
+      } else {
+        expect(second.statusCode, second.body).toBe(402);
+        expect(upstreamCalls).toBe(1);
+      }
       await drainBackgroundWork();
     } finally {
       if (settlementFails)

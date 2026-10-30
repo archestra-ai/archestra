@@ -131,6 +131,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   // Limit
   "limit.created": "Limit created",
   "limit.updated": "Limit updated",
+  "limit.reset": "Limit usage reset",
   "limit.deleted": "Limit deleted",
   "limit.bulk_deleted": "Limits deleted",
   // LLM model

@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
-import type {
-  BillingAttribution,
-  PricedBillingUsage,
+import {
+  type BillingAttribution,
+  PRICE_ISSUES,
+  type PricedBillingUsage,
 } from "@/utils/billable-usage";
 
 /** Receipts are independent of log content, encryption and retention. */
@@ -43,10 +44,7 @@ export default class InteractionBillingModel {
           mode: usage.mode,
           providerIssues: [
             ...new Set(
-              usage.issues.filter(
-                (issue) =>
-                  !["estimated_model_price", "unpriced_usage"].includes(issue),
-              ),
+              usage.issues.filter((issue) => !PRICE_ISSUES.has(issue)),
             ),
           ].sort(),
           components: usage.components.map((item) => ({

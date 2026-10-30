@@ -4,7 +4,7 @@ import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { EnvironmentModel, LimitModel } from "@/models";
+import { EnvironmentModel, LimitModel, LimitValidationService } from "@/models";
 import AgentModel from "@/models/agent";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
@@ -722,6 +722,237 @@ describe("limits routes", () => {
       const usage = await LimitModel.getRawModelUsage(limit.id);
       expect(usage[0].currentUsageTokensIn).toBe(500);
       expect(usage[0].currentUsageTokensOut).toBe(700);
+    });
+  });
+
+  describe("POST /api/limits/:id/reset", () => {
+    const settle = (usage: {
+      issues: string[];
+      cost: string;
+      cacheRead: string | null;
+    }) =>
+      db.transaction((tx) =>
+        LimitModel.settleBillableUsage({
+          tx,
+          attribution: {
+            organizationId,
+            environmentId: null,
+            entities: [
+              { entityType: "organization", entityId: organizationId },
+            ],
+          },
+          usage: {
+            version: 1,
+            mode: "enforce",
+            status: "incomplete",
+            issues: usage.issues,
+            cost: usage.cost,
+            components: [
+              {
+                id: "primary",
+                model: "fireworks-model",
+                kind: "message",
+                provider: "vllm",
+                inputTokens: 100_000,
+                outputTokens: 100_000,
+                cacheReadTokens: 1_000_000,
+                cacheWriteTokens: 0,
+                cacheWrite1hTokens: 0,
+                prices: {
+                  input: "1",
+                  output: "1",
+                  cacheRead: usage.cacheRead,
+                  cacheWrite: null,
+                  cacheWrite1h: null,
+                  source: "custom",
+                },
+                cost: usage.cost,
+              },
+            ],
+          },
+        }),
+      );
+    const spendLimit = (limitValue: number) =>
+      LimitModel.create({
+        entityType: "organization",
+        entityId: organizationId,
+        limitType: "token_cost",
+        limitValue,
+        model: null,
+        cleanupInterval: "calendar_month",
+        lastCleanup: new Date(Date.now() - 60_000),
+      });
+    const spendOf = async (id: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/limits/${id}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json().modelUsage as { model: string; cost: number }[];
+    };
+
+    test("an estimated charge counts, blocks only past the limit, and a reset clears it", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      const limit = await spendLimit(1);
+      // 1M cache reads with no cache price, estimated at half the $1 input
+      // rate, plus 200k input and output tokens.
+      await settle({
+        issues: ["estimated_cache_price"],
+        cost: "0.7000000000",
+        cacheRead: null,
+      });
+      expect(
+        await LimitValidationService.checkLimitsBeforeRequest({
+          agentId: agent.id,
+        }),
+      ).toBeNull();
+      expect(await spendOf(limit.id)).toEqual([
+        expect.objectContaining({ model: "fireworks-model", cost: 0.7 }),
+      ]);
+
+      await settle({
+        issues: ["estimated_cache_price"],
+        cost: "0.7000000000",
+        cacheRead: null,
+      });
+      expect(
+        await LimitValidationService.checkLimitsBeforeRequest({
+          agentId: agent.id,
+        }),
+      ).not.toBeNull();
+
+      const reset = await app.inject({
+        method: "POST",
+        url: `/api/limits/${limit.id}/reset`,
+      });
+      expect(reset.statusCode, reset.body).toBe(200);
+      expect(new Date(reset.json().lastCleanup).getTime()).toBeGreaterThan(
+        Date.now() - 30_000,
+      );
+      expect(
+        await LimitValidationService.checkLimitsBeforeRequest({
+          agentId: agent.id,
+        }),
+      ).toBeNull();
+      expect(
+        (await spendOf(limit.id)).reduce((sum, row) => sum + row.cost, 0),
+      ).toBe(0);
+
+      const records = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(
+          and(
+            eq(schema.auditLogsTable.resourceId, limit.id),
+            eq(schema.auditLogsTable.action, "limit.reset"),
+          ),
+        );
+      expect(records).toEqual([
+        expect.objectContaining({
+          outcome: "success",
+          resourceType: "limit",
+          before: expect.objectContaining({
+            lastCleanup: limit.lastCleanup?.toISOString(),
+          }),
+          after: expect.objectContaining({
+            lastCleanup: reset.json().lastCleanup,
+          }),
+        }),
+      ]);
+    });
+
+    test("a budget an earlier release blocked for an unpriced request blocks only on its spend", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      const limit = await spendLimit(1);
+      // What an earlier release settled for a cache hit with no cache price:
+      // the cache left out of the cost and the request counted as incomplete,
+      // plus a zero-cost marker row that kept the budget blocked.
+      await settle({
+        issues: ["unpriced_usage"],
+        cost: "0.2000000000",
+        cacheRead: null,
+      });
+      const marker =
+        "urn:archestra:billing:incomplete:5707b463-67d0-4e54-a8f4-2c3897e186ba";
+      await db
+        .insert(schema.limitModelUsageTable)
+        .values({ limitId: limit.id, model: marker });
+      await db
+        .insert(schema.limitBillingUsageTable)
+        .values({ limitId: limit.id, model: marker, incomplete: 1 });
+
+      expect(
+        await LimitValidationService.checkLimitsBeforeRequest({
+          agentId: agent.id,
+        }),
+      ).toBeNull();
+      expect(await spendOf(limit.id)).toEqual([
+        expect.objectContaining({ model: "fireworks-model", cost: 0.2 }),
+      ]);
+    });
+
+    test("refuses limits that are not spend limits, and limits of another organization", async ({
+      makeOrganization,
+    }) => {
+      const calls = await LimitModel.create({
+        entityType: "organization",
+        entityId: organizationId,
+        limitType: "tool_calls",
+        limitValue: 5,
+        cleanupInterval: "calendar_day",
+      });
+      const refused = await app.inject({
+        method: "POST",
+        url: `/api/limits/${calls.id}/reset`,
+      });
+      expect(refused.statusCode).toBe(400);
+
+      const other = await makeOrganization();
+      const foreign = await LimitModel.create({
+        entityType: "organization",
+        entityId: other.id,
+        limitType: "token_cost",
+        limitValue: 5,
+      });
+      const missing = await app.inject({
+        method: "POST",
+        url: `/api/limits/${foreign.id}/reset`,
+      });
+      expect(missing.statusCode).toBe(404);
+    });
+
+    test("an edit cannot move the reset time and points at the reset", async () => {
+      const limit = await spendLimit(5);
+      const patch = await app.inject({
+        method: "PATCH",
+        url: `/api/limits/${limit.id}`,
+        payload: { lastCleanup: new Date().toISOString() },
+      });
+      expect(patch.statusCode).toBe(400);
+      expect(patch.body).toContain("/reset");
+
+      // Older generated clients send null for an untouched field, even when
+      // nothing else changes.
+      const untouched = await app.inject({
+        method: "PATCH",
+        url: `/api/limits/${limit.id}`,
+        payload: { lastCleanup: null },
+      });
+      expect(untouched.statusCode, untouched.body).toBe(200);
+      const edit = await app.inject({
+        method: "PATCH",
+        url: `/api/limits/${limit.id}`,
+        payload: { lastCleanup: null, limitValue: 7 },
+      });
+      expect(edit.statusCode, edit.body).toBe(200);
+      expect(edit.json()).toMatchObject({
+        limitValue: 7,
+        lastCleanup: limit.lastCleanup?.toISOString(),
+      });
     });
   });
 

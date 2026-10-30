@@ -433,9 +433,11 @@ describe("Connect page apps and the shared agent list", () => {
     }
   });
 
-  it("names each recognised agent as its Connect page app does", () => {
+  it("keeps recognised client identities while clarifying the Codex CLI display name", () => {
     for (const [id, agent] of Object.entries(OAUTH_AGENTS)) {
-      expect(CONNECT_CLIENTS.find((c) => c.id === id)?.label).toBe(agent.label);
+      expect(CONNECT_CLIENTS.find((c) => c.id === id)?.label).toBe(
+        id === "codex" ? "Codex CLI" : agent.label,
+      );
     }
   });
 });

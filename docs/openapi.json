@@ -151933,7 +151933,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -389944,23 +389945,19 @@
                     "properties": {
                       "input": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "output": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "cacheRead": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "cacheWrite": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -390349,23 +390346,19 @@
                     "properties": {
                       "input": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "output": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "cacheRead": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       },
                       "cacheWrite": {
                         "nullable": true,
-                        "type": "string",
-                        "pattern": "^\\d+(\\.\\d+)?$"
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -463003,7 +462996,8 @@
                                   "query",
                                   "impersonate",
                                   "full-view",
-                                  "admin"
+                                  "admin",
+                                  "configure-runtime"
                                 ]
                               }
                             }
@@ -463362,7 +463356,8 @@
                           "query",
                           "impersonate",
                           "full-view",
-                          "admin"
+                          "admin",
+                          "configure-runtime"
                         ]
                       }
                     }
@@ -463415,7 +463410,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -463762,7 +463758,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -464073,7 +464070,8 @@
                           "query",
                           "impersonate",
                           "full-view",
-                          "admin"
+                          "admin",
+                          "configure-runtime"
                         ]
                       }
                     }
@@ -464148,7 +464146,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -545507,7 +545506,8 @@
                               "query",
                               "impersonate",
                               "full-view",
-                              "admin"
+                              "admin",
+                              "configure-runtime"
                             ]
                           }
                         }
@@ -545791,7 +545791,8 @@
                         "query",
                         "impersonate",
                         "full-view",
-                        "admin"
+                        "admin",
+                        "configure-runtime"
                       ]
                     }
                   }

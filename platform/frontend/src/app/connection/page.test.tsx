@@ -335,7 +335,7 @@ describe("ConnectPage gateway footprint", () => {
     expect(await within(summary).findByText("2 tools")).toBeVisible();
     expect(within(summary).getByText("~2.4K tokens")).toBeVisible();
     expect(within(summary).queryByText("3 tools")).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: /Codex$/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Codex CLI$/ }));
     await requestToolCounts();
     expect(await screen.findByText("~1.1K tokens")).toBeVisible();
   });
@@ -465,10 +465,10 @@ describe("ConnectPage saved agent order", () => {
       .getAllByRole("button")
       .map((button) => button.textContent?.trim());
     const tileNames = names.filter((name) =>
-      ["n8n", "Codex", "Claude Code"].includes(name ?? ""),
+      ["n8n", "Codex CLI", "Claude Code"].includes(name ?? ""),
     );
-    expect(tileNames).toEqual(["n8n", "Codex", "Claude Code"]);
-    expect(screen.getByRole("button", { name: /Codex$/ })).toHaveAttribute(
+    expect(tileNames).toEqual(["n8n", "Codex CLI", "Claude Code"]);
+    expect(screen.getByRole("button", { name: /Codex CLI$/ })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -604,13 +604,16 @@ describe("ConnectPage guardrails chip", () => {
     Object.entries(NATIVE_SESSION_CLIENT_LABELS),
   )("marks %s as supporting guardrails even before enforcement is enabled", async (clientId, label) => {
     setup(clientId, { active: false, unsupportedClientAction: "block" });
-    const tile = screen.getByRole("button", { name: new RegExp(`${label}$`) });
+    const clientLabel = clientId === "codex" ? "Codex CLI" : label;
+    const tile = screen.getByRole("button", {
+      name: new RegExp(`${clientLabel}$`),
+    });
     const badge = within(tile).getByRole("img", {
       name: "Supports LLM proxy guardrails",
     });
     expect(badge).toBeVisible();
     // Separate from the label text so the shield does not shift the agent name.
-    expect(within(tile).getByText(label)).not.toContainElement(badge);
+    expect(within(tile).getByText(clientLabel)).not.toContainElement(badge);
     await userEvent.hover(badge);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "Enforcement depends on your organization's settings.",
@@ -634,7 +637,7 @@ describe("ConnectPage guardrails chip", () => {
       ),
     );
     setup("codex", { active: true, unsupportedClientAction: "block" });
-    const tile = screen.getByRole("button", { name: "Codex" });
+    const tile = screen.getByRole("button", { name: "Codex CLI" });
     const lastConnected = await within(tile).findByRole("img", {
       name: "Last connected",
     });
@@ -643,7 +646,9 @@ describe("ConnectPage guardrails chip", () => {
     });
     const corner = guardrails.parentElement;
     expect(lastConnected.parentElement).toBe(corner);
-    expect(within(tile).getByText("Codex")).not.toContainElement(guardrails);
+    expect(within(tile).getByText("Codex CLI")).not.toContainElement(
+      guardrails,
+    );
     expect(
       within(corner as HTMLElement)
         .getAllByRole("img")
@@ -660,7 +665,7 @@ describe("ConnectPage guardrails chip", () => {
 
   it("keeps the selected client button name concise when it has a support hint", () => {
     setup("codex", { active: true, unsupportedClientAction: "block" });
-    const tile = screen.getByRole("button", { name: "Codex" });
+    const tile = screen.getByRole("button", { name: "Codex CLI" });
     expect(tile).toHaveAttribute("aria-pressed", "true");
     expect(tile).toHaveAccessibleDescription("Supports LLM proxy guardrails");
   });

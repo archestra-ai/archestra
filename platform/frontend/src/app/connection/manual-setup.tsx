@@ -4,6 +4,7 @@
 // apps without an installer or a prompt, such as n8n and Generic client.
 
 import type { ReactNode } from "react";
+import { ChatgptGatewaySetup } from "./chatgpt-gateway-setup";
 import type { ConnectClient } from "./clients";
 import { isInstallerClientId, usesGenericInstructions } from "./clients";
 import type { ConnectPageData } from "./connect-page-data";
@@ -56,6 +57,7 @@ export interface ManualStep {
 export function useManualSteps(
   client: ConnectClient | null,
   data: ConnectPageData,
+  includeSkills = true,
 ): ManualStep[] {
   const marketplaceVisible = useSkillsMarketplaceVisible(client);
   const skillsVisible = data.skillsEnabled && marketplaceVisible;
@@ -63,6 +65,21 @@ export function useManualSteps(
   const baseUrl = data.baseUrl;
 
   if (!client) return [];
+  if (client.id === "chatgpt") {
+    return [
+      {
+        key: "mcp",
+        title: "Install the ChatGPT plugin",
+        content: (
+          <ChatgptGatewaySetup
+            includeSkills={data.skillsEnabled && includeSkills}
+            gateway={data.partsFor(client).tools ? gateway : null}
+            baseUrl={baseUrl}
+          />
+        ),
+      },
+    ];
+  }
   const steps: ManualStep[] = [];
   if (data.partsFor(client).tools && gateway) {
     steps.push({

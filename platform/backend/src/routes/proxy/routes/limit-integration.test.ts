@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type OpenAI from "openai";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { __setTestDb, getDb, schema } from "@/database";
 import {
   EnvironmentDefaultUserLimitModel,
@@ -43,31 +44,33 @@ function createOpenAiHarness(options: { usage?: typeof DEFAULT_USAGE } = {}) {
     client: {
       chat: {
         completions: {
-          create: async (
-            request: OpenAI.Chat.Completions.ChatCompletionCreateParams,
-          ) => ({
-            id: "chatcmpl-limit-test",
-            object: "chat.completion",
-            created: 1,
-            model: request.model,
-            choices: [
-              {
-                index: 0,
-                message: {
-                  role: "assistant" as const,
-                  content: "Mocked response",
-                  refusal: null,
+          create: vi.fn(
+            async (
+              request: OpenAI.Chat.Completions.ChatCompletionCreateParams,
+            ) => ({
+              id: "chatcmpl-limit-test",
+              object: "chat.completion",
+              created: 1,
+              model: request.model,
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: "assistant" as const,
+                    content: "Mocked response",
+                    refusal: null,
+                  },
+                  finish_reason: "stop" as const,
+                  logprobs: null,
                 },
-                finish_reason: "stop" as const,
-                logprobs: null,
+              ],
+              usage: {
+                prompt_tokens: usage.inputTokens,
+                completion_tokens: usage.outputTokens,
+                total_tokens: usage.inputTokens + usage.outputTokens,
               },
-            ],
-            usage: {
-              prompt_tokens: usage.inputTokens,
-              completion_tokens: usage.outputTokens,
-              total_tokens: usage.inputTokens + usage.outputTokens,
-            },
-          }),
+            }),
+          ),
         },
       },
     },
@@ -233,10 +236,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       test(`${source} owner limit cannot be bypassed with identity hints`, async ({
         makeInteraction,
       }) => {
-        const providerCall = vi.spyOn(
-          harness.client.chat.completions,
-          "create",
-        );
+        const providerCall = harness.client.chat.completions.create;
         if (source === "custom") {
           await LimitModel.create({
             entityType: "user",
@@ -368,6 +368,118 @@ describe("LLM proxy limit enforcement (integration)", () => {
         .where(eq(schema.interactionsTable.profileId, agentId));
       expect(row.userId).toBe(other.id);
     });
+  });
+
+  test("a scoped cap refuses its model without dispatch and leaves unrelated models usable", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    await ModelModel.create({
+      externalId: "openai/gpt-4o-mini",
+      provider: "openai",
+      modelId: "gpt-4o-mini",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: ["gpt-4o"],
+      lastCleanup: new Date(),
+    });
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "gpt-4o",
+      1_000_000,
+      1_000_000,
+    );
+    const harness = await setupRoute();
+    const credential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: user.id,
+    });
+    const send = (model: string) =>
+      app.inject({
+        method: "POST",
+        url: OPENAI_ENDPOINT(agent.id),
+        headers: OPENAI_HEADERS("Bearer test-key", credential),
+        payload: SIMPLE_PAYLOAD(model),
+      });
+
+    const blocked = await send("gpt-4o");
+    expect(blocked.statusCode, blocked.body).toBe(402);
+    expect(blocked.json().error.code).toBe("token_cost_limit_exceeded");
+    expect(harness.client.chat.completions.create).not.toHaveBeenCalled();
+
+    const allowed = await send("gpt-4o-mini");
+    expect(allowed.statusCode, allowed.body).toBe(200);
+    expect(harness.client.chat.completions.create).toHaveBeenCalledTimes(1);
+
+    await LimitModel.create({
+      entityType: "organization",
+      entityId: agent.organizationId,
+      limitType: "token_cost",
+      limitValue: 0,
+      model: null,
+      lastCleanup: new Date(),
+    });
+    const aggregateBlocked = await send("gpt-4o-mini");
+    expect(aggregateBlocked.statusCode, aggregateBlocked.body).toBe(402);
+    expect(aggregateBlocked.json().error.usage_limit.entity_type).toBe(
+      "organization",
+    );
+    expect(harness.client.chat.completions.create).toHaveBeenCalledTimes(1);
+  });
+
+  test("budget applicability uses the normalized model rather than its context variant", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 0,
+      model: ["claude-sonnet-4-5"],
+      lastCleanup: new Date(),
+    });
+    config.llmProxy.modelPoolsEnabled = true;
+    await LimitModel.create({
+      entityType: "organization",
+      entityId: agent.organizationId,
+      limitType: "token_cost",
+      limitValue: 0,
+      model: null,
+      lastCleanup: new Date(),
+    });
+    const harness = await setupRoute();
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: OPENAI_HEADERS(
+        "Bearer test-key",
+        await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: user.id,
+        }),
+      ),
+      payload: SIMPLE_PAYLOAD("claude-sonnet-4-5[1m]"),
+    });
+
+    expect(response.statusCode, response.body).toBe(402);
+    expect(response.json().error.usage_limit.entity_type).toBe("agent");
+    expect(harness.client.chat.completions.create).not.toHaveBeenCalled();
   });
 
   test("blocks request with 402 when virtual_key limit is exceeded", async ({

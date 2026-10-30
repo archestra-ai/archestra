@@ -18,6 +18,7 @@ import {
 } from "@archestra/shared/connection-setup";
 import {
   CLAUDE_MARK,
+  CODEX_MARK,
   COPILOT_MARK,
   GROK_MARK,
   HERMES_AGENT_MARK,
@@ -188,6 +189,8 @@ export interface ConnectClient {
   label: string;
   sub: string;
   svg?: string;
+  /** Official product artwork when a flat vector mark is insufficient. */
+  iconSrc?: string;
   /**
    * Second-tone shape drawn beneath `svg`, for two-tone marks a single path
    * can't carry (e.g. OpenCode's lighter inner block).
@@ -215,6 +218,7 @@ const N8N_PATH =
  */
 function markFields(mark: ClientMark) {
   return {
+    iconSrc: mark.imageSrc,
     svg: mark.path,
     svgAccent: mark.accent,
     svgViewBox: mark.viewBox,
@@ -543,10 +547,48 @@ claude`,
     },
   },
   {
-    id: "codex",
-    label: NATIVE_SESSION_CLIENT_LABELS.codex,
-    sub: "OpenAI CLI",
+    id: "chatgpt",
+    label: "ChatGPT",
+    sub: "Desktop, Chat and Work",
     ...markFields(OPENAI_MARK),
+    iconColor: "#171717",
+    tileBg: "#f4f4f5",
+    mcp: {
+      kind: "custom",
+      supportedAuth: "oauth",
+      configFile: "MCP server URL",
+      language: "json",
+      steps: [
+        {
+          title: "Add a custom MCP server in ChatGPT",
+          body: 'Open Plugins, select the plus button, then "Add custom MCP server". Your account and workspace must permit custom MCP servers. If this option is missing, ask your workspace administrator.',
+        },
+        {
+          title: "Enter the gateway URL",
+          body: "Give the plugin a name. Under Connection, use the public HTTPS URL below, including its full path. For a private gateway, use Secure MCP Tunnel with your administrator's help; localhost and private network URLs cannot be reached directly by ChatGPT.",
+          buildCommand: ({ url }) => url,
+        },
+        {
+          title: "Connect with OAuth",
+          body: 'Choose OAuth, review the requested access, then select "I understand and want to continue" and "Create as a plugin". Sign in to the gateway and approve access. Client registration is automatic by default; if your deployment disables it, ask your administrator for a registered MCP OAuth client.',
+        },
+        {
+          title: "Install the plugin and try a tool",
+          body: "Review the discovered tools and install the resulting plugin. Start a new Chat or Work conversation in ChatGPT desktop, type @ and select the plugin, then ask which tools are available. For a dot, enable the plugin in that dot's configuration if available. A dot's access depends on its plugin settings and workspace policy.",
+        },
+      ],
+    },
+    proxy: {
+      kind: "unsupported",
+      reason:
+        "Plugin archives do not configure inference. Local ChatGPT Work supports separate native model-gateway configuration; cloud chats and dots do not inherit that local setting.",
+    },
+  },
+  {
+    id: "codex",
+    label: "Codex CLI",
+    sub: "OpenAI CLI",
+    ...markFields(CODEX_MARK),
     mcp: {
       kind: "custom",
       supportedAuth: "oauth",

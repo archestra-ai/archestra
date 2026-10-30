@@ -27,6 +27,7 @@
   "dependencies": {
     "@ai-sdk/react": "^3.0.195",
     "@archestra/shared": "workspace:*",
+    "@aws-crypto/sha256-js": "^5.2.0",
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",
     "@better-auth/sso": "catalog:",

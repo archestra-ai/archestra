@@ -195,6 +195,36 @@ describe("AgentCreatePage", () => {
     }
   });
 
+  it("allows ordinary agents but denies runtime templates without Configure runtime", () => {
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentRuntime" ? true : undefined,
+    );
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.agent?.includes("configure-runtime"),
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    renderAgentCreatePage();
+    expect(
+      screen.getByText("Configure runtime permission required"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /new archestra agent/i }),
+    ).toBeEnabled();
+    for (const name of [/codex/i, /custom image/i]) {
+      const choice = screen.getByRole("button", { name });
+      expect(choice).toBeDisabled();
+      expect(choice).toHaveAccessibleDescription(
+        "Requires Configure runtime permission.",
+      );
+    }
+    expect(
+      screen.getByRole("button", { name: /connect via a2a/i }),
+    ).toBeEnabled();
+  });
+
   it("offers maintained Agent templates and prefills the existing create wizard", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockImplementation((feature) =>

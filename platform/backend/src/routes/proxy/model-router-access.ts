@@ -263,7 +263,10 @@ function isOwnedPersonalCredential(
 }
 
 export function modelRequiresResponses(
-  resolution: ModelRouterResolution,
+  resolution: Pick<
+    ModelRouterResolution,
+    "provider" | "modelId" | "supportedEndpoints"
+  >,
 ): boolean {
   return (
     requiresResponsesApi(resolution.supportedEndpoints) ||

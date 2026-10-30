@@ -1168,6 +1168,30 @@ describe("Model Router auto model", () => {
       ).toBe(1);
     });
 
+    test("a tier served only on the Responses API keeps the call on the default model, undecided", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+        supportedEndpoints: { 2: ["/responses"] },
+      });
+      await publishPlan(org);
+      const userId = await member(org, makeUser, makeMember);
+
+      const response = await sendPlatformCall(org, { userId });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamModels).toEqual([org.trio[1].modelId]);
+      expect(jevCalls).toBe(0);
+      expect(await decisions(org.organizationId)).toEqual([]);
+    });
+
     for (const [label, tier] of [
       ["a provider the client's wire cannot reach", "gemini"],
       ["a per-user provider", "github-copilot"],

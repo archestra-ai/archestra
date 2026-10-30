@@ -35,6 +35,7 @@ import {
   type ModelRouterEndpoint,
   ModelRouterEndpointSchema,
   type ModelRouterLimitAgent,
+  modelRequiresResponses,
   modelRouterLimitScope,
 } from "@/routes/proxy/model-router-access";
 import { setAutoRoutingContext } from "@/routes/proxy/utils/auto-routing-context";
@@ -238,6 +239,20 @@ export async function routeInternalAutoSession(params: {
   if (unreachable) {
     return unroutable(
       `the client's wire cannot reach the "${unreachable.provider}/${unreachable.modelId}" tier`,
+    );
+  }
+  // A tier is sent on its provider's chat wire, which a Responses-only model
+  // does not serve.
+  const responsesOnly = trio.find((model) =>
+    modelRequiresResponses({
+      provider: model.provider,
+      modelId: model.modelId,
+      supportedEndpoints: model.supportedEndpoints ?? null,
+    }),
+  );
+  if (responsesOnly) {
+    return unroutable(
+      `the "${responsesOnly.provider}/${responsesOnly.modelId}" tier is served only on the Responses API`,
     );
   }
   const auth = await userModelRouterAuth({

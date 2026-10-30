@@ -2,8 +2,9 @@
 
 A runtime image for Archestra work that runs the dev stack as plain processes:
 PostgreSQL, the backend dev server and the Next.js dev server. No Docker, kind,
-Helm or Tilt inside the pod, so the pod needs no privilege, no Docker volume,
-and half of what a full-image run reserves (tier L: 4 CPU / 8 GiB, limit 16 GiB).
+Helm or Tilt inside the pod, so the pod needs no privilege and no Docker volume,
+starts in half the time of the full stack and idles at a tenth of its CPU (see
+"Lite and full stacks side by side" below).
 
 It is not a replacement for the full image. It covers the common cases: a
 preview of a branch, manual QA, code review with a running app, unit tests, and
@@ -12,13 +13,16 @@ image: MCP server installs (the orchestrator), nested Agent Runtime, the Dagger
 code runtime, Vault, and the Keycloak-backed identity-provider specs.
 
 Lite is the default: a Lobster Agent runs this kind of image, unprivileged, at
-runtime tier M (2 CPU, 4 GiB, 8 GiB limit). Work that needs Kubernetes goes to
-one of a few separate Tilt Agents that run the full image, privileged, at tier
-L; any lite Agent can hand work to any of them. A run promotes by handing its
-branch to such an Agent with `start_agent_run` and continues with what comes
-back; nothing switches a running workspace in place.
-`$ARCHESTRA_AGENT_RUNTIME_TIER` names the Pod's size (S, M or L), not its kind
-of image.
+every tier, by default M (4 CPU, 8 GiB, 16 GiB limit). A run whose work needs a
+different size starts a run of its own Agent at that tier (up to the Agent's
+largest tier) with `start_agent_run` and hands over its branch. Work that needs
+Kubernetes goes to one of a few separate Tilt Agents that run the full image,
+privileged, at tier L; any lite Agent can hand work to any of them. Nothing
+switches a running workspace in place. Inside a run,
+`$ARCHESTRA_AGENT_RUNTIME_TIER` and `$ARCHESTRA_AGENT_RUNTIME_MAX_TIER` name the
+Pod's size and the largest it may move to, and
+`$ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST` and
+`$ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT` what that size gives.
 
 ## What the image adds to the public agent image
 
@@ -44,7 +48,7 @@ Native addons (`app-runtime-rs`, `image-rs`, `openappa-rs`, `router-rs`,
 `sandbox-rs`) are not in the image. `dev-lite.sh` installs the ones CI
 publishes for main's `platform/archestra-rs` tree (`scripts/napi-prebuilt.mjs`,
 about a second) and builds them with cargo only for a changed tree (about 6
-minutes at 16 CPUs, longer on a tier M pod).
+minutes at 16 CPUs, longer at 2 or 4).
 
 ## Use
 
@@ -55,7 +59,8 @@ archestra-dev-lite up            # PostgreSQL, migrations, backend :9000, fronte
 archestra-dev-lite status        # processes with RSS, cgroup memory, disk, URLs
 archestra-dev-lite logs backend  # or db, migrate, frontend, wiremock, a2a
 archestra-dev-lite up --e2e      # also WireMock :9092 and the A2A fixture :9191
-archestra-dev-lite e2e           # Playwright chromium + api projects against this stack
+archestra-dev-lite warm          # compile the routes the Playwright specs open
+archestra-dev-lite e2e           # warm, then Playwright chromium + api projects against this stack
 archestra-dev-lite restart       # down, then up
 archestra-dev-lite down          # stop; data and caches stay
 ```
@@ -150,20 +155,54 @@ median and 6.5 at p90. The Lobster agents' requests were cut on that evidence
 from 7 CPU / 24 GiB to 3.5 CPU / 12 GiB with an 18 GiB limit, which fits two
 runs on an `n2d-standard-8` node instead of one.
 
-Tier M, the lite image's size: request 2 CPU and 4 GiB, limit 8 GiB, no CPU
-limit, `privileged: false`, no Docker volume. That fits three runs on the same
-node. Tier L, the full image's size for the rare Kubernetes work, defaults to a
-request of 4 CPU and 8 GiB with a 16 GiB limit. It is chosen for occasional
-runs, not density: one L run per 8-vCPU node, and the scheduler only reserves 8
-GiB for it, so a session that grows past that uses spare node memory. The limit
-is below the p90 above (16.8 GiB, measured before the Tilt stack's overhead was
-trimmed), so a long full-stack session can still reach it. These sizes are
-defaults; administrators change any tier under Settings > Agents > Runtime
-tiers, for example back to 3.5 CPU and 12 GiB when L runs become frequent.
+The tiers' default sizes, with no CPU limit (administrators change any of them
+under Settings > Agents > Runtime tiers):
+
+| Tier | Request | Memory limit | Used for |
+| --- | --- | --- | --- |
+| S | 2 CPU, 4 GiB | 8 GiB | reviews, scripts, light edits; the lite stack fits, as measured below |
+| M | 4 CPU, 8 GiB | 16 GiB | the default: a dev stack, tests and builds |
+| L | 8 CPU, 16 GiB | 32 GiB | large builds and test suites, work that ran out of memory at M, and the Tilt Agents' full image (its p90 of 16.8 GiB above fits) |
+
+L keeps no warm spares by default: its runs are rare and an idle spare holds 8
+CPU and 16 GiB.
 The frontend dev server is the largest and most variable consumer; a
 production build (`next build` and `next start`) would cut it to a few hundred
 MB for preview-only runs at the cost of a build per start, and is a candidate
 follow-up.
+
+## Lite and full stacks side by side
+
+Measured on 2026-10-30 on an `n2-standard-16` VM, both stacks on the same
+commit, each in a container set up like a runtime Pod. `--cpus` held each stack
+to the CPU request of its size, so these are the slow case; a Pod with spare
+node CPU runs faster. One run per configuration.
+
+| | Lite, 2 CPU / 8 GiB (S) | Full Tilt, 4 CPU / 16 GiB (M) | Full Tilt, 2 CPU / 8 GiB |
+| --- | --- | --- | --- |
+| Cold start, clone to ready | 63 s (90 CPU-seconds) | 121 s (191) | 148 s (191) |
+| Warm restart | 26 s | 43 s | not measured |
+| Six pages, first visit / warm | 82 s / 7.9 s | 58 s / 5.9 s | 91 s / 14.8 s |
+| Backend reload, median of 3 | 31 s, see below | 17 s | 19 s |
+| vitest file, pure / with the database | 13 s / 19 s | 13 s / 18 s | not measured |
+| Idle CPU | 0.02 cores | 0.19 cores | 0.18 cores |
+| Peak memory, anonymous | 5.3 GiB | 8.4 GiB | 5.9 GiB |
+| Disk: home volume + Docker volume | 6.3 GB | 12.7 GB | 9.7 GB |
+
+The full stack's extra cost is kind, Tilt, dockerd and the Playwright MCP Pod:
+about 0.17 cores at idle, 1 GiB of memory and 3.5 to 7 GB of Docker disk. At
+equal CPU the lite stack starts in less than half the time and serves pages at
+least as fast. The full stack at 4 CPU wins first page compiles because of its
+CPU, not its stack.
+
+The lite backend reload waited out the backend's production shutdown drain;
+`dev-lite.sh` now gives the dev server a short drain and stops it within 5 s,
+like Tilt's backend runner.
+
+At 2 CPU the Playwright agents and chat specs first timed out on pages
+compiling for the first time (3 of 23). `archestra-dev-lite e2e` now compiles
+the routes the specs open before they start, and on 2 to 4 CPUs runs fewer
+workers with scaled timeouts (`E2E_WORKERS`, `E2E_TIMEOUT_SCALE`).
 
 ## Not covered
 

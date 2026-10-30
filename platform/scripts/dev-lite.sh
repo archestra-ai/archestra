@@ -19,7 +19,11 @@
 #   scripts/dev-lite.sh e2e [playwright args]  run the Playwright lite projects
 #                              against this stack (needs --e2e). --e2e rewrites
 #                              platform/.env for the suite; delete the file to
-#                              get the defaults back on the next up
+#                              get the defaults back on the next up. Compiles
+#                              the routes the specs open first, and scales the
+#                              timeouts and workers to the CPUs available
+#   scripts/dev-lite.sh warm                   compile the routes the specs open,
+#                              so no test waits on a first compile
 #   scripts/dev-lite.sh restart [options]      down, then up again
 #   scripts/dev-lite.sh reload backend|frontend  restart one component; the backend
 #                              is rebuilt first when the watcher is off
@@ -601,9 +605,72 @@ cmd_logs() {
   tail -n "$lines" "$LOG_DIR/$name.log"
 }
 
+# CPUs this stack can count on: a CPU limit when the container has one, else
+# the Pod's CPU request (an Agent Runtime sets it), else every CPU it sees.
+available_cpus() {
+  local quota period request
+  if read -r quota period 2>/dev/null </sys/fs/cgroup/cpu.max && [ "$quota" != max ]; then
+    echo $(( (quota + period - 1) / period ))
+    return
+  fi
+  request="${ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST:-}"
+  case "$request" in
+    *m) echo $(( (${request%m} + 999) / 1000 )); return ;;
+    [0-9]*) echo "${request%%.*}"; return ;;
+  esac
+  nproc
+}
+
+# Routes the Playwright specs open (goto and goToPage literals). A trailing
+# slash means an id follows: any id compiles that dynamic route.
+warm_routes() {
+  # shellcheck disable=SC2016 # JavaScript, not shell
+  node -e '
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const routes = new Set();
+    const pattern = /(?:goToPage\(\s*\w+,\s*|goto\(\s*)[`"\x27](\/[^`"\x27$?#]*)/g;
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const file = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(file);
+        else if (file.endsWith(".ts"))
+          for (const [, route] of fs.readFileSync(file, "utf8").matchAll(pattern))
+            if (route !== "/") routes.add(route.endsWith("/") ? `${route}warm` : route);
+      }
+    };
+    walk(process.argv[1]);
+    console.log([...routes].sort().join("\n"));
+  ' "$PLATFORM_DIR/e2e-tests/tests"
+}
+
+# Next's dev server compiles a route on its first request. At 2 CPUs that
+# takes up to 40 s, longer than the specs' navigation and assertion timeouts,
+# so compile the routes the specs open before they start.
+cmd_warm() {
+  http_ok "http://127.0.0.1:$FRONTEND_PORT/chat" 600 || die "frontend is not ready"
+  local routes started=$SECONDS
+  routes="$(warm_routes)"
+  log "compiling $(printf '%s\n' "$routes" | wc -l) routes the specs open"
+  printf '%s\n' "$routes" | xargs -P 2 -I{} \
+    curl -s -o /dev/null -m 600 -w "  %{http_code} %{time_total}s {}\n" "http://127.0.0.1:$FRONTEND_PORT{}" || true
+  log "routes compiled in $((SECONDS - started)) s"
+}
+
 cmd_e2e() {
   e2e_enabled || die "start the stack with --e2e first"
   http_ok "http://127.0.0.1:$BACKEND_PORT/ready" || die "backend is not ready"
+  [ "${ARCHESTRA_DEV_LITE_E2E_WARM:-1}" = 0 ] || cmd_warm
+  # The browser, both dev servers and PostgreSQL share these CPUs: fewer
+  # workers and longer timeouts on a small Pod. E2E_* set by hand win.
+  local cpus
+  cpus="$(available_cpus)"
+  if [ "$cpus" -le 2 ]; then
+    export E2E_WORKERS="${E2E_WORKERS:-2}" E2E_TIMEOUT_SCALE="${E2E_TIMEOUT_SCALE:-3}"
+  elif [ "$cpus" -le 4 ]; then
+    export E2E_WORKERS="${E2E_WORKERS:-3}" E2E_TIMEOUT_SCALE="${E2E_TIMEOUT_SCALE:-2}"
+  fi
+  log "Playwright on $cpus CPU(s): ${E2E_WORKERS:-3} workers, timeouts x${E2E_TIMEOUT_SCALE:-1}"
   cd "$PLATFORM_DIR/e2e-tests"
   export E2E_WIREMOCK_BASE_URL="http://127.0.0.1:$WIREMOCK_PORT"
   export E2E_WIREMOCK_INTERNAL_URL="http://127.0.0.1:$WIREMOCK_PORT"
@@ -653,6 +720,7 @@ case "${1:-}" in
   status) cmd_status ;;
   logs) shift; cmd_logs "$@" ;;
   e2e) shift; cmd_e2e "$@" ;;
+  warm) cmd_warm ;;
   down) cmd_down ;;
   reset) cmd_reset ;;
   -h|--help|help) usage 0 ;;

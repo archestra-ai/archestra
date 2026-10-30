@@ -181,6 +181,15 @@ const chromiumShard2TestMatch = [
   "**/users-role-filter.spec.ts",
 ];
 const chromiumShard = process.env.E2E_CHROMIUM_SHARD;
+
+/**
+ * Slow hosts scale every timeout below, and set how many workers run at once.
+ * A 2-CPU Agent Runtime on the lite dev stack runs the browser, the dev
+ * servers and PostgreSQL on the same CPUs; `scripts/dev-lite.sh e2e` sets both
+ * from the CPUs it has. Timeouts written into a spec are not scaled.
+ */
+const TIMEOUT_SCALE = Math.max(1, Number(process.env.E2E_TIMEOUT_SCALE) || 1);
+const LOCAL_WORKERS = Math.max(1, Number(process.env.E2E_WORKERS) || 3);
 const chromiumTestFiles =
   chromiumShard === "2"
     ? {
@@ -222,9 +231,9 @@ export default defineConfig({
   forbidOnly: IS_CI,
   /* Retry on CI only */
   retries: IS_CI ? 2 : 0,
-  workers: IS_CI ? "90%" : 3,
+  workers: IS_CI ? "90%" : LOCAL_WORKERS,
   /* Global timeout for each test */
-  timeout: 60_000,
+  timeout: 60_000 * TIMEOUT_SCALE,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: IS_CI ? [["blob"], ["github"], ["line"]] : "line",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -236,13 +245,13 @@ export default defineConfig({
     /* Take screenshot only when test fails */
     screenshot: "only-on-failure",
     /* Timeout for each action (click, fill, etc.) */
-    actionTimeout: 15_000,
+    actionTimeout: 15_000 * TIMEOUT_SCALE,
     /* Timeout for navigation actions */
-    navigationTimeout: 30_000,
+    navigationTimeout: 30_000 * TIMEOUT_SCALE,
   },
   /* Expect timeout for assertions */
   expect: {
-    timeout: 10_000,
+    timeout: 10_000 * TIMEOUT_SCALE,
   },
 
   /* Configure projects for major browsers */

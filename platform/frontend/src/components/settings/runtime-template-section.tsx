@@ -173,23 +173,9 @@ export function RuntimeTemplateSection({
   }
   function reorder(ids: string[]) {
     if (!editable) return;
-    const overrides = { ...state.popularAgentOverrides };
-    ids.forEach((id, position) => {
-      if (AGENT_CATALOG_IDS.includes(id as AgentCatalogId))
-        overrides[id as AgentCatalogId] = {
-          ...overrides[id as AgentCatalogId],
-          position,
-        };
-    });
-    setDraft({
-      ...state,
-      templates: state.templates.map((item) => ({
-        ...item,
-        position: ids.indexOf(item.id),
-      })),
-      popularAgentOverrides: overrides,
-    });
+    setDraft(withRuntimeOrder(state, ids));
   }
+
   function move(from: number, to: number) {
     if (to < 0 || to >= rows.length || from < 0) return;
     reorder(
@@ -324,15 +310,23 @@ export function RuntimeTemplateSection({
             .map((row) => row.name)}
           onClose={() => setEditing(null)}
           onSave={(template) => {
-            setDraft({
+            const next = {
               ...state,
               templates:
                 editing === "new"
-                  ? [...state.templates, { ...template, position: rows.length }]
+                  ? [...state.templates, template]
                   : state.templates.map((item) =>
                       item.id === template.id ? template : item,
                     ),
-            });
+            };
+            setDraft(
+              editing === "new"
+                ? withRuntimeOrder(next, [
+                    ...rows.map((row) => row.id),
+                    template.id,
+                  ])
+                : next,
+            );
             setEditing(null);
           }}
         />
@@ -658,4 +652,23 @@ function RuntimeTemplateDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function withRuntimeOrder(state: SaveBody, ids: string[]): SaveBody {
+  const overrides = { ...state.popularAgentOverrides };
+  ids.forEach((id, position) => {
+    if (AGENT_CATALOG_IDS.includes(id as AgentCatalogId))
+      overrides[id as AgentCatalogId] = {
+        ...overrides[id as AgentCatalogId],
+        position,
+      };
+  });
+  return {
+    ...state,
+    popularAgentOverrides: overrides,
+    templates: state.templates.map((item) => ({
+      ...item,
+      position: ids.indexOf(item.id),
+    })),
+  };
 }

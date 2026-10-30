@@ -238,4 +238,47 @@ describe("RuntimeTemplateSection", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(settings.templates).toEqual([]));
   });
+  it("appends new templates after existing choices when saved positions contain gaps", async () => {
+    settings.templates = [999, 1000].map((position, index) => ({
+      id: `00000000-0000-4000-8000-00000000000${index + 1}`,
+      name: `Existing workspace ${index + 1}`,
+      description: "Existing configuration",
+      icon: null,
+      hidden: false,
+      position,
+      runtime: {
+        ...buildCustomAgentRuntime({
+          image: "registry.example.com/existing:v1",
+        }),
+        privileged: false as const,
+      },
+    }));
+    mount();
+    const user = userEvent.setup();
+    const add = await screen.findByRole("button", {
+      name: "Add custom runtime",
+    });
+    await waitFor(() => expect(add).toBeEnabled());
+    await user.click(add);
+    await user.type(
+      screen.getByRole("textbox", { name: "Name" }),
+      "New workspace",
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Container image" }),
+      "registry.example.com/new:v1",
+    );
+    await user.click(screen.getByRole("button", { name: "Add template" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(settings.templates).toHaveLength(3));
+    const ordered = [...settings.templates].sort(
+      (a, b) => a.position - b.position,
+    );
+    expect(ordered.map((item) => item.name)).toEqual([
+      "Existing workspace 1",
+      "Existing workspace 2",
+      "New workspace",
+    ]);
+    expect(ordered.at(-1)?.position).toBeLessThan(1000);
+  });
 });

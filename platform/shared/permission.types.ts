@@ -19,6 +19,7 @@ export const actions = [
   "impersonate",
   "full-view",
   "admin",
+  "configure-runtime",
 ] as const;
 
 export const resources = [

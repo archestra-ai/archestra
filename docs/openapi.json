@@ -151933,7 +151933,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -463003,7 +463004,8 @@
                                   "query",
                                   "impersonate",
                                   "full-view",
-                                  "admin"
+                                  "admin",
+                                  "configure-runtime"
                                 ]
                               }
                             }
@@ -463362,7 +463364,8 @@
                           "query",
                           "impersonate",
                           "full-view",
-                          "admin"
+                          "admin",
+                          "configure-runtime"
                         ]
                       }
                     }
@@ -463415,7 +463418,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -463762,7 +463766,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -464073,7 +464078,8 @@
                           "query",
                           "impersonate",
                           "full-view",
-                          "admin"
+                          "admin",
+                          "configure-runtime"
                         ]
                       }
                     }
@@ -464148,7 +464154,8 @@
                             "query",
                             "impersonate",
                             "full-view",
-                            "admin"
+                            "admin",
+                            "configure-runtime"
                           ]
                         }
                       }
@@ -545507,7 +545514,8 @@
                               "query",
                               "impersonate",
                               "full-view",
-                              "admin"
+                              "admin",
+                              "configure-runtime"
                             ]
                           }
                         }
@@ -545791,7 +545799,8 @@
                         "query",
                         "impersonate",
                         "full-view",
-                        "admin"
+                        "admin",
+                        "configure-runtime"
                       ]
                     }
                   }

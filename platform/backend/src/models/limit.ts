@@ -125,6 +125,12 @@ type LimitPrefetch = {
   limitsByEntity: Map<string, Limit[]>;
   usageByLimitId: Map<string, LimitModelUsageRecord[]>;
   pricingByModelId: Map<string, Model>;
+} & LimitModelApplicability;
+type LimitModelApplicability = {
+  /** Normalized selected model; omitted when the operation has no model. */
+  model?: string;
+  /** Routing is pending; check aggregate caps now and scoped caps after selection. */
+  deferModelScopedLimits?: boolean;
 };
 export type LimitViolationResponse = [
   refusalMessage: string,
@@ -1661,6 +1667,8 @@ export class LimitValidationService {
    * Returns null if allowed, or a refusal tuple if blocked.
    */
   static async checkLimitsBeforeRequest(params: {
+    model?: string;
+    deferModelScopedLimits?: boolean;
     /** Refuse applicable budgets when this media model cannot be priced. */
     unpricedMediaModel?: string;
     agentId: string;
@@ -1862,6 +1870,8 @@ export class LimitValidationService {
         entitiesToCheck,
         limits,
       );
+      prefetch.model = params.model;
+      prefetch.deferModelScopedLimits = params.deferModelScopedLimits;
 
       if (params.unpricedMediaModel) {
         const applies = (models?: string[] | null) =>
@@ -1967,6 +1977,8 @@ export class LimitValidationService {
               customUserLimits:
                 prefetch.limitsByEntity.get(`user:${userId}`) ?? [],
               defaultLimit: defaultUserLimit,
+              model: params.model,
+              deferModelScopedLimits: params.deferModelScopedLimits,
             });
           if (defaultUserLimitViolation) {
             logger.info(
@@ -2163,6 +2175,7 @@ export class LimitValidationService {
     }
 
     for (const limit of limits) {
+      if (!limitAppliesToModel({ ...prefetch, models: limit.model })) continue;
       logger.debug(
         `[LimitValidation] Checking limit ${limit.id} for ${entityType} ${entityId}`,
       );
@@ -2232,6 +2245,8 @@ export class LimitValidationService {
   }
 
   private static async checkDefaultUserLimit(params: {
+    model?: string;
+    deferModelScopedLimits?: boolean;
     organizationId: string;
     userId: string;
     environmentId?: string | null;
@@ -2268,6 +2283,8 @@ export class LimitValidationService {
               params.organizationId,
             )));
       if (!defaultLimit) return null;
+      if (!limitAppliesToModel({ ...params, models: defaultLimit.model }))
+        return null;
       // An override counts only this environment; the global fallback counts
       // the user's whole organization, preserving custom-user precedence.
       const environmentId = defaultLimit.environmentId;
@@ -2987,6 +3004,14 @@ function describeLimitResetWindow(
     default:
       return null;
   }
+}
+
+function limitAppliesToModel(
+  params: LimitModelApplicability & { models?: string[] | null },
+): boolean {
+  if (!params.models?.length) return true;
+  if (params.model) return params.models.includes(params.model);
+  return !params.deferModelScopedLimits;
 }
 
 function normalizeLimitModels(models: string[] | null | undefined) {

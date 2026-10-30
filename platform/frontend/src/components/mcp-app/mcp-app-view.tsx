@@ -1656,10 +1656,8 @@ function SandboxIframe({
       }}
     >
       {showReloadProgress && (
-        <output
+        <div
           data-testid="mcp-app-reload-indicator"
-          aria-live="polite"
-          aria-label="Reloading app"
           className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-start bg-background/30 backdrop-blur-[1px] transition-opacity duration-150"
         >
           <div
@@ -1669,7 +1667,7 @@ function SandboxIframe({
           >
             <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
           </div>
-        </output>
+        </div>
       )}
       {error && (
         <div role="alert" style={{ color: "red", padding: "1rem" }}>

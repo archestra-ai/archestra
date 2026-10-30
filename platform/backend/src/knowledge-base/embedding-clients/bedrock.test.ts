@@ -555,4 +555,103 @@ describe("callBedrockEmbedding", () => {
       );
     });
   });
+
+  describe("Cohere Embed v4", () => {
+    const captureCohere = () => {
+      const bodies: Array<{ modelId: string; body: Record<string, unknown> }> =
+        [];
+      server.use(
+        http.post(
+          `${BEDROCK_HOST}/model/:modelId/invoke`,
+          async ({ params, request }) => {
+            const body = (await request.json()) as Record<string, unknown>;
+            bodies.push({ modelId: String(params.modelId), body });
+            const count = Array.isArray(body.texts)
+              ? (body.texts as string[]).length
+              : 1;
+            return HttpResponse.json({
+              embeddings: {
+                float: Array.from({ length: count }, (_, i) => [i + 1, 0.5]),
+              },
+            });
+          },
+        ),
+      );
+      return bodies;
+    };
+
+    test("sends the v4 request shape for texts and images", async () => {
+      const bodies = captureCohere();
+
+      const result = await callBedrockEmbedding({
+        inputs: [
+          "first text",
+          { mimeType: "image/png", data: "aW1n" },
+          "second text",
+        ],
+        model: "us.cohere.embed-v4:0",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+        dimensions: 1024,
+      });
+
+      // The inference-profile id goes to the API verbatim.
+      expect(
+        bodies.every((call) => call.modelId === "us.cohere.embed-v4:0"),
+      ).toBe(true);
+      const textCall = bodies.find((call) => "texts" in call.body)?.body;
+      const imageCall = bodies.find((call) => "images" in call.body)?.body;
+      // v4 truncates with LEFT/RIGHT (v3's "END" is not a v4 value) and takes
+      // the requested output dimension.
+      expect(textCall).toMatchObject({
+        texts: ["first text", "second text"],
+        input_type: "search_document",
+        truncate: "RIGHT",
+        output_dimension: 1024,
+      });
+      // v4 has no "image" input_type: an image is embedded for the same
+      // purpose as text, so both land in one comparable vector space.
+      expect(imageCall).toMatchObject({
+        images: ["data:image/png;base64,aW1n"],
+        input_type: "search_document",
+        output_dimension: 1024,
+      });
+
+      expect(result.data.map((item) => item.embedding)).toEqual([
+        [1, 0.5],
+        [1, 0.5],
+        [2, 0.5],
+      ]);
+    });
+
+    test("does not clamp texts to the v3 character cap", async () => {
+      const bodies = captureCohere();
+      const longText = "alpha bravo charlie ".repeat(250); // 5000 chars
+
+      await callBedrockEmbedding({
+        inputs: [longText],
+        model: "cohere.embed-v4:0",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      });
+
+      expect(bodies[0].body.texts).toEqual([longText]);
+      // No dimension requested: the model's native 1536 applies.
+      expect(bodies[0].body).not.toHaveProperty("output_dimension");
+    });
+
+    test("embeds queries as search_query", async () => {
+      const bodies = captureCohere();
+
+      await callBedrockEmbedding({
+        inputs: ["what is in the picture?"],
+        model: "eu.cohere.embed-v4:0",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+        purpose: "search_query",
+      });
+
+      expect(bodies[0].body.input_type).toBe("search_query");
+    });
+  });
 });

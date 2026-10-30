@@ -4,16 +4,25 @@ import {
   inlineMediaPart,
   linkedMediaPart,
   mediaFormatLabel,
+  missingImageReason,
   missingMediaPart,
 } from "./media";
+
+/** An edit's uploaded image: its metadata, and its bytes when the log kept them. */
+type Upload = {
+  filename?: string;
+  mime_type?: string;
+  width?: number;
+  height?: number;
+  data?: string;
+  data_omitted?: string;
+};
 
 type ImageRequest = {
   prompt?: string;
   size?: string;
   output_format?: string;
-  input_files?: {
-    images?: Array<{ filename?: string; width?: number; height?: number }>;
-  };
+  input_files?: { images?: Upload[]; mask?: Upload };
 };
 
 type ImageResponse = {
@@ -25,7 +34,8 @@ type ImageResponse = {
 /**
  * Images are artifacts, not assistant text or executable tool calls: the
  * conversation view shows them inline, each with a one-line caption. An
- * edit's uploaded images are not kept, so they appear as named placeholders.
+ * edit's uploaded images, and its mask, show in the user's turn; one the log
+ * did not keep appears as a named placeholder saying why.
  */
 export default class AzureImagesInteraction implements InteractionUtils {
   readonly modelName: string;
@@ -58,20 +68,11 @@ export default class AzureImagesInteraction implements InteractionUtils {
     return `${count} ${count === 1 ? "image" : "images"}${size ? `, ${size}` : ""}`;
   }
   mapToUiMessages(): PartialUIMessage[] {
-    const inputs = (this.request.input_files?.images ?? []).map((image) =>
-      missingMediaPart({
-        kind: "image",
-        label: [
-          image.filename ?? "Input image",
-          image.width && image.height
-            ? `${image.width} × ${image.height}`
-            : undefined,
-        ]
-          .filter(Boolean)
-          .join(" · "),
-        reason: "Uploaded images are not kept in the log",
-      }),
-    );
+    const files = this.request.input_files;
+    const inputs = [
+      ...(files?.images ?? []).map((image) => uploadPart(image, "Input image")),
+      ...(files?.mask ? [uploadPart(files.mask, "Mask", "Mask")] : []),
+    ];
     const mediaType = `image/${(this.response.output_format ?? this.request.output_format ?? "png").toLowerCase()}`;
     const caption = [mediaFormatLabel(mediaType), this.size()]
       .filter(Boolean)
@@ -105,4 +106,31 @@ export default class AzureImagesInteraction implements InteractionUtils {
     const size = this.response.size ?? this.request.size;
     return size && size !== "auto" ? size.replace("x", " × ") : undefined;
   }
+}
+
+/** "circle.png · 1024 × 1024" shown inline, or a placeholder saying why not. */
+function uploadPart(
+  upload: Upload,
+  fallbackName: string,
+  role?: string,
+): PartialUIMessage["parts"][number] {
+  const caption = [
+    role && upload.filename ? `${role}: ${upload.filename}` : upload.filename,
+    upload.width && upload.height
+      ? `${upload.width} × ${upload.height}`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return upload.data
+    ? inlineMediaPart({
+        mediaType: upload.mime_type ?? "image/png",
+        data: upload.data,
+        caption: caption || fallbackName,
+      })
+    : missingMediaPart({
+        kind: "image",
+        label: caption || fallbackName,
+        reason: missingImageReason(upload.data_omitted),
+      });
 }

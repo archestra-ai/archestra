@@ -72,14 +72,36 @@ describe("media and embeddings in the conversation view", () => {
     });
   });
 
-  it("shows generated images inline and names an edit's uploaded image", () => {
+  it("shows an edit's uploads and mask beside the generated image", () => {
     const { messages, reply } = conversation({
       type: "openai:images",
       model: "gpt-image-1-mini",
       request: {
         prompt: "Make the circle red",
         input_files: {
-          images: [{ filename: "circle.png", width: 1024, height: 1024 }],
+          images: [
+            {
+              filename: "circle.png",
+              mime_type: "image/png",
+              width: 1024,
+              height: 1024,
+              data: "iVBORw0KGgo",
+            },
+            {
+              filename: "photo.jpg",
+              mime_type: "image/jpeg",
+              width: 4032,
+              height: 3024,
+              data_omitted: "too_large",
+            },
+          ],
+          mask: {
+            filename: "mask.png",
+            mime_type: "image/png",
+            width: 1024,
+            height: 1024,
+            data: "iVBORw0KGgoM",
+          },
         },
       },
       response: {
@@ -92,12 +114,24 @@ describe("media and embeddings in the conversation view", () => {
     expect(messages[0].parts).toEqual([
       { type: "text", text: "Make the circle red" },
       {
+        type: "file",
+        mediaType: "image/png",
+        url: "data:image/png;base64,iVBORw0KGgo",
+        filename: "circle.png · 1024 × 1024",
+      },
+      {
         type: "data-missing-media",
         data: {
           kind: "image",
-          label: "circle.png · 1024 × 1024",
-          reason: "Uploaded images are not kept in the log",
+          label: "photo.jpg · 4032 × 3024",
+          reason: "Larger than the log keeps (2 MB per image)",
         },
+      },
+      {
+        type: "file",
+        mediaType: "image/png",
+        url: "data:image/png;base64,iVBORw0KGgoM",
+        filename: "Mask: mask.png · 1024 × 1024",
       },
     ]);
     expect(messages[1].parts).toEqual([
@@ -108,6 +142,28 @@ describe("media and embeddings in the conversation view", () => {
         filename: "PNG, 1024 × 1024",
       },
     ]);
+  });
+
+  it("names an upload a row written before uploads were kept", () => {
+    const { messages } = conversation({
+      type: "openai:images",
+      model: "gpt-image-1-mini",
+      request: {
+        prompt: "Make the circle red",
+        input_files: {
+          images: [{ filename: "circle.png", width: 1024, height: 1024 }],
+        },
+      },
+      response: { data: [{ b64_json: "iVBORw0KGgo" }] },
+    });
+    expect(messages[0].parts[1]).toEqual({
+      type: "data-missing-media",
+      data: {
+        kind: "image",
+        label: "circle.png · 1024 × 1024",
+        reason: "Not kept in the log",
+      },
+    });
   });
 
   it("plays speech and transcription audio, and says when it was not kept", () => {

@@ -50,6 +50,13 @@ export function missingAudioReason(omitted: unknown): string {
     : "Not kept in the log";
 }
 
+/** Why the log holds no copy of an uploaded image: too large, or not kept. */
+export function missingImageReason(omitted: unknown): string {
+  return omitted === "too_large"
+    ? "Larger than the log keeps (2 MB per image)"
+    : "Not kept in the log";
+}
+
 /** The media type of an OpenAI audio format name. */
 export function audioMediaType(format: string | undefined): string {
   switch ((format ?? "").toLowerCase()) {

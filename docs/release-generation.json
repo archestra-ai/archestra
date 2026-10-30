@@ -1,18 +1,42 @@
 {
   "schema": 1,
-  "sourceSha": "790513ea7e3b9842f337a5a6b8ba5b2614a17c6d",
-  "baseSha": "d319ab91c94ed40238b66b3a72cfc5b1303c1f83",
-  "runId": 40996753554,
+  "sourceSha": "5baa5d379269ee82e88126e21d974f6c7a2ffc02",
+  "baseSha": "eac39964a2e15f7ad36b864d0e91edaf3a819517",
+  "runId": 41044878397,
   "attempt": 1,
-  "platformTree": "72018896bd1f46c2a0b14003820cdca80d359389",
+  "platformTree": "ac4000414c7edf9dc74d9736c1fcac6555381460",
   "files": [
     {
       "path": "docs/openapi.json",
-      "blob": "576e99885ba612a18b916a8ae185b8b5d90befa9"
+      "blob": "13f85aecd3c38498d22fcc51f690f86a5cd83287"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/llm-proxy_limits.dark.webp",
+      "blob": "7a2d1e486a096af516293d8fe11bff5c9d4b59b4"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/llm-proxy_limits.webp",
+      "blob": "0095ffba7c5e5aa7afb171e37973fbcaebb88e06"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/llm-proxy_throughput.dark.webp",
+      "blob": "3fdf26fec6f9eeed0efada912c49e5d968765a20"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/llm-proxy_throughput.webp",
+      "blob": "b5405477a8e417335938f72efbbff23da41c5ad3"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/platform-openappa_policy.dark.webp",
+      "blob": "8ff2a9bec2de7033af9150b99a861e7f3f8d8260"
+    },
+    {
+      "path": "docs/assets/automated_screenshots/platform-openappa_policy.webp",
+      "blob": "c03a93328f7efcfacbb49cabf7d41f3d8b21b974"
     },
     {
       "path": "docs/pages/admin/performance-benchmarks.md",
-      "blob": "05fb707ad5969ae0a520e5b2c84984065fb02411"
+      "blob": "defdf03b6d811df975c0c5fab891fe991b39443e"
     }
   ]
 }

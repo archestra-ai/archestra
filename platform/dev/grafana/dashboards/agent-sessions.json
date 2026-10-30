@@ -15,100 +15,76 @@
       }
     ]
   },
-  "description": "Session-level agent audit trail \u2014 view recent agent sessions and drill into LLM calls, MCP tool calls, and logs",
+  "description": "Investigate one session across Agent Runtime and external clients using correlated inference calls, tool calls and logs. Requires Tempo; logs require Loki.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": 5,
   "links": [
     {
-      "asDropdown": false,
-      "icon": "dashboard",
+      "title": "LLM Proxy",
+      "type": "link",
+      "url": "/d/archestra-genai-observability",
       "includeVars": true,
       "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "GenAI Observability",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-genai-observability/archestra-genai-observability"
+      "targetBlank": false
     },
     {
-      "asDropdown": false,
-      "icon": "dashboard",
+      "title": "Costs & Limits",
+      "type": "link",
+      "url": "/d/archestra-costs-and-limits",
       "includeVars": true,
       "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Agent Runtime",
+      "type": "link",
+      "url": "/d/archestra-agent-runtime",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Guardrails & OpenAPPA",
+      "type": "link",
+      "url": "/d/archestra-guardrails",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
       "title": "MCP Monitoring",
-      "tooltip": "",
       "type": "link",
-      "url": "/d/archestra-mcp-monitoring/archestra-mcp-monitoring"
-    },
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
+      "url": "/d/archestra-mcp-monitoring",
       "includeVars": true,
       "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "Application Metrics",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-application-metrics/archestra-application-metrics"
+      "targetBlank": false
     },
     {
-      "asDropdown": false,
-      "icon": "dashboard",
+      "title": "Knowledge Base Operations",
+      "type": "link",
+      "url": "/d/archestra-rag-knowledge-base",
       "includeVars": true,
       "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "RAG & Knowledge Base",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-rag-knowledge-base/archestra-rag-knowledge-base"
+      "targetBlank": false
     },
     {
-      "asDropdown": false,
-      "icon": "doc",
-      "includeVars": false,
-      "keepTime": false,
-      "tags": [],
-      "targetBlank": true,
-      "title": "Documentation",
-      "tooltip": "Archestra Documentation",
+      "title": "Platform Health",
       "type": "link",
-      "url": "https://archestra.ai/docs/administration/observability"
+      "url": "/d/archestra-application-metrics",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Metrics reference",
+      "type": "link",
+      "url": "https://archestra.ai/docs/admin/observability/metrics",
+      "targetBlank": true
     }
   ],
   "panels": [
-    {
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 3,
-        "x": 0,
-        "y": 0
-      },
-      "id": 9,
-      "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "<div style=\"display: flex; align-items: center; justify-content: center; height: 100%;\"><a href=\"https://archestra.ai\" target=\"_blank\"><img src=\"https://archestra.ai/logo.png\" alt=\"Archestra\" style=\"height: 100%;\" /></a></div>",
-        "mode": "html"
-      },
-      "pluginVersion": "12.3.2",
-      "title": "",
-      "transparent": true,
-      "type": "text"
-    },
     {
       "fieldConfig": {
         "defaults": {},
@@ -127,7 +103,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "## Agent Session Viewer\n\nSession-level view of agent activity across all invocation channels (Chat UI, A2A, MS Teams, Slack, Email). Filter by **Agent Name**, click a **Session ID** to drill in, then click any **Trace ID** link to load the trace waterfall in the **Trace Viewer** panel below. You can also paste a session ID directly into the **Session ID** variable above.",
+        "content": "## Session investigation\nSelect a session to inspect its inference and tool calls across runtime and external clients. Requires session context propagation and a Tempo data source. Logs additionally require Loki. Fleet provisioning and Kubernetes resources are in Agent Runtime.",
         "mode": "markdown"
       },
       "pluginVersion": "12.3.2",
@@ -1817,72 +1793,35 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "text": "grafanacloud-archestra-traces",
-          "value": "grafanacloud-traces"
-        },
+        "current": {},
         "includeAll": false,
         "label": "Traces data source",
         "name": "traces_datasource",
         "options": [],
         "query": "tempo",
         "refresh": 1,
-        "regex": "",
         "type": "datasource"
       },
       {
-        "current": {
-          "text": "grafanacloud-archestra-prom",
-          "value": "grafanacloud-prom"
-        },
-        "includeAll": false,
-        "label": "Metrics data source",
-        "name": "metrics_datasource",
-        "options": [],
-        "query": "prometheus",
-        "refresh": 1,
-        "regex": "(?!grafanacloud-usage|grafanacloud-ml-metrics).+",
-        "type": "datasource"
-      },
-      {
-        "current": {
-          "text": "grafanacloud-archestra-logs",
-          "value": "grafanacloud-logs"
-        },
+        "current": {},
         "includeAll": false,
         "label": "Logs data source",
         "name": "logs_datasource",
         "options": [],
         "query": "loki",
         "refresh": 1,
-        "regex": "",
         "type": "datasource"
       },
       {
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${metrics_datasource}"
-        },
-        "definition": "label_values(llm_request_duration_seconds_count, agent_name)",
-        "includeAll": true,
-        "label": "Agent Name",
-        "multi": true,
         "name": "agent_name",
-        "options": [],
-        "query": {
-          "qryType": 1,
-          "query": "label_values(llm_request_duration_seconds_count, agent_name)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        "label": "Agent name regex",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
         },
-        "refresh": 1,
-        "regex": "",
-        "sort": 1,
-        "type": "query"
+        "options": []
       },
       {
         "current": {
@@ -1916,7 +1855,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Archestra Agent Sessions",
+  "title": "Archestra / Session Investigation",
   "uid": "archestra-agent-sessions",
   "version": 6
 }

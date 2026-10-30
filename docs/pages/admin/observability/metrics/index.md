@@ -2,10 +2,10 @@
 title: Metrics
 description: Configure Prometheus scraping and explore Archestra's metric references.
 order: 1
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-30
 ---
 
-Scrape Archestra's Prometheus metrics to track model spend, tool calls, agent runs, and platform health. Choose a reference below to look up metric names, labels, and aggregation behavior.
+Scrape Archestra's Prometheus metrics to track model spend, tool calls, guardrails, agent runs, and platform health. Choose a reference below to look up metric names, labels, and aggregation behavior.
 
 ## Scraping
 
@@ -13,7 +13,7 @@ Each process serves its own registry, so scrape every pod:
 
 | Process | Endpoint | Emits |
 | --- | --- | --- |
-| Web | `http://<pod>:9050/metrics` | Requests served by the web tier: LLM, MCP, chat, coding agents, HTTP |
+| Web | `http://<pod>:9050/metrics` | Requests served by the web tier: LLM, MCP, Guardrails, chat, coding agents, HTTP |
 | Worker | `http://<pod>:9000/metrics` | Knowledge Base syncs and embeddings, the task queue, scheduled tasks, and the LLM and MCP calls they make |
 
 The Helm chart runs the worker as its own Deployment by default. Sum counters across web and worker pods: an agent run from a schedule reports its LLM metrics from a worker pod.
@@ -87,3 +87,4 @@ LLM and MCP request metrics do not carry user, skill, app, or client-supplied id
 <span id="skill-and-sandbox-metrics"></span><span id="skill_activations_total"></span><span id="skill_context_tokens_total"></span><span id="sandbox_commands_total"></span><span id="sandbox_command_duration_seconds"></span><span id="sandbox_runtime_errors_total"></span><span id="sandbox_runtime_status"></span>
 <span id="background-task-metrics"></span><span id="task_queue_tasks_enqueued_total"></span><span id="task_queue_tasks_completed_total"></span><span id="task_queue_tasks_failed_total"></span><span id="task_queue_tasks_dead_total"></span><span id="task_queue_task_duration_seconds"></span><span id="task_queue_active_tasks"></span><span id="task_queue_stuck_tasks_reset_total"></span><span id="schedule_trigger_runs_total"></span>
 <span id="platform-metrics"></span><span id="http_request_duration_seconds"></span><span id="http_request_summary_seconds"></span><span id="database_pool_connections"></span><span id="database_pool_size_limit"></span><span id="audit_write_failures_total"></span><span id="file_storage_orphaned_objects_total"></span><span id="chat_message_feedback_total"></span>
+<span id="openappa-metrics"></span><span id="openappa_hook_dispatches_total"></span><span id="openappa_hook_dispatch_duration_seconds"></span>

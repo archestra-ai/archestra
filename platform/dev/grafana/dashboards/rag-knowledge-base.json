@@ -22,113 +22,86 @@
   "id": null,
   "links": [
     {
-      "asDropdown": false,
-      "icon": "dashboard",
+      "title": "LLM Proxy",
+      "type": "link",
+      "url": "/d/archestra-genai-observability",
       "includeVars": true,
       "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "GenAI Observability",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-genai-observability/archestra-genai-observability"
+      "targetBlank": false
     },
     {
-      "asDropdown": false,
-      "icon": "dashboard",
+      "title": "Costs & Limits",
+      "type": "link",
+      "url": "/d/archestra-costs-and-limits",
       "includeVars": true,
       "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Agent Runtime",
+      "type": "link",
+      "url": "/d/archestra-agent-runtime",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Guardrails & OpenAPPA",
+      "type": "link",
+      "url": "/d/archestra-guardrails",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
       "title": "MCP Monitoring",
-      "tooltip": "",
       "type": "link",
-      "url": "/d/archestra-mcp-monitoring/archestra-mcp-monitoring"
-    },
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
+      "url": "/d/archestra-mcp-monitoring",
       "includeVars": true,
       "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "Agent Sessions",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-agent-sessions/archestra-agent-sessions"
+      "targetBlank": false
     },
     {
-      "asDropdown": false,
-      "icon": "dashboard",
+      "title": "Platform Health",
+      "type": "link",
+      "url": "/d/archestra-application-metrics",
       "includeVars": true,
       "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "Application Metrics",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-application-metrics/archestra-application-metrics"
+      "targetBlank": false
     },
     {
-      "asDropdown": false,
-      "icon": "doc",
-      "includeVars": false,
-      "keepTime": false,
-      "tags": [],
-      "targetBlank": true,
-      "title": "Documentation",
-      "tooltip": "Archestra Documentation",
+      "title": "Session Investigation",
       "type": "link",
-      "url": "https://archestra.ai/docs/administration/observability"
+      "url": "/d/archestra-agent-sessions",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Metrics reference",
+      "type": "link",
+      "url": "https://archestra.ai/docs/admin/observability/metrics",
+      "targetBlank": true
     }
   ],
   "panels": [
     {
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 3,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
+        "defaults": {
+          "noValue": "No samples"
         },
-        "content": "<div style=\"display: flex; align-items: center; justify-content: center; height: 100%;\"><a href=\"https://archestra.ai\" target=\"_blank\"><img src=\"https://archestra.ai/logo.png\" alt=\"Archestra\" style=\"height: 100%;\" /></a></div>",
-        "mode": "html"
-      },
-      "pluginVersion": "12.3.2",
-      "title": "",
-      "transparent": true,
-      "type": "text"
-    },
-    {
-      "fieldConfig": {
-        "defaults": {},
         "overrides": []
       },
       "gridPos": {
         "h": 4,
-        "w": 21,
-        "x": 3,
+        "w": 24,
+        "x": 0,
         "y": 0
       },
       "id": 2,
       "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "# Knowledge Base Operations\n\nMonitor connector syncs, document ingestion, embedding batches, query traffic, and reranker performance. Use the variables above to filter by connector type or search type.",
-        "mode": "markdown"
+        "mode": "markdown",
+        "content": "Select the deployment job. Connector filters apply to connector panels and search type applies to query panels. Embedding and retrieval quality signals without those labels are deployment-wide. Missing or disabled pipeline telemetry remains No samples."
       },
       "pluginVersion": "12.3.2",
       "title": "",
@@ -177,7 +150,8 @@
                 "value": 1000
               }
             ]
-          }
+          },
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -213,7 +187,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(rag_connector_syncs_total{connector_type=~\"$connector_type\"}[$__range])) or vector(0)",
+          "expr": "sum(increase(rag_connector_syncs_total{job=~\"$job\",connector_type=~\"$connector_type\"}[$__range]))",
           "legendFormat": "Total Syncs",
           "range": true,
           "refId": "A"
@@ -252,7 +226,8 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "percent",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -288,7 +263,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * sum(increase(rag_connector_syncs_total{connector_type=~\"$connector_type\", status=\"success\"}[$__range])) / clamp_min(sum(increase(rag_connector_syncs_total{connector_type=~\"$connector_type\"}[$__range])), 1)",
+          "expr": "100 * sum(increase(rag_connector_syncs_total{job=~\"$job\",connector_type=~\"$connector_type\", status=\"success\"}[$__range])) / clamp_min(sum(increase(rag_connector_syncs_total{job=~\"$job\",connector_type=~\"$connector_type\"}[$__range])), 1)",
           "legendFormat": "Success Rate",
           "range": true,
           "refId": "A"
@@ -318,7 +293,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -353,7 +329,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "sum(task_queue_active_tasks{task_type=~\"connector_sync|batch_embedding\"}) or vector(0)",
+          "expr": "sum(task_queue_active_tasks{job=~\"$job\",task_type=~\"connector_sync|batch_embedding\"})",
           "hide": false,
           "legendFormat": "",
           "queryType": "range",
@@ -394,7 +370,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -430,7 +407,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(rag_documents_ingested_total{connector_type=~\"$connector_type\"}[$__range])) or vector(0)",
+          "expr": "sum(increase(rag_documents_ingested_total{job=~\"$job\",connector_type=~\"$connector_type\"}[$__range]))",
           "legendFormat": "Documents Ingested",
           "range": true,
           "refId": "A"
@@ -469,7 +446,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -505,7 +483,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(rag_chunks_created_total{connector_type=~\"$connector_type\"}[$__range])) or vector(0)",
+          "expr": "sum(increase(rag_chunks_created_total{job=~\"$job\",connector_type=~\"$connector_type\"}[$__range]))",
           "legendFormat": "Chunks Created",
           "range": true,
           "refId": "A"
@@ -575,7 +553,8 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "reqps",
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -638,7 +617,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (connector_type, status) (rate(rag_connector_syncs_total{connector_type=~\"$connector_type\"}[$__rate_interval]))",
+          "expr": "sum by (connector_type, status) (rate(rag_connector_syncs_total{job=~\"$job\",connector_type=~\"$connector_type\"}[$__rate_interval]))",
           "legendFormat": "{{connector_type}} - {{status}}",
           "range": true,
           "refId": "A"
@@ -708,7 +687,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -740,7 +720,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(rag_connector_sync_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "expr": "histogram_quantile(0.95, sum(rate(rag_connector_sync_duration_seconds_bucket{job=~\"$job\",connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
           "legendFormat": "P95 - {{connector_type}}",
           "range": true,
           "refId": "A"
@@ -792,7 +772,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -828,7 +809,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(rag_embedding_batches_total[$__range])) or vector(0)",
+          "expr": "sum(increase(rag_embedding_batches_total{job=~\"$job\"}[$__range]))",
           "legendFormat": "Total Embedding Batches",
           "range": true,
           "refId": "A"
@@ -867,7 +848,8 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "percent",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -903,7 +885,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "(100 * sum(increase(rag_embedding_batches_total{status=\"error\"}[$__range])) / clamp_min(sum(increase(rag_embedding_batches_total[$__range])), 1)) or vector(0)",
+          "expr": "(100 * sum(increase(rag_embedding_batches_total{job=~\"$job\",status=\"error\"}[$__range])) / clamp_min(sum(increase(rag_embedding_batches_total{job=~\"$job\"}[$__range])), 1))",
           "legendFormat": "Embedding Error Rate",
           "range": true,
           "refId": "A"
@@ -973,7 +955,8 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "reqps",
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -1036,7 +1019,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(rag_embedding_batches_total[$__rate_interval])) by (status)",
+          "expr": "sum(rate(rag_embedding_batches_total{job=~\"$job\"}[$__rate_interval])) by (status)",
           "legendFormat": "{{status}}",
           "range": true,
           "refId": "A"
@@ -1106,7 +1089,8 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "reqps",
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -1169,7 +1153,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(rag_embedding_documents_total[$__rate_interval])) by (status)",
+          "expr": "sum(rate(rag_embedding_documents_total{job=~\"$job\"}[$__rate_interval])) by (status)",
           "legendFormat": "{{status}}",
           "range": true,
           "refId": "A"
@@ -1239,7 +1223,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1271,7 +1256,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{source=\"knowledge:embedding\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{job=~\"$job\",source=\"knowledge:embedding\"}[$__rate_interval])) by (le))",
           "legendFormat": "P50",
           "range": true,
           "refId": "A"
@@ -1282,7 +1267,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{source=\"knowledge:embedding\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{job=~\"$job\",source=\"knowledge:embedding\"}[$__rate_interval])) by (le))",
           "legendFormat": "P95",
           "range": true,
           "refId": "B"
@@ -1293,7 +1278,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(llm_request_duration_seconds_bucket{source=\"knowledge:embedding\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(llm_request_duration_seconds_bucket{job=~\"$job\",source=\"knowledge:embedding\"}[$__rate_interval])) by (le))",
           "legendFormat": "P99",
           "range": true,
           "refId": "C"
@@ -1363,7 +1348,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1395,7 +1381,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(llm_tokens_total{source=\"knowledge:embedding\"}[$__rate_interval])) by (type)",
+          "expr": "sum(rate(llm_tokens_total{job=~\"$job\",source=\"knowledge:embedding\"}[$__rate_interval])) by (type)",
           "legendFormat": "{{type}}",
           "range": true,
           "refId": "A"
@@ -1447,7 +1433,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1483,7 +1470,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(rag_queries_total{search_type=~\"$search_type\"}[$__range])) or vector(0)",
+          "expr": "sum(increase(rag_queries_total{job=~\"$job\",search_type=~\"$search_type\"}[$__range]))",
           "legendFormat": "Total Queries",
           "range": true,
           "refId": "A"
@@ -1553,7 +1540,8 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "reqps",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1585,7 +1573,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(rag_queries_total{search_type=~\"$search_type\"}[$__rate_interval])) by (search_type)",
+          "expr": "sum(rate(rag_queries_total{job=~\"$job\",search_type=~\"$search_type\"}[$__rate_interval])) by (search_type)",
           "legendFormat": "{{search_type}}",
           "range": true,
           "refId": "A"
@@ -1655,7 +1643,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1687,7 +1676,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(rag_query_duration_seconds_bucket{search_type=~\"$search_type\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(rag_query_duration_seconds_bucket{job=~\"$job\",search_type=~\"$search_type\"}[$__rate_interval])) by (le))",
           "legendFormat": "P50",
           "range": true,
           "refId": "A"
@@ -1698,7 +1687,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(rag_query_duration_seconds_bucket{search_type=~\"$search_type\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(rag_query_duration_seconds_bucket{job=~\"$job\",search_type=~\"$search_type\"}[$__rate_interval])) by (le))",
           "legendFormat": "P95",
           "range": true,
           "refId": "B"
@@ -1709,7 +1698,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(rag_query_duration_seconds_bucket{search_type=~\"$search_type\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(rag_query_duration_seconds_bucket{job=~\"$job\",search_type=~\"$search_type\"}[$__rate_interval])) by (le))",
           "legendFormat": "P99",
           "range": true,
           "refId": "C"
@@ -1779,7 +1768,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1811,7 +1801,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(rag_query_results_count_bucket{search_type=~\"$search_type\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(rag_query_results_count_bucket{job=~\"$job\",search_type=~\"$search_type\"}[$__rate_interval])) by (le))",
           "legendFormat": "P50",
           "range": true,
           "refId": "A"
@@ -1822,7 +1812,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(rag_query_results_count_bucket{search_type=~\"$search_type\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(rag_query_results_count_bucket{job=~\"$job\",search_type=~\"$search_type\"}[$__rate_interval])) by (le))",
           "legendFormat": "P95",
           "range": true,
           "refId": "B"
@@ -1833,7 +1823,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(rag_query_results_count_bucket{search_type=~\"$search_type\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(rag_query_results_count_bucket{job=~\"$job\",search_type=~\"$search_type\"}[$__rate_interval])) by (le))",
           "legendFormat": "P99",
           "range": true,
           "refId": "C"
@@ -1903,7 +1893,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1935,7 +1926,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{source=\"knowledge:reranker\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(llm_request_duration_seconds_bucket{job=~\"$job\",source=\"knowledge:reranker\"}[$__rate_interval])) by (le))",
           "legendFormat": "P50",
           "range": true,
           "refId": "A"
@@ -1946,7 +1937,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{source=\"knowledge:reranker\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{job=~\"$job\",source=\"knowledge:reranker\"}[$__rate_interval])) by (le))",
           "legendFormat": "P95",
           "range": true,
           "refId": "B"
@@ -1957,7 +1948,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(llm_request_duration_seconds_bucket{source=\"knowledge:reranker\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(llm_request_duration_seconds_bucket{job=~\"$job\",source=\"knowledge:reranker\"}[$__rate_interval])) by (le))",
           "legendFormat": "P99",
           "range": true,
           "refId": "C"
@@ -2027,7 +2018,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -2059,7 +2051,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(llm_tokens_total{source=\"knowledge:reranker\", type=\"input\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(rate(llm_tokens_total{job=~\"$job\",source=\"knowledge:reranker\", type=\"input\"}[$__rate_interval]))",
           "legendFormat": "input",
           "range": true,
           "refId": "A"
@@ -2070,7 +2062,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(llm_tokens_total{source=\"knowledge:reranker\", type=\"output\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(rate(llm_tokens_total{job=~\"$job\",source=\"knowledge:reranker\", type=\"output\"}[$__rate_interval]))",
           "legendFormat": "output",
           "range": true,
           "refId": "B"
@@ -2079,6 +2071,350 @@
       "title": "KB Reranker Token Usage",
       "transparent": true,
       "type": "timeseries"
+    },
+    {
+      "id": 700,
+      "type": "row",
+      "title": "Ingestion quality and access control",
+      "collapsed": false,
+      "panels": [],
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 67,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 701,
+      "title": "Documents without extracted text",
+      "type": "timeseries",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 68,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (connector_type) (rate(rag_documents_without_text_total{job=~\"$job\",connector_type=~\"$connector_type\"}[$__rate_interval]))",
+          "legendFormat": "{{connector_type}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 702,
+      "title": "OCR outcomes",
+      "type": "timeseries",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 68,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (connector_type,outcome) (rate(rag_ocr_pages_total{job=~\"$job\",connector_type=~\"$connector_type\"}[$__rate_interval]))",
+          "legendFormat": "{{connector_type}} / {{outcome}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 703,
+      "title": "Permission synchronization",
+      "type": "timeseries",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 76,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (connector_type,status) (rate(rag_permission_syncs_total{job=~\"$job\",connector_type=~\"$connector_type\"}[$__rate_interval]))",
+          "legendFormat": "{{connector_type}} / {{status}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 704,
+      "title": "Dropped permission principals",
+      "type": "timeseries",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 76,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (connector_type,reason) (rate(rag_permission_sync_dropped_principals_total{job=~\"$job\",connector_type=~\"$connector_type\"}[$__rate_interval]))",
+          "legendFormat": "{{connector_type}} / {{reason}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 705,
+      "title": "Search lane timeouts",
+      "type": "timeseries",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 84,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (lane) (rate(rag_search_lane_timeout_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{lane}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 706,
+      "title": "Quote verification",
+      "type": "timeseries",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 84,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (result) (rate(rag_quote_verification_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{result}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
     }
   ],
   "schemaVersion": 40,
@@ -2090,16 +2426,12 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "text": "grafanacloud-archestra-prom",
-          "value": "grafanacloud-prom"
-        },
+        "current": {},
         "label": "Metrics data source",
         "name": "metrics_datasource",
         "options": [],
         "query": "prometheus",
         "refresh": 1,
-        "regex": "(?!grafanacloud-usage|grafanacloud-ml-metrics).+",
         "type": "datasource"
       },
       {
@@ -2153,6 +2485,29 @@
         "regex": "",
         "sort": 1,
         "type": "query"
+      },
+      {
+        "name": "job",
+        "label": "Deployment job",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${metrics_datasource}"
+        },
+        "query": {
+          "query": "label_values({__name__=~\"llm_tokens_total|agent_runtime_health_collection_timestamp_seconds|http_request_duration_seconds_count\"}, job)",
+          "refId": "job"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
       }
     ]
   },

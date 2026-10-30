@@ -1,0 +1,1135 @@
+{
+  "id": null,
+  "uid": "archestra-costs-and-limits",
+  "title": "Archestra / Costs & Limits",
+  "description": "Estimated inference spend, cache use, and observed limit enforcement.",
+  "tags": [
+    "archestra",
+    "observability"
+  ],
+  "schemaVersion": 40,
+  "version": 1,
+  "editable": true,
+  "timezone": "browser",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "metrics_datasource",
+        "label": "Metrics",
+        "type": "datasource",
+        "query": "prometheus",
+        "refresh": 1,
+        "options": [],
+        "current": {}
+      },
+      {
+        "name": "job",
+        "label": "Deployment job",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${metrics_datasource}"
+        },
+        "query": {
+          "query": "label_values({__name__=~\"llm_tokens_total|agent_runtime_health_collection_timestamp_seconds|http_request_duration_seconds_count\"}, job)",
+          "refId": "job"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Read this dashboard",
+      "options": {
+        "mode": "markdown",
+        "content": "Spend is an estimate based on configured list prices, not an invoice. Metered and subscription-covered estimates are shown separately. Cache read savings are gross, not net of cache-write surcharges. Limits count **rule evaluations**; one request can evaluate several rules. Last-exceeded values describe a past check, not current budget remaining."
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      }
+    },
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Estimated spend",
+      "collapsed": false,
+      "panels": [],
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 3,
+      "title": "Metered estimate in selected period",
+      "type": "stat",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum (increase(llm_cost_total{job=~\"$job\",billing_mode=\"metered\"}[$__range]))",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Subscription-covered equivalent",
+      "type": "stat",
+      "description": "List-price equivalent; not an additional token bill.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 5,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum (increase(llm_cost_total{job=~\"$job\",billing_mode=\"subscription\"}[$__range]))",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Gross cache-read savings",
+      "type": "stat",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 5,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum (increase(llm_cache_savings_total{job=~\"$job\"}[$__range]))",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 6,
+      "title": "Metered estimate / hour",
+      "type": "timeseries",
+      "description": "Rolling estimated USD per hour, not spend already incurred in this hour.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (provider) (rate(llm_cost_total{job=~\"$job\",billing_mode=\"metered\"}[$__rate_interval])) * 3600",
+          "legendFormat": "{{provider}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Estimated spend by model",
+      "type": "bargauge",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (model) (increase(llm_cost_total{job=~\"$job\",billing_mode=\"metered\"}[$__range]))",
+          "legendFormat": "{{model}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": false
+      }
+    },
+    {
+      "id": 8,
+      "title": "Estimated spend by agent",
+      "type": "bargauge",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(10, sum by (agent_name) (increase(llm_cost_total{job=~\"$job\",billing_mode=\"metered\"}[$__range])))",
+          "legendFormat": "{{agent_name}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": false
+      }
+    },
+    {
+      "id": 9,
+      "title": "Cache tokens in selected period",
+      "type": "bargauge",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cache_type) (increase(llm_cache_tokens_total{job=~\"$job\"}[$__range]))",
+          "legendFormat": "{{cache_type}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": false
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Limit enforcement",
+      "collapsed": false,
+      "panels": [],
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 11,
+      "title": "Rule evaluations / second",
+      "type": "timeseries",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (behavior,outcome) (rate(llm_limit_checks_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{behavior}} / {{outcome}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Hard rule refusals / second",
+      "type": "timeseries",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (entity_type,limit_kind) (rate(llm_limit_checks_total{job=~\"$job\",behavior=\"hard\",outcome=\"blocked\"}[$__rate_interval]))",
+          "legendFormat": "{{entity_type}} / {{limit_kind}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Soft exceeded evaluations / second",
+      "type": "timeseries",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (entity_type,limit_kind) (rate(llm_limit_checks_total{job=~\"$job\",behavior=\"soft\",outcome=\"exceeded\"}[$__rate_interval]))",
+          "legendFormat": "{{entity_type}} / {{limit_kind}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Limit storage failures / second",
+      "type": "timeseries",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (operation) (rate(llm_limit_storage_errors_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{operation}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Last known exhausted checks",
+      "collapsed": false,
+      "panels": [],
+      "description": "",
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 16,
+      "title": "Last exceeded check time",
+      "type": "table",
+      "description": "Newest observation per rule/target across replicas. Retained for 24 hours in each process; absent is not proof of budget headroom.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1000 * max by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (llm_limit_last_exceeded_timestamp_seconds{job=~\"$job\"})",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeAsIso",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 17,
+      "title": "Usage at last exceeded check: token_cost",
+      "type": "table",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (llm_limit_last_exceeded_usage{job=~\"$job\",limit_kind=\"token_cost\"} and topk by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (1, llm_limit_last_exceeded_timestamp_seconds{job=~\"$job\",limit_kind=\"token_cost\"}))",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 18,
+      "title": "Threshold at last exceeded check: token_cost",
+      "type": "table",
+      "description": "Historical observation. Compare only matching rule, target and check time; replicas can hold different observations.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (llm_limit_last_exceeded_threshold{job=~\"$job\",limit_kind=\"token_cost\"} and topk by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (1, llm_limit_last_exceeded_timestamp_seconds{job=~\"$job\",limit_kind=\"token_cost\"}))",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 19,
+      "title": "Usage at last exceeded check: tokens",
+      "type": "table",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (llm_limit_last_exceeded_usage{job=~\"$job\",limit_kind=\"tokens\"} and topk by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (1, llm_limit_last_exceeded_timestamp_seconds{job=~\"$job\",limit_kind=\"tokens\"}))",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 20,
+      "title": "Threshold at last exceeded check: tokens",
+      "type": "table",
+      "description": "Historical observation. Compare only matching rule, target and check time; replicas can hold different observations.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 59,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (llm_limit_last_exceeded_threshold{job=~\"$job\",limit_kind=\"tokens\"} and topk by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (1, llm_limit_last_exceeded_timestamp_seconds{job=~\"$job\",limit_kind=\"tokens\"}))",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 21,
+      "title": "Usage at last exceeded check: requests",
+      "type": "table",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 67,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (llm_limit_last_exceeded_usage{job=~\"$job\",limit_kind=\"requests\"} and topk by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (1, llm_limit_last_exceeded_timestamp_seconds{job=~\"$job\",limit_kind=\"requests\"}))",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 22,
+      "title": "Threshold at last exceeded check: requests",
+      "type": "table",
+      "description": "Historical observation. Compare only matching rule, target and check time; replicas can hold different observations.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${metrics_datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 67,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (llm_limit_last_exceeded_threshold{job=~\"$job\",limit_kind=\"requests\"} and topk by (limit_id,entity_id,entity_type,limit_kind,behavior,cleanup_interval,source) (1, llm_limit_last_exceeded_timestamp_seconds{job=~\"$job\",limit_kind=\"requests\"}))",
+          "legendFormat": "auto",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No samples",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ],
+  "links": [
+    {
+      "title": "LLM Proxy",
+      "type": "link",
+      "url": "/d/archestra-genai-observability",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Agent Runtime",
+      "type": "link",
+      "url": "/d/archestra-agent-runtime",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Guardrails & OpenAPPA",
+      "type": "link",
+      "url": "/d/archestra-guardrails",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "MCP Monitoring",
+      "type": "link",
+      "url": "/d/archestra-mcp-monitoring",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Knowledge Base Operations",
+      "type": "link",
+      "url": "/d/archestra-rag-knowledge-base",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Platform Health",
+      "type": "link",
+      "url": "/d/archestra-application-metrics",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Session Investigation",
+      "type": "link",
+      "url": "/d/archestra-agent-sessions",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Metrics reference",
+      "type": "link",
+      "url": "https://archestra.ai/docs/admin/observability/metrics",
+      "targetBlank": true
+    }
+  ]
+}

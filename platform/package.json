@@ -34,7 +34,7 @@
     "check:ci": "turbo check:ci",
     "license-check": "tsx scripts/license-check.ts",
     "check:white-label": "tsx scripts/check-white-label-copy.ts",
-    "codegen": "CODEGEN=true turbo codegen && python3 dev/grafana/generate-pg-dashboard-variants.py",
+    "codegen": "CODEGEN=true turbo codegen && python3 dev/grafana/generate-dashboards.py && python3 dev/grafana/generate-pg-dashboard-variants.py",
     "cleanup:dev:caches": "tsx scripts/cleanup-dev-caches.ts",
     "worktree:bootstrap": "scripts/worktree-bootstrap.sh bootstrap",
     "worktree:install-hook": "scripts/worktree-bootstrap.sh install-hook",

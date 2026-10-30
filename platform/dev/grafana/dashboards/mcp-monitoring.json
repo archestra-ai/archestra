@@ -22,92 +22,83 @@
   "id": 3,
   "links": [
     {
-      "asDropdown": false,
-      "icon": "dashboard",
+      "title": "LLM Proxy",
+      "type": "link",
+      "url": "/d/archestra-genai-observability",
       "includeVars": true,
       "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "GenAI Observability",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-genai-observability/archestra-genai-observability"
+      "targetBlank": false
     },
     {
-      "asDropdown": false,
-      "icon": "dashboard",
+      "title": "Costs & Limits",
+      "type": "link",
+      "url": "/d/archestra-costs-and-limits",
       "includeVars": true,
       "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "Agent Sessions",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-agent-sessions/archestra-agent-sessions"
+      "targetBlank": false
     },
     {
-      "asDropdown": false,
-      "icon": "dashboard",
+      "title": "Agent Runtime",
+      "type": "link",
+      "url": "/d/archestra-agent-runtime",
       "includeVars": true,
       "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "Application Metrics",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-application-metrics/archestra-application-metrics"
+      "targetBlank": false
     },
     {
-      "asDropdown": false,
-      "icon": "dashboard",
+      "title": "Guardrails & OpenAPPA",
+      "type": "link",
+      "url": "/d/archestra-guardrails",
       "includeVars": true,
       "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "RAG & Knowledge Base",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-rag-knowledge-base/archestra-rag-knowledge-base"
+      "targetBlank": false
     },
     {
-      "asDropdown": false,
-      "icon": "doc",
-      "includeVars": false,
-      "keepTime": false,
-      "tags": [],
-      "targetBlank": true,
-      "title": "Documentation",
-      "tooltip": "Archestra Documentation",
+      "title": "Knowledge Base Operations",
       "type": "link",
-      "url": "https://archestra.ai/docs/administration/observability"
+      "url": "/d/archestra-rag-knowledge-base",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Platform Health",
+      "type": "link",
+      "url": "/d/archestra-application-metrics",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Session Investigation",
+      "type": "link",
+      "url": "/d/archestra-agent-sessions",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Metrics reference",
+      "type": "link",
+      "url": "https://archestra.ai/docs/admin/observability/metrics",
+      "targetBlank": true
     }
   ],
   "panels": [
     {
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
+      "id": 900,
+      "title": "Scope and data",
+      "type": "text",
       "gridPos": {
-        "h": 4,
-        "w": 3,
         "x": 0,
-        "y": 0
+        "y": 0,
+        "w": 24,
+        "h": 3
       },
-      "id": 46,
       "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "<div style=\"display: flex; align-items: center; justify-content: center; height: 100%;\"><a href=\"https://archestra.ai\" target=\"_blank\"><img src=\"https://archestra.ai/logo.png\" alt=\"Archestra\" style=\"height: 100%;\" /></a></div>",
-        "mode": "html"
-      },
-      "pluginVersion": "12.3.2",
-      "title": "",
-      "transparent": true,
-      "type": "text"
+        "mode": "markdown",
+        "content": "Select the deployment job and tool filters. Totals and weighted averages use the selected time range; rates use the scrape-aware interval. Deployment state is a shared fleet snapshot and ignores tool filters. Trace investigation is available in Session Investigation when Tempo is configured. No samples is not a healthy zero."
+      }
     },
     {
       "datasource": {
@@ -138,7 +129,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -146,9 +138,9 @@
         "h": 2,
         "w": 6,
         "x": 3,
-        "y": 0
+        "y": 3
       },
-      "id": 3,
+      "id": 2,
       "options": {
         "colorMode": "background",
         "displayMode": "basic",
@@ -175,7 +167,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(mcp_tool_calls_total{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"})",
+          "expr": "sum(increase(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range]))",
           "legendFormat": "Total Requests",
           "range": true,
           "refId": "A"
@@ -214,7 +206,8 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "reqps",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -222,9 +215,9 @@
         "h": 2,
         "w": 7,
         "x": 9,
-        "y": 0
+        "y": 3
       },
-      "id": 4,
+      "id": 3,
       "options": {
         "colorMode": "background",
         "displayMode": "basic",
@@ -251,7 +244,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(mcp_tool_calls_total{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__rate_interval]))",
+          "expr": "sum(rate(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__rate_interval]))",
           "legendFormat": "Request Rate",
           "range": true,
           "refId": "A"
@@ -290,7 +283,8 @@
               }
             ]
           },
-          "unit": "decbytes"
+          "unit": "decbytes",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -298,9 +292,9 @@
         "h": 2,
         "w": 8,
         "x": 16,
-        "y": 0
+        "y": 3
       },
-      "id": 11,
+      "id": 4,
       "options": {
         "colorMode": "background",
         "displayMode": "basic",
@@ -327,7 +321,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(mcp_request_size_bytes_sum{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}) / sum(mcp_request_size_bytes_count{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"})",
+          "expr": "sum(increase(mcp_request_size_bytes_sum{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range])) / sum(increase(mcp_request_size_bytes_count{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range]))",
           "legendFormat": "Avg Request Size",
           "range": true,
           "refId": "A"
@@ -366,7 +360,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -374,9 +369,9 @@
         "h": 2,
         "w": 6,
         "x": 3,
-        "y": 2
+        "y": 5
       },
-      "id": 10,
+      "id": 5,
       "options": {
         "colorMode": "background",
         "displayMode": "basic",
@@ -403,7 +398,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(mcp_tool_call_duration_seconds_sum{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}) / sum(mcp_tool_call_duration_seconds_count{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"})",
+          "expr": "sum(increase(mcp_tool_call_duration_seconds_sum{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range])) / sum(increase(mcp_tool_call_duration_seconds_count{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range]))",
           "legendFormat": "Avg Duration",
           "range": true,
           "refId": "A"
@@ -444,7 +439,8 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "percent",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -452,9 +448,9 @@
         "h": 2,
         "w": 7,
         "x": 9,
-        "y": 2
+        "y": 5
       },
-      "id": 5,
+      "id": 6,
       "options": {
         "colorMode": "background",
         "displayMode": "basic",
@@ -481,7 +477,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * sum(increase(mcp_tool_calls_total{status=\"error\", agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range])) / (sum(increase(mcp_tool_calls_total{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range])) + 1)",
+          "expr": "100 * (sum(increase(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\",mcp_server_name=~\"$mcp_server_name\",tool_name=~\"$tool_name\",status=\"error\"}[$__range])) or (sum(increase(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\",mcp_server_name=~\"$mcp_server_name\",tool_name=~\"$tool_name\"}[$__range])) * 0)) / sum(increase(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\",mcp_server_name=~\"$mcp_server_name\",tool_name=~\"$tool_name\"}[$__range]))",
           "legendFormat": "Error Percentage",
           "range": true,
           "refId": "A"
@@ -520,7 +516,8 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "bytes",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -528,9 +525,9 @@
         "h": 2,
         "w": 8,
         "x": 16,
-        "y": 2
+        "y": 5
       },
-      "id": 12,
+      "id": 7,
       "options": {
         "colorMode": "background",
         "displayMode": "basic",
@@ -557,7 +554,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(mcp_response_size_bytes_sum{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}) / sum(mcp_response_size_bytes_count{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"})",
+          "expr": "sum(increase(mcp_response_size_bytes_sum{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range])) / sum(increase(mcp_response_size_bytes_count{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range]))",
           "legendFormat": "Avg Response Size",
           "range": true,
           "refId": "A"
@@ -627,7 +624,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "reqps",
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -744,9 +742,9 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 7
       },
-      "id": 1,
+      "id": 8,
       "options": {
         "legend": {
           "calcs": [
@@ -773,38 +771,14 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(mcp_tool_calls_total{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"})",
-          "legendFormat": "Total Requests",
-          "range": true,
-          "refId": "A",
-          "exemplar": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${metrics_datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(mcp_tool_calls_total{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__rate_interval]))",
+          "expr": "sum(rate(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__rate_interval]))",
           "legendFormat": "Request Rate (req/s)",
           "range": true,
           "refId": "B",
           "exemplar": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${metrics_datasource}"
-          },
-          "editorMode": "code",
-          "expr": "100 * sum(rate(mcp_tool_calls_total{status=\"error\", agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__rate_interval])) / (sum(rate(mcp_tool_calls_total{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__rate_interval])) + 0.001)",
-          "legendFormat": "Error Percentage",
-          "range": true,
-          "refId": "C",
-          "exemplar": true
         }
       ],
-      "title": "Traffic Overview",
+      "title": "Tool calls / second",
       "type": "timeseries"
     },
     {
@@ -813,207 +787,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 13
+        "y": 16
       },
-      "id": 45,
-      "panels": [],
-      "title": "Traces",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "tempo",
-        "uid": "${traces_datasource}"
-      },
-      "description": "This panel shows detailed trace information for MCP Gateway requests, including agent names, MCP servers, tool names, and durations. Click on the View Trace link to see the complete trace visualization.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "footer": {
-              "reducers": []
-            },
-            "inspect": false,
-            "wrapHeaderText": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Trace ID"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "View trace waterfall",
-                    "url": "/d/archestra-mcp-monitoring/archestra-mcp-monitoring?var-traceId=${__value.raw}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&${__url_time_range}"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 18,
-        "w": 12,
-        "x": 0,
-        "y": 14
-      },
-      "id": 42,
-      "options": {
-        "cellHeight": "sm",
-        "frameIndex": 0,
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Start time"
-          }
-        ]
-      },
-      "pluginVersion": "12.3.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "tempo",
-            "uid": "${traces_datasource}"
-          },
-          "limit": 20,
-          "metricsQueryType": "range",
-          "query": "{resource.service.name=\"Archestra\" && span.route.category=\"mcp-gateway\" && span.gen_ai.agent.name=~\"$agent_name\" && span.mcp.server.name=~\"$mcp_server_name\" && span.gen_ai.tool.name=~\"$tool_name\"}",
-          "queryType": "traceql",
-          "refId": "A",
-          "tableType": "traces"
-        }
-      ],
-      "title": "",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "rootServiceName": true,
-              "rootTraceName": true,
-              "Service": true,
-              "Name": true
-            }
-          }
-        }
-      ],
-      "transparent": true,
-      "type": "table"
-    },
-    {
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 12,
-        "x": 12,
-        "y": 14
-      },
-      "id": 102,
-      "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "> To View Traces:\n>  1. Click a **Trace ID** in the table on the left (or paste a trace ID into the **Trace ID** variable above)\n>  2. The trace view will load below",
-        "mode": "markdown"
-      },
-      "pluginVersion": "12.3.2",
-      "title": "",
-      "transparent": true,
-      "type": "text"
-    },
-    {
-      "datasource": {
-        "type": "tempo",
-        "uid": "${traces_datasource}"
-      },
-      "description": "This panel displays the selected trace visualization. Use the trace ID variable or click on traces in the table above to view detailed span information, timing, and request flow through your GenAI services.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 15,
-        "w": 12,
-        "x": 12,
-        "y": 17
-      },
-      "id": 44,
-      "options": {
-        "spanFilters": {
-          "adhocFilters": [],
-          "criticalPathOnly": false,
-          "matchesOnly": false,
-          "serviceNameOperator": "=",
-          "spanNameOperator": "=",
-          "tags": [
-            {
-              "id": "f7da6dee-532",
-              "operator": "="
-            }
-          ]
-        }
-      },
-      "pluginVersion": "12.3.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "tempo",
-            "uid": "${traces_datasource}"
-          },
-          "limit": 20,
-          "metricsQueryType": "range",
-          "query": "${traceId}",
-          "queryType": "traceql",
-          "refId": "A",
-          "tableType": "traces"
-        }
-      ],
-      "title": "",
-      "transparent": true,
-      "type": "traces"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 32
-      },
-      "id": 36,
+      "id": 9,
       "panels": [],
       "title": "Tools",
       "type": "row"
@@ -1052,7 +828,8 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "percent",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1060,9 +837,9 @@
         "h": 3,
         "w": 4,
         "x": 0,
-        "y": 33
+        "y": 17
       },
-      "id": 34,
+      "id": 10,
       "options": {
         "minVizHeight": 75,
         "minVizWidth": 75,
@@ -1087,7 +864,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "100 - (100 * sum(mcp_tool_calls_total{status=\"error\", agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}) / (sum(mcp_tool_calls_total{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}) + 1))",
+          "expr": "100 - (100 * (sum(increase(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\",mcp_server_name=~\"$mcp_server_name\",tool_name=~\"$tool_name\",status=\"error\"}[$__range])) or (sum(increase(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\",mcp_server_name=~\"$mcp_server_name\",tool_name=~\"$tool_name\"}[$__range])) * 0)) / sum(increase(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\",mcp_server_name=~\"$mcp_server_name\",tool_name=~\"$tool_name\"}[$__range])))",
           "legendFormat": "Overall Success Rate",
           "range": true,
           "refId": "A"
@@ -1102,7 +879,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Number of unique tools currently active in the system",
+      "description": "Unique tool names with observed calls in the selected period.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1126,7 +903,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1134,9 +912,9 @@
         "h": 3,
         "w": 10,
         "x": 4,
-        "y": 33
+        "y": 17
       },
-      "id": 37,
+      "id": 11,
       "options": {
         "colorMode": "background",
         "displayMode": "basic",
@@ -1163,13 +941,13 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "count(count by (tool_name) (mcp_tool_calls_total{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}))",
+          "expr": "count(sum by(tool_name) (increase(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\",mcp_server_name=~\"$mcp_server_name\",tool_name=~\"$tool_name\"}[$__range])) > 0)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Active Tools",
+      "title": "Tools used in selected period",
       "transparent": true,
       "type": "stat"
     },
@@ -1202,7 +980,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1210,9 +989,9 @@
         "h": 3,
         "w": 10,
         "x": 14,
-        "y": 33
+        "y": 17
       },
-      "id": 38,
+      "id": 12,
       "options": {
         "colorMode": "background",
         "displayMode": "basic",
@@ -1239,7 +1018,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(mcp_tool_calls_total{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"})",
+          "expr": "sum(increase(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range]))",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -1274,7 +1053,8 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "bytes",
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -1313,9 +1093,9 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 36
+        "y": 20
       },
-      "id": 41,
+      "id": 13,
       "options": {
         "displayMode": "gradient",
         "legend": {
@@ -1348,7 +1128,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (tool_name) (mcp_request_size_bytes_sum{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}) / sum by (tool_name) (mcp_request_size_bytes_count{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"})",
+          "expr": "sum by (tool_name) (increase(mcp_request_size_bytes_sum{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range])) / sum by (tool_name) (increase(mcp_request_size_bytes_count{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range]))",
           "legendFormat": "{{tool_name}} Request",
           "range": true,
           "refId": "A"
@@ -1359,7 +1139,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (tool_name) (mcp_response_size_bytes_sum{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}) / sum by (tool_name) (mcp_response_size_bytes_count{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"})",
+          "expr": "sum by (tool_name) (increase(mcp_response_size_bytes_sum{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range])) / sum by (tool_name) (increase(mcp_response_size_bytes_count{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range]))",
           "legendFormat": "{{tool_name}} Response",
           "range": true,
           "refId": "B"
@@ -1429,7 +1209,8 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "ops",
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1437,9 +1218,9 @@
         "h": 6,
         "w": 16,
         "x": 8,
-        "y": 36
+        "y": 20
       },
-      "id": 40,
+      "id": 14,
       "options": {
         "legend": {
           "calcs": [],
@@ -1465,7 +1246,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(mcp_tool_calls_total{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__rate_interval])",
+          "expr": "rate(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__rate_interval])",
           "legendFormat": "{{tool_name}}",
           "range": true,
           "refId": "A",
@@ -1535,7 +1316,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -1559,9 +1341,9 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 42
+        "y": 26
       },
-      "id": 30,
+      "id": 15,
       "options": {
         "legend": {
           "calcs": [
@@ -1585,7 +1367,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(5, sum by (tool_name) (mcp_tool_calls_total{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}))",
+          "expr": "topk(5, sum by (tool_name) (increase(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range])))",
           "legendFormat": "{{tool_name}}",
           "range": true,
           "refId": "A",
@@ -1655,7 +1437,8 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -1679,9 +1462,9 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 42
+        "y": 26
       },
-      "id": 31,
+      "id": 16,
       "options": {
         "legend": {
           "calcs": [
@@ -1705,7 +1488,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(5, sum by (tool_name) (mcp_tool_call_duration_seconds_sum{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}) / sum by (tool_name) (mcp_tool_call_duration_seconds_count{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}))",
+          "expr": "topk(5, sum by (tool_name) (increase(mcp_tool_call_duration_seconds_sum{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range])) / sum by (tool_name) (increase(mcp_tool_call_duration_seconds_count{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range])))",
           "legendFormat": "{{tool_name}}",
           "range": true,
           "refId": "A",
@@ -1775,7 +1558,8 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -1799,9 +1583,9 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 42
+        "y": 26
       },
-      "id": 32,
+      "id": 17,
       "options": {
         "legend": {
           "calcs": [
@@ -1825,7 +1609,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "topk(5, sum by (tool_name) (mcp_tool_calls_total{status=\"error\", agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}))",
+          "expr": "topk(5, sum by (tool_name) (increase(mcp_tool_calls_total{job=~\"$job\",status=\"error\", agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__range])))",
           "legendFormat": "{{tool_name}}",
           "range": true,
           "refId": "A",
@@ -1885,7 +1669,8 @@
                 "color": "green"
               }
             ]
-          }
+          },
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1893,9 +1678,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 50
+        "y": 34
       },
-      "id": 100,
+      "id": 18,
       "options": {
         "legend": {
           "calcs": [],
@@ -1913,7 +1698,7 @@
             "type": "prometheus",
             "uid": "${metrics_datasource}"
           },
-          "expr": "sum by (mcp_server_name) (rate(mcp_tool_calls_total{agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__rate_interval]))",
+          "expr": "sum by (mcp_server_name) (rate(mcp_tool_calls_total{job=~\"$job\",agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__rate_interval]))",
           "legendFormat": "{{mcp_server_name}}",
           "refId": "A",
           "exemplar": true
@@ -1975,7 +1760,8 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "noValue": "No samples"
         },
         "overrides": []
       },
@@ -1983,9 +1769,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 50
+        "y": 34
       },
-      "id": 101,
+      "id": 19,
       "options": {
         "legend": {
           "calcs": [],
@@ -2003,7 +1789,7 @@
             "type": "prometheus",
             "uid": "${metrics_datasource}"
           },
-          "expr": "sum by (mcp_server_name) (rate(mcp_tool_calls_total{status=\"error\", agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__rate_interval]))",
+          "expr": "sum by (mcp_server_name) (rate(mcp_tool_calls_total{job=~\"$job\",status=\"error\", agent_name=~\"$agent_name\", mcp_server_name=~\"$mcp_server_name\", tool_name=~\"$tool_name\"}[$__rate_interval]))",
           "legendFormat": "{{mcp_server_name}}",
           "refId": "A",
           "exemplar": true
@@ -2018,9 +1804,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 58
+        "y": 42
       },
-      "id": 102,
+      "id": 20,
       "panels": [],
       "title": "Deployments",
       "type": "row"
@@ -2045,7 +1831,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -2099,9 +1886,9 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 59
+        "y": 43
       },
-      "id": 103,
+      "id": 21,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
@@ -2127,7 +1914,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "count(mcp_server_deployment_status{state=\"running\"} == 1) or vector(0)",
+          "expr": "sum(max by(server_name) (mcp_server_deployment_status{job=~\"$job\",state=\"running\"}))",
           "legendFormat": "running",
           "range": true,
           "refId": "A"
@@ -2138,7 +1925,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "count(mcp_server_deployment_status{state=\"pending\"} == 1) or vector(0)",
+          "expr": "sum(max by(server_name) (mcp_server_deployment_status{job=~\"$job\",state=\"pending\"}))",
           "legendFormat": "pending",
           "range": true,
           "refId": "B"
@@ -2149,7 +1936,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "count(mcp_server_deployment_status{state=\"failed\"} == 1) or vector(0)",
+          "expr": "sum(max by(server_name) (mcp_server_deployment_status{job=~\"$job\",state=\"failed\"}))",
           "legendFormat": "failed",
           "range": true,
           "refId": "C"
@@ -2187,7 +1974,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "noValue": "No samples"
         },
         "overrides": [
           {
@@ -2239,9 +2027,9 @@
         "h": 6,
         "w": 16,
         "x": 8,
-        "y": 59
+        "y": 43
       },
-      "id": 104,
+      "id": 22,
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -2268,7 +2056,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "mcp_server_deployment_status == 1",
+          "expr": "mcp_server_deployment_status{job=~\"$job\"} == 1",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -2308,29 +2096,21 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "text": "grafanacloud-archestra-traces",
-          "value": "grafanacloud-traces"
-        },
+        "current": {},
         "label": "Traces data source",
         "name": "traces_datasource",
         "options": [],
         "query": "tempo",
         "refresh": 1,
-        "regex": "",
         "type": "datasource"
       },
       {
-        "current": {
-          "text": "grafanacloud-archestra-prom",
-          "value": "grafanacloud-prom"
-        },
+        "current": {},
         "label": "Metrics data source",
         "name": "metrics_datasource",
         "options": [],
         "query": "prometheus",
         "refresh": 1,
-        "regex": "(?!grafanacloud-usage|grafanacloud-ml-metrics).+",
         "type": "datasource"
       },
       {
@@ -2421,6 +2201,29 @@
         "options": [],
         "query": "",
         "type": "textbox"
+      },
+      {
+        "name": "job",
+        "label": "Deployment job",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${metrics_datasource}"
+        },
+        "query": {
+          "query": "label_values({__name__=~\"llm_tokens_total|agent_runtime_health_collection_timestamp_seconds|http_request_duration_seconds_count\"}, job)",
+          "refId": "job"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
       }
     ]
   },
@@ -2430,7 +2233,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Archestra MCP Monitoring",
+  "title": "Archestra / MCP Monitoring",
   "uid": "archestra-mcp-monitoring",
   "version": 21
 }

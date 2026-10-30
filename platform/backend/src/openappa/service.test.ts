@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { SEEDED_APP_RENDER_META_KEY } from "@archestra/shared";
+import client from "prom-client";
 import { vi } from "vitest";
 import {
   executeArchestraTool,
@@ -13,6 +14,7 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { initializeOpenappaMetrics } from "@/observability/metrics/openappa";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
 import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -3652,6 +3654,16 @@ describe("a policy saved mid-conversation", () => {
   test("a call whose policy moved is retried with the policy read again", async ({
     makeUser,
   }) => {
+    initializeOpenappaMetrics();
+    const counter = client.register.getSingleMetric(
+      "openappa_hook_dispatches_total",
+    ) as client.Counter;
+    const before = (await counter.get()).values
+      .filter(
+        (v) =>
+          v.labels.hook === "tool_call" && v.labels.decision === "allow_call",
+      )
+      .reduce((sum, v) => sum + v.value, 0);
     const user = await makeUser();
     await save({ userId: user.id, tool: "before", revision: 0 });
     native.dispatchHook
@@ -3668,6 +3680,13 @@ describe("a policy saved mid-conversation", () => {
 
     expect(decisions).toEqual([{ kind: "allow" }]);
     expect(native.dispatchHook).toHaveBeenCalledTimes(2);
+    const after = (await counter.get()).values
+      .filter(
+        (v) =>
+          v.labels.hook === "tool_call" && v.labels.decision === "allow_call",
+      )
+      .reduce((sum, v) => sum + v.value, 0);
+    expect(after - before).toBe(1);
     expect(servedPolicy(0).content).toContain('"before"');
     expect(servedPolicy(1).content).toContain('"after"');
   });

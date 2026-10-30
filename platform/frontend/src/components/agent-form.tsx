@@ -131,7 +131,11 @@ import {
 } from "@/components/ui/collapsible";
 import { ExpandableText } from "@/components/ui/expandable-text";
 import { FieldDescription } from "@/components/ui/field-description";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -3749,13 +3753,15 @@ export function AgentForm({
                 {!canConfigureRuntime && (
                   <InlineNotice variant="info">
                     <InfoIcon className="size-4 shrink-0" />
-                    <span className="font-medium">
-                      Runtime settings are read-only
-                    </span>
-                    <InlineNoticeText>
-                      Configure runtime permission is required to change this
-                      agent's runtime. Existing settings are preserved.
-                    </InlineNoticeText>
+                    <InlineNoticeBody>
+                      <span className="font-medium">
+                        Runtime settings are read-only
+                      </span>
+                      <InlineNoticeText>
+                        Configure runtime permission is required to change this
+                        agent's runtime. Existing settings are preserved.
+                      </InlineNoticeText>
+                    </InlineNoticeBody>
                   </InlineNotice>
                 )}
                 <fieldset disabled={canConfigureRuntime !== true}>

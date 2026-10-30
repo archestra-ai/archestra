@@ -1966,18 +1966,15 @@ async function handleStreaming<
   const carriesStreamTerminal = provider.carriesStreamTerminal;
   let terminalSent = false;
 
-  // Every byte to the client goes through here so the keep-alive knows when
-  // the stream last spoke. The keep-alive itself only ever writes to a stream
-  // that is already committed and idle (see StreamKeepAlive) — it is armed
-  // now, before the upstream call, so it also covers a stream committed
-  // during preflight and a slow post-stream plugin ruling, but it cannot
-  // itself turn a pending upstream error into a 200.
+  // Comments may commit only after successful upstream HTTP headers. Buffered
+  // policy responses and connection probes retain their existing lazy commit.
   const keepAlive = new StreamKeepAlive(
     reply.raw,
     config.llmProxy.streamKeepAliveIntervalMs,
     streamAdapter
       .getSSEHeaders()
       ["Content-Type"]?.startsWith("text/event-stream") ?? false,
+    ensureStreamHeaders,
   );
   keepAlive.start();
   const writeToClient = (data: string | Uint8Array) => {
@@ -2277,8 +2274,23 @@ async function handleStreaming<
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
         const stream = await openUpstreamWithRetry({
-          open: async () =>
-            withFirstChunk(await provider.executeStream(client, request)),
+          open: async () => {
+            keepAlive.suspendCommit();
+            try {
+              const upstream = await provider.executeStream(
+                client,
+                request,
+                () => {
+                  if (!bufferModelResponse && !ctx.connectionVerification)
+                    keepAlive.allowCommit();
+                },
+              );
+              return await withFirstChunk(upstream);
+            } catch (error) {
+              keepAlive.suspendCommit();
+              throw error;
+            }
+          },
           // Gemini's SDK loses the HTTP status when an error body is cut off;
           // that is indistinguishable from a transport failure, so don't retry.
           isRetryable: (error) =>
@@ -2292,6 +2304,8 @@ async function handleStreaming<
               model: actualModel,
             }),
         });
+        if (!bufferModelResponse && !ctx.connectionVerification)
+          keepAlive.allowCommit();
         billingMode = getBillingMode();
 
         // Record request duration at stream establishment for providers whose

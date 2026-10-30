@@ -1636,6 +1636,7 @@ export const openaiAdapterFactory: LLMProvider<
   async executeStream(
     client: unknown,
     request: OpenAiRequest,
+    onAccepted?: () => void,
   ): Promise<AsyncIterable<OpenAiStreamChunk>> {
     const openaiClient = client as OpenAIProvider;
     const openaiRequest = {
@@ -1643,7 +1644,9 @@ export const openaiAdapterFactory: LLMProvider<
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
-    const stream = await openaiClient.chat.completions.create(openaiRequest);
+    const pending = openaiClient.chat.completions.create(openaiRequest);
+    const stream = await pending;
+    if (typeof pending.asResponse === "function") onAccepted?.();
 
     return {
       [Symbol.asyncIterator]: async function* () {

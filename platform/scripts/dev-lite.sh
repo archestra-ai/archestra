@@ -483,12 +483,13 @@ start_e2e_deps() {
     "exec env A2A_FIXTURE_HOST=127.0.0.1 A2A_FIXTURE_PORT=$A2A_PORT node e2e-tests/fixtures/a2a-test-agent/server.mjs"
 }
 
-# Both sidecars, so a fixture that died is restarted by the next `up --e2e`
-# instead of being waited for.
+# The frontend the stack last started: dev, or e2e for the production build.
 frontend_mode() {
   cat "$FRONTEND_MODE_FILE" 2>/dev/null || echo dev
 }
 
+# Both sidecars, so a fixture that died is restarted by the next `up --e2e`
+# instead of being waited for.
 e2e_enabled() {
   session_alive wiremock && session_alive a2a
 }

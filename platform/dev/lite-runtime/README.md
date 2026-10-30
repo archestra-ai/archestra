@@ -107,7 +107,7 @@ or memory limit. Base image `agent-claude-code:f80e33a17`, checkout at
 | Memory right after start | 2.7 GB anonymous, 3.4 GB total RSS: backend 2.4 GB (tsdown watcher 1.2 GB, server 0.9 GB), frontend 0.6 GB, PostgreSQL 0.3 GB |
 | Memory after compiling six pages | 5.4 GB anonymous: frontend 3.6 GB (Next dev server and turbopack workers), backend 2.3 GB, PostgreSQL 0.3 GB; cgroup 10.2 GB with file cache |
 | Disk per workspace | `node_modules` 178 MB (hard links), `frontend/.next` 0.6 to 1.4 GB, PostgreSQL data 75 MB |
-| `up --e2e` warm restart with WireMock and the A2A fixture | 21 s; WireMock 218 MB RSS, fixture 61 MB |
+| `up --e2e` warm restart with WireMock and the A2A fixture, before e2e mode served a production build | 21 s; WireMock 218 MB RSS, fixture 61 MB |
 | Playwright `chromium` project, `agents`, `auth-redirect` and `chat` specs, against the dev server at 16 vCPU | 25 passed, 1 flaky (the Anthropic chat spec passed on retry), 3.2 min |
 
 ### Compared with the full Tilt stack on the same VM
@@ -208,7 +208,23 @@ production build served by its standalone server, as CI and the released image
 serve it: it compiles nothing while the specs run and holds a few hundred MB.
 After frontend edits in e2e mode, `reload frontend` rebuilds it; `restart`
 without `--e2e` returns to the dev server. On 2 to 4 CPUs `e2e` also runs fewer
-workers with scaled timeouts (`E2E_WORKERS`, `E2E_TIMEOUT_SCALE`).
+workers with scaled timeouts (`E2E_WORKERS`, `E2E_TIMEOUT_SCALE`), and the
+build runs one Next worker per CPU.
+
+Measured on 2026-10-30 on the same VM, held to 2 CPU and 8 GiB, on a clean
+clone:
+
+| e2e mode at 2 CPU / 8 GiB (S) | Result |
+| --- | --- |
+| Frontend build | 112 s with 2 workers; whole stack at most 5.5 GiB anonymous memory |
+| `up --e2e` on a running dev stack | 123 s, most of it the build |
+| `reload frontend` | 44 s |
+| Standalone frontend server | 160 MB idle, 480 MB after the full suite |
+| Full default `e2e`, 115 tests | 97 passed, 3 skipped, 15 failed, none flaky; 15.4 min; at most 3.5 GiB anonymous memory, no process killed for memory |
+
+All 15 failures need what the lite stack does not run: 9 need Kubernetes (the
+MCP server runtime and the orchestrator) and 6 need Keycloak (JWKS auth for the
+LLM proxy and the MCP gateway).
 
 ## Not covered
 
@@ -217,9 +233,9 @@ workers with scaled timeouts (`E2E_WORKERS`, `E2E_TIMEOUT_SCALE`).
   exist, so the backend logs "MCP Server Runtime is disabled" once at startup
   and `/ready` reports `sandbox: disabled`. Remote (HTTP) MCP servers still
   work. The `p4_shim_reconcile` periodic task logs one warning every 5 minutes.
-- Nested Agent Runtime, the Dagger code runtime, Vault, Keycloak-backed
-  identity-provider specs, and the `api-k8s`, `hibernation` and `vault-k8s`
-  Playwright projects.
+- Nested Agent Runtime, the Dagger code runtime, Vault, the Keycloak-backed
+  specs (identity providers, JWKS auth), and the `api-k8s`, `hibernation` and
+  `vault-k8s` Playwright projects.
 
 ## PGlite was tried and does not fit
 

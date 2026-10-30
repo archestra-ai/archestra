@@ -1,5 +1,5 @@
 {
-  "id": "de613740-f673-4162-9889-b2d10a29b8dc",
+  "id": "fb9b5ce8-a94a-4526-856c-43f085c7477c",
   "prevId": "ef3e1aee-9459-4fa9-8cf9-c7443e4e5b76",
   "version": "7",
   "dialect": "postgresql",
@@ -19803,25 +19803,25 @@
         },
         "custom_price_per_million_input": {
           "name": "custom_price_per_million_input",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
         "custom_price_per_million_output": {
           "name": "custom_price_per_million_output",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
         "custom_price_per_million_cache_read": {
           "name": "custom_price_per_million_cache_read",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
         "custom_price_per_million_cache_write": {
           "name": "custom_price_per_million_cache_write",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
@@ -19833,25 +19833,25 @@
         },
         "long_context_price_per_million_input": {
           "name": "long_context_price_per_million_input",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
         "long_context_price_per_million_output": {
           "name": "long_context_price_per_million_output",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
         "long_context_price_per_million_cache_read": {
           "name": "long_context_price_per_million_cache_read",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
         "long_context_price_per_million_cache_write": {
           "name": "long_context_price_per_million_cache_write",
-          "type": "numeric(10, 2)",
+          "type": "numeric(16, 8)",
           "primaryKey": false,
           "notNull": false
         },
@@ -21362,13 +21362,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "keep_media_in_logs": {
-          "name": "keep_media_in_logs",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
         },
         "allow_tool_auto_assignment": {
           "name": "allow_tool_auto_assignment",

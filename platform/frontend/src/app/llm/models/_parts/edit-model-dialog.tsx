@@ -8,7 +8,10 @@ import {
   OUTPUT_MODALITY_OPTIONS,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@archestra/shared";
-import { isValidModelPrice } from "@archestra/shared/model-price";
+import {
+  isValidModelPrice,
+  normalizeModelPrice,
+} from "@archestra/shared/model-price";
 import { AlertCircle, Boxes, RotateCcw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -47,7 +50,10 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { type ModelWithApiKeys, useUpdateModel } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import type { ModelCostBackfillPrices } from "@/lib/model-cost-backfill.query";
-import { formatMediaPricing } from "@/lib/model-price-format";
+import {
+  formatMediaPricing,
+  formatPricePerMillion,
+} from "@/lib/model-price-format";
 import { useOrganization } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { formatThousands } from "@/lib/utils/format-thousands";
@@ -1094,15 +1100,12 @@ function toBackfillPrices(
       prices[key] = null;
       continue;
     }
-    if (!isValidModelPrice(value)) return null;
-    // The form also accepts "1.", ".5" or "1e2"; the preview takes plain
-    // decimals. Ten places keep the digit that decides the stored rounding.
-    prices[key] = PLAIN_DECIMAL.test(value) ? value : Number(value).toFixed(10);
+    const normalized = normalizeModelPrice(value);
+    if (normalized === null) return null;
+    prices[key] = normalized;
   }
   return prices;
 }
-
-const PLAIN_DECIMAL = /^\d+(\.\d+)?$/;
 
 /**
  * Placeholder for a limit input: the provider's own figure, or a note that it
@@ -1133,20 +1136,31 @@ function sameModalities(a: string[], b: string[]): boolean {
 
 function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
   return {
-    customPricePerMillionInput: model.customPricePerMillionInput ?? "",
-    customPricePerMillionOutput: model.customPricePerMillionOutput ?? "",
-    customPricePerMillionCacheRead: model.customPricePerMillionCacheRead ?? "",
-    customPricePerMillionCacheWrite:
+    customPricePerMillionInput: formatPricePerMillion(
+      model.customPricePerMillionInput ?? "",
+    ),
+    customPricePerMillionOutput: formatPricePerMillion(
+      model.customPricePerMillionOutput ?? "",
+    ),
+    customPricePerMillionCacheRead: formatPricePerMillion(
+      model.customPricePerMillionCacheRead ?? "",
+    ),
+    customPricePerMillionCacheWrite: formatPricePerMillion(
       model.customPricePerMillionCacheWrite ?? "",
+    ),
     longContextThreshold: model.longContextThreshold?.toString() ?? "",
-    longContextPricePerMillionInput:
+    longContextPricePerMillionInput: formatPricePerMillion(
       model.longContextPricePerMillionInput ?? "",
-    longContextPricePerMillionOutput:
+    ),
+    longContextPricePerMillionOutput: formatPricePerMillion(
       model.longContextPricePerMillionOutput ?? "",
-    longContextPricePerMillionCacheRead:
+    ),
+    longContextPricePerMillionCacheRead: formatPricePerMillion(
       model.longContextPricePerMillionCacheRead ?? "",
-    longContextPricePerMillionCacheWrite:
+    ),
+    longContextPricePerMillionCacheWrite: formatPricePerMillion(
       model.longContextPricePerMillionCacheWrite ?? "",
+    ),
     customContextLength: model.customContextLength?.toString() ?? "",
     customOutputLength: model.customOutputLength?.toString() ?? "",
     ignored: model.ignored,

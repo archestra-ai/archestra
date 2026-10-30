@@ -923,6 +923,33 @@ describe("recomputing past costs", () => {
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
+  test("rejects a stale eighth-decimal price even when both prices map to the same Number", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const model = await makeAnthropicModel({
+      input: "99999999.98999999",
+      output: "0",
+    });
+    await expect(
+      modelCostBackfillService.start({
+        model,
+        since: null,
+        organizationId: org.id,
+        userId: user.id,
+        expectedPrices: {
+          input: "99999999.99000000",
+          output: "0",
+          cacheRead: null,
+          cacheWrite: null,
+        },
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(await modelCostBackfillService.getLatest(model.id)).toBeNull();
+  });
+
   test("nothing starts when the prices changed after the caller saved them", async ({
     makeOrganization,
     makeUser,
@@ -1035,11 +1062,11 @@ describe("previewing a recompute", () => {
       },
     });
 
-    // Priced as numeric(10,2) will store it: "1.005" saves as 1.01.
+    // Preview uses the same eight-decimal half-up price as persistence.
     const rounded = await modelCostBackfillService.getPreview({
       model,
       prices: {
-        input: "1.005",
+        input: "1.000000005",
         output: "0",
         cacheRead: null,
         cacheWrite: null,
@@ -1047,7 +1074,9 @@ describe("previewing a recompute", () => {
       timeZone: "UTC",
       since: null,
     });
-    expect(rounded.days.map((day) => day.recomputedCost)).toEqual([1.01, 2.02]);
+    expect(rounded.days.map((day) => day.recomputedCost)).toEqual([
+      1.00000001, 2.00000002,
+    ]);
   });
 
   test("says why a model's past costs cannot be recomputed", async ({

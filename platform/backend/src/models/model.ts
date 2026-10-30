@@ -163,7 +163,7 @@ function combineCacheSource(
  * end's job.
  */
 function formatPerMillionPrice(perMillion: number): string {
-  return Number.parseFloat(perMillion.toFixed(8)).toString();
+  return perMillion.toFixed(8).replace(/\.?0+$/, "");
 }
 
 /**

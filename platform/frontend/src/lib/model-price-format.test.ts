@@ -27,6 +27,15 @@ describe("formatPricePerMillion", () => {
     expect(formatPricePerMillion("1e-7")).toBe("0.0000001");
   });
 
+  test("preserves distinct eight-decimal prices near the maximum", () => {
+    expect(formatPricePerMillion("99999999.98999997")).toBe(
+      "99999999.98999997",
+    );
+    expect(formatPricePerMillion("99999999.98999998")).toBe(
+      "99999999.98999998",
+    );
+  });
+
   test("leaves a value it cannot parse alone", () => {
     expect(formatPricePerMillion("")).toBe("");
     expect(formatPricePerMillion("n/a")).toBe("n/a");

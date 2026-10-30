@@ -126,10 +126,10 @@ test("Models API accepts long-context pricing only as a complete, positive set",
   expect(saved.statusCode, saved.body).toBe(200);
   expect(saved.json()).toMatchObject({
     longContextThreshold: 200000,
-    longContextPricePerMillionInput: "6.00",
-    longContextPricePerMillionOutput: "22.50",
-    longContextPricePerMillionCacheRead: "0.60",
-    longContextPricePerMillionCacheWrite: "7.50",
+    longContextPricePerMillionInput: "6.00000000",
+    longContextPricePerMillionOutput: "22.50000000",
+    longContextPricePerMillionCacheRead: "0.60000000",
+    longContextPricePerMillionCacheWrite: "7.50000000",
   });
 
   const cleared = await ctx.app.inject({
@@ -144,4 +144,36 @@ test("Models API accepts long-context pricing only as a complete, positive set",
     longContextThreshold: null,
     longContextPricePerMillionCacheWrite: null,
   });
+});
+
+test("Models API preserves all eight decimal custom and long-context rates", async ({
+  makeMember,
+}) => {
+  await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+  const model = await ModelModel.create({
+    externalId: "anthropic/precise-pricing",
+    provider: "anthropic",
+    modelId: "precise-pricing",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+  });
+  const prices = {
+    customPricePerMillionInput: "0.00000001",
+    customPricePerMillionOutput: "0.12345678",
+    customPricePerMillionCacheRead: "0.00000002",
+    customPricePerMillionCacheWrite: "99999999.98999999",
+    longContextThreshold: 200000,
+    longContextPricePerMillionInput: "0.00000003",
+    longContextPricePerMillionOutput: "0.23456789",
+    longContextPricePerMillionCacheRead: "0.00000004",
+    longContextPricePerMillionCacheWrite: "1.23456789",
+  };
+  const response = await ctx.app.inject({
+    method: "PATCH",
+    url: `/api/llm-models/${model.id}`,
+    payload: prices,
+  });
+  expect(response.statusCode, response.body).toBe(200);
+  expect(response.json()).toMatchObject(prices);
+  expect(await ModelModel.findById(model.id)).toMatchObject(prices);
 });

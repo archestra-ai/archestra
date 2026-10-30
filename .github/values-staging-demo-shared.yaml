@@ -34,9 +34,10 @@ archestra:
     ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS: "4"
     ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED: "true"
     ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR: "archestra-agent-runtime=true"
-    # Runs on an Agent's Lite tier keep no Docker data on the volume. Watch
-    # Full tier workspaces (kind node, images, build caches) after a change.
-    ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE: "30Gi"
+    # Each workspace volume counts against the region's SSD quota for 72 hours.
+    # Peak use on staging is about 10Gi (p95 12Gi). Runs that keep a kind node
+    # and images on the volume can need more; watch them after a change.
+    ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE: "20Gi"
     ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS: "standard-rwo"
     ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS: "900"
     ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"

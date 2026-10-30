@@ -135032,7 +135032,8 @@
                             "impersonate",
                             "full-view",
                             "admin",
-                            "configure-runtime"
+                            "configure-runtime",
+                            "share-across-teams"
                           ]
                         }
                       }
@@ -396267,7 +396268,8 @@
                                   "impersonate",
                                   "full-view",
                                   "admin",
-                                  "configure-runtime"
+                                  "configure-runtime",
+                                  "share-across-teams"
                                 ]
                               }
                             }
@@ -396627,7 +396629,8 @@
                           "impersonate",
                           "full-view",
                           "admin",
-                          "configure-runtime"
+                          "configure-runtime",
+                          "share-across-teams"
                         ]
                       }
                     }
@@ -396681,7 +396684,8 @@
                             "impersonate",
                             "full-view",
                             "admin",
-                            "configure-runtime"
+                            "configure-runtime",
+                            "share-across-teams"
                           ]
                         }
                       }
@@ -397029,7 +397033,8 @@
                             "impersonate",
                             "full-view",
                             "admin",
-                            "configure-runtime"
+                            "configure-runtime",
+                            "share-across-teams"
                           ]
                         }
                       }
@@ -397341,7 +397346,8 @@
                           "impersonate",
                           "full-view",
                           "admin",
-                          "configure-runtime"
+                          "configure-runtime",
+                          "share-across-teams"
                         ]
                       }
                     }
@@ -397417,7 +397423,8 @@
                             "impersonate",
                             "full-view",
                             "admin",
-                            "configure-runtime"
+                            "configure-runtime",
+                            "share-across-teams"
                           ]
                         }
                       }
@@ -478156,7 +478163,8 @@
                               "impersonate",
                               "full-view",
                               "admin",
-                              "configure-runtime"
+                              "configure-runtime",
+                              "share-across-teams"
                             ]
                           }
                         }
@@ -478441,7 +478449,8 @@
                         "impersonate",
                         "full-view",
                         "admin",
-                        "configure-runtime"
+                        "configure-runtime",
+                        "share-across-teams"
                       ]
                     }
                   }

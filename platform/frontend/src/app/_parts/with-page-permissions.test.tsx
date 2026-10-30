@@ -1,9 +1,17 @@
 import "@/lib/limits-access";
 import type { Permissions } from "@archestra/shared";
-import { predefinedPermissionsMap } from "@archestra/shared/access-control";
+import {
+  memberPermissions,
+  predefinedPermissionsMap,
+} from "@archestra/shared/access-control";
 import { render, screen } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import A2aRemoteAgentDetailPageServer from "@/app/agents/a2a/[id]/page";
+import NewA2aRemoteAgentPageServer from "@/app/agents/a2a/new/page";
+import NewAgentPageServer from "@/app/agents/new/page";
+import NewMcpCatalogItemPageServer from "@/app/mcp/registry/new/page";
 import { useHasPagePermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import { hasPagePermissions } from "@/lib/auth/auth.utils";
 import { WithPagePermissions } from "./with-page-permissions";
@@ -16,7 +24,27 @@ vi.mock("@/lib/runtime-credentials.query", () => ({
   useRuntimeCredentials: () => ({ data: [], isPending: false }),
 }));
 
+vi.mock("@/app/mcp/registry/new/page.client", () => ({
+  default: () => <p>Page content</p>,
+}));
+vi.mock("@/components/agent-pages/agent-create-page", () => ({
+  AgentCreatePage: ({ canCreateAgent }: { canCreateAgent: boolean }) => (
+    <p data-can-create-agent={String(canCreateAgent)}>Page content</p>
+  ),
+}));
+vi.mock("@/components/a2a-remote-agent-page", () => ({
+  CreateA2aRemoteAgentPage: () => <p>Page content</p>,
+  A2aRemoteAgentDetailPage: () => <p>Page content</p>,
+}));
+
 const replace = vi.fn();
+
+beforeEach(() => {
+  replace.mockClear();
+  vi.mocked(useRouter).mockReturnValue({
+    replace,
+  } as unknown as ReturnType<typeof useRouter>);
+});
 
 function signInAs(userPermissions: Permissions | null) {
   vi.mocked(usePermissionMap).mockImplementation((map) =>
@@ -50,13 +78,6 @@ function renderAt(pathname: string) {
 }
 
 describe("WithPagePermissions", () => {
-  beforeEach(() => {
-    replace.mockClear();
-    vi.mocked(useRouter).mockReturnValue({
-      replace,
-    } as unknown as ReturnType<typeof useRouter>);
-  });
-
   it.each([
     ["/settings", "/account"],
     ["/settings/credentials", "/account/credentials"],
@@ -149,3 +170,95 @@ describe("WithPagePermissions", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 });
+
+const FORBIDDEN = "You don't have permission to access this page.";
+
+const without = (resource: keyof Permissions, action: string): Permissions => ({
+  ...memberPermissions,
+  [resource]: memberPermissions[resource].filter((a) => a !== action),
+});
+
+const routes: Array<{
+  path: string;
+  page: () => Promise<ReactElement> | ReactElement;
+  /** A member who may not open this page. */
+  refused: Permissions;
+}> = [
+  {
+    path: "/mcp/registry/new",
+    page: NewMcpCatalogItemPageServer,
+    // The default member reads the registry but cannot add to it.
+    refused: memberPermissions,
+  },
+  {
+    path: "/agents/new",
+    page: NewAgentPageServer,
+    refused: without("agent", "create"),
+  },
+  {
+    path: "/agents/a2a/new",
+    page: NewA2aRemoteAgentPageServer,
+    refused: without("agent", "read"),
+  },
+  {
+    path: "/agents/a2a/agent-1",
+    page: () =>
+      A2aRemoteAgentDetailPageServer({
+        params: Promise.resolve({ id: "agent-1" }),
+      }),
+    refused: without("agent", "read"),
+  },
+];
+
+describe("routes refused by the client page guard", () => {
+  it.each(
+    routes,
+  )("$path shows the Forbidden page to a member without access", async ({
+    path,
+    page,
+    refused,
+  }) => {
+    await renderPageAt({ path, page, permissions: refused });
+
+    expect(screen.getByText(FORBIDDEN)).toBeVisible();
+    expect(screen.queryByText(/Page content/)).not.toBeInTheDocument();
+  });
+
+  it.each(routes)("$path opens for an admin", async ({ path, page }) => {
+    await renderPageAt({
+      path,
+      page,
+      permissions: predefinedPermissionsMap.admin,
+    });
+
+    expect(screen.getByText(/Page content/)).toBeVisible();
+    expect(screen.queryByText(FORBIDDEN)).not.toBeInTheDocument();
+  });
+
+  it("opens the agent chooser with creation enabled for a default member", async () => {
+    await renderPageAt({
+      path: "/agents/new",
+      page: NewAgentPageServer,
+      permissions: memberPermissions,
+    });
+
+    expect(screen.getByText("Page content")).toHaveAttribute(
+      "data-can-create-agent",
+      "true",
+    );
+  });
+});
+
+async function renderPageAt({
+  path,
+  page,
+  permissions,
+}: {
+  path: string;
+  page: () => Promise<ReactElement> | ReactElement;
+  permissions: Permissions;
+}) {
+  vi.mocked(usePathname).mockReturnValue(path);
+  signInAs(permissions);
+  render(<WithPagePermissions>{await page()}</WithPagePermissions>);
+}

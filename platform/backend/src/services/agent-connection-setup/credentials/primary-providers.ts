@@ -158,13 +158,13 @@ export async function getVirtualKeyProviderCatalog(
   },
 ): Promise<NonNullable<SetupScriptProxySection["primaryProviders"]>> {
   const virtualKey = await VirtualApiKeyModel.findById(params.virtualApiKeyId);
-  const automaticMappings = virtualKey?.includeFutureProviders
-    ? await resolveVirtualKeyProviderMappings(params.virtualApiKeyId)
-    : null;
+  const resolvedMappings = await resolveVirtualKeyProviderMappings(
+    params.virtualApiKeyId,
+  );
   const [userKeys, mappedKeys, mappings] = await Promise.all([
-    automaticMappings
+    virtualKey?.includeFutureProviders
       ? LlmProviderApiKeyModel.findByIds(
-          automaticMappings.map((key) => key.providerApiKeyId),
+          resolvedMappings.map((key) => key.providerApiKeyId),
         )
       : params.provider
         ? LlmProviderApiKeyModel.getAvailableKeysForUser(
@@ -174,8 +174,7 @@ export async function getVirtualKeyProviderCatalog(
           )
         : getPrimaryKeys(params),
     getMappedKeys(params),
-    automaticMappings ??
-      VirtualApiKeyModel.getProviderApiKeys(params.virtualApiKeyId),
+    resolvedMappings,
   ]);
   // Admin-mapped keys stand in for the user's own access.
   const keys = [

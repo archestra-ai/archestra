@@ -109,7 +109,7 @@ export async function startActiveChatSpan<T>(params: {
         span.setStatus({ code: SpanStatusCode.OK });
         return result;
       } catch (error) {
-        setSpanError(span, error);
+        setSpanError({ span, error });
         throw error;
       } finally {
         span.end();

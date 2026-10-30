@@ -137,7 +137,7 @@ export async function startActiveMcpSpan<T>(params: {
 
         return result;
       } catch (error) {
-        setSpanError(span, error);
+        setSpanError({ span, error });
         throw error;
       } finally {
         span.end();

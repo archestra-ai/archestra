@@ -310,7 +310,7 @@ export interface LLMProxyContext<TRequest> {
 /** How a request is spread across its model pool's members. */
 export interface ModelPoolRouting {
   plan: ModelPoolPlan;
-  checkLimits: (model: string) => Promise<void>;
+  checkLimits: (member: PlannedMember) => Promise<void>;
   transportFor: (
     member: PlannedMember,
     signal: AbortSignal,
@@ -1764,8 +1764,11 @@ export async function handleLLMProxy<
       attemptSignal?: AbortSignal;
       /** The deployment and query of an Azure-shaped inbound URL. */
       azureRequest?: ReturnType<typeof getAzureProxyIngress>;
-    }) =>
-      target.adapter.createClient(target.apiKey, {
+    }) => {
+      const clientBillingMode = modelPoolPlan
+        ? billingMode
+        : credentialBillingMode;
+      return target.adapter.createClient(target.apiKey, {
         ...(target.azureRequest ? { azureRequest: target.azureRequest } : {}),
         baseUrl: target.baseUrl,
         agent: resolvedAgent,
@@ -1783,7 +1786,7 @@ export async function handleLLMProxy<
           if (target.adapter.provider === "anthropic") {
             billingMode = utils.refineAnthropicBillingModeFromHeaders({
               // A retry's response must not inherit a failed attempt's overage.
-              billingMode: credentialBillingMode,
+              billingMode: clientBillingMode,
               headers: responseHeaders,
             });
           }
@@ -1794,6 +1797,7 @@ export async function handleLLMProxy<
           ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
           : {}),
       });
+    };
     // A pooled request never uses the caller's own key, which a Model Router
     // pool request doesn't even carry.
     const client = modelPoolPlan
@@ -1813,29 +1817,74 @@ export async function handleLLMProxy<
 
     // Each pool member is reached with its own provider's client, its own
     // model id and, when it speaks another wire, a translator.
+    const loadPoolMember = async (member: PlannedMember) => {
+      const row = await LlmProviderApiKeyModel.findById(
+        member.providerApiKeyId,
+      );
+      const adapter = memberAdapter(member.provider);
+      if (!row || !adapter)
+        throw new ApiError(500, "Model pool member key no longer exists");
+      return {
+        row,
+        adapter,
+        apiKey: row.secretId
+          ? await getSecretValueForLlmProviderApiKey(row.secretId)
+          : undefined,
+      };
+    };
+    let preparedMember:
+      | { value: Awaited<ReturnType<typeof loadPoolMember>> }
+      | { error: unknown }
+      | undefined;
     const modelPool: ModelPoolRouting | undefined =
       modelPoolPlan && poolWire
         ? {
             plan: modelPoolPlan,
-            checkLimits: async (model) => {
+            checkLimits: async (member) => {
+              const model = stripClaudeContextVariantSuffix(member.modelId);
               const violation =
                 await LimitValidationService.checkLimitsBeforeRequest({
                   ...limitContext,
-                  model: stripClaudeContextVariantSuffix(model),
+                  model,
                 });
               if (violation) throw new ModelBudgetExceededError(violation);
+              try {
+                preparedMember = { value: await loadPoolMember(member) };
+              } catch (error) {
+                // Keep unavailable credentials on the existing member-failover path.
+                preparedMember = { error };
+                return;
+              }
+              const { adapter, apiKey: memberApiKey } = preparedMember.value;
+              billingMode = utils.resolveInteractionBillingMode({
+                isSubscriptionCredential:
+                  adapter.isSubscriptionCredential?.(memberApiKey) === true,
+                autodetectEnabled: config.llmCost.subscriptionAutodetect,
+              });
+              try {
+                await throughput.admitSpendForModel(
+                  model,
+                  billingMode === "subscription",
+                );
+              } catch (error) {
+                if (error instanceof ThroughputError && error.status === 402)
+                  throw new ModelBudgetExceededError([
+                    error.message,
+                    error.message,
+                  ]);
+                throw error;
+              }
             },
             transportFor: async (member, signal) => {
-              const row = await LlmProviderApiKeyModel.findById(
-                member.providerApiKeyId,
-              );
-              const adapter = memberAdapter(member.provider);
-              if (!row || !adapter) {
-                throw new ApiError(
-                  500,
-                  "Model pool member key no longer exists",
-                );
-              }
+              if (!preparedMember || "error" in preparedMember)
+                throw preparedMember && "error" in preparedMember
+                  ? preparedMember.error
+                  : new ApiError(500, "Model pool member was not prepared");
+              const {
+                row,
+                adapter,
+                apiKey: memberApiKey,
+              } = preparedMember.value;
               const sameWire =
                 inboundPoolWire(adapter.interactionType) === poolWire;
               return memberTransport({
@@ -1844,9 +1893,7 @@ export async function handleLLMProxy<
                 modelId: member.modelId,
                 client: createUpstreamClient({
                   adapter,
-                  apiKey: row.secretId
-                    ? await getSecretValueForLlmProviderApiKey(row.secretId)
-                    : undefined,
+                  apiKey: memberApiKey,
                   baseUrl:
                     row.inferenceBaseUrl ?? row.baseUrl ?? adapter.getBaseUrl(),
                   // Protocol headers (anthropic-beta, ...) only mean something
@@ -1901,10 +1948,12 @@ export async function handleLLMProxy<
                   outputTokens: 0,
                   cost: cutOff ? cutOff.cost : "0",
                   baselineCost: cutOff?.cost,
+                  billingMode,
                 },
                 encryptedChat,
                 streamTiming,
                 attributionLabels,
+                throughput,
                 // A failed attempt has no usage to attribute to its routing decision.
                 autoRouting: undefined,
                 upstreamAttempt: attempt,
@@ -2031,6 +2080,22 @@ export async function handleLLMProxy<
       requestAdapter.getOriginalRequest(),
       claudeCodeAgentId,
     );
+    const throughput = new LlmThroughput({
+      entities: [...uniqueBillingEntities.values()],
+      model: actualModel,
+      provider: providerName,
+      subscription: billingMode === "subscription",
+      rules: modelPool
+        ? requestContext.throughputRules.filter(
+            (rule) => rule.limitType !== "token_cost",
+          )
+        : requestContext.throughputRules,
+      attemptSpendRules: modelPool
+        ? requestContext.throughputRules.filter(
+            (rule) => rule.limitType === "token_cost",
+          )
+        : undefined,
+    });
     const ctx: LLMProxyContext<TRequest> = {
       authorizeA2AOAuthAttempt: oauthExecution
         ? () =>
@@ -2041,13 +2106,7 @@ export async function handleLLMProxy<
         : undefined,
       attributionLabels,
       autoRouting,
-      throughput: new LlmThroughput({
-        entities: [...uniqueBillingEntities.values()],
-        model: actualModel,
-        provider: providerName,
-        subscription: billingMode === "subscription",
-        rules: requestContext.throughputRules,
-      }),
+      throughput,
       providerApiKeyId: perKeyChatApiKeyId,
       upstreamAttempt,
       ...(modelPool ? { modelPool } : {}),
@@ -4420,14 +4479,18 @@ async function openUpstream<TRequest, T>(params: {
       plan: pool.plan,
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
-      beforeAttempt: (member) => pool.checkLimits(member.modelId),
+      beforeAttempt: (member) => pool.checkLimits(member),
       open: authorizedOpen,
       memberTimeoutMs,
       recordFailedAttempt: pool.recordFailedAttempt,
       ...retry,
     });
   } catch (error) {
-    if (error instanceof ModelBudgetExceededError && !dispatched)
+    if (
+      (error instanceof ModelBudgetExceededError ||
+        error instanceof ThroughputError) &&
+      !dispatched
+    )
       await ctx.throughput?.cancelBeforeSend();
     throw error;
   } finally {

@@ -87,8 +87,14 @@ describe("Model pools - LLM Proxy", () => {
   });
 
   for (const stream of [false, true]) {
-    for (const cappedModel of ["model-a", "model-b", "pool-alias"]) {
-      test(`checks the actual pool attempt against ${cappedModel} without budget-based failover (stream: ${stream})`, async ({
+    for (const { cappedModel, minute } of [
+      "model-a",
+      "model-b",
+      "pool-alias",
+    ].flatMap((cappedModel) =>
+      [false, true].map((minute) => ({ cappedModel, minute })),
+    )) {
+      test(`checks the actual pool attempt against ${cappedModel} without budget-based failover (stream: ${stream}, minute: ${minute})`, async ({
         makeSecret,
         makeLlmProviderApiKey,
       }) => {
@@ -131,10 +137,31 @@ describe("Model pools - LLM Proxy", () => {
           entityType: "virtual_key",
           entityId: virtualKey.id,
           limitType: "token_cost",
-          limitValue: 0,
+          limitValue: minute ? 1 : 0,
           model: [cappedModel],
+          ...(minute ? { cleanupInterval: "minute" as const } : {}),
           lastCleanup: new Date(),
         });
+        if (minute) {
+          const scope = {
+            entities: [
+              { entityType: "virtual_key" as const, entityId: virtualKey.id },
+            ],
+            model: cappedModel,
+          };
+          const admitted = await LlmThroughputModel.admit(scope);
+          if (!("reservation" in admitted) || !admitted.reservation)
+            throw new Error("Expected spend receipt");
+          await LlmThroughputModel.reconcile({
+            reservation: admitted.reservation,
+            tokens: 0,
+            spend: 2,
+            billingMode: "metered",
+          });
+          expect(await LlmThroughputModel.admit(scope)).toHaveProperty(
+            "denied",
+          );
+        }
         const rpm = await LimitModel.create({
           entityType: "organization",
           entityId: proxy.organizationId,
@@ -355,6 +382,41 @@ describe("Model pools - LLM Proxy", () => {
             { provider: "openai", providerApiKeyId: silent.id },
           ],
         });
+      for (const modelId of ["silent-model", "healthy-model"]) {
+        await ModelModel.create({
+          externalId: `openai/${modelId}`,
+          provider: "openai",
+          modelId,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          customPricePerMillionInput: "1000000",
+          customPricePerMillionOutput: "1000000",
+        });
+      }
+      const rpm = await LimitModel.create({
+        entityType: "organization",
+        entityId: proxy.organizationId,
+        limitType: "requests_per_minute",
+        limitValue: 1,
+      });
+      const budgets = [];
+      for (const model of [
+        null,
+        ["silent-model", "healthy-model"],
+        ["silent-model"],
+        ["healthy-model"],
+      ]) {
+        budgets.push(
+          await LimitModel.create({
+            entityType: "organization",
+            entityId: proxy.organizationId,
+            limitType: "token_cost",
+            cleanupInterval: "minute",
+            limitValue: 100,
+            model,
+          }),
+        );
+      }
       // The defaults (30 s first chunk, 3 min response) would outlast the test.
       const pool = await ModelPoolModel.create({
         organizationId: proxy.organizationId,
@@ -364,7 +426,7 @@ describe("Model pools - LLM Proxy", () => {
           timeoutSeconds: 1,
           members: [silent, healthy].map((key, index) => ({
             providerApiKeyId: key.id,
-            modelId: "gpt-4o-mini",
+            modelId: index === 0 ? "silent-model" : "healthy-model",
             priority: index + 1,
             weight: 1,
             enabled: true,
@@ -402,6 +464,21 @@ describe("Model pools - LLM Proxy", () => {
         "timeout (408)",
         null,
       ]);
+      const costs = rows.map((row) => Number(row.cost));
+      expect(costs.every((cost) => cost > 0)).toBe(true);
+      const usage = await LlmThroughputModel.usage([rpm, ...budgets]);
+      expect(usage.get(rpm.id)?.currentUsage).toBeCloseTo(1, 1);
+      // Leaky minute buckets drain during database writes; both billed attempts
+      // must contribute once to the shared/global caps and only to their own model.
+      for (const [index, expected] of [
+        costs[0] + costs[1],
+        costs[0] + costs[1],
+        ...costs,
+      ].entries()) {
+        const actual = usage.get(budgets[index].id)?.currentUsage ?? 0;
+        expect(actual).toBeGreaterThan(expected - 5);
+        expect(actual).toBeLessThanOrEqual(expected);
+      }
     });
   }
 

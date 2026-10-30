@@ -61,6 +61,8 @@ const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 15_000;
 /** Realtime sessions can run long; this only bounds a session nobody uses. */
 const IDLE_TIMEOUT_MS = 30 * 60_000;
+/** How long a budgeted session waits for OpenAI to turn its own responses off. */
+const AUTO_RESPONSE_OFF_TIMEOUT_MS = 15_000;
 /** The typed text one logged response keeps; longer input is cut and marked. */
 const MAX_LOGGED_INPUT_CHARS = 64 * 1024;
 const INPUT_TRUNCATED = "\n[input truncated]";
@@ -347,6 +349,7 @@ function isWebSocketHandshake(request: IncomingMessage): boolean {
  * In a `gated` session, OpenAI never starts a response on its own: turn
  * detection keeps every setting but `create_response`, and the response a
  * finished spoken turn asks for is sent from here once the budget allows it.
+ * The client's frames wait until OpenAI confirms its own responses are off.
  */
 function bridge(params: {
   client: WebSocket;
@@ -361,8 +364,10 @@ function bridge(params: {
     clearTimeout(idle);
     idle = setTimeout(() => close(1001, "Idle session"), IDLE_TIMEOUT_MS);
   };
+  let held: NodeJS.Timeout | undefined;
   const close = (code: number, reason: string) => {
     clearTimeout(idle);
+    clearTimeout(held);
     const safeCode =
       code === 1000 || code === 1008 || (code >= 3000 && code <= 4999)
         ? code
@@ -403,12 +408,31 @@ function bridge(params: {
       close(1011, "Could not process an event");
     });
   };
-  // Gated sessions: what the client's turn detection asks for, whether the
-  // client set it itself, and the proxy's own update awaiting its reply.
+  // Gated sessions: what the client's turn detection asks for, and the
+  // proxy's own update awaiting its reply.
   let autoResponse = false;
-  let clientSetTurnDetection = false;
   let spokenTurn = false;
   let ownUpdate: string | undefined;
+  const refuseUnchecked = () =>
+    refuse({
+      code: "budget_check_unavailable",
+      message:
+        "OpenAI did not turn off its automatic responses, so the gateway cannot check the budget before each one.",
+      reason: "Budget check unavailable",
+    });
+  // Until OpenAI has answered the proxy's update, no client frame goes out:
+  // none can start a response unchecked or take that update's reply.
+  let release = () => {};
+  if (gated) {
+    const ready = new Promise<void>((resolve) => {
+      release = () => {
+        clearTimeout(held);
+        resolve();
+      };
+    });
+    held = setTimeout(refuseUnchecked, AUTO_RESPONSE_OFF_TIMEOUT_MS);
+    enqueue(() => ready);
+  }
   const forward = async (data: RawData, isBinary: boolean) => {
     let frame: RawData | string = data;
     if (!isBinary) {
@@ -423,7 +447,6 @@ function bridge(params: {
         if (gatedUpdate) {
           frame = gatedUpdate.text;
           autoResponse = gatedUpdate.autoResponse;
-          clientSetTurnDetection = true;
         }
       }
     }
@@ -444,25 +467,25 @@ function bridge(params: {
         upstream.send(JSON.stringify({ type: "response.create" }));
     });
   const gate = (event: Record<string, unknown>): boolean => {
-    if (event.type === "session.created" && !clientSetTurnDetection) {
+    if (event.type === "session.created") {
       const found = turnDetectionOf(event.session);
       if (isRecord(found?.value) && found.value.create_response !== false) {
         autoResponse = true;
         ownUpdate = `gateway_${randomUUID()}`;
-        const update = {
-          event_id: ownUpdate,
-          ...autoResponseOffUpdate(event.session, found),
-        };
-        enqueue(() => {
-          if (upstream.readyState === WebSocket.OPEN)
-            upstream.send(JSON.stringify(update));
-        });
-      }
+        if (upstream.readyState === WebSocket.OPEN)
+          upstream.send(
+            JSON.stringify({
+              event_id: ownUpdate,
+              ...autoResponseOffUpdate(event.session, found),
+            }),
+          );
+      } else release();
     }
     // The reply to the proxy's own update is not the client's. Rejected, the
     // update leaves OpenAI's own responses on, so the session cannot go on.
     if (ownUpdate && event.type === "session.updated") {
       ownUpdate = undefined;
+      release();
       return false;
     }
     if (
@@ -476,12 +499,7 @@ function bridge(params: {
         { error: event.error },
         "OpenAI rejected turning off a realtime session's own responses",
       );
-      refuse({
-        code: "budget_check_unavailable",
-        message:
-          "OpenAI did not turn off its automatic responses, so the gateway cannot check the budget before each one.",
-        reason: "Budget check unavailable",
-      });
+      refuseUnchecked();
       return false;
     }
     if (event.type === "input_audio_buffer.speech_stopped") spokenTurn = true;

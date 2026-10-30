@@ -1,7 +1,12 @@
 import { once } from "node:events";
 import { createServer, type Server } from "node:http";
 import { connect as connectTcp } from "node:net";
-import { type WebSocket as ServerSocket, WebSocket, WebSocketServer } from "ws";
+import {
+  type RawData,
+  type WebSocket as ServerSocket,
+  WebSocket,
+  WebSocketServer,
+} from "ws";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -45,12 +50,15 @@ describe("OpenAI realtime sessions through the Model Router", () => {
     /** Whether server voice detection would start a response itself. */
     createResponse: boolean;
   }>;
-  /** Whether OpenAI rejects every `session.update`, as some sessions do. */
-  let rejectSessionUpdates: boolean;
+  /** Whether OpenAI rejects an update to turn detection, as some sessions do. */
+  let rejectTurnDetectionUpdates: boolean;
+  /** How long OpenAI takes to send `session.created` once connected. */
+  let sessionCreatedDelayMs: number;
 
   beforeEach(async () => {
     upstreamConnections = [];
-    rejectSessionUpdates = false;
+    rejectTurnDetectionUpdates = false;
+    sessionCreatedDelayMs = 0;
     upstream = new WebSocketServer({ port: 0, host: "127.0.0.1" });
     upstream.on("connection", (socket, request) => {
       const connection = {
@@ -63,22 +71,40 @@ describe("OpenAI realtime sessions through the Model Router", () => {
       };
       upstreamConnections.push(connection);
       // OpenAI's default: server voice detection that answers each turn.
-      socket.send(
-        JSON.stringify({
-          type: "session.created",
-          session: {
-            turn_detection: { type: "server_vad", create_response: true },
-          },
-        }),
-      );
+      const created = JSON.stringify({
+        type: "session.created",
+        session: {
+          turn_detection: { type: "server_vad", create_response: true },
+        },
+      });
+      // OpenAI handles the client's events only once the session exists.
+      if (!sessionCreatedDelayMs) socket.send(created);
+      const sessionReady = new Promise<void>((resolve) => {
+        if (!sessionCreatedDelayMs) return resolve();
+        setTimeout(() => {
+          socket.send(created);
+          resolve();
+        }, sessionCreatedDelayMs);
+      });
       socket.on("message", (data) => {
+        void sessionReady.then(() => handle(data));
+      });
+      const handle = (data: RawData) => {
         const event = JSON.parse(data.toString()) as {
           type: string;
           event_id?: string;
-          session?: { turn_detection?: { create_response?: boolean } | null };
+          session?: {
+            instructions?: string;
+            turn_detection?: { create_response?: boolean } | null;
+          };
         };
         connection.received.push(event.type);
-        if (event.type === "session.update" && rejectSessionUpdates) {
+        if (
+          event.type === "session.update" &&
+          rejectTurnDetectionUpdates &&
+          event.session &&
+          "turn_detection" in event.session
+        ) {
           socket.send(
             JSON.stringify({
               type: "error",
@@ -97,7 +123,13 @@ describe("OpenAI realtime sessions through the Model Router", () => {
           if (turnDetection === null) connection.createResponse = false;
           else if (turnDetection)
             connection.createResponse = turnDetection.create_response !== false;
-          socket.send(JSON.stringify({ type: "session.updated", session: {} }));
+          socket.send(
+            // Echoes the instructions, so a reply shows which update it answers.
+            JSON.stringify({
+              type: "session.updated",
+              session: { instructions: event.session?.instructions },
+            }),
+          );
         }
         if (event.type === "response.create") {
           for (const delta of ["AAEC", "AwQF"])
@@ -137,7 +169,7 @@ describe("OpenAI realtime sessions through the Model Router", () => {
               },
             }),
           );
-      });
+      };
     });
     await once(upstream, "listening");
     const address = upstream.address();
@@ -660,7 +692,7 @@ describe("OpenAI realtime sessions through the Model Router", () => {
     ).toHaveLength(1);
   });
 
-  test("ends a budgeted session whose own responses OpenAI does not turn off", async ({
+  test("holds a budgeted session's frames until OpenAI turns its own responses off, and ends the session if it will not", async ({
     makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
@@ -678,22 +710,49 @@ describe("OpenAI realtime sessions through the Model Router", () => {
       limitValue: 100,
       lastCleanup: new Date(),
     });
-    rejectSessionUpdates = true;
+    const open = async () => {
+      const session = await connect(
+        `${origin}/v1/model-router/${agent.id}/realtime?model=openai:gpt-realtime-2.1`,
+        key.value,
+      );
+      if (!("socket" in session)) throw new Error(`Refused: ${session.body}`);
+      return session.socket;
+    };
+    const instructions = JSON.stringify({
+      type: "session.update",
+      session: { instructions: "Be brief." },
+    });
+    // OpenAI's first event comes late, so the client's update is sent first.
+    sessionCreatedDelayMs = 200;
 
-    const session = await connect(
-      `${origin}/v1/model-router/${agent.id}/realtime?model=openai:gpt-realtime-2.1`,
-      key.value,
-    );
-    if (!("socket" in session)) throw new Error(`Refused: ${session.body}`);
-    const [code] = await once(session.socket, "close");
-    expect(code).toBe(1008);
-    // The client hears why, not OpenAI's reply to an update it never sent.
-    const errors = events
-      .get(session.socket)
-      ?.filter((event) => event.type === "error")
-      .map((event) => (event.error as { code: string }).code);
-    expect(errors).toEqual(["budget_check_unavailable"]);
-    expect(upstreamConnections[0].received).toEqual(["session.update"]);
+    // The early update waits for the proxy's own, and gets its own reply.
+    const early = await open();
+    early.send(instructions);
+    expect((await nextEvent(early, "session.updated")).session).toEqual({
+      instructions: "Be brief.",
+    });
+    expect(upstreamConnections[0].received).toEqual([
+      "session.update",
+      "session.update",
+    ]);
+    expect(upstreamConnections[0].createResponse).toBe(false);
+    early.close();
+
+    // Rejected, the proxy's update ends the session before the client's
+    // update leaves. The client hears why, not OpenAI's reply to an update
+    // it never sent.
+    rejectTurnDetectionUpdates = true;
+    const rejected = await open();
+    const closed = once(rejected, "close");
+    rejected.send(instructions);
+    expect((await closed)[0]).toBe(1008);
+    expect(
+      events
+        .get(rejected)
+        ?.filter((event) => event.type === "error")
+        .map((event) => (event.error as { code: string }).code),
+    ).toEqual(["budget_check_unavailable"]);
+    expect(upstreamConnections[1].received).toEqual(["session.update"]);
   });
 
   test("logs every output item of a long reply, however many there are", async ({

@@ -3,6 +3,7 @@ import { gzipSync } from "node:zlib";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
 import { InteractionModel } from "@/models";
+import LimitModel from "@/models/limit";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import {
   accessGrants,
@@ -290,6 +291,108 @@ describe("pass-through logging", () => {
       inputTokens: 12,
       outputTokens: null,
     });
+  });
+
+  // A batch reports no cost the gateway can settle, so it would escape the
+  // key's budget. Listings and moderation cost nothing and stay available.
+  test("refuses a batch while the key has a hard budget, but still lists files and moderates", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent();
+    const key = await standardKey({
+      organizationId: agent.organizationId,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    await LimitModel.create({
+      entityType: "virtual_key",
+      entityId: key.virtualKey.id,
+      limitType: "token_cost",
+      limitValue: 0,
+      model: null,
+      lastCleanup: new Date(),
+    });
+    const forwarded: string[] = [];
+    respond = (url) => {
+      forwarded.push(url);
+      return url.startsWith("/v1/files")
+        ? json({ object: "list", data: [] })
+        : url.startsWith("/v1/moderations")
+          ? json({ id: "modr-1", results: [{ flagged: false }] })
+          : json({ id: "batch-1", object: "batch" });
+    };
+    const headers = { authorization: `Bearer ${key.value}` };
+
+    const refused = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/batches`,
+      headers,
+      payload: {
+        input_file_id: "file-1",
+        endpoint: "/v1/chat/completions",
+        completion_window: "24h",
+      },
+    });
+    expect(refused.statusCode).toBe(422);
+    expect(refused.json()).toEqual({
+      error: {
+        message:
+          "This pass-through operation reports no cost the gateway can count, so it cannot run while a budget applies.",
+        type: "unknown_api_error",
+      },
+    });
+    expect(forwarded).toEqual([]);
+
+    const files = await app.inject({
+      method: "GET",
+      url: `/v1/openai/${agent.id}/files`,
+      headers,
+    });
+    expect(files.statusCode).toBe(200);
+    const moderation = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/moderations`,
+      headers,
+      payload: { model: "omni-moderation-latest", input: "hello" },
+    });
+    expect(moderation.statusCode).toBe(200);
+    expect(moderation.json()).toMatchObject({ id: "modr-1" });
+    expect(forwarded).toEqual(["/v1/files", "/v1/moderations"]);
+  });
+
+  test("forwards a batch for a key with no budget", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent();
+    const key = await standardKey({
+      organizationId: agent.organizationId,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    let upstreamAuthorization: string | undefined;
+    respond = (_url, authorization) => {
+      upstreamAuthorization = authorization;
+      return json({ id: "batch-1", object: "batch" });
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/batches`,
+      headers: { authorization: `Bearer ${key.value}` },
+      payload: {
+        input_file_id: "file-1",
+        endpoint: "/v1/chat/completions",
+        completion_window: "24h",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ id: "batch-1", object: "batch" });
+    expect(upstreamAuthorization).toBe("Bearer sk-openai-mapped");
   });
 
   test("keeps a large or compressed answer within the cap and marks streams", async ({

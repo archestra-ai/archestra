@@ -214,8 +214,20 @@ export function sumMoney(values: string[]): string {
   );
 }
 
-/** Cache estimate, as a fraction of the input rate, for a provider without multipliers. */
-const DEFAULT_CACHE_ESTIMATE = { read: 0.5, write: 1, write1h: 1 };
+/**
+ * Receipt issues that a price change resolves. They stay out of a receipt's
+ * identity, and only they mark a budget's spend as estimated.
+ */
+export const PRICE_ISSUES = new Set([
+  "estimated_model_price",
+  "estimated_cache_price",
+  "unpriced_usage",
+]);
+
+/** Whether part of a receipt's charge was estimated for a missing price. */
+export function hasEstimatedPrice(usage: { issues: string[] }): boolean {
+  return usage.issues.some((issue) => PRICE_ISSUES.has(issue));
+}
 
 /**
  * Fill every cache rate that a billed token count needs but the quote lacks,
@@ -432,3 +444,6 @@ function decimal(value: string, scale: number): bigint {
     (Number(digits[scale]) >= 5 ? 1n : 0n)
   );
 }
+
+/** Cache estimate, as a fraction of the input rate, for a provider without multipliers. */
+const DEFAULT_CACHE_ESTIMATE = { read: 0.5, write: 1, write1h: 1 };

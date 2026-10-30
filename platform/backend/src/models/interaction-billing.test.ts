@@ -146,6 +146,32 @@ test("settles once across replay, keeps historical rates, and replay after reset
   );
 });
 
+test("a retry across a release or a price fix keeps the receipt's identity", async ({
+  makeAgent,
+  makeOrganization,
+  makeUser,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const data = await record({ agent, userId: user.id, cacheOnly: true });
+  const withIssues = (issues: string[]) => {
+    const attempt = structuredClone(data);
+    attempt.billingUsage = {
+      ...(attempt.billingUsage as PricedBillingUsage),
+      status: "incomplete",
+      issues,
+    };
+    return attempt;
+  };
+  // An older pod recorded the cache as unpriced; the retry estimates it.
+  await InteractionModel.create(withIssues(["unpriced_usage"]));
+  await InteractionModel.create(withIssues(["estimated_cache_price"]));
+  expect(
+    await InteractionBillingModel.findMany([data.id as string]),
+  ).toHaveLength(1);
+});
+
 test("a failed interaction write rolls back the receipt and budget updates", async ({
   makeAgent,
   makeOrganization,

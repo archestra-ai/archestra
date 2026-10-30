@@ -30,7 +30,11 @@ import type {
   BillingAttribution,
   PricedBillingUsage,
 } from "@/utils/billable-usage";
-import { priceTokens, sumMoney } from "@/utils/billable-usage";
+import {
+  hasEstimatedPrice,
+  priceTokens,
+  sumMoney,
+} from "@/utils/billable-usage";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import AgentModel from "./agent";
 import AgentTeamModel, { type AgentTeamSource } from "./agent-team";
@@ -370,11 +374,15 @@ class LimitModel {
         ? { ...patchData, lastCleanup: sql`now()` }
         : patchData;
 
-      const updatedLimits = await tx
-        .update(schema.limitsTable)
-        .set(limitPatchData)
-        .where(eq(schema.limitsTable.id, id))
-        .returning();
+      // A labels-only edit changes no column.
+      const updatedLimits =
+        Object.keys(limitPatchData).length === 0
+          ? [existingLimit]
+          : await tx
+              .update(schema.limitsTable)
+              .set(limitPatchData)
+              .where(eq(schema.limitsTable.id, id))
+              .returning();
 
       if (shouldResetUsage) {
         await tx
@@ -759,7 +767,9 @@ class LimitModel {
           coveredTokensIn: total.input,
           coveredTokensOut: total.output,
           cost: total.cost,
-          incomplete: usage.status === "incomplete" ? 1 : 0,
+          // No budget check reads this count. Later releases read it as
+          // the budget's estimated-spend flag, so it counts price estimates.
+          incomplete: hasEstimatedPrice(usage) ? 1 : 0,
         });
       }
     }

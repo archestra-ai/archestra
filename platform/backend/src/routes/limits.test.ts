@@ -935,7 +935,14 @@ describe("limits routes", () => {
       expect(patch.statusCode).toBe(400);
       expect(patch.body).toContain("/reset");
 
-      // Older generated clients send null for an untouched field.
+      // Older generated clients send null for an untouched field, even when
+      // nothing else changes.
+      const untouched = await app.inject({
+        method: "PATCH",
+        url: `/api/limits/${limit.id}`,
+        payload: { lastCleanup: null },
+      });
+      expect(untouched.statusCode, untouched.body).toBe(200);
       const edit = await app.inject({
         method: "PATCH",
         url: `/api/limits/${limit.id}`,

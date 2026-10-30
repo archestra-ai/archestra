@@ -75,15 +75,15 @@ export async function priceBillingUsage(params: {
     }
     // A missing cache rate is estimated, never left unpriced: an unpriced
     // charge would leave its budgets unable to say what was spent.
-    const estimate = estimateCachePrices({
-      usage: component,
-      prices,
-      provider,
-    });
-    if (!authoritative && estimate.estimated)
-      issues.push("estimated_cache_price");
     let cost = "0.0000000000";
     try {
+      const estimate = estimateCachePrices({
+        usage: component,
+        prices,
+        provider,
+      });
+      if (!authoritative && estimate.estimated)
+        issues.push("estimated_cache_price");
       cost = priceTokens(component, estimate.prices);
     } catch {
       if (!authoritative) issues.push("unpriced_usage");

@@ -194,6 +194,25 @@ const modelsTable = pgTable(
       { precision: 10, scale: 2 },
     ),
 
+    /** Registry-owned Copilot tier, separate from the user-defined tier above. */
+    syncedLongContextThreshold: integer("synced_long_context_threshold"),
+    syncedLongContextPromptPricePerToken: numeric(
+      "synced_long_context_prompt_price_per_token",
+      { precision: 20, scale: 12 },
+    ),
+    syncedLongContextCompletionPricePerToken: numeric(
+      "synced_long_context_completion_price_per_token",
+      { precision: 20, scale: 12 },
+    ),
+    syncedLongContextCacheReadPricePerToken: numeric(
+      "synced_long_context_cache_read_price_per_token",
+      { precision: 20, scale: 12 },
+    ),
+    syncedLongContextCacheWritePricePerToken: numeric(
+      "synced_long_context_cache_write_price_per_token",
+      { precision: 20, scale: 12 },
+    ),
+
     /** Whether this model should be excluded from chat model selection. */
     ignored: boolean("ignored").notNull().default(false),
 
@@ -257,6 +276,10 @@ const modelsTable = pgTable(
     ),
     /** Index for lookups by external_id */
     externalIdIdx: index("models_external_id_idx").on(table.externalId),
+    syncedLongContextPricingCheck: check(
+      "models_synced_long_context_pricing_check",
+      sql`(${table.syncedLongContextThreshold} IS NULL AND num_nonnulls(${table.syncedLongContextPromptPricePerToken}, ${table.syncedLongContextCompletionPricePerToken}, ${table.syncedLongContextCacheReadPricePerToken}, ${table.syncedLongContextCacheWritePricePerToken}) = 0) OR (${table.syncedLongContextThreshold} IS NOT NULL AND ${table.syncedLongContextThreshold} > 0 AND ${table.syncedLongContextPromptPricePerToken} IS NOT NULL AND ${table.syncedLongContextCompletionPricePerToken} IS NOT NULL)`,
+    ),
     longContextPricingCheck: check(
       "models_long_context_pricing_check",
       sql`num_nonnulls(${table.longContextThreshold}, ${table.longContextPricePerMillionInput}, ${table.longContextPricePerMillionOutput}, ${table.longContextPricePerMillionCacheRead}, ${table.longContextPricePerMillionCacheWrite}) IN (0, 5) AND (${table.longContextThreshold} IS NULL OR ${table.longContextThreshold} > 0)`,

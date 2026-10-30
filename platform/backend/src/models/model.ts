@@ -476,6 +476,11 @@ class ModelModel {
             // synced value so changed Ollama defaults show up, keeping the last
             // known value only when a sync omits it (e.g. a transient /api/show miss).
             defaultParameters: sql`COALESCE(excluded.default_parameters, ${schema.modelsTable.defaultParameters})`,
+            syncedLongContextThreshold: sql`excluded.synced_long_context_threshold`,
+            syncedLongContextPromptPricePerToken: sql`excluded.synced_long_context_prompt_price_per_token`,
+            syncedLongContextCompletionPricePerToken: sql`excluded.synced_long_context_completion_price_per_token`,
+            syncedLongContextCacheReadPricePerToken: sql`excluded.synced_long_context_cache_read_price_per_token`,
+            syncedLongContextCacheWritePricePerToken: sql`excluded.synced_long_context_cache_write_price_per_token`,
             lastSyncedAt: new Date(),
             updatedAt: new Date(),
             // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
@@ -572,6 +577,11 @@ class ModelModel {
               // fresh synced value so changed Ollama defaults show up, keeping
               // the last known value only when a sync omits it.
               defaultParameters: sql`COALESCE(excluded.default_parameters, ${schema.modelsTable.defaultParameters})`,
+              syncedLongContextThreshold: sql`excluded.synced_long_context_threshold`,
+              syncedLongContextPromptPricePerToken: sql`excluded.synced_long_context_prompt_price_per_token`,
+              syncedLongContextCompletionPricePerToken: sql`excluded.synced_long_context_completion_price_per_token`,
+              syncedLongContextCacheReadPricePerToken: sql`excluded.synced_long_context_cache_read_price_per_token`,
+              syncedLongContextCacheWritePricePerToken: sql`excluded.synced_long_context_cache_write_price_per_token`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
               // The proxy marks a row it creates for an id no catalog had
@@ -676,6 +686,11 @@ class ModelModel {
               customContextLength: sql`NULL`,
               customOutputLength: sql`NULL`,
               discoveredViaLlmProxy: sql`false`,
+              syncedLongContextThreshold: sql`excluded.synced_long_context_threshold`,
+              syncedLongContextPromptPricePerToken: sql`excluded.synced_long_context_prompt_price_per_token`,
+              syncedLongContextCompletionPricePerToken: sql`excluded.synced_long_context_completion_price_per_token`,
+              syncedLongContextCacheReadPricePerToken: sql`excluded.synced_long_context_cache_read_price_per_token`,
+              syncedLongContextCacheWritePricePerToken: sql`excluded.synced_long_context_cache_write_price_per_token`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
             },
@@ -913,6 +928,27 @@ class ModelModel {
     return { ...model, ...prices[0], providerPricing: prices[0] ?? undefined };
   }
 
+  /** The active schedule, shared with routing. Custom schedules replace imported ones. */
+  static getLongContextThreshold(
+    model: Pick<
+      Model,
+      | "longContextThreshold"
+      | "syncedLongContextThreshold"
+      | "customPricePerMillionInput"
+      | "customPricePerMillionOutput"
+      | "customPricePerMillionCacheRead"
+      | "customPricePerMillionCacheWrite"
+    >,
+  ): number | null {
+    if (model.longContextThreshold !== null) return model.longContextThreshold;
+    const allCustom =
+      model.customPricePerMillionInput !== null &&
+      model.customPricePerMillionOutput !== null &&
+      model.customPricePerMillionCacheRead !== null &&
+      model.customPricePerMillionCacheWrite !== null;
+    return allCustom ? null : model.syncedLongContextThreshold;
+  }
+
   /**
    * Get effective pricing for a model.
    *
@@ -929,8 +965,8 @@ class ModelModel {
    * Cache prices are null when the provider has no cache pricing model and none
    * was synced/set (so cache cost is not fabricated for non-caching providers).
    *
-   * With `promptTokens` above the model's long-context threshold, its long
-   * prices replace all four rates while the chosen source is kept.
+   * Imported tiers feed the registry rate below custom overrides. An explicit
+   * custom tier replaces the imported schedule and all four rates above its threshold.
    */
   static getEffectivePricing(
     model: ProviderPricedModel | null,
@@ -942,6 +978,22 @@ class ModelModel {
   ): EffectivePricing {
     if (model?.providerPricing && model.providerPricing !== "conflicting") {
       model = { ...model, ...model.providerPricing };
+    }
+    // Imported prices enter the existing base resolution, below category-specific
+    // user overrides. An explicit custom schedule excludes the imported schedule.
+    if (
+      model &&
+      model.longContextThreshold === null &&
+      !model.providerPricing &&
+      isLongContextPrompt(model.syncedLongContextThreshold, promptTokens)
+    ) {
+      model = {
+        ...model,
+        promptPricePerToken: model.syncedLongContextPromptPricePerToken,
+        completionPricePerToken: model.syncedLongContextCompletionPricePerToken,
+        cacheReadPricePerToken: model.syncedLongContextCacheReadPricePerToken,
+        cacheWritePricePerToken: model.syncedLongContextCacheWritePricePerToken,
+      };
     }
     const base = ModelModel.getEffectiveBasePricing(model, modelId, provider);
     const instance = model?.providerPricing;
@@ -978,14 +1030,14 @@ class ModelModel {
       // The CHECK constraint makes the threshold and all four prices all-or-none.
       // They are configured on the model, so they are no estimate even when
       // the base rates fell back to the default.
-      const longSource = source === "default" ? "custom" : source;
+      const longSource = "custom";
       return {
         pricePerMillionInput: model.longContextPricePerMillionInput,
         pricePerMillionOutput: model.longContextPricePerMillionOutput,
         pricePerMillionCacheRead: model.longContextPricePerMillionCacheRead,
         pricePerMillionCacheWrite: model.longContextPricePerMillionCacheWrite,
         source: longSource,
-        cacheSource: cacheSource ?? longSource,
+        cacheSource: longSource,
       };
     }
 

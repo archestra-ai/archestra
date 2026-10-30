@@ -97892,6 +97892,11 @@ export type GetModelsWithApiKeysResponses = {
         longContextPricePerMillionOutput: string | null;
         longContextPricePerMillionCacheRead: string | null;
         longContextPricePerMillionCacheWrite: string | null;
+        syncedLongContextThreshold: number | null;
+        syncedLongContextPromptPricePerToken: string | null;
+        syncedLongContextCompletionPricePerToken: string | null;
+        syncedLongContextCacheReadPricePerToken: string | null;
+        syncedLongContextCacheWritePricePerToken: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
         defaultParameters: {
@@ -98379,6 +98384,11 @@ export type UpdateModelResponses = {
         longContextPricePerMillionOutput: string | null;
         longContextPricePerMillionCacheRead: string | null;
         longContextPricePerMillionCacheWrite: string | null;
+        syncedLongContextThreshold: number | null;
+        syncedLongContextPromptPricePerToken: string | null;
+        syncedLongContextCompletionPricePerToken: string | null;
+        syncedLongContextCacheReadPricePerToken: string | null;
+        syncedLongContextCacheWritePricePerToken: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
         defaultParameters: {

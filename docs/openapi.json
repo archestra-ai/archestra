@@ -387614,6 +387614,28 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "syncedLongContextThreshold": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
+                      "syncedLongContextPromptPricePerToken": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "syncedLongContextCompletionPricePerToken": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "syncedLongContextCacheReadPricePerToken": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "syncedLongContextCacheWritePricePerToken": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "ignored": {
                         "type": "boolean"
                       },
@@ -387908,6 +387930,11 @@
                       "longContextPricePerMillionOutput",
                       "longContextPricePerMillionCacheRead",
                       "longContextPricePerMillionCacheWrite",
+                      "syncedLongContextThreshold",
+                      "syncedLongContextPromptPricePerToken",
+                      "syncedLongContextCompletionPricePerToken",
+                      "syncedLongContextCacheReadPricePerToken",
+                      "syncedLongContextCacheWritePricePerToken",
                       "ignored",
                       "embeddingDimensions",
                       "defaultParameters",
@@ -389533,6 +389560,28 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "syncedLongContextThreshold": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "syncedLongContextPromptPricePerToken": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "syncedLongContextCompletionPricePerToken": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "syncedLongContextCacheReadPricePerToken": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "syncedLongContextCacheWritePricePerToken": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "ignored": {
                       "type": "boolean"
                     },
@@ -389665,6 +389714,11 @@
                     "longContextPricePerMillionOutput",
                     "longContextPricePerMillionCacheRead",
                     "longContextPricePerMillionCacheWrite",
+                    "syncedLongContextThreshold",
+                    "syncedLongContextPromptPricePerToken",
+                    "syncedLongContextCompletionPricePerToken",
+                    "syncedLongContextCacheReadPricePerToken",
+                    "syncedLongContextCacheWritePricePerToken",
                     "ignored",
                     "embeddingDimensions",
                     "defaultParameters",

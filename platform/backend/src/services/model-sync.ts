@@ -18,6 +18,7 @@ import {
   type ModelsDevApiResponse,
   modelsDevClient,
   modelsDevCostToPerToken,
+  modelsDevLongContextToColumns,
   sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
 import config from "@/config";
@@ -157,6 +158,14 @@ class ModelSyncService {
 
       // 2. Fetch models.dev data for capabilities
       const modelsDevData = await modelsDevClient.fetchModelsFromApi();
+
+      // A missing registry response is an outage, not evidence a Copilot tier
+      // was removed. Keep the last known rates rather than clearing them.
+      if (provider === "github-copilot" && !modelsDevData["github-copilot"]) {
+        throw new Error(
+          "Copilot pricing catalog is unavailable; keeping existing model prices",
+        );
+      }
 
       // 3. Merge provider models with models.dev capabilities.
       // Use the API key's provider (not the fetcher's detected provider) so that
@@ -487,6 +496,11 @@ export function buildModelsToUpsert(params: {
       externalId: `${provider}/${model.id}`,
       provider,
       modelId: model.id,
+      ...(provider === "github-copilot"
+        ? modelsDevLongContextToColumns(
+            modelsDevData["github-copilot"]?.models[model.id]?.cost,
+          )
+        : {}),
       description: capabilities.description,
       contextLength: capabilities.contextLength,
       outputLength: capabilities.outputLength,

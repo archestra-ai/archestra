@@ -1230,7 +1230,7 @@ async function listModels(params: { auth: ModelRouterAuth }) {
   };
 }
 
-async function getModelRouterAgent(agentId: string | undefined) {
+export async function getModelRouterAgent(agentId: string | undefined) {
   const agent = await resolveAgent(agentId);
   if (agent.agentType !== "llm_proxy" && agent.agentType !== "agent") {
     throw new ApiError(400, "Model router requires an Agent or LLM Proxy ID.");
@@ -1242,7 +1242,7 @@ async function getDefaultModelRouterAgent() {
   return getModelRouterAgent(undefined);
 }
 
-async function ensureModelRouterAgentAccess(params: {
+export async function ensureModelRouterAgentAccess(params: {
   agent: GatewayAgent;
   auth: ModelRouterAuth;
 }) {
@@ -1292,7 +1292,21 @@ async function ensureModelRouterAgentAccess(params: {
 async function getModelRouterAuth(
   request: FastifyRequest,
 ): Promise<ModelRouterAuth> {
-  const rawAuthHeader = request.raw.headers.authorization;
+  return authenticateModelRouterBearer({
+    authorization: request.raw.headers.authorization,
+    ip: request.ip,
+  });
+}
+
+/**
+ * The Model Router's credential check on its own, for a request that is not
+ * a Fastify request: a WebSocket upgrade carries the same bearer token.
+ */
+export async function authenticateModelRouterBearer(params: {
+  authorization: string | undefined;
+  ip: string;
+}): Promise<ModelRouterAuth> {
+  const rawAuthHeader = params.authorization;
   const tokenMatch = rawAuthHeader?.match(/^Bearer\s+(.+)$/i);
   const bearerToken = tokenMatch?.[1];
   if (!bearerToken) {
@@ -1307,7 +1321,7 @@ async function getModelRouterAuth(
   }
 
   await virtualKeyRateLimiter.check({
-    ip: request.ip,
+    ip: params.ip,
     credential: bearerToken,
   });
   try {
@@ -1346,7 +1360,7 @@ async function getModelRouterAuth(
     if (error instanceof ApiError && error.statusCode === 401) {
       try {
         await virtualKeyRateLimiter.recordFailure({
-          ip: request.ip,
+          ip: params.ip,
           credential: bearerToken,
         });
       } catch (rateLimitError) {
@@ -1365,11 +1379,13 @@ async function getModelRouterAuth(
   }
 }
 
-function getMappedProviders(auth: ModelRouterAuth): Set<SupportedProvider> {
+export function getMappedProviders(
+  auth: ModelRouterAuth,
+): Set<SupportedProvider> {
   return new Set(auth.providerApiKeys.map((mapping) => mapping.provider));
 }
 
-function getMappedApiKeyIds(auth: ModelRouterAuth): string[] {
+export function getMappedApiKeyIds(auth: ModelRouterAuth): string[] {
   return auth.providerApiKeys.map((mapping) => mapping.providerApiKeyId);
 }
 

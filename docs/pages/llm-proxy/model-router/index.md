@@ -54,6 +54,7 @@ The router speaks the OpenAI API. It supports these endpoints:
 | `/images/edits` | OpenAI, Azure, and Gemini image models |
 | `/audio/speech` | OpenAI and Azure speech models |
 | `/audio/transcriptions` and `/audio/translations` | OpenAI and Azure models that support the requested operation |
+| `/realtime` (WebSocket) | OpenAI realtime models |
 
 Sign in with a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) or an [OAuth client](/docs/llm-proxy/authentication#oauth-clients) token. The router does not accept a [passthrough key](/docs/llm-proxy/authentication#passthrough-virtual-keys), a [provider's own key](/docs/llm-proxy/authentication#direct-provider-api-key), or an [identity provider JWT](/docs/llm-proxy/authentication#jwks-external-identity-provider).
 
@@ -73,6 +74,22 @@ with open("speech.wav", "rb") as audio:
 Image responses carry the provider's image data, and transcriptions carry a `text` field. Speech responses are the audio bytes, and streamed transcriptions are SSE events, as the provider sends them. Add `/<proxy-id>` after `/v1/model-router` to select a specific LLM proxy.
 
 Audio chat models such as `openai:gpt-audio` answer `/chat/completions` in text, or in speech when the request sets `modalities` and `audio`. Their audio tokens are priced at OpenAI's audio rates.
+
+## Realtime
+
+Open a live voice session with the SDK's realtime client and the same base URL and virtual key. Archestra checks the key and its budgets, then forwards the session to OpenAI with the mapped provider key.
+
+```python
+with client.realtime.connect(model="openai:gpt-realtime") as session:
+    session.session.update(session={"output_modalities": ["audio"]})
+    session.conversation.item.create(item={"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Say hello."}]})
+    session.response.create()
+    for event in session:
+        if event.type == "response.done":
+            break
+```
+
+Each response of the session is one row under **Logs → LLM Proxy**, with its transcripts, tokens and cost at OpenAI's realtime rates. Audio never enters the logs. SIP calls (`call_id`) are not served.
 
 - **Provider parameters:** OpenAI and Azure accept their native image parameters. Gemini returns one base64 image at its own size and rejects `quality`, `size`, `output_format`, and a mask on edits. Image streaming is rejected for every provider.
 - **Uploads and logs:** audio uploads are limited to 25 MiB per file. Logs keep file metadata and usage, never audio bytes or transcript text.

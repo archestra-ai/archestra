@@ -6,6 +6,7 @@ import {
   priceOpenAiAudio,
   priceOpenAiAudioChat,
   priceOpenAiImage,
+  priceOpenAiRealtime,
 } from "./media-pricing";
 
 describe("priceOpenAiImage", () => {
@@ -215,6 +216,43 @@ describe("priceOpenAiAudioChat", () => {
   });
 });
 
+describe("priceOpenAiRealtime", () => {
+  test("prices each input modality, cached input and each output modality at its own rate", () => {
+    // gpt-realtime-2.1: text $4 in / $24 out, audio $32 in / $64 out, image $5 in,
+    // cached text and audio $0.40. 20 of the 70 text and 50 of the 250 audio
+    // input tokens were cached.
+    expect(
+      priceOpenAiRealtime({
+        model: "gpt-realtime-2.1",
+        usage: {
+          input_tokens: 330,
+          output_tokens: 160,
+          input_token_details: {
+            text_tokens: 70,
+            audio_tokens: 250,
+            image_tokens: 10,
+            cached_tokens: 70,
+            cached_tokens_details: { text_tokens: 20, audio_tokens: 50 },
+          },
+          output_token_details: { text_tokens: 10, audio_tokens: 150 },
+        },
+      }),
+    ).toBe(0.016518);
+  });
+
+  test("leaves a translation session and a usage-less response unpriced", () => {
+    expect(
+      priceOpenAiRealtime({
+        model: "gpt-realtime-translate",
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    ).toBeUndefined();
+    expect(
+      priceOpenAiRealtime({ model: "gpt-realtime", usage: undefined }),
+    ).toBeUndefined();
+  });
+});
+
 describe("mediaTariffCovers", () => {
   test("covers the request shapes whose responses report what is billed", () => {
     expect(
@@ -287,6 +325,18 @@ describe("mediaPricingFor", () => {
         { kind: "image", usd: 10 },
       ],
       output: [{ kind: "image", usd: 40 }],
+    });
+    expect(mediaPricingFor("openai", "gpt-realtime-mini")).toEqual({
+      per: "million_tokens",
+      input: [
+        { kind: "text", usd: 0.6 },
+        { kind: "audio", usd: 10 },
+        { kind: "image", usd: 0.8 },
+      ],
+      output: [
+        { kind: "text", usd: 2.4 },
+        { kind: "audio", usd: 20 },
+      ],
     });
     expect(mediaPricingFor("openai", "gpt-audio-mini")).toEqual({
       per: "million_tokens",

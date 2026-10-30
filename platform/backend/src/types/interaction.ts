@@ -43,6 +43,10 @@ import {
   PassthroughRequestSchema,
   PassthroughResponseSchema,
 } from "./passthrough";
+import {
+  RealtimeInteractionRequestSchema,
+  RealtimeInteractionResponseSchema,
+} from "./realtime";
 import { VirtualApiKeyTypeSchema } from "./virtual-api-key";
 import { ResourceVisibilityScopeSchema } from "./visibility";
 
@@ -214,6 +218,7 @@ export const InteractionRequestSchema = z.union([
   Azure.API.RealtimeTurnRequestSchema,
   Jev.API.DecisionsRequestSchema,
   PassthroughRequestSchema,
+  RealtimeInteractionRequestSchema,
 ]);
 
 /**
@@ -272,6 +277,7 @@ export const InteractionResponseSchema = z.union([
   Jev.API.DecisionsResponseSchema,
   InteractionErrorResponseSchema,
   PassthroughResponseSchema,
+  RealtimeInteractionResponseSchema,
 ]);
 
 /**
@@ -875,6 +881,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .optional(),
     response: withErrorResponse(Jev.API.DecisionsResponseSchema),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["openai:realtime"]),
+    request: withReadFallback(RealtimeInteractionRequestSchema),
+    processedRequest: withReadFallback(RealtimeInteractionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(RealtimeInteractionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({

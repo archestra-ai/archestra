@@ -76,6 +76,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "openai:images",
   "openai:passthrough",
   "anthropic:passthrough",
+  "openai:realtime",
   "azure:realtime",
   "github-copilot:chatCompletions",
   "github-copilot:responses",

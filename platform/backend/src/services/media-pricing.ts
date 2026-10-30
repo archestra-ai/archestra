@@ -24,7 +24,8 @@ export type MediaOperation =
   | "image-edit"
   | "audio-speech"
   | "audio-transcription"
-  | "audio-translation";
+  | "audio-translation"
+  | "realtime";
 
 /** Whether a request of this shape can be priced once its response arrives. */
 export function mediaTariffCovers(params: {
@@ -71,6 +72,8 @@ export function mediaTariffCovers(params: {
         lookup(OPENAI_TRANSCRIPTION, model) !== undefined &&
         params.audioSeconds !== undefined
       );
+    case "realtime":
+      return lookup(OPENAI_REALTIME, model) !== undefined;
   }
 }
 
@@ -249,6 +252,64 @@ export function priceOpenAiAudioChat(params: {
   );
 }
 
+/** The `usage` of a Realtime `response.done` event. */
+interface OpenAiRealtimeUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  input_token_details?: {
+    text_tokens?: number;
+    audio_tokens?: number;
+    image_tokens?: number;
+    cached_tokens?: number;
+    cached_tokens_details?: {
+      text_tokens?: number;
+      audio_tokens?: number;
+      image_tokens?: number;
+    };
+  } | null;
+  output_token_details?: {
+    text_tokens?: number;
+    audio_tokens?: number;
+  } | null;
+}
+
+/**
+ * Cost of one Realtime response: text, audio and image input tokens at their
+ * own rates, cached input at the cached rates, text and audio output apart.
+ * Cached tokens are a subset of the input tokens OpenAI reports.
+ */
+export function priceOpenAiRealtime(params: {
+  model: string;
+  usage: OpenAiRealtimeUsage | undefined;
+}): number | undefined {
+  const tariff = lookup(OPENAI_REALTIME, params.model);
+  const usage = params.usage;
+  if (!tariff || !usage || typeof usage.input_tokens !== "number") return;
+  if (typeof usage.output_tokens !== "number") return;
+  const input = usage.input_token_details;
+  const cached = input?.cached_tokens_details;
+  const cachedText = cached?.text_tokens ?? 0;
+  const cachedAudio = cached?.audio_tokens ?? 0;
+  const cachedImage = cached?.image_tokens ?? 0;
+  // Without a modality breakdown every input token counts as text.
+  const textIn = (input?.text_tokens ?? usage.input_tokens) - cachedText;
+  const audioIn = (input?.audio_tokens ?? 0) - cachedAudio;
+  const imageIn = (input?.image_tokens ?? 0) - cachedImage;
+  const output = usage.output_token_details;
+  const audioOut = output?.audio_tokens ?? 0;
+  const textOut = output?.text_tokens ?? usage.output_tokens - audioOut;
+  return perMillion(
+    Math.max(0, textIn) * tariff.textInput +
+      Math.max(0, audioIn) * tariff.audioInput +
+      Math.max(0, imageIn) * tariff.imageInput +
+      cachedText * tariff.cachedTextInput +
+      cachedAudio * tariff.cachedAudioInput +
+      cachedImage * tariff.cachedImageInput +
+      Math.max(0, textOut) * tariff.textOutput +
+      audioOut * tariff.audioOutput,
+  );
+}
+
 /**
  * A model's media rates as its vendor publishes them, for display beside the
  * per-token prices of chat models; `null` for a model these tables do not
@@ -285,6 +346,20 @@ export function mediaPricingFor(
         ...(image.textOutput === undefined
           ? []
           : [{ kind: "text" as const, usd: image.textOutput }]),
+      ],
+    };
+  const realtime = lookup(OPENAI_REALTIME, model);
+  if (realtime)
+    return {
+      per: "million_tokens",
+      input: [
+        { kind: "text", usd: realtime.textInput },
+        { kind: "audio", usd: realtime.audioInput },
+        { kind: "image", usd: realtime.imageInput },
+      ],
+      output: [
+        { kind: "text", usd: realtime.textOutput },
+        { kind: "audio", usd: realtime.audioOutput },
       ],
     };
   const audioChat = lookup(OPENAI_AUDIO_CHAT, model);
@@ -373,6 +448,66 @@ const GEMINI_IMAGE: Record<
     imageOutput: 30,
   },
   "gemini-nano-banana-2.1": { input: 1.5, textOutput: 7.5, imageOutput: 30 },
+};
+
+/**
+ * Realtime models: every input modality and cached input at its own rate.
+ * `gpt-realtime-translate` is billed per minute of a live session, which no
+ * response event reports, so it is not priced.
+ */
+const OPENAI_REALTIME: Record<
+  string,
+  {
+    textInput: number;
+    audioInput: number;
+    imageInput: number;
+    cachedTextInput: number;
+    cachedAudioInput: number;
+    cachedImageInput: number;
+    textOutput: number;
+    audioOutput: number;
+  }
+> = {
+  "gpt-realtime": {
+    textInput: 4,
+    audioInput: 32,
+    imageInput: 5,
+    cachedTextInput: 0.4,
+    cachedAudioInput: 0.4,
+    cachedImageInput: 0.5,
+    textOutput: 16,
+    audioOutput: 64,
+  },
+  "gpt-realtime-mini": {
+    textInput: 0.6,
+    audioInput: 10,
+    imageInput: 0.8,
+    cachedTextInput: 0.06,
+    cachedAudioInput: 0.3,
+    cachedImageInput: 0.08,
+    textOutput: 2.4,
+    audioOutput: 20,
+  },
+  "gpt-realtime-2.1": {
+    textInput: 4,
+    audioInput: 32,
+    imageInput: 5,
+    cachedTextInput: 0.4,
+    cachedAudioInput: 0.4,
+    cachedImageInput: 0.5,
+    textOutput: 24,
+    audioOutput: 64,
+  },
+  "gpt-realtime-2.1-mini": {
+    textInput: 0.6,
+    audioInput: 10,
+    imageInput: 0.8,
+    cachedTextInput: 0.06,
+    cachedAudioInput: 0.3,
+    cachedImageInput: 0.08,
+    textOutput: 2.4,
+    audioOutput: 20,
+  },
 };
 
 /** Audio chat models: text and audio tokens on both sides, priced apart. */

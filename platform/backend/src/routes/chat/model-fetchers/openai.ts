@@ -60,10 +60,10 @@ export function mapOpenAiModelToModelInfo(
 
 // babbage/davinci are OpenAI's legacy completions-only base models: they 404 on
 // /chat/completions ("not a chat model"). They, and the other non-chat families
-// that no governed endpoint serves, are dropped from sync: realtime and live
-// voice models speak only the Realtime API, moderation models only
-// /moderations. Image, speech and transcription models are kept as media
-// models (openAiMediaCapabilities).
+// that no governed endpoint serves, are dropped from sync: live voice models
+// speak only the Realtime transcription API, moderation models only
+// /moderations. Image, speech, transcription and realtime models are kept as
+// media models (openAiMediaCapabilities).
 const NON_CHAT_MODEL_ID_PATTERNS = [
   "instruct",
   "realtime",
@@ -178,6 +178,11 @@ function openAiMediaCapabilities(id: string): FetchedModelCapabilities | null {
   }
   if (/^(whisper-|gpt-(?:[\w.-]+-)?transcribe(?:-|$))/.test(lower)) {
     return mediaCapabilities(["audio"], ["text"]);
+  }
+  // Realtime models speak only the Realtime API, which the Model Router
+  // serves over WebSocket; their audio output keeps them out of chat.
+  if (/^gpt-realtime(?:-|$)/.test(lower)) {
+    return mediaCapabilities(["text", "audio"], ["audio"]);
   }
   return null;
 }

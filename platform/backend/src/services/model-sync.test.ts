@@ -325,11 +325,19 @@ describe("ModelSyncService", () => {
       "gpt-audio",
       "gpt-image-1",
       "gpt-live-transcribe",
+      "gpt-realtime-2.1",
       "gpt-transcribe",
       "text-embedding-ada-002",
       "tts-1",
       "whisper-1",
     ]);
+    // Realtime models are served over the router's WebSocket endpoint; their
+    // audio-only output keeps them out of chat.
+    expect(byId.get("gpt-realtime-2.1")?.inputModalities).toEqual([
+      "text",
+      "audio",
+    ]);
+    expect(byId.get("gpt-realtime-2.1")?.outputModalities).toEqual(["audio"]);
     expect(byId.get("gpt-image-1")?.outputModalities).toEqual(["image"]);
     // Audio chat models answer chat turns in text or speech; they stay chat models.
     expect(byId.get("gpt-audio")?.inputModalities).toEqual(["text", "audio"]);

@@ -43,7 +43,8 @@ import {
   previewToolResultContent,
 } from "@/utils/tool-result-preview";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
-import { LOGGED_AUDIO_MAX_BYTES, LoggedAudioClip } from "../utils/logged-audio";
+import { LoggedAudioClip } from "../utils/logged-audio";
+import { LOGGED_MEDIA_MAX_BYTES } from "../utils/logged-media";
 import {
   doesModelSupportImages,
   hasImageContent,
@@ -1547,7 +1548,7 @@ export function withReplyAudioWithinLimit<T>(response: T): T {
     const data = (audio as { data?: unknown } | null)?.data;
     if (typeof audio !== "object" || audio === null || typeof data !== "string")
       return choice;
-    if (base64Bytes(data) <= LOGGED_AUDIO_MAX_BYTES) return choice;
+    if (base64Bytes(data) <= LOGGED_MEDIA_MAX_BYTES) return choice;
     changed = true;
     const { data: _data, ...rest } = audio as Record<string, unknown>;
     return {

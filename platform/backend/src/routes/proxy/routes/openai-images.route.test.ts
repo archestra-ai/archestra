@@ -199,9 +199,14 @@ describe.each([
           metadata: { operation: "image-edit" },
         },
       });
-      expect(JSON.stringify(interactions.at(-1)?.request)).not.toContain(
-        image.toString("base64"),
-      );
+      // The row keeps the uploaded image, with its metadata, for Logs.
+      expect(
+        (
+          interactions.at(-1)?.request as {
+            input_files?: { images?: Array<{ data?: string }> };
+          }
+        ).input_files?.images?.[0]?.data,
+      ).toBe(image.toString("base64"));
     } finally {
       await app.close();
     }

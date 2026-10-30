@@ -589,6 +589,13 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    * provider's published media tariff prices, so its cost is authoritative.
    */
   mediaTariffCovers?(request: TRequest): boolean;
+  /**
+   * The request as its log row keeps it, when that differs from what the
+   * provider and plugins receive: an image edit adds its uploaded images, so
+   * the Logs page can show what was edited. Typed loosely so an adapter that
+   * spreads another provider's factory does not inherit its request type.
+   */
+  toLoggedRequest?(request: unknown): unknown;
   /** Propagate downstream disconnection to upstream work. */
   readonly cancelOnDisconnect?: boolean;
   /** End failed binary streams by closing the transport, never injecting SSE bytes. */

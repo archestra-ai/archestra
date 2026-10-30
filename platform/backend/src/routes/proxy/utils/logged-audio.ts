@@ -1,12 +1,10 @@
-/**
- * Audio a log row keeps so the Logs page can play it: the speech a model
- * returned, the clip a user uploaded for transcription, a spoken reply. Each
- * clip is kept up to this size; a longer one is noted as omitted, never cut
- * short. The Logs copy names the same limit ("2 MB per clip").
- */
-export const LOGGED_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
+import { LOGGED_MEDIA_MAX_BYTES } from "./logged-media";
 
-/** Collects one clip's bytes as they stream, up to the limit. */
+/**
+ * Collects one clip's bytes as they stream, up to the limit a log row keeps:
+ * the speech a model returned, the clip a user uploaded for transcription, a
+ * spoken reply.
+ */
 export class LoggedAudioClip {
   private chunks: Buffer[] = [];
   private size = 0;
@@ -15,7 +13,7 @@ export class LoggedAudioClip {
   add(bytes: Uint8Array): void {
     if (this.overLimit || bytes.byteLength === 0) return;
     this.size += bytes.byteLength;
-    if (this.size > LOGGED_AUDIO_MAX_BYTES) {
+    if (this.size > LOGGED_MEDIA_MAX_BYTES) {
       this.overLimit = true;
       this.chunks = [];
       return;

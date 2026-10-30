@@ -555,7 +555,8 @@ describe.each([
           row.type.endsWith(":images") || row.type === "gemini:generateContent",
       );
       expect(images.length).toBeGreaterThanOrEqual(5);
-      expect(JSON.stringify(images.map((row) => row.request))).not.toContain(
+      // Each edit's row keeps its reference image so Logs can show it.
+      expect(JSON.stringify(images.map((row) => row.request))).toContain(
         reference.toString("base64"),
       );
       const failedImages = images.filter(

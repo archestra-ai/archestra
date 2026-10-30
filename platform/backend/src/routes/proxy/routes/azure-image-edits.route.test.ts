@@ -194,16 +194,17 @@ test("real SDK edits preserve multiple inputs and a mask with governed credentia
     outputTokens: 3,
     request: {
       input_files: {
-        images: [{ filename: "one.png" }, { filename: "two.webp" }],
-        mask: { filename: "mask.png" },
+        // The row keeps each upload, and the mask, so Logs can show them.
+        images: [
+          { filename: "one.png", data: media.image.toString("base64") },
+          { filename: "two.webp", data: second.toString("base64") },
+        ],
+        mask: { filename: "mask.png", data: media.image.toString("base64") },
       },
     },
   });
   // gpt-image-1's published tariff: 2 text tokens at $5/M, 3 image tokens at $40/M.
   expect(Number(interactions[0].cost)).toBe(0.00013);
-  expect(JSON.stringify(interactions[0].request)).not.toContain(
-    media.image.toString("base64"),
-  );
   expect(JSON.stringify(interactions[0].request)).not.toContain(
     "fixture-image-provider-key",
   );

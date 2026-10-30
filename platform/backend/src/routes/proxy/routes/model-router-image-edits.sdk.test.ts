@@ -269,7 +269,7 @@ describe.each([
               ?.operation === "image-edit",
         ),
       ).toBe(true);
-      expect(JSON.stringify(rows.map((row) => row.request))).not.toContain(
+      expect(JSON.stringify(rows.map((row) => row.request))).toContain(
         image.toString("base64"),
       );
       expect(JSON.stringify(rows)).not.toContain("synthetic-azure-edit-secret");
@@ -283,7 +283,7 @@ describe.each([
       );
       expect(openAiRows).toHaveLength(1);
       expect(openAiRows[0]).toMatchObject({ inputTokens: 2, outputTokens: 3 });
-      expect(JSON.stringify(openAiRows[0].request)).not.toContain(
+      expect(JSON.stringify(openAiRows[0].request)).toContain(
         image.toString("base64"),
       );
       expect(JSON.stringify(openAiRows)).not.toContain(

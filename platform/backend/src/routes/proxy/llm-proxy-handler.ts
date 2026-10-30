@@ -3394,6 +3394,10 @@ async function handleNonStreaming<
     pluginContext,
     appaReceipts,
   } = ctx;
+  // What the log row keeps of the request; the provider and plugins still
+  // work from `originalRequest`.
+  const loggedRequest =
+    provider.toLoggedRequest?.(originalRequest) ?? originalRequest;
 
   const providerName = provider.provider;
   const sendResponse = (response: unknown) => {
@@ -3509,7 +3513,7 @@ async function handleNonStreaming<
             sessionSource,
             source,
             providerType: provider.interactionType,
-            request: originalRequest,
+            request: loggedRequest,
             processedRequest: request,
             response: error.response,
             actualModel,
@@ -3894,7 +3898,7 @@ async function handleNonStreaming<
         sessionSource,
         source,
         providerType: provider.interactionType,
-        request: originalRequest,
+        request: loggedRequest,
         processedRequest: request,
         response: responseAdapter.getLoggedResponse?.() ?? refusalResponse,
         actualModel,
@@ -4069,7 +4073,7 @@ async function handleNonStreaming<
       sessionSource,
       source,
       providerType: provider.interactionType,
-      request: originalRequest,
+      request: loggedRequest,
       processedRequest: request,
       // Bedrock<->OpenAI compat need to return OpenAI response to client, but store bedrock response for interaction log.
       // Providers which need this behavior should implement getLoggedResponse() for persisting interaction and getOriginalResponse() for returning to client.

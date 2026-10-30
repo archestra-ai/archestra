@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { ApiError } from "@/types/api";
+import { LOGGED_MEDIA_MAX_BYTES } from "./logged-media";
 import { mediaUploadType } from "./media-multipart";
 
 export const IMAGE_EDIT_MAX_FILE_BYTES = 50 * 1024 * 1024 - 1;
@@ -59,6 +60,28 @@ export async function validateImageEditUploads(
     }
   }
   return { images, ...(mask && { mask }), metadata };
+}
+
+/**
+ * The edit's upload metadata as its log row keeps it: each image, and the
+ * mask, with its bytes as base64 up to the per-file limit, so the Logs page
+ * can show what was edited. A larger file is marked `data_omitted:
+ * "too_large"`. The provider and plugins receive the metadata without bytes.
+ */
+export function loggedUploadMetadata(uploads: ValidatedImageEditUploads) {
+  const kept = (metadata: ImageEditFileMetadata, file: ImageEditFile) =>
+    file.data.length <= LOGGED_MEDIA_MAX_BYTES
+      ? { ...metadata, data: file.data.toString("base64") }
+      : { ...metadata, data_omitted: "too_large" as const };
+  return {
+    images: uploads.metadata.images.map((metadata, index) =>
+      kept(metadata, uploads.images[index]),
+    ),
+    ...(uploads.mask &&
+      uploads.metadata.mask && {
+        mask: kept(uploads.metadata.mask, uploads.mask),
+      }),
+  };
 }
 
 interface ImageEditFileMetadata {

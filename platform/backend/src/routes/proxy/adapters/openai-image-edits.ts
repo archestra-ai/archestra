@@ -2,7 +2,10 @@ import type OpenAI from "openai";
 import { toFile } from "openai";
 import type { z } from "zod";
 import { Azure, type LLMProvider, type OpenAi } from "@/types";
-import type { ValidatedImageEditUploads } from "../utils/image-edit-input";
+import {
+  loggedUploadMetadata,
+  type ValidatedImageEditUploads,
+} from "../utils/image-edit-input";
 import { mediaProviderError } from "../utils/media-provider-error";
 import type { AzureImageEditRequest } from "./azure-image-edits";
 import { openaiImagesAdapterFactory } from "./openai-images";
@@ -11,8 +14,7 @@ type ImageResponse = z.infer<typeof Azure.API.ImageGenerationResponseSchema>;
 
 /**
  * OpenAI's native image edits, on the governed path its image generations use.
- * Binary inputs live only in this request's closure, never in interaction
- * bodies.
+ * The uploads live in this request's closure; only the log row keeps a copy.
  */
 export function createOpenAiImageEditAdapter(
   uploads: ValidatedImageEditUploads,
@@ -25,6 +27,10 @@ export function createOpenAiImageEditAdapter(
 > {
   return {
     ...openaiImagesAdapterFactory,
+    toLoggedRequest: (request: AzureImageEditRequest) => ({
+      ...request,
+      input_files: loggedUploadMetadata(uploads),
+    }),
     async execute(client, request) {
       const {
         input_files: _inputFiles,

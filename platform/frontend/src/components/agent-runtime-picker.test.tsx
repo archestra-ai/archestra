@@ -1,6 +1,6 @@
 import { archestraApiClient, getAgentCatalogImages } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -42,6 +42,9 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 } as typeof ResizeObserver;
 const server = setupServer(
+  http.get("http://localhost:9000/api/agent-runtime-templates", () =>
+    HttpResponse.json([]),
+  ),
   http.get("http://localhost:9000/api/organization", () =>
     HttpResponse.json(makeOrganization()),
   ),
@@ -220,6 +223,40 @@ describe("AgentRuntimePicker", () => {
       target: { value: "custom-command" },
     });
     expect(savedRuntime().inferenceProtocol).toBe("openai_chat");
+  });
+
+  it("resolves a custom template on selection without putting environment values in the catalog list", async () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    const runtime = {
+      ...defaultAgentRuntime(),
+      image: "registry.example.com/team-agent:v2",
+      command: ["team-agent", "--serve"],
+      environment: [{ key: "TEAM_MODE", value: "review" }],
+    };
+    const summary = {
+      id,
+      name: "Team workspace",
+      description: "Team tools",
+      icon: null,
+      hidden: false,
+      position: 0,
+      image: runtime.image,
+    };
+    server.use(
+      http.get("http://localhost:9000/api/agent-runtime-templates", () =>
+        HttpResponse.json([summary]),
+      ),
+      http.get(`http://localhost:9000/api/agent-runtime-templates/${id}`, () =>
+        HttpResponse.json({ ...summary, runtime }),
+      ),
+    );
+    await renderPicker("chat");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("radio", { name: "Team workspace" }));
+    await waitFor(() => expect(savedRuntime()).toEqual(runtime));
+    expect(screen.getByRole("radio", { name: "Team workspace" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "Test Platform" }));
+    expect(savedRuntime()).toBeNull();
   });
 
   it("opens Custom image setup and preserves edits through disclosure changes", async () => {

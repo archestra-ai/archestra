@@ -91,6 +91,16 @@ vi.mock("@/lib/agent-options.query", () => ({
   },
 }));
 
+vi.mock("@/lib/agent-runtime-templates.query", () => ({
+  useRuntimeTemplateCatalog: () => ({
+    data: [],
+    isFetching: false,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useResolveRuntimeTemplate: () => ({ isPending: false, mutate: vi.fn() }),
+}));
 vi.mock("next/navigation");
 
 const {

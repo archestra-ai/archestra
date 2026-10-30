@@ -30,6 +30,10 @@ const mockAgentSelector = vi.fn(
   ),
 );
 
+vi.mock("@/components/settings/runtime-template-section", () => ({
+  RuntimeTemplateSection: () => <div>Runtime templates</div>,
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     children,

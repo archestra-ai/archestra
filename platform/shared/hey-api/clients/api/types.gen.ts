@@ -26012,6 +26012,631 @@ export type UploadAgentWorkspaceTransferResponses = {
 
 export type UploadAgentWorkspaceTransferResponse = UploadAgentWorkspaceTransferResponses[keyof UploadAgentWorkspaceTransferResponses];
 
+export type ListAgentRuntimeTemplatesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates';
+};
+
+export type ListAgentRuntimeTemplatesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListAgentRuntimeTemplatesError = ListAgentRuntimeTemplatesErrors[keyof ListAgentRuntimeTemplatesErrors];
+
+export type ListAgentRuntimeTemplatesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        description: string;
+        icon: string | null;
+        hidden: boolean;
+        position: number;
+        image: string;
+    }>;
+};
+
+export type ListAgentRuntimeTemplatesResponse = ListAgentRuntimeTemplatesResponses[keyof ListAgentRuntimeTemplatesResponses];
+
+export type GetRuntimeTemplateSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates/settings';
+};
+
+export type GetRuntimeTemplateSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetRuntimeTemplateSettingsError = GetRuntimeTemplateSettingsErrors[keyof GetRuntimeTemplateSettingsErrors];
+
+export type GetRuntimeTemplateSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        revision: number;
+        templates: Array<{
+            id: string;
+            name: string;
+            description: string;
+            icon: string | null;
+            hidden: boolean;
+            position: number;
+            runtime: {
+                image: string;
+                command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                backend: 'kubernetes';
+                steerMode: 'pipe' | 'tmux_keys';
+                privileged: false;
+                resources: {
+                    cpuRequest?: string;
+                    memoryRequest?: string;
+                    cpuLimit?: string;
+                    memoryLimit?: string;
+                } | null;
+                ports?: Array<number>;
+                environment: Array<{
+                    key: string;
+                    value: string;
+                }> | null;
+                credentials: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    credentialId?: string;
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
+                ttlHours: number | null;
+                maxCostUsd: number | null;
+                idleTimeoutMinutes: number | null;
+            };
+        }>;
+        popularAgentOverrides: {
+            'claude-code'?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            codex?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            opencode?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            hermes?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            openclaw?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            grok?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            kimi?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            copilot?: {
+                hidden?: boolean;
+                position?: number;
+            };
+        } | null;
+    };
+};
+
+export type GetRuntimeTemplateSettingsResponse = GetRuntimeTemplateSettingsResponses[keyof GetRuntimeTemplateSettingsResponses];
+
+export type SaveRuntimeTemplateSettingsData = {
+    body: {
+        revision: number;
+        templates: Array<{
+            id: string;
+            name: string;
+            description: string;
+            icon: string | null;
+            hidden: boolean;
+            position: number;
+            runtime: {
+                image: string;
+                command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                backend: 'kubernetes';
+                steerMode: 'pipe' | 'tmux_keys';
+                privileged: false;
+                resources: {
+                    cpuRequest?: string;
+                    memoryRequest?: string;
+                    cpuLimit?: string;
+                    memoryLimit?: string;
+                } | null;
+                ports?: Array<number>;
+                environment: Array<{
+                    key: string;
+                    value: string;
+                }> | null;
+                credentials: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    credentialId?: string;
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
+                ttlHours: number | null;
+                maxCostUsd: number | null;
+                idleTimeoutMinutes: number | null;
+            };
+        }>;
+        popularAgentOverrides: {
+            'claude-code'?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            codex?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            opencode?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            hermes?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            openclaw?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            grok?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            kimi?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            copilot?: {
+                hidden?: boolean;
+                position?: number;
+            };
+        } | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-runtime-templates/settings';
+};
+
+export type SaveRuntimeTemplateSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SaveRuntimeTemplateSettingsError = SaveRuntimeTemplateSettingsErrors[keyof SaveRuntimeTemplateSettingsErrors];
+
+export type SaveRuntimeTemplateSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        revision: number;
+        templates: Array<{
+            id: string;
+            name: string;
+            description: string;
+            icon: string | null;
+            hidden: boolean;
+            position: number;
+            runtime: {
+                image: string;
+                command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                backend: 'kubernetes';
+                steerMode: 'pipe' | 'tmux_keys';
+                privileged: false;
+                resources: {
+                    cpuRequest?: string;
+                    memoryRequest?: string;
+                    cpuLimit?: string;
+                    memoryLimit?: string;
+                } | null;
+                ports?: Array<number>;
+                environment: Array<{
+                    key: string;
+                    value: string;
+                }> | null;
+                credentials: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    credentialId?: string;
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
+                ttlHours: number | null;
+                maxCostUsd: number | null;
+                idleTimeoutMinutes: number | null;
+            };
+        }>;
+        popularAgentOverrides: {
+            'claude-code'?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            codex?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            opencode?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            hermes?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            openclaw?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            grok?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            kimi?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            copilot?: {
+                hidden?: boolean;
+                position?: number;
+            };
+        } | null;
+    };
+};
+
+export type SaveRuntimeTemplateSettingsResponse = SaveRuntimeTemplateSettingsResponses[keyof SaveRuntimeTemplateSettingsResponses];
+
+export type GetAgentRuntimeTemplateData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agent-runtime-templates/{id}';
+};
+
+export type GetAgentRuntimeTemplateErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentRuntimeTemplateError = GetAgentRuntimeTemplateErrors[keyof GetAgentRuntimeTemplateErrors];
+
+export type GetAgentRuntimeTemplateResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string;
+        icon: string | null;
+        hidden: boolean;
+        position: number;
+        runtime: {
+            image: string;
+            command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+            backend: 'kubernetes';
+            steerMode: 'pipe' | 'tmux_keys';
+            privileged: false;
+            resources: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            } | null;
+            ports?: Array<number>;
+            environment: Array<{
+                key: string;
+                value: string;
+            }> | null;
+            credentials: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                credentialId?: string;
+                label: string;
+                description?: string;
+                required: boolean;
+            }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
+            ttlHours: number | null;
+            maxCostUsd: number | null;
+            idleTimeoutMinutes: number | null;
+        };
+    };
+};
+
+export type GetAgentRuntimeTemplateResponse = GetAgentRuntimeTemplateResponses[keyof GetAgentRuntimeTemplateResponses];
+
 export type GetAllAgentToolsData = {
     body?: never;
     path?: never;

@@ -1,9 +1,81 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { generateText } from "ai";
+import { HttpResponse, http } from "msw";
 import { describe, expect, test, vi } from "vitest";
+import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { createDirectLLMModel } from "@/clients/llm-client";
 import config from "@/config";
 import { ModelModel } from "@/models";
+import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
+import { buildModelsToUpsert } from "@/services/model-sync";
+import { useMswServer } from "@/test/msw";
+
+// biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper
+const server = useMswServer();
+
+describe("gateway-discovered output budget", () => {
+  test.each([
+    { listed: 64000, detailed: 64000, expected: 32768 },
+    { listed: undefined, detailed: 64000, expected: 32768 },
+    { listed: 64000, detailed: undefined, expected: 32768 },
+    { listed: 64000, detailed: 4096, expected: 4096 },
+    { listed: 4096, detailed: 64000, expected: 4096 },
+    { listed: 64000, detailed: 64000, custom: 4096, expected: 4096 },
+    { listed: undefined, detailed: undefined, expected: 8192 },
+  ])("sends $expected tokens for listing=$listed and detail=$detailed", async ({
+    listed,
+    detailed,
+    custom,
+    expected,
+  }) => {
+    const modelId = "gateway-model";
+    server.use(
+      http.get("https://gateway.example.test/v1/models", () =>
+        HttpResponse.json({
+          data: [{ id: modelId, max_output_tokens: listed }],
+        }),
+      ),
+      http.get("https://gateway.example.test/v1/model/info", () =>
+        HttpResponse.json({
+          data: [
+            {
+              model_name: modelId,
+              model_info: { max_output_tokens: detailed },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const discovered = await fetchOpenAiModels(
+      "fixture-key",
+      "https://gateway.example.test/v1",
+    );
+    const [synced] = buildModelsToUpsert({
+      provider: "openai",
+      models: discovered,
+      modelsDevData: {},
+    });
+    const stored = await ModelModel.create({
+      ...synced,
+      customOutputLength: custom,
+    });
+    const budget = resolveAgentMaxOutputTokens({
+      provider: "openai",
+      outputLength: ModelModel.resolveEffectiveOutputLength(stored),
+      ceiling: config.chat.maxOutputTokensCeiling,
+    });
+
+    expect(budget).toBe(expected);
+    expect(
+      await sentMaxTokens({
+        provider: "openai",
+        modelName: modelId,
+        maxOutputTokens: budget,
+      }),
+    ).toBe(expected);
+  });
+});
 
 describe("default output budget", () => {
   test("a catalogued model gets its catalog budget on every provider", async () => {

@@ -309,54 +309,76 @@ export function priceTokens(usage: UsageTokens, prices: TokenPrices): string {
  * Savings can be negative when cache writes cost more than uncached input.
  */
 export function componentCacheCosts(component: PricedComponent) {
-  const prices = {
-    ...component.prices,
-    cacheRead: component.prices.cacheRead ?? "0",
-    cacheWrite: component.prices.cacheWrite ?? "0",
-    cacheWrite1h: component.prices.cacheWrite1h ?? "0",
+  const { prices } = component;
+  // Token counts that cannot be priced have no cache figures either.
+  const counts = [
+    component.cacheReadTokens,
+    component.cacheWriteTokens - component.cacheWrite1hTokens,
+    component.cacheWrite1hTokens,
+  ];
+  if (counts.some((count) => !Number.isSafeInteger(count) || count < 0))
+    return { cacheCost: 0, cacheSavings: 0, cacheReadSavings: 0 };
+  const none: UsageTokens = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    cacheWrite1hTokens: 0,
   };
-  const cacheCost = priceTokens(
-    { ...component, inputTokens: 0, outputTokens: 0 },
+  const free: TokenPrices = {
+    input: "0",
+    output: "0",
+    cacheRead: "0",
+    cacheWrite: "0",
+    cacheWrite1h: "0",
+    source: prices.source,
+  };
+  const units = (usage: Partial<UsageTokens>, rates: Partial<TokenPrices>) =>
+    moneyUnits(priceTokens({ ...none, ...usage }, { ...free, ...rates }));
+  const read = component.cacheReadTokens;
+  const writes = component.cacheWriteTokens;
+  const write1h = component.cacheWrite1hTokens;
+  // The charge includes estimated cache rates, so the cache cost does too.
+  const charged = estimateCachePrices({
+    usage: component,
     prices,
-  );
-  const baseline = priceTokens(
+    provider: component.provider,
+  }).prices;
+  const cacheCost = units(
     {
-      inputTokens: component.cacheReadTokens + component.cacheWriteTokens,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      cacheWrite1hTokens: 0,
+      cacheReadTokens: read,
+      cacheWriteTokens: writes,
+      cacheWrite1hTokens: write1h,
     },
-    prices,
-  );
-  const readBaseline = priceTokens(
     {
-      inputTokens: component.cacheReadTokens,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      cacheWrite1hTokens: 0,
+      cacheRead: charged.cacheRead,
+      cacheWrite: charged.cacheWrite,
+      cacheWrite1h: charged.cacheWrite1h,
     },
-    prices,
   );
-  const readCost = priceTokens(
-    {
-      ...component,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheWriteTokens: 0,
-      cacheWrite1hTokens: 0,
-    },
-    prices,
-  );
+  // Savings need a known rate: against an estimated rate they would only
+  // repeat the estimate's own discount.
+  const uncached = (tokens: number) =>
+    units({ inputTokens: tokens }, { input: prices.input });
+  const readSavings =
+    prices.cacheRead === null
+      ? 0n
+      : uncached(read) -
+        units({ cacheReadTokens: read }, { cacheRead: prices.cacheRead });
+  const writeSurcharge =
+    prices.cacheWrite === null
+      ? 0n
+      : units(
+          { cacheWriteTokens: writes, cacheWrite1hTokens: write1h },
+          {
+            cacheWrite: prices.cacheWrite,
+            cacheWrite1h: prices.cacheWrite1h ?? "0",
+          },
+        ) - uncached(writes);
   return {
-    cacheCost: Number(cacheCost),
-    cacheSavings: Number(
-      formatMoney(moneyUnits(baseline) - moneyUnits(cacheCost)),
-    ),
-    cacheReadSavings: Number(
-      formatMoney(moneyUnits(readBaseline) - moneyUnits(readCost)),
-    ),
+    cacheCost: Number(formatMoney(cacheCost)),
+    cacheSavings: Number(formatMoney(readSavings - writeSurcharge)),
+    cacheReadSavings: Number(formatMoney(readSavings)),
   };
 }
 

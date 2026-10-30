@@ -29,7 +29,7 @@ Clients keep their credentials and endpoint URLs. An enforced request records it
   - Anthropic, Amazon Bedrock, OpenAI, Gemini, and DeepSeek models get their provider's standard cache rates.
   - Other providers pay half the input price for a cache read and the full input price for a cache write.
 - Unsupported billing components, partial usage, and models with no price count at their recorded cost. Only spend at or over a limit blocks a request.
-- To start a spend limit's window at `$0`, call `POST /api/limits/{id}/reset` with [`llmLimit:update`](/docs/reference/permissions#llmLimit:update). Cost reports keep the past spend.
+- To start a spend limit's window at `$0`, call [`POST /api/limits/{id}/reset`](/docs/reference/api#/Limits/resetLimitUsage) with [`llmLimit:update`](/docs/reference/permissions#llmLimit:update). Cost reports keep the past spend.
 - A database settlement failure returns an error instead of successful accounting.
 - Budgets check consumption before a request. Concurrent requests already in flight can exceed a limit; settlement does not reserve funds.
 

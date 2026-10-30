@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  componentCacheCosts,
   estimateCachePrices,
   mergeAnthropicUsage,
   moneyUnits,
@@ -263,6 +264,45 @@ describe("missing cache rates", () => {
     ).toMatchObject({
       prices: { cacheRead: "0.0000000000" },
       estimated: false,
+    });
+  });
+});
+
+describe("cache cost and savings", () => {
+  const component = {
+    id: "primary",
+    model: "fireworks-model",
+    kind: "message" as const,
+    provider: "vllm" as const,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 1_000_000,
+    cacheWriteTokens: 1_000_000,
+    cacheWrite1hTokens: 0,
+    cost: "0",
+  };
+
+  test("count an estimated rate in the cache cost but claim no savings from it", () => {
+    expect(
+      componentCacheCosts({
+        ...component,
+        prices: {
+          ...rates,
+          input: "0.90",
+          cacheRead: null,
+          cacheWrite: null,
+          cacheWrite1h: null,
+        },
+      }),
+    ).toEqual({ cacheCost: 1.35, cacheSavings: 0, cacheReadSavings: 0 });
+  });
+
+  test("compare known rates with the uncached input price", () => {
+    // Reads at $0.10 save $0.90; writes at $1.25 cost $0.25 more than input.
+    expect(componentCacheCosts({ ...component, prices: rates })).toEqual({
+      cacheCost: 1.35,
+      cacheSavings: 0.65,
+      cacheReadSavings: 0.9,
     });
   });
 });

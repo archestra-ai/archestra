@@ -56,8 +56,22 @@ function oggPage(params: {
 }
 
 describe("audioDurationSeconds", () => {
-  test("reads a WAV file's data size against its byte rate", () => {
+  test("counts a WAV file's sample frames at its sample rate", () => {
     expect(audioDurationSeconds(wav({ seconds: 3, rate: 8000 }))).toBe(3);
+  });
+
+  test("refuses a WAV header whose byte rate disagrees with its samples", () => {
+    // A minute of 16 kHz mono 16-bit PCM claiming 60 times its byte rate
+    // would bill as one second.
+    const file = wav({ seconds: 60, rate: 16000 });
+    file.writeUInt32LE(1_920_000, 28);
+    expect(audioDurationSeconds(file)).toBeUndefined();
+  });
+
+  test("leaves a compressed WAV encoding unmeasured", () => {
+    const file = wav({ seconds: 2, rate: 8000 });
+    file.writeUInt16LE(0x0011, 20); // IMA ADPCM
+    expect(audioDurationSeconds(file)).toBeUndefined();
   });
 
   test("reads a streamed WAV whose data size was left at its maximum", () => {

@@ -30,24 +30,51 @@ function ascii(data: Buffer, start: number, end: number): string {
   return end <= data.length ? data.toString("latin1", start, end) : "";
 }
 
+/**
+ * Length of uncompressed WAV audio, counted in sample frames. The header's
+ * byte rate is redundant and the uploader controls it, so it only has to
+ * agree with the sample rate and frame size; a header that disagrees, or a
+ * compressed encoding, yields `undefined`.
+ */
 function wavDuration(data: Buffer): number | undefined {
   if (ascii(data, 8, 12) !== "WAVE") return;
-  let byteRate: number | undefined;
+  let format: { sampleRate: number; frameBytes: number } | undefined;
   for (let offset = 12; offset + 8 <= data.length; ) {
     const id = ascii(data, offset, offset + 4);
     const size = data.readUInt32LE(offset + 4);
-    if (id === "fmt " && size >= 16) byteRate = data.readUInt32LE(offset + 16);
+    if (id === "fmt " && size >= 16) format = wavFormat(data, offset + 8);
     if (id === "data") {
-      if (!byteRate) return;
+      if (!format) return;
       // Streaming writers leave the size at its maximum; the bytes present
       // are then the data.
       const bytes = Math.min(size, data.length - offset - 8);
-      return bytes / byteRate;
+      return Math.floor(bytes / format.frameBytes) / format.sampleRate;
     }
     offset += 8 + size + (size % 2);
   }
   return undefined;
 }
+
+/** Sample rate and frame size of an uncompressed `fmt ` chunk whose fields agree. */
+function wavFormat(
+  data: Buffer,
+  start: number,
+): { sampleRate: number; frameBytes: number } | undefined {
+  const encoding = data.readUInt16LE(start);
+  const channels = data.readUInt16LE(start + 2);
+  const sampleRate = data.readUInt32LE(start + 4);
+  const byteRate = data.readUInt32LE(start + 8);
+  const frameBytes = data.readUInt16LE(start + 12);
+  const bitsPerSample = data.readUInt16LE(start + 14);
+  if (!WAV_UNCOMPRESSED.has(encoding)) return;
+  if (!channels || !sampleRate || !bitsPerSample) return;
+  if (frameBytes !== channels * Math.ceil(bitsPerSample / 8)) return;
+  if (byteRate !== sampleRate * frameBytes) return;
+  return { sampleRate, frameBytes };
+}
+
+/** PCM, IEEE float, A-law, mu-law, and the extensible header that wraps them. */
+const WAV_UNCOMPRESSED = new Set([0x0001, 0x0003, 0x0006, 0x0007, 0xfffe]);
 
 function flacOrMp3Duration(data: Buffer): number | undefined {
   // An ID3v2 tag may precede either format.

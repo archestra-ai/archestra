@@ -89,6 +89,7 @@ import {
 import {
   describeMemoryKill,
   type MemoryEvents,
+  type MemoryKill,
   memoryKillBetween,
   parseMemoryEvents,
   READ_MEMORY_EVENTS_COMMAND,
@@ -1328,22 +1329,24 @@ class AgentRuntimeManager {
             }
             // A memory kill explains a process that died without a word; an
             // image's own diagnosis (a provider error it reported itself)
-            // stands, with the kill noted after it.
+            // stands, with the kill noted after it. Only a container that hit
+            // its own limit is pod.oom_killed: a node that ran out of memory
+            // says nothing about the run's size.
             const killNote = describeMemoryKill(
               killed,
               AGENT_RUNTIME_CONTAINER_NAME,
             );
-            return MEMORY_KILL_EXPLAINS.has(turnFailure.code)
-              ? {
-                  outcome: "failed",
-                  reason: `${killNote}\n${turnReason}`,
-                  failure: agentRunFailure("pod.oom_killed"),
-                }
-              : {
-                  outcome: "failed",
-                  reason: `${turnReason}\n${killNote}`,
-                  failure: turnFailure,
-                };
+            const explained = MEMORY_KILL_EXPLAINS.has(turnFailure.code);
+            return {
+              outcome: "failed",
+              reason: explained
+                ? `${killNote}\n${turnReason}`
+                : `${turnReason}\n${killNote}`,
+              failure:
+                explained && killed.atLimit
+                  ? agentRunFailure("pod.oom_killed")
+                  : turnFailure,
+            };
           }
         }
         const finished = sandbox.status?.conditions?.find(
@@ -1376,24 +1379,23 @@ class AgentRuntimeManager {
                 )
               : null;
           if (params.abortSignal?.aborted) break;
+          const failure = agentRunFailure(
+            podFailure && pod
+              ? classifyAgentRuntimePodFailure(pod)
+              : expired
+                ? "run.deadline_exceeded"
+                : "pod.failed",
+          );
           if (killed) {
             return {
               outcome: "failed",
               reason: `${describeMemoryKill(killed, AGENT_RUNTIME_CONTAINER_NAME)}\n${reason}`,
-              failure: agentRunFailure("pod.oom_killed"),
+              failure: killed.atLimit
+                ? agentRunFailure("pod.oom_killed")
+                : failure,
             };
           }
-          return {
-            outcome: "failed",
-            reason,
-            failure: agentRunFailure(
-              podFailure && pod
-                ? classifyAgentRuntimePodFailure(pod)
-                : expired
-                  ? "run.deadline_exceeded"
-                  : "pod.failed",
-            ),
-          };
+          return { outcome: "failed", reason, failure };
         }
         retryDelayMs = interval;
       } catch (error) {
@@ -1406,10 +1408,15 @@ class AgentRuntimeManager {
           );
           if (params.abortSignal?.aborted) break;
           if (killed) {
+            // The poll's shell died with the run's processes. A container that
+            // hit its limit ran out of memory; a node that did took the
+            // process with it, which says nothing about the run's size.
             return {
               outcome: "failed",
               reason: describeMemoryKill(killed, AGENT_RUNTIME_CONTAINER_NAME),
-              failure: agentRunFailure("pod.oom_killed"),
+              failure: agentRunFailure(
+                killed.atLimit ? "pod.oom_killed" : "turn.process_exited",
+              ),
             };
           }
         }
@@ -1972,7 +1979,7 @@ done`
     session: AgentRunRecord,
     podName: string,
     before: MemoryEvents | null,
-  ): Promise<MemoryEvents | null> {
+  ): Promise<MemoryKill | null> {
     if (!before) return null;
     return memoryKillBetween(
       before,

@@ -173,163 +173,163 @@ test.for([
     true,
     "software image and access to the host system",
   ],
-] as const)("refuses a changed image %s with privileged=%s before modifying the saved workspace", async ([
-  image,
-  privileged,
-  changed,
-], { run }) => {
-  server.use(
-    http.get(sandboxUrl, () =>
-      HttpResponse.json({
-        metadata: { name: run.workloadName },
-        spec: {
-          podTemplate: {
-            spec: {
-              containers: [
-                { name: "agent-runtime", image: "registry.example/agent:1" },
-              ],
+] as const)(
+  "refuses a changed image %s with privileged=%s before modifying the saved workspace",
+  async ([image, privileged, changed], { run }) => {
+    server.use(
+      http.get(sandboxUrl, () =>
+        HttpResponse.json({
+          metadata: { name: run.workloadName },
+          spec: {
+            podTemplate: {
+              spec: {
+                containers: [
+                  { name: "agent-runtime", image: "registry.example/agent:1" },
+                ],
+              },
             },
           },
-        },
-      }),
-    ),
-  );
-  const spec: AgentRunLaunchSpec = {
-    taskId: run.taskId,
-    agentRuntimeId: run.agentId,
-    frozenName: run.workloadName,
-    runtimeScope: run.runtimeScope,
-    image,
-    privileged,
-    command: ["/bin/true"],
-    resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
-    tier: null,
-    warmTiers: [],
-    env: {},
-    secretEnv: {},
-    activeDeadlineSeconds: 600,
-    workspaceStorageSize: "1Gi",
-    nodeSelector: {},
-    imagePullSecrets: [],
-    inputFileCount: 0,
-    effectiveNetworkPolicy: { source: "built_in", policy: null },
-  };
-  const exec = completeExec();
-  for (let attempt = 0; attempt < 2; attempt++) {
-    await expect(manager.continueRun({ session: run, spec })).rejects.toThrow(
-      `This run cannot resume because these Agent settings changed: ${changed}. Start a new run from the Agent page to use the updated settings. Saved files are kept until their retention deadline.`,
+        }),
+      ),
     );
-  }
-  expect(exec).not.toHaveBeenCalled();
-});
+    const spec: AgentRunLaunchSpec = {
+      taskId: run.taskId,
+      agentRuntimeId: run.agentId,
+      frozenName: run.workloadName,
+      runtimeScope: run.runtimeScope,
+      image,
+      privileged,
+      command: ["/bin/true"],
+      resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
+      tier: null,
+      warmTiers: [],
+      env: {},
+      secretEnv: {},
+      activeDeadlineSeconds: 600,
+      workspaceStorageSize: "1Gi",
+      nodeSelector: {},
+      imagePullSecrets: [],
+      inputFileCount: 0,
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+    };
+    const exec = completeExec();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await expect(manager.continueRun({ session: run, spec })).rejects.toThrow(
+        `This run cannot resume because these Agent settings changed: ${changed}. Start a new run from the Agent page to use the updated settings. Saved files are kept until their retention deadline.`,
+      );
+    }
+    expect(exec).not.toHaveBeenCalled();
+  },
+);
 
-test.for([
-  60, 900,
-])("keeps image migration's five-minute pod-removal budget with a %i-second startup timeout", async (timeout, {
-  run,
-}) => {
-  config.agentRuntime.podStartTimeoutSeconds = timeout;
-  vi.useFakeTimers({ toFake: ["Date"] });
-  let polls = 0;
-  const patches: unknown[] = [];
-  const image = config.agentRuntime.catalogImages["claude-code"];
-  server.use(
-    http.get(sandboxUrl, () =>
-      HttpResponse.json({
-        metadata: { name: run.workloadName },
-        spec: {
-          podTemplate: {
-            spec: {
-              containers: [
-                {
-                  name: "agent-runtime",
-                  image: image.replace(/:[^/]+$/, ":previous"),
-                },
-              ],
+test.for([60, 900])(
+  "keeps image migration's five-minute pod-removal budget with a %i-second startup timeout",
+  async (timeout, { run }) => {
+    config.agentRuntime.podStartTimeoutSeconds = timeout;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    let polls = 0;
+    const patches: unknown[] = [];
+    const image = config.agentRuntime.catalogImages["claude-code"];
+    server.use(
+      http.get(sandboxUrl, () =>
+        HttpResponse.json({
+          metadata: { name: run.workloadName },
+          spec: {
+            podTemplate: {
+              spec: {
+                containers: [
+                  {
+                    name: "agent-runtime",
+                    image: image.replace(/:[^/]+$/, ":previous"),
+                  },
+                ],
+              },
             },
           },
-        },
+        }),
+      ),
+      http.patch(sandboxUrl, async ({ request }) => {
+        patches.push(await request.json());
+        return HttpResponse.json({});
       }),
-    ),
-    http.patch(sandboxUrl, async ({ request }) => {
-      patches.push(await request.json());
-      return HttpResponse.json({});
-    }),
-    http.get(podsUrl, () => {
-      polls++;
-      vi.setSystemTime(Date.now() + 60_000);
-      return HttpResponse.json({
-        items: [
-          {
-            metadata: {
-              name: "worker",
-              deletionTimestamp: new Date().toISOString(),
+      http.get(podsUrl, () => {
+        polls++;
+        vi.setSystemTime(Date.now() + 60_000);
+        return HttpResponse.json({
+          items: [
+            {
+              metadata: {
+                name: "worker",
+                deletionTimestamp: new Date().toISOString(),
+              },
+              status: { phase: "Succeeded" },
             },
-            status: { phase: "Succeeded" },
-          },
-        ],
-      });
-    }),
-  );
-  const spec: AgentRunLaunchSpec = {
-    taskId: run.taskId,
-    agentRuntimeId: run.agentId,
-    frozenName: run.workloadName,
-    runtimeScope: run.runtimeScope,
-    image,
-    command: ["/bin/true"],
-    privileged: false,
-    resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
-    tier: null,
-    warmTiers: [],
-    env: {},
-    secretEnv: {},
-    activeDeadlineSeconds: 600,
-    workspaceStorageSize: "1Gi",
-    nodeSelector: {},
-    imagePullSecrets: [],
-    inputFileCount: 0,
-    effectiveNetworkPolicy: { source: "built_in", policy: null },
-  };
-  const exec = completeExec();
+          ],
+        });
+      }),
+    );
+    const spec: AgentRunLaunchSpec = {
+      taskId: run.taskId,
+      agentRuntimeId: run.agentId,
+      frozenName: run.workloadName,
+      runtimeScope: run.runtimeScope,
+      image,
+      command: ["/bin/true"],
+      privileged: false,
+      resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
+      tier: null,
+      warmTiers: [],
+      env: {},
+      secretEnv: {},
+      activeDeadlineSeconds: 600,
+      workspaceStorageSize: "1Gi",
+      nodeSelector: {},
+      imagePullSecrets: [],
+      inputFileCount: 0,
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+    };
+    const exec = completeExec();
 
-  await expect(manager.continueRun({ session: run, spec })).rejects.toThrow(
-    "The Agent did not stop in time to update its software image",
-  );
-  expect(polls).toBe(5);
-  expect(patches).toEqual([{ spec: { operatingMode: "Suspended" } }]);
-  expect(exec).not.toHaveBeenCalled();
-});
+    await expect(manager.continueRun({ session: run, spec })).rejects.toThrow(
+      "The Agent did not stop in time to update its software image",
+    );
+    expect(polls).toBe(5);
+    expect(patches).toEqual([{ spec: { operatingMode: "Suspended" } }]);
+    expect(exec).not.toHaveBeenCalled();
+  },
+);
 
 for (const endpoint of [sandboxUrl, podsUrl]) {
-  test.for([
-    429, 500, 502, 503, 504,
-  ])(`recovers HTTP %i from ${endpoint} without losing the result`, async (status, {
-    run,
-  }) => {
-    let requests = 0;
-    server.use(
-      http.get(endpoint, () => {
-        requests++;
-        if (requests <= 3)
-          return HttpResponse.json(
-            { message: "temporarily unavailable" },
-            { status },
-          );
-        return endpoint === sandboxUrl
-          ? HttpResponse.json({ status: {} })
-          : HttpResponse.json({
-              items: [
-                { metadata: { name: "worker" }, status: { phase: "Running" } },
-              ],
-            });
-      }),
-    );
-    await expect(
-      manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
-    ).resolves.toEqual({ outcome: "succeeded" });
-    expect(requests).toBe(4);
-  });
+  test.for([429, 500, 502, 503, 504])(
+    `recovers HTTP %i from ${endpoint} without losing the result`,
+    async (status, { run }) => {
+      let requests = 0;
+      server.use(
+        http.get(endpoint, () => {
+          requests++;
+          if (requests <= 3)
+            return HttpResponse.json(
+              { message: "temporarily unavailable" },
+              { status },
+            );
+          return endpoint === sandboxUrl
+            ? HttpResponse.json({ status: {} })
+            : HttpResponse.json({
+                items: [
+                  {
+                    metadata: { name: "worker" },
+                    status: { phase: "Running" },
+                  },
+                ],
+              });
+        }),
+      );
+      await expect(
+        manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
+      ).resolves.toEqual({ outcome: "succeeded" });
+      expect(requests).toBe(4);
+    },
+  );
 
   test(`recovers a real request timeout from ${endpoint}`, async ({ run }) => {
     // Keep the production HTTP client and AbortSignal; shorten only the clock.
@@ -362,38 +362,37 @@ for (const endpoint of [sandboxUrl, podsUrl]) {
   });
 }
 
-test.for([
-  "disconnect",
-  "timeout",
-  "ECONNRESET",
-  "ETIMEDOUT",
-])("recovers a result-read %s", async (failure, { run }) => {
-  let attempts = 0;
-  const success = completeExec();
-  const original = success.getMockImplementation();
-  if (!original) throw new Error("Missing exec boundary");
-  if (failure === "timeout") {
-    const timer = setTimeout;
-    vi.spyOn(globalThis, "setTimeout").mockImplementation(((
-      fn: (...args: unknown[]) => void,
-      ms?: number,
-      ...rest: unknown[]
-    ) => timer(fn, ms === 30_000 ? 10 : ms, ...rest)) as typeof setTimeout);
-  }
-  success.mockImplementation(async (...args) => {
-    attempts++;
-    if (attempts > 1) return original(...args);
-    if (failure === "ECONNRESET" || failure === "ETIMEDOUT")
-      throw Object.assign(new Error("connection lost"), { code: failure });
-    const connection = socket();
-    if (failure === "disconnect") setTimeout(() => connection.emit("close"), 0);
-    return connection;
-  });
-  await expect(
-    manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
-  ).resolves.toEqual({ outcome: "succeeded" });
-  expect(attempts).toBe(2);
-});
+test.for(["disconnect", "timeout", "ECONNRESET", "ETIMEDOUT"])(
+  "recovers a result-read %s",
+  async (failure, { run }) => {
+    let attempts = 0;
+    const success = completeExec();
+    const original = success.getMockImplementation();
+    if (!original) throw new Error("Missing exec boundary");
+    if (failure === "timeout") {
+      const timer = setTimeout;
+      vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+        fn: (...args: unknown[]) => void,
+        ms?: number,
+        ...rest: unknown[]
+      ) => timer(fn, ms === 30_000 ? 10 : ms, ...rest)) as typeof setTimeout);
+    }
+    success.mockImplementation(async (...args) => {
+      attempts++;
+      if (attempts > 1) return original(...args);
+      if (failure === "ECONNRESET" || failure === "ETIMEDOUT")
+        throw Object.assign(new Error("connection lost"), { code: failure });
+      const connection = socket();
+      if (failure === "disconnect")
+        setTimeout(() => connection.emit("close"), 0);
+      return connection;
+    });
+    await expect(
+      manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
+    ).resolves.toEqual({ outcome: "succeeded" });
+    expect(attempts).toBe(2);
+  },
+);
 
 test("keeps monitoring a sustained outage with capped backoff and cancels during the wait", async ({
   run,
@@ -428,29 +427,28 @@ test("keeps monitoring a sustained outage with capped backoff and cancels during
   expect(requests).toBe(count);
 });
 
-test.for([
-  0, 7,
-])("still returns the worker's actual exit status %i after an outage", async (exitCode, {
-  run,
-}) => {
-  server.use(
-    http.get(sandboxUrl, () => new HttpResponse(null, { status: 503 }), {
-      once: true,
-    }),
-  );
-  completeExec(String(exitCode));
-  await expect(
-    manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
-  ).resolves.toEqual(
-    exitCode === 0
-      ? { outcome: "succeeded" }
-      : {
-          outcome: "failed",
-          reason: "The Agent Runtime turn exited with status 7",
-          failure: { code: "turn.exit_status", retriable: false },
-        },
-  );
-});
+test.for([0, 7])(
+  "still returns the worker's actual exit status %i after an outage",
+  async (exitCode, { run }) => {
+    server.use(
+      http.get(sandboxUrl, () => new HttpResponse(null, { status: 503 }), {
+        once: true,
+      }),
+    );
+    completeExec(String(exitCode));
+    await expect(
+      manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
+    ).resolves.toEqual(
+      exitCode === 0
+        ? { outcome: "succeeded" }
+        : {
+            outcome: "failed",
+            reason: "The Agent Runtime turn exited with status 7",
+            failure: { code: "turn.exit_status", retriable: false },
+          },
+    );
+  },
+);
 
 test("propagates a custom image failure without a platform code registry", async ({
   run,
@@ -499,39 +497,41 @@ test("still fails when the sandbox was deleted", async ({ run }) => {
   });
 });
 
-test.for([
-  "Finished",
-  "SandboxExpired",
-])("still fails on confirmed sandbox %s", async (condition, { run }) => {
-  server.use(
-    http.get(sandboxUrl, () =>
-      HttpResponse.json({
-        status: {
-          conditions: [
-            {
-              type: condition,
-              reason: condition,
-              status: "True",
-              message: "Workspace ended",
-            },
-          ],
-        },
-      }),
-    ),
-  );
-  completeExec("");
-  await expect(
-    manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
-  ).resolves.toEqual({
-    outcome: "failed",
-    reason: "Workspace ended",
-    failure: {
-      code:
-        condition === "SandboxExpired" ? "run.deadline_exceeded" : "pod.failed",
-      retriable: false,
-    },
-  });
-});
+test.for(["Finished", "SandboxExpired"])(
+  "still fails on confirmed sandbox %s",
+  async (condition, { run }) => {
+    server.use(
+      http.get(sandboxUrl, () =>
+        HttpResponse.json({
+          status: {
+            conditions: [
+              {
+                type: condition,
+                reason: condition,
+                status: "True",
+                message: "Workspace ended",
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    completeExec("");
+    await expect(
+      manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
+    ).resolves.toEqual({
+      outcome: "failed",
+      reason: "Workspace ended",
+      failure: {
+        code:
+          condition === "SandboxExpired"
+            ? "run.deadline_exceeded"
+            : "pod.failed",
+        retriable: false,
+      },
+    });
+  },
+);
 
 test.for([
   {
@@ -629,44 +629,42 @@ test.for([
     details: ["TerminationByKubelet", "Kubelet is terminating the pod."],
     failure: { code: "pod.evicted", retriable: true },
   },
-])("preserves Kubernetes diagnostics for $name instead of a generic Sandbox summary", async ({
-  spec,
-  status,
-  details,
-  failure,
-}, { run }) => {
-  server.use(
-    http.get(sandboxUrl, () =>
-      HttpResponse.json({
-        status: {
-          conditions: [
-            {
-              type: "Finished",
-              status: "True",
-              reason: "PodFailed",
-              message: "Pod failed",
-            },
+])(
+  "preserves Kubernetes diagnostics for $name instead of a generic Sandbox summary",
+  async ({ spec, status, details, failure }, { run }) => {
+    server.use(
+      http.get(sandboxUrl, () =>
+        HttpResponse.json({
+          status: {
+            conditions: [
+              {
+                type: "Finished",
+                status: "True",
+                reason: "PodFailed",
+                message: "Pod failed",
+              },
+            ],
+          },
+        }),
+      ),
+      http.get(podsUrl, () =>
+        HttpResponse.json({
+          items: [
+            { metadata: { name: "worker", namespace: "test" }, spec, status },
           ],
-        },
-      }),
-    ),
-    http.get(podsUrl, () =>
-      HttpResponse.json({
-        items: [
-          { metadata: { name: "worker", namespace: "test" }, spec, status },
-        ],
-      }),
-    ),
-  );
-  const exec = completeExec();
-  const completion = await manager.waitForCompletion({ session: run });
-  expect(completion.outcome).toBe("failed");
-  expect(completion.reason).toContain("test/worker");
-  for (const detail of details) expect(completion.reason).toContain(detail);
-  expect(completion.failure).toEqual(failure);
-  expect(completion.reason).not.toContain("exit code 0");
-  expect(exec).not.toHaveBeenCalled();
-});
+        }),
+      ),
+    );
+    const exec = completeExec();
+    const completion = await manager.waitForCompletion({ session: run });
+    expect(completion.outcome).toBe("failed");
+    expect(completion.reason).toContain("test/worker");
+    for (const detail of details) expect(completion.reason).toContain(detail);
+    expect(completion.failure).toEqual(failure);
+    expect(completion.reason).not.toContain("exit code 0");
+    expect(exec).not.toHaveBeenCalled();
+  },
+);
 
 test("reports a failed pod before the Sandbox controller publishes its finished condition", async ({
   run,
@@ -855,21 +853,22 @@ test("preserves failed-pod diagnostics while resuming a workspace, before execut
   expect(exec).not.toHaveBeenCalled();
 });
 
-test.for([
-  401, 403, 422,
-])("does not hide permanent HTTP %i failures", async (status, { run }) => {
-  let requests = 0;
-  server.use(
-    http.get(sandboxUrl, () => {
-      requests++;
-      return new HttpResponse(null, { status });
-    }),
-  );
-  await expect(
-    manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
-  ).rejects.toMatchObject({ code: status });
-  expect(requests).toBe(1);
-});
+test.for([401, 403, 422])(
+  "does not hide permanent HTTP %i failures",
+  async (status, { run }) => {
+    let requests = 0;
+    server.use(
+      http.get(sandboxUrl, () => {
+        requests++;
+        return new HttpResponse(null, { status });
+      }),
+    );
+    await expect(
+      manager.waitForCompletion({ session: run, pollIntervalMs: 1 }),
+    ).rejects.toMatchObject({ code: status });
+    expect(requests).toBe(1);
+  },
+);
 
 test("does not retry a command that actually failed", async ({ run }) => {
   vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
@@ -881,116 +880,117 @@ test("does not retry a command that actually failed", async ({ run }) => {
   ).rejects.toThrow("Command in Agent Runtime pod failed");
 });
 
-test.for([
-  "success",
-  "worker-failure",
-  "cancel",
-] as const)("re-adopted lifecycle preserves work through a timeout and settles %s correctly", async (outcome, {
-  run,
-}) => {
-  // Exercise the real lifecycle without waiting for the production 5s poll.
-  const timer = setTimeout;
-  vi.spyOn(globalThis, "setTimeout").mockImplementation(((
-    fn: (...args: unknown[]) => void,
-    ms?: number,
-    ...rest: unknown[]
-  ) => timer(fn, ms === 5_000 ? 1 : ms, ...rest)) as typeof setTimeout);
-  const timeout = AbortSignal.timeout.bind(AbortSignal);
-  vi.spyOn(AbortSignal, "timeout").mockImplementation(() => timeout(100));
-  const lifecycle = new A2AManager({ taskMode: "full" });
-  const commands: string[] = [];
-  let observations = 0;
-  let recovering = true;
-  server.use(
-    http.get(
-      `${origin}/api/v1/namespaces/test/secrets/:name`,
-      () => new HttpResponse(null, { status: 404 }),
-    ),
-    http.delete(
-      `${origin}/api/v1/namespaces/test/secrets/:name`,
-      () => new HttpResponse(null, { status: 404 }),
-    ),
-    http.get(sandboxUrl, async ({ request }) => {
-      if (recovering) {
-        recovering = false;
-        return HttpResponse.json({
-          metadata: { labels: { [AGENT_RUNTIME_TASK_LABEL]: run.taskId } },
-          spec: {},
-        });
-      }
-      observations++;
-      if (observations === 1) {
-        await new Promise<void>((resolve) =>
-          request.signal.addEventListener("abort", () => resolve(), {
-            once: true,
-          }),
-        );
-      } else {
-        expect((await A2ATaskModel.findById(run.taskId))?.state).toBe(
-          "TASK_STATE_WORKING",
-        );
-        expect(
-          (await AgentRunModel.findByTaskId(run.taskId))?.endedAt,
-        ).toBeNull();
-        expect(commands.some((command) => command.includes(".cancel"))).toBe(
-          false,
-        );
-        if (outcome === "cancel") {
-          await lifecycle.cancelTask({
-            actor: {
-              kind: "user",
-              id: run.actorId,
-              organizationId: run.organizationId,
-            },
-            agentId: run.agentId,
-            request: { id: run.taskId },
+test.for(["success", "worker-failure", "cancel"] as const)(
+  "re-adopted lifecycle preserves work through a timeout and settles %s correctly",
+  async (outcome, { run }) => {
+    // Exercise the real lifecycle without waiting for the production 5s poll.
+    const timer = setTimeout;
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      fn: (...args: unknown[]) => void,
+      ms?: number,
+      ...rest: unknown[]
+    ) => timer(fn, ms === 5_000 ? 1 : ms, ...rest)) as typeof setTimeout);
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    vi.spyOn(AbortSignal, "timeout").mockImplementation(() => timeout(100));
+    const lifecycle = new A2AManager({ taskMode: "full" });
+    const commands: string[] = [];
+    let observations = 0;
+    let recovering = true;
+    server.use(
+      http.get(
+        `${origin}/api/v1/namespaces/test/secrets/:name`,
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+      http.delete(
+        `${origin}/api/v1/namespaces/test/secrets/:name`,
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+      http.get(sandboxUrl, async ({ request }) => {
+        if (recovering) {
+          recovering = false;
+          return HttpResponse.json({
+            metadata: { labels: { [AGENT_RUNTIME_TASK_LABEL]: run.taskId } },
+            spec: {},
           });
-          return new HttpResponse(null, { status: 503 });
         }
-      }
-      return HttpResponse.json({ status: {} });
-    }),
-  );
-  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
-    const command = (args[3] as string[]).join(" ");
-    commands.push(command);
-    if (command.includes("read-turn-result"))
-      args[4]?.write(outcome === "worker-failure" ? "7" : "0");
-    else if (command.includes(".log"))
-      args[4]?.write("===ARCHESTRA-FINAL-ANSWER===\nRecovered answer");
-    args[8]?.({ status: "Success" });
-    return socket();
-  });
-  const adoption = lifecycle.adoptAgentRun({
-    taskId: run.taskId,
-    session: run,
-  });
-  if (outcome === "worker-failure")
-    await expect(adoption).rejects.toThrow("turn exited with status 7");
-  else await adoption;
-  expect(observations).toBe(2);
-  expect((await A2ATaskModel.findById(run.taskId))?.state).toBe(
-    outcome === "success"
-      ? "TASK_STATE_COMPLETED"
-      : outcome === "cancel"
-        ? "TASK_STATE_CANCELED"
-        : "TASK_STATE_FAILED",
-  );
-  if (outcome === "success") {
-    expect(await A2AArtifactModel.findByTaskId(run.taskId)).toEqual([
-      expect.objectContaining({
-        name: "agent-response",
-        parts: [{ text: "Recovered answer" }],
+        observations++;
+        if (observations === 1) {
+          await new Promise<void>((resolve) =>
+            request.signal.addEventListener("abort", () => resolve(), {
+              once: true,
+            }),
+          );
+        } else {
+          expect((await A2ATaskModel.findById(run.taskId))?.state).toBe(
+            "TASK_STATE_WORKING",
+          );
+          expect(
+            (await AgentRunModel.findByTaskId(run.taskId))?.endedAt,
+          ).toBeNull();
+          expect(commands.some((command) => command.includes(".cancel"))).toBe(
+            false,
+          );
+          if (outcome === "cancel") {
+            await lifecycle.cancelTask({
+              actor: {
+                kind: "user",
+                id: run.actorId,
+                organizationId: run.organizationId,
+              },
+              agentId: run.agentId,
+              request: { id: run.taskId },
+            });
+            return new HttpResponse(null, { status: 503 });
+          }
+        }
+        return HttpResponse.json({ status: {} });
       }),
-    ]);
-    expect(commands.some((command) => command.includes(".cancel"))).toBe(false);
-  } else {
-    expect(commands.some((command) => command.includes(".cancel"))).toBe(true);
-  }
-  expect(
-    (await AgentRunModel.findByTaskId(run.taskId))?.endedAt,
-  ).toBeInstanceOf(Date);
-});
+    );
+    vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+      const command = (args[3] as string[]).join(" ");
+      commands.push(command);
+      if (command.includes("read-turn-result"))
+        args[4]?.write(outcome === "worker-failure" ? "7" : "0");
+      else if (command.includes(".log"))
+        args[4]?.write("===ARCHESTRA-FINAL-ANSWER===\nRecovered answer");
+      args[8]?.({ status: "Success" });
+      return socket();
+    });
+    const adoption = lifecycle.adoptAgentRun({
+      taskId: run.taskId,
+      session: run,
+    });
+    if (outcome === "worker-failure")
+      await expect(adoption).rejects.toThrow("turn exited with status 7");
+    else await adoption;
+    expect(observations).toBe(2);
+    expect((await A2ATaskModel.findById(run.taskId))?.state).toBe(
+      outcome === "success"
+        ? "TASK_STATE_COMPLETED"
+        : outcome === "cancel"
+          ? "TASK_STATE_CANCELED"
+          : "TASK_STATE_FAILED",
+    );
+    if (outcome === "success") {
+      expect(await A2AArtifactModel.findByTaskId(run.taskId)).toEqual([
+        expect.objectContaining({
+          name: "agent-response",
+          parts: [{ text: "Recovered answer" }],
+        }),
+      ]);
+      expect(commands.some((command) => command.includes(".cancel"))).toBe(
+        false,
+      );
+    } else {
+      expect(commands.some((command) => command.includes(".cancel"))).toBe(
+        true,
+      );
+    }
+    expect(
+      (await AgentRunModel.findByTaskId(run.taskId))?.endedAt,
+    ).toBeInstanceOf(Date);
+  },
+);
 
 test("cancellation wins over a successful in-flight result read", async ({
   run,
@@ -1007,55 +1007,54 @@ test("cancellation wins over a successful in-flight result read", async ({
   ).resolves.toEqual({ outcome: "aborted" });
 });
 
-test.for([
-  403, 503,
-])("persists a readable HTTP %i connection failure when a recovered run ends", async (status, {
-  run,
-}) => {
-  server.use(
-    http.get(
-      `${origin}/api/v1/namespaces/test/secrets/:name`,
-      () => new HttpResponse(null, { status: 404 }),
-    ),
-    http.delete(
-      `${origin}/api/v1/namespaces/test/secrets/:name`,
-      () => new HttpResponse(null, { status: 404 }),
-    ),
-    http.get(sandboxUrl, () =>
-      HttpResponse.json({
-        metadata: { labels: { [AGENT_RUNTIME_TASK_LABEL]: run.taskId } },
-        spec: {},
-        status: {},
-      }),
-    ),
-  );
-  let observations = 0;
-  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
-    if ((args[3] as string[]).join(" ").includes("read-turn-result")) {
-      observations++;
-      // The real SDK handshake shape is covered by exec-handshake.unit.test.
-      throw {
-        message: `Unexpected server response: ${status}`,
-        target: { authorization: "synthetic-private-token" },
-      };
-    }
-    args[8]?.({ status: "Success" });
-    return socket();
-  });
-  const lifecycle = new A2AManager({ taskMode: "full" });
-  const reason = `Agent Runtime exec connection failed (HTTP ${status})`;
-  await expect(
-    lifecycle.adoptAgentRun({ taskId: run.taskId, session: run }),
-  ).rejects.toThrow(reason);
-  expect(await A2ATaskModel.findById(run.taskId)).toMatchObject({
-    state: "TASK_STATE_FAILED",
-    statusReason: reason,
-  });
-  expect(observations).toBe(1);
-  expect(
-    (await AgentRunModel.findByTaskId(run.taskId))?.endedAt,
-  ).toBeInstanceOf(Date);
-});
+test.for([403, 503])(
+  "persists a readable HTTP %i connection failure when a recovered run ends",
+  async (status, { run }) => {
+    server.use(
+      http.get(
+        `${origin}/api/v1/namespaces/test/secrets/:name`,
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+      http.delete(
+        `${origin}/api/v1/namespaces/test/secrets/:name`,
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+      http.get(sandboxUrl, () =>
+        HttpResponse.json({
+          metadata: { labels: { [AGENT_RUNTIME_TASK_LABEL]: run.taskId } },
+          spec: {},
+          status: {},
+        }),
+      ),
+    );
+    let observations = 0;
+    vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+      if ((args[3] as string[]).join(" ").includes("read-turn-result")) {
+        observations++;
+        // The real SDK handshake shape is covered by exec-handshake.unit.test.
+        throw {
+          message: `Unexpected server response: ${status}`,
+          target: { authorization: "synthetic-private-token" },
+        };
+      }
+      args[8]?.({ status: "Success" });
+      return socket();
+    });
+    const lifecycle = new A2AManager({ taskMode: "full" });
+    const reason = `Agent Runtime exec connection failed (HTTP ${status})`;
+    await expect(
+      lifecycle.adoptAgentRun({ taskId: run.taskId, session: run }),
+    ).rejects.toThrow(reason);
+    expect(await A2ATaskModel.findById(run.taskId)).toMatchObject({
+      state: "TASK_STATE_FAILED",
+      statusReason: reason,
+    });
+    expect(observations).toBe(1);
+    expect(
+      (await AgentRunModel.findByTaskId(run.taskId))?.endedAt,
+    ).toBeInstanceOf(Date);
+  },
+);
 
 test("an already canceled monitor makes no requests", async ({ run }) => {
   const exec = completeExec();
@@ -1106,6 +1105,12 @@ const PANE_EXITED_ENVELOPE = JSON.stringify({
 test.for([
   { name: "a memory kill inside the running pod", killed: true, exit: null },
   {
+    name: "the node's OOM killer inside the running pod",
+    killed: true,
+    exit: null,
+    nodeOom: true,
+  },
+  {
     name: "a failed command without a memory kill",
     killed: false,
     exit: null,
@@ -1137,125 +1142,138 @@ test.for([
     counters: false,
     polls: 5,
   },
-])("$name: a turn that fails is checked against the cgroup's memory counters", async ({
-  killed,
-  exit = null,
-  finished = false,
-  counters = true,
-  polls = 2,
-}, { run }) => {
-  const GIB = 1024 ** 3;
-  let turnReads = 0;
-  let memoryReads = 0;
-  if (finished) {
-    server.use(
-      http.get(sandboxUrl, () =>
-        HttpResponse.json({
-          status: {
-            conditions: [
-              {
-                type: "Finished",
-                status: "True",
-                reason: "PodFailed",
-                message: "Pod failed",
-              },
-            ],
-          },
-        }),
-      ),
-    );
-  }
-  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
-    const command = (args[3] as string[]).join(" ");
-    if (command.includes("read-memory-events")) {
-      // The counters when the turn was first seen running, then after the
-      // failure: the kernel killed the run's tsc, shell and tmux server
-      // while PID 1 and the pod lived on.
-      const kills = memoryReads++ === 0 || !killed ? 0 : 1;
-      if (counters) {
-        args[4]?.write(
-          `low 0\nhigh 0\nmax 1203\noom ${kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills ? 8 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
-        );
-      }
-      args[8]?.({ status: "Success" });
-    } else if (command.includes("read-turn-result")) {
-      // No result until the last poll. Then either the turn has ended with
-      // the given status, or the poll's own shell is killed.
-      turnReads++;
-      if (turnReads < polls || finished) {
-        args[8]?.({ status: "Success" });
-      } else if (exit !== null) {
-        args[4]?.write(`${exit}\n`);
-        args[8]?.({ status: "Success" });
-      } else {
-        args[8]?.({
-          status: "Failure",
-          message: "command terminated with non-zero exit code",
-        });
-      }
-    } else {
-      args[8]?.({ status: "Success" });
+])(
+  "$name: a turn that fails is checked against the cgroup's memory counters",
+  async ({
+    killed,
+    exit = null,
+    finished = false,
+    counters = true,
+    polls = 2,
+    nodeOom = false,
+  }, { run }) => {
+    const GIB = 1024 ** 3;
+    let turnReads = 0;
+    let memoryReads = 0;
+    if (finished) {
+      server.use(
+        http.get(sandboxUrl, () =>
+          HttpResponse.json({
+            status: {
+              conditions: [
+                {
+                  type: "Finished",
+                  status: "True",
+                  reason: "PodFailed",
+                  message: "Pod failed",
+                },
+              ],
+            },
+          }),
+        ),
+      );
     }
-    return socket();
-  });
-  const completion = manager.waitForCompletion({
-    session: run,
-    pollIntervalMs: 1,
-  });
-  const described =
-    "The run ran out of memory. The agent-runtime container reached its memory limit of 8 GiB (peak usage 8 GiB), and the kernel killed the run's processes. Start the run again at a larger tier.";
-  if (!counters) {
-    // The first reading is tried a few times, then the container is left alone.
-    await expect(completion).resolves.toEqual({
-      outcome: "failed",
-      reason: "The Agent Runtime turn exited with status 7",
-      failure: { code: "turn.exit_status", retriable: false },
+    vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+      const command = (args[3] as string[]).join(" ");
+      if (command.includes("read-memory-events")) {
+        // The counters when the turn was first seen running, then after the
+        // failure: the kernel killed the run's tsc, shell and tmux server
+        // while PID 1 and the pod lived on.
+        const kills = memoryReads++ === 0 || !killed ? 0 : 1;
+        if (counters) {
+          args[4]?.write(
+            `low 0\nhigh 0\nmax 1203\noom ${nodeOom ? 0 : kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills ? 8 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
+          );
+        }
+        args[8]?.({ status: "Success" });
+      } else if (command.includes("read-turn-result")) {
+        // No result until the last poll. Then either the turn has ended with
+        // the given status, or the poll's own shell is killed.
+        turnReads++;
+        if (turnReads < polls || finished) {
+          args[8]?.({ status: "Success" });
+        } else if (exit !== null) {
+          args[4]?.write(`${exit}\n`);
+          args[8]?.({ status: "Success" });
+        } else {
+          args[8]?.({
+            status: "Failure",
+            message: "command terminated with non-zero exit code",
+          });
+        }
+      } else {
+        args[8]?.({ status: "Success" });
+      }
+      return socket();
     });
-    expect(memoryReads).toBe(3);
-    expect(turnReads).toBe(polls);
-    return;
-  }
-  if (finished) {
-    const result = await completion;
-    expect(result).toMatchObject({
-      outcome: "failed",
-      failure: { code: "pod.oom_killed", retriable: false },
+    const completion = manager.waitForCompletion({
+      session: run,
+      pollIntervalMs: 1,
     });
-    expect(result.reason).toContain(described);
-    expect(result.reason).toContain("Pod failed");
+    const described =
+      "The run ran out of memory. The agent-runtime container reached its memory limit of 8 GiB (peak usage 8 GiB), and the kernel killed the run's processes. Start the run again at a larger tier.";
+    if (!counters) {
+      // The first reading is tried a few times, then the container is left alone.
+      await expect(completion).resolves.toEqual({
+        outcome: "failed",
+        reason: "The Agent Runtime turn exited with status 7",
+        failure: { code: "turn.exit_status", retriable: false },
+      });
+      expect(memoryReads).toBe(3);
+      expect(turnReads).toBe(polls);
+      return;
+    }
+    if (finished) {
+      const result = await completion;
+      expect(result).toMatchObject({
+        outcome: "failed",
+        failure: { code: "pod.oom_killed", retriable: false },
+      });
+      expect(result.reason).toContain(described);
+      expect(result.reason).toContain("Pod failed");
+      expect(memoryReads).toBe(2);
+      return;
+    }
+    if (killed && exit?.includes("claude_rate_limit")) {
+      // The image's own diagnosis stands; the kill is noted after it.
+      const result = await completion;
+      expect(result).toMatchObject({
+        outcome: "failed",
+        failure: { code: "image.claude_rate_limit", retriable: true },
+      });
+      expect(result.reason).toContain("Claude Code reached a rate limit.");
+      expect(result.reason?.endsWith(described)).toBe(true);
+    } else if (killed && exit !== null) {
+      const result = await completion;
+      expect(result).toMatchObject({
+        outcome: "failed",
+        failure: { code: "pod.oom_killed", retriable: false },
+      });
+      // The kill comes first; the exit it led to is kept after it.
+      expect(result.reason).toContain(described);
+      expect(result.reason).toContain(`status ${exit.split("\n")[0]}`);
+    } else if (killed && nodeOom) {
+      // The cgroup never hit its own limit: the node ran out of memory, so the
+      // size was not the cause and the run is not pod.oom_killed.
+      await expect(completion).resolves.toEqual({
+        outcome: "failed",
+        reason:
+          "The kernel killed the run's processes because the node ran out of memory; the agent-runtime container stayed under its 8 GiB limit (peak usage 8 GiB). Start the run again.",
+        failure: { code: "turn.process_exited", retriable: false },
+      });
+    } else if (killed) {
+      await expect(completion).resolves.toEqual({
+        outcome: "failed",
+        reason: described,
+        failure: { code: "pod.oom_killed", retriable: false },
+      });
+    } else {
+      await expect(completion).rejects.toThrow(
+        "Command in Agent Runtime pod failed",
+      );
+    }
+    // One reading when the pod was first seen running, one after the failure.
     expect(memoryReads).toBe(2);
-    return;
-  }
-  if (killed && exit?.includes("claude_rate_limit")) {
-    // The image's own diagnosis stands; the kill is noted after it.
-    const result = await completion;
-    expect(result).toMatchObject({
-      outcome: "failed",
-      failure: { code: "image.claude_rate_limit", retriable: true },
-    });
-    expect(result.reason).toContain("Claude Code reached a rate limit.");
-    expect(result.reason?.endsWith(described)).toBe(true);
-  } else if (killed && exit !== null) {
-    const result = await completion;
-    expect(result).toMatchObject({
-      outcome: "failed",
-      failure: { code: "pod.oom_killed", retriable: false },
-    });
-    // The kill comes first; the exit it led to is kept after it.
-    expect(result.reason).toContain(described);
-    expect(result.reason).toContain(`status ${exit.split("\n")[0]}`);
-  } else if (killed) {
-    await expect(completion).resolves.toEqual({
-      outcome: "failed",
-      reason: described,
-      failure: { code: "pod.oom_killed", retriable: false },
-    });
-  } else {
-    await expect(completion).rejects.toThrow(
-      "Command in Agent Runtime pod failed",
-    );
-  }
-  // One reading when the pod was first seen running, one after the failure.
-  expect(memoryReads).toBe(2);
-  expect(turnReads).toBe(polls);
-});
+    expect(turnReads).toBe(polls);
+  },
+);

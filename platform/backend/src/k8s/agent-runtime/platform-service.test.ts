@@ -90,42 +90,40 @@ describe("platform Service egress", () => {
     });
   });
 
-  it.each([
-    "",
-    "https://api.example.com",
-    "https://example.com",
-  ])("does not look up external or absent destination %s as a Service", async (baseUrl) => {
-    const readNamespacedService = vi.fn();
-    expect(
-      await resolvePlatformServiceDestination({
-        coreApi: { readNamespacedService } as unknown as k8s.CoreV1Api,
-        baseUrl,
-        platformNamespace: "platform",
-        runtimeNamespace: "platform",
-      }),
-    ).toBeUndefined();
-    expect(readNamespacedService).not.toHaveBeenCalled();
-  });
+  it.each(["", "https://api.example.com", "https://example.com"])(
+    "does not look up external or absent destination %s as a Service",
+    async (baseUrl) => {
+      const readNamespacedService = vi.fn();
+      expect(
+        await resolvePlatformServiceDestination({
+          coreApi: { readNamespacedService } as unknown as k8s.CoreV1Api,
+          baseUrl,
+          platformNamespace: "platform",
+          runtimeNamespace: "platform",
+        }),
+      ).toBeUndefined();
+      expect(readNamespacedService).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     { baseUrl: "http://172.21.40.50", ips: ["172.21.40.50"], port: 80 },
     { baseUrl: "https://[fd00:1234::50]", ips: ["fd00:1234::50"], port: 443 },
-  ])("uses explicit destination $baseUrl without DNS lookup", async ({
-    baseUrl,
-    ips,
-    port,
-  }) => {
-    const readNamespacedService = vi.fn();
-    expect(
-      await resolvePlatformServiceDestination({
-        coreApi: { readNamespacedService } as unknown as k8s.CoreV1Api,
-        baseUrl,
-        platformNamespace: "platform",
-        runtimeNamespace: "platform",
-      }),
-    ).toEqual({ ips, port });
-    expect(readNamespacedService).not.toHaveBeenCalled();
-  });
+  ])(
+    "uses explicit destination $baseUrl without DNS lookup",
+    async ({ baseUrl, ips, port }) => {
+      const readNamespacedService = vi.fn();
+      expect(
+        await resolvePlatformServiceDestination({
+          coreApi: { readNamespacedService } as unknown as k8s.CoreV1Api,
+          baseUrl,
+          platformNamespace: "platform",
+          runtimeNamespace: "platform",
+        }),
+      ).toEqual({ ips, port });
+      expect(readNamespacedService).not.toHaveBeenCalled();
+    },
+  );
 
   it("does not render a CIDR for a headless Service", async () => {
     const readNamespacedService = vi.fn(async () => ({

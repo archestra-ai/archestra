@@ -58,47 +58,49 @@ describe("buildAgentRuntimeSandbox", () => {
     expect(fixed?.containers[0]?.imagePullPolicy).toBeUndefined();
   });
 
-  it.each([
-    true,
-    false,
-  ])("reports credential projection timeout without starting the agent (failure file writable: %s)", (writable) => {
-    const directory = mkdtempSync(path.join(tmpdir(), "runtime-credentials-"));
-    const prefix = path.join(directory, writable ? "turn" : "missing/turn");
-    try {
-      const script = buildAgentRuntimeTurnScript({
-        ...SPEC,
-        runtimeScope: SPEC.namespace,
-        renewableCredentials: {},
-        command: ["/bin/sh", "-c", "echo AGENT_STARTED"],
-      });
-      const result = spawnSync(
-        "/bin/sh",
-        ["-c", `grep() { return 1; }; sleep() { :; };\n${script}`],
-        {
-          encoding: "utf8",
-          env: {
-            PATH: "/usr/bin:/bin",
-            ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX: prefix,
-          },
-          timeout: 5_000,
-        },
+  it.each([true, false])(
+    "reports credential projection timeout without starting the agent (failure file writable: %s)",
+    (writable) => {
+      const directory = mkdtempSync(
+        path.join(tmpdir(), "runtime-credentials-"),
       );
-      expect(result.status, result.stderr).toBe(75);
-      expect(result.stdout).not.toContain("AGENT_STARTED");
-      expect(result.stderr).not.toContain("arch_secret");
-      if (writable) {
-        const failure = JSON.parse(readFileSync(`${prefix}.failure`, "utf8"));
-        expect(failure).toEqual({
-          version: 1,
-          code: "runtime.credential_projection_timeout",
-          message: expect.stringMatching(/credentials.*retry/i),
+      const prefix = path.join(directory, writable ? "turn" : "missing/turn");
+      try {
+        const script = buildAgentRuntimeTurnScript({
+          ...SPEC,
+          runtimeScope: SPEC.namespace,
+          renewableCredentials: {},
+          command: ["/bin/sh", "-c", "echo AGENT_STARTED"],
         });
-        expect(JSON.stringify(failure)).not.toContain("arch_secret");
+        const result = spawnSync(
+          "/bin/sh",
+          ["-c", `grep() { return 1; }; sleep() { :; };\n${script}`],
+          {
+            encoding: "utf8",
+            env: {
+              PATH: "/usr/bin:/bin",
+              ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX: prefix,
+            },
+            timeout: 5_000,
+          },
+        );
+        expect(result.status, result.stderr).toBe(75);
+        expect(result.stdout).not.toContain("AGENT_STARTED");
+        expect(result.stderr).not.toContain("arch_secret");
+        if (writable) {
+          const failure = JSON.parse(readFileSync(`${prefix}.failure`, "utf8"));
+          expect(failure).toEqual({
+            version: 1,
+            code: "runtime.credential_projection_timeout",
+            message: expect.stringMatching(/credentials.*retry/i),
+          });
+          expect(JSON.stringify(failure)).not.toContain("arch_secret");
+        }
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
       }
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
-  });
+    },
+  );
 
   it("does not inherit removed credentials or settings in a subsequent turn", () => {
     const script = buildAgentRuntimeTurnScript(
@@ -457,35 +459,35 @@ describe("buildAgentRuntimePlatformEgressPolicy", () => {
       selector: "app=custom-api,component=backend",
       apiLabels: { app: "custom-api", component: "backend" },
     },
-  ])("allows $name destinations without granting worker access", ({
-    selector,
-    apiLabels,
-  }) => {
-    const policy = buildAgentRuntimePlatformEgressPolicy({
-      spec: SPEC,
-      platformNamespace: "platform",
-      platformPodLabels: parseLabelSelector(
-        selector,
-        config.agentRuntime.platformPodSelector,
-      ),
-      platformPorts: [9000],
-    });
-    const destination = policy.spec?.egress?.[0]?.to?.[0];
-    expect(destination?.namespaceSelector?.matchLabels).toEqual({
-      "kubernetes.io/metadata.name": "platform",
-    });
-    const labels = destination?.podSelector?.matchLabels;
-    expect(labels).toEqual(apiLabels);
-    const workerLabels: Record<string, string> = {
-      "archestra.io/p4-shim-client": "true",
-      "app.kubernetes.io/component": "worker",
-    };
-    expect(
-      Object.entries(labels ?? {}).every(
-        ([key, value]) => workerLabels[key] === value,
-      ),
-    ).toBe(false);
-  });
+  ])(
+    "allows $name destinations without granting worker access",
+    ({ selector, apiLabels }) => {
+      const policy = buildAgentRuntimePlatformEgressPolicy({
+        spec: SPEC,
+        platformNamespace: "platform",
+        platformPodLabels: parseLabelSelector(
+          selector,
+          config.agentRuntime.platformPodSelector,
+        ),
+        platformPorts: [9000],
+      });
+      const destination = policy.spec?.egress?.[0]?.to?.[0];
+      expect(destination?.namespaceSelector?.matchLabels).toEqual({
+        "kubernetes.io/metadata.name": "platform",
+      });
+      const labels = destination?.podSelector?.matchLabels;
+      expect(labels).toEqual(apiLabels);
+      const workerLabels: Record<string, string> = {
+        "archestra.io/p4-shim-client": "true",
+        "app.kubernetes.io/component": "worker",
+      };
+      expect(
+        Object.entries(labels ?? {}).every(
+          ([key, value]) => workerLabels[key] === value,
+        ),
+      ).toBe(false);
+    },
+  );
 
   it("selects only this Agent Runtime run's pods so MCP pods are unaffected", () => {
     const policy = buildAgentRuntimePlatformEgressPolicy({

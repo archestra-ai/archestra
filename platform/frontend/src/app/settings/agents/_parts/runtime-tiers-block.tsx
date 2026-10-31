@@ -52,7 +52,7 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
       id: "name",
       accessorKey: "name",
       header: "Tier",
-      size: 160,
+      size: 150,
       minSize: 120,
       cell: ({ row }) => (
         <span className="flex items-center gap-2">
@@ -225,7 +225,6 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
           onClearFilters={() => setFilter("")}
           emptyMessage="No tiers"
           filteredEmptyMessage="No tiers match the search"
-          flexibleColumnIds={["name"]}
           columnDropOrder={["memory", "cpuLimit", "pools"]}
         />
       </div>

@@ -99,7 +99,8 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   expect((await save).postDataJSON()).toEqual({ agentRuntimeTiers: saved });
   await expect(dialog).toBeHidden();
 
-  // The table fits its column at every width; nothing scrolls sideways.
+  // The table fits its column at every width: the table element is never
+  // wider than the container that would otherwise scroll it sideways.
   const container = block.locator('[data-slot="table-container"]');
   const overflow: Record<number, number> = {};
   for (const width of [1440, 1180, 1024, 768, 390]) {
@@ -108,9 +109,15 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
     await page.screenshot({
       path: testInfo.outputPath(`runtime-tiers-${width}.png`),
     });
-    overflow[width] = await container.evaluate(
-      (element) => element.scrollWidth - element.clientWidth,
-    );
+    overflow[width] = await container.evaluate((element) => {
+      const table = element.querySelector("table");
+      if (!table) return Number.NaN;
+      return Math.max(
+        Math.ceil(table.getBoundingClientRect().width) - element.clientWidth,
+        element.scrollWidth - element.clientWidth,
+        0,
+      );
+    });
     // Laptop widths and up show every column; narrower ones drop some.
     if (width >= 1180) {
       await expect(rowOf("L")).toContainText("No limit");

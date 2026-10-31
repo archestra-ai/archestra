@@ -777,12 +777,12 @@ export function ConnectCommandPanel({
         (provider === "kimi-code" || provider === "kimi")) ||
       openCodeFamily);
 
-  // The backend's reason for refusing the latest setup request, read once the
-  // request settles.
-  const refusalRef = useRef<string | null>(null);
+  // The backend's reason for refusing each setup request, by its body, so a
+  // request's reason cannot be mixed up with another's.
+  const refusalsRef = useRef(new WeakMap<object, string>());
   const { mutateAsync: createSetup, isPending } = useCreateConnectionSetup({
-    onRefused: (message) => {
-      refusalRef.current = message;
+    onRefused: (message, body) => {
+      refusalsRef.current.set(body, message);
     },
   });
   // Creating the personal key invalidates the available-keys query, so once the
@@ -903,14 +903,16 @@ export function ConnectCommandPanel({
       let request = cache.pending.get(key);
       if (!request) {
         const requestedAt = Date.now();
-        refusalRef.current = null;
         request = createSetup(body)
           .then((setup) => {
             if (setup) {
               cache.requestedAt.set(setup.id, requestedAt);
               cache.byKey.set(key, setup);
             }
-            return { setup, refusal: setup ? null : refusalRef.current };
+            return {
+              setup,
+              refusal: setup ? null : (refusalsRef.current.get(body) ?? null),
+            };
           })
           .finally(() => cache.pending.delete(key));
         cache.pending.set(key, request);

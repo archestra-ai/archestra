@@ -54,7 +54,9 @@ const {
   skillsMarketplaceVisibleMock,
 } = vi.hoisted(() => ({
   createSetupMock: vi.fn(),
-  setupHookOptions: {} as { onRefused?: (message: string) => void },
+  setupHookOptions: {} as {
+    onRefused?: (message: string, body: object) => void;
+  },
   skillNamesMock: vi.fn(),
   pluginsMock: vi.fn(),
   skillsMarketplaceVisibleMock: vi.fn(() => true),
@@ -62,7 +64,7 @@ const {
 
 vi.mock("@/lib/connection-setup.query", () => ({
   useCreateConnectionSetup: (options?: {
-    onRefused?: (message: string) => void;
+    onRefused?: (message: string, body: object) => void;
   }) => {
     setupHookOptions.onRefused = options?.onRefused;
     return { mutateAsync: createSetupMock, isPending: false };
@@ -2738,9 +2740,10 @@ describe("a setup over a delivery limit on the approval page", () => {
   });
 
   it("shows the backend's reason when it refuses the setup", async () => {
-    createSetupMock.mockImplementationOnce(async () => {
+    createSetupMock.mockImplementationOnce(async (body: object) => {
       setupHookOptions.onRefused?.(
         "Plugin delivery is limited to 1110 MiB of plugin files",
+        body,
       );
       return null;
     });

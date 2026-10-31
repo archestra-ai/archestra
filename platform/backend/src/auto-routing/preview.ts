@@ -1,7 +1,12 @@
 import RoutingPlanModel from "@/models/routing-plan";
 import { ApiError } from "@/types";
-import type { AutoRoutingPreviewResponse } from "@/types/auto-routing-api";
+import type {
+  AutoRoutingPreviewBody,
+  AutoRoutingPreviewResponse,
+} from "@/types/auto-routing-api";
+import { firstUserText } from "./first-user-text";
 import { selectTier, uniform } from "./router";
+import { scoringContext } from "./scoring-context";
 import { loadAutoRoutingSettings } from "./settings";
 import { activeSourceVersion, decisionFeatures, preRunSource } from "./signals";
 import { type PreRunInput, SignalSourceError } from "./signals/types";
@@ -12,11 +17,28 @@ import { loadTrio, TIER_NAMES } from "./tiers";
  * the active plan and a fresh `u`. Nothing is stored and no re-plan is
  * requested; the scorer call is real and billed.
  */
-export async function previewAutoRouting(params: {
-  organizationId: string;
-  text: string;
-}): Promise<AutoRoutingPreviewResponse> {
+export async function previewAutoRouting(
+  params: AutoRoutingPreviewBody & { organizationId: string },
+): Promise<AutoRoutingPreviewResponse> {
   const { organizationId } = params;
+  const text =
+    "request" in params
+      ? firstUserText(
+          params.request.input !== undefined ? "responses" : "chat_completions",
+          params.request,
+        )
+      : params.text;
+  if (text === null) {
+    throw new ApiError(
+      400,
+      "The request must contain an opening user message with text.",
+    );
+  }
+  const input: PreRunInput = {
+    firstUserText: text,
+    client: "request" in params ? (params.client ?? null) : null,
+    ...("request" in params ? scoringContext(params.request) : {}),
+  };
   const loaded = await loadTrio(await loadAutoRoutingSettings(organizationId));
   if (loaded.kind === "missing") {
     throw new ApiError(
@@ -25,7 +47,6 @@ export async function previewAutoRouting(params: {
     );
   }
   const { trio } = loaded;
-  const input: PreRunInput = { firstUserText: params.text, client: null };
   const scored = await preRunSource
     .read(input, { organizationId })
     .catch((error: unknown) => {

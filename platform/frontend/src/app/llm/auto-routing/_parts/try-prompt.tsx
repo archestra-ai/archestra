@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   type AutoRoutingPreview,
+  type AutoRoutingPreviewBody,
   type AutoRoutingScorerState,
   usePreviewAutoRouting,
 } from "@/lib/auto-routing.query";
@@ -23,7 +26,10 @@ export function TryPrompt({
   scorer: AutoRoutingScorerState;
 }) {
   const [text, setText] = useState("");
+  const [requestMode, setRequestMode] = useState(false);
+  const [client, setClient] = useState("");
   const preview = usePreviewAutoRouting();
+  const parsed = previewBody({ text, requestMode, client });
 
   if (scorer === "no_jev_key") {
     return (
@@ -38,25 +44,109 @@ export function TryPrompt({
   }
   return (
     <section className="space-y-3 rounded-md border p-4">
-      <Label htmlFor="auto-routing-try-prompt">Try a prompt</Label>
+      <div className="flex items-center gap-2">
+        <Switch
+          id="auto-routing-request-mode"
+          checked={requestMode}
+          disabled={!canUpdate}
+          onCheckedChange={(checked) => {
+            setRequestMode(checked);
+            setText("");
+            preview.reset();
+          }}
+        />
+        <Label htmlFor="auto-routing-request-mode">Use request JSON</Label>
+      </div>
+      <Label htmlFor="auto-routing-try-prompt">
+        {requestMode ? "Opening request JSON" : "Try a prompt"}
+      </Label>
       <Textarea
         id="auto-routing-try-prompt"
         value={text}
-        onChange={(event) => setText(event.target.value)}
-        placeholder="A first message of a session"
+        onChange={(event) => {
+          setText(event.target.value);
+          preview.reset();
+        }}
+        placeholder={
+          requestMode
+            ? "Paste the opening request body from LLM Logs"
+            : "A first message of a session"
+        }
+        aria-invalid={!!parsed.error}
+        aria-describedby="auto-routing-preview-input-help"
         rows={3}
         disabled={!canUpdate}
       />
+      <p
+        id="auto-routing-preview-input-help"
+        className="text-xs text-muted-foreground"
+      >
+        {parsed.error ??
+          (requestMode
+            ? "Uses the request's opening user message, system instructions and tools, as live routing does. Scores a new session under the current plan; does not replay a saved decision or execute the request."
+            : "Text-only preview. Use request JSON to include the agent's system instructions and tools.")}
+      </p>
+      {requestMode && (
+        <div className="space-y-2">
+          <Label htmlFor="auto-routing-preview-client">
+            Client identifier (optional)
+          </Label>
+          <Input
+            id="auto-routing-preview-client"
+            value={client}
+            maxLength={256}
+            placeholder="Client identifier from the original request metadata"
+            disabled={!canUpdate}
+            onChange={(event) => {
+              setClient(event.target.value);
+              preview.reset();
+            }}
+          />
+        </div>
+      )}
       <Button
         size="sm"
-        disabled={!canUpdate || !text.trim() || preview.isPending}
-        onClick={() => preview.mutate({ text })}
+        disabled={!canUpdate || !parsed.body || preview.isPending}
+        onClick={() => {
+          if (parsed.body) preview.mutate(parsed.body);
+        }}
       >
         Preview
       </Button>
       {preview.data && <PreviewResult result={preview.data} />}
     </section>
   );
+}
+
+function previewBody({
+  text,
+  requestMode,
+  client,
+}: {
+  text: string;
+  requestMode: boolean;
+  client: string;
+}): { body?: AutoRoutingPreviewBody; error?: string } {
+  if (!text.trim()) return {};
+  if (!requestMode) return { body: { text } };
+  try {
+    const request: unknown = JSON.parse(text);
+    if (
+      request === null ||
+      typeof request !== "object" ||
+      Array.isArray(request)
+    ) {
+      return { error: "Enter a JSON object containing the request body." };
+    }
+    return {
+      body: {
+        request: request as Record<string, unknown>,
+        ...(client.trim() ? { client: client.trim() } : {}),
+      },
+    };
+  } catch {
+    return { error: "Enter valid JSON containing the request body." };
+  }
 }
 
 function PreviewResult({ result }: { result: AutoRoutingPreview }) {

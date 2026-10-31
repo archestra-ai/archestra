@@ -140,9 +140,22 @@ export const AutoRoutingPlansQuerySchema = z.object({
  */
 export const AUTO_ROUTING_PREVIEW_MAX_CHARS = 20_000;
 
-export const AutoRoutingPreviewBodySchema = z.strictObject({
-  text: z.string().trim().min(1).max(AUTO_ROUTING_PREVIEW_MAX_CHARS),
-});
+export const AutoRoutingPreviewBodySchema = z.union([
+  z.strictObject({
+    text: z.string().trim().min(1).max(AUTO_ROUTING_PREVIEW_MAX_CHARS),
+  }),
+  z.strictObject({
+    request: z
+      .record(z.string(), z.unknown())
+      .describe(
+        "An opening Chat Completions, Responses or Anthropic Messages request body. Only its opening user text, system instructions and tool metadata are scored; the request is not executed.",
+      ),
+    client: z.string().min(1).max(256).optional(),
+  }),
+]);
+export type AutoRoutingPreviewBody = z.infer<
+  typeof AutoRoutingPreviewBodySchema
+>;
 
 export const AutoRoutingSimulateBodySchema = z.strictObject({
   budgetUsdPerDay: BudgetUsdPerDaySchema,

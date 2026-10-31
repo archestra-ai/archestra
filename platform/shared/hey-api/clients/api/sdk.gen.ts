@@ -2309,7 +2309,7 @@ export const getAutoRoutingPlan = <ThrowOnError extends boolean = false>(options
 export const replanAutoRouting = <ThrowOnError extends boolean = false>(options?: Options<ReplanAutoRoutingData, ThrowOnError>) => (options?.client ?? client).post<ReplanAutoRoutingResponses, ReplanAutoRoutingErrors, ThrowOnError>({ url: '/api/auto-routing/replan', ...options });
 
 /**
- * Score a first message and show the tier the active plan would pick, without storing anything
+ * Score opening text or a request body with its system/tool context and show a fresh choice under the current plan, without executing the request or storing a decision
  *
  * Authentication:
  *

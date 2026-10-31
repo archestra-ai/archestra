@@ -39,6 +39,8 @@ A session is routed once, on its first request, and keeps that model for its who
 
 The scorer assesses the opening user message with bounded excerpts of the request's system instructions and tool names and descriptions. It does not receive tool parameter schemas or tool results.
 
+Under **Try a prompt**, turn on **Use request JSON** to preview an opening request body copied from LLM Logs, including its system instructions and tools. Text-only previews omit that context. A preview makes a fresh choice under the current plan; it does not replay the session's saved choice or execute the request, and scorer calls are billed.
+
 - **Session identity:** the session id if the client sends one. Otherwise the virtual key plus the first user message, so identical first messages under one key share a model.
 - **Budget:** the daily budget is an average target, not a cap. Spend on a given day can go above or below it. Hard caps come from [limits](/docs/llm-proxy/costs-and-limits/limits).
 - **Plans:** a background job builds a routing plan from past sessions. Changing the settings or the default models triggers a new plan within about a minute, and every organization is re-planned at least daily. Each plan is versioned.

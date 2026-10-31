@@ -715,6 +715,66 @@ describe("AutoRoutingOverviewPage", () => {
     expect(within(result).getByText("$0.42")).toBeInTheDocument();
   });
 
+  it("previews request JSON with context, rejects invalid JSON locally and clears stale results on edits", async () => {
+    const previewed: unknown[] = [];
+    server.use(
+      http.post(
+        `${API_ORIGIN}/api/auto-routing/preview`,
+        async ({ request }) => {
+          previewed.push(await request.json());
+          return HttpResponse.json({
+            tierNeeded: [0.1, 0.2, 0.7],
+            pLong: 0.25,
+            reason: "planned",
+            planId: PLAN_ID,
+            chosen: { tier: "smart", model: tier("claude-opus", 3) },
+            propensity: 1,
+            expectedCostUsd: null,
+            scorerCostUsd: null,
+          } satisfies AutoRoutingPreview);
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("switch", { name: "Use request JSON" }),
+    );
+    const input = screen.getByLabelText("Opening request JSON");
+    await user.click(input);
+    await user.paste("not JSON");
+    expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();
+    expect(
+      screen.getByText("Enter valid JSON containing the request body."),
+    ).toBeInTheDocument();
+    expect(previewed).toEqual([]);
+
+    const request = {
+      instructions: "Review migration locking.",
+      input: "Review this change.",
+      tools: [{ type: "function", name: "inspect_schema", description: null }],
+    };
+    await user.clear(input);
+    await user.click(input);
+    await user.paste(JSON.stringify(request));
+    await user.type(
+      screen.getByLabelText("Client identifier (optional)"),
+      "opencode",
+    );
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    expect(await screen.findByTestId("auto-routing-preview")).toHaveTextContent(
+      "smart",
+    );
+    expect(previewed).toEqual([{ request, client: "opencode" }]);
+
+    await user.type(input, " ");
+    expect(
+      screen.queryByTestId("auto-routing-preview"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("switch", { name: "Use request JSON" }));
+    expect(screen.getByLabelText("Try a prompt")).toHaveValue("");
+  });
+
   it("refuses an infeasible budget, keeping the edited value", async () => {
     const message =
       "Budget too low for these models: the cheapest routing costs $8.86/day.";

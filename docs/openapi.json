@@ -123830,24 +123830,47 @@
         "tags": [
           "Auto Routing"
         ],
-        "description": "Score a first message and show the tier the active plan would pick, without storing anything\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProxy:update`: Modify LLM Proxy configuration",
+        "description": "Score opening text or a request body with its system/tool context and show a fresh choice under the current plan, without executing the request or storing a decision\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProxy:update`: Modify LLM Proxy configuration",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "text": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 20000
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 20000
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "request": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "description": "An opening Chat Completions, Responses or Anthropic Messages request body. Only its opening user text, system instructions and tool metadata are scored; the request is not executed."
+                      },
+                      "client": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      }
+                    },
+                    "required": [
+                      "request"
+                    ],
+                    "additionalProperties": false
                   }
-                },
-                "required": [
-                  "text"
-                ],
-                "additionalProperties": false
+                ]
               }
             }
           }

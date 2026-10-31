@@ -33701,6 +33701,14 @@ export type ReplanAutoRoutingResponse = ReplanAutoRoutingResponses[keyof ReplanA
 export type PreviewAutoRoutingData = {
     body: {
         text: string;
+    } | {
+        /**
+         * An opening Chat Completions, Responses or Anthropic Messages request body. Only its opening user text, system instructions and tool metadata are scored; the request is not executed.
+         */
+        request: {
+            [key: string]: unknown;
+        };
+        client?: string;
     };
     path?: never;
     query?: never;

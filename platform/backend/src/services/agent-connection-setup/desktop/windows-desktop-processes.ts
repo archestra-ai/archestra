@@ -19,7 +19,7 @@ export const WINDOWS_DESKTOP_PROCESSES = String.raw`function Get-DesktopProcess 
  * it the end-session message Windows uses to close apps before an update, and
  * Desktop quits. A Desktop that still runs is ended. Throws if it survives.
  */
-export const WINDOWS_DESKTOP_CLOSE = String.raw`function Wait-DesktopExit([int]$Seconds) {
+export const WINDOWS_DESKTOP_CLOSE = `function Wait-DesktopExit([int]$Seconds) {
   $p = Get-DesktopProcess
   if ($p) { $p | Wait-Process -Timeout $Seconds -ErrorAction SilentlyContinue }
   @(Get-DesktopProcess).Count -eq 0

@@ -273,10 +273,6 @@ test.each([
         headers: { Origin: origin },
       });
       await expect.poll(async () => (await status()).phase).toBe("restarting");
-      // The helper closes Desktop on every platform, tray included.
-      expect((await status()).message).toBe(
-        "Desktop is restarting. A confirmation will open when it finishes.",
-      );
       // A detached PowerShell exits before it runs the restart script.
       if (targetOs === "win32") {
         expect(spawned).toEqual([

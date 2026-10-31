@@ -8,7 +8,6 @@ import {
 
 const exec = promisify(execFile);
 const powershellAvailable =
-  process.platform !== "win32" &&
   spawnSync("pwsh", ["-NoProfile", "-Command", "exit 0"]).status === 0;
 
 if (process.env.CI === "true" && !powershellAvailable) {

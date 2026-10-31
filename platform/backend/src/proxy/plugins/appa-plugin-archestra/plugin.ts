@@ -71,7 +71,6 @@ import {
   peekHitlDecision,
   recordHitlAnswerNotRecorded,
   recordHitlRuling,
-  recordHitlUnidentifiableAnswers,
   renewHitlReview,
   resolveHitlInspectableAnswer,
   sealHitlClosure,
@@ -5482,18 +5481,13 @@ async function claimNativeQuestionResults(params: {
   binding: AppaPluginBinding;
   results: ReadonlyArray<{ id: string; name: string; namespace?: string }>;
 }): Promise<Map<object, NativeQuestionClaim>> {
-  let unidentifiable = 0;
   const candidates = params.results.flatMap((result) => {
-    const name = nativeQuestionName(params.binding, result.name);
-    if (!name || !releasesUserQuestion(params.binding, result)) return [];
     // An answer without its own string id names no issued question: it is
     // dropped before any claim key is built or looked up, never conflated
-    // with other unidentifiable answers under a placeholder id. Only the
-    // session notes that one arrived.
-    if (typeof result.id !== "string" || result.id.length === 0) {
-      unidentifiable += 1;
-      return [];
-    }
+    // with other unidentifiable answers under a placeholder id.
+    if (typeof result.id !== "string" || result.id.length === 0) return [];
+    const name = nativeQuestionName(params.binding, result.name);
+    if (!name || !releasesUserQuestion(params.binding, result)) return [];
     const scope = { session: params.binding.session, id: result.id };
     const legacyKey = legacyNativeQuestionCacheKey(scope);
     return [
@@ -5507,11 +5501,6 @@ async function claimNativeQuestionResults(params: {
       },
     ];
   });
-  if (unidentifiable > 0)
-    await recordHitlUnidentifiableAnswers({
-      session: params.binding.session,
-      count: unidentifiable,
-    });
   const verified = new Map<object, NativeQuestionClaim>();
   if (candidates.length === 0) return verified;
   const claimed = new Map(

@@ -49,7 +49,6 @@ export type ClosedHitlReviewOutcome = Exclude<
 /** Why the answer to the last approval question ruled nothing. */
 export type HitlAnswerNotRecordedReason =
   | "question_not_issued"
-  | "unidentifiable_answer"
   | "stale_card"
   | "review_expired"
   | "record_failed";
@@ -57,8 +56,6 @@ export type HitlAnswerNotRecordedReason =
 const HITL_ANSWER_NOT_RECORDED_CAUSES = {
   question_not_issued:
     "No approval card was issued for this offer since the last review result: a question tool called directly, or ask_user without this offer ID in remedy_offer_ids, records nothing.",
-  unidentifiable_answer:
-    "The answer to the approval card arrived without its question's tool-call id, so it could not be bound to this review.",
   stale_card:
     "The answer came from an approval card that no longer matched the review.",
   review_expired: "The answer arrived after the review expired.",
@@ -913,7 +910,7 @@ export async function renewHitlReview(params: {
       await cache.delete(notRecordedKey(params.session, params.offerId));
       await cache.set(
         cardIssuedKey(params.session, params.offerId),
-        { offerId: params.offerId, issuedAt: Date.now() },
+        { offerId: params.offerId },
         lifetime,
       );
       return true;
@@ -1465,35 +1462,6 @@ export async function recordHitlAnswerNotRecorded(params: {
   );
 }
 
-/**
- * Notes the native answers without their own call id that a request carries.
- * The client resends its history, so only a count above the last one seen is
- * a new arrival. Never a ruling: losing it leaves the next review plain.
- */
-export async function recordHitlUnidentifiableAnswers(params: {
-  session: OpenAppaSession;
-  count: number;
-}): Promise<void> {
-  const key = unidentifiableAnswersKey(params.session);
-  await cacheManager.withLock(key, async (cache) => {
-    const seen = await cache.get<{ count?: unknown; arrivedAt?: unknown }>(key);
-    const seenCount = typeof seen?.count === "number" ? seen.count : 0;
-    const arrivedAt =
-      params.count > seenCount
-        ? Date.now()
-        : typeof seen?.arrivedAt === "number"
-          ? seen.arrivedAt
-          : undefined;
-    if (arrivedAt === undefined) return;
-    // Outlives any card it is compared with, so a resent answer is not new.
-    await cache.set(
-      key,
-      { count: params.count, arrivedAt },
-      HITL_QUESTION_TTL_MS + HITL_REVIEW_TTL_MS,
-    );
-  });
-}
-
 /** Takes why the answer since the previous stage ruled nothing, if it did. */
 async function takeUnrecordedAnswer(params: {
   cache: LockedCache;
@@ -1507,37 +1475,18 @@ async function takeUnrecordedAnswer(params: {
       await cache.getAndDeleteMany<{
         offerId?: unknown;
         reason?: unknown;
-        issuedAt?: unknown;
       }>([notRecordedKey(session, offerId), cardIssuedKey(session, offerId)])
     ).map((entry) => [entry.key, entry.value]),
   );
   const fact = entries.get(notRecordedKey(session, offerId));
   if (fact?.offerId === offerId && isHitlAnswerNotRecordedReason(fact.reason))
     return { lastAnswer: { reason: fact.reason } };
-  if (!params.restaged) return {};
-  const card = entries.get(cardIssuedKey(session, offerId));
-  if (card?.offerId !== offerId)
-    return { lastAnswer: { reason: "question_not_issued" } };
-  // An answer without its id names no card. One that arrived after this card
-  // was issued is reported; otherwise the card may still be open.
-  const unidentified = await cache.get<{ arrivedAt?: unknown }>(
-    unidentifiableAnswersKey(session),
-  );
   if (
-    typeof card.issuedAt === "number" &&
-    typeof unidentified?.arrivedAt === "number" &&
-    unidentified.arrivedAt > card.issuedAt
+    params.restaged &&
+    entries.get(cardIssuedKey(session, offerId))?.offerId !== offerId
   )
-    return { lastAnswer: { reason: "unidentifiable_answer" } };
+    return { lastAnswer: { reason: "question_not_issued" } };
   return {};
-}
-
-function unidentifiableAnswersKey(session: OpenAppaSession): AllowedCacheKey {
-  return scopedKey(
-    CacheKey.OpenAppaHitlRuling,
-    session,
-    ":unidentifiable-answers",
-  );
 }
 
 function notRecordedKey(

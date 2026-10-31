@@ -18,7 +18,6 @@ import {
   recordHitlAnswerNotRecorded,
   recordHitlReviewResult,
   recordHitlRuling,
-  recordHitlUnidentifiableAnswers,
   renewHitlReview,
   reviewOutcomeFromClosure,
   reviewSessionFromTrajectory,
@@ -1391,42 +1390,6 @@ describe("an answer that ruled nothing", () => {
     expect(await stageHitlReview({ session: active, review })).toEqual({
       status: "staged",
     });
-  });
-
-  test("an answer without its id is reported only when it arrived after the card", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    try {
-      const active = session("unidentifiable");
-      const tick = () => vi.setSystemTime(Date.now() + 1);
-      await stageHitlReview({ session: active, review });
-      await recordHitlUnidentifiableAnswers({ session: active, count: 1 });
-      tick();
-      await renewHitlReview({ session: active, offerId: review.offerId });
-      expect(await stageHitlReview({ session: active, review })).toEqual({
-        status: "staged",
-      });
-
-      await renewHitlReview({ session: active, offerId: review.offerId });
-      tick();
-      // A resent history carries the same answer again: nothing new arrived.
-      await recordHitlUnidentifiableAnswers({ session: active, count: 1 });
-      expect(await stageHitlReview({ session: active, review })).toEqual({
-        status: "staged",
-      });
-
-      await renewHitlReview({ session: active, offerId: review.offerId });
-      tick();
-      await recordHitlUnidentifiableAnswers({ session: active, count: 2 });
-      expect(await stageHitlReview({ session: active, review })).toEqual({
-        status: "staged",
-        lastAnswer: { reason: "unidentifiable_answer" },
-      });
-      expect(
-        await peekHitlDecision({ session: active, offerId: review.offerId }),
-      ).toBeUndefined();
-    } finally {
-      vi.useRealTimers();
-    }
   });
 
   test("a dropped answer is reported once, and a newer card supersedes it", async () => {

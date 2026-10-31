@@ -320,7 +320,10 @@ for (const endpoint of [sandboxUrl, podsUrl]) {
           ? HttpResponse.json({ status: {} })
           : HttpResponse.json({
               items: [
-                { metadata: { name: "worker" }, status: { phase: "Running" } },
+                {
+                  metadata: { name: "worker" },
+                  status: { phase: "Running" },
+                },
               ],
             });
       }),
@@ -1106,6 +1109,12 @@ const PANE_EXITED_ENVELOPE = JSON.stringify({
 test.for([
   { name: "a memory kill inside the running pod", killed: true, exit: null },
   {
+    name: "the node's OOM killer inside the running pod",
+    killed: true,
+    exit: null,
+    nodeOom: true,
+  },
+  {
     name: "a failed command without a memory kill",
     killed: false,
     exit: null,
@@ -1143,6 +1152,7 @@ test.for([
   finished = false,
   counters = true,
   polls = 2,
+  nodeOom = false,
 }, { run }) => {
   const GIB = 1024 ** 3;
   let turnReads = 0;
@@ -1174,7 +1184,7 @@ test.for([
       const kills = memoryReads++ === 0 || !killed ? 0 : 1;
       if (counters) {
         args[4]?.write(
-          `low 0\nhigh 0\nmax 1203\noom ${kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills ? 8 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
+          `low 0\nhigh 0\nmax 1203\noom ${nodeOom ? 0 : kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills && !nodeOom ? 8 * GIB : nodeOom ? 3 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
         );
       }
       args[8]?.({ status: "Success" });
@@ -1244,6 +1254,15 @@ test.for([
     // The kill comes first; the exit it led to is kept after it.
     expect(result.reason).toContain(described);
     expect(result.reason).toContain(`status ${exit.split("\n")[0]}`);
+  } else if (killed && nodeOom) {
+    // The cgroup never hit its own limit: the node ran out of memory, so the
+    // size was not the cause and the run is not pod.oom_killed.
+    await expect(completion).resolves.toEqual({
+      outcome: "failed",
+      reason:
+        "The kernel killed the run's processes because the node ran out of memory; the agent-runtime container did not hit its 8 GiB limit (peak usage 3 GiB). Start the run again.",
+      failure: { code: "turn.process_exited", retriable: false },
+    });
   } else if (killed) {
     await expect(completion).resolves.toEqual({
       outcome: "failed",

@@ -4,15 +4,25 @@
  * container: an agent whose type check or test run passes the limit loses
  * that process, its shell and the tmux server around them, while PID 1 lives
  * on and the pod stays Running. Nothing in the pod's status says so; the
- * cgroup's `memory.events` does (`oom_kill` counts the kills).
+ * cgroup's `memory.events` does: `oom_kill` counts processes killed by any
+ * OOM killer, `oom` the times this cgroup hit its own limit.
  */
 export interface MemoryEvents {
-  /** Kills since the cgroup was created. */
+  /** Processes of the cgroup killed by an OOM killer, the node's included. */
   oomKills: number;
+  /** Times the cgroup hit its own memory limit. */
+  limitHits: number;
   /** The highest usage seen, when the kernel exposes it. */
   peakBytes: number | null;
   /** The limit, or null without one. */
   limitBytes: number | null;
+}
+
+/** A kill between two readings, and whether the container's own limit caused it. */
+export interface MemoryKill {
+  events: MemoryEvents;
+  /** True when the cgroup hit its limit in between; false for a node that ran out of memory. */
+  atLimit: boolean;
 }
 
 /** Runs in the pod's shell; its output is parsed by {@link parseMemoryEvents}. */
@@ -33,12 +43,17 @@ export function parseMemoryEvents(output: string): MemoryEvents | null {
   }
   const oomKills = fields.get("oom_kill");
   if (oomKills === undefined || !/^\d+$/.test(oomKills)) return null;
+  const count = (field: string): number => {
+    const value = fields.get(field);
+    return value && /^\d+$/.test(value) ? Number(value) : 0;
+  };
   const bytes = (field: string): number | null => {
     const value = fields.get(field);
     return value && /^\d+$/.test(value) ? Number(value) : null;
   };
   return {
     oomKills: Number(oomKills),
+    limitHits: count("oom"),
     peakBytes: bytes("peak"),
     limitBytes: bytes("limit"),
   };
@@ -53,25 +68,37 @@ export function parseMemoryEvents(output: string): MemoryEvents | null {
 export function memoryKillBetween(
   before: MemoryEvents | null,
   after: MemoryEvents | null,
-): MemoryEvents | null {
-  if (!before || !after) return null;
-  return after.oomKills > before.oomKills ? after : null;
+): MemoryKill | null {
+  if (!before || !after || after.oomKills <= before.oomKills) return null;
+  return { events: after, atLimit: after.limitHits > before.limitHits };
 }
 
-/** The failure reason for a run whose processes the kernel killed for memory. */
+/**
+ * The failure reason for a run whose processes the kernel killed for memory.
+ * A container that hit its own limit needs a larger tier; a node that ran out
+ * of memory does not, and the run can simply start again.
+ */
 export function describeMemoryKill(
-  events: MemoryEvents,
+  kill: MemoryKill,
   container: string,
 ): string {
-  const limit =
-    events.limitBytes !== null
-      ? ` reached its memory limit of ${formatGibibytes(events.limitBytes)}`
-      : " ran out of memory";
+  const { events } = kill;
   const peak =
     events.peakBytes !== null
       ? ` (peak usage ${formatGibibytes(events.peakBytes)})`
       : "";
-  return `The run ran out of memory. The ${container} container${limit}${peak}, and the kernel killed the run's processes. Start the run again at a larger tier.`;
+  if (kill.atLimit) {
+    const limit =
+      events.limitBytes !== null
+        ? `reached its memory limit of ${formatGibibytes(events.limitBytes)}`
+        : "hit its memory limit";
+    return `The run ran out of memory. The ${container} container ${limit}${peak}, and the kernel killed the run's processes. Start the run again at a larger tier.`;
+  }
+  const limit =
+    events.limitBytes !== null
+      ? `did not hit its ${formatGibibytes(events.limitBytes)} limit`
+      : "has no memory limit of its own";
+  return `The kernel killed the run's processes because the node ran out of memory; the ${container} container ${limit}${peak}. Start the run again.`;
 }
 
 function formatGibibytes(bytes: number): string {

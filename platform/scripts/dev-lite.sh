@@ -673,8 +673,10 @@ cmd_start() {
     log "restarting the frontend as a production build for e2e"
     stop_session frontend
   fi
-  # The backend reads its trusted origins at startup.
-  if [ "$keycloak" = 1 ] && ! session_alive keycloak && session_alive backend; then
+  # The backend reads its trusted origins at startup: restart a running one
+  # when Keycloak's origin is not among them yet.
+  if [ "$keycloak" = 1 ] && session_alive backend \
+    && [[ "$(env_value ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS)" != *"http://localhost:$KEYCLOAK_PORT"* ]]; then
     log "restarting the backend with Keycloak among the trusted origins"
     stop_session backend
   fi

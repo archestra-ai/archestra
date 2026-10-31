@@ -8,6 +8,7 @@ import logger from "@/logging";
 import { decodeJwtClaims } from "@/services/openai-codex-credentials";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import {
+  xaiAccessTokenExpiryMs,
   xaiOauthEndpoints,
   xaiOauthErrorLogFields,
 } from "@/services/xai-subscription-token";
@@ -175,6 +176,7 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the error name in the body, so parse the body before judging status.
       let payload: {
         access_token?: string;
+        expires_in?: number;
         refresh_token?: string;
         id_token?: string;
         error?: string;
@@ -225,6 +227,11 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           status: "complete" as const,
           credential: encodeXaiSubscriptionCredential({
             refreshToken: payload.refresh_token,
+            accessToken: payload.access_token,
+            accessTokenExpiresAtMs: xaiAccessTokenExpiryMs(
+              payload.access_token,
+              payload.expires_in,
+            ),
             userId,
             ...(email ? { email } : {}),
           }),

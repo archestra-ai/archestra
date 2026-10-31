@@ -1,5 +1,6 @@
 import { SecretsManagerType, TimeInMs } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
+import type { Transaction } from "@/database";
 import SecretModel from "@/models/secret";
 import type {
   ISecretManager,
@@ -13,6 +14,7 @@ import type {
  * Stores secrets in the database using SecretModel
  */
 export class DbSecretsManager implements ISecretManager {
+  constructor(private readonly transaction?: Transaction) {}
   readonly type = SecretsManagerType.DB;
   private readonly secretsCache = new LRUCacheManager<SelectSecret>({
     maxSize: 2_000,
@@ -73,7 +75,7 @@ export class DbSecretsManager implements ISecretManager {
 
     // Fresh reads always start a new query. Only the newest read may populate
     // the cache, so an older miss cannot overwrite a rotation or deletion.
-    const read = SecretModel.findById(secid);
+    const read = SecretModel.findById(secid, this.transaction);
     this.pendingReads.set(secid, read);
     try {
       const secret = await read;
@@ -92,7 +94,11 @@ export class DbSecretsManager implements ISecretManager {
     secid: string,
     secretValue: SecretValue,
   ): Promise<SelectSecret | null> {
-    const secret = await SecretModel.update(secid, { secret: secretValue });
+    const secret = await SecretModel.update(
+      secid,
+      { secret: secretValue },
+      this.transaction,
+    );
     this.pendingReads.delete(secid);
     if (secret) {
       this.secretsCache.set(secid, secret);

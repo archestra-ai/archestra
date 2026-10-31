@@ -36,11 +36,15 @@ class SecretModel {
   /**
    * Find a secret by ID
    */
-  static async findById(id: string): Promise<SelectSecret | null> {
-    const [secret] = await db
+  static async findById(
+    id: string,
+    tx?: Transaction,
+  ): Promise<SelectSecret | null> {
+    const query = (tx ?? db)
       .select()
       .from(schema.secretsTable)
       .where(eq(schema.secretsTable.id, id));
+    const [secret] = await (tx ? query.for("update") : query);
 
     return decryptSecretRow(secret ?? null);
   }

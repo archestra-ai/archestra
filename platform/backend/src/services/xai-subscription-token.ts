@@ -1,39 +1,12 @@
-/**
- * xAI OAuth token redemption for the "SuperGrok" subscription auth
- * mode.
- *
- * Each user holds a long-lived xAI `refresh_token` (obtained via the device flow
- * — see routes/xai-subscription-auth) which is NOT accepted by api.x.ai directly.
- * It is redeemed at the issuer's token endpoint for a short-lived `access_token`
- * used as the bearer against xAI's OpenAI-compatible CLI chat proxy.
- *
- * The redemption sits in the LLM proxy hot path, so this manager caches access
- * tokens per llm_provider_api_keys row id and single-flights concurrent
- * redemptions for the same key. Keying by the row id — not by the refresh token —
- * keeps secret material out of cache keys and keeps the slot stable while the
- * token rotates.
- *
- * xAI refresh tokens may ROTATE: a redemption can return a new refresh token.
- * The manager keeps the newest in memory and persists it back to the stored
- * provider key best-effort — the previously stored token stays valid until its
- * own expiry, so a failed write-back costs only longevity, never correctness.
- *
- * Mirrors services/openai-codex-token; see there for the lineage-digest rationale
- * (dropping a cached token whose stored credential was replaced by a reconnect to
- * a different account).
- */
 import { createHmac, randomBytes } from "node:crypto";
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
-import {
-  getSecretValueForLlmProviderApiKey,
-  secretManager,
-} from "@/secrets-manager";
+import { withSubscriptionCredentialLock } from "@/models/subscription-credential-lock";
+import { secretManager } from "@/secrets-manager";
 import { ApiError } from "@/types";
-import { trackBackgroundWork } from "@/utils/background-work";
 import { decodeJwtClaims } from "./openai-codex-credentials";
 import { recordSubscriptionAuthenticationFailure } from "./subscription-authentication-status";
 import {
@@ -49,151 +22,220 @@ const GROK_CLI_CLIENT_VERSION = "1.0.70";
 
 const MAX_CACHED_TOKENS = 1000;
 
-class XaiSubscriptionTokenManager {
+/** @public — independent instances exercise fleet-wide credential coordination in tests. */
+export class XaiSubscriptionTokenManager {
   private tokenCache = new LRUCacheManager<CachedAccessToken>({
     maxSize: MAX_CACHED_TOKENS,
   });
-  private inFlightRedemptions = new Map<string, InFlightRedemption>();
-  private persistQueues = new Map<string, Promise<void>>();
-  /**
-   * Rotations observed during ID-less redemptions (key validation before the
-   * row exists), keyed by the digest of the token that was redeemed. The issuer
-   * invalidates the predecessor on rotation, so discarding these would persist
-   * an already-dead token at key creation. `latestKnownRefreshToken` lets the
-   * create/reconnect routes re-encode the credential with the newest token
-   * before writing the secret.
-   */
-  private validationRotations = new LRUCacheManager<string>({
+  private validationRotations = new LRUCacheManager<XaiSubscriptionCredential>({
     maxSize: MAX_CACHED_TOKENS,
   });
 
-  /**
-   * Returns a valid xAI access token for the given stored refresh token,
-   * redeeming (and caching) it if needed. Without a providerApiKeyId (key
-   * validation before the row exists) the redemption is uncached and any
-   * rotated refresh token is stashed for `latestKnownRefreshToken`, so the
-   * caller can persist the still-valid token instead of the dead predecessor.
-   */
   async getAccessToken(params: {
-    refreshToken: string;
+    credential: XaiSubscriptionCredential;
     providerApiKeyId?: string;
+    staleAccessToken?: string;
   }): Promise<string> {
-    const { refreshToken, providerApiKeyId } = params;
-
+    const { credential, providerApiKeyId, staleAccessToken } = params;
     if (!providerApiKeyId) {
-      // Follow any rotation already observed for this token, so validating the
-      // same credential twice in one process doesn't redeem a dead predecessor.
-      const latestToken = this.latestKnownRefreshToken(refreshToken);
-      const { accessToken, rotatedRefreshToken } =
-        await redeemWithXai(latestToken);
-      this.recordValidationRotation(latestToken, rotatedRefreshToken);
-      return accessToken;
+      const latest = this.latestKnownCredential(credential);
+      if (
+        freshCredentialAccessToken(credential) &&
+        credential.accessToken !== staleAccessToken
+      ) {
+        return credential.accessToken;
+      }
+      const result = await redeemWithXai(latest.refreshToken);
+      const updated = {
+        ...latest,
+        refreshToken: result.rotatedRefreshToken ?? latest.refreshToken,
+        accessToken: result.accessToken,
+        accessTokenExpiresAtMs: result.expiresAtMs,
+      };
+      for (const refreshToken of [
+        credential.refreshToken,
+        latest.refreshToken,
+        updated.refreshToken,
+      ]) {
+        this.validationRotations.set(
+          hashToken(refreshToken),
+          updated,
+          VALIDATION_ROTATION_TTL_MS,
+        );
+      }
+      return result.accessToken;
     }
 
-    const callerDigest = hashToken(refreshToken);
-    let cached = this.tokenCache.get(providerApiKeyId);
-    if (cached && !cached.knownRefreshTokenDigests.includes(callerDigest)) {
-      // Stored secret was replaced under the same key row (reconnect to a
-      // different account): serving the cached token would answer as the old
-      // credential. Drop it and redeem with the caller's token.
-      this.tokenCache.delete(providerApiKeyId);
-      cached = undefined;
-    }
-    if (cached && cached.expiresAtMs - cached.refreshBufferMs > Date.now()) {
+    const cached = this.tokenCache.get(providerApiKeyId);
+    if (
+      cached?.userId === credential.userId &&
+      cached.expiresAtMs - cached.refreshBufferMs > Date.now() &&
+      cached.accessToken !== staleAccessToken
+    ) {
       return cached.accessToken;
     }
 
-    // Join an in-flight redemption only when the caller's token belongs to the
-    // same credential lineage. A caller holding a DIFFERENT credential (the row
-    // was reconnected to another account mid-flight) must not receive the old
-    // account's bearer — it starts its own redemption and takes over the slot.
-    const inFlight = this.inFlightRedemptions.get(providerApiKeyId);
-    if (inFlight?.lineageDigests.has(callerDigest)) {
-      return inFlight.promise;
-    }
-
-    const entry: InFlightRedemption = {
-      lineageDigests: new Set([
-        callerDigest,
-        ...(cached?.knownRefreshTokenDigests ?? []),
-      ]),
-      promise: this.redeemAndCache({
-        refreshToken,
+    let rejectedCredential: XaiSubscriptionCredential | undefined;
+    try {
+      const result = await withSubscriptionCredentialLock({
+        provider: "xai",
         providerApiKeyId,
-        latestRefreshToken: cached?.latestRefreshToken,
-        knownRefreshTokenDigests: cached?.knownRefreshTokenDigests ?? [],
-      }).finally(() => {
-        // Identity-guarded: a takeover by a newer credential must not have its
-        // map entry deleted by the superseded flight finishing later.
-        if (this.inFlightRedemptions.get(providerApiKeyId) === entry) {
-          this.inFlightRedemptions.delete(providerApiKeyId);
-        }
-      }),
-    };
-    this.inFlightRedemptions.set(providerApiKeyId, entry);
-    return entry.promise;
+        run: async (transaction) => {
+          const row = await LlmProviderApiKeyModel.findById(
+            providerApiKeyId,
+            transaction,
+          );
+          const manager = secretManager(transaction);
+          const secret =
+            row?.provider === "xai" && row.secretId
+              ? await manager.getSecret(row.secretId, { skipCache: true })
+              : null;
+          const stored = decodeXaiSubscriptionCredential(
+            typeof secret?.secret?.apiKey === "string"
+              ? secret.secret.apiKey
+              : undefined,
+          );
+          if (!stored || !row?.secretId) {
+            throw new ApiError(
+              401,
+              "SuperGrok credential is unreadable or has been replaced. Reconnect your Grok account.",
+              ArchestraInternalErrorCode.ProviderAuthRequired,
+            );
+          }
+          if (stored.userId !== credential.userId) {
+            throw new ApiError(
+              401,
+              "SuperGrok account has changed. Reload the credential before retrying.",
+              ArchestraInternalErrorCode.ProviderAuthRequired,
+            );
+          }
+          if (
+            freshCredentialAccessToken(stored) &&
+            stored.accessToken !== staleAccessToken &&
+            (stored.accessToken !== cached?.accessToken ||
+              cached.expiresAtMs - cached.refreshBufferMs > Date.now())
+          ) {
+            return {
+              credential: stored,
+              digests: [hashToken(stored.refreshToken)],
+            };
+          }
+          let redeemed: Awaited<ReturnType<typeof redeemWithXai>>;
+          try {
+            redeemed = await redeemWithXai(stored.refreshToken);
+          } catch (error) {
+            if (
+              error instanceof ApiError &&
+              error.internalCode ===
+                ArchestraInternalErrorCode.ProviderAuthRequired
+            ) {
+              rejectedCredential = stored;
+            }
+            throw error;
+          }
+          const updated = {
+            ...stored,
+            refreshToken: redeemed.rotatedRefreshToken ?? stored.refreshToken,
+            accessToken: redeemed.accessToken,
+            accessTokenExpiresAtMs: redeemed.expiresAtMs,
+          };
+          const persisted = await manager.updateSecret(row.secretId, {
+            apiKey: encodeXaiSubscriptionCredential(updated),
+          });
+          if (!persisted) {
+            throw new ApiError(
+              502,
+              "Could not persist the refreshed SuperGrok credential",
+            );
+          }
+          return {
+            credential: updated,
+            digests: [
+              hashToken(stored.refreshToken),
+              hashToken(updated.refreshToken),
+            ],
+          };
+        },
+      });
+      const updated = result.credential;
+      const expiresAtMs = updated.accessTokenExpiresAtMs as number;
+      const accessToken = updated.accessToken as string;
+      this.tokenCache.set(
+        providerApiKeyId,
+        {
+          accessToken,
+          expiresAtMs,
+          refreshBufferMs: refreshBufferFor(expiresAtMs - Date.now()),
+          userId: updated.userId,
+          knownRefreshTokenDigests: appendKnownDigests(
+            cached?.userId === updated.userId &&
+              result.digests.some((digest) =>
+                cached.knownRefreshTokenDigests.includes(digest),
+              )
+              ? cached.knownRefreshTokenDigests
+              : [],
+            result.digests,
+          ),
+        },
+        Math.max(expiresAtMs - Date.now(), 0),
+      );
+      return accessToken;
+    } catch (error) {
+      if (rejectedCredential) {
+        await this.recordAuthenticationFailure({
+          providerApiKeyId,
+          credential: rejectedCredential,
+        });
+      }
+      throw error;
+    }
   }
 
-  /**
-   * The newest refresh token this process knows to descend from
-   * `refreshToken` via ID-less validation redemptions — `refreshToken` itself
-   * when no rotation was observed. Routes call this after validation to
-   * persist a credential whose token is still alive.
-   */
-  latestKnownRefreshToken(refreshToken: string): string {
-    let current = refreshToken;
-    // The chain is bounded: each hop is one observed rotation, and entries
-    // never map a token to itself.
+  latestKnownCredential(
+    credential: XaiSubscriptionCredential,
+  ): XaiSubscriptionCredential {
+    let current = credential;
     for (let hop = 0; hop < KNOWN_REFRESH_TOKEN_LIMIT; hop++) {
-      const next = this.validationRotations.get(hashToken(current));
-      if (!next || next === current) {
-        break;
-      }
-      current = next;
+      const next = this.validationRotations.get(
+        hashToken(current.refreshToken),
+      );
+      if (!next || next.userId !== credential.userId) break;
+      const previousRefreshToken = current.refreshToken;
+      current = { ...current, ...next };
+      if (next.refreshToken === previousRefreshToken) break;
     }
     return current;
   }
 
-  /**
-   * Drops the cached access token for a provider key. Called when xAI rejects a
-   * cached token (revoked early) so the next request re-redeems. When
-   * `staleAccessToken` is given, only that exact token is evicted — a concurrent
-   * 401 handler must not throw away a token another request already refreshed.
-   */
   invalidate(providerApiKeyId: string, staleAccessToken?: string): void {
     const cached = this.tokenCache.get(providerApiKeyId);
-    if (!cached) {
-      return;
-    }
     if (
-      staleAccessToken !== undefined &&
-      cached.accessToken !== staleAccessToken
+      cached &&
+      (staleAccessToken === undefined ||
+        cached.accessToken === staleAccessToken)
     ) {
-      return;
+      this.tokenCache.delete(providerApiKeyId);
     }
-    // Keep the rotated refresh token + lineage alive across eviction, with an
-    // explicit TTL — the cache's default (1h) would silently cut the retention
-    // window redeemAndCache granted.
-    this.tokenCache.set(
-      providerApiKeyId,
-      { ...cached, expiresAtMs: 0 },
-      ROTATED_TOKEN_RETENTION_MS,
-    );
   }
 
   async recordAuthenticationFailure(params: {
     providerApiKeyId: string;
     credential: XaiSubscriptionCredential;
+    accessToken?: string;
   }): Promise<void> {
     const { providerApiKeyId, credential } = params;
     const callerDigest = hashToken(credential.refreshToken);
     const cached = this.tokenCache.get(providerApiKeyId);
-    const lineage = cached?.knownRefreshTokenDigests.includes(callerDigest)
-      ? cached.knownRefreshTokenDigests
-      : [callerDigest];
+    const lineage =
+      cached?.userId === credential.userId &&
+      (cached.knownRefreshTokenDigests.includes(callerDigest) ||
+        cached.accessToken === params.accessToken)
+        ? cached.knownRefreshTokenDigests
+        : [callerDigest];
     await recordSubscriptionAuthenticationFailure({
       providerApiKeyId,
       provider: "xai",
+      skipCache: true,
       matchesCredential(value) {
         const stored = decodeXaiSubscriptionCredential(value);
         return Boolean(
@@ -204,159 +246,8 @@ class XaiSubscriptionTokenManager {
       },
     });
   }
-
-  private recordValidationRotation(
-    redeemedToken: string,
-    rotatedRefreshToken: string | undefined,
-  ): void {
-    if (rotatedRefreshToken && rotatedRefreshToken !== redeemedToken) {
-      this.validationRotations.set(
-        hashToken(redeemedToken),
-        rotatedRefreshToken,
-        VALIDATION_ROTATION_TTL_MS,
-      );
-    }
-  }
-
-  private async redeemAndCache(params: {
-    refreshToken: string;
-    providerApiKeyId: string;
-    latestRefreshToken?: string;
-    knownRefreshTokenDigests: string[];
-  }): Promise<string> {
-    const {
-      refreshToken,
-      providerApiKeyId,
-      latestRefreshToken,
-      knownRefreshTokenDigests,
-    } = params;
-
-    // Prefer the most recently rotated refresh token; fall back to the stored
-    // one only when we have never rotated in this process. If an in-memory
-    // `latestRefreshToken` is itself rejected we intentionally do NOT retry with
-    // the stored `refreshToken`: when an issuer rotates it invalidates the
-    // predecessor, so the older stored token is necessarily already dead.
-    // Surfacing the 401 (which prompts a reconnect) is correct rather than
-    // masking it with a guaranteed-stale retry.
-    const redeemedToken = latestRefreshToken ?? refreshToken;
-    const { accessToken, expiresAtMs, rotatedRefreshToken } =
-      await redeemWithXai(redeemedToken);
-
-    const updatedDigests = appendKnownDigests(knownRefreshTokenDigests, [
-      hashToken(refreshToken),
-      rotatedRefreshToken && hashToken(rotatedRefreshToken),
-    ]);
-    this.tokenCache.set(
-      providerApiKeyId,
-      {
-        accessToken,
-        expiresAtMs,
-        refreshBufferMs: refreshBufferFor(expiresAtMs - Date.now()),
-        latestRefreshToken: rotatedRefreshToken ?? latestRefreshToken,
-        knownRefreshTokenDigests: updatedDigests,
-      },
-      Math.max(expiresAtMs - Date.now(), 0) + ROTATED_TOKEN_RETENTION_MS,
-    );
-
-    if (rotatedRefreshToken && rotatedRefreshToken !== refreshToken) {
-      this.queuePersist(providerApiKeyId, {
-        newRefreshToken: rotatedRefreshToken,
-        predecessorRefreshToken: redeemedToken,
-        lineageDigests: updatedDigests,
-      });
-    }
-
-    return accessToken;
-  }
-
-  /**
-   * Resolves once every rotation persist queued so far for the key has
-   * settled.
-   *
-   * @public — test hook: lets suites assert deterministically on the
-   * fire-and-forget persist queue instead of sleeping.
-   */
-  async waitForPersistFlush(providerApiKeyId: string): Promise<void> {
-    await this.persistQueues.get(providerApiKeyId);
-  }
-
-  private queuePersist(
-    providerApiKeyId: string,
-    params: PersistRotationParams,
-  ) {
-    const tail = this.persistQueues.get(providerApiKeyId) ?? Promise.resolve();
-    const next = tail
-      .then(() => this.persistRotatedRefreshToken(providerApiKeyId, params))
-      .catch((error) => {
-        logger.warn(
-          { providerApiKeyId, error },
-          "[XaiSubscription] failed to persist rotated refresh token",
-        );
-      });
-    this.persistQueues.set(providerApiKeyId, next);
-    // Fire-and-forget DB work: registered so shutdown/test teardown can drain
-    // it instead of letting it race the database going away.
-    trackBackgroundWork(next);
-    next.finally(() => {
-      if (this.persistQueues.get(providerApiKeyId) === next) {
-        this.persistQueues.delete(providerApiKeyId);
-      }
-    });
-  }
-
-  private async persistRotatedRefreshToken(
-    providerApiKeyId: string,
-    params: PersistRotationParams,
-  ): Promise<void> {
-    const { newRefreshToken, predecessorRefreshToken, lineageDigests } = params;
-    const keyRow = await LlmProviderApiKeyModel.findById(providerApiKeyId);
-    if (!keyRow?.secretId) {
-      return;
-    }
-    const storedValue = await getSecretValueForLlmProviderApiKey(
-      keyRow.secretId,
-    );
-    if (storedValue === undefined) {
-      logger.warn(
-        { providerApiKeyId },
-        "[XaiSubscription] skipping rotated refresh token persistence: stored secret value is unreadable",
-      );
-      return;
-    }
-    const storedCredential = decodeXaiSubscriptionCredential(storedValue);
-    if (!storedCredential) {
-      // The stored secret is no longer a SuperGrok credential (e.g.
-      // reconnected as a plain API key). Don't overwrite it.
-      return;
-    }
-    if (storedCredential.refreshToken === newRefreshToken) {
-      // Already persisted (another replica or an earlier queued write).
-      return;
-    }
-    // Compare-and-swap: only overwrite a stored token this rotation descends
-    // from. A reconnect — even to the SAME account — mints an independent token
-    // family, and writing the old family's rotation over it would kill the
-    // fresh sign-in.
-    if (
-      storedCredential.refreshToken !== predecessorRefreshToken &&
-      !lineageDigests.includes(hashToken(storedCredential.refreshToken))
-    ) {
-      logger.warn(
-        { providerApiKeyId },
-        "[XaiSubscription] skipping rotated refresh token persistence: stored credential was replaced since this rotation",
-      );
-      return;
-    }
-    await secretManager().updateSecret(keyRow.secretId, {
-      apiKey: encodeXaiSubscriptionCredential({
-        ...storedCredential,
-        refreshToken: newRefreshToken,
-      }),
-    });
-  }
 }
 
-/** @public — exercised directly by unit tests (cache/single-flight/rotation) */
 export const xaiSubscriptionTokenManager = new XaiSubscriptionTokenManager();
 
 /**
@@ -429,7 +320,7 @@ export function createXaiSubscriptionFetch(params: {
     let accessToken: string;
     try {
       accessToken = await xaiSubscriptionTokenManager.getAccessToken({
-        refreshToken: credential.refreshToken,
+        credential,
         providerApiKeyId,
       });
     } catch (error) {
@@ -457,8 +348,9 @@ export function createXaiSubscriptionFetch(params: {
       let freshAccessToken: string;
       try {
         freshAccessToken = await xaiSubscriptionTokenManager.getAccessToken({
-          refreshToken: credential.refreshToken,
+          credential,
           providerApiKeyId,
+          staleAccessToken: accessToken,
         });
       } catch (error) {
         if (
@@ -478,6 +370,7 @@ export function createXaiSubscriptionFetch(params: {
         await xaiSubscriptionTokenManager.recordAuthenticationFailure({
           providerApiKeyId,
           credential,
+          accessToken: freshAccessToken,
         });
       }
       return retried;
@@ -618,22 +511,8 @@ interface CachedAccessToken {
   expiresAtMs: number;
   /** How early to redeem again, derived from this token's own lifetime. */
   refreshBufferMs: number;
-  latestRefreshToken?: string;
+  userId: string;
   knownRefreshTokenDigests: string[];
-}
-
-interface InFlightRedemption {
-  promise: Promise<string>;
-  /** Digests of the credential lineage this flight redeems for — callers with a token outside it must not join. */
-  lineageDigests: Set<string>;
-}
-
-interface PersistRotationParams {
-  newRefreshToken: string;
-  /** The exact token whose redemption produced `newRefreshToken`. */
-  predecessorRefreshToken: string;
-  /** Lineage digests known when the rotation happened, for the persist CAS. */
-  lineageDigests: string[];
 }
 
 /**
@@ -649,7 +528,6 @@ const MAX_REFRESH_BUFFER_MS = 5 * 60 * 1000;
  * a flat buffer at or above the lifetime would re-redeem on every single request.
  */
 const REFRESH_BUFFER_FRACTION = 0.25;
-const ROTATED_TOKEN_RETENTION_MS = 24 * 60 * 60 * 1000;
 const KNOWN_REFRESH_TOKEN_LIMIT = 8;
 /** Fallback access-token lifetime when the response omits `expires_in`. */
 const DEFAULT_ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -677,6 +555,7 @@ async function discoverXaiOauthEndpoints(
   let response: Response;
   try {
     response = await fetch(url, {
+      signal: AbortSignal.timeout(20_000),
       headers: { accept: "application/json" },
       redirect: "manual",
     });
@@ -855,6 +734,7 @@ async function redeemWithXai(refreshToken: string): Promise<{
       accept: "application/json",
       "content-type": "application/x-www-form-urlencoded",
     },
+    signal: AbortSignal.timeout(20_000),
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
@@ -899,7 +779,10 @@ async function redeemWithXai(refreshToken: string): Promise<{
 
   return {
     accessToken: payload.access_token,
-    expiresAtMs: accessTokenExpiryMs(payload.access_token, payload.expires_in),
+    expiresAtMs: xaiAccessTokenExpiryMs(
+      payload.access_token,
+      payload.expires_in,
+    ),
     rotatedRefreshToken: payload.refresh_token,
   };
 }
@@ -911,7 +794,7 @@ async function redeemWithXai(refreshToken: string): Promise<{
  * not a documented constant, and over-estimating it would cost every request
  * in the gap a 401 + re-redemption round-trip.
  */
-function accessTokenExpiryMs(
+export function xaiAccessTokenExpiryMs(
   accessToken: string,
   expiresIn: number | undefined,
 ): number {
@@ -928,4 +811,16 @@ function accessTokenExpiryMs(
 function jwtExpMs(jwt: string): number | undefined {
   const exp = decodeJwtClaims(jwt)?.exp;
   return typeof exp === "number" ? exp * 1000 : undefined;
+}
+
+function freshCredentialAccessToken(
+  credential: XaiSubscriptionCredential,
+): credential is XaiSubscriptionCredential & {
+  accessToken: string;
+  accessTokenExpiresAtMs: number;
+} {
+  const remaining = (credential.accessTokenExpiresAtMs ?? 0) - Date.now();
+  return Boolean(
+    credential.accessToken && remaining - refreshBufferFor(remaining) > 0,
+  );
 }

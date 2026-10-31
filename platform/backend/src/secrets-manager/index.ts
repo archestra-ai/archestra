@@ -1,6 +1,7 @@
 import { SecretsManagerType, SupportedProviders } from "@archestra/shared";
 import { encodeBedrockSigV4Marker } from "@/clients/bedrock-credentials";
 import config from "@/config";
+import type { Transaction } from "@/database";
 import logger from "@/logging";
 import type { ISecretManager, VaultConfig } from "@/types";
 import { DbSecretsManager } from "./db";
@@ -107,8 +108,11 @@ export function getSecretsManagerTypeBasedOnEnvVars(): SecretsManagerType {
  * @public — exported for tests that exercise configured secret storage.
  */
 export const secretManagerCoordinator = new SecretManager();
-export function secretManager(): ISecretManager {
-  return secretManagerCoordinator.getCurrentInstance();
+export function secretManager(transaction?: Transaction): ISecretManager {
+  const manager = secretManagerCoordinator.getCurrentInstance();
+  return transaction && manager instanceof DbSecretsManager
+    ? new DbSecretsManager(transaction)
+    : manager;
 }
 
 /**
@@ -124,8 +128,9 @@ export function secretManager(): ISecretManager {
  */
 export async function getSecretValueForLlmProviderApiKey(
   secretId: string,
+  options?: { skipCache?: boolean },
 ): Promise<string | undefined> {
-  const secret = await secretManager().getSecret(secretId);
+  const secret = await secretManager().getSecret(secretId, options);
   const data = secret?.secret as Record<string, unknown> | null;
   if (!data) return undefined;
 

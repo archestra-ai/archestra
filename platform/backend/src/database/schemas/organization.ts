@@ -1,5 +1,4 @@
 import type {
-  StoredAgentRuntimeTierSettings,
   ContextualRetrievalMode,
   KnowledgeConnectorOverrides,
   MessagingChannelOverrides,
@@ -7,6 +6,7 @@ import type {
   OrganizationCustomFont,
   OrganizationTheme,
   PopularAgentOverrides,
+  StoredAgentRuntimeTierSettings,
   SupportedProvider,
 } from "@archestra/shared";
 import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@archestra/shared";

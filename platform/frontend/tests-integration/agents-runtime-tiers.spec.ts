@@ -1,7 +1,7 @@
 import { makeOrganization } from "../src/mocks/data/organization";
 import { expect, test } from "./fixtures";
 
-test("an administrator resizes a runtime tier: problems block Save, and only the filled fields are saved", async ({
+test("an administrator resizes a runtime tier: memory follows the CPU, a problem blocks Save, and the whole list is saved", async ({
   page,
   request,
   mswControl,
@@ -9,9 +9,7 @@ test("an administrator resizes a runtime tier: problems block Save, and only the
   const config = await (
     await request.get("/internal-test/api/api/config")
   ).json();
-  const organization = makeOrganization({
-    agentRuntimeTiers: { L: { memoryLimit: "24Gi" } },
-  });
+  const organization = makeOrganization();
   await mswControl.registerMany([
     {
       method: "get",
@@ -40,18 +38,23 @@ test("an administrator resizes a runtime tier: problems block Save, and only the
 
   const heading = page.getByRole("heading", { name: "Runtime tiers" });
   await heading.scrollIntoViewIfNeeded();
+  // The tiers in effect, smallest first, each with the memory its CPU gives it.
   const cpu = page.getByLabel("Tier L CPU request");
-  await expect(cpu).toHaveAttribute("placeholder", "8");
-  await expect(page.getByLabel("Tier L Memory limit")).toHaveValue("24Gi");
-  await expect(page.getByLabel("Tier M Warm spares")).toHaveAttribute(
+  await expect(cpu).toHaveValue("8");
+  await expect(page.getByLabel("Tier L CPU limit")).toHaveAttribute(
     "placeholder",
-    "Deployment",
+    "No limit",
   );
+  const row = page.getByRole("row").filter({ has: cpu });
+  await expect(row).toContainText("16 GiB");
+  await expect(row).toContainText("32 GiB limit");
+  await expect(page.getByLabel("Default tier M")).toBeChecked();
 
-  await cpu.fill("1");
+  // A value out of range is named, and Save stays disabled.
+  await cpu.fill("9");
   await expect(
     page.getByRole("alert", { name: "Runtime tier problems" }),
-  ).toContainText("Tier L requests less than tier M");
+  ).toContainText("Tier L: the CPU request is more than 0 and at most 8");
   await expect(
     page.getByRole("button", { name: "Save", exact: true }),
   ).toBeDisabled();
@@ -61,10 +64,19 @@ test("an administrator resizes a runtime tier: problems block Save, and only the
     fullPage: false,
   });
 
+  // A valid size: the memory follows while typing, and the save sends the
+  // whole list with the default tier.
   await cpu.fill("6");
-  await page.getByLabel("Tier L Warm spares").fill("1");
+  await expect(row).toContainText("12 GiB");
+  await expect(row).toContainText("24 GiB limit");
+  await page.getByLabel("Tier L ready spares").fill("1");
   const saved = {
-    L: { cpuRequest: "6", memoryLimit: "24Gi", warmPoolSize: 1 },
+    tiers: [
+      { name: "S", cpuRequest: 2, cpuLimit: null, warmSpares: 1 },
+      { name: "M", cpuRequest: 4, cpuLimit: null, warmSpares: 1 },
+      { name: "L", cpuRequest: 6, cpuLimit: null, warmSpares: 1 },
+    ],
+    defaultTier: "M",
   };
   await mswControl.use({
     method: "patch",

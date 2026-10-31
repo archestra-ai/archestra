@@ -19,20 +19,20 @@ test("returns the full successful output, without leaking stderr", async () => {
   expect(boundary.terminate).toHaveBeenCalledOnce();
 });
 
-test.each(["stdout", "stderr"])(
-  "bounds %s even before connection resolves",
-  async (stream) => {
-    const boundary = connection();
-    boundary.exec.mockImplementation(async (...args) => {
-      args[stream === "stdout" ? 4 : 5]?.write("12345");
-      return boundary.socket;
-    });
-    await expect(run(boundary, { maxOutputBytes: 4 })).rejects.toThrow(
-      "output limit",
-    );
-    expect(boundary.terminate).toHaveBeenCalledOnce();
-  },
-);
+test.each([
+  "stdout",
+  "stderr",
+])("bounds %s even before connection resolves", async (stream) => {
+  const boundary = connection();
+  boundary.exec.mockImplementation(async (...args) => {
+    args[stream === "stdout" ? 4 : 5]?.write("12345");
+    return boundary.socket;
+  });
+  await expect(run(boundary, { maxOutputBytes: 4 })).rejects.toThrow(
+    "output limit",
+  );
+  expect(boundary.terminate).toHaveBeenCalledOnce();
+});
 
 test("times out an exec handshake and closes a late connection", async () => {
   vi.useFakeTimers();
@@ -82,16 +82,13 @@ test.each([
     error: { code: "SYNTHETIC_PRIVATE_VALUE" },
     target: { authorization: "synthetic-token" },
   },
-])(
-  "bounds unknown connection rejections without reporting success",
-  async (error) => {
-    const boundary = connection();
-    boundary.exec.mockRejectedValue(error);
-    await expect(run(boundary)).rejects.toThrow(
-      /^Agent Runtime exec connection failed$/,
-    );
-  },
-);
+])("bounds unknown connection rejections without reporting success", async (error) => {
+  const boundary = connection();
+  boundary.exec.mockRejectedValue(error);
+  await expect(run(boundary)).rejects.toThrow(
+    /^Agent Runtime exec connection failed$/,
+  );
+});
 
 test("preserves existing Error rejections", async () => {
   const boundary = connection();

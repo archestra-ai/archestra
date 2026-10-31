@@ -123,38 +123,36 @@ describe("describeAgentRuntimeStartupProgress", () => {
     });
   });
 
-  it.for(["Pending", "Failed"])(
-    "surfaces a failed init container when the pod is %s",
-    (phase) => {
-      const progress = describeAgentRuntimeStartupProgress(
-        pod({
-          phase,
-          initContainerStatuses: [
-            {
-              name: "initialize-workspace",
-              state: {
-                terminated: {
-                  exitCode: 1,
-                  reason: "Error",
-                  message: "Could not initialize workspace volume",
-                },
+  it.for([
+    "Pending",
+    "Failed",
+  ])("surfaces a failed init container when the pod is %s", (phase) => {
+    const progress = describeAgentRuntimeStartupProgress(
+      pod({
+        phase,
+        initContainerStatuses: [
+          {
+            name: "initialize-workspace",
+            state: {
+              terminated: {
+                exitCode: 1,
+                reason: "Error",
+                message: "Could not initialize workspace volume",
               },
             },
-          ],
-          containerStatuses: [
-            { state: { waiting: { reason: "PodInitializing" } } },
-          ],
-        }),
-      );
+          },
+        ],
+        containerStatuses: [
+          { state: { waiting: { reason: "PodInitializing" } } },
+        ],
+      }),
+    );
 
-      expect(progress.message).toBe("Agent initialization failed");
-      expect(progress.detail).toContain("initialize-workspace");
-      expect(progress.detail).toContain("exit code 1");
-      expect(progress.detail).toContain(
-        "Could not initialize workspace volume",
-      );
-    },
-  );
+    expect(progress.message).toBe("Agent initialization failed");
+    expect(progress.detail).toContain("initialize-workspace");
+    expect(progress.detail).toContain("exit code 1");
+    expect(progress.detail).toContain("Could not initialize workspace volume");
+  });
 
   it("advances past a completed init container to the actual image pull failure", () => {
     const progress = describeAgentRuntimeStartupProgress(

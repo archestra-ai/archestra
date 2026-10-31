@@ -116,133 +116,124 @@ for (const outcome of ["success", "disconnect", "failure", "abort"] as const) {
   });
 }
 
-test.for(["user", "serviceAccount"] as const)(
-  "retains %s access only for the same live CLI and revokes it on workspace cleanup",
-  async (actorKind, {
-    makeOrganization,
-    makeUser,
-    makeAgent,
-    makeServiceAccount,
-  }) => {
-    vi.spyOn(manager, "isEnabled", "get").mockReturnValue(true);
-    vi.spyOn(KubeConfig.prototype, "loadFromDefault").mockImplementation(
-      function (this: KubeConfig) {
-        this.loadFromOptions({
-          clusters: [
-            { name: "test", server: "https://kubernetes.example.test" },
-          ],
-          users: [{ name: "test" }],
-          contexts: [{ name: "test", cluster: "test", user: "test" }],
-          currentContext: "test",
-        });
-      },
-    );
-    const organization = await makeOrganization();
-    const user = await makeUser();
-    const account =
-      actorKind === "serviceAccount"
-        ? await makeServiceAccount(organization.id)
-        : null;
-    const actorId = account?.id ?? user.id;
-    const gateway = account
-      ? await ServiceAccountModel.createToken({
-          serviceAccountId: account.id,
-          organizationId: organization.id,
-          name: "run gateway",
-          expiresIn: 3600,
-        })
+test.for([
+  "user",
+  "serviceAccount",
+] as const)("retains %s access only for the same live CLI and revokes it on workspace cleanup", async (actorKind, {
+  makeOrganization,
+  makeUser,
+  makeAgent,
+  makeServiceAccount,
+}) => {
+  vi.spyOn(manager, "isEnabled", "get").mockReturnValue(true);
+  vi.spyOn(KubeConfig.prototype, "loadFromDefault").mockImplementation(
+    function (this: KubeConfig) {
+      this.loadFromOptions({
+        clusters: [{ name: "test", server: "https://kubernetes.example.test" }],
+        users: [{ name: "test" }],
+        contexts: [{ name: "test", cluster: "test", user: "test" }],
+        currentContext: "test",
+      });
+    },
+  );
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  const account =
+    actorKind === "serviceAccount"
+      ? await makeServiceAccount(organization.id)
       : null;
-    const agent = await makeAgent({ organizationId: organization.id });
-    const context = await A2AContextModel.create({
-      actorKind,
-      actorId,
+  const actorId = account?.id ?? user.id;
+  const gateway = account
+    ? await ServiceAccountModel.createToken({
+        serviceAccountId: account.id,
+        organizationId: organization.id,
+        name: "run gateway",
+        expiresIn: 3600,
+      })
+    : null;
+  const agent = await makeAgent({ organizationId: organization.id });
+  const context = await A2AContextModel.create({
+    actorKind,
+    actorId,
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    agentId: agent.id,
+    state: "TASK_STATE_COMPLETED",
+  });
+  const key = await VirtualApiKeyModel.create({
+    organizationId: organization.id,
+    name: "retained-terminal",
+    keyType: "passthrough",
+  });
+  const run = await AgentRunModel.create({
+    taskId: task.id,
+    agentId: agent.id,
+    organizationId: organization.id,
+    actorKind,
+    actorId,
+    actorUserId: account ? null : user.id,
+    gatewayTokenId: gateway?.id,
+    backend: "kubernetes",
+    runtimeScope: "archestra-dev",
+    workloadName: `retained-${randomUUID()}`,
+    virtualApiKeyId: key.virtualKey.id,
+  });
+  const pods = vi
+    .spyOn(CoreV1Api.prototype, "listNamespacedPod")
+    .mockResolvedValue({
+      items: [
+        { metadata: { name: run.workloadName }, status: { phase: "Running" } },
+      ],
     });
-    const task = await A2ATaskModel.create({
-      contextId: context.id,
-      agentId: agent.id,
-      state: "TASK_STATE_COMPLETED",
+  const credentialData = {
+    [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: "renewable-bundle",
+    GITHUB_TOKEN: "startup-token",
+  };
+  vi.spyOn(CoreV1Api.prototype, "readNamespacedSecret").mockImplementation(
+    async () => ({ data: { ...credentialData } }),
+  );
+  vi.spyOn(CoreV1Api.prototype, "patchNamespacedSecret").mockImplementation(
+    async ({ body }) => {
+      Object.assign(credentialData, body.data);
+      return {};
+    },
+  );
+  vi.spyOn(CoreV1Api.prototype, "deleteNamespacedSecret").mockResolvedValue({});
+  let pane = `0:${run.taskId}`;
+  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+    args[4]?.write(pane);
+    setTimeout(() => args[8]?.({ status: "Success" }), 0);
+    return Object.assign(new EventEmitter(), {
+      close: vi.fn(),
+      terminate: vi.fn(),
+    }) as unknown as WebSocket;
+  });
+  await expect(manager.hasRetainedTerminal(run)).resolves.toBe(true);
+  pane = `1:${run.taskId}`;
+  await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
+  pane = `0:${randomUUID()}`;
+  await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
+  pane = `0:${run.taskId}`;
+  await manager.releaseRun(run, { retainInteractiveSession: true });
+  expect((await AgentRunModel.findByTaskId(run.taskId))?.virtualApiKeyId).toBe(
+    key.virtualKey.id,
+  );
+  expect(credentialData).toEqual({
+    [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: "renewable-bundle",
+    GITHUB_TOKEN: "",
+  });
+  if (gateway)
+    expect(await ServiceAccountModel.verifyToken(gateway.token)).toMatchObject({
+      serviceAccount: { id: actorId },
     });
-    const key = await VirtualApiKeyModel.create({
-      organizationId: organization.id,
-      name: "retained-terminal",
-      keyType: "passthrough",
-    });
-    const run = await AgentRunModel.create({
-      taskId: task.id,
-      agentId: agent.id,
-      organizationId: organization.id,
-      actorKind,
-      actorId,
-      actorUserId: account ? null : user.id,
-      gatewayTokenId: gateway?.id,
-      backend: "kubernetes",
-      runtimeScope: "archestra-dev",
-      workloadName: `retained-${randomUUID()}`,
-      virtualApiKeyId: key.virtualKey.id,
-    });
-    const pods = vi
-      .spyOn(CoreV1Api.prototype, "listNamespacedPod")
-      .mockResolvedValue({
-        items: [
-          {
-            metadata: { name: run.workloadName },
-            status: { phase: "Running" },
-          },
-        ],
-      });
-    const credentialData = {
-      [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: "renewable-bundle",
-      GITHUB_TOKEN: "startup-token",
-    };
-    vi.spyOn(CoreV1Api.prototype, "readNamespacedSecret").mockImplementation(
-      async () => ({ data: { ...credentialData } }),
-    );
-    vi.spyOn(CoreV1Api.prototype, "patchNamespacedSecret").mockImplementation(
-      async ({ body }) => {
-        Object.assign(credentialData, body.data);
-        return {};
-      },
-    );
-    vi.spyOn(CoreV1Api.prototype, "deleteNamespacedSecret").mockResolvedValue(
-      {},
-    );
-    let pane = `0:${run.taskId}`;
-    vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
-      args[4]?.write(pane);
-      setTimeout(() => args[8]?.({ status: "Success" }), 0);
-      return Object.assign(new EventEmitter(), {
-        close: vi.fn(),
-        terminate: vi.fn(),
-      }) as unknown as WebSocket;
-    });
-    await expect(manager.hasRetainedTerminal(run)).resolves.toBe(true);
-    pane = `1:${run.taskId}`;
-    await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
-    pane = `0:${randomUUID()}`;
-    await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
-    pane = `0:${run.taskId}`;
-    await manager.releaseRun(run, { retainInteractiveSession: true });
-    expect(
-      (await AgentRunModel.findByTaskId(run.taskId))?.virtualApiKeyId,
-    ).toBe(key.virtualKey.id);
-    expect(credentialData).toEqual({
-      [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: "renewable-bundle",
-      GITHUB_TOKEN: "",
-    });
-    if (gateway)
-      expect(
-        await ServiceAccountModel.verifyToken(gateway.token),
-      ).toMatchObject({
-        serviceAccount: { id: actorId },
-      });
-    pods.mockResolvedValue({ items: [] });
-    await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
-    await manager.releaseRun(run, { retainInteractiveSession: true });
-    expect(
-      (await AgentRunModel.findByTaskId(run.taskId))?.virtualApiKeyId,
-    ).toBeNull();
-    expect(credentialData[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]).toBe("");
-    if (gateway)
-      expect(await ServiceAccountModel.verifyToken(gateway.token)).toBeNull();
-  },
-);
+  pods.mockResolvedValue({ items: [] });
+  await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
+  await manager.releaseRun(run, { retainInteractiveSession: true });
+  expect(
+    (await AgentRunModel.findByTaskId(run.taskId))?.virtualApiKeyId,
+  ).toBeNull();
+  expect(credentialData[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]).toBe("");
+  if (gateway)
+    expect(await ServiceAccountModel.verifyToken(gateway.token)).toBeNull();
+});

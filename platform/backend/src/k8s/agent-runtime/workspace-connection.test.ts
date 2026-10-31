@@ -31,20 +31,19 @@ beforeEach(() => {
   );
 });
 
-test.for([403, 503])(
-  "omits optional connection hints when Kubernetes returns %i",
-  async (status) => {
-    let requests = 0;
-    server.use(
-      http.get(SANDBOX_URL, () => {
-        requests++;
-        return new HttpResponse(null, { status });
-      }),
-    );
-    await expect(manager.getWorkspaceConnection(SESSION)).resolves.toBeNull();
-    expect(requests).toBe(1);
-  },
-);
+test.for([
+  403, 503,
+])("omits optional connection hints when Kubernetes returns %i", async (status) => {
+  let requests = 0;
+  server.use(
+    http.get(SANDBOX_URL, () => {
+      requests++;
+      return new HttpResponse(null, { status });
+    }),
+  );
+  await expect(manager.getWorkspaceConnection(SESSION)).resolves.toBeNull();
+  expect(requests).toBe(1);
+});
 
 test("omits connection hints when the Agent Sandbox controller is not installed", async () => {
   vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);

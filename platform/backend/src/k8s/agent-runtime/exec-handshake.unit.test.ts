@@ -6,44 +6,43 @@ import { WebSocketServer } from "ws";
 import { execAgentRuntimeCommand, streamAgentRuntimeCommand } from "./exec";
 
 for (const streaming of [false, true]) {
-  test.for([401, 403, 429, 500, 503])(
-    `reports HTTP %i from a real ${streaming ? "streaming" : "buffered"} exec handshake`,
-    async (status) => {
-      const server = createServer((_request, response) => {
-        response.writeHead(status);
-        response.end("synthetic-private-response");
-      });
-      await new Promise<void>((resolve) =>
-        server.listen(0, "127.0.0.1", resolve),
+  test.for([
+    401, 403, 429, 500, 503,
+  ])(`reports HTTP %i from a real ${streaming ? "streaming" : "buffered"} exec handshake`, async (status) => {
+    const server = createServer((_request, response) => {
+      response.writeHead(status);
+      response.end("synthetic-private-response");
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    try {
+      const options = connectionOptions(server);
+      const execute = () => {
+        if (!streaming) return execAgentRuntimeCommand(options);
+        const result = streamAgentRuntimeCommand(options);
+        result.stdout.on("error", () => {});
+        return result.completed;
+      };
+      const error = await execute().catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(Error);
+      if (!(error instanceof Error)) throw new Error("Expected an Error");
+      const serialized = stdSerializers.err(error);
+      expect(serialized.message).toBe(
+        `Agent Runtime exec connection failed (HTTP ${status})`,
       );
-      try {
-        const options = connectionOptions(server);
-        const execute = () => {
-          if (!streaming) return execAgentRuntimeCommand(options);
-          const result = streamAgentRuntimeCommand(options);
-          result.stdout.on("error", () => {});
-          return result.completed;
-        };
-        const error = await execute().catch((error: unknown) => error);
-        expect(error).toBeInstanceOf(Error);
-        if (!(error instanceof Error)) throw new Error("Expected an Error");
-        const serialized = stdSerializers.err(error);
-        expect(serialized.message).toBe(
-          `Agent Runtime exec connection failed (HTTP ${status})`,
-        );
-        expect(JSON.stringify(serialized)).not.toContain(
-          "synthetic-private-response",
-        );
-        expect(JSON.stringify(serialized)).not.toContain("synthetic-token");
-        // Diagnostics must not silently opt denied access or server failures
-        // into the completion monitor's existing retry policy.
-        expect(error).not.toHaveProperty("code");
-        expect(error.constructor).toBe(Error);
-      } finally {
-        await new Promise<void>((resolve) => server.close(() => resolve()));
-      }
-    },
-  );
+      expect(JSON.stringify(serialized)).not.toContain(
+        "synthetic-private-response",
+      );
+      expect(JSON.stringify(serialized)).not.toContain("synthetic-token");
+      // Diagnostics must not silently opt denied access or server failures
+      // into the completion monitor's existing retry policy.
+      expect(error).not.toHaveProperty("code");
+      expect(error.constructor).toBe(Error);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 }
 
 test("reports a real socket reset without including connection details", async () => {

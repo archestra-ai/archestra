@@ -36,10 +36,11 @@ echo VERIFIED
       expect(result.stdout).toContain("VERIFIED");
     }, 30_000);
 
-    it.each(["disconnect", "parser error"])(
-      "fails a recording %s without losing output or ending the workspace",
-      (failure) => {
-        const result = runInContainer(`
+    it.each([
+      "disconnect",
+      "parser error",
+    ])("fails a recording %s without losing output or ending the workspace", (failure) => {
+      const result = runInContainer(`
 printf 'echo retained-output; touch /tmp/started; sleep 60\\n' > /var/run/archestra/turns/1.request
 wait_for /tmp/started
 ${failure === "disconnect" ? 'client="$(tmux list-clients -F \'#{client_name}\')"\ntmux detach-client -t "$client"' : "printf 'not-a-tmux-command\\n' > /var/run/archestra/turns/1.recording-input"}
@@ -58,11 +59,9 @@ test "$(cat /var/run/archestra/turns/2.exit)" = 0
 grep -q follow-up /var/run/archestra/turns/2.log
 echo VERIFIED
 `);
-        expect(result.status, result.stderr).toBe(0);
-        expect(result.stdout).toContain("VERIFIED");
-      },
-      30_000,
-    );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+    }, 30_000);
 
     it("bounds recording startup without launching unrecorded work", () => {
       const result = runInContainer(`
@@ -250,10 +249,11 @@ echo VERIFIED
       expect(result.stdout).toContain("VERIFIED");
     }, 30_000);
 
-    it.each([true, false])(
-      "fails an interrupted request without replaying its side effects (failure file writable: %s)",
-      (writable) => {
-        const result = runInContainer(`
+    it.each([
+      true,
+      false,
+    ])("fails an interrupted request without replaying its side effects (failure file writable: %s)", (writable) => {
+      const result = runInContainer(`
 mkdir -p /var/run/archestra/turns
 touch /var/run/archestra/turns/1.started
 ${writable ? "" : 'mkdir "/var/run/archestra/turns/1.failure.tmp.$supervisor"'}
@@ -275,11 +275,9 @@ test ! -f /var/run/archestra/replayed
 kill -0 "$supervisor"
 echo VERIFIED
 `);
-        expect(result.status, result.stderr).toBe(0);
-        expect(result.stdout).toContain("VERIFIED");
-      },
-      30_000,
-    );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+    }, 30_000);
 
     it("explains a crashed pane without replaying the turn", () => {
       const result = runInContainer(`

@@ -300,7 +300,13 @@ export class XaiSubscriptionTokenManager {
           this.pendingRotations.set(
             providerApiKeyId,
             { refreshToken: stored.refreshToken, redeemed },
-            PENDING_ROTATION_TTL_MS,
+            // A vault-referenced row never receives the rotation, so this
+            // entry is the only live successor: keep it as long as this
+            // branch kept its in-memory token before.
+            stored.vaultReference
+              ? Math.max(redeemed.expiresAtMs - Date.now(), 0) +
+                  VAULT_REFERENCE_ROTATION_RETENTION_MS
+              : PENDING_ROTATION_TTL_MS,
           );
         }
         const { vaultReference, ...storedCredential } = stored;
@@ -312,8 +318,9 @@ export class XaiSubscriptionTokenManager {
         };
         if (vaultReference) {
           // Release-branch rule: a vault-referenced row is never overwritten
-          // with OAuth material. The rotation stays pending in this process,
-          // which keeps refreshing from its own successor.
+          // with OAuth material. The rotation stays pending in this process
+          // for the access token's lifetime plus a day, and the process keeps
+          // refreshing from its own successor.
           rotationSkipped = true;
           logger.warn(
             { providerApiKeyId },
@@ -796,6 +803,13 @@ const VALIDATION_ROTATION_TTL_MS = 15 * 60 * 1000;
  * cost the family anyway.
  */
 const PENDING_ROTATION_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * How long past its access token's expiry a vault-referenced key's rotation is
+ * kept. Its row is never written, so the pending entry is the only copy of the
+ * live refresh token; a key idle for longer redeems the spent stored one.
+ */
+const VAULT_REFERENCE_ROTATION_RETENTION_MS = 24 * 60 * 60 * 1000;
 /**
  * Attempts for the write-back under the lock when an external secrets backend
  * fails with a network-shaped error, and the pause between them. Short on

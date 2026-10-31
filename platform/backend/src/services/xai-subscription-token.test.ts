@@ -907,6 +907,39 @@ describe("shared refresh guards", () => {
   );
 
   tokenTest(
+    "keeps a vault-referenced key's rotation past an idle hour and refreshes from its successor",
+    async ({ subscriptionKey }) => {
+      // The row is a vault reference: the rotation is never written back.
+      await SecretModel.update(subscriptionKey.secretId, { isByosVault: true });
+      const issuer = stubSingleUseIssuer();
+      const manager = new XaiSubscriptionTokenManager();
+      const params = {
+        credential: subscriptionKey.credential,
+        providerApiKeyId: subscriptionKey.id,
+      };
+      expect(await manager.getAccessToken(params)).toBe("at_1");
+      expect(await readCredential(subscriptionKey.secretId)).toEqual(
+        subscriptionKey.credential,
+      );
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        // Past the access token's hour and past the pending-rotation TTL
+        // used for rows that are written back.
+        vi.setSystemTime(Date.now() + 90 * 60 * 1000);
+        expect(await manager.getAccessToken(params)).toBe("at_2");
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(issuer.calls).toEqual(["rt_0", "rt_1"]);
+      expect(issuer.familyDead).toBe(false);
+      expect(
+        (await LlmProviderApiKeyModel.findById(subscriptionKey.id))
+          ?.requiresReauthentication,
+      ).toBe(false);
+    },
+  );
+
+  tokenTest(
     "persists a rotation whose write-back kept failing on the next refresh, without redeeming again",
     async ({ subscriptionKey }) => {
       const issuer = stubSingleUseIssuer();

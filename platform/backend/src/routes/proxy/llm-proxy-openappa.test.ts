@@ -15619,7 +15619,9 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
               frame.type === "response.custom_tool_call_input.delta",
           ),
         ).toBe(false);
-        expect(response.body).toContain("data: [DONE]");
+        // The failed terminal ends the stream, as OpenAI's does: no `[DONE]`.
+        expect(frames.at(-1)?.type).toBe(`response.${status}`);
+        expect(response.body).not.toContain("[DONE]");
       }
       const released = stream
         ? frames.find((frame) => frame.type === `response.${status}`).response

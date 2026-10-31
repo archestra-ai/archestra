@@ -369,6 +369,7 @@ function createRun(endedAt: string | null): AgentRunListItem {
     agentId: "agent-1",
     actorKind: "user",
     actorId: "user-1",
+    runtimeLimits: null,
     actorUserId: "user-1",
     title: "Native TUI verification",
     pinnedAt: null,

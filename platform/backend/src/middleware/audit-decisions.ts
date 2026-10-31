@@ -1130,6 +1130,10 @@ export const AUDIT_DECISIONS = {
     reason:
       "internal completion ledger committed with application data upgrades",
   },
+  orgTrioPendingNormalTierTable: {
+    audited: false,
+    reason: "migration-written normal tiers the startup check consumes once",
+  },
   interactionUserActivityTable: {
     audited: false,
     reason: "derived log user activity counts",

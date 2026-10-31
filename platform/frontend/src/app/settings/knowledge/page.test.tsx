@@ -235,6 +235,7 @@ function makeCapabilities(
     pricePerMillionCacheRead: null,
     pricePerMillionCacheWrite: null,
     cachePriceSource: "default",
+    mediaPricing: null,
     ...overrides,
   };
 }

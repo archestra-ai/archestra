@@ -2193,6 +2193,27 @@ describe("ProviderError", () => {
 });
 
 describe("mapProviderError - EmptyModelResponseError", () => {
+  it("explains an empty length-capped turn without offering an unchanged retry", () => {
+    const result = mapProviderError(
+      new EmptyModelResponseError({
+        finishReason: "length",
+        rawFinishReason: "max_tokens",
+        attempts: 1,
+      }),
+      "anthropic",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.IncompleteResponse);
+    expect(result.isRetryable).toBe(false);
+    expect(result.message).toContain("output limit before producing a reply");
+    expect(result.message).toContain("smaller");
+    expect(result.originalError?.raw).toEqual({
+      finishReason: "length",
+      rawFinishReason: "max_tokens",
+      attempts: 1,
+    });
+  });
+
   it("maps a content-filter finish to the non-retryable ContentFiltered card", () => {
     const result = mapProviderError(
       new EmptyModelResponseError({

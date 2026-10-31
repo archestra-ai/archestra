@@ -45,6 +45,7 @@ import {
   type RequestSpan,
   shortToolName,
 } from "./session-timeline";
+import { silentReplyExplanation } from "./silent-reply";
 
 /**
  * The right column for a selected request: what it said and what came back,
@@ -148,6 +149,7 @@ export function RequestContent({
                   profileName={profileName}
                   latest={latest}
                   onShowRequest={() => setView("request")}
+                  onShowResponse={() => setView("response")}
                   onJumpToLatest={onJumpToLatest}
                 />
               </TabsContent>
@@ -186,6 +188,7 @@ function ConversationView({
   profileName,
   latest,
   onShowRequest,
+  onShowResponse,
   onJumpToLatest,
 }: {
   record: InteractionRecord;
@@ -195,13 +198,22 @@ function ConversationView({
   profileName: string | null;
   latest: boolean;
   onShowRequest: () => void;
+  onShowResponse: () => void;
   onJumpToLatest: (() => void) | null;
 }) {
   const thread = useMemo(() => {
     const interaction = new DynamicInteraction(record);
+    const messages = interaction.mapToUiMessages().map(fenceJsonReplies);
     return {
-      messages: interaction.mapToUiMessages().map(fenceJsonReplies),
+      messages,
       modelName: interaction.modelName,
+      silentReply: silentReplyExplanation({
+        messages,
+        response: record.response,
+        failed:
+          readFailure(record.response) !== null ||
+          (record.chatErrors?.length ?? 0) > 0,
+      }),
     };
   }, [record]);
 
@@ -254,6 +266,26 @@ function ConversationView({
         selectedModel={thread.modelName}
         openPendingTools
       />
+      {thread.silentReply ? (
+        // A reply with no text, tool calls or transcript would otherwise
+        // leave the thread ending on the prompt, as if nothing came back.
+        <div className="px-4 pb-4">
+          <InlineNotice variant="neutral">
+            <MessageSquareText />
+            <span className="font-medium">The reply has nothing to show</span>
+            <InlineNoticeText>{thread.silentReply}</InlineNoticeText>
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-auto"
+              onClick={onShowResponse}
+            >
+              <Braces />
+              <span>Show response</span>
+            </Button>
+          </InlineNotice>
+        </div>
+      ) : null}
     </>
   );
 }

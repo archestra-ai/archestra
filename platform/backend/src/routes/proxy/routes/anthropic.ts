@@ -13,6 +13,7 @@ import { anthropicAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { passthroughReplyOptions } from "../passthrough-log";
 import { getExternalAgentId } from "../utils/headers/external-agent-id";
 import {
   AnthropicModelsHeadersSchema,
@@ -51,6 +52,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       upstream,
       providerName: "Anthropic",
       authenticate: createPassthroughAuthenticator("anthropic"),
+      logProvider: "anthropic",
       rewritePrefix: "",
       beforeCleanBody: async (request, body) => {
         if (
@@ -75,7 +77,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     }),
-    replyOptions: { onResponse: claudeCodeToolTokenCountObserver.onResponse },
+    replyOptions: passthroughReplyOptions(
+      claudeCodeToolTokenCountObserver.onResponse,
+    ),
   });
 
   /**

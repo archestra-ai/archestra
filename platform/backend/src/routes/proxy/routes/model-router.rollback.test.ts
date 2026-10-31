@@ -78,6 +78,7 @@ import {
   xaiAdapterFactory,
   zhipuaiAdapterFactory,
 } from "../adapters";
+import { azureEmbeddingsAdapterFactory } from "../adapters/azure";
 import modelRouterProxyRoutes from "./model-router";
 
 setupTestCacheManager();
@@ -656,6 +657,9 @@ describe("model router proxy routes", () => {
     vi.spyOn(azureAdapterFactory, "createClient").mockImplementation(
       () => createAzureTestClient() as never,
     );
+    vi.spyOn(azureEmbeddingsAdapterFactory, "createClient").mockImplementation(
+      () => createAzureTestClient() as never,
+    );
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
       () => createAnthropicTestClient(anthropicStubOptions) as never,
     );
@@ -843,7 +847,12 @@ describe("model router proxy routes", () => {
       expect(responsesResponse.headers["content-type"]).toContain(
         "text/event-stream",
       );
-      expect(responsesResponse.body).toContain("data: [DONE]");
+      // Every provider answers in OpenAI's Responses framing: named events,
+      // ending on `response.completed` with no `[DONE]` sentinel after it.
+      expect(responsesResponse.body).toMatch(
+        /event: response\.completed\ndata: [^\n]*\n\n$/,
+      );
+      expect(responsesResponse.body).not.toContain("[DONE]");
       expect(responsesResponse.body).not.toContain(
         "Streaming is not yet available",
       );
@@ -1180,7 +1189,10 @@ describe("model router proxy routes", () => {
 
     expect(response.statusCode, response.body).toBe(200);
     expect(response.headers["content-type"]).toContain("text/event-stream");
-    expect(response.body).toContain("data: [DONE]");
+    expect(response.body).toMatch(
+      /event: response\.completed\ndata: [^\n]*\n\n$/,
+    );
+    expect(response.body).not.toContain("[DONE]");
     expect(
       githubCopilotResponsesAdapterFactory.createClient,
     ).toHaveBeenCalledOnce();
@@ -1238,6 +1250,54 @@ describe("model router proxy routes", () => {
     expect(
       githubCopilotResponsesAdapterFactory.createClient,
     ).not.toHaveBeenCalled();
+  });
+
+  test("answers OpenAI chat completions as OpenAI does: gpt-6 is served, Codex is not", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "openai", modelId: "gpt-6.1-terra" });
+    await upsertModel({ provider: "openai", modelId: "gpt-5.3-codex" });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "openai",
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router OpenAI Chat Agent",
+      agentType: "llm_proxy",
+    });
+    const chat = (model: string) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+        payload: { model, messages: [{ role: "user", content: "Hello" }] },
+      });
+
+    // OpenAI answers gpt-6 chat completions (it rejects only function tools
+    // there, with its own error), so the router forwards the request.
+    const served = await chat("openai:gpt-6.1-terra");
+    expect(served.statusCode, served.body).toBe(200);
+    expect(openaiAdapterFactory.createClient).toHaveBeenCalledOnce();
+
+    // OpenAI has no chat completions for Codex models at all: refused locally.
+    const refused = await chat("openai:gpt-5.3-codex");
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error.message).toContain("/responses");
+    expect(openaiAdapterFactory.createClient).toHaveBeenCalledOnce();
+    expect(openAiResponsesAdapterFactory.createClient).not.toHaveBeenCalled();
   });
 
   test("rejects Copilot embedding requests rather than sending the raw token upstream", async ({

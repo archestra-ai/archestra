@@ -91,6 +91,16 @@ vi.mock("@/lib/agent-options.query", () => ({
   },
 }));
 
+vi.mock("@/lib/agent-runtime-templates.query", () => ({
+  useRuntimeTemplateCatalog: () => ({
+    data: [],
+    isFetching: false,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useResolveRuntimeTemplate: () => ({ isPending: false, mutate: vi.fn() }),
+}));
 vi.mock("next/navigation");
 
 const {
@@ -206,7 +216,6 @@ const {
   ),
   useAgentRuntimePreflightMock: vi.fn(() => ({ data: undefined })),
   useOrganizationDefaultModelMock: vi.fn(() => ({
-    isSet: false,
     model: null,
     label: null,
   })),
@@ -1157,8 +1166,6 @@ const baseAgent = {
   llmModel: null,
   modelId: null,
   modelPoolId: null,
-  fastModelId: null,
-  smartModelId: null,
   identityProviderId: null,
   environmentId: null,
   builtInAgentConfig: null,
@@ -2872,7 +2879,6 @@ describe("AgentForm save payload and failure handling", () => {
     useLlmModelsByProviderMock.mockReturnValue({ modelsByProvider: {} });
     useAgentRuntimePreflightMock.mockReturnValue({ data: undefined });
     useOrganizationDefaultModelMock.mockReturnValue({
-      isSet: false,
       model: null,
       label: null,
     });
@@ -3325,7 +3331,6 @@ describe("AgentForm save payload and failure handling", () => {
       backend: "kubernetes" as const,
       steerMode: "pipe" as const,
       privileged: false,
-      resources: null,
       environment: null,
       credentials: null,
       ttlHours: null,
@@ -3457,7 +3462,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3517,7 +3521,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3586,7 +3589,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3644,7 +3646,6 @@ describe("AgentForm save payload and failure handling", () => {
 
   it("blocks an Anthropic runtime when the inherited organization model is Gemini", async () => {
     useOrganizationDefaultModelMock.mockReturnValue({
-      isSet: true,
       label: "Google · Gemini 2.5 Pro",
       model: {
         dbId: "gemini-default",
@@ -3670,7 +3671,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3719,7 +3719,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3766,7 +3765,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3825,7 +3823,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -3987,7 +3984,6 @@ describe("AgentForm save payload and failure handling", () => {
       backend: "kubernetes" as const,
       steerMode: "pipe" as const,
       privileged: false,
-      resources: null,
       environment: null,
       credentials: null,
       ttlHours: null,
@@ -4037,7 +4033,6 @@ describe("AgentForm save payload and failure handling", () => {
       backend: "kubernetes" as const,
       steerMode: "pipe" as const,
       privileged: false,
-      resources: null,
       environment: null,
       credentials: null,
       ttlHours: null,
@@ -4116,7 +4111,6 @@ describe("AgentForm save payload and failure handling", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: null,
@@ -4322,68 +4316,6 @@ describe("AgentForm save payload and failure handling", () => {
     await waitFor(() => expect(updateAgent).toHaveBeenCalled());
     expect(savedBody().llmApiKeyId).toBe("key-1");
     expect(savedBody().modelId).toBe("model-1");
-  });
-
-  it("clears the fast and smart models when the key changes", async () => {
-    // They are validated against the trio's key, so they cannot follow the
-    // normal model onto another key.
-    const user = userEvent.setup();
-    useAvailableLlmProviderApiKeysMock.mockReturnValue({
-      data: [
-        {
-          id: "key-0",
-          name: "Old OpenAI",
-          provider: "openai",
-          scope: "org",
-          bestModelId: "model-1",
-        },
-        {
-          id: "key-1",
-          name: "Org OpenAI",
-          provider: "openai",
-          scope: "org",
-          bestModelId: "model-1",
-        },
-      ],
-    });
-    useLlmModelsByProviderMock.mockReturnValue({
-      modelsByProvider: {
-        openai: [
-          {
-            dbId: "model-1",
-            id: "gpt-4o",
-            displayName: "GPT-4o",
-            provider: "openai",
-            isFree: false,
-          },
-        ],
-      },
-    });
-    render(
-      <AgentForm
-        agentType="agent"
-        agent={{
-          ...baseAgent,
-          llmApiKeyId: "key-0",
-          modelId: "model-1",
-          fastModelId: "fast-0",
-          smartModelId: "smart-0",
-        }}
-        sections={["configuration"]}
-      />,
-    );
-
-    await user.click(
-      await screen.findByRole("button", { name: /pick api key/i }),
-    );
-    await user.click(screen.getByRole("button", { name: /update/i }));
-
-    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
-    expect(savedBody()).toMatchObject({
-      llmApiKeyId: "key-1",
-      fastModelId: null,
-      smartModelId: null,
-    });
   });
 
   it("automatically uses an existing ChatGPT subscription for the Codex catalog runtime", async () => {
@@ -4629,7 +4561,6 @@ describe("AgentForm save payload and failure handling", () => {
       },
     });
     useOrganizationDefaultModelMock.mockReturnValue({
-      isSet: true,
       model: {
         dbId: "gpt-default",
         id: "gpt-5.6-luna",

@@ -344,7 +344,6 @@ async function seededRun(params: {
       backend: "kubernetes",
       steerMode: "tmux_keys",
       privileged: false,
-      resources: null,
       environment: null,
       credentials: null,
       ttlHours: 1,

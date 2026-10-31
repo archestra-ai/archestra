@@ -71,6 +71,7 @@ test.each([
   const home = await mkdtemp(join(tmpdir(), "desktop-browser-setup-"));
   const opened: string[] = [];
   const native: string[] = [];
+  const spawned: { file: string; options: { detached?: boolean } }[] = [];
   const module = { exports: null };
   let verifier: string | undefined;
   let challenge: string | null = null;
@@ -147,8 +148,13 @@ test.each([
         return { homedir: () => home, tmpdir: () => home };
       if (name === "node:child_process")
         return {
-          spawn: (file: string) => {
+          spawn: (
+            file: string,
+            _args: string[],
+            options: { detached?: boolean },
+          ) => {
             native.push(file);
+            spawned.push({ file, options });
             const child = Object.assign(new EventEmitter(), { unref() {} });
             queueMicrotask(() => child.emit("spawn"));
             return child;
@@ -267,6 +273,13 @@ test.each([
         headers: { Origin: origin },
       });
       await expect.poll(async () => (await status()).phase).toBe("restarting");
+      // A detached PowerShell exits before it runs the restart script.
+      if (targetOs === "win32") {
+        expect(spawned).toEqual([
+          { file: "powershell.exe", options: expect.anything() },
+        ]);
+        expect(spawned[0].options.detached).toBeFalsy();
+      }
       const metadata = JSON.parse(
         await readFile(join(library, "_meta.json"), "utf8"),
       );

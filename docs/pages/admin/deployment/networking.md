@@ -13,10 +13,22 @@ Route gateway traffic directly to the backend, and keep the web app and sign-in 
 
 1. Configure DNS and TLS for your Archestra host.
 2. Set [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL) to the public UI URL and [`ARCHESTRA_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_API_BASE_URL) to every public backend or gateway URL. API base URLs accept a comma-separated list. Use `https://` even when TLS terminates at a load balancer.
-3. Route `/v1` and `/v2` to backend port **9000**, and `/` to frontend port **3000**. Keep `/api/auth` on the frontend.
+3. Route `/v1` and `/v2` with `pathType: Prefix` and `/openapi.json` with `pathType: Exact` to backend port **9000**. Route `/` to frontend port **3000**. Keep `/api/auth` on the frontend.
 4. [Connect a client](/docs/get-started/connect) through the public endpoint and test a streaming model request and an MCP tool call.
 
-The chart applies this split for `archestra.ingress.hosts`. A complete `archestra.ingress.spec` or external routing layer must apply it explicitly.
+The chart applies this split for `archestra.ingress.hosts` when `archestra.ingress.routeBackendApisDirectly` is enabled, preserving explicitly configured routes. A complete `archestra.ingress.spec` or external routing layer must apply it explicitly. Include this path in each combined UI/API host's rules, replacing the service name with your release's service:
+
+```yaml
+- path: /openapi.json
+  pathType: Exact
+  backend:
+    service:
+      name: my-release-archestra-platform
+      port:
+        number: 9000
+```
+
+Terraform model-pool writes check this endpoint before sending changes. Verify `curl -i https://archestra.example.com/openapi.json` returns HTTP 200 and an OpenAPI JSON document. If this returns HTML or a 404, check that the exact path routes to the backend.
 
 Gateway OAuth discovery uses the configured public URLs. An unconfigured host falls back to the request scheme, which can advertise HTTP behind a TLS-terminating proxy. [`ARCHESTRA_TRUST_PROXY`](/docs/admin/deployment/configuration#ARCHESTRA_TRUST_PROXY) does not change that rule.
 

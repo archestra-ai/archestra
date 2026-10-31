@@ -98,6 +98,7 @@ import {
   ConversationEnabledToolModel,
   ConversationModel,
   LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   McpGatewayTaskModel,
   MessageModel,
   ModelModel,
@@ -1185,6 +1186,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     source: "chat",
                     agentLlmApiKeyId: agent.llmApiKeyId,
                     modelPoolId: conversation.modelPoolId,
+                    autoRoutable: !conversation.modelPoolId,
                     // Lets the proxy store this turn's interaction encrypted
                     // rather than redacted. Only sent when an escrow record
                     // exists, since without one the row could never be reopened.
@@ -1424,6 +1426,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           source: "chat:tool_call_repair",
                           agentLlmApiKeyId: agent.llmApiKeyId,
                           modelPoolId: conversation.modelPoolId,
+                          autoRoutable: !conversation.modelPoolId,
                           // A repair prompt carries the same conversation
                           // content as the turn it repairs.
                           encryptedChatKey: encryptedChatAudit?.dek ?? null,
@@ -1673,9 +1676,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const maxOutputTokens = resolveAgentMaxOutputTokens({
                   // Resolved, so an admin-set max-output override on a model
                   // whose provider reports no limit is what the turn asks for.
-                  outputLength: modelRow
-                    ? ModelModel.resolveEffectiveOutputLength(modelRow)
-                    : null,
+                  outputLength:
+                    await LlmProviderApiKeyModelLinkModel.resolveOutputLength(
+                      modelRow,
+                      chatApiKeyId,
+                    ),
                   ceiling: config.chat.maxOutputTokensCeiling,
                   rateMeteredCeiling:
                     config.chat.rateMeteredMaxOutputTokensCeiling,

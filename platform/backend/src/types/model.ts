@@ -172,6 +172,25 @@ export const PriceSourceSchema = z.enum([
 ]);
 export type PriceSource = z.infer<typeof PriceSourceSchema>;
 
+const MediaRateSchema = z.object({
+  /** What the rate meters: text, image or audio, or text and image together. */
+  kind: z.enum(["text", "image", "audio", "text_and_image"]),
+  usd: z.number(),
+});
+
+/**
+ * A media model's rates as its vendor publishes them: per million tokens (image
+ * and audio tokens priced apart from text), per million characters of speech
+ * input, or per minute of transcribed audio. These are the rates the proxy
+ * charges media calls by; the per-token chat prices do not apply to them.
+ */
+export const MediaPricingSchema = z.object({
+  per: z.enum(["million_tokens", "million_characters", "minute"]),
+  input: z.array(MediaRateSchema),
+  output: z.array(MediaRateSchema),
+});
+export type MediaPricing = z.infer<typeof MediaPricingSchema>;
+
 /**
  * Model capabilities for API responses.
  * Derived from SelectModelSchema with computed price fields.
@@ -207,6 +226,8 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   pricePerMillionCacheWrite: z.string().nullable(),
   /** Source of the effective cache price (null when cache is unpriced) */
   cachePriceSource: PriceSourceSchema.nullable(),
+  /** Media rates, for an image, speech or transcription model; else null */
+  mediaPricing: MediaPricingSchema.nullable(),
 });
 export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>;
 
@@ -434,6 +455,8 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   pricePerMillionCacheWrite: z.string().nullable(),
   /** Source of the effective cache price (null when cache is unpriced) */
   cachePriceSource: PriceSourceSchema.nullable(),
+  /** Media rates, for an image, speech or transcription model; else null */
+  mediaPricing: MediaPricingSchema.nullable(),
   /** True when the provider charges nothing for this model (both raw prices are zero). */
   isFree: z.boolean(),
   /**

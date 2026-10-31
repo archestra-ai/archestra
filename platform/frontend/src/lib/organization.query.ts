@@ -63,6 +63,8 @@ export function useAppearanceSettings(enabled = true) {
  * Query key factory for organization-related queries
  */
 export const organizationKeys = {
+  agentRuntimeTiers: () =>
+    [...organizationKeys.all, "agent-runtime-tiers"] as const,
   all: ["organization"] as const,
   invitations: () => [...organizationKeys.all, "invitations"] as const,
   invitation: (id: string) => [...organizationKeys.invitations(), id] as const,
@@ -70,6 +72,7 @@ export const organizationKeys = {
   activeMemberRole: (organizationId: string | undefined) =>
     [...organizationKeys.activeOrg(), "member-role", organizationId] as const,
   details: () => [...organizationKeys.all, "details"] as const,
+  defaultModel: () => [...organizationKeys.all, "default-model"] as const,
   onboardingStatus: () =>
     [...organizationKeys.all, "onboarding-status"] as const,
   memberSignupStatus: (userIds?: string[]) =>
@@ -380,6 +383,23 @@ export function useOrganization(
 }
 
 /**
+ * What "Organization default" runs on, readable by every member: the default
+ * model, or the trio auto routing routes it across.
+ */
+export function useOrganizationDefaultModelSummary(enabled = true) {
+  return useQuery({
+    queryKey: organizationKeys.defaultModel(),
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getOrganizationDefaultModel();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    enabled,
+  });
+}
+
+/**
  * Check if organization onboarding is complete
  * Only polls when enabled
  */
@@ -555,6 +575,22 @@ export function useUpdateSkillsSettings(
 }
 
 /**
+ * The organization's Agent Runtime tiers in effect, smallest first, with the
+ * memory each tier's CPU gives it and the default tier.
+ */
+export function useAgentRuntimeTiers(enabled = true) {
+  return useQuery({
+    queryKey: organizationKeys.agentRuntimeTiers(),
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getAgentRuntimeTiers();
+      throwOnApiError(error);
+      return data ?? null;
+    },
+    enabled,
+  });
+}
+
+/**
  * Update agent settings (default model, default agent)
  */
 export function useUpdateAgentSettings(
@@ -579,6 +615,14 @@ export function useUpdateAgentSettings(
     onSuccess: (updatedOrganization) => {
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.defaultModel(),
+      });
+      // The tiers in effect are their own query: a save that renames, adds or
+      // removes tiers refetches them, and the form rebuilds from the saved list.
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.agentRuntimeTiers(),
+      });
       toast.success(onSuccessMessage);
     },
   });

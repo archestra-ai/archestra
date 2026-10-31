@@ -1,4 +1,5 @@
 import {
+  AgentRuntimeTierSettingsSchema,
   BM25_B_MAX,
   BM25_B_MIN,
   BM25_K1_MAX,
@@ -16,6 +17,7 @@ import {
   RoleAssignmentSchema,
   SESSION_MAX_AGE_MAX_SECONDS,
   SESSION_MAX_AGE_MIN_SECONDS,
+  StoredAgentRuntimeTierSettingsSchema,
   StoredKnowledgeConnectorOverridesSchema,
   StoredMessagingChannelOverridesSchema,
   StoredModelProviderOverridesSchema,
@@ -377,6 +379,7 @@ const extendedFields = {
   knowledgeConnectorOverrides:
     StoredKnowledgeConnectorOverridesSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
+  agentRuntimeTiers: StoredAgentRuntimeTierSettingsSchema.nullable(),
   defaultEnvironmentTrustedImageRegistries:
     TrustedImageRegistriesSchema.nullable(),
 };
@@ -398,6 +401,34 @@ export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
   connectionDefaultProviderKeys: true,
   appsHackathonRecorderEnabled: true,
 });
+const OrganizationDefaultModelRefSchema = z.object({
+  id: z.string().uuid(),
+  provider: SupportedProvidersSchema,
+  displayName: z.string(),
+});
+export type OrganizationDefaultModelRef = z.infer<
+  typeof OrganizationDefaultModelRefSchema
+>;
+
+/** What "Organization default" runs on: the default model, routed across the trio while auto routing is active. */
+export const OrganizationDefaultModelSchema = z.object({
+  model: OrganizationDefaultModelRefSchema.nullable(),
+  autoRouting: z.discriminatedUnion("active", [
+    z.object({ active: z.literal(false) }),
+    z.object({
+      active: z.literal(true),
+      tiers: z.object({
+        fast: OrganizationDefaultModelRefSchema,
+        normal: OrganizationDefaultModelRefSchema,
+        smart: OrganizationDefaultModelRefSchema,
+      }),
+    }),
+  ]),
+});
+export type OrganizationDefaultModel = z.infer<
+  typeof OrganizationDefaultModelSchema
+>;
+
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
@@ -455,6 +486,7 @@ export const UpdateSecuritySettingsSchema = z.object({
   playwrightMcpEnabled: z.boolean().optional(),
   allowChatFileUploads: z.boolean().optional(),
   allowUnauthenticatedLlmProxyRequests: z.boolean().optional(),
+  keepMediaInLogs: z.boolean().optional(),
   newAppsDisabledByDefault: z.boolean().optional(),
   newAppsLockedByDefault: z.boolean().optional(),
   /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */
@@ -478,6 +510,14 @@ export const UpdateSkillsSettingsSchema = z.object({
 });
 
 export const UpdateAgentSettingsSchema = z.object({
+  /**
+   * The organization's Agent Runtime tiers: the whole list with the default
+   * tier, as the settings form saves it; null restores the defaults. A tier
+   * saved with `previousName` renames that tier, and the agents that name it
+   * follow. A tier left out is removed, which is refused while an agent or a
+   * template still names it.
+   */
+  agentRuntimeTiers: AgentRuntimeTierSettingsSchema.nullable().optional(),
   defaultModelId: z.string().uuid().nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
   defaultAgentId: z.string().uuid().nullable().optional(),
@@ -703,3 +743,19 @@ function isValidHttpUrl(value: string): boolean {
     return false;
   }
 }
+
+/** One Agent Runtime tier in effect, with the memory its CPU gives it. */
+export const AgentRuntimeTierSizeSchema = z.object({
+  name: z.string(),
+  cpuRequest: z.number(),
+  cpuLimit: z.number().nullable(),
+  warmSpares: z.number().int(),
+  memoryRequestMiB: z.number().int(),
+  memoryLimitMiB: z.number().int(),
+});
+
+/** The organization's Agent Runtime tiers in effect, smallest first. */
+export const AgentRuntimeTiersResponseSchema = z.object({
+  tiers: z.array(AgentRuntimeTierSizeSchema),
+  defaultTier: z.string(),
+});

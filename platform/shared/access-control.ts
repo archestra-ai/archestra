@@ -485,6 +485,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.OpenAiAudioTranslationsWithAgent]: {},
   [RouteId.AzureImagesWithDefaultAgent]: {},
   [RouteId.AzureImagesWithAgent]: {},
+  [RouteId.OpenAiImagesWithDefaultAgent]: {},
+  [RouteId.OpenAiImagesWithAgent]: {},
+  [RouteId.OpenAiImageEditsWithDefaultAgent]: {},
+  [RouteId.OpenAiImageEditsWithAgent]: {},
+  [RouteId.ModelRouterImagesWithDefaultAgent]: {},
+  [RouteId.ModelRouterImagesWithAgent]: {},
+  [RouteId.ModelRouterImageEditsWithDefaultAgent]: {},
+  [RouteId.ModelRouterImageEditsWithAgent]: {},
+  [RouteId.ModelRouterAudioSpeechWithDefaultAgent]: {},
+  [RouteId.ModelRouterAudioSpeechWithAgent]: {},
+  [RouteId.ModelRouterAudioTranscriptionsWithDefaultAgent]: {},
+  [RouteId.ModelRouterAudioTranscriptionsWithAgent]: {},
+  [RouteId.ModelRouterAudioTranslationsWithDefaultAgent]: {},
+  [RouteId.ModelRouterAudioTranslationsWithAgent]: {},
   [RouteId.AzureImageEditsWithDefaultAgent]: {},
   [RouteId.AzureImageEditsWithAgent]: {},
   [RouteId.AzureCreateFile]: {},
@@ -527,6 +541,14 @@ export const requiredEndpointPermissionsMap: Partial<
    * authenticated but no specific permission.
    */
   [RouteId.GetOrganization]: {},
+  // The tiers' names and sizes: the agent form shows them to anyone who may edit an agent.
+  [RouteId.GetAgentRuntimeTiers]: {},
+  [RouteId.ListAgentRuntimeTemplates]: {},
+  [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped create/update check in the handler.
+  [RouteId.GetRuntimeTemplateSettings]: { organizationSettings: ["update"] },
+  [RouteId.SaveRuntimeTemplateSettings]: { organizationSettings: ["update"] },
+  /** Names the default model for every member, so "Organization default" reads the same for all. */
+  [RouteId.GetOrganizationDefaultModel]: {},
 
   // Agent Runtime belongs to Agents. Read access is enough to view
   // runs and manage one's own declared credentials; shared credential writes

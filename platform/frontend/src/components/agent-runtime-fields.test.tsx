@@ -45,6 +45,41 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/organization.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/organization.query")>()),
+  // An administrator resized tier M; the form shows the organization's size.
+  useAgentRuntimeTiers: () => ({
+    data: {
+      tiers: [
+        {
+          name: "S",
+          cpuRequest: 0.5,
+          cpuLimit: null,
+          warmSpares: 1,
+          memoryRequestMiB: 1024,
+          memoryLimitMiB: 2048,
+        },
+        {
+          name: "M",
+          cpuRequest: 0.75,
+          cpuLimit: null,
+          warmSpares: 1,
+          memoryRequestMiB: 1536,
+          memoryLimitMiB: 3072,
+        },
+        {
+          name: "L",
+          cpuRequest: 8,
+          cpuLimit: null,
+          warmSpares: 0,
+          memoryRequestMiB: 16384,
+          memoryLimitMiB: 32768,
+        },
+      ],
+      defaultTier: "M",
+    },
+  }),
+}));
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
@@ -108,11 +143,6 @@ describe("AgentRuntimeFields", () => {
           defaultTtlHours: 36,
           defaultIdleTimeoutMinutes: 45,
           allowPrivileged: false,
-          resources: {
-            cpuRequest: "750m",
-            memoryRequest: "2Gi",
-            memoryLimit: "6Gi",
-          },
         };
       }
       return undefined;
@@ -147,15 +177,19 @@ describe("AgentRuntimeFields", () => {
       "placeholder",
       "No limit (default)",
     );
-    // Resources, ports, and privileged mode stay closed behind a summary.
+    // The tiers are in view, with no per-agent CPU or memory fields. The
+    // scaleup tier offers only tiers at or above the default tier, and a run
+    // may then ask for any of them.
+    expect(screen.getByLabelText("Default tier")).toBeVisible();
     expect(screen.queryByLabelText("Memory limit")).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: /Resources and access/ }),
-    );
-    expect(screen.getByLabelText("Memory limit")).toHaveAttribute(
-      "placeholder",
-      "6Gi (default)",
-    );
+    await user.click(screen.getByLabelText("Scaleup tier"));
+    expect(
+      screen.queryByRole("option", { name: /^S:/ }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /^L:/ }));
+    expect(
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}").maxTier,
+    ).toBe("L");
     expect(screen.getByLabelText("Ports to forward")).toHaveValue("");
     await user.type(screen.getByLabelText("Ports to forward"), "3000, 9000");
     expect(
@@ -195,7 +229,6 @@ describe("AgentRuntimeFields", () => {
       target: { value: "--permission-mode\nbypassPermissions" },
     });
     await user.type(screen.getByLabelText("Maximum duration"), "12");
-    await user.type(screen.getByLabelText("Memory limit"), "8Gi");
     await user.click(
       screen.getByRole("button", { name: /^(Add variable|Add)$/ }),
     );
@@ -213,9 +246,38 @@ describe("AgentRuntimeFields", () => {
       image: "registry.example.com/coding-agent:1.2.3",
       command: ["claude", "--permission-mode", "bypassPermissions"],
       ttlHours: 12,
-      resources: { memoryLimit: "8Gi" },
       environment: [{ key: "WORK_MODE", value: "runtime" }],
     });
+  });
+
+  it("raises the scaleup tier with the default tier, so the saved pair matches the form", async () => {
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "agentRuntime" ? true : undefined,
+    );
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <Harness
+          initial={{ ...defaultAgentRuntime(), tier: "S", maxTier: "M" }}
+        />
+      </QueryClientProvider>,
+    );
+    const config = () =>
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}");
+
+    await user.click(screen.getByLabelText("Default tier"));
+    await user.click(screen.getByRole("option", { name: /^L:/ }));
+    expect(config()).toMatchObject({ tier: "L", maxTier: "L" });
+
+    // Lowering the default tier keeps the larger scaleup tier.
+    await user.click(screen.getByLabelText("Default tier"));
+    await user.click(screen.getByRole("option", { name: /^S:/ }));
+    expect(config()).toMatchObject({ tier: "S", maxTier: "L" });
   });
 
   it("binds built-in and organization-defined credentials to image-specific environment variable names", async () => {
@@ -273,7 +335,10 @@ describe("AgentRuntimeFields", () => {
       "href",
       "/settings/credentials",
     );
-    await user.click(screen.getByRole("button", { name: "Edit GITHUB_TOKEN" }));
+    await user.click(
+      screen.getByRole("button", { name: "Actions for GITHUB_TOKEN" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: /^Edit$/ }));
     expect(
       within(screen.getByRole("dialog")).getByLabelText("Secret source"),
     ).toHaveTextContent("Repository access");

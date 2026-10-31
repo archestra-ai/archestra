@@ -85,6 +85,11 @@ describe("isChatModelId", () => {
     "whisper-1",
     "tts-1",
     "dall-e-3",
+    "gpt-realtime",
+    "gpt-realtime-2.1",
+    "gpt-realtime-translate",
+    "gpt-live-1",
+    "omni-moderation-latest",
   ])("drops non-chat model %s", (id) => {
     expect(isChatModelId(id)).toBe(false);
   });

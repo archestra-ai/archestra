@@ -1041,7 +1041,7 @@ Each entry in `requirements` uses one of these forms:
 |---|---|
 | Trust | `{"kind":"trust","required":"trusted"}` |
 | Public audience | `{"kind":"audience","required":"public"}` |
-| Restricted audience | `{"kind":"audience","required":2}`; the number is the required reader count. |
+| Restricted audience | `{"kind":"audience","required":["internal","@finance","alice@corp.com"]}`; the array lists the audience entries that `contains` requires, in this order: the built-in audience, `@` references, then literal reader IDs. Only the entries after the `@` references are reader IDs. Each entry uses the spelling from the policy, the tool call arguments, or the annotation answer. OpenAPPA does not expand a group to its members. |
 | Effect exclusion | `{"kind":"effect","excludes":"email.sent"}` |
 | Attention | `{"kind":"attention","mark":"finance-signoff"}` |
 
@@ -1078,6 +1078,20 @@ A child agent can read data without exposing it to the parent agent. `context_co
 OpenAPPA first offers a plan that checks the child's answer without changing it. It then offers plans that use the registered `tool_output` sanitizers without tags. Last, it offers a plan that takes no answer.
 
 The parent supplies `label` to specify the audience and trust limits for the child's answer. `label = {}` uses the parent's current audience and trust rank, so the answer cannot add restrictions to the parent. If a plan uses a sanitizer, the cleaned answer must meet those limits.
+
+#### Declaring the return
+
+A return declaration needs no authority. The agent executes it, and OpenAPPA does not ask a person.
+
+A blocked spawn offers only the return declarations, even when the spawn has other gaps. The agent executes one plan and then calls the subagent tool again. OpenAPPA then checks the other gaps of the spawn. Each gap gets its own remedy plan. Only a plan that names an authority asks for approval. A spawn with no other gap starts after the declaration, with no approval. If no plan can lift the other gaps, for example because their only authority denied the call, the block offers no declaration. A declaration covers one spawn: the release that starts the spawn also spends it.
+
+The parent can also declare the return before the spawn. It calls `execute_remedy_plan` without `offer_id`, with the same `label` and, for `attest-schema`, `return_schema`:
+
+```json
+{ "label": {} }
+```
+
+This declaration applies to the parent's next spawn only. A single spawn uses it. A fan-out spawn discards it, and the parent declares the fan-out spawn's return at its block. The declaration is valid only at the parent's label when it was made, and only until the parent's turn ends. If a tool result changes the parent's label first, the declaration lapses. If no declaration plan of the spawn's block fits the declaration, OpenAPPA does not apply it. In each case, the spawn's block says so. Declare the return immediately before the subagent call, with no other tool call between them. The runtime keeps this declaration in memory. After a restart, the spawn is blocked and the parent declares at the block.
 
 In the example below, a child can read internal customer data and pass its answer through `remove_customer_details`. The sanitizer must remove private details before the parent receives the answer:
 
@@ -1357,7 +1371,7 @@ A consult request is a JSON request that OpenAPPA sends to an external component
   "artifact": {
     "tool": "send_email",
     "arguments": { "recipient": "auditor@external.com", "body": "Ticket summary" },
-    "requirements": [{ "kind": "audience", "required": 1 }]
+    "requirements": [{ "kind": "audience", "required": ["auditor@external.com"] }]
   }
 }
 ```

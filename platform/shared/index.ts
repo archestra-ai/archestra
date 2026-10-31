@@ -1,5 +1,6 @@
 export * from "./agent-catalog-images";
 export * from "./agent-run-transcript";
+export * from "./agent-runtime-tiers";
 export * from "./agent-skills";
 export * from "./agents";
 export * from "./archestra-mcp-server";
@@ -38,6 +39,7 @@ export * from "./knowledge-base";
 export * from "./labels";
 export * from "./linked-idp-auth";
 export * from "./log-content";
+export * from "./log-media";
 export * from "./mcp-alert-fingerprint";
 export * from "./mcp-config-redaction";
 export * from "./mcp-executed-as";

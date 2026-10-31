@@ -74,6 +74,7 @@ describe("GET /v1/health", () => {
       mcp: "ok",
       llm: "ok",
       guardVersion: GUARD_VERSION,
+      mcpToolPrefix: "archestra__",
     });
   });
 
@@ -83,10 +84,14 @@ describe("GET /v1/health", () => {
     // The startup guard stamps this at connect time and re-reads it here every
     // launch; a bare ping (no params) still answers with it.
     const proxy = await makeAgent({ agentType: "llm_proxy" });
-    expect((await health("")).json()).toEqual({ guardVersion: GUARD_VERSION });
+    expect((await health("")).json()).toEqual({
+      guardVersion: GUARD_VERSION,
+      mcpToolPrefix: "archestra__",
+    });
     expect((await health(`?llm=${proxy.id}`)).json()).toEqual({
       llm: "ok",
       guardVersion: GUARD_VERSION,
+      mcpToolPrefix: "archestra__",
     });
     expect(Number.isInteger(GUARD_VERSION)).toBe(true);
     expect(GUARD_VERSION).toBeGreaterThanOrEqual(0);
@@ -102,6 +107,7 @@ describe("GET /v1/health", () => {
       mcp: "ok",
       llm: "ok",
       guardVersion: GUARD_VERSION,
+      mcpToolPrefix: "archestra__",
     });
 
     await AgentModel.delete(gateway.id);
@@ -112,6 +118,7 @@ describe("GET /v1/health", () => {
       mcp: "down",
       llm: "ok",
       guardVersion: GUARD_VERSION,
+      mcpToolPrefix: "archestra__",
     });
   });
 
@@ -122,12 +129,20 @@ describe("GET /v1/health", () => {
     expect((await health(`?llm=${proxy.id}`)).json()).toEqual({
       llm: "ok",
       guardVersion: GUARD_VERSION,
+      mcpToolPrefix: "archestra__",
     });
     expect(
       (await health("?mcp=00000000-0000-0000-0000-000000000000")).json(),
-    ).toEqual({ mcp: "down", guardVersion: GUARD_VERSION });
+    ).toEqual({
+      mcp: "down",
+      guardVersion: GUARD_VERSION,
+      mcpToolPrefix: "archestra__",
+    });
     // no params = a bare reachability ping
-    expect((await health("")).json()).toEqual({ guardVersion: GUARD_VERSION });
+    expect((await health("")).json()).toEqual({
+      guardVersion: GUARD_VERSION,
+      mcpToolPrefix: "archestra__",
+    });
   });
 
   test("is kind-scoped: a proxy ref never passes as a gateway", async ({
@@ -137,6 +152,7 @@ describe("GET /v1/health", () => {
     expect((await health(`?mcp=${proxy.id}`)).json()).toEqual({
       mcp: "down",
       guardVersion: GUARD_VERSION,
+      mcpToolPrefix: "archestra__",
     });
   });
 

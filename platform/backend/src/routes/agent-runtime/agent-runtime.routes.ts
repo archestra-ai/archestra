@@ -44,6 +44,10 @@ import {
   mayAttachAgentRun,
 } from "@/services/agent-runtime/run-access";
 import {
+  organizationAgentRuntimeTiers,
+  resolveAgentRunLimits,
+} from "@/services/agent-runtime/runtime-tiers";
+import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
@@ -57,6 +61,7 @@ import {
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
+  AgentRunLimitsRequestSchema,
   type AgentRunSession,
   AgentRunSessionResponseSchema,
   type AgentRunStartupProgress,
@@ -557,6 +562,8 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
           message: z.string().trim().min(1).max(100_000),
           projectId: z.string().uuid().optional(),
           attachments: agentRunAttachmentsSchema(),
+          /** Each value must stay within the Agent's own; a larger one is refused. */
+          limits: AgentRunLimitsRequestSchema.optional(),
         }),
         response: constructResponseSchema(StartAgentRunResponseSchema),
       },
@@ -625,6 +632,11 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      const limits = resolveAgentRunLimits({
+        runtime,
+        requested: request.body.limits,
+        tiers: await organizationAgentRuntimeTiers(request.organizationId),
+      });
       const task = await startDetachedAgentTask({
         actor: {
           ...actorFromUserId(request.user.id),
@@ -638,6 +650,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
           source: "chat",
           projectId: request.body.projectId,
           runtimeMode: "interactive",
+          runtimeLimits: limits,
         },
       });
       request.auditResourceId = { value: task.id };
@@ -656,6 +669,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         prompt: request.body.message,
         projectId: request.body.projectId ?? null,
         createdAt: task.createdAt,
+        limits,
       });
     },
   );
@@ -896,6 +910,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         prompt: request.body.message,
         projectId: run.projectId,
         createdAt: task.createdAt,
+        limits: session?.runtimeLimits ?? null,
       });
     },
   );

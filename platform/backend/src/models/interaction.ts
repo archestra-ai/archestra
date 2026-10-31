@@ -53,6 +53,7 @@ import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import {
   resolveLogContentMode,
   withholdInteractionContent,
+  withoutInteractionMedia,
 } from "@/log-content";
 import logger from "@/logging";
 import { parseClaudeMetadataParentSessionId } from "@/routes/proxy/utils/headers/session-id";
@@ -84,7 +85,7 @@ import {
 import { trackBackgroundWork } from "@/utils/background-work";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
-import { hasUnavailableMediaCost } from "@/utils/media-usage";
+import { isMediaUsage } from "@/utils/media-usage";
 import { sizedChunks } from "@/utils/sized-chunks";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
@@ -98,6 +99,7 @@ import InteractionUserActivityModel from "./interaction-user-activity";
 import LimitModel from "./limit";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import { interactionBelongsToOrganization } from "./log-organization";
+import OrganizationModel from "./organization";
 import RoutingUsageModel from "./routing-usage";
 import VirtualApiKeyModel from "./virtual-api-key";
 
@@ -1500,7 +1502,7 @@ class InteractionModel {
       }
 
       // Audio/image counts cannot be repriced using generic text-token tariffs.
-      if (hasUnavailableMediaCost(interaction.response)) return;
+      if (isMediaUsage(interaction.response)) return;
 
       // Calculate token usage for this interaction
       const inputTokens = interaction.inputTokens || 0;
@@ -3002,7 +3004,13 @@ class InteractionModel {
             (hasOpenAiContent ||
               hasResponsesContent ||
               hasGeminiContent ||
-              isLogContentNotStored(interaction.request))
+              isLogContentNotStored(interaction.request) ||
+              // Media, realtime and pass-through rows carry no message
+              // array; they are turns when their request summarises to text.
+              buildLastUserMessagePreview(
+                interaction.request,
+                interaction.type,
+              ) !== null)
           ) {
             if (isGuardrail || isOpenCodeSideTurn) {
               if (isGuardrail) guardrailTip ??= interaction;
@@ -3530,15 +3538,35 @@ class InteractionModel {
     } = data;
     if (billingUsage && !billingAttribution)
       throw new Error("Billing attribution is required for settlement");
+    // One cached read of the agent gives its environment and its
+    // organization's media setting.
+    const agentSettings = data.profileId
+      ? await AgentModel.findLogSettings(data.profileId)
+      : null;
     const environmentId = billingAttribution
       ? billingAttribution.environmentId
       : data.profileId
-        ? await AgentModel.findEnvironmentId(data.profileId)
+        ? (agentSettings?.environmentId ?? null)
         : (data.environmentId ?? null);
     // Enforced here, in the single funnel, so no writer can store content
-    // the deployment's Log Content mode withholds.
+    // the deployment's Log Content mode withholds, or media the organization
+    // keeps out of its logs, whether the call came from Chat, an agent
+    // session or a client of the proxy.
     const withheld = resolveLogContentMode() === "metadata_only";
-    const record = withheld ? withholdInteractionContent(columns) : columns;
+    const keepMedia =
+      withheld ||
+      (agentSettings?.keepMediaInLogs ??
+        (await OrganizationModel.keepsMediaInLogs({
+          organizationId: billingAttribution?.organizationId,
+          appId: data.appId,
+          connectorId: data.connectorId,
+          environmentId,
+        })));
+    const record = withheld
+      ? withholdInteractionContent(columns)
+      : keepMedia
+        ? columns
+        : withoutInteractionMedia(columns);
     // A withheld row holds no content to encrypt under a conversation key, so
     // it is written like the encrypted-chat fallback: unkeyed, marker in place.
     const audit = withheld ? null : (auditContext ?? null);
@@ -3925,9 +3953,15 @@ function extractGenuineAnthropicUserMessage(request: unknown): string | null {
   return null;
 }
 
+/**
+ * The session title's text: the last user message. A media row may keep
+ * what the user said on its response (the text a speech call spoke), so the
+ * response is read too when the caller has it.
+ */
 function buildLastUserMessagePreview(
   request: unknown,
   type: string,
+  response: unknown = {},
 ): string | null {
   try {
     if (type === "anthropic:messages") {
@@ -3938,7 +3972,7 @@ function buildLastUserMessagePreview(
     }
     const interaction = new DynamicInteraction({
       request,
-      response: {},
+      response: response ?? {},
       type,
     } as never);
     const message = interaction.getLastUserMessage().trim();
@@ -4059,11 +4093,20 @@ function buildSessionPreview(
     : findMarkers(request, SESSION_PREVIEW_MARKERS);
   const isTitleGeneration = hasTitleGenerationMarker(markers);
   const contentNotStored = isLogContentNotStored(request);
+  const lastUserMessagePreview = buildLastUserMessagePreview(
+    data.request,
+    data.type,
+    data.response,
+  );
   return {
     hasContent:
       [request?.messages, request?.input, request?.contents].some(
         (value) => Array.isArray(value) && value.length > 0,
-      ) || contentNotStored,
+      ) ||
+      contentNotStored ||
+      // Media, realtime and pass-through rows carry no message array; they
+      // are turns when their request summarises to text.
+      lastUserMessagePreview !== null,
     isTitleGeneration,
     isPromptSuggestion: markers.has(PROMPT_SUGGESTION_MARKER),
     isOpenCodeSideTurn:
@@ -4076,10 +4119,7 @@ function buildSessionPreview(
       (isClaudeSessionSource(data.sessionSource ?? null) &&
         hasClaudeSubagentMarker(data.request)),
     contentNotStored,
-    lastUserMessagePreview: buildLastUserMessagePreview(
-      data.request,
-      data.type,
-    ),
+    lastUserMessagePreview,
     claudeCodeTitle: isTitleGeneration
       ? extractClaudeCodeTitle(data.response)
       : null,

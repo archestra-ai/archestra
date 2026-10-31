@@ -203,6 +203,8 @@ test.for([
     privileged,
     command: ["/bin/true"],
     resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
+    tier: null,
+    warmTiers: [],
     env: {},
     secretEnv: {},
     activeDeadlineSeconds: 600,
@@ -278,6 +280,8 @@ test.for([
     command: ["/bin/true"],
     privileged: false,
     resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
+    tier: null,
+    warmTiers: [],
     env: {},
     secretEnv: {},
     activeDeadlineSeconds: 600,
@@ -316,7 +320,10 @@ for (const endpoint of [sandboxUrl, podsUrl]) {
           ? HttpResponse.json({ status: {} })
           : HttpResponse.json({
               items: [
-                { metadata: { name: "worker" }, status: { phase: "Running" } },
+                {
+                  metadata: { name: "worker" },
+                  status: { phase: "Running" },
+                },
               ],
             });
       }),
@@ -532,6 +539,11 @@ test.for([
 test.for([
   {
     name: "container memory termination",
+    spec: {
+      containers: [
+        { name: "agent-runtime", resources: { limits: { memory: "8Gi" } } },
+      ],
+    },
     status: {
       phase: "Failed",
       containerStatuses: [
@@ -553,6 +565,7 @@ test.for([
       "OOMKilled",
       "exit code 137",
       "signal 9",
+      "memory limit 8Gi",
       "Container exceeded its memory limit",
     ],
     failure: { code: "pod.oom_killed", retriable: false },
@@ -620,6 +633,7 @@ test.for([
     failure: { code: "pod.evicted", retriable: true },
   },
 ])("preserves Kubernetes diagnostics for $name instead of a generic Sandbox summary", async ({
+  spec,
   status,
   details,
   failure,
@@ -641,7 +655,9 @@ test.for([
     ),
     http.get(podsUrl, () =>
       HttpResponse.json({
-        items: [{ metadata: { name: "worker", namespace: "test" }, status }],
+        items: [
+          { metadata: { name: "worker", namespace: "test" }, spec, status },
+        ],
       }),
     ),
   );
@@ -1078,3 +1094,187 @@ function completeExec(output = "0") {
       return socket();
     });
 }
+
+const RATE_LIMIT_ENVELOPE = JSON.stringify({
+  version: 1,
+  code: "claude_rate_limit",
+  message: "Claude Code reached a rate limit.",
+});
+const PANE_EXITED_ENVELOPE = JSON.stringify({
+  version: 1,
+  code: "runtime.pane_exited",
+  message: "The agent process exited before it reported a result.",
+});
+
+test.for([
+  { name: "a memory kill inside the running pod", killed: true, exit: null },
+  {
+    name: "the node's OOM killer inside the running pod",
+    killed: true,
+    exit: null,
+    nodeOom: true,
+  },
+  {
+    name: "a failed command without a memory kill",
+    killed: false,
+    exit: null,
+  },
+  {
+    name: "a turn that ends non-zero after a memory kill",
+    killed: true,
+    exit: "7",
+  },
+  {
+    name: "a turn whose image reported its own failure after a memory kill",
+    killed: true,
+    exit: `7\n${RATE_LIMIT_ENVELOPE}`,
+  },
+  {
+    name: "a pane that exited after a memory kill",
+    killed: true,
+    exit: `75\n${PANE_EXITED_ENVELOPE}`,
+  },
+  {
+    name: "a workspace that finished while the pod runs, after a memory kill",
+    killed: true,
+    finished: true,
+  },
+  {
+    name: "a container without the counters",
+    killed: false,
+    exit: "7",
+    counters: false,
+    polls: 5,
+  },
+])("$name: a turn that fails is checked against the cgroup's memory counters", async ({
+  killed,
+  exit = null,
+  finished = false,
+  counters = true,
+  polls = 2,
+  nodeOom = false,
+}, { run }) => {
+  const GIB = 1024 ** 3;
+  let turnReads = 0;
+  let memoryReads = 0;
+  if (finished) {
+    server.use(
+      http.get(sandboxUrl, () =>
+        HttpResponse.json({
+          status: {
+            conditions: [
+              {
+                type: "Finished",
+                status: "True",
+                reason: "PodFailed",
+                message: "Pod failed",
+              },
+            ],
+          },
+        }),
+      ),
+    );
+  }
+  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+    const command = (args[3] as string[]).join(" ");
+    if (command.includes("read-memory-events")) {
+      // The counters when the turn was first seen running, then after the
+      // failure: the kernel killed the run's tsc, shell and tmux server
+      // while PID 1 and the pod lived on.
+      const kills = memoryReads++ === 0 || !killed ? 0 : 1;
+      if (counters) {
+        args[4]?.write(
+          `low 0\nhigh 0\nmax 1203\noom ${nodeOom ? 0 : kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills && !nodeOom ? 8 * GIB : nodeOom ? 3 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
+        );
+      }
+      args[8]?.({ status: "Success" });
+    } else if (command.includes("read-turn-result")) {
+      // No result until the last poll. Then either the turn has ended with
+      // the given status, or the poll's own shell is killed.
+      turnReads++;
+      if (turnReads < polls || finished) {
+        args[8]?.({ status: "Success" });
+      } else if (exit !== null) {
+        args[4]?.write(`${exit}\n`);
+        args[8]?.({ status: "Success" });
+      } else {
+        args[8]?.({
+          status: "Failure",
+          message: "command terminated with non-zero exit code",
+        });
+      }
+    } else {
+      args[8]?.({ status: "Success" });
+    }
+    return socket();
+  });
+  const completion = manager.waitForCompletion({
+    session: run,
+    pollIntervalMs: 1,
+  });
+  const described =
+    "The run ran out of memory. The agent-runtime container reached its memory limit of 8 GiB (peak usage 8 GiB), and the kernel killed the run's processes. Start the run again at a larger tier.";
+  if (!counters) {
+    // The first reading is tried a few times, then the container is left alone.
+    await expect(completion).resolves.toEqual({
+      outcome: "failed",
+      reason: "The Agent Runtime turn exited with status 7",
+      failure: { code: "turn.exit_status", retriable: false },
+    });
+    expect(memoryReads).toBe(3);
+    expect(turnReads).toBe(polls);
+    return;
+  }
+  if (finished) {
+    const result = await completion;
+    expect(result).toMatchObject({
+      outcome: "failed",
+      failure: { code: "pod.oom_killed", retriable: false },
+    });
+    expect(result.reason).toContain(described);
+    expect(result.reason).toContain("Pod failed");
+    expect(memoryReads).toBe(2);
+    return;
+  }
+  if (killed && exit?.includes("claude_rate_limit")) {
+    // The image's own diagnosis stands; the kill is noted after it.
+    const result = await completion;
+    expect(result).toMatchObject({
+      outcome: "failed",
+      failure: { code: "image.claude_rate_limit", retriable: true },
+    });
+    expect(result.reason).toContain("Claude Code reached a rate limit.");
+    expect(result.reason?.endsWith(described)).toBe(true);
+  } else if (killed && exit !== null) {
+    const result = await completion;
+    expect(result).toMatchObject({
+      outcome: "failed",
+      failure: { code: "pod.oom_killed", retriable: false },
+    });
+    // The kill comes first; the exit it led to is kept after it.
+    expect(result.reason).toContain(described);
+    expect(result.reason).toContain(`status ${exit.split("\n")[0]}`);
+  } else if (killed && nodeOom) {
+    // The cgroup never hit its own limit: the node ran out of memory, so the
+    // size was not the cause and the run is not pod.oom_killed.
+    await expect(completion).resolves.toEqual({
+      outcome: "failed",
+      reason:
+        "The kernel killed the run's processes because the node ran out of memory; the agent-runtime container did not hit its 8 GiB limit (peak usage 3 GiB). Start the run again.",
+      failure: { code: "turn.process_exited", retriable: false },
+    });
+  } else if (killed) {
+    await expect(completion).resolves.toEqual({
+      outcome: "failed",
+      reason: described,
+      failure: { code: "pod.oom_killed", retriable: false },
+    });
+  } else {
+    await expect(completion).rejects.toThrow(
+      "Command in Agent Runtime pod failed",
+    );
+  }
+  // One reading when the pod was first seen running, one after the failure.
+  expect(memoryReads).toBe(2);
+  expect(turnReads).toBe(polls);
+});

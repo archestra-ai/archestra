@@ -4037,6 +4037,47 @@ class AgentModel {
     return rows.length === 1;
   }
 
+  /** How many of the organization's agents name `name` as their default or scaleup tier. */
+  static async countRuntimeTierReferences(params: {
+    organizationId: string;
+    name: string;
+  }): Promise<number> {
+    const table = schema.agentsTable;
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          sql`(lower(${table.runtime}->>'tier') = lower(${params.name}) or lower(${table.runtime}->>'maxTier') = lower(${params.name}))`,
+        ),
+      );
+    return row?.count ?? 0;
+  }
+
+  /** Follow a tier rename on every agent of the organization that names it. */
+  static async renameRuntimeTier(params: {
+    organizationId: string;
+    from: string;
+    to: string;
+    tx?: Transaction;
+  }): Promise<void> {
+    const table = schema.agentsTable;
+    for (const field of ["tier", "maxTier"] as const) {
+      await (params.tx ?? db)
+        .update(table)
+        .set({
+          runtime: sql`jsonb_set(${table.runtime}, ${sql.raw(`'{${field}}'`)}, to_jsonb(${params.to}::text))`,
+        })
+        .where(
+          and(
+            eq(table.organizationId, params.organizationId),
+            sql`lower(${table.runtime}->>${field}) = lower(${params.from})`,
+          ),
+        );
+    }
+  }
+
   static async update(
     id: string,
     {

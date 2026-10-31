@@ -1,5 +1,5 @@
 import type { PopularAgentOverrides } from "@archestra/shared";
-import { ApiError } from "@archestra/shared";
+import { ApiError, sameAgentRuntimeTierName } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { Organization } from "@/types";
@@ -157,6 +157,54 @@ class AgentRuntimeTemplateModel {
 
   // Private platform configuration uses the same encrypted database store as
   // ChatOps configuration. The organization row serializes first writes too.
+  /** How many templates name `name` as their default or scaleup tier. */
+  static async countRuntimeTierReferences(params: {
+    organizationId: string;
+    name: string;
+  }): Promise<number> {
+    const settings = await withDbTransaction((tx) =>
+      AgentRuntimeTemplateModel.readStoredSettings(params.organizationId, tx),
+    );
+    return settings.templates.filter(
+      ({ runtime }) =>
+        (runtime.tier && sameAgentRuntimeTierName(runtime.tier, params.name)) ||
+        (runtime.maxTier &&
+          sameAgentRuntimeTierName(runtime.maxTier, params.name)),
+    ).length;
+  }
+
+  /** Follow a tier rename on every template that names it. */
+  static async renameRuntimeTier(params: {
+    organizationId: string;
+    from: string;
+    to: string;
+    tx: Transaction;
+  }): Promise<void> {
+    const settings = await AgentRuntimeTemplateModel.readStoredSettings(
+      params.organizationId,
+      params.tx,
+    );
+    let changed = false;
+    const templates = settings.templates.map((template) => {
+      const runtime = { ...template.runtime };
+      for (const field of ["tier", "maxTier"] as const) {
+        const name = runtime[field];
+        if (name && sameAgentRuntimeTierName(name, params.from)) {
+          runtime[field] = params.to;
+          changed = true;
+        }
+      }
+      return { ...template, runtime };
+    });
+    if (changed) {
+      await AgentRuntimeTemplateModel.writeStoredSettings(
+        params.organizationId,
+        { ...settings, templates },
+        params.tx,
+      );
+    }
+  }
+
   private static secretName(organizationId: string) {
     return `agent-runtime-templates:${organizationId}`;
   }

@@ -2,8 +2,9 @@
 
 import {
   buildCustomAgentRuntime,
+  describeAgentRuntimeTier,
+  findAgentRuntimeTier,
   getAgentRuntimeAllowedProtocols,
-  resolveAgentRuntimeTiers,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
 import Link from "next/link";
@@ -40,14 +41,15 @@ import { Switch } from "@/components/ui/switch";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useOrganization } from "@/lib/organization.query";
+import { useAgentRuntimeTiers } from "@/lib/organization.query";
 import {
   type RuntimeCredentialDefinition,
   useCanAttachCredential,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 
-export type AgentRuntimeTier = "S" | "M" | "L";
+/** A tier name, as the organization's administrators chose it. */
+export type AgentRuntimeTier = string;
 
 export type AgentRuntimeConfig = {
   image: string;
@@ -56,10 +58,10 @@ export type AgentRuntimeConfig = {
   backend: "kubernetes";
   steerMode: "pipe" | "tmux_keys";
   privileged: boolean;
-  /** The default tier of a run's container; absent means M. */
-  tier?: AgentRuntimeTier;
+  /** The default tier of a run's container; absent means the organization's default tier. */
+  tier?: AgentRuntimeTier | null;
   /** The scaleup tier, the largest a run may ask for; absent means `tier`. */
-  maxTier?: AgentRuntimeTier;
+  maxTier?: AgentRuntimeTier | null;
   ports?: number[];
   environment: Array<{ key: string; value: string }> | null;
   credentials: Array<{
@@ -577,40 +579,42 @@ function AgentRuntimeRunLimits({ value, onChange }: RuntimeSectionProps) {
 function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...value, ...patch });
-  const runtimeDefaults = useFeature("agentRuntimeBackend");
-  // Sizes come from the organization's tier settings over the code defaults.
-  const { data: organization } = useOrganization();
-  const tiers = resolveAgentRuntimeTiers(organization?.agentRuntimeTiers);
-  const defaultTier = value.tier ?? runtimeDefaults?.defaultTier ?? "M";
+  // The organization's tiers, smallest first, with the memory each gives.
+  const { data: resolved } = useAgentRuntimeTiers();
+  const tiers = resolved?.tiers ?? [];
+  const defaultTier =
+    findAgentRuntimeTier(tiers, value.tier)?.name ?? resolved?.defaultTier;
+  const defaultRank = tiers.findIndex((tier) => tier.name === defaultTier);
   // Never below the default tier: a smaller value counts as the default tier.
+  const saved = findAgentRuntimeTier(tiers, value.maxTier);
   const scaleupTier =
-    value.maxTier &&
-    TIER_ORDER.indexOf(value.maxTier) > TIER_ORDER.indexOf(defaultTier)
-      ? value.maxTier
-      : defaultTier;
+    saved && tiers.indexOf(saved) > defaultRank ? saved.name : defaultTier;
+  const label = (tier: (typeof tiers)[number]) =>
+    `${tier.name}: ${describeAgentRuntimeTier(tier)}`;
   return (
     <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
       <div className="space-y-2">
         <Label htmlFor="agent-runtime-tier">Default tier</Label>
         <Select
-          value={defaultTier}
-          onValueChange={(tier: AgentRuntimeTier) =>
+          value={defaultTier ?? ""}
+          disabled={!resolved}
+          onValueChange={(tier) => {
             // A default tier above the saved scaleup tier raises it too, so
             // the saved pair matches what the form shows.
-            update(
-              TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf(scaleupTier)
-                ? { tier, maxTier: tier }
-                : { tier },
-            )
-          }
+            const rank = tiers.findIndex((entry) => entry.name === tier);
+            const scaleupRank = tiers.findIndex(
+              (entry) => entry.name === scaleupTier,
+            );
+            update(rank > scaleupRank ? { tier, maxTier: tier } : { tier });
+          }}
         >
           <SelectTrigger id="agent-runtime-tier" className="w-full">
-            <SelectValue />
+            <SelectValue placeholder="Loading tiers…" />
           </SelectTrigger>
           <SelectContent>
-            {TIER_ORDER.map((tier) => (
-              <SelectItem key={tier} value={tier}>
-                {tierLabel(tier, tiers[tier])}
+            {tiers.map((tier) => (
+              <SelectItem key={tier.name} value={tier.name}>
+                {label(tier)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -623,16 +627,17 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
       <div className="space-y-2">
         <Label htmlFor="agent-runtime-max-tier">Scaleup tier</Label>
         <Select
-          value={scaleupTier}
-          onValueChange={(maxTier: AgentRuntimeTier) => update({ maxTier })}
+          value={scaleupTier ?? ""}
+          disabled={!resolved}
+          onValueChange={(maxTier) => update({ maxTier })}
         >
           <SelectTrigger id="agent-runtime-max-tier" className="w-full">
-            <SelectValue />
+            <SelectValue placeholder="Loading tiers…" />
           </SelectTrigger>
           <SelectContent>
-            {TIER_ORDER.slice(TIER_ORDER.indexOf(defaultTier)).map((tier) => (
-              <SelectItem key={tier} value={tier}>
-                {tierLabel(tier, tiers[tier])}
+            {tiers.slice(Math.max(defaultRank, 0)).map((tier) => (
+              <SelectItem key={tier.name} value={tier.name}>
+                {label(tier)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -867,20 +872,6 @@ function NumberField({
       <FieldDescription>{description}</FieldDescription>
     </div>
   );
-}
-
-const TIER_ORDER: AgentRuntimeTier[] = ["S", "M", "L"];
-
-function tierLabel(
-  tier: AgentRuntimeTier,
-  resources?: {
-    cpuRequest: string;
-    memoryRequest: string;
-    memoryLimit: string;
-  },
-): string {
-  if (!resources) return tier;
-  return `${tier}: ${resources.cpuRequest} CPU, ${resources.memoryRequest} memory (${resources.memoryLimit} limit)`;
 }
 
 const ENVIRONMENT_KEY_LABELS: Record<string, string> = {

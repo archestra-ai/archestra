@@ -72,6 +72,7 @@ import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
 import { transferAgentOwnership } from "@/services/agent-ownership";
 import {
   assertAgentRuntimeModelCompatibility,
+  assertAgentRuntimeTiersExist,
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
@@ -792,6 +793,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         runtime: body.runtime,
         isAdmin: checker.isAdmin(agentType),
         userId: user.id,
+        organizationId,
+      });
+      await assertAgentRuntimeTiersExist({
+        runtime: body.runtime,
         organizationId,
       });
       await assertCanBindRuntimeCredentials({
@@ -2184,6 +2189,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         previous: existingAgent.runtime,
+      });
+      await assertAgentRuntimeTiersExist({
+        runtime: body.runtime,
+        organizationId,
       });
       await assertCanBindRuntimeCredentials({
         organizationId,

@@ -1,4 +1,9 @@
-import { AGENT_RUN_ATTACH_PHASES, ApiError } from "@archestra/shared";
+import {
+  AGENT_RUN_ATTACH_PHASES,
+  AGENT_RUNTIME_TIER_MAX_CPU_LIMIT,
+  AGENT_RUNTIME_TIER_NAME_MAX_LENGTH,
+  ApiError,
+} from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -70,16 +75,31 @@ export const AgentRuntimeResourcesSchema = z.object({
 export type AgentRuntimeResources = z.infer<typeof AgentRuntimeResourcesSchema>;
 
 /**
- * Runtime tiers: the fixed CPU and memory sizes a run can get. An Agent names
- * the tier its runs get by default; a caller may ask for a tier at or below it.
- * The sizes live in `services/agent-runtime/runtime-tiers.ts`.
+ * Runtime tiers: the container sizes a run can get, as the organization's
+ * administrators define and name them (Settings > Agents > Runtime tiers). An
+ * Agent names the tier its runs get by default and the largest one a run may
+ * ask for. The resolution lives in `services/agent-runtime/runtime-tiers.ts`.
  */
-export const AgentRuntimeTierSchema = z.enum(["S", "M", "L"]);
+export const AgentRuntimeTierSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(AGENT_RUNTIME_TIER_NAME_MAX_LENGTH);
 export type AgentRuntimeTier = z.infer<typeof AgentRuntimeTierSchema>;
 
-/** Limits a caller asks for one run. Each must stay within the Agent's own. */
+/**
+ * Limits a caller asks for one run. Each must stay within the Agent's own. A
+ * tier is chosen by name, or by the CPU and memory the work needs, which gives
+ * the smallest tier that fits.
+ */
 export const AgentRunLimitsRequestSchema = z.object({
   tier: AgentRuntimeTierSchema.optional(),
+  minCpu: z
+    .number()
+    .positive()
+    .max(AGENT_RUNTIME_TIER_MAX_CPU_LIMIT)
+    .optional(),
+  minMemoryGib: z.number().positive().max(256).optional(),
   idleTimeoutMinutes: z
     .number()
     .int()
@@ -265,14 +285,15 @@ export const AgentRuntimeSchema = z.object({
   steerMode: AgentRuntimeSteerModeSchema,
   privileged: z.boolean(),
   /**
-   * The tier of a run's container, S, M or L: the default tier of the Agent's
-   * runs. Absent means M. Administrators size the tiers for the organization.
+   * The default tier of the Agent's runs, by name. Absent means the
+   * organization's default tier. A tier the organization no longer has reads
+   * as that default too.
    */
   tier: AgentRuntimeTierSchema.nullable().optional(),
   /**
-   * Largest tier a caller may ask for when it starts a run, so a run can move
-   * its work to a larger run of the same Agent. Absent means the Agent's
-   * tier; a value below it counts as the Agent's tier.
+   * The scaleup tier: the largest tier a caller may ask for when it starts a
+   * run, so a run can move its work to a larger run of the same Agent. Absent
+   * means the Agent's default tier; a smaller tier counts as the default tier.
    */
   maxTier: AgentRuntimeTierSchema.nullable().optional(),
   /** Container ports users can forward from an active workspace. */

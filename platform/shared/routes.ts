@@ -711,6 +711,7 @@ export const RouteId = {
 
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
+  GetAgentRuntimeTiers: "getAgentRuntimeTiers",
 
   // Auth Settings Routes (organization-level)
   UpdateAuthSettings: "updateAuthSettings",

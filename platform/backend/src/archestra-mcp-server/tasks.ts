@@ -61,7 +61,10 @@ import {
   SPAWN_TARGET_MISMATCH,
   UNVERIFIED_RUNTIME_SESSION,
 } from "@/services/agent-runtime/runtime-crossing";
-import { resolveAgentRunLimits } from "@/services/agent-runtime/runtime-tiers";
+import {
+  organizationAgentRuntimeTiers,
+  resolveAgentRunLimits,
+} from "@/services/agent-runtime/runtime-tiers";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
@@ -179,7 +182,11 @@ async function launchDelegatedTask(params: {
     // the maximum and can ask again within it.
     let limits: AgentRunLimits;
     try {
-      limits = resolveAgentRunLimits({ runtime, requested: params.limits });
+      limits = resolveAgentRunLimits({
+        runtime,
+        requested: params.limits,
+        tiers: await organizationAgentRuntimeTiers(actor.organizationId),
+      });
     } catch (error) {
       if (error instanceof ApiError)
         return failedLaunch("refused", errorResult(error.message));
@@ -326,7 +333,7 @@ const RunSummarySchema = z.object({
 const RunLimitsSchema = z
   .object({
     tier: AgentRuntimeTierSchema.nullable().describe(
-      "Container size the run has: S, M or L, as the organization sizes them.",
+      "The name of the runtime tier the run has, as the organization sizes it.",
     ),
     idle_timeout_minutes: z.number(),
     max_duration_hours: z
@@ -788,8 +795,15 @@ const registry = defineArchestraTools([
         .object({
           // The same fields and bounds as the REST route's `limits`, in snake case.
           tier: AgentRunLimitsRequestSchema.shape.tier.describe(
-            "Container size, as the organization sizes them: S (a review, a script, light edits), M (a dev stack and tests; the usual default) or L (large builds and test suites, or work that ran out of memory at M). At or below the Agent's largest tier ($ARCHESTRA_AGENT_RUNTIME_MAX_TIER inside a run). To move work to another size, start a run of the same Agent at that tier and hand over the branch.",
+            "The name of one of the organization's runtime tiers, at or below this Agent's scaleup tier. Choose by size, not by name: inside a run, $ARCHESTRA_AGENT_RUNTIME_TIERS lists the tiers the run may move to with their CPU and memory; pick the smallest that covers the work. To move work to another tier, start a run of the same Agent at that tier and hand over the branch. A tier above the scaleup tier is refused with the allowed tiers and their sizes named.",
           ),
+          min_cpu: AgentRunLimitsRequestSchema.shape.minCpu.describe(
+            "CPUs the work needs. The run gets the smallest tier this Agent may use with at least this many; refused with the allowed tiers named when none has. Use this when the tier names are unknown.",
+          ),
+          min_memory_gib:
+            AgentRunLimitsRequestSchema.shape.minMemoryGib.describe(
+              "GiB of memory the work needs, with the same effect as min_cpu.",
+            ),
           idle_timeout_minutes:
             AgentRunLimitsRequestSchema.shape.idleTimeoutMinutes,
           max_duration_hours:
@@ -813,6 +827,8 @@ const registry = defineArchestraTools([
           ? {
               limits: {
                 tier: args.limits.tier,
+                minCpu: args.limits.min_cpu,
+                minMemoryGib: args.limits.min_memory_gib,
                 idleTimeoutMinutes: args.limits.idle_timeout_minutes,
                 maxDurationHours: args.limits.max_duration_hours,
                 maxCostUsd: args.limits.max_cost_usd,

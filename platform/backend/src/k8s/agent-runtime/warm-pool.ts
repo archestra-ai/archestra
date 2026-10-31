@@ -21,6 +21,7 @@ import {
 } from "@/services/agent-runtime/runtime-contract";
 import {
   agentRuntimeTier,
+  agentRuntimeTierDefaults,
   resolveRunResources,
   warmPoolReplicas,
 } from "@/services/agent-runtime/runtime-tiers";
@@ -163,8 +164,11 @@ class AgentWarmPoolManager {
         const namespace =
           agent.namespace ?? agent.defaultNamespace ?? clients.namespace;
         namespaces.add(namespace);
-        const tiers = resolveAgentRuntimeTiers(agent.agentRuntimeTiers);
-        const tier = agentRuntimeTier(runtime);
+        const tiers = resolveAgentRuntimeTiers(
+          agent.agentRuntimeTiers,
+          agentRuntimeTierDefaults(),
+        );
+        const tier = agentRuntimeTier(runtime, tiers);
         const replicas = warmPoolReplicas(tiers, tier);
         // A tier without spares takes no pool slot from the other Agents.
         if (

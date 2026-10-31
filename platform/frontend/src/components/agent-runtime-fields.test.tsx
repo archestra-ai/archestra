@@ -48,11 +48,35 @@ vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/organization.query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/organization.query")>()),
   // An administrator resized tier M; the form shows the organization's size.
-  useOrganization: () => ({
+  useAgentRuntimeTiers: () => ({
     data: {
-      agentRuntimeTiers: {
-        M: { cpuRequest: "750m", memoryRequest: "2Gi", memoryLimit: "6Gi" },
-      },
+      tiers: [
+        {
+          name: "S",
+          cpuRequest: 0.5,
+          cpuLimit: null,
+          warmSpares: 1,
+          memoryRequestMiB: 1024,
+          memoryLimitMiB: 2048,
+        },
+        {
+          name: "M",
+          cpuRequest: 0.75,
+          cpuLimit: null,
+          warmSpares: 1,
+          memoryRequestMiB: 1536,
+          memoryLimitMiB: 3072,
+        },
+        {
+          name: "L",
+          cpuRequest: 8,
+          cpuLimit: null,
+          warmSpares: 0,
+          memoryRequestMiB: 16384,
+          memoryLimitMiB: 32768,
+        },
+      ],
+      defaultTier: "M",
     },
   }),
 }));
@@ -119,7 +143,6 @@ describe("AgentRuntimeFields", () => {
           defaultTtlHours: 36,
           defaultIdleTimeoutMinutes: 45,
           allowPrivileged: false,
-          defaultTier: "M",
         };
       }
       return undefined;

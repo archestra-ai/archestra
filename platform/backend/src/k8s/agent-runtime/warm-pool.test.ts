@@ -1,10 +1,11 @@
-import { DEFAULT_AGENT_RUNTIME_TIERS } from "@archestra/shared";
+import { resolveAgentRuntimeTiers } from "@archestra/shared";
 import { CustomObjectsApi, KubeConfig } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
 import { expect, test, vi } from "vitest";
 import config from "@/config";
 import { createK8sClients } from "@/k8s/shared";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
+import { tierResources } from "@/services/agent-runtime/runtime-tiers";
 import { useMswServer } from "@/test/msw";
 import type { KubernetesAgentRunLaunchSpec } from "./manifests";
 import { agentSandboxApi } from "./sandbox-api";
@@ -196,6 +197,14 @@ test("serves a drained or missing tier from the larger tier's ready pool, never 
   expect(await claim("L")).toEqual({ result: { tier: "L" }, pool: poolName.L });
 });
 
+/** The default tiers' container resources, by name. */
+const DEFAULT_SIZES = Object.fromEntries(
+  resolveAgentRuntimeTiers(null, { defaultWarmSpares: 0 }).tiers.map((tier) => [
+    tier.name,
+    tierResources(tier),
+  ]),
+);
+
 test("keeps tier L spares apart: none by default, and no pool slot taken from the other tiers", async () => {
   const runtime = (tier: "M" | "L") => ({
     image: "runtime:v1",
@@ -269,10 +278,7 @@ test("keeps tier L spares apart: none by default, and no pool slot taken from th
       return HttpResponse.json(body, { status: 201 });
     }),
   );
-  const poolOf = (
-    tier: "M" | "L",
-    resources: object = DEFAULT_AGENT_RUNTIME_TIERS[tier],
-  ) => {
+  const poolOf = (tier: "M" | "L", resources: object = DEFAULT_SIZES[tier]) => {
     const {
       warmPoolSize: _,
       cpuLimit: __,
@@ -310,7 +316,11 @@ test("keeps tier L spares apart: none by default, and no pool slot taken from th
   agentRuntimeTiers = { L: { cpuRequest: "6", warmPoolSize: 1 } };
   await agentWarmPoolManager.reconcile();
   expect(replicasByPool()).toEqual({
-    [poolOf("L", { ...DEFAULT_AGENT_RUNTIME_TIERS.L, cpuRequest: "6" })]: 1,
+    [poolOf("L", {
+      cpuRequest: "6",
+      memoryRequest: "12Gi",
+      memoryLimit: "24Gi",
+    })]: 1,
     [poolOf("M")]: 2,
   });
 });

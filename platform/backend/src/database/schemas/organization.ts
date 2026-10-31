@@ -1,5 +1,5 @@
 import type {
-  AgentRuntimeTierSettings,
+  StoredAgentRuntimeTierSettings,
   ContextualRetrievalMode,
   KnowledgeConnectorOverrides,
   MessagingChannelOverrides,
@@ -474,7 +474,7 @@ const organizationsTable = pgTable("organization", {
    */
   agentRuntimeTiers: jsonb(
     "agent_runtime_tiers",
-  ).$type<AgentRuntimeTierSettings>(),
+  ).$type<StoredAgentRuntimeTierSettings>(),
 
   /**
    * ALLOWLIST regex (JS source, no delimiters/flags) for the implicit "default"

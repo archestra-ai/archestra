@@ -18,7 +18,10 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
-import { makeOrganization } from "@/mocks/data/organization";
+import {
+  agentRuntimeTiersSeed,
+  makeOrganization,
+} from "@/mocks/data/organization";
 import {
   AgentCatalog,
   getAgentCatalogTemplates,
@@ -50,6 +53,9 @@ const server = setupServer(
   ),
   http.get("http://localhost:9000/api/organization", () =>
     HttpResponse.json(makeOrganization()),
+  ),
+  http.get("http://localhost:9000/api/organization/agent-runtime-tiers", () =>
+    HttpResponse.json(agentRuntimeTiersSeed),
   ),
   http.get("http://localhost:9000/api/credentials", () =>
     HttpResponse.json([]),

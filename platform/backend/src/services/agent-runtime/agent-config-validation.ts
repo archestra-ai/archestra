@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { findAgentRuntimeTier } from "@archestra/shared";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import {
@@ -11,6 +12,7 @@ import type { Agent, AgentRuntime, AgentType } from "@/types";
 import { ApiError } from "@/types";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "./backends";
 import { getResolvedAgentRuntimeModelCompatibility } from "./model-compatibility";
+import { organizationAgentRuntimeTiers } from "./runtime-tiers";
 
 // Checks every surface that writes an Agent's runtime or model must run. The
 // agents REST routes and the create_agent/edit_agent MCP tools both call these,
@@ -68,6 +70,29 @@ export async function requireAgentRuntimePermission(params: {
       403,
       "Privileged background deployments are disabled by the deployment operator",
     );
+  }
+}
+
+/**
+ * Refuse a runtime whose default or scaleup tier is not one of the
+ * organization's tiers, naming the tiers it has.
+ */
+export async function assertAgentRuntimeTiersExist(params: {
+  runtime: Pick<AgentRuntime, "tier" | "maxTier"> | null | undefined;
+  organizationId: string;
+}): Promise<void> {
+  if (!params.runtime) return;
+  const { tiers } = await organizationAgentRuntimeTiers(params.organizationId);
+  for (const [label, name] of [
+    ["default tier", params.runtime.tier],
+    ["scaleup tier", params.runtime.maxTier],
+  ] as const) {
+    if (name && !findAgentRuntimeTier(tiers, name)) {
+      throw new ApiError(
+        400,
+        `The ${label} ${name} is not one of the organization's runtime tiers: ${tiers.map((tier) => tier.name).join(", ")}`,
+      );
+    }
   }
 }
 

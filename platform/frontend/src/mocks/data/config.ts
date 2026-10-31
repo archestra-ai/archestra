@@ -47,7 +47,6 @@ export function makeConfig(
         defaultTtlHours: 24,
         defaultIdleTimeoutMinutes: 60,
         allowPrivileged: false,
-        defaultTier: "M",
       },
       plugins: false,
       sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,

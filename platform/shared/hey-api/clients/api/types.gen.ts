@@ -141282,6 +141282,242 @@ export type GetSkillUsageResponses = {
 
 export type GetSkillUsageResponse = GetSkillUsageResponses[keyof GetSkillUsageResponses];
 
+export type GetModelUsageData = {
+    body?: never;
+    path?: never;
+    query: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        model: string;
+        groupBy?: 'person' | 'key' | 'agent' | 'client';
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/statistics/model-usage';
+};
+
+export type GetModelUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetModelUsageError = GetModelUsageErrors[keyof GetModelUsageErrors];
+
+export type GetModelUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            requests: number;
+            totalTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+            timeSeries: Array<{
+                timestamp: string;
+                requests: number;
+                totalTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetModelUsageResponse = GetModelUsageResponses[keyof GetModelUsageResponses];
+
+export type GetMyModelUsageData = {
+    body?: never;
+    path?: never;
+    query: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        model: string;
+        groupBy?: 'person' | 'key' | 'agent' | 'client';
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/statistics/me/model-usage';
+};
+
+export type GetMyModelUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMyModelUsageError = GetMyModelUsageErrors[keyof GetMyModelUsageErrors];
+
+export type GetMyModelUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            requests: number;
+            totalTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+            timeSeries: Array<{
+                timestamp: string;
+                requests: number;
+                totalTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetMyModelUsageResponse = GetMyModelUsageResponses[keyof GetMyModelUsageResponses];
+
 export type GetTeamsData = {
     body?: never;
     path?: never;

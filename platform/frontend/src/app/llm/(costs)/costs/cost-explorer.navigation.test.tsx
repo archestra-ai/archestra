@@ -71,6 +71,7 @@ vi.mock("./cost-explorer-parts", async (importOriginal) => ({
 }));
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/llm/costs");
   vi.mocked(useCostsTimeRange).mockReturnValue({
     timeframe: "30d",
     enabled: true,
@@ -86,7 +87,7 @@ it("opens Limits with the selected model and clears only the context when select
   expect(
     screen.getByRole("link", { name: "Show spend limits" }),
   ).toHaveAttribute("href", "/llm/limits?units=token_cost");
-  fireEvent.click(screen.getByText("Demo model", { selector: "td span" }));
+  fireEvent.click(screen.getByRole("row", { name: /Demo model/ }));
   expect(
     screen.getByRole("link", { name: "Show spend limits for Demo model" }),
   ).toHaveAttribute(

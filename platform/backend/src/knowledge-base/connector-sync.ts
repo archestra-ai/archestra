@@ -105,6 +105,11 @@ class ConnectorSyncService {
       throw new Error(`Connector not found: ${connectorId}`);
     }
 
+    // Ignore stale queued tasks for uploads: they have no source or credentials.
+    if (connector.connectorType === "file_upload") {
+      return { runId: "", status: "skipped" };
+    }
+
     // Single-flight: claim the connector's one running-run slot and take a
     // liveness lease. If another worker holds a live lease we skip — no second
     // execution runs concurrently. A run whose lease has expired (crashed/hung

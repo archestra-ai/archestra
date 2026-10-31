@@ -27,9 +27,8 @@ import {
   resolveRunResources,
   resolveRunWorkspaceStorageSize,
   retargetRuntimeTiersEnv,
+  runtimeSystemPrompt,
   warmPoolReplicas,
-  workspaceVolumeGiB,
-  workspaceVolumeSentence,
 } from "@/services/agent-runtime/runtime-tiers";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type { AgentRuntimeTier } from "@/types";
@@ -489,6 +488,7 @@ export function servedLaunchSpec<
     | "warmTiers"
     | "env"
     | "secretEnv"
+    | "systemPromptParts"
     | "workspaceStorageSize"
   >,
 >(spec: T, tier: AgentRuntimeTier | null): T {
@@ -500,7 +500,17 @@ export function servedLaunchSpec<
     tier,
     resources: served.resources,
     workspaceStorageSize: served.workspaceStorageSize,
-    secretEnv: retoldWorkspaceVolume(spec, served.workspaceStorageSize),
+    // The prompt is rebuilt from its parts with the served volume; no other
+    // text of it changes.
+    secretEnv: spec.systemPromptParts
+      ? {
+          ...spec.secretEnv,
+          [AGENT_RUNTIME_SYSTEM_PROMPT_ENV]: runtimeSystemPrompt(
+            spec.systemPromptParts,
+            served.workspaceGiB,
+          ),
+        }
+      : spec.secretEnv,
     env: {
       ...spec.env,
       [AGENT_RUNTIME_TIER_ENV]: tier,
@@ -538,30 +548,3 @@ type Claim = {
     conditions?: Array<{ status: string; reason?: string }>;
   };
 };
-
-/**
- * The system prompt with the volume sentence retold for the served tier's
- * size, when it differs from the requested tier's.
- */
-function retoldWorkspaceVolume(
-  spec: Pick<
-    KubernetesAgentRunLaunchSpec,
-    "secretEnv" | "workspaceStorageSize"
-  >,
-  servedStorageSize: string,
-): Record<string, string> {
-  const prompt = spec.secretEnv[AGENT_RUNTIME_SYSTEM_PROMPT_ENV];
-  if (
-    !prompt ||
-    !spec.workspaceStorageSize ||
-    spec.workspaceStorageSize === servedStorageSize
-  )
-    return spec.secretEnv;
-  return {
-    ...spec.secretEnv,
-    [AGENT_RUNTIME_SYSTEM_PROMPT_ENV]: prompt.replace(
-      workspaceVolumeSentence(workspaceVolumeGiB(spec.workspaceStorageSize)),
-      workspaceVolumeSentence(workspaceVolumeGiB(servedStorageSize)),
-    ),
-  };
-}

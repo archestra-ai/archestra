@@ -252,6 +252,9 @@ class AgentRuntimeManager {
         await AgentRunModel.updateRuntimeLimitsTier({
           taskId: spec.taskId,
           tier: claimed.tier,
+          workspaceGiB: withOwner.warmTiers.find(
+            (candidate) => candidate.tier === claimed.tier,
+          )?.workspaceGiB,
         });
       const deadline =
         Date.now() + config.agentRuntime.podStartTimeoutSeconds * 1000;

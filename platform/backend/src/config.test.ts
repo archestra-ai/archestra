@@ -12,6 +12,7 @@ import {
   vi,
 } from "vitest";
 import config, {
+  agentRuntimeWorkspaceStorage,
   betaFeatureEnabled,
   deriveOllamaNativeBaseUrl,
   getAnalyticsConfig,
@@ -2469,6 +2470,20 @@ describe("k8sMemoryQuantityToBytes", () => {
     // treating `G` as `Gi` would compare the ceiling against the wrong number.
     expect(k8sMemoryQuantityToBytes("1G")).toBe(1000 ** 3);
     expect(k8sMemoryQuantityToBytes("1048576")).toBe(1048576);
+  });
+
+  test("the default workspace volume is read once, as a quantity and in GiB", () => {
+    for (const [value, size, gib] of [
+      [undefined, "20Gi", 20],
+      ["60Gi", "60Gi", 60],
+      ["500Mi", "500Mi", 0.49],
+      ["64G", "64G", 59.6],
+      ["1T", "1T", 931.32],
+    ] as const)
+      expect(agentRuntimeWorkspaceStorage(value)).toEqual({
+        workspaceStorageSize: size,
+        workspaceStorageGiB: gib,
+      });
   });
 
   test("returns undefined for anything that is not a quantity", () => {

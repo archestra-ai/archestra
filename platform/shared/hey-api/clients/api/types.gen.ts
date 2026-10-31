@@ -24889,6 +24889,10 @@ export type GetAgentRunsResponses = {
             idleTimeoutMinutes: number;
             maxDurationHours: number;
             maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
         } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
@@ -25032,6 +25036,10 @@ export type StartAgentRunResponses = {
             idleTimeoutMinutes: number;
             maxDurationHours: number;
             maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
         } | null;
     };
 };
@@ -25143,6 +25151,10 @@ export type GetMyAgentRunsResponses = {
                 idleTimeoutMinutes: number;
                 maxDurationHours: number;
                 maxCostUsd: number | null;
+                /**
+                 * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+                 */
+                workspaceGiB?: number;
             } | null;
             attentionState: 'input_required' | 'auth_required' | null;
             virtualApiKeyId: string | null;
@@ -25375,6 +25387,10 @@ export type GetMyAgentRunResponses = {
             idleTimeoutMinutes: number;
             maxDurationHours: number;
             maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
         } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
@@ -25532,6 +25548,10 @@ export type UpdateAgentRunResponses = {
             idleTimeoutMinutes: number;
             maxDurationHours: number;
             maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
         } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
@@ -25668,6 +25688,10 @@ export type ContinueAgentRunResponses = {
             idleTimeoutMinutes: number;
             maxDurationHours: number;
             maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
         } | null;
     };
 };
@@ -130677,6 +130701,10 @@ export type GetProjectRunsResponses = {
             idleTimeoutMinutes: number;
             maxDurationHours: number;
             maxCostUsd: number | null;
+            /**
+             * Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.
+             */
+            workspaceGiB?: number;
         } | null;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;

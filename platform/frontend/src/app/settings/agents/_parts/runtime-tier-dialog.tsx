@@ -31,11 +31,6 @@ import {
 const POOLED_HINT =
   "Pooled tiers keep spare runtimes ready, so runs start at once. Spares use CPU and memory while they wait. A tier that is not pooled starts a new runtime for each run, which takes longer.";
 
-/** What the workspace size covers, and what a blank field means. */
-function workspaceHint(defaultWorkspaceGiB: number): string {
-  return `Blank: the deployment default, ${defaultWorkspaceGiB} GiB. The volume holds the home directory and, for a privileged agent, its Docker data. A stack that runs Kubernetes in Docker needs about 60 GiB.`;
-}
-
 /**
  * Create a tier or edit one. The whole list is saved with the change in it;
  * a refusal from the server stays in the dialog, next to the fields.
@@ -322,4 +317,9 @@ function Field({
       )}
     </div>
   );
+}
+
+/** What the workspace size covers, and what a blank field means. */
+function workspaceHint(defaultWorkspaceGiB: number): string {
+  return `Blank: the deployment default, ${defaultWorkspaceGiB} GiB. The volume holds the home directory and, for a privileged agent, its Docker data. A stack that runs Kubernetes in Docker needs about 60 GiB. Each spare of a pooled tier holds a volume of this size.`;
 }

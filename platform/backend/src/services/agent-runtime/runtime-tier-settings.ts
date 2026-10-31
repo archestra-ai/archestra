@@ -1,8 +1,10 @@
 import {
+  type AgentRuntimeTierDefinitionInput,
   type AgentRuntimeTierSettingsInput,
   agentRuntimeTierDefinitionFromInput,
   agentRuntimeTierProblems,
   findAgentRuntimeTier,
+  type ResolvedAgentRuntimeTiers,
   resolveAgentRuntimeTiers,
   type StoredAgentRuntimeTierSettings,
   sameAgentRuntimeTierName,
@@ -35,14 +37,16 @@ export async function prepareAgentRuntimeTierChange(params: {
 }> {
   const { organizationId, input } = params;
   const next = input ?? defaultTierInput();
+  const current = await organizationAgentRuntimeTiers(organizationId);
   const settings = {
-    tiers: next.tiers.map(agentRuntimeTierDefinitionFromInput),
+    tiers: next.tiers
+      .map((tier) => withCurrentWorkspace(tier, current))
+      .map(agentRuntimeTierDefinitionFromInput),
     defaultTier: next.defaultTier,
   };
   const problems = agentRuntimeTierProblems(settings);
   if (problems.length) throw new ApiError(400, problems.join("; "));
 
-  const current = await organizationAgentRuntimeTiers(organizationId);
   // One mapping from old names to new ones. The models apply it to each
   // stored name once, so renaming S to M and M to Medium in one save leaves
   // the former S agents on M.
@@ -96,6 +100,26 @@ export async function prepareAgentRuntimeTierChange(params: {
       });
     },
   };
+}
+
+// === Internal helpers ===
+
+/**
+ * A tier saved without a workspace size keeps the size it has: a client that
+ * does not know the field must not erase it. The tier is matched by its name
+ * before the save, so a rename keeps the size too. Null is a choice: the
+ * deployment's default.
+ */
+function withCurrentWorkspace(
+  tier: AgentRuntimeTierDefinitionInput,
+  current: ResolvedAgentRuntimeTiers,
+): AgentRuntimeTierDefinitionInput {
+  if (tier.workspaceGiB !== undefined) return tier;
+  const before = findAgentRuntimeTier(
+    current.tiers,
+    tier.previousName ?? tier.name,
+  );
+  return { ...tier, workspaceGiB: before?.workspaceGiB ?? null };
 }
 
 /** The default list as a save would send it: what a reset restores. */

@@ -92215,6 +92215,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 9007199254740991
+                          },
+                          "workspaceGiB": {
+                            "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
+                            "type": "number",
+                            "minimum": 0,
+                            "exclusiveMinimum": true
                           }
                         },
                         "required": [
@@ -92824,6 +92830,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "workspaceGiB": {
+                          "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMinimum": true
                         }
                       },
                       "required": [
@@ -93251,6 +93263,12 @@
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 9007199254740991
+                              },
+                              "workspaceGiB": {
+                                "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
+                                "type": "number",
+                                "minimum": 0,
+                                "exclusiveMinimum": true
                               }
                             },
                             "required": [
@@ -93843,6 +93861,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "workspaceGiB": {
+                          "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMinimum": true
                         }
                       },
                       "required": [
@@ -94514,6 +94538,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "workspaceGiB": {
+                          "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMinimum": true
                         }
                       },
                       "required": [
@@ -95362,6 +95392,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "workspaceGiB": {
+                          "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMinimum": true
                         }
                       },
                       "required": [
@@ -481979,7 +482015,6 @@
                               "type": "boolean"
                             },
                             "workspaceGiB": {
-                              "default": null,
                               "nullable": true,
                               "type": "integer",
                               "minimum": 1,
@@ -511983,6 +512018,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 9007199254740991
+                          },
+                          "workspaceGiB": {
+                            "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
+                            "type": "number",
+                            "minimum": 0,
+                            "exclusiveMinimum": true
                           }
                         },
                         "required": [

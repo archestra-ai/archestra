@@ -67,14 +67,15 @@ import {
   agentRuntimeAllowedTiers,
   agentRuntimeMaxTier,
   organizationAgentRuntimeTiers,
+  type RuntimeSystemPromptParts,
   resolveRunResources,
   resolveRunWorkspaceGiB,
   resolveRunWorkspaceStorageSize,
+  runtimeSystemPrompt,
   runtimeTiersEnv,
   tierResources,
   tierWorkspaceStorageSize,
   warmTierCandidates,
-  workspaceVolumeSentence,
 } from "./runtime-tiers";
 
 /**
@@ -361,6 +362,7 @@ export async function buildAgentRunLaunchSpec(params: {
     [AGENT_RUNTIME_TIERS_ENV]: runtimeTiersEnv(
       allowedTiers,
       params.limits.tier,
+      params.limits.workspaceGiB,
     ),
     ...(resources.cpuRequest
       ? { [AGENT_RUNTIME_CPU_REQUEST_ENV]: resources.cpuRequest }
@@ -425,6 +427,27 @@ export async function buildAgentRunLaunchSpec(params: {
     if (virtualKey) await VirtualApiKeyModel.delete(virtualKey.virtualKey.id);
     throw error;
   }
+  // The volume sentence sits between two fixed parts, so a run served from a
+  // larger tier's warm pool can be told its volume without editing any other
+  // text, the Agent's own prompt included.
+  const systemPromptParts = runtimeSystemPromptParts({
+    lead: [
+      agent.systemPrompt,
+      skillPreview,
+      "Skills configured for this Agent are available through its MCP gateway, " +
+        "not necessarily in this client's native skill directories. " +
+        `Use ${archestraMcpBranding.getToolName(TOOL_LIST_SKILLS_SHORT_NAME)} ` +
+        "to discover available skills and " +
+        `${archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME)} ` +
+        "to load matching instructions and bundled resources. " +
+        "If these tools are not directly listed, discover them through the gateway's tool search. " +
+        "Save bundled resources with their relative paths before running them locally; " +
+        "decode resources marked base64 with a shell decoder, not a text-file tool. " +
+        "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
+        "not this runtime's filesystem.",
+    ],
+    runtime: params.runtime,
+  });
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
     ...(claudeCodeToken ? { CLAUDE_CODE_OAUTH_TOKEN: claudeCodeToken } : {}),
@@ -439,27 +462,10 @@ export async function buildAgentRunLaunchSpec(params: {
           OPENAI_API_KEY: virtualKeyValue,
         }
       : {}),
-    [AGENT_RUNTIME_SYSTEM_PROMPT_ENV]: [
-      agent.systemPrompt,
-      skillPreview,
-      "Skills configured for this Agent are available through its MCP gateway, " +
-        "not necessarily in this client's native skill directories. " +
-        `Use ${archestraMcpBranding.getToolName(TOOL_LIST_SKILLS_SHORT_NAME)} ` +
-        "to discover available skills and " +
-        `${archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME)} ` +
-        "to load matching instructions and bundled resources. " +
-        "If these tools are not directly listed, discover them through the gateway's tool search. " +
-        "Save bundled resources with their relative paths before running them locally; " +
-        "decode resources marked base64 with a shell decoder, not a text-file tool. " +
-        "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
-        "not this runtime's filesystem.",
-      describeRuntimeWorkspace(
-        params.runtime,
-        resolveRunWorkspaceGiB(params.limits.tier, tiers),
-      ),
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
+    [AGENT_RUNTIME_SYSTEM_PROMPT_ENV]: runtimeSystemPrompt(
+      systemPromptParts,
+      params.limits.workspaceGiB,
+    ),
     ...(task ? { ARCHESTRA_AGENT_RUNTIME_TASK: task } : {}),
     ...withNativeClientCredentialAliases(credentials.env),
     ...(isClaudeCodeBedrock
@@ -501,11 +507,13 @@ export async function buildAgentRunLaunchSpec(params: {
               tier: tier.name,
               resources: tierResources(tier),
               workspaceStorageSize: tierWorkspaceStorageSize(tier),
+              workspaceGiB: resolveRunWorkspaceGiB(tier.name, tiers),
             }),
           )
         : [],
       env: nonSecretEnv,
       secretEnv,
+      systemPromptParts,
       ...(Object.keys(credentials.renewableCredentials).length
         ? { renewableCredentials: credentials.renewableCredentials }
         : {}),
@@ -752,25 +760,33 @@ function virtualKeyVisibility(actor: A2AActor): {
 }
 
 /**
- * Workspace facts the platform owns, whatever the image installs: what
- * survives between turns, and which ports a user can open from it. The image
- * describes its own tools; see `docker_images/agent/environment.md`.
+ * The system prompt around its volume sentence: the Agent's prompt and the
+ * platform's notes first, then the workspace facts the platform owns,
+ * whatever the image installs: what survives between turns, how large the
+ * volume is (added by `runtimeSystemPrompt`), and which ports a user can open
+ * from it. The image describes its own tools; see
+ * `docker_images/agent/environment.md`.
  */
-function describeRuntimeWorkspace(
-  runtime: Pick<ResolvedAgentRuntime, "ports">,
-  workspaceGiB: number,
-): string {
-  const ports = [...new Set(runtime.ports ?? [])];
-  return [
-    "Files under /home/node persist across this conversation's turns; " +
-      `other paths reset when the container is replaced. ${workspaceVolumeSentence(workspaceGiB)}`,
-    ports.length > 0 &&
-      `The user can forward ${ports.length === 1 ? "port" : "ports"} ` +
-        `${ports.join(", ")} from this workspace to a browser; serve anything ` +
-        "they should open there.",
-  ]
-    .filter(Boolean)
-    .join(" ");
+function runtimeSystemPromptParts(params: {
+  lead: Array<string | null | undefined>;
+  runtime: Pick<ResolvedAgentRuntime, "ports">;
+}): RuntimeSystemPromptParts {
+  const ports = [...new Set(params.runtime.ports ?? [])];
+  return {
+    beforeVolume: [
+      ...params.lead,
+      "Files under /home/node persist across this conversation's turns; " +
+        "other paths reset when the container is replaced.",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    afterVolume:
+      ports.length > 0
+        ? ` The user can forward ${ports.length === 1 ? "port" : "ports"} ` +
+          `${ports.join(", ")} from this workspace to a browser; serve anything ` +
+          "they should open there."
+        : "",
+  };
 }
 
 function withNativeClientCredentialAliases(

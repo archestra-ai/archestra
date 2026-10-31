@@ -25,6 +25,7 @@ import {
   DEFAULT_VAULT_TOKEN,
   getAgentCatalogImages,
   getAgentCatalogImageTag,
+  gibFromMiB,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
   type LogContentMode,
@@ -1883,6 +1884,31 @@ export const parseClusterDnsIps = (envValue: string | undefined): string[] => {
 };
 
 /**
+ * The default workspace volume of Agent Runtime runs, read once: the
+ * Kubernetes quantity a volume claim takes, and the same size in GiB.
+ *
+ * @public — exported for testability
+ */
+export function agentRuntimeWorkspaceStorage(value: string | undefined): {
+  workspaceStorageSize: string;
+  workspaceStorageGiB: number;
+} {
+  const workspaceStorageSize = parseK8sResourceQuantity({
+    envName: "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE",
+    value,
+    validator: isValidK8sMemoryQuantity,
+    defaultValue: "20Gi",
+  });
+  // The validator and the parser accept the same suffixes, so a validated
+  // quantity always has a byte count.
+  const bytes = k8sMemoryQuantityToBytes(workspaceStorageSize) ?? 0;
+  return {
+    workspaceStorageSize,
+    workspaceStorageGiB: gibFromMiB(bytes / 1024 ** 2),
+  };
+}
+
+/**
  * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
  * undefined when it is not one. Reads every suffix `isValidK8sMemoryQuantity`
  * accepts, so a validated setting always has a byte count.
@@ -2523,12 +2549,12 @@ const config = {
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES,
       60,
     ),
-    workspaceStorageSize: parseK8sResourceQuantity({
-      envName: "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE",
-      value: process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE,
-      validator: isValidK8sMemoryQuantity,
-      defaultValue: "20Gi",
-    }),
+    // `workspaceStorageSize` (the quantity a volume claim takes) and
+    // `workspaceStorageGiB` (the same size in GiB, which runs and the tier
+    // settings are told): the volume of a run whose tier sets none.
+    ...agentRuntimeWorkspaceStorage(
+      process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE,
+    ),
     workspaceStorageClass:
       process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS?.trim() ||
       undefined,

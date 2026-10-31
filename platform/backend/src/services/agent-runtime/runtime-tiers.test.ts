@@ -5,10 +5,10 @@ import {
   agentRuntimeAllowedTiers,
   agentRuntimeMaxTier,
   agentRuntimeTier,
-  defaultWorkspaceGiB,
   resolveAgentRunLimits,
   resolveRunResources,
   resolveRunWorkspaceStorageSize,
+  runtimeSystemPrompt,
   runtimeTiersEnv,
   warmPoolReplicas,
   warmTierCandidates,
@@ -221,23 +221,6 @@ describe("runtime tiers", () => {
     ]);
   });
 
-  test("the deployment's volume size reads in GiB whatever quantity it was set in", () => {
-    const size = config.agentRuntime.workspaceStorageSize;
-    try {
-      for (const [quantity, gib] of [
-        ["20Gi", 20],
-        ["500Mi", 0.49],
-        ["1T", 931.32],
-        ["64G", 59.6],
-      ] as const) {
-        config.agentRuntime.workspaceStorageSize = quantity;
-        expect(defaultWorkspaceGiB()).toBe(gib);
-      }
-    } finally {
-      config.agentRuntime.workspaceStorageSize = size;
-    }
-  });
-
   test("a run's workspace volume is its tier's size, else the deployment's", () => {
     const sized = resolveAgentRuntimeTiers(
       {
@@ -263,24 +246,108 @@ describe("runtime tiers", () => {
     expect(resolveRunWorkspaceStorageSize("Gone", sized)).toBe(
       config.agentRuntime.workspaceStorageSize,
     );
-    expect(
-      JSON.parse(runtimeTiersEnv(sized.tiers, "Tilt")).map(
-        (tier: { name: string; workspace_gib: number }) => [
+    const sizes = (current: number | undefined) =>
+      JSON.parse(runtimeTiersEnv(sized.tiers, "Tilt", current)).map(
+        (tier: { name: string; workspace_gib?: number }) => [
           tier.name,
           tier.workspace_gib,
         ],
-      ),
-    ).toEqual([
+      );
+    expect(sizes(60)).toEqual([
       ["Lite", 20],
       ["Tilt", 60],
     ]);
+    // The run's own tier carries the volume the run has, which a continuation
+    // keeps from its first turn, and nothing when that is unknown.
+    expect(sizes(40)).toEqual([
+      ["Lite", 20],
+      ["Tilt", 40],
+    ]);
+    expect(sizes(undefined)).toEqual([
+      ["Lite", 20],
+      ["Tilt", undefined],
+    ]);
+  });
+
+  test("the prompt names the run's volume between its fixed parts, and nothing when the size is unknown", () => {
+    const parts = {
+      beforeVolume: "Files persist.",
+      afterVolume: " Ports: none.",
+    };
+    expect(runtimeSystemPrompt(parts, 60)).toBe(
+      "Files persist. The workspace volume is 60 GiB in all, including any Docker data. Ports: none.",
+    );
+    expect(runtimeSystemPrompt(parts, undefined)).toBe(
+      "Files persist. Ports: none.",
+    );
+  });
+
+  test("a tier chosen by size never has a smaller workspace than the Agent's default tier", () => {
+    const tiers = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          { name: "Small", cpuRequest: 2, cpuLimit: null, warmSpares: 0 },
+          {
+            name: "Tilt",
+            cpuRequest: 4,
+            cpuLimit: null,
+            warmSpares: 0,
+            workspaceGiB: 60,
+          },
+          { name: "Big", cpuRequest: 6, cpuLimit: null, warmSpares: 0 },
+          {
+            name: "Huge",
+            cpuRequest: 8,
+            cpuLimit: null,
+            warmSpares: 0,
+            workspaceGiB: 80,
+          },
+        ],
+        defaultTier: "Tilt",
+      },
+      { defaultWarmSpares: 0 },
+    );
+    const tilt = { ...DEFAULTS, tier: "Tilt", maxTier: "Huge" };
+    // Small and Big have the CPU but only the deployment's 20 GiB.
+    expect(
+      resolveAgentRunLimits({
+        runtime: tilt,
+        tiers,
+        requested: { minCpu: 2 },
+      }),
+    ).toMatchObject({ tier: "Tilt", workspaceGiB: 60 });
+    expect(
+      resolveAgentRunLimits({
+        runtime: tilt,
+        tiers,
+        requested: { minCpu: 5 },
+      }),
+    ).toMatchObject({ tier: "Huge", workspaceGiB: 80 });
+    // An Agent whose default tier has the deployment's size may get any.
+    expect(
+      resolveAgentRunLimits({
+        runtime: { ...DEFAULTS, tier: "Small", maxTier: "Huge" },
+        tiers,
+        requested: { minCpu: 5 },
+      }),
+    ).toMatchObject({ tier: "Big", workspaceGiB: 20 });
+    // No tier with the CPU and the disk: the refusal says which is missing.
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: { ...tilt, maxTier: "Big" },
+        tiers,
+        requested: { minCpu: 5 },
+      }),
+    ).toThrow(
+      "No tier this Agent's runs may use has 5 CPU and a workspace of at least 60 GiB, the size of its default tier.",
+    );
   });
 
   test("the Pod reads the tiers it may move to, smallest first, with their sizes", () => {
     const worker = { ...DEFAULTS, tier: "Medium", maxTier: "Large" };
     expect(
       JSON.parse(
-        runtimeTiersEnv(agentRuntimeAllowedTiers(worker, CUSTOM), "Medium"),
+        runtimeTiersEnv(agentRuntimeAllowedTiers(worker, CUSTOM), "Medium", 20),
       ),
     ).toEqual([
       {
@@ -335,6 +402,7 @@ describe("runtime tiers", () => {
       idleTimeoutMinutes: config.agentRuntime.defaultIdleTimeoutMinutes,
       maxDurationHours: config.agentRuntime.defaultTtlHours,
       maxCostUsd: null,
+      workspaceGiB: 20,
     });
     expect(
       resolveAgentRunLimits({
@@ -352,6 +420,7 @@ describe("runtime tiers", () => {
       idleTimeoutMinutes: 30,
       maxDurationHours: 48,
       maxCostUsd: 25,
+      workspaceGiB: 20,
     });
   });
 
@@ -379,6 +448,7 @@ describe("runtime tiers", () => {
       idleTimeoutMinutes: 10,
       maxDurationHours: 3,
       maxCostUsd: 5,
+      workspaceGiB: 20,
     });
     for (const [requested, message] of [
       [

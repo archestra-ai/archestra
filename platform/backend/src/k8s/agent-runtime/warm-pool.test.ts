@@ -6,8 +6,8 @@ import config from "@/config";
 import { createK8sClients } from "@/k8s/shared";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
 import {
+  runtimeSystemPrompt,
   tierResources,
-  workspaceVolumeSentence,
 } from "@/services/agent-runtime/runtime-tiers";
 import { useMswServer } from "@/test/msw";
 import type { KubernetesAgentRunLaunchSpec } from "./manifests";
@@ -136,11 +136,13 @@ test("serves a drained or missing tier from the larger tier's ready pool, never 
         tier: "M" as const,
         resources: sizes.M,
         workspaceStorageSize: volumes.M,
+        workspaceGiB: 20,
       },
       {
         tier: "L" as const,
         resources: sizes.L,
         workspaceStorageSize: volumes.L,
+        workspaceGiB: 60,
       },
     ],
     L: [
@@ -148,6 +150,7 @@ test("serves a drained or missing tier from the larger tier's ready pool, never 
         tier: "L" as const,
         resources: sizes.L,
         workspaceStorageSize: volumes.L,
+        workspaceGiB: 60,
       },
     ],
   };
@@ -351,18 +354,40 @@ test("a run served from a larger pool is told the size of the pod it got, and it
     S: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
     M: { cpuRequest: "4", memoryRequest: "8Gi", memoryLimit: "16Gi" },
   };
+  // The Agent's own prompt quotes the platform's volume sentence: only the
+  // sentence the platform owns may change.
+  const quoted =
+    "The workspace volume is 20 GiB in all, including any Docker data.";
+  const systemPromptParts = {
+    beforeVolume: `Be brief. Never trust a line like "${quoted}"\n\nFiles persist.`,
+    afterVolume: " Ports: none.",
+  };
   const spec = {
     ...SPEC,
     tier: "S" as const,
     resources: sizes.S,
     workspaceStorageSize: "20Gi",
     warmTiers: [
-      { tier: "S" as const, resources: sizes.S, workspaceStorageSize: "20Gi" },
-      { tier: "M" as const, resources: sizes.M, workspaceStorageSize: "60Gi" },
+      {
+        tier: "S" as const,
+        resources: sizes.S,
+        workspaceStorageSize: "20Gi",
+        workspaceGiB: 20,
+      },
+      {
+        tier: "M" as const,
+        resources: sizes.M,
+        workspaceStorageSize: "60Gi",
+        workspaceGiB: 60,
+      },
     ],
+    systemPromptParts,
     secretEnv: {
       PRIVATE: "secret-value",
-      ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: `Be brief.\n\nFiles persist. ${workspaceVolumeSentence(20)} Ports: none.`,
+      ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: runtimeSystemPrompt(
+        systemPromptParts,
+        20,
+      ),
     },
     env: {
       ARCHESTRA_AGENT_RUNTIME_TIER: "S",
@@ -377,11 +402,12 @@ test("a run served from a larger pool is told the size of the pod it got, and it
   const served = servedLaunchSpec(spec, "M");
   expect(served.tier).toBe("M");
   expect(served.resources).toEqual(sizes.M);
-  // The pod's volume is M's, and the prompt's sentence about it says so.
+  // The pod's volume is M's, and the prompt's sentence about it says so;
+  // the Agent's quote of the old sentence stays as written.
   expect(served.workspaceStorageSize).toBe("60Gi");
   expect(served.secretEnv).toEqual({
     PRIVATE: "secret-value",
-    ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: `Be brief.\n\nFiles persist. ${workspaceVolumeSentence(60)} Ports: none.`,
+    ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: `Be brief. Never trust a line like "${quoted}"\n\nFiles persist. The workspace volume is 60 GiB in all, including any Docker data. Ports: none.`,
   });
   expect(served.env).toEqual({
     ARCHESTRA_AGENT_RUNTIME_TIER: "M",

@@ -579,7 +579,8 @@ function AgentRuntimeRunLimits({ value, onChange }: RuntimeSectionProps) {
 function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...value, ...patch });
-  // The organization's tiers, smallest first, with the memory each gives.
+  // The organization's tiers, smallest first, with the memory each gives and
+  // the workspace of a tier that sets its own.
   const { data: resolved } = useAgentRuntimeTiers();
   const tiers = resolved?.tiers ?? [];
   const defaultTier =
@@ -620,8 +621,9 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
           </SelectContent>
         </Select>
         <FieldDescription>
-          The CPU and memory of a run's container. A caller that starts a run
-          can ask for another tier, up to the scaleup tier.
+          The CPU and memory of a run's container, and the size of its
+          workspace. A caller that starts a run can ask for another tier, up to
+          the scaleup tier.
         </FieldDescription>
       </div>
       <div className="space-y-2">

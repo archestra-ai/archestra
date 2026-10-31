@@ -132,6 +132,11 @@ export function memoryQuantity(mib: number): string {
   return mib % MIB_PER_GIB === 0 ? `${mib / MIB_PER_GIB}Gi` : `${mib}Mi`;
 }
 
+/** MiB in GiB, to two decimals: the sizes a run reads as numbers. */
+export function gibFromMiB(mib: number): number {
+  return Math.round((mib / MIB_PER_GIB) * 100) / 100;
+}
+
 /** A memory amount for people: "4 GiB", "1.5 GiB", "512 MiB". */
 export function formatMemory(mib: number): string {
   if (mib % MIB_PER_GIB === 0) return `${mib / MIB_PER_GIB} GiB`;
@@ -141,9 +146,14 @@ export function formatMemory(mib: number): string {
 
 /** A tier's size in a few words: "4 CPU, 8 GiB". */
 export function summarizeAgentRuntimeTier(
-  tier: Pick<AgentRuntimeTierSize, "cpuRequest" | "memoryRequestMiB">,
+  tier: Pick<
+    AgentRuntimeTierSize,
+    "cpuRequest" | "memoryRequestMiB" | "workspaceGiB"
+  >,
 ): string {
-  return `${tier.cpuRequest} CPU, ${formatMemory(tier.memoryRequestMiB)}`;
+  const workspace =
+    tier.workspaceGiB === null ? "" : `, ${tier.workspaceGiB} GiB workspace`;
+  return `${tier.cpuRequest} CPU, ${formatMemory(tier.memoryRequestMiB)}${workspace}`;
 }
 
 /**
@@ -254,8 +264,12 @@ const CpuLimitSchema = z
     (cpus) => Number.isInteger(cpus * CPU_DECIMALS),
     "A CPU amount has at most three decimals",
   );
-/** A workspace volume size: whole GiB, from 1 to the largest a tier may give. */
-const WorkspaceGiBSchema = z
+/**
+ * A tier's workspace volume size: whole GiB, from 1 to the largest a tier may
+ * give. The one definition of the rule: the API schema, the save check and the
+ * settings form all use it.
+ */
+export const AgentRuntimeWorkspaceGiBSchema = z
   .number()
   .int("A workspace size is a whole number of GiB")
   .min(1, "The workspace is at least 1 GiB")
@@ -281,10 +295,11 @@ export const AgentRuntimeTierDefinitionSchema = z.strictObject({
    */
   pooled: z.boolean(),
   /**
-   * Size of a run's workspace volume in GiB; null, or left out, follows the
-   * deployment's default.
+   * Size of a run's workspace volume in GiB; null follows the deployment's
+   * default. Left out, the tier keeps the size it has, so a client that does
+   * not know the field never erases it.
    */
-  workspaceGiB: WorkspaceGiBSchema.nullable().default(null),
+  workspaceGiB: AgentRuntimeWorkspaceGiBSchema.nullable().optional(),
   /**
    * The tier's name before this save, when the save renames it. Agents that
    * name the old tier follow the rename.
@@ -391,7 +406,7 @@ function readTier(entry: unknown): AgentRuntimeTierDefinition | null {
   const warmSpares = StoredWarmSparesSchema.nullable().safeParse(
     value.warmSpares ?? null,
   );
-  const workspaceGiB = WorkspaceGiBSchema.nullable().safeParse(
+  const workspaceGiB = AgentRuntimeWorkspaceGiBSchema.nullable().safeParse(
     value.workspaceGiB ?? null,
   );
   return {
@@ -521,9 +536,7 @@ export function agentRuntimeTierProblems(settings: {
     }
     if (
       tier.workspaceGiB !== null &&
-      (!Number.isInteger(tier.workspaceGiB) ||
-        tier.workspaceGiB < 1 ||
-        tier.workspaceGiB > AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB)
+      !AgentRuntimeWorkspaceGiBSchema.safeParse(tier.workspaceGiB).success
     )
       problems.push(
         `${label}: the workspace is a whole number of GiB from 1 to ${AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB}`,
@@ -550,6 +563,7 @@ export function agentRuntimeTierDefinitionFromInput(
     cpuRequest: input.cpuRequest,
     cpuLimit: input.cpuLimit,
     warmSpares: input.pooled ? null : 0,
-    workspaceGiB: input.workspaceGiB,
+    // The caller fills a left-out size from the tier's current one first.
+    workspaceGiB: input.workspaceGiB ?? null,
   };
 }

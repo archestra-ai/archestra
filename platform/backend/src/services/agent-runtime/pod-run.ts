@@ -63,6 +63,7 @@ import {
 import {
   organizationAgentRuntimeTiers,
   resolveAgentRunLimits,
+  resolveRunWorkspaceGiB,
 } from "./runtime-tiers";
 import { generateAgentRunTitle } from "./title";
 import { agentRunTranscriptStore } from "./transcript-store";
@@ -164,13 +165,20 @@ async function startAgentRunSession(params: {
 
   // A continuation keeps the first turn's tier and limits; its workspace
   // already has that size and that expiry.
-  const limits =
+  const tiers = await organizationAgentRuntimeTiers(params.organizationId);
+  const chosen =
     priorRun?.runtimeLimits ??
     params.limits ??
-    resolveAgentRunLimits({
-      runtime: params.runtime,
-      tiers: await organizationAgentRuntimeTiers(params.organizationId),
-    });
+    resolveAgentRunLimits({ runtime: params.runtime, tiers });
+  const limits = withWorkspaceSize({
+    limits: chosen,
+    // The volume a run is told about is the one it has: a new run's comes
+    // from its tier now; a continuation's was recorded when its workspace was
+    // created, and a workspace from before sizes were recorded has none.
+    workspaceGiB: priorRun
+      ? priorRun.runtimeLimits?.workspaceGiB
+      : (chosen.workspaceGiB ?? resolveRunWorkspaceGiB(chosen.tier, tiers)),
+  });
   const { spec, virtualApiKeyId, gatewayTokenId } =
     await buildAgentRunLaunchSpec({
       runtime: params.runtime,
@@ -887,4 +895,15 @@ async function notifyRuntimeSessionCreated(
       "Could not announce the Agent Runtime session",
     );
   }
+}
+
+/** The limits with the run's workspace size, or without one when it is unknown. */
+function withWorkspaceSize(params: {
+  limits: AgentRunLimits;
+  workspaceGiB: number | undefined;
+}): AgentRunLimits {
+  const { workspaceGiB: _recorded, ...rest } = params.limits;
+  return params.workspaceGiB === undefined
+    ? rest
+    : { ...rest, workspaceGiB: params.workspaceGiB };
 }

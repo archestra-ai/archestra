@@ -59,6 +59,7 @@ vi.mock("@/lib/organization.query", async (importOriginal) => ({
           pooled: true,
           memoryRequestMiB: 1024,
           memoryLimitMiB: 2048,
+          workspaceGiB: null,
         },
         {
           name: "M",
@@ -68,6 +69,7 @@ vi.mock("@/lib/organization.query", async (importOriginal) => ({
           pooled: true,
           memoryRequestMiB: 1536,
           memoryLimitMiB: 3072,
+          workspaceGiB: null,
         },
         {
           name: "L",
@@ -77,9 +79,12 @@ vi.mock("@/lib/organization.query", async (importOriginal) => ({
           pooled: false,
           memoryRequestMiB: 16384,
           memoryLimitMiB: 32768,
+          // L sizes its own volume: the pickers name it.
+          workspaceGiB: 60,
         },
       ],
       defaultTier: "M",
+      defaultWorkspaceGiB: 20,
     },
   }),
 }));
@@ -189,7 +194,16 @@ describe("AgentRuntimeFields", () => {
     expect(
       screen.queryByRole("option", { name: /^S:/ }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("option", { name: /^L:/ }));
+    // A tier that sets its own workspace names it; the others show CPU and
+    // memory only.
+    expect(
+      screen.getByRole("option", { name: "M: 0.75 CPU, 1.5 GiB" }),
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("option", {
+        name: "L: 8 CPU, 16 GiB, 60 GiB workspace",
+      }),
+    );
     expect(
       JSON.parse(screen.getByTestId("config").textContent ?? "{}").maxTier,
     ).toBe("L");

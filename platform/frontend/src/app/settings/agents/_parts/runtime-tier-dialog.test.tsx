@@ -106,7 +106,7 @@ describe("RuntimeTierDialog", () => {
       "20",
     );
     expect(within(dialog).getByTestId("tier-workspace")).toHaveTextContent(
-      "Blank: the deployment default, 20 GiB. The volume holds the home directory and, for a privileged agent, its Docker data. A stack that runs Kubernetes in Docker needs about 60 GiB.",
+      "Blank: the deployment default, 20 GiB. The volume holds the home directory and, for a privileged agent, its Docker data. A stack that runs Kubernetes in Docker needs about 60 GiB. Each spare of a pooled tier holds a volume of this size.",
     );
     expect(
       within(dialog).getByRole("switch", { name: "Pooled" }),

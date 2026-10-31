@@ -90,7 +90,8 @@ export type AgentRuntimeTier = z.infer<typeof AgentRuntimeTierSchema>;
 /**
  * Limits a caller asks for one run. Each must stay within the Agent's own. A
  * tier is chosen by name, or by the CPU and memory the work needs, which gives
- * the smallest tier that fits.
+ * the smallest tier that fits and has no smaller workspace than the Agent's
+ * default tier.
  */
 export const AgentRunLimitsRequestSchema = z.object({
   tier: AgentRuntimeTierSchema.optional(),
@@ -118,13 +119,21 @@ export type AgentRunLimitsRequest = z.infer<typeof AgentRunLimitsRequestSchema>;
 
 /**
  * What a run got: the tier it runs at (null only on a run recorded before
- * every run had one), and its idle, duration and spend limits.
+ * every run had one), its idle, duration and spend limits, and the size of
+ * its workspace volume.
  */
 export const AgentRunLimitsSchema = z.object({
   tier: AgentRuntimeTierSchema.nullable(),
   idleTimeoutMinutes: z.number().int().min(1),
   maxDurationHours: z.number().int().min(1),
   maxCostUsd: z.number().int().min(1).nullable(),
+  workspaceGiB: z
+    .number()
+    .positive()
+    .optional()
+    .describe(
+      "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
+    ),
 });
 export type AgentRunLimits = z.infer<typeof AgentRunLimitsSchema>;
 

@@ -5,6 +5,7 @@ import {
   AGENT_RUNTIME_TIER_NAME_MAX_LENGTH,
   type AgentRuntimeTierDefinitionInput,
   type AgentRuntimeTierSettingsInput,
+  AgentRuntimeWorkspaceGiBSchema,
   agentRuntimeTierMemory,
   sameAgentRuntimeTierName,
 } from "@archestra/shared";
@@ -153,10 +154,7 @@ export function validateRuntimeTierForm(
     : null;
   if (
     values.workspaceGiB.trim() &&
-    (workspaceGiB === null ||
-      !Number.isInteger(workspaceGiB) ||
-      workspaceGiB < 1 ||
-      workspaceGiB > AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB)
+    !AgentRuntimeWorkspaceGiBSchema.safeParse(workspaceGiB).success
   )
     errors.workspaceGiB = `Enter a whole number from 1 to ${AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB}, or leave it blank for the default`;
 

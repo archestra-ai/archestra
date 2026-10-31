@@ -60,10 +60,7 @@ import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { assertRuntimeAgentsSupportOrganizationDefault } from "@/services/agent-runtime/model-compatibility";
 import { prepareAgentRuntimeTierChange } from "@/services/agent-runtime/runtime-tier-settings";
-import {
-  defaultWorkspaceGiB,
-  organizationAgentRuntimeTiers,
-} from "@/services/agent-runtime/runtime-tiers";
+import { organizationAgentRuntimeTiers } from "@/services/agent-runtime/runtime-tiers";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { removeMemberTarget } from "@/services/member-removal";
@@ -350,7 +347,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ organizationId }, reply) => {
       return reply.send({
         ...(await organizationAgentRuntimeTiers(organizationId)),
-        defaultWorkspaceGiB: defaultWorkspaceGiB(),
+        defaultWorkspaceGiB: config.agentRuntime.workspaceStorageGiB,
       });
     },
   );

@@ -9,6 +9,7 @@ import {
   parseCpuQuantity,
   resolveAgentRuntimeTiers,
   sortAgentRuntimeTiers,
+  summarizeAgentRuntimeTier,
 } from "./agent-runtime-tiers";
 
 const DEPLOYMENT = { defaultWarmSpares: 1 };
@@ -217,6 +218,11 @@ describe("sizes and order", () => {
     expect(describeAgentRuntimeTier({ ...tiers[1], workspaceGiB: 60 })).toBe(
       "2 CPU (3 limit), 4 GiB (6 GiB limit), 60 GiB workspace",
     );
+    // The short label names the workspace only when the tier sets one.
+    expect(summarizeAgentRuntimeTier(tiers[1])).toBe("2 CPU, 4 GiB");
+    expect(summarizeAgentRuntimeTier({ ...tiers[1], workspaceGiB: 60 })).toBe(
+      "2 CPU, 4 GiB, 60 GiB workspace",
+    );
     // With the deployment's default given, every tier names its volume.
     expect(describeAgentRuntimeTier(tiers[1], 20)).toBe(
       "2 CPU (3 limit), 4 GiB (6 GiB limit), 20 GiB workspace",
@@ -248,13 +254,14 @@ describe("AgentRuntimeTierSettingsSchema", () => {
         defaultTier: "S",
       }).success,
     ).toBe(true);
-    // Left out, the workspace size reads as the deployment's default.
+    // Left out, the workspace size stays unset: the save keeps the tier's
+    // current size rather than erasing it.
     expect(
       AgentRuntimeTierSettingsSchema.parse({
         tiers: [{ name: "S", cpuRequest: 1, cpuLimit: null, pooled: false }],
         defaultTier: "S",
-      }).tiers[0].workspaceGiB,
-    ).toBeNull();
+      }).tiers[0],
+    ).not.toHaveProperty("workspaceGiB");
     for (const tiers of [
       [{ name: "S", cpuRequest: 9, cpuLimit: null, pooled: false }],
       [{ name: "S", cpuRequest: 2, cpuLimit: 17, pooled: false }],

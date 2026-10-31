@@ -796,10 +796,10 @@ const registry = defineArchestraTools([
         .object({
           // The same fields and bounds as the REST route's `limits`, in snake case.
           tier: AgentRunLimitsRequestSchema.shape.tier.describe(
-            "The name of one of the organization's runtime tiers, at or below this Agent's scaleup tier. Choose by size, not by name: inside a run, $ARCHESTRA_AGENT_RUNTIME_TIERS lists the tiers the run may move to with their CPU and memory; pick the smallest that covers the work. To move work to another tier, start a run of the same Agent at that tier and hand over the branch. A tier above the scaleup tier is refused with the allowed tiers and their sizes named.",
+            "The name of one of the organization's runtime tiers, at or below this Agent's scaleup tier. Choose by size, not by name: inside a run, $ARCHESTRA_AGENT_RUNTIME_TIERS lists the tiers the run may move to with their CPU, memory and workspace size; pick the smallest that covers the work. To move work to another tier, start a run of the same Agent at that tier and hand over the branch. A tier above the scaleup tier is refused with the allowed tiers and their sizes named.",
           ),
           min_cpu: AgentRunLimitsRequestSchema.shape.minCpu.describe(
-            "CPUs the work needs. The run gets the smallest tier this Agent may use with at least this many; refused with the allowed tiers named when none has. Use this when the tier names are unknown.",
+            "CPUs the work needs. The run gets the smallest tier this Agent may use with at least this many and no smaller workspace than the Agent's default tier; refused with the allowed tiers named when none has. Use this when the tier names are unknown.",
           ),
           min_memory_gib:
             AgentRunLimitsRequestSchema.shape.minMemoryGib.describe(

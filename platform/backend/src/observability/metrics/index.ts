@@ -9,6 +9,7 @@ export * as limit from "./limit";
 export * as llm from "./llm";
 export * as llmProxy from "./llm-proxy";
 export * as mcp from "./mcp";
+export * as openappa from "./openappa";
 export * as rag from "./rag";
 export * as sandbox from "./sandbox";
 export * as scheduleTrigger from "./schedule-trigger";

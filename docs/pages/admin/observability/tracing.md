@@ -24,6 +24,10 @@ Send model requests, tool calls, and backend logs to your OpenTelemetry collecto
 
 Archestra appends `/v1/traces` and `/v1/logs` to the base URL.
 
+### Collect Metrics Alongside Traces
+
+As part of setup, configure [Prometheus scraping](/docs/admin/observability/metrics#scraping) for application metrics, including embedded Guardrails hooks. The endpoint above exports traces and logs only. If you also run a standalone OpenAPPA daemon, add a metrics branch to your collector's OTLP receiver and configure the daemon separately; follow [OpenAPPA collection setup](/docs/admin/observability/metrics/openappa#collection-setup).
+
 ### Logs
 
 Archestra sends its backend logs to the same collector. Each record carries `trace_id` and `span_id`, plus `session_id` inside an agent session. Your tracing backend uses them to jump from a span to its logs.

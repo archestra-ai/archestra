@@ -15,6 +15,7 @@ Usage:
 
 import copy
 import json
+import re
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
@@ -57,7 +58,11 @@ PROVIDERS = {
             },
             502: {
                 "targets": [
-                    {"refId": "A", "expr": "max(postgresql_connection_max)", "legendFormat": ""},
+                    {
+                        "refId": "A",
+                        "expr": "max(postgresql_connection_max)",
+                        "legendFormat": "",
+                    },
                 ],
             },
             503: {
@@ -73,7 +78,11 @@ PROVIDERS = {
                 "title": "WAL Age",
                 "unit": "s",
                 "targets": [
-                    {"refId": "A", "expr": "postgresql_wal_age_seconds", "legendFormat": ""},
+                    {
+                        "refId": "A",
+                        "expr": "postgresql_wal_age_seconds",
+                        "legendFormat": "",
+                    },
                 ],
             },
             513: {
@@ -128,10 +137,10 @@ PROVIDERS = {
                     {
                         "refId": "A",
                         "expr": (
-                            "sum by (datname) (rate(postgresql_blocks_read_total{datname!~\"template0|template1|postgres\",source=\"heap_hit\"}[$__rate_interval])) / "
+                            'sum by (datname) (rate(postgresql_blocks_read_total{datname!~"template0|template1|postgres",source="heap_hit"}[$__rate_interval])) / '
                             "clamp_min("
-                            "sum by (datname) (rate(postgresql_blocks_read_total{datname!~\"template0|template1|postgres\",source=\"heap_hit\"}[$__rate_interval])) + "
-                            "sum by (datname) (rate(postgresql_blocks_read_total{datname!~\"template0|template1|postgres\",source=\"heap_read\"}[$__rate_interval])), "
+                            'sum by (datname) (rate(postgresql_blocks_read_total{datname!~"template0|template1|postgres",source="heap_hit"}[$__rate_interval])) + '
+                            'sum by (datname) (rate(postgresql_blocks_read_total{datname!~"template0|template1|postgres",source="heap_read"}[$__rate_interval])), '
                             "1e-9)"
                         ),
                         "legendFormat": "hit ratio - {{datname}}",
@@ -498,7 +507,12 @@ def transform_dashboard(base: dict, provider: dict) -> dict:
 
     panel_transforms = provider["panels"]
 
-    for panel in dashboard["panels"]:
+    def walk(panels):
+        for panel in panels:
+            yield panel
+            yield from walk(panel.get("panels", []))
+
+    for panel in walk(dashboard["panels"]):
         panel_id = panel.get("id")
         if panel_id not in panel_transforms:
             continue
@@ -522,6 +536,18 @@ def transform_dashboard(base: dict, provider: dict) -> dict:
             fc["overrides"] = spec["overrides"]
             panel["fieldConfig"] = fc
 
+        # Unsupported provider signals are explanatory panels, never empty queries.
+        if "targets" in spec and not any(t.get("expr") for t in spec["targets"]):
+            panel["type"] = "text"
+            panel.pop("targets", None)
+            panel.pop("datasource", None)
+            panel.pop("fieldConfig", None)
+            panel["options"] = {
+                "mode": "markdown",
+                "content": "This PostgreSQL metrics provider does not expose this signal. Select a provider that exports it to populate this view.",
+            }
+            continue
+
         # Replace targets
         if "targets" in spec:
             base_target = panel["targets"][0] if panel.get("targets") else {}
@@ -529,7 +555,22 @@ def transform_dashboard(base: dict, provider: dict) -> dict:
             for t_spec in spec["targets"]:
                 target = copy.deepcopy(base_target)
                 target["refId"] = t_spec["refId"]
-                target["expr"] = t_spec["expr"]
+                expression = re.sub(r"\s+or\s+vector\(0\)", "", t_spec["expr"])
+
+                def scope(match):
+                    name, labels = match.group(1), match.group(2)
+                    return (
+                        name
+                        + '{job=~"$postgres_job"'
+                        + ("," + labels[1:-1] if labels else "")
+                        + "}"
+                    )
+
+                target["expr"] = re.sub(
+                    r"\b((?:postgresql_|stackdriver_|azure_)[a-zA-Z0-9_]+)(\{[^}]*\})?",
+                    scope,
+                    expression,
+                )
                 target["legendFormat"] = t_spec["legendFormat"]
                 # Ensure range queries for timeseries panels
                 if panel.get("type") == "timeseries":

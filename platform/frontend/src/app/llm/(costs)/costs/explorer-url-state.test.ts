@@ -91,3 +91,14 @@ it("round trips a sorted expanded table, including ids containing commas", () =>
   expect(table.showAll).toBe(true);
   expect(decodeExplorerTable(encodeExplorerTable(table))).toEqual(table);
 });
+
+it("keeps an explicit personal grouping independent of desktop and mobile chart preferences", () => {
+  const params = new URLSearchParams(
+    "metric=billed&group=model&chart=lines&mobileChart=table",
+  );
+  const state = decodePersonalExplorer(params);
+  expect(state.group).toBe("model");
+  expect(state.chart).toBe("lines");
+  expect(state.mobileChart).toBe("table");
+  expect(decodePersonalExplorer(encodePersonalExplorer(state))).toEqual(state);
+});

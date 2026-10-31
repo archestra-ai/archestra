@@ -146,7 +146,7 @@ export function decodePersonalExplorer(
     group = "overall";
     if (!params.has("chart")) chart = "table";
   }
-  if (chart === "lines") group = "time";
+  if (chart === "lines" && !params.has("group")) group = "time";
   if (!supportsUsage(group, metric)) group = "model";
   return {
     model,

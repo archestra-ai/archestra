@@ -62,12 +62,15 @@ export function UsageContent(props: UsageViewProps) {
     setExplorer("group", value);
   const setSplit = (value: SetStateAction<boolean>) =>
     setExplorer("split", value);
-  const [chart, setChart] = useResponsiveChart(
+  const [preferredChart, setChart] = useResponsiveChart(
     explorer.chart,
     explorer.mobileChart,
     (chart) => setExplorer("chart", chart),
     (chart) => setExplorer("mobileChart", chart),
   );
+  // Personal categorical totals have no timeline; retain the saved line preference for time views.
+  const chart =
+    preferredChart === "lines" && group !== "time" ? "bars" : preferredChart;
   const setView = (value: SetStateAction<"summary" | "pivot">) =>
     setExplorer("view", value);
   const setFocus = (value: SetStateAction<Set<string>>) =>

@@ -142,6 +142,19 @@ describe("usage exploration", () => {
     ).toBe(10);
   });
 
+  it("restores an explicit grouping even when the saved desktop chart prefers lines", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/llm/usage?group=model&chart=lines&mobileChart=table",
+    );
+    render(<UsageContent {...makeUsageData()} />);
+    expect(screen.getByRole("button", { name: "by Model" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Stacked bars" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("only shows splitting when the metric and grouping support it", async () => {
     const user = userEvent.setup();
     render(<UsageContent {...makeUsageData()} />);

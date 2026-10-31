@@ -29,7 +29,10 @@ export interface ResourceSignals {
   hostParallelism: number;
   /** `os.totalmem()`: the machine's memory. */
   hostMemoryBytes: number;
-  /** `process.constrainedMemory()`: the cgroup memory limit; 0 without one. */
+  /**
+   * `process.constrainedMemory()`: the cgroup memory limit. Without one Node
+   * reports 0 or, on Linux, the largest unsigned 64-bit value.
+   */
   constrainedMemoryBytes: number | undefined;
   /** The pod's CPU request as a Kubernetes quantity ("2", "3500m"), when set. */
   podCpuRequest?: string;

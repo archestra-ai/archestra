@@ -1092,37 +1092,87 @@ function completeExec(output = "0") {
     });
 }
 
+const RATE_LIMIT_ENVELOPE = JSON.stringify({
+  version: 1,
+  code: "claude_rate_limit",
+  message: "Claude Code reached a rate limit.",
+});
+
 test.for([
   { name: "a memory kill inside the running pod", killed: true, exit: null },
-  { name: "a failed command without a memory kill", killed: false, exit: null },
+  {
+    name: "a failed command without a memory kill",
+    killed: false,
+    exit: null,
+  },
   {
     name: "a turn that ends non-zero after a memory kill",
     killed: true,
     exit: "7",
   },
+  {
+    name: "a turn whose image reported its own failure after a memory kill",
+    killed: true,
+    exit: `7\n${RATE_LIMIT_ENVELOPE}`,
+  },
+  {
+    name: "a workspace that finished while the pod runs, after a memory kill",
+    killed: true,
+    finished: true,
+  },
+  {
+    name: "a container without the counters",
+    killed: false,
+    exit: "7",
+    counters: false,
+    polls: 5,
+  },
 ])("$name: a turn that fails is checked against the cgroup's memory counters", async ({
   killed,
-  exit,
+  exit = null,
+  finished = false,
+  counters = true,
+  polls = 2,
 }, { run }) => {
   const GIB = 1024 ** 3;
   let turnReads = 0;
   let memoryReads = 0;
+  if (finished) {
+    server.use(
+      http.get(sandboxUrl, () =>
+        HttpResponse.json({
+          status: {
+            conditions: [
+              {
+                type: "Finished",
+                status: "True",
+                reason: "PodFailed",
+                message: "Pod failed",
+              },
+            ],
+          },
+        }),
+      ),
+    );
+  }
   vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
     const command = (args[3] as string[]).join(" ");
     if (command.includes("read-memory-events")) {
       // The counters when the turn was first seen running, then after the
-      // failed command: the kernel killed the run's tsc, shell and tmux server
+      // failure: the kernel killed the run's tsc, shell and tmux server
       // while PID 1 and the pod lived on.
       const kills = memoryReads++ === 0 || !killed ? 0 : 1;
-      args[4]?.write(
-        `low 0\nhigh 0\nmax 1203\noom ${kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills ? 8 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
-      );
+      if (counters) {
+        args[4]?.write(
+          `low 0\nhigh 0\nmax 1203\noom ${kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills ? 8 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
+        );
+      }
       args[8]?.({ status: "Success" });
     } else if (command.includes("read-turn-result")) {
-      // No result yet on the first poll. On the second, either the turn has
-      // ended with the given status, or the poll's own shell is killed.
+      // No result until the last poll. Then either the turn has ended with
+      // the given status, or the poll's own shell is killed.
       turnReads++;
-      if (turnReads === 1) {
+      if (turnReads < polls || finished) {
         args[8]?.({ status: "Success" });
       } else if (exit !== null) {
         args[4]?.write(`${exit}\n`);
@@ -1144,7 +1194,38 @@ test.for([
   });
   const described =
     "The run ran out of memory. The agent-runtime container reached its memory limit of 8 GiB (peak usage 8 GiB), and the kernel killed the run's processes. Start the run again at a larger tier.";
-  if (killed && exit !== null) {
+  if (!counters) {
+    // The first reading is tried a few times, then the container is left alone.
+    await expect(completion).resolves.toEqual({
+      outcome: "failed",
+      reason: "The Agent Runtime turn exited with status 7",
+      failure: { code: "turn.exit_status", retriable: false },
+    });
+    expect(memoryReads).toBe(3);
+    expect(turnReads).toBe(polls);
+    return;
+  }
+  if (finished) {
+    const result = await completion;
+    expect(result).toMatchObject({
+      outcome: "failed",
+      failure: { code: "pod.oom_killed", retriable: false },
+    });
+    expect(result.reason).toContain(described);
+    expect(result.reason).toContain("Pod failed");
+    expect(memoryReads).toBe(2);
+    return;
+  }
+  if (killed && exit?.includes("claude_rate_limit")) {
+    // The image's own diagnosis stands; the kill is noted after it.
+    const result = await completion;
+    expect(result).toMatchObject({
+      outcome: "failed",
+      failure: { code: "image.claude_rate_limit", retriable: true },
+    });
+    expect(result.reason).toContain("Claude Code reached a rate limit.");
+    expect(result.reason?.endsWith(described)).toBe(true);
+  } else if (killed && exit !== null) {
     const result = await completion;
     expect(result).toMatchObject({
       outcome: "failed",
@@ -1166,5 +1247,5 @@ test.for([
   }
   // One reading when the pod was first seen running, one after the failure.
   expect(memoryReads).toBe(2);
-  expect(turnReads).toBe(2);
+  expect(turnReads).toBe(polls);
 });

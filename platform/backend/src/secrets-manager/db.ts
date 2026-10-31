@@ -1,11 +1,12 @@
 import { SecretsManagerType, TimeInMs } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
-import type { Transaction } from "@/database";
 import SecretModel from "@/models/secret";
 import type {
   ISecretManager,
+  SecretReadOptions,
   SecretsConnectivityResult,
   SecretValue,
+  SecretWriteOptions,
   SelectSecret,
 } from "@/types";
 
@@ -14,7 +15,6 @@ import type {
  * Stores secrets in the database using SecretModel
  */
 export class DbSecretsManager implements ISecretManager {
-  constructor(private readonly transaction?: Transaction) {}
   readonly type = SecretsManagerType.DB;
   private readonly secretsCache = new LRUCacheManager<SelectSecret>({
     maxSize: 2_000,
@@ -62,8 +62,15 @@ export class DbSecretsManager implements ISecretManager {
    */
   async getSecret(
     secid: string,
-    options?: { skipCache?: boolean },
+    options?: SecretReadOptions,
   ): Promise<SelectSecret | null> {
+    if (options?.transaction) {
+      // Transactional reads see the row as of their transaction and may lock
+      // it; they neither consult nor populate the shared cache.
+      return options.forUpdate
+        ? SecretModel.findByIdForUpdate(secid, options.transaction)
+        : SecretModel.findById(secid, options.transaction);
+    }
     if (!options?.skipCache) {
       const cachedSecret = this.secretsCache.get(secid);
       if (cachedSecret) {
@@ -75,7 +82,7 @@ export class DbSecretsManager implements ISecretManager {
 
     // Fresh reads always start a new query. Only the newest read may populate
     // the cache, so an older miss cannot overwrite a rotation or deletion.
-    const read = SecretModel.findById(secid, this.transaction);
+    const read = SecretModel.findById(secid);
     this.pendingReads.set(secid, read);
     try {
       const secret = await read;
@@ -93,16 +100,19 @@ export class DbSecretsManager implements ISecretManager {
   async updateSecret(
     secid: string,
     secretValue: SecretValue,
+    options?: SecretWriteOptions,
   ): Promise<SelectSecret | null> {
     const secret = await SecretModel.update(
       secid,
       { secret: secretValue },
-      this.transaction,
+      options?.transaction,
     );
     this.pendingReads.delete(secid);
-    if (secret) {
+    if (secret && !options?.transaction) {
       this.secretsCache.set(secid, secret);
     } else {
+      // Inside a transaction the row is not committed yet: drop the entry
+      // rather than cache a value that may roll back.
       this.secretsCache.delete(secid);
     }
     return secret;

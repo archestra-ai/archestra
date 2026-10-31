@@ -684,6 +684,84 @@ describe("xaiSubscriptionTokenManager", () => {
   );
 });
 
+describe("shared refresh guards", () => {
+  tokenTest(
+    "adopts a stored access token only while it keeps the minimum remaining lifetime",
+    async ({ subscriptionKey }) => {
+      const issuer = stubSingleUseIssuer();
+      const params = {
+        credential: subscriptionKey.credential,
+        providerApiKeyId: subscriptionKey.id,
+      };
+      await replaceCredential({
+        secretId: subscriptionKey.secretId,
+        credential: {
+          ...subscriptionKey.credential,
+          accessToken: "at_nearly_expired",
+          accessTokenExpiresAtMs: Date.now() + 10_000,
+        },
+      });
+      // Ten seconds left is not worth serving: the refresh token is redeemed.
+      expect(
+        await new XaiSubscriptionTokenManager().getAccessToken(params),
+      ).toBe("at_1");
+      expect(issuer.calls).toEqual(["rt_0"]);
+
+      await replaceCredential({
+        secretId: subscriptionKey.secretId,
+        credential: {
+          ...subscriptionKey.credential,
+          refreshToken: "rt_1",
+          accessToken: "at_from_replica_b",
+          accessTokenExpiresAtMs: Date.now() + 10 * 60_000,
+        },
+      });
+      // Ten minutes left is adopted without touching the issuer.
+      expect(
+        await new XaiSubscriptionTokenManager().getAccessToken(params),
+      ).toBe("at_from_replica_b");
+      expect(issuer.calls).toEqual(["rt_0"]);
+    },
+  );
+
+  tokenTest(
+    "shares one refresh among concurrent misses in the same process",
+    async ({ subscriptionKey }) => {
+      const issuer = stubSingleUseIssuer();
+      const manager = new XaiSubscriptionTokenManager();
+      const reads = vi.spyOn(secretManager(), "getSecret");
+      try {
+        const tokens = await Promise.all(
+          Array.from({ length: 5 }, () =>
+            manager.getAccessToken({
+              credential: subscriptionKey.credential,
+              providerApiKeyId: subscriptionKey.id,
+            }),
+          ),
+        );
+        expect(tokens).toEqual(Array(5).fill("at_1"));
+        expect(issuer.calls).toEqual(["rt_0"]);
+        // One lock-free read, one locked read, one read of the committed row:
+        // the other four callers waited for the same refresh.
+        expect(reads).toHaveBeenCalledTimes(3);
+      } finally {
+        reads.mockRestore();
+      }
+    },
+  );
+
+  test("reuses the access token stashed by an earlier validation of the same credential", async () => {
+    const issuer = stubSingleUseIssuer();
+    const manager = new XaiSubscriptionTokenManager();
+    const credential = { refreshToken: "rt_0", userId: "test-account" };
+    expect(await manager.getAccessToken({ credential })).toBe("at_1");
+    // A second validation of the same body (an update route re-sending it)
+    // must not redeem again: that would rotate and kill the token just stored.
+    expect(await manager.getAccessToken({ credential })).toBe("at_1");
+    expect(issuer.calls).toEqual(["rt_0"]);
+  });
+});
+
 describe("createXaiSubscriptionFetch", () => {
   tokenTest(
     "adopts another replica's token on the single 401 retry without redeeming again",
@@ -913,7 +991,7 @@ describe("createXaiSubscriptionFetch", () => {
 });
 
 describe("ID-less validation rotation stash", () => {
-  test("follows an observed rotation without caching the access token", async () => {
+  test("follows an observed rotation when the stashed access token is stale", async () => {
     const issuer = stubSingleUseIssuer();
     const manager = new XaiSubscriptionTokenManager();
     const credential = { refreshToken: "rt_0", userId: "validation-account" };
@@ -923,10 +1001,13 @@ describe("ID-less validation rotation stash", () => {
       accessToken: "at_1",
       accessTokenExpiresAtMs: expect.any(Number),
     });
-    await manager.getAccessToken({ credential });
+    // The stashed access token was rejected upstream: the successor refresh
+    // token is redeemed, never the spent one the caller still holds.
+    await manager.getAccessToken({ credential, staleAccessToken: "at_1" });
     expect(issuer.calls).toEqual(["rt_0", "rt_1"]);
     await manager.getAccessToken({
       credential: { ...credential, refreshToken: "rt_1" },
+      staleAccessToken: "at_2",
     });
     expect(issuer.calls).toEqual(["rt_0", "rt_1", "rt_2"]);
     expect(issuer.familyDead).toBe(false);

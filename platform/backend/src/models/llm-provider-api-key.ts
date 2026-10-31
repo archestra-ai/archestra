@@ -233,11 +233,8 @@ class LlmProviderApiKeyModel {
   /**
    * Find an LLM provider API key by ID.
    */
-  static async findById(
-    id: string,
-    tx?: Transaction,
-  ): Promise<LlmProviderApiKey | null> {
-    const [apiKey] = await (tx ?? db)
+  static async findById(id: string): Promise<LlmProviderApiKey | null> {
+    const [apiKey] = await db
       .select()
       .from(schema.llmProviderApiKeysTable)
       .where(eq(schema.llmProviderApiKeysTable.id, id));

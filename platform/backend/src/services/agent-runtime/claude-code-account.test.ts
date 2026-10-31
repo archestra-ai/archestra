@@ -492,7 +492,6 @@ function runtime(agent: {
     privileged: false,
     environment: [],
     credentials: [],
-    resources: null,
     ttlHours: null,
     idleTimeoutMinutes: null,
     maxCostUsd: null,

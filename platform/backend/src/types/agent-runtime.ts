@@ -55,13 +55,15 @@ export type AgentRunAttentionState = z.infer<
 export const AgentRuntimeSteerModeSchema = z.enum(["pipe", "tmux_keys"]);
 export type AgentRuntimeSteerMode = z.infer<typeof AgentRuntimeSteerModeSchema>;
 
+/**
+ * The container resources of one run: its tier's size (see
+ * `services/agent-runtime/runtime-tiers.ts`). No CPU limit by default
+ * (matching the MCP server runtime): throttling an agent loop mid-turn
+ * produces confusing timeouts rather than back-pressure.
+ */
 export const AgentRuntimeResourcesSchema = z.object({
   cpuRequest: z.string().optional(),
   memoryRequest: z.string().optional(),
-  /**
-   * No CPU limit by default (matching the MCP server runtime): throttling an
-   * agent loop mid-turn produces confusing timeouts rather than back-pressure.
-   */
   cpuLimit: z.string().optional(),
   memoryLimit: z.string().optional(),
 });
@@ -95,8 +97,8 @@ export const AgentRunLimitsRequestSchema = z.object({
 export type AgentRunLimitsRequest = z.infer<typeof AgentRunLimitsRequestSchema>;
 
 /**
- * What a run got: the tier it runs at (null when the Agent sizes its runs
- * with explicit resources), and its idle, duration and spend limits.
+ * What a run got: the tier it runs at (null only on a run recorded before
+ * every run had one), and its idle, duration and spend limits.
  */
 export const AgentRunLimitsSchema = z.object({
   tier: AgentRuntimeTierSchema.nullable(),
@@ -262,10 +264,9 @@ export const AgentRuntimeSchema = z.object({
   backend: AgentRuntimeBackendSchema,
   steerMode: AgentRuntimeSteerModeSchema,
   privileged: z.boolean(),
-  resources: AgentRuntimeResourcesSchema.nullable(),
   /**
-   * Size of a run's container while `resources` is null: S, M or L. Absent
-   * means M. Explicit `resources` replace the tier for custom images.
+   * The tier of a run's container, S, M or L: the default tier of the Agent's
+   * runs. Absent means M. Administrators size the tiers for the organization.
    */
   tier: AgentRuntimeTierSchema.nullable().optional(),
   /**

@@ -101,7 +101,6 @@ describe("Agent Runtime routes", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         environment: null,
         credentials: [
           {

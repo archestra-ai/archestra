@@ -337,9 +337,8 @@ describe("AgentRuntimePicker", () => {
       screen.getByRole("option", { name: "Anthropic Messages" }),
     );
     await user.click(screen.getByRole("button", { name: /^Limits/ }));
-    await user.click(
-      screen.getByRole("button", { name: /Resources and access/ }),
-    );
+    // Tiers and access are in view with the limits: nothing folds away.
+    expect(screen.getByLabelText("Default tier")).toBeVisible();
     expect(screen.getByLabelText("Privileged mode")).toBeVisible();
     fireEvent.change(screen.getByLabelText("Metered LLM budget"), {
       target: { value: "25" },

@@ -154,18 +154,12 @@ describe("AgentRuntimeFields", () => {
       "placeholder",
       "No limit (default)",
     );
-    // Resources, ports, and privileged mode stay closed behind a summary.
+    // The tiers are in view, with no per-agent CPU or memory fields. The
+    // scaleup tier offers only tiers at or above the default tier, and a run
+    // may then ask for any of them.
+    expect(screen.getByLabelText("Default tier")).toBeVisible();
     expect(screen.queryByLabelText("Memory limit")).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: /Resources and access/ }),
-    );
-    expect(screen.getByLabelText("Memory limit")).toHaveAttribute(
-      "placeholder",
-      "6Gi (default)",
-    );
-    // The largest size offers only sizes at or above the size, and a run may
-    // then ask for any of them.
-    await user.click(screen.getByLabelText("Largest size"));
+    await user.click(screen.getByLabelText("Scaleup tier"));
     expect(
       screen.queryByRole("option", { name: /^S:/ }),
     ).not.toBeInTheDocument();
@@ -212,7 +206,6 @@ describe("AgentRuntimeFields", () => {
       target: { value: "--permission-mode\nbypassPermissions" },
     });
     await user.type(screen.getByLabelText("Maximum duration"), "12");
-    await user.type(screen.getByLabelText("Memory limit"), "8Gi");
     await user.click(
       screen.getByRole("button", { name: /^(Add variable|Add)$/ }),
     );
@@ -230,7 +223,6 @@ describe("AgentRuntimeFields", () => {
       image: "registry.example.com/coding-agent:1.2.3",
       command: ["claude", "--permission-mode", "bypassPermissions"],
       ttlHours: 12,
-      resources: { memoryLimit: "8Gi" },
       environment: [{ key: "WORK_MODE", value: "runtime" }],
     });
   });

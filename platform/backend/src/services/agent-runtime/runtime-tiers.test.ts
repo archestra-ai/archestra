@@ -14,7 +14,6 @@ import {
 } from "./runtime-tiers";
 
 const DEFAULTS = {
-  resources: null,
   tier: null,
   idleTimeoutMinutes: null,
   ttlHours: null,
@@ -22,37 +21,27 @@ const DEFAULTS = {
 };
 
 describe("runtime tiers", () => {
-  test("an Agent without a tier runs at M; explicit resources replace the tier", () => {
+  test("an Agent without a tier runs at M; a run gets its tier's size", () => {
     expect(agentRuntimeTier(DEFAULTS)).toBe("M");
-    expect(agentRuntimeTier({ resources: null, tier: "L" })).toBe("L");
-    expect(
-      agentRuntimeTier({ resources: { cpuRequest: "7" }, tier: "L" }),
-    ).toBeNull();
+    expect(agentRuntimeTier({ tier: "L" })).toBe("L");
     const tiers = DEFAULT_AGENT_RUNTIME_TIERS;
-    expect(resolveRunResources(DEFAULTS, "S", tiers)).toEqual({
+    expect(resolveRunResources("S", tiers)).toEqual({
       cpuRequest: "2",
       memoryRequest: "4Gi",
       memoryLimit: "8Gi",
     });
-    expect(resolveRunResources(DEFAULTS, null, tiers)).toEqual({
+    expect(resolveRunResources(null, tiers)).toEqual({
       cpuRequest: "4",
       memoryRequest: "8Gi",
       memoryLimit: "16Gi",
     });
-    expect(
-      resolveRunResources(
-        { resources: { cpuRequest: "7" }, tier: null },
-        "S",
-        tiers,
-      ),
-    ).toEqual({ cpuRequest: "7" });
   });
 
   test("a run gets its tier's size in the organization, CPU limit included when an administrator set one", () => {
     const tiers = resolveAgentRuntimeTiers({
       L: { cpuRequest: "12", cpuLimit: "16", memoryLimit: "48Gi" },
     });
-    expect(resolveRunResources(DEFAULTS, "L", tiers)).toEqual({
+    expect(resolveRunResources("L", tiers)).toEqual({
       cpuRequest: "12",
       cpuLimit: "16",
       memoryRequest: "16Gi",
@@ -83,14 +72,6 @@ describe("runtime tiers", () => {
     expect(agentRuntimeMaxTier({ ...DEFAULTS, tier: "M", maxTier: "S" })).toBe(
       "M",
     );
-    // Explicit resources: no tiers at all.
-    expect(
-      agentRuntimeMaxTier({
-        ...DEFAULTS,
-        resources: { cpuRequest: "7" },
-        maxTier: "L",
-      }),
-    ).toBeNull();
   });
 
   test("a warm Sandbox may come from the requested tier, then the larger neighbour within the Agent's, never a smaller one", () => {
@@ -107,13 +88,12 @@ describe("runtime tiers", () => {
       config.agentRuntime.warmPoolSize = warmPoolSize;
     });
 
-    test("L keeps none by default; S, M and explicit resources follow the deployment; a tier's own count wins", () => {
+    test("L keeps none by default; S and M follow the deployment; a tier's own count wins", () => {
       config.agentRuntime.warmPoolSize = 2;
       const defaults = DEFAULT_AGENT_RUNTIME_TIERS;
       expect(warmPoolReplicas(defaults, "S")).toBe(2);
       expect(warmPoolReplicas(defaults, "M")).toBe(2);
       expect(warmPoolReplicas(defaults, "L")).toBe(0);
-      expect(warmPoolReplicas(defaults, null)).toBe(2);
       const set = resolveAgentRuntimeTiers({
         L: { warmPoolSize: 1 },
         M: { warmPoolSize: 0 },
@@ -196,12 +176,6 @@ describe("runtime tiers", () => {
         requested: { tier: "L" },
       }),
     ).toThrow("Tier L is above this Agent's largest tier M");
-    expect(() =>
-      resolveAgentRunLimits({
-        runtime: { ...DEFAULTS, resources: { cpuRequest: "7" } },
-        requested: { tier: "S" },
-      }),
-    ).toThrow("explicit resources");
     // Without a budget on the Agent, any budget bounds the run.
     expect(
       resolveAgentRunLimits({ runtime: DEFAULTS, requested: { maxCostUsd: 3 } })

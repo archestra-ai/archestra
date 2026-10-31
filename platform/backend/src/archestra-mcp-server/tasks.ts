@@ -326,7 +326,7 @@ const RunSummarySchema = z.object({
 const RunLimitsSchema = z
   .object({
     tier: AgentRuntimeTierSchema.nullable().describe(
-      "Container size the run has: S, M or L, as the organization sizes them. Null when the Agent sizes its runs with explicit resources.",
+      "Container size the run has: S, M or L, as the organization sizes them.",
     ),
     idle_timeout_minutes: z.number(),
     max_duration_hours: z

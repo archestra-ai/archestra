@@ -60,6 +60,7 @@ import {
   userModelRouterAuth,
 } from "./eligibility";
 import { firstUserText } from "./first-user-text";
+import { scoringContext } from "./scoring-context";
 import {
   activeSourceVersion,
   decisionFeatures,
@@ -162,6 +163,7 @@ export async function resolveAutoModel(params: {
     sessionKey,
     text,
     client: metadata.client,
+    body,
     beforeScoring: async () =>
       LimitValidationService.checkLimitsBeforeRequest({
         ...modelRouterLimitScope(auth, params.agent),
@@ -276,6 +278,7 @@ export async function routeInternalAutoSession(params: {
     sessionKey,
     text,
     client: null,
+    body: params.body,
     beforeScoring: async () => null,
   });
   const onNormal = {
@@ -480,6 +483,7 @@ async function sessionDecision(params: {
   sessionKey: RoutingSessionKey | null;
   text: string | null;
   client: string | null;
+  body: unknown;
   beforeScoring: () => Promise<LimitViolationResponse | null>;
 }): Promise<
   | { kind: "decided"; decision: RoutingDecision }
@@ -510,7 +514,11 @@ async function sessionDecision(params: {
       settings: params.settings,
       trio: params.trio,
       sessionKey,
-      scorerInput: { firstUserText: text, client: params.client },
+      scorerInput: {
+        firstUserText: text,
+        client: params.client,
+        ...scoringContext(params.body),
+      },
     }),
   };
 }

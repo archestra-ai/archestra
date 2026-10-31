@@ -3,7 +3,7 @@ title: Auto Routing
 description: Let Archestra pick a fast, normal, or smart model for each session of agents and chats on the organization default, and of apps
 order: 6
 alpha: "Set [`ARCHESTRA_AUTO_ROUTING_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_ENABLED) to turn it on."
-lastUpdated: 2026-10-29
+lastUpdated: 2026-10-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -37,6 +37,8 @@ What to know:
 
 A session is routed once, on its first request, and keeps that model for its whole life.
 
+The scorer assesses the opening user message with bounded excerpts of the request's system instructions and tool names and descriptions. It does not receive tool parameter schemas or tool results.
+
 - **Session identity:** the session id if the client sends one. Otherwise the virtual key plus the first user message, so identical first messages under one key share a model.
 - **Budget:** the daily budget is an average target, not a cap. Spend on a given day can go above or below it. Hard caps come from [limits](/docs/llm-proxy/costs-and-limits/limits).
 - **Plans:** a background job builds a routing plan from past sessions. Changing the settings or the default models triggers a new plan within about a minute, and every organization is re-planned at least daily. Each plan is versioned.
@@ -46,7 +48,7 @@ A session is routed once, on its first request, and keeps that model for its who
 A new plan needs about 1000 finished sessions. Past traffic can supply them instead of waiting for `auto` traffic.
 
 1. **Find past sessions.** Runs on its own when you first enable auto routing, or from the Overview page. It reads the last 35 days of proxy logs and counts the sessions a plan can learn from, by API and client. It costs nothing.
-2. **Score them.** You start this. Archestra sends the opening prompt of a sample of those sessions to the Jev scorer, up to the spending limit you set (calls already in flight can take it a few calls over), then fits a plan.
+2. **Score them.** You start this. Archestra sends the opening prompt and context from each sampled session's logged first request to the Jev scorer, up to the spending limit you set (calls already in flight can take it a few calls over), then fits a plan.
 
 Only sessions with a client-supplied session id that began inside the window are used. Sessions whose content was not logged or is end-to-end encrypted are skipped. After a scorer change the page offers to score the same sessions again.
 

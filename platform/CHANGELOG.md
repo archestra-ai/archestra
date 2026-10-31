@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.4.15](https://github.com/archestra-ai/archestra/compare/platform-v1.4.14...platform-v1.4.15) (2026-10-31)
+
+
+### Bug Fixes
+
+* **access:** allow resource managers to share across teams (1.4) ([#9937](https://github.com/archestra-ai/archestra/issues/9937)) ([76170d0](https://github.com/archestra-ai/archestra/commit/76170d0419cbc3099d20be4f3dabd59afe684e13))
+* **agent-runtime:** key a run's LLM trace and title by the session its runtime sends [1.4] ([#9966](https://github.com/archestra-ai/archestra/issues/9966)) ([fa05034](https://github.com/archestra-ai/archestra/commit/fa05034fd45aececc5cd494872abc6137ffa35c6))
+* **agent-runtime:** report in-pod memory kills and size test runs for the container [1.4] ([#9975](https://github.com/archestra-ai/archestra/issues/9975)) ([895b552](https://github.com/archestra-ai/archestra/commit/895b552fd25de55d43f97a9618b56e6aeded506b))
+* **agent-runtime:** require patched Cyrus SASL packages (backport release/1.4) ([#9998](https://github.com/archestra-ai/archestra/issues/9998)) ([f3b1e16](https://github.com/archestra-ai/archestra/commit/f3b1e1662c4333b51a473c29cbca2b9fc382c4ae))
+* **agent-runtime:** say when a run stopped because its workspace volume is full [1.4] ([#10001](https://github.com/archestra-ai/archestra/issues/10001)) ([dfd9b93](https://github.com/archestra-ai/archestra/commit/dfd9b93c7a28dae0ce42fa470dfce9cdcc6d26f7))
+* **agents:** keep the agent's model on a runtime-only update (backport release/1.4) ([#9965](https://github.com/archestra-ai/archestra/issues/9965)) ([96221e3](https://github.com/archestra-ai/archestra/commit/96221e31a0148b805eb8cc1a35171235a8e59d96))
+* **connect:** close Claude Desktop on Windows for the setup restart [1.4] ([#9974](https://github.com/archestra-ai/archestra/issues/9974)) ([c4a5d07](https://github.com/archestra-ai/archestra/commit/c4a5d077a945495cb9aa942d2c768fcdea04967d))
+* **costs:** narrow model drill-down before billing aggregation [1.4] ([#9991](https://github.com/archestra-ai/archestra/issues/9991)) ([c0b2e8d](https://github.com/archestra-ai/archestra/commit/c0b2e8d1d0cdabc7a86316df8d25f748fa41f099))
+* **costs:** restore model drill-down and shareable usage exploration [1.4] ([#9989](https://github.com/archestra-ai/archestra/issues/9989)) ([3f29e4c](https://github.com/archestra-ai/archestra/commit/3f29e4c355ba106409f8382f0fdd4697991ac73d))
+* **deps:** patch follow-redirects credential handling (backport release/1.4) ([#10006](https://github.com/archestra-ai/archestra/issues/10006)) ([4aa6f06](https://github.com/archestra-ai/archestra/commit/4aa6f063125551163e51b165acd1fb46d0a04c30))
+* **knowledge:** keep uploaded files out of connector sync [1.4] ([#9986](https://github.com/archestra-ai/archestra/issues/9986)) ([fd845b9](https://github.com/archestra-ai/archestra/commit/fd845b95cc78069db374198700da2b72d7ec2e6c))
+* **llm-providers:** probe live Gemini models in the Vertex AI fallback [1.4] ([#9988](https://github.com/archestra-ai/archestra/issues/9988)) ([4323c42](https://github.com/archestra-ai/archestra/commit/4323c42d1b38516c90442ec28ed00f56831ef55c))
+* **llm-providers:** refresh SuperGrok tokens once per key across replicas [1.4] ([#9977](https://github.com/archestra-ai/archestra/issues/9977)) ([a24116a](https://github.com/archestra-ai/archestra/commit/a24116a1f658501aefb0914d95b049bc6b125b54))
+* **observability:** backport unified metrics and session investigation [1.4] ([#9992](https://github.com/archestra-ai/archestra/issues/9992)) ([8642fd7](https://github.com/archestra-ai/archestra/commit/8642fd711cfc7b99e82b6b9d266dbe61ad3dcbc8))
+
 ## [1.4.14](https://github.com/archestra-ai/archestra/compare/platform-v1.4.13...platform-v1.4.14) (2026-10-31)
 
 

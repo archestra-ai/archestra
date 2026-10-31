@@ -377,9 +377,27 @@ describe("Runtime tiers", () => {
       .getByRole("button", { name: `Edit ${name}` })
       .closest("tr") as HTMLElement;
   const seedInput = {
-    S: { name: "S", cpuRequest: 2, cpuLimit: null, pooled: true },
-    M: { name: "M", cpuRequest: 4, cpuLimit: null, pooled: true },
-    L: { name: "L", cpuRequest: 8, cpuLimit: null, pooled: false },
+    S: {
+      name: "S",
+      cpuRequest: 2,
+      cpuLimit: null,
+      pooled: true,
+      workspaceGiB: null,
+    },
+    M: {
+      name: "M",
+      cpuRequest: 4,
+      cpuLimit: null,
+      pooled: true,
+      workspaceGiB: null,
+    },
+    L: {
+      name: "L",
+      cpuRequest: 8,
+      cpuLimit: null,
+      pooled: false,
+      workspaceGiB: null,
+    },
   };
 
   it("lists the tiers smallest first with their memory, pools and default; the header links the docs and explains pools, with no search or hint text", async () => {
@@ -408,6 +426,8 @@ describe("Runtime tiers", () => {
     expect(rowOf("S")).not.toHaveTextContent("Default");
     expect(rowOf("L")).toHaveTextContent("No limit");
     expect(rowOf("L")).toHaveTextContent("16 GiB32 GiB limit");
+    // No size of its own: the deployment's volume, marked as the default.
+    expect(rowOf("L")).toHaveTextContent("20 GiBdefault");
     expect(rowOf("S")).toHaveTextContent("Pooled");
     expect(rowOf("L")).not.toHaveTextContent("Pooled");
     expect(block()).not.toHaveTextContent("CPU request up to 8");
@@ -465,6 +485,7 @@ describe("Runtime tiers", () => {
     expect(within(dialog).getByTestId("tier-memory")).toHaveTextContent(
       "Memory: 12 GiB, 14 GiB limit",
     );
+    await user.type(within(dialog).getByLabelText("Workspace (GiB)"), "60");
     await user.click(within(dialog).getByRole("switch", { name: "Pooled" }));
     await user.click(
       within(dialog).getByRole("button", { name: "Save changes" }),
@@ -474,7 +495,13 @@ describe("Runtime tiers", () => {
       tiers: [
         seedInput.S,
         seedInput.M,
-        { name: "L", cpuRequest: 6, cpuLimit: 7, pooled: true },
+        {
+          name: "L",
+          cpuRequest: 6,
+          cpuLimit: 7,
+          pooled: true,
+          workspaceGiB: 60,
+        },
       ],
       defaultTier: "M",
     });
@@ -543,7 +570,13 @@ describe("Runtime tiers", () => {
         seedInput.S,
         seedInput.M,
         seedInput.L,
-        { name: "XL", cpuRequest: 8, cpuLimit: null, pooled: true },
+        {
+          name: "XL",
+          cpuRequest: 8,
+          cpuLimit: null,
+          pooled: true,
+          workspaceGiB: null,
+        },
       ],
       defaultTier: "XL",
     });

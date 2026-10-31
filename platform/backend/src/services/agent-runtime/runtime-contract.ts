@@ -8,6 +8,9 @@ export const AGENT_RUNTIME_CREDENTIALS_SECRET_KEY =
 export const AGENT_RUNTIME_STEER_FIFO = `${AGENT_RUNTIME_DIR}/steer`;
 /** The name of the tier the Pod runs at. */
 export const AGENT_RUNTIME_TIER_ENV = "ARCHESTRA_AGENT_RUNTIME_TIER";
+/** The run's system prompt, with the Agent's own text first. */
+export const AGENT_RUNTIME_SYSTEM_PROMPT_ENV =
+  "ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT";
 /** The name of the largest tier a run of this Agent may ask for. */
 export const AGENT_RUNTIME_MAX_TIER_ENV = "ARCHESTRA_AGENT_RUNTIME_MAX_TIER";
 /**

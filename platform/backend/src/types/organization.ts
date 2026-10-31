@@ -755,10 +755,22 @@ export const AgentRuntimeTierSizeSchema = z.object({
     .describe("Whether the tier keeps spare containers ready for its runs"),
   memoryRequestMiB: z.number().int(),
   memoryLimitMiB: z.number().int(),
+  workspaceGiB: z
+    .number()
+    .int()
+    .nullable()
+    .describe(
+      "Size of a run's workspace volume in GiB; null means the deployment's default",
+    ),
 });
 
 /** The organization's Agent Runtime tiers in effect, smallest first. */
 export const AgentRuntimeTiersResponseSchema = z.object({
   tiers: z.array(AgentRuntimeTierSizeSchema),
   defaultTier: z.string(),
+  defaultWorkspaceGiB: z
+    .number()
+    .describe(
+      "The deployment's workspace volume size in GiB, which a tier that sets none gives its runs",
+    ),
 });

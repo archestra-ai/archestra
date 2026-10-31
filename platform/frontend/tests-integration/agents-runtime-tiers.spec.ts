@@ -71,6 +71,7 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   await expect(rowOf("L")).toContainText("No limit");
   await expect(rowOf("L")).toContainText("16 GiB");
   await expect(rowOf("L")).toContainText("32 GiB limit");
+  await expect(rowOf("L")).toContainText("20 GiB");
   await expect(rowOf("S")).toContainText("Pooled");
   await expect(
     block.getByRole("button", { name: "Create tier" }),
@@ -86,6 +87,10 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   await expect(dialog.getByLabel("CPU limit")).toHaveAttribute(
     "placeholder",
     "No limit",
+  );
+  await expect(dialog.getByLabel("Workspace (GiB)")).toHaveAttribute(
+    "placeholder",
+    "20",
   );
   await cpu.fill("9");
   await dialog.getByLabel("Name").focus();
@@ -118,11 +123,30 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   await expect(hint).toBeHidden();
   await expect(about).toBeFocused();
   await dialog.getByRole("switch", { name: "Pooled" }).click();
+  await dialog.getByLabel("Workspace (GiB)").fill("60");
   const saved = {
     tiers: [
-      { name: "S", cpuRequest: 2, cpuLimit: null, pooled: true },
-      { name: "M", cpuRequest: 4, cpuLimit: null, pooled: true },
-      { name: "L", cpuRequest: 6, cpuLimit: null, pooled: true },
+      {
+        name: "S",
+        cpuRequest: 2,
+        cpuLimit: null,
+        pooled: true,
+        workspaceGiB: null,
+      },
+      {
+        name: "M",
+        cpuRequest: 4,
+        cpuLimit: null,
+        pooled: true,
+        workspaceGiB: null,
+      },
+      {
+        name: "L",
+        cpuRequest: 6,
+        cpuLimit: null,
+        pooled: true,
+        workspaceGiB: 60,
+      },
     ],
     defaultTier: "M",
   };

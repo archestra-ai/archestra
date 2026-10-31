@@ -12,6 +12,9 @@ export const REDACTED_LOG_PATHS = [
   "deviceCode",
   "passthroughHeaders",
   "secretEnv",
+  // The launch spec's system prompt parts hold the Agent's instructions,
+  // as private as the copy in secretEnv.
+  "systemPromptParts",
   "bindingToken",
   "ARCHESTRA_AGENT_RUNTIME_BINDING",
   "apiKey",

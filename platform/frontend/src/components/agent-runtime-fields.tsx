@@ -579,7 +579,8 @@ function AgentRuntimeRunLimits({ value, onChange }: RuntimeSectionProps) {
 function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...value, ...patch });
-  // The organization's tiers, smallest first, with the memory each gives.
+  // The organization's tiers, smallest first, with the memory each gives and
+  // its workspace: its own size, else the deployment's default.
   const { data: resolved } = useAgentRuntimeTiers();
   const tiers = resolved?.tiers ?? [];
   const defaultTier =
@@ -590,7 +591,7 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
   const scaleupTier =
     saved && tiers.indexOf(saved) > defaultRank ? saved.name : defaultTier;
   const label = (tier: (typeof tiers)[number]) =>
-    `${tier.name}: ${summarizeAgentRuntimeTier(tier)}`;
+    `${tier.name}: ${summarizeAgentRuntimeTier(tier, resolved?.defaultWorkspaceGiB)}`;
   return (
     <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
       <div className="space-y-2">
@@ -620,8 +621,9 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
           </SelectContent>
         </Select>
         <FieldDescription>
-          The CPU and memory of a run's container. A caller that starts a run
-          can ask for another tier, up to the scaleup tier.
+          The CPU and memory of a run's container, and the size of its
+          workspace. A caller that starts a run can ask for another tier, up to
+          the scaleup tier.
         </FieldDescription>
       </div>
       <div className="space-y-2">

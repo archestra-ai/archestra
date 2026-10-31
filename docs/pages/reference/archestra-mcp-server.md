@@ -1654,8 +1654,8 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `attachments[].contentType` | `string` | Yes |  |
 | `attachments[].contentBase64` | `string` | Yes |  |
 | `limits` | `object` | No | Limits for this run, each at or below the Agent's own (for the tier, its largest tier); a larger value is refused with the maximum named. Omit to take the Agent's defaults. |
-| `limits.tier` | `string` | No | The name of one of the organization's runtime tiers, at or below this Agent's scaleup tier. Choose by size, not by name: inside a run, $ARCHESTRA_AGENT_RUNTIME_TIERS lists the tiers the run may move to with their CPU and memory; pick the smallest that covers the work. To move work to another tier, start a run of the same Agent at that tier and hand over the branch. A tier above the scaleup tier is refused with the allowed tiers and their sizes named. |
-| `limits.min_cpu` | `number` | No | CPUs the work needs. The run gets the smallest tier this Agent may use with at least this many; refused with the allowed tiers named when none has. Use this when the tier names are unknown. |
+| `limits.tier` | `string` | No | The name of one of the organization's runtime tiers, at or below this Agent's scaleup tier. Choose by size, not by name: inside a run, $ARCHESTRA_AGENT_RUNTIME_TIERS lists the tiers the run may move to with their CPU, memory and workspace size; pick the smallest that covers the work. To move work to another tier, start a run of the same Agent at that tier and hand over the branch. A tier above the scaleup tier is refused with the allowed tiers and their sizes named. |
+| `limits.min_cpu` | `number` | No | CPUs the work needs. The run gets the smallest tier this Agent may use with at least this many and no smaller workspace than the Agent's default tier; refused with the allowed tiers named when none has. Use this when the tier names are unknown. |
 | `limits.min_memory_gib` | `number` | No | GiB of memory the work needs, with the same effect as min_cpu. |
 | `limits.idle_timeout_minutes` | `integer` | No |  |
 | `limits.max_duration_hours` | `integer` | No | Hours until the run and its saved files end. Keep it short for work that nobody continues. |
@@ -1681,6 +1681,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `limits.idle_timeout_minutes` | `number` | Yes |  |
 | `limits.max_duration_hours` | `number` | Yes | The run and its saved files end this many hours after the start. |
 | `limits.max_cost_usd` | `number \| null` | Yes |  |
+| `limits.workspace_gib` | `number` | No | The size of the run's workspace volume in GiB. Absent for a workspace from before sizes were recorded. |
 | `next_step` | `string` | Yes | What to do now. |
 
 #### get_agent_run
@@ -1713,6 +1714,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `limits.idle_timeout_minutes` | `number` | Yes |  |
 | `limits.max_duration_hours` | `number` | Yes | The run and its saved files end this many hours after the start. |
 | `limits.max_cost_usd` | `number \| null` | Yes |  |
+| `limits.workspace_gib` | `number` | No | The size of the run's workspace volume in GiB. Absent for a workspace from before sizes were recorded. |
 | `requests` | `object[]` | Yes | The run's original request and, when different, the current turn's request. Use this context to interpret short follow-ups. |
 | `requests[].text` | `string` | Yes |  |
 | `requests[].truncated` | `boolean` | Yes |  |

@@ -17,6 +17,7 @@ import type {
   AgentWorkspaceFileResult,
 } from "@/types/agent-workspace-file";
 import type { RenewableCredential } from "@/types/renewable-credential";
+import type { RuntimeSystemPromptParts } from "../runtime-tiers";
 
 /**
  * Runtime-neutral description of one isolated Agent run.
@@ -42,14 +43,23 @@ export type AgentRunLaunchSpec = {
   tier: AgentRuntimeTier | null;
   /**
    * Tiers whose warm pool may serve the run, the requested one first, each
-   * with its size in the run's organization.
+   * with its container size and workspace volume in the run's organization.
    */
   warmTiers: Array<{
     tier: AgentRuntimeTier;
     resources: AgentRuntimeResources;
+    workspaceStorageSize: string;
+    /** The same volume size in GiB, which the run is told. */
+    workspaceGiB: number;
   }>;
   env: Record<string, string>;
   secretEnv: Record<string, string>;
+  /**
+   * The system prompt in `secretEnv` around its volume sentence, so a run
+   * served by another tier's pool is told that tier's volume. Holds the
+   * Agent's instructions: as private as `secretEnv`.
+   */
+  systemPromptParts?: RuntimeSystemPromptParts;
   renewableCredentials?: Record<string, RenewableCredential>;
   activeDeadlineSeconds: number | null;
   /** Durable workspace PVC, including nested Docker storage for privileged runtimes. */

@@ -18,11 +18,31 @@ describe("validateRuntimeTierForm", () => {
     };
     expect(validateRuntimeTierForm(values, { otherNames })).toEqual({
       errors: {},
-      tier: { name: "XL", cpuRequest: 8, cpuLimit: null, pooled: true },
+      tier: {
+        name: "XL",
+        cpuRequest: 8,
+        cpuLimit: null,
+        pooled: true,
+        workspaceGiB: null,
+      },
     });
     expect(runtimeTierFormMemory(values)).toEqual({
       memoryRequestMiB: 16384,
       memoryLimitMiB: 32768,
+    });
+    // A workspace size is whole GiB; blank keeps the deployment's default.
+    expect(
+      validateRuntimeTierForm({ ...values, workspaceGiB: "60" }, { otherNames })
+        .tier?.workspaceGiB,
+    ).toBe(60);
+    expect(
+      validateRuntimeTierForm(
+        { ...values, workspaceGiB: " 1.5" },
+        { otherNames },
+      ).errors,
+    ).toEqual({
+      workspaceGiB:
+        "Enter a whole number from 1 to 1024, or leave it blank for the default",
     });
   });
 
@@ -59,12 +79,36 @@ describe("validateRuntimeTierForm", () => {
 });
 
 describe("runtimeTierSettingsAfter", () => {
-  const S = { name: "S", cpuRequest: 2, cpuLimit: null, pooled: true };
-  const M = { name: "M", cpuRequest: 4, cpuLimit: null, pooled: true };
-  const L = { name: "L", cpuRequest: 8, cpuLimit: null, pooled: false };
+  const S = {
+    name: "S",
+    cpuRequest: 2,
+    cpuLimit: null,
+    pooled: true,
+    workspaceGiB: null,
+  };
+  const M = {
+    name: "M",
+    cpuRequest: 4,
+    cpuLimit: null,
+    pooled: true,
+    workspaceGiB: null,
+  };
+  const L = {
+    name: "L",
+    cpuRequest: 8,
+    cpuLimit: null,
+    pooled: false,
+    workspaceGiB: null,
+  };
 
   it("appends a created tier, replaces an edited one with its previous name, and drops a deleted one", () => {
-    const XL = { name: "XL", cpuRequest: 8, cpuLimit: null, pooled: true };
+    const XL = {
+      name: "XL",
+      cpuRequest: 8,
+      cpuLimit: null,
+      pooled: true,
+      workspaceGiB: 60,
+    };
     expect(
       runtimeTierSettingsAfter(agentRuntimeTiersSeed, {
         kind: "create",

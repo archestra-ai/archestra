@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-30
+lastUpdated: 2026-10-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1023,7 +1023,7 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 
 - **Runtime tiers** - A run's pod gets the CPU and memory of its [runtime tier](/docs/agents/runtime/setup#runtime-tiers). The tiers are stored with the organization, not in environment variables. The pod sees its tier in `ARCHESTRA_AGENT_RUNTIME_TIER`, the agent's scaleup tier in `ARCHESTRA_AGENT_RUNTIME_MAX_TIER`, the tiers it may move to with their sizes as JSON in `ARCHESTRA_AGENT_RUNTIME_TIERS`, and its CPU request and memory limit in `ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST` and `ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT`. The former `ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`, `ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST` and `ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT` variables are no longer read.
 
-- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Size of each run's persistent volume, which holds `/home/node` and, for privileged runs, `/var/lib/docker`.
+- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Size of a run's persistent volume, which holds `/home/node` and, for privileged runs, `/var/lib/docker`. A [runtime tier](/docs/agents/runtime/setup#runtime-tiers) with a **Workspace** size of its own overrides it for that tier's runs.
   - Default: `20Gi`
   - Values: Kubernetes quantity
 

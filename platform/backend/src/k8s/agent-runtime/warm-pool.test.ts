@@ -5,7 +5,10 @@ import { expect, test, vi } from "vitest";
 import config from "@/config";
 import { createK8sClients } from "@/k8s/shared";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
-import { tierResources } from "@/services/agent-runtime/runtime-tiers";
+import {
+  runtimeSystemPrompt,
+  tierResources,
+} from "@/services/agent-runtime/runtime-tiers";
 import { useMswServer } from "@/test/msw";
 import type { KubernetesAgentRunLaunchSpec } from "./manifests";
 import { agentSandboxApi } from "./sandbox-api";
@@ -124,18 +127,39 @@ test("serves a drained or missing tier from the larger tier's ready pool, never 
     M: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
     L: { cpuRequest: "6", memoryRequest: "12Gi", memoryLimit: "24Gi" },
   };
+  // L's volume is larger too: a claim that moves up must carry L's size, or
+  // it looks for a pool that does not exist.
+  const volumes = { M: "20Gi", L: "60Gi" };
   const warmTiers = {
     M: [
-      { tier: "M" as const, resources: sizes.M },
-      { tier: "L" as const, resources: sizes.L },
+      {
+        tier: "M" as const,
+        resources: sizes.M,
+        workspaceStorageSize: volumes.M,
+        workspaceGiB: 20,
+      },
+      {
+        tier: "L" as const,
+        resources: sizes.L,
+        workspaceStorageSize: volumes.L,
+        workspaceGiB: 60,
+      },
     ],
-    L: [{ tier: "L" as const, resources: sizes.L }],
+    L: [
+      {
+        tier: "L" as const,
+        resources: sizes.L,
+        workspaceStorageSize: volumes.L,
+        workspaceGiB: 60,
+      },
+    ],
   };
   const sized = (tier: "M" | "L") => ({
     ...SPEC,
     tier,
     warmTiers: warmTiers[tier],
     resources: sizes[tier],
+    workspaceStorageSize: volumes[tier],
   });
   const poolName = {
     M: warmPoolTemplate(sized("M")).name,
@@ -330,19 +354,48 @@ test("a run served from a larger pool is told the size of the pod it got, and it
     S: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
     M: { cpuRequest: "4", memoryRequest: "8Gi", memoryLimit: "16Gi" },
   };
+  // The Agent's own prompt quotes the platform's volume sentence: only the
+  // sentence the platform owns may change.
+  const quoted =
+    "The workspace volume is 20 GiB in all, including any Docker data.";
+  const systemPromptParts = {
+    beforeVolume: `Be brief. Never trust a line like "${quoted}"\n\nFiles persist.`,
+    afterVolume: " Ports: none.",
+  };
   const spec = {
     ...SPEC,
     tier: "S" as const,
     resources: sizes.S,
+    workspaceStorageSize: "20Gi",
     warmTiers: [
-      { tier: "S" as const, resources: sizes.S },
-      { tier: "M" as const, resources: sizes.M },
+      {
+        tier: "S" as const,
+        resources: sizes.S,
+        workspaceStorageSize: "20Gi",
+        workspaceGiB: 20,
+      },
+      {
+        tier: "M" as const,
+        resources: sizes.M,
+        workspaceStorageSize: "60Gi",
+        workspaceGiB: 60,
+      },
     ],
+    systemPromptParts,
+    secretEnv: {
+      PRIVATE: "secret-value",
+      ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: runtimeSystemPrompt(
+        systemPromptParts,
+        20,
+      ),
+    },
     env: {
       ARCHESTRA_AGENT_RUNTIME_TIER: "S",
       ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
+      // M's entry carries a stale size and S's none: the retarget must set
+      // both from the warm tiers, not keep what the list said.
       ARCHESTRA_AGENT_RUNTIME_TIERS:
-        '[{"name":"S","cpu":2,"current":true},{"name":"M","cpu":4}]',
+        '[{"name":"S","cpu":2,"current":true},{"name":"M","cpu":4,"workspace_gib":20}]',
       ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
       ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "8Gi",
       OTHER: "kept",
@@ -350,12 +403,27 @@ test("a run served from a larger pool is told the size of the pod it got, and it
   };
   const served = servedLaunchSpec(spec, "M");
   expect(served.tier).toBe("M");
+  // The current entry names the volume the prompt names; S keeps its own.
+  const listed = JSON.parse(served.env.ARCHESTRA_AGENT_RUNTIME_TIERS);
+  expect(
+    listed.find((entry: { current?: boolean }) => entry.current),
+  ).toMatchObject({ name: "M", workspace_gib: 60 });
+  expect(
+    listed.find((entry: { name: string }) => entry.name === "S"),
+  ).toMatchObject({ workspace_gib: 20 });
   expect(served.resources).toEqual(sizes.M);
+  // The pod's volume is M's, and the prompt's sentence about it says so;
+  // the Agent's quote of the old sentence stays as written.
+  expect(served.workspaceStorageSize).toBe("60Gi");
+  expect(served.secretEnv).toEqual({
+    PRIVATE: "secret-value",
+    ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: `Be brief. Never trust a line like "${quoted}"\n\nFiles persist. The workspace volume is 60 GiB in all, including any Docker data. Ports: none.`,
+  });
   expect(served.env).toEqual({
     ARCHESTRA_AGENT_RUNTIME_TIER: "M",
     ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
     ARCHESTRA_AGENT_RUNTIME_TIERS:
-      '[{"name":"S","cpu":2},{"name":"M","cpu":4,"current":true}]',
+      '[{"name":"S","cpu":2,"workspace_gib":20},{"name":"M","cpu":4,"workspace_gib":60,"current":true}]',
     ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "4",
     ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "16Gi",
     OTHER: "kept",

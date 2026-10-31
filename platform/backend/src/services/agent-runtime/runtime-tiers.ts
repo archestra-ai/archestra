@@ -4,6 +4,7 @@ import {
   cpuQuantity,
   describeAgentRuntimeTier,
   findAgentRuntimeTier,
+  gibFromMiB,
   memoryQuantity,
   nextLargerAgentRuntimeTier,
   type ResolvedAgentRuntimeTiers,
@@ -117,10 +118,68 @@ export function resolveRunResources(
 }
 
 /**
+ * The workspace volume a run gets, as a Kubernetes quantity: its tier's size,
+ * else the deployment's `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`.
+ */
+export function resolveRunWorkspaceStorageSize(
+  tier: string | null,
+  tiers: ResolvedAgentRuntimeTiers,
+): string {
+  return tierWorkspaceStorageSize(tierSize(tiers, tier));
+}
+
+/** The same size in GiB, for text and for the Pod's tier list. */
+export function resolveRunWorkspaceGiB(
+  tier: string | null,
+  tiers: ResolvedAgentRuntimeTiers,
+): number {
+  return tierWorkspaceGiB(tierSize(tiers, tier));
+}
+
+/** A tier's workspace volume in GiB, the deployment's when it sets none. */
+export function tierWorkspaceGiB(tier: AgentRuntimeTierSize): number {
+  return tier.workspaceGiB ?? config.agentRuntime.workspaceStorageGiB;
+}
+
+/** A tier's workspace volume as a Kubernetes quantity. */
+export function tierWorkspaceStorageSize(tier: AgentRuntimeTierSize): string {
+  return tier.workspaceGiB === null
+    ? config.agentRuntime.workspaceStorageSize
+    : `${tier.workspaceGiB}Gi`;
+}
+
+/**
+ * A run's system prompt around the one sentence that names its workspace
+ * volume, so the sentence can be built for the volume the run got (a larger
+ * tier's warm pool may serve it) without touching any other text.
+ */
+export interface RuntimeSystemPromptParts {
+  beforeVolume: string;
+  afterVolume: string;
+}
+
+/**
+ * The system prompt with the sentence about the run's volume. A run whose
+ * volume size is unknown (its workspace predates recorded sizes) is told
+ * nothing about it rather than a size it may not have.
+ */
+export function runtimeSystemPrompt(
+  parts: RuntimeSystemPromptParts,
+  workspaceGiB: number | undefined,
+): string {
+  const volume =
+    workspaceGiB === undefined
+      ? ""
+      : ` The workspace volume is ${workspaceGiB} GiB in all, including any Docker data.`;
+  return `${parts.beforeVolume}${volume}${parts.afterVolume}`;
+}
+
+/**
  * Tiers whose warm pool may serve a run, in order: the requested tier, then
- * the next larger one while it stays within the Agent's scaleup tier. Never a
- * smaller one: a run sized below what it asked for can run out of memory. A
- * run served from the larger pool runs at that size.
+ * the next larger one while it stays within the Agent's scaleup tier and its
+ * workspace volume is no smaller. Never a smaller one: a run sized below what
+ * it asked for can run out of memory or disk. A run served from the larger
+ * pool runs at that size.
  */
 export function warmTierCandidates(
   tier: string,
@@ -131,7 +190,8 @@ export function warmTierCandidates(
   const larger = nextLargerAgentRuntimeTier(tiers.tiers, own.name);
   return larger &&
     agentRuntimeTierRank(tiers.tiers, larger.name) <=
-      agentRuntimeTierRank(tiers.tiers, max)
+      agentRuntimeTierRank(tiers.tiers, max) &&
+    tierWorkspaceGiB(larger) >= tierWorkspaceGiB(own)
     ? [own, larger]
     : [own];
 }
@@ -151,38 +211,50 @@ export function warmPoolReplicas(
 
 /**
  * What a run's Pod reads in `ARCHESTRA_AGENT_RUNTIME_TIERS`: the tiers the
- * run may move to, smallest first, each with its size, and which one the
- * run has. The agent decides by these numbers, not by the names.
+ * run may move to, smallest first, each with its size (CPU, memory and the
+ * workspace volume in GiB), and which one the run has. The agent decides by
+ * these numbers, not by the names. The run's own tier carries the size of the
+ * volume the run has, which a continuation keeps from its first turn, and no
+ * size when that is unknown.
  */
 export function runtimeTiersEnv(
   allowed: readonly AgentRuntimeTierSize[],
   current: string | null,
+  currentWorkspaceGiB: number | undefined,
 ): string {
+  const currentName =
+    current === null
+      ? null
+      : tierSize({ tiers: [...allowed], defaultTier: current }, current).name;
   return JSON.stringify(
-    allowed.map((tier) => ({
-      name: tier.name,
-      cpu: tier.cpuRequest,
-      cpu_limit: tier.cpuLimit,
-      memory_gib: gib(tier.memoryRequestMiB),
-      memory_limit_gib: gib(tier.memoryLimitMiB),
-      ...(current !== null &&
-      tier.name ===
-        tierSize({ tiers: [...allowed], defaultTier: current }, current).name
-        ? { current: true }
-        : {}),
-    })),
+    allowed.map((tier) => {
+      const isCurrent = tier.name === currentName;
+      const workspaceGiB = isCurrent
+        ? currentWorkspaceGiB
+        : tierWorkspaceGiB(tier);
+      return {
+        name: tier.name,
+        cpu: tier.cpuRequest,
+        cpu_limit: tier.cpuLimit,
+        memory_gib: gibFromMiB(tier.memoryRequestMiB),
+        memory_limit_gib: gibFromMiB(tier.memoryLimitMiB),
+        ...(workspaceGiB === undefined ? {} : { workspace_gib: workspaceGiB }),
+        ...(isCurrent ? { current: true } : {}),
+      };
+    }),
   );
 }
 
-function gib(mib: number): number {
-  return Math.round((mib / 1024) * 100) / 100;
-}
-
 /**
- * The same list with `current` on `tier` alone: a run served from a larger
- * tier's warm pool runs at that size, and its list must say so.
+ * The same list with `current` on the served tier alone: a run served from a
+ * larger tier's warm pool runs at that size, and its list must say so,
+ * including the served volume.
  */
-export function retargetRuntimeTiersEnv(value: string, tier: string): string {
+export function retargetRuntimeTiersEnv(
+  value: string,
+  served: { tier: string; workspaceGiB: number },
+  requested: { tier: string; workspaceGiB: number } | undefined,
+): string {
   let entries: unknown;
   try {
     entries = JSON.parse(value);
@@ -197,10 +269,14 @@ export function retargetRuntimeTiersEnv(value: string, tier: string): string {
         current?: boolean;
         name?: unknown;
       };
-      return typeof rest.name === "string" &&
-        sameAgentRuntimeTierName(rest.name, tier)
-        ? { ...rest, current: true }
-        : rest;
+      if (typeof rest.name !== "string") return rest;
+      // The served tier carries the volume the run got; the requested tier
+      // goes back to its own size, which a new run at that tier would get.
+      if (sameAgentRuntimeTierName(rest.name, served.tier))
+        return { ...rest, workspace_gib: served.workspaceGiB, current: true };
+      if (requested && sameAgentRuntimeTierName(rest.name, requested.tier))
+        return { ...rest, workspace_gib: requested.workspaceGiB };
+      return rest;
     }),
   );
 }
@@ -224,7 +300,7 @@ export function describeScaleupDisabledPrompt(
   const currentTier = tierSize(tiers, currentTierName);
   return (
     `Scaling up this agent runtime instance is disabled: the runtime tier is fixed to ` +
-    `${currentTier.name} (${describeAgentRuntimeTier(currentTier)}). ` +
+    `${currentTier.name} (${describeTier(currentTier)}). ` +
     `You cannot scale up this instance; do not attempt to start a run at a larger tier.`
   );
 }
@@ -233,7 +309,7 @@ function allowedTiersSentence(
   allowed: readonly AgentRuntimeTierSize[],
 ): string {
   return `Tiers this Agent's runs may use: ${allowed
-    .map((tier) => `${tier.name} (${describeAgentRuntimeTier(tier)})`)
+    .map((tier) => `${tier.name} (${describeTier(tier)})`)
     .join(", ")}.`;
 }
 
@@ -242,7 +318,9 @@ function allowedTiersSentence(
  * deployment defaults) and a caller's request. A request above the Agent's
  * value is refused with that value named, so the caller can retry within it.
  * A tier is chosen by name, or by the CPU and memory the work needs, which
- * gives the smallest tier that fits.
+ * gives the smallest tier that fits and has no smaller workspace than the
+ * Agent's default tier: asking for CPU must not cost the run its disk. The
+ * limits carry the workspace size of the chosen tier, which the run records.
  */
 export function resolveAgentRunLimits(params: {
   runtime: Pick<
@@ -257,6 +335,7 @@ export function resolveAgentRunLimits(params: {
   const allowed = agentRuntimeAllowedTiers(runtime, tiers);
   const maxTier = agentRuntimeMaxTier(runtime, tiers);
   let tier = agentRuntimeTier(runtime, tiers);
+  const defaultWorkspaceGiB = resolveRunWorkspaceGiB(tier, tiers);
   const isScaleupDisabled =
     agentRuntimeTierRank(tiers.tiers, maxTier) <=
     agentRuntimeTierRank(tiers.tiers, tier);
@@ -264,7 +343,7 @@ export function resolveAgentRunLimits(params: {
   const scaleupDisabledError = () =>
     new ApiError(
       400,
-      `Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to ${currentTier.name} (${describeAgentRuntimeTier(currentTier)}). This call is not retriable; calling it again will fail.`,
+      `Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to ${currentTier.name} (${describeTier(currentTier)}). This call is not retriable; calling it again will fail.`,
     );
 
   if (requested.tier !== undefined) {
@@ -283,7 +362,7 @@ export function resolveAgentRunLimits(params: {
       }
       throw new ApiError(
         400,
-        `Tier ${named.name} (${describeAgentRuntimeTier(named)}) is above this Agent's scaleup tier ${maxTier}. ${allowedTiersSentence(allowed)}`,
+        `Tier ${named.name} (${describeTier(named)}) is above this Agent's scaleup tier ${maxTier}. ${allowedTiersSentence(allowed)}`,
       );
     }
     tier = named.name;
@@ -310,18 +389,27 @@ export function resolveAgentRunLimits(params: {
         }
         throw new ApiError(
           400,
-          `Tier ${named.name} (${describeAgentRuntimeTier(named)}) has less than the ${need} asked for. ${allowedTiersSentence(allowed)}`,
+          `Tier ${named.name} (${describeTier(named)}) has less than the ${need} asked for. ${allowedTiersSentence(allowed)}`,
         );
       }
     } else {
-      const smallest = allowed.find(fits);
+      const hasDisk = (candidate: AgentRuntimeTierSize) =>
+        tierWorkspaceGiB(candidate) >= defaultWorkspaceGiB;
+      const smallest = allowed.find(
+        (candidate) => fits(candidate) && hasDisk(candidate),
+      );
       if (!smallest) {
+        // With scaleup fixed, the default tier is the largest allowed and
+        // always has its own disk, so nothing qualifies only when the work
+        // needs a larger tier: the fixed-scaleup refusal is the reason.
         if (isScaleupDisabled) {
           throw scaleupDisabledError();
         }
         throw new ApiError(
           400,
-          `No tier this Agent's runs may use has ${need}. ${allowedTiersSentence(allowed)}`,
+          allowed.some(fits)
+            ? `No tier this Agent's runs may use has ${need} and a workspace of at least ${defaultWorkspaceGiB} GiB, the size of its default tier. ${allowedTiersSentence(allowed)}`
+            : `No tier this Agent's runs may use has ${need}. ${allowedTiersSentence(allowed)}`,
         );
       }
       tier = smallest.name;
@@ -362,5 +450,16 @@ export function resolveAgentRunLimits(params: {
     idleTimeoutMinutes: requested.idleTimeoutMinutes ?? idleTimeoutMinutes,
     maxDurationHours: requested.maxDurationHours ?? maxDurationHours,
     maxCostUsd: requested.maxCostUsd ?? maxCostUsd,
+    workspaceGiB: resolveRunWorkspaceGiB(tier, tiers),
   };
+}
+
+// === Internal helpers ===
+
+/** A tier's size for refusal messages, its workspace always named. */
+function describeTier(tier: AgentRuntimeTierSize): string {
+  return describeAgentRuntimeTier(
+    tier,
+    config.agentRuntime.workspaceStorageGiB,
+  );
 }

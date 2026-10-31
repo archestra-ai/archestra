@@ -371,8 +371,16 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
       "The user can forward ports 3000, 9000 from this workspace",
     );
+    const fixedNote =
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.";
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
-      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
+      fixedNote,
+    );
+    // The note sits after the volume sentence, in the part a served tier's
+    // rebuild keeps as written.
+    expect(spec.systemPromptParts?.afterVolume).toContain(fixedNote);
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toMatch(
+      /The workspace volume is 20 GiB in all, including any Docker data\.[\s\S]*Scaling up this agent runtime instance is disabled/,
     );
 
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(

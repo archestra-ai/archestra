@@ -345,7 +345,10 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId }, reply) => {
-      return reply.send(await organizationAgentRuntimeTiers(organizationId));
+      return reply.send({
+        ...(await organizationAgentRuntimeTiers(organizationId)),
+        defaultWorkspaceGiB: config.agentRuntime.workspaceStorageGiB,
+      });
     },
   );
 

@@ -62,7 +62,13 @@ describe("log redaction", () => {
     const { logger, records } = createCapturingLogger();
     logger.info({
       request: { headers: { "x-archestra-runtime-binding": "runtime-proof" } },
-      spec: { secretEnv: { ARCHESTRA_AGENT_RUNTIME_BINDING: "runtime-proof" } },
+      spec: {
+        secretEnv: { ARCHESTRA_AGENT_RUNTIME_BINDING: "runtime-proof" },
+        systemPromptParts: {
+          beforeVolume: "runtime-proof instructions",
+          afterVolume: "",
+        },
+      },
       bindingToken: "runtime-proof",
       workspaceId: "workspace",
     });

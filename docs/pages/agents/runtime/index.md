@@ -113,11 +113,11 @@ Limits protect your cluster and budget by capping runtime duration, idle time, s
 | **Default tier** | Sets the container size for standard runs from your organization's [runtime tiers](/docs/agents/runtime/setup#runtime-tiers). |
 | **Scaleup tier** | Sets the largest tier a run can request. Choose **Fix at &lt;tier&gt;** to disable scaling up. |
 
-When starting a run through [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) or [`POST /api/agents/{id}/runs`](/docs/reference/api#/Agents/startAgentRun), you can pass custom `limits`. You can request stricter limits or a different tier, either by name or by minimum compute (`min_cpu` and `min_memory_gib`). Requests exceeding the agent's configured limits fail with the allowed tiers named.
+When starting a run through [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) or [`POST /api/agents/{id}/runs`](/docs/reference/api#/Agents/startAgentRun), you can pass custom `limits`. You can request stricter limits or a different tier, either by name or by minimum compute (`min_cpu` and `min_memory_gib`). A tier chosen by minimum compute never has a smaller workspace than the agent's default tier. Requests exceeding the agent's configured limits fail with the allowed tiers named.
 
 A run that needs more compute starts a new run of the same agent at a larger tier and hands over its workspace. Setting **Scaleup tier** to **Fix at &lt;tier&gt;** disables scaling up. The agent runtime instance receives instructions that scaling is disabled, and scaleup attempts fail with a non-retriable error.
 
-Inside a container, `ARCHESTRA_AGENT_RUNTIME_TIERS` lists the allowed tiers with their CPU and memory. When the requested tier has no ready warm container, Archestra serves the run from the next larger tier within the scaleup limit. Runs never start below their requested tier.
+Inside a container, `ARCHESTRA_AGENT_RUNTIME_TIERS` lists the allowed tiers with their CPU, memory, and workspace size. When the requested tier has no ready warm container, Archestra serves the run from the next larger tier within the scaleup limit, unless that tier has a smaller workspace. Runs never start below their requested tier.
 
 <span id="environments-and-network-egress"></span>
 
@@ -188,7 +188,7 @@ What to know:
 
 - **A run does not start:** see [Setup troubleshooting](/docs/agents/runtime/setup#troubleshooting).
 - **A run ends with a pod failure:** open **Failed details** for the Kubernetes pod name, failure reason, and container exit code when available. Share these details with your cluster operator; for example, `OOMKilled` identifies a memory termination and `Evicted` includes Kubernetes' eviction message.
-- **A run ends with `pod.workspace_full`:** the agent filled its workspace volume, which holds the home directory and, for privileged agents, the Docker data. **Failed details** shows how much of the volume was used. Start a new run after an administrator raises [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Exit code 77 means the volume refuses writes for another reason, such as a read-only or failing volume: ask your cluster operator to check it.
+- **A run ends with `pod.workspace_full`:** the agent filled its workspace volume, which holds the home directory and, for privileged agents, the Docker data. **Failed details** shows how much of the volume was used. Start a new run after an administrator gives the agent's [runtime tier](/docs/agents/runtime/setup#runtime-tiers) a larger **Workspace** size. A tier with no size uses [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Exit code 77 means the volume refuses writes for another reason, such as a read-only or failing volume: ask your cluster operator to check it.
 - **A model call fails with a Guardrails error:** the message says what to do, and the status says who.
   - `400`: the conversation holds content [Guardrails](/docs/agents/guardrails) cannot store, such as binary tool output. Rewind past it or start a new conversation.
   - `409`: the conversation cannot continue. Start a new one.

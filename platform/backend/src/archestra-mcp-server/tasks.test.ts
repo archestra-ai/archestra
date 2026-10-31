@@ -321,7 +321,7 @@ describe("run tools", () => {
     for (const [limits, message] of [
       [
         { tier: "L" },
-        "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit)). This call is not retriable; calling it again will fail.",
+        "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
       ],
       [
         { max_duration_hours: 24 },
@@ -368,7 +368,7 @@ describe("run tools", () => {
     );
     expect(aboveScaleupResult.isError).toBe(true);
     expect((aboveScaleupResult.content[0] as { text: string }).text).toContain(
-      "Tier L (8 CPU, 16 GiB (32 GiB limit)) is above this Agent's scaleup tier M",
+      "Tier L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier M",
     );
     expect(sendMessage).not.toHaveBeenCalled();
   });

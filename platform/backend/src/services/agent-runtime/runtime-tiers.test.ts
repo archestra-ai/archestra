@@ -8,6 +8,8 @@ import {
   describeScaleupDisabledPrompt,
   resolveAgentRunLimits,
   resolveRunResources,
+  resolveRunWorkspaceStorageSize,
+  runtimeSystemPrompt,
   runtimeTiersEnv,
   warmPoolReplicas,
   warmTierCandidates,
@@ -112,7 +114,7 @@ describe("runtime tiers", () => {
         requested: { tier: "M" },
       }),
     ).toThrow(
-      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). This call is not retriable; calling it again will fail.",
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
     );
     // When scaling up is allowed, requesting above the scaleup tier names the allowed tiers.
     expect(() =>
@@ -122,7 +124,7 @@ describe("runtime tiers", () => {
         requested: { tier: "L" },
       }),
     ).toThrow(
-      "Tier L (8 CPU, 16 GiB (32 GiB limit)) is above this Agent's scaleup tier M. Tiers this Agent's runs may use: S (2 CPU, 4 GiB (8 GiB limit)), M (4 CPU, 8 GiB (16 GiB limit)).",
+      "Tier L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier M. Tiers this Agent's runs may use: S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace), M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace).",
     );
     // A scaleup tier below the Agent's own tier counts as the Agent's tier.
     expect(
@@ -131,7 +133,7 @@ describe("runtime tiers", () => {
     expect(
       describeScaleupDisabledPrompt({ ...DEFAULTS, tier: "S" }, TIERS),
     ).toBe(
-      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
     );
     expect(
       describeScaleupDisabledPrompt(
@@ -180,7 +182,7 @@ describe("runtime tiers", () => {
         requested: { minCpu: 4 },
       }),
     ).toThrow(
-      "No tier this Agent's runs may use has 4 CPU. Tiers this Agent's runs may use: Small (1 CPU, 2 GiB (4 GiB limit)), Medium (3 CPU, 6 GiB (12 GiB limit)).",
+      "No tier this Agent's runs may use has 4 CPU. Tiers this Agent's runs may use: Small (1 CPU, 2 GiB (4 GiB limit), 20 GiB workspace), Medium (3 CPU, 6 GiB (12 GiB limit), 20 GiB workspace).",
     );
     // When scaling up is disabled, asking for more size than the fixed tier fails with a non-retriable error.
     expect(() =>
@@ -190,7 +192,7 @@ describe("runtime tiers", () => {
         requested: { minCpu: 4 },
       }),
     ).toThrow(
-      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to Small (1 CPU, 2 GiB (4 GiB limit)). This call is not retriable; calling it again will fail.",
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to Small (1 CPU, 2 GiB (4 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
     );
     // A named tier must also have the size asked for.
     expect(() =>
@@ -200,7 +202,7 @@ describe("runtime tiers", () => {
         requested: { tier: "Small", minCpu: 2 },
       }),
     ).toThrow(
-      "Tier Small (1 CPU, 2 GiB (4 GiB limit)) has less than the 2 CPU asked for.",
+      "Tier Small (1 CPU, 2 GiB (4 GiB limit), 20 GiB workspace) has less than the 2 CPU asked for.",
     );
   });
 
@@ -218,13 +220,186 @@ describe("runtime tiers", () => {
       "Large",
       "XL",
     ]);
+    // A larger tier never serves a run whose workspace volume it cannot hold.
+    const volumes = (bigWorkspaceGiB: number | null) =>
+      resolveAgentRuntimeTiers(
+        {
+          tiers: [
+            {
+              name: "Tilt",
+              cpuRequest: 6,
+              cpuLimit: null,
+              warmSpares: 0,
+              workspaceGiB: 60,
+            },
+            {
+              name: "Big",
+              cpuRequest: 8,
+              cpuLimit: null,
+              warmSpares: 0,
+              workspaceGiB: bigWorkspaceGiB,
+            },
+          ],
+          defaultTier: "Tilt",
+        },
+        { defaultWarmSpares: 0 },
+      );
+    expect(names(warmTierCandidates("Tilt", "Big", volumes(null)))).toEqual([
+      "Tilt",
+    ]);
+    expect(names(warmTierCandidates("Tilt", "Big", volumes(60)))).toEqual([
+      "Tilt",
+      "Big",
+    ]);
+  });
+
+  test("a run's workspace volume is its tier's size, else the deployment's", () => {
+    const sized = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          { name: "Lite", cpuRequest: 2, cpuLimit: null, warmSpares: 0 },
+          {
+            name: "Tilt",
+            cpuRequest: 6,
+            cpuLimit: null,
+            warmSpares: 0,
+            workspaceGiB: 60,
+          },
+        ],
+        defaultTier: "Lite",
+      },
+      { defaultWarmSpares: 2 },
+    );
+    expect(resolveRunWorkspaceStorageSize("Tilt", sized)).toBe("60Gi");
+    expect(resolveRunWorkspaceStorageSize("Lite", sized)).toBe(
+      config.agentRuntime.workspaceStorageSize,
+    );
+    // A tier the organization no longer has reads as the default tier.
+    expect(resolveRunWorkspaceStorageSize("Gone", sized)).toBe(
+      config.agentRuntime.workspaceStorageSize,
+    );
+    const sizes = (current: number | undefined) =>
+      JSON.parse(runtimeTiersEnv(sized.tiers, "Tilt", current)).map(
+        (tier: { name: string; workspace_gib?: number }) => [
+          tier.name,
+          tier.workspace_gib,
+        ],
+      );
+    expect(sizes(60)).toEqual([
+      ["Lite", 20],
+      ["Tilt", 60],
+    ]);
+    // The run's own tier carries the volume the run has, which a continuation
+    // keeps from its first turn, and nothing when that is unknown.
+    expect(sizes(40)).toEqual([
+      ["Lite", 20],
+      ["Tilt", 40],
+    ]);
+    expect(sizes(undefined)).toEqual([
+      ["Lite", 20],
+      ["Tilt", undefined],
+    ]);
+  });
+
+  test("the prompt names the run's volume between its fixed parts, and nothing when the size is unknown", () => {
+    const parts = {
+      beforeVolume: "Files persist.",
+      afterVolume: " Ports: none.",
+    };
+    expect(runtimeSystemPrompt(parts, 60)).toBe(
+      "Files persist. The workspace volume is 60 GiB in all, including any Docker data. Ports: none.",
+    );
+    expect(runtimeSystemPrompt(parts, undefined)).toBe(
+      "Files persist. Ports: none.",
+    );
+  });
+
+  test("a tier chosen by size never has a smaller workspace than the Agent's default tier", () => {
+    const tiers = resolveAgentRuntimeTiers(
+      {
+        tiers: [
+          { name: "Small", cpuRequest: 2, cpuLimit: null, warmSpares: 0 },
+          {
+            name: "Tilt",
+            cpuRequest: 4,
+            cpuLimit: null,
+            warmSpares: 0,
+            workspaceGiB: 60,
+          },
+          { name: "Big", cpuRequest: 6, cpuLimit: null, warmSpares: 0 },
+          {
+            name: "Huge",
+            cpuRequest: 8,
+            cpuLimit: null,
+            warmSpares: 0,
+            workspaceGiB: 80,
+          },
+        ],
+        defaultTier: "Tilt",
+      },
+      { defaultWarmSpares: 0 },
+    );
+    const tilt = { ...DEFAULTS, tier: "Tilt", maxTier: "Huge" };
+    // Small and Big have the CPU but only the deployment's 20 GiB.
+    expect(
+      resolveAgentRunLimits({
+        runtime: tilt,
+        tiers,
+        requested: { minCpu: 2 },
+      }),
+    ).toMatchObject({ tier: "Tilt", workspaceGiB: 60 });
+    expect(
+      resolveAgentRunLimits({
+        runtime: tilt,
+        tiers,
+        requested: { minCpu: 5 },
+      }),
+    ).toMatchObject({ tier: "Huge", workspaceGiB: 80 });
+    // An Agent whose default tier has the deployment's size may get any.
+    expect(
+      resolveAgentRunLimits({
+        runtime: { ...DEFAULTS, tier: "Small", maxTier: "Huge" },
+        tiers,
+        requested: { minCpu: 5 },
+      }),
+    ).toMatchObject({ tier: "Big", workspaceGiB: 20 });
+    // Scaleup fixed at Tilt: the disk rule still keeps Small out, and work
+    // that needs more than Tilt meets the fixed-scaleup refusal, not the disk
+    // message: only a larger tier would fit, and that is disabled.
+    const fixedAtTilt = { ...DEFAULTS, tier: "Tilt", maxTier: "Tilt" };
+    expect(
+      resolveAgentRunLimits({
+        runtime: fixedAtTilt,
+        tiers,
+        requested: { minCpu: 2 },
+      }),
+    ).toMatchObject({ tier: "Tilt", workspaceGiB: 60 });
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: fixedAtTilt,
+        tiers,
+        requested: { minCpu: 5 },
+      }),
+    ).toThrow(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to Tilt (4 CPU, 8 GiB (16 GiB limit), 60 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+    // No tier with the CPU and the disk: the refusal says which is missing.
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: { ...tilt, maxTier: "Big" },
+        tiers,
+        requested: { minCpu: 5 },
+      }),
+    ).toThrow(
+      "No tier this Agent's runs may use has 5 CPU and a workspace of at least 60 GiB, the size of its default tier.",
+    );
   });
 
   test("the Pod reads the tiers it may move to, smallest first, with their sizes", () => {
     const worker = { ...DEFAULTS, tier: "Medium", maxTier: "Large" };
     expect(
       JSON.parse(
-        runtimeTiersEnv(agentRuntimeAllowedTiers(worker, CUSTOM), "Medium"),
+        runtimeTiersEnv(agentRuntimeAllowedTiers(worker, CUSTOM), "Medium", 20),
       ),
     ).toEqual([
       {
@@ -233,6 +408,7 @@ describe("runtime tiers", () => {
         cpu_limit: null,
         memory_gib: 2,
         memory_limit_gib: 4,
+        workspace_gib: 20,
       },
       {
         name: "Medium",
@@ -240,6 +416,7 @@ describe("runtime tiers", () => {
         cpu_limit: null,
         memory_gib: 6,
         memory_limit_gib: 12,
+        workspace_gib: 20,
         current: true,
       },
       {
@@ -248,6 +425,7 @@ describe("runtime tiers", () => {
         cpu_limit: null,
         memory_gib: 12,
         memory_limit_gib: 24,
+        workspace_gib: 20,
       },
     ]);
   });
@@ -276,6 +454,7 @@ describe("runtime tiers", () => {
       idleTimeoutMinutes: config.agentRuntime.defaultIdleTimeoutMinutes,
       maxDurationHours: config.agentRuntime.defaultTtlHours,
       maxCostUsd: null,
+      workspaceGiB: 20,
     });
     expect(
       resolveAgentRunLimits({
@@ -293,6 +472,7 @@ describe("runtime tiers", () => {
       idleTimeoutMinutes: 30,
       maxDurationHours: 48,
       maxCostUsd: 25,
+      workspaceGiB: 20,
     });
   });
 
@@ -320,6 +500,7 @@ describe("runtime tiers", () => {
       idleTimeoutMinutes: 10,
       maxDurationHours: 3,
       maxCostUsd: 5,
+      workspaceGiB: 20,
     });
     for (const [requested, message] of [
       [

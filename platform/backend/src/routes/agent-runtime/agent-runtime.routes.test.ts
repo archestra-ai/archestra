@@ -618,7 +618,7 @@ describe("Agent Runtime routes", () => {
     });
     expect(refused.statusCode, refused.body).toBe(400);
     expect(refused.json().error.message).toContain(
-      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit)). This call is not retriable; calling it again will fail.",
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
     );
     expect(startDetachedAgentTask).not.toHaveBeenCalled();
 

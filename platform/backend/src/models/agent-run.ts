@@ -770,16 +770,29 @@ class AgentRunModel {
     return await AgentRunModel.addRunPrompts(rows);
   }
 
-  /** A warm Sandbox from a neighbouring pool changes the tier a run runs at. */
+  /**
+   * A warm Sandbox from a neighbouring pool changes the tier a run runs at,
+   * and the size of the volume it got.
+   */
   static async updateRuntimeLimitsTier(params: {
     taskId: string;
     tier: AgentRuntimeTier | null;
+    workspaceGiB: number | undefined;
   }): Promise<void> {
     const current = await AgentRunModel.findByTaskId(params.taskId);
     if (!current?.runtimeLimits) return;
+    const { workspaceGiB: _previous, ...rest } = current.runtimeLimits;
     await db
       .update(schema.agentRunsTable)
-      .set({ runtimeLimits: { ...current.runtimeLimits, tier: params.tier } })
+      .set({
+        runtimeLimits: {
+          ...rest,
+          tier: params.tier,
+          ...(params.workspaceGiB === undefined
+            ? {}
+            : { workspaceGiB: params.workspaceGiB }),
+        },
+      })
       .where(eq(schema.agentRunsTable.taskId, params.taskId));
   }
 

@@ -25,6 +25,7 @@ import {
   DEFAULT_VAULT_TOKEN,
   getAgentCatalogImages,
   getAgentCatalogImageTag,
+  gibFromMiB,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
   type LogContentMode,
@@ -1883,8 +1884,34 @@ export const parseClusterDnsIps = (envValue: string | undefined): string[] => {
 };
 
 /**
+ * The default workspace volume of Agent Runtime runs, read once: the
+ * Kubernetes quantity a volume claim takes, and the same size in GiB.
+ *
+ * @public — exported for testability
+ */
+export function agentRuntimeWorkspaceStorage(value: string | undefined): {
+  workspaceStorageSize: string;
+  workspaceStorageGiB: number;
+} {
+  const workspaceStorageSize = parseK8sResourceQuantity({
+    envName: "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE",
+    value,
+    validator: isValidK8sMemoryQuantity,
+    defaultValue: "20Gi",
+  });
+  // The validator and the parser accept the same suffixes, so a validated
+  // quantity always has a byte count.
+  const bytes = k8sMemoryQuantityToBytes(workspaceStorageSize) ?? 0;
+  return {
+    workspaceStorageSize,
+    workspaceStorageGiB: gibFromMiB(bytes / 1024 ** 2),
+  };
+}
+
+/**
  * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
- * undefined when it is not one.
+ * undefined when it is not one. Reads every suffix `isValidK8sMemoryQuantity`
+ * accepts, so a validated setting always has a byte count.
  *
  * @public — exported for testability
  */
@@ -1893,17 +1920,22 @@ export const k8sMemoryQuantityToBytes = (
 ): number | undefined => {
   const match = quantity
     .trim()
-    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|k|M|G|T)?$/);
+    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|Pi|Ei|k|K|M|G|T|P|E)?$/);
   if (!match) return undefined;
   const multipliers: Record<string, number> = {
     Ki: 1024,
     Mi: 1024 ** 2,
     Gi: 1024 ** 3,
     Ti: 1024 ** 4,
+    Pi: 1024 ** 5,
+    Ei: 1024 ** 6,
     k: 1000,
+    K: 1000,
     M: 1000 ** 2,
     G: 1000 ** 3,
     T: 1000 ** 4,
+    P: 1000 ** 5,
+    E: 1000 ** 6,
   };
   // Floored because the only consumers are a cgroup limit and a byte
   // comparison, neither of which takes a fraction.
@@ -2517,12 +2549,12 @@ const config = {
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES,
       60,
     ),
-    workspaceStorageSize: parseK8sResourceQuantity({
-      envName: "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE",
-      value: process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE,
-      validator: isValidK8sMemoryQuantity,
-      defaultValue: "20Gi",
-    }),
+    // `workspaceStorageSize` (the quantity a volume claim takes) and
+    // `workspaceStorageGiB` (the same size in GiB, which runs and the tier
+    // settings are told): the volume of a run whose tier sets none.
+    ...agentRuntimeWorkspaceStorage(
+      process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE,
+    ),
     workspaceStorageClass:
       process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS?.trim() ||
       undefined,

@@ -324,8 +324,16 @@ describe("auto routing backfill", () => {
       type: "openai:responses",
       request: {
         model: "gpt-4o",
-        instructions: system,
-        input: "Review this migration",
+        input: [
+          {
+            role: "developer",
+            content: [{ type: "input_text", text: system }],
+          },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: "Review this migration" }],
+          },
+        ],
         tools: [
           {
             type: "function",

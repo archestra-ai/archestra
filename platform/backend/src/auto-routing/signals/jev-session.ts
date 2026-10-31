@@ -22,7 +22,7 @@ export interface JevSessionReading {
   costUsd: number | null;
 }
 
-// State template v3: independently bounded task, instructions and tool summaries.
+// State template v4: includes Responses input_text and custom/nullable tool metadata.
 const PROMPT_HEAD = 3000;
 const PROMPT_TAIL = 1000;
 const SYSTEM_HEAD = 1500;

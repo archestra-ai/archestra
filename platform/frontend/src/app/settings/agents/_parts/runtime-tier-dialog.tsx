@@ -1,5 +1,6 @@
 import type { AgentRuntimeTierSettingsInput } from "@archestra/shared";
 import { formatMemory } from "@archestra/shared";
+import { Info } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,12 @@ import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 import {
   type RuntimeTierFormField,
@@ -19,6 +26,10 @@ import {
   runtimeTierSettingsAfter,
   validateRuntimeTierForm,
 } from "./runtime-tier-form";
+
+/** What the Pooled switch does, in plain words. */
+const POOLED_HINT =
+  "Pooled tiers keep spare runtimes ready, so runs start at once. Spares use CPU and memory while they wait. A tier that is not pooled starts a new runtime for each run, which takes longer.";
 
 /**
  * Create a tier or edit one. The whole list is saved with the change in it;
@@ -133,6 +144,7 @@ export function RuntimeTierDialog({
               onBlur={() => touch("name")}
               aria-invalid={shown("name") ? true : undefined}
               aria-describedby={shown("name") ? `${id}-name-error` : undefined}
+              placeholder="XL"
               autoComplete="off"
               autoFocus
             />
@@ -149,6 +161,7 @@ export function RuntimeTierDialog({
                 inputMode="decimal"
                 min={0.1}
                 step="any"
+                placeholder="4"
                 value={values.cpuRequest}
                 onChange={(event) => update({ cpuRequest: event.target.value })}
                 onBlur={() => touch("cpuRequest")}
@@ -189,9 +202,24 @@ export function RuntimeTierDialog({
               : "Memory follows the CPU request."}
           </p>
           <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
-            <Label htmlFor={`${id}-pooled`} className="font-normal">
-              Pooled
-            </Label>
+            <span className="flex items-center gap-1.5">
+              <Label htmlFor={`${id}-pooled`} className="font-normal">
+                Pooled
+              </Label>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <UnstyledButton
+                    aria-label="About pooled tiers"
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <Info className="size-3.5" />
+                  </UnstyledButton>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  {POOLED_HINT}
+                </TooltipContent>
+              </Tooltip>
+            </span>
             <Switch
               id={`${id}-pooled`}
               checked={values.pooled}

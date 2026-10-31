@@ -40,8 +40,13 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   const heading = block.getByRole("heading", { name: "Runtime tiers" });
   await heading.scrollIntoViewIfNeeded();
   await expect(block).toContainText(
-    "Runtime tiers control compute and other resources allocation to agent runtimes",
+    "Runtime tiers control compute and other resources allocation to agent runtimes.",
   );
+  await expect(block.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
+    "href",
+    /\/docs\/agents\/runtime\/setup#runtime-tiers$/,
+  );
+  await expect(block.getByPlaceholder("Search tiers")).toHaveCount(0);
   // The tiers in effect, smallest first: memory, pools and the default.
   const rowOf = (name: string) =>
     block
@@ -61,6 +66,12 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   const dialog = page.getByRole("dialog", { name: "Edit tier" });
   const cpu = dialog.getByLabel("CPU request");
   await expect(cpu).toHaveValue("8");
+  await expect(dialog.getByLabel("Name")).toHaveAttribute("placeholder", "XL");
+  await expect(cpu).toHaveAttribute("placeholder", "4");
+  await expect(dialog.getByLabel("CPU limit")).toHaveAttribute(
+    "placeholder",
+    "No limit",
+  );
   await cpu.fill("9");
   await dialog.getByLabel("Name").focus();
   await expect(dialog).toContainText("Enter a number from 0.1 to 8");
@@ -75,6 +86,11 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   await cpu.fill("6");
   await expect(dialog.getByTestId("tier-memory")).toHaveText(
     "Memory: 12 GiB, 24 GiB limit",
+  );
+  // The Pooled switch explains itself on request.
+  await dialog.getByRole("button", { name: "About pooled tiers" }).hover();
+  await expect(page.getByRole("tooltip")).toContainText(
+    "Pooled tiers keep spare runtimes ready, so runs start at once.",
   );
   await dialog.getByRole("switch", { name: "Pooled" }).click();
   const saved = {

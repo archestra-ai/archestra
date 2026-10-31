@@ -64,6 +64,14 @@ Keep Archestra on Fargate and place runtime containers on EC2 nodes:
 4. Exclude runtime namespaces and labels from Fargate profiles.
 5. Install the controller above and start a run.
 
+## Runtime Tiers
+
+A tier is the size of a run's container. Define them under **Settings > Agents > Runtime tiers**: each tier has a name, a CPU request (up to 8), and an optional CPU limit (up to 16). Memory follows the CPU: 2 GiB per requested CPU, with a limit of twice that, or 2 GiB per CPU of the CPU limit when that is lower. A new organization starts with `S` (2 CPU), `M` (4 CPU) and `L` (8 CPU), with `M` as the default.
+
+An agent's [**Default tier**](/docs/agents/runtime#limits) sizes its runs, and its **Scaleup tier** is the largest tier a run may ask for; an agent has no CPU or memory settings of its own. Renaming a tier renames it on every agent that uses it. A tier that an agent or a template still uses cannot be deleted.
+
+A pooled tier keeps spare containers ready, so its runs start at once; see [Warm Pools](#warm-pools).
+
 ## Warm Pools
 
 A warm pool keeps spare containers ready, so runs start faster. Agents in the same environment share a pool when their image, resources, storage, placement, and network policy match. Images tagged `:latest` always start fresh. Spares reserve CPU, memory, and storage, but hold no credentials or network access until a run takes them.

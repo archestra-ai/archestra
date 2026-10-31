@@ -42,6 +42,41 @@ describe("RuntimeTierDialog", () => {
     });
   });
 
+  it("shows an example in each empty field and explains pooling on request", async () => {
+    const user = userEvent.setup();
+    render(
+      <RuntimeTierDialog
+        open
+        onOpenChange={() => {}}
+        tier={null}
+        tiers={agentRuntimeTiersSeed}
+        onSave={vi.fn()}
+      />,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Create tier" });
+    expect(within(dialog).getByLabelText("Name")).toHaveAttribute(
+      "placeholder",
+      "XL",
+    );
+    expect(within(dialog).getByLabelText("CPU request")).toHaveAttribute(
+      "placeholder",
+      "4",
+    );
+    expect(within(dialog).getByLabelText("CPU limit")).toHaveAttribute(
+      "placeholder",
+      "No limit",
+    );
+    expect(
+      within(dialog).getByRole("switch", { name: "Pooled" }),
+    ).toBeChecked();
+    await user.hover(
+      within(dialog).getByRole("button", { name: "About pooled tiers" }),
+    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Pooled tiers keep spare runtimes ready, so runs start at once. Spares use CPU and memory while they wait. A tier that is not pooled starts a new runtime for each run, which takes longer.",
+    );
+  });
+
   it("keeps a server refusal in the dialog", async () => {
     const onSave = vi
       .fn()

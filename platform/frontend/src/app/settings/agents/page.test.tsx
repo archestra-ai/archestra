@@ -174,10 +174,6 @@ const mutateAsync = vi.fn();
 const saveTiers = vi.fn();
 
 vi.mock("@/lib/organization.query");
-// The tiers table's search input reads the router; the page itself does not.
-vi.mock("next/navigation");
-
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
   useAgentRuntimeTiers,
@@ -205,14 +201,6 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  vi.mocked(useSearchParams).mockReturnValue(
-    new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
-  );
-  vi.mocked(usePathname).mockReturnValue("/settings/agents");
-  vi.mocked(useRouter).mockReturnValue({
-    push: vi.fn(),
-    replace: vi.fn(),
-  } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(useUpdateIntegrationSettings).mockReturnValue({
     mutateAsync: vi.fn().mockResolvedValue(undefined),
     isPending: false,
@@ -394,13 +382,23 @@ describe("Runtime tiers", () => {
     L: { name: "L", cpuRequest: 8, cpuLimit: null, pooled: false },
   };
 
-  it("lists the tiers smallest first with their memory, pools and default, and no hint text", () => {
+  it("lists the tiers smallest first with their memory, pools and default; the header links the docs and has no search or hint text", () => {
     enableRuntime();
     renderPage();
 
     expect(block()).toHaveTextContent(
-      "Runtime tiers control compute and other resources allocation to agent runtimes",
+      "Runtime tiers control compute and other resources allocation to agent runtimes.",
     );
+    expect(
+      within(block()).getByRole("link", { name: /Learn more/ }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/docs\/agents\/runtime\/setup#runtime-tiers$/),
+    );
+    expect(within(block()).queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(
+      within(block()).queryByPlaceholderText("Search tiers"),
+    ).not.toBeInTheDocument();
     const names = within(block())
       .getAllByRole("button", { name: /^Edit / })
       .map((button) => button.getAttribute("aria-label")?.slice(5));

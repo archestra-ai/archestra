@@ -1,15 +1,10 @@
-import { formatMemory } from "@archestra/shared";
+import { DocsPage, formatMemory, getDocsUrl } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import {
-  CollectionFilters,
-  FilterBar,
-  filterSearchClass,
-} from "@/components/filter-bar";
-import { SearchInput } from "@/components/search-input";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -26,13 +21,12 @@ import {
 } from "./runtime-tier-form";
 
 /**
- * The organization's runtime tiers: a table of the tiers in effect, a filter,
- * and dialogs that create, edit or delete one. Each dialog saves at once.
+ * The organization's runtime tiers: a table of the tiers in effect and dialogs
+ * that create, edit or delete one. Each dialog saves at once.
  */
 export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
   const { data: resolved, isPending } = useAgentRuntimeTiers();
   const save = useSaveAgentRuntimeTiers();
-  const [filter, setFilter] = useState("");
   // Open dialogs: `editing` holds the tier being edited, or null for a new one.
   const [editing, setEditing] = useState<{
     tier: RuntimeTierSize | null;
@@ -42,10 +36,6 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
 
   const tiers = resolved?.tiers ?? [];
   const defaultTier = resolved?.defaultTier;
-  const query = filter.trim().toLowerCase();
-  const rows = query
-    ? tiers.filter((tier) => tier.name.toLowerCase().includes(query))
-    : tiers;
 
   const columns: ColumnDef<RuntimeTierSize>[] = [
     {
@@ -184,7 +174,29 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
     <SettingsBlock
       id="runtime-tiers"
       title="Runtime tiers"
-      description="Runtime tiers control compute and other resources allocation to agent runtimes"
+      description={
+        <>
+          Runtime tiers control compute and other resources allocation to agent
+          runtimes.{" "}
+          <ExternalDocsLink
+            href={getDocsUrl(
+              DocsPage.PlatformAgentRuntimeSetup,
+              "runtime-tiers",
+            )}
+            className="whitespace-nowrap"
+          >
+            Learn more
+          </ExternalDocsLink>
+        </>
+      }
+      control={
+        canEdit ? (
+          <Button size="sm" onClick={() => setEditing({ tier: null })}>
+            <Plus className="h-4 w-4" />
+            <span>Create tier</span>
+          </Button>
+        ) : undefined
+      }
       notice={
         canEdit ? undefined : (
           <span className="text-muted-foreground">
@@ -193,41 +205,15 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
         )
       }
     >
-      <div className="space-y-3">
-        <CollectionFilters>
-          <FilterBar
-            search={
-              <SearchInput
-                value={filter}
-                onSearchChange={setFilter}
-                syncQueryParams={false}
-                placeholder="Search tiers"
-                className={filterSearchClass}
-              />
-            }
-            actions={
-              canEdit ? (
-                <Button size="sm" onClick={() => setEditing({ tier: null })}>
-                  <Plus className="h-4 w-4" />
-                  <span>Create tier</span>
-                </Button>
-              ) : undefined
-            }
-          />
-        </CollectionFilters>
-        <DataTable
-          columns={columns}
-          data={rows}
-          getRowId={(row) => row.name}
-          isLoading={isPending}
-          hidePaginationWhenSinglePage
-          hasActiveFilters={query !== ""}
-          onClearFilters={() => setFilter("")}
-          emptyMessage="No tiers"
-          filteredEmptyMessage="No tiers match the search"
-          columnDropOrder={["memory", "cpuLimit", "pools"]}
-        />
-      </div>
+      <DataTable
+        columns={columns}
+        data={tiers}
+        getRowId={(row) => row.name}
+        isLoading={isPending}
+        hidePaginationWhenSinglePage
+        emptyMessage="No tiers"
+        columnDropOrder={["memory", "cpuLimit", "pools"]}
+      />
       {resolved && (
         <RuntimeTierDialog
           open={editing !== null}

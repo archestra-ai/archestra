@@ -51,6 +51,7 @@ async function resolveUploadConnector(params: {
         organizationId: params.organizationId,
         name: "Uploaded files",
         connectorType: "file_upload",
+        schedule: "",
         config: {} as never,
         visibility: "org-wide",
       })

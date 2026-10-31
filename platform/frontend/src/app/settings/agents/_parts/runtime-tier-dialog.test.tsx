@@ -72,8 +72,15 @@ describe("RuntimeTierDialog", () => {
     await user.hover(
       within(dialog).getByRole("button", { name: "About pooled tiers" }),
     );
-    expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Pooled tiers keep spare runtimes ready, so runs start at once. Spares use CPU and memory while they wait. A tier that is not pooled starts a new runtime for each run, which takes longer.",
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent(
+      "Agent runs start much quicker from pool of runtime instances. Managed automatically. Pooled instances reserve part of cluster's capacity. Learn more",
+    );
+    expect(
+      within(tooltip).getByRole("link", { name: /Learn more/ }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/docs\/agents\/runtime\/setup#warm-pools$/),
     );
   });
 

@@ -1,6 +1,5 @@
 import type { AgentRuntimeTierSettingsInput } from "@archestra/shared";
 import { formatMemory } from "@archestra/shared";
-import { Info } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
@@ -9,13 +8,8 @@ import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
+import { PooledHint } from "./pooled-hint";
 import {
   type RuntimeTierFormField,
   type RuntimeTierFormValues,
@@ -26,10 +20,6 @@ import {
   runtimeTierSettingsAfter,
   validateRuntimeTierForm,
 } from "./runtime-tier-form";
-
-/** What the Pooled switch does, in plain words. */
-const POOLED_HINT =
-  "Pooled tiers keep spare runtimes ready, so runs start at once. Spares use CPU and memory while they wait. A tier that is not pooled starts a new runtime for each run, which takes longer.";
 
 /**
  * Create a tier or edit one. The whole list is saved with the change in it;
@@ -206,20 +196,7 @@ export function RuntimeTierDialog({
               <Label htmlFor={`${id}-pooled`} className="font-normal">
                 Pooled
               </Label>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <UnstyledButton
-                    aria-label="About pooled tiers"
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <Info className="size-3.5" />
-                  </UnstyledButton>
-                </TooltipTrigger>
-                {/* Anchored at the icon, so the text stays inside the dialog. */}
-                <TooltipContent align="start" className="max-w-xs">
-                  {POOLED_HINT}
-                </TooltipContent>
-              </Tooltip>
+              <PooledHint />
             </span>
             <Switch
               id={`${id}-pooled`}

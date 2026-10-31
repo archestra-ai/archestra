@@ -47,6 +47,21 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
     /\/docs\/agents\/runtime\/setup#runtime-tiers$/,
   );
   await expect(block.getByPlaceholder("Search tiers")).toHaveCount(0);
+  // The Pools header explains itself, so nobody opens a form to read it.
+  await block.getByRole("button", { name: "About pooled tiers" }).hover();
+  const hint = page.getByRole("tooltip");
+  await expect(hint).toContainText(
+    "Agent runs start much quicker from pool of runtime instances. Managed automatically. Pooled instances reserve part of cluster's capacity.",
+  );
+  await expect(hint.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
+    "href",
+    /\/docs\/agents\/runtime\/setup#warm-pools$/,
+  );
+  await page.screenshot({
+    path: testInfo.outputPath("runtime-tiers-pools-hint.png"),
+  });
+  await page.keyboard.press("Escape");
+  await expect(hint).toBeHidden();
   // The tiers in effect, smallest first: memory, pools and the default.
   const rowOf = (name: string) =>
     block
@@ -90,7 +105,7 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   // The Pooled switch explains itself on request.
   await dialog.getByRole("button", { name: "About pooled tiers" }).hover();
   await expect(page.getByRole("tooltip")).toContainText(
-    "Pooled tiers keep spare runtimes ready, so runs start at once.",
+    "Agent runs start much quicker from pool of runtime instances.",
   );
   await dialog.getByRole("switch", { name: "Pooled" }).click();
   const saved = {

@@ -3367,7 +3367,7 @@ Required RBAC permission: None
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `offer_id` | `string` | Yes |  |
+| `offer_id` | `string` | No |  |
 | `plan` | `string` | No |  |
 | `label` | `object` | No |  |
 | `label.trust` | `string` | No |  |

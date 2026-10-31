@@ -207,6 +207,14 @@ export interface StartupGuardClient {
    */
   skillsRefreshCommands?: string;
   /**
+   * Shell commands run once per launch, after the health check, when the guard
+   * covers an MCP gateway. `$arch_tool_server` holds the gateway's server name
+   * and `$arch_tool_prefix` the tool prefix the instance reports now, not yet
+   * validated. They update client config keyed by full tool names, which a
+   * later prefix change (white-labeling on or off) leaves stale.
+   */
+  toolPrefixSync?: string;
+  /**
    * Optional proof that the `mcp)` removal actually took effect, run in the
    * foreground after the silenced commands above.
    *
@@ -256,6 +264,12 @@ export interface StartupGuardWindowsClient {
    * `$ArchRefreshPluginNames`; return `$false` on failure.
    */
   skillsRefreshCommands?: string;
+  /**
+   * PowerShell twin of {@link StartupGuardClient.toolPrefixSync}. May use
+   * `$McpServerName` and `$archToolPrefix`, the reported tool prefix, not yet
+   * validated.
+   */
+  toolPrefixSync?: string;
   /**
    * PowerShell body proving the `'mcp'` removal landed, for
    * `Test-ArchDisconnected`. Must `return $false` (after setting
@@ -577,6 +591,28 @@ refresh_version_update() {
   return 1
 }
 
+${
+  ctx.mcp && client.toolPrefixSync
+    ? `# Client config keyed by full tool names follows the tool prefix the instance
+# reports now: white-labeling can change it after connect. Never blocks a launch.
+sync_tool_prefix() {
+  [ "$HEALTH_STATE" = "down" ] && return 0
+  already_disconnected mcp && return 0
+  # A gateway the instance reports down is gone: its rules are left for the disconnect prompt.
+  case "$HEALTH_BODY" in
+    *'"mcp":"down"'*) return 0 ;;
+    *'"mcpToolPrefix":"'*) : ;;
+    *) return 0 ;;
+  esac
+  arch_tool_prefix=\${HEALTH_BODY#*'"mcpToolPrefix":"'}
+  arch_tool_prefix=\${arch_tool_prefix%%'"'*}
+  arch_tool_server=${sh(ctx.mcp.serverName)}
+${client.toolPrefixSync}
+  return 0
+}`
+    : "sync_tool_prefix() { return 0; }"
+}
+
 launch_refreshed_guard() {
   version_is_stale || return 0
   refresh_version_update || return 0
@@ -601,6 +637,7 @@ if [ "$INTERACTIVE" = "0" ] && [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
     fetch_health || HEALTH_STATE='down'
   fi
   launch_refreshed_guard "$@"
+  sync_tool_prefix
   warn_unreachable
   i=0
   while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
@@ -1227,7 +1264,10 @@ if [ "$SKIP_ALL" = "1" ]; then
 fi
 # Hand off before presenting connection decisions. Menu/skip/disconnect choices
 # made during the health probe above take precedence and are never replayed.
-if [ "$ARCH_DISCONNECT_ALL" = "0" ]; then launch_refreshed_guard "$@"; fi
+if [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
+  launch_refreshed_guard "$@"
+  sync_tool_prefix
+fi
 start_frame_key_reader
 DOWN_IDXS=''
 DOWN_COUNT=0

@@ -4511,7 +4511,7 @@ export const getConnectionRuntime = <ThrowOnError extends boolean = false>(optio
 export const getConnectionInstructions = <ThrowOnError extends boolean = false>(options?: Options<GetConnectionInstructionsData, ThrowOnError>) => (options?.client ?? client).get<GetConnectionInstructionsResponses, GetConnectionInstructionsErrors, ThrowOnError>({ url: '/v1/connection-instructions', ...options });
 
 /**
- * Health of the remotes a connected client is wired to, one request for all of them. Public: used by the Claude Code startup guard before every launch, from machines with no session. Reports only ok/down per requested remote.
+ * Health of the remotes a connected client is wired to, one request for all of them. Public: used by the Claude Code startup guard before every launch, from machines with no session. Reports only ok/down per requested remote, the launch check's format version, and the gateway's tool prefix.
  */
 export const getConnectionHealth = <ThrowOnError extends boolean = false>(options?: Options<GetConnectionHealthData, ThrowOnError>) => (options?.client ?? client).get<GetConnectionHealthResponses, GetConnectionHealthErrors, ThrowOnError>({ url: '/v1/health', ...options });
 

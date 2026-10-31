@@ -344,8 +344,10 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  *
  * Preview installs already used version 2. Version 3 repairs their PowerShell
  * permission cleanup; reusing version 2 would not prompt those users to reconnect.
+ * Version 10 moves Claude Code allow rules to the tool prefix `/v1/health`
+ * reports, so installed guards pick that up without a reconnect.
  */
-export const STARTUP_GUARD_FORMAT_VERSION = 9;
+export const STARTUP_GUARD_FORMAT_VERSION = 10;
 
 /**
  * The managed instructions a deployment uses until an admin edits them. It

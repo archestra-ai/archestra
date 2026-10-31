@@ -4,6 +4,8 @@ import type WebSocket from "ws";
 
 /** A transport failure does not establish whether the command completed. */
 export class AgentRuntimeCommandTransportError extends Error {}
+/** The pod ran the command and it ended in failure, as opposed to a connection the API server lost. */
+export class AgentRuntimeCommandFailedError extends Error {}
 
 /** Stream a command's output instead of collecting it.
  *
@@ -82,7 +84,9 @@ export function streamAgentRuntimeCommand(params: {
         finish(
           status.status === "Success"
             ? undefined
-            : new Error("Command in Agent Runtime pod failed"),
+            : new AgentRuntimeCommandFailedError(
+                "Command in Agent Runtime pod failed",
+              ),
         ),
     )
     .then((connected) => {
@@ -173,7 +177,9 @@ export function execAgentRuntimeCommand(params: {
           finish(
             status.status === "Success"
               ? undefined
-              : new Error("Command in Agent Runtime pod failed"),
+              : new AgentRuntimeCommandFailedError(
+                  "Command in Agent Runtime pod failed",
+                ),
           ),
       )
       .then((connected) => {

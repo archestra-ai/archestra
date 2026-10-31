@@ -33,6 +33,13 @@ export function describeAgentRuntimePodFailure(
 
       const exit = [`exit code ${terminated.exitCode}`];
       if (terminated.signal) exit.push(`signal ${terminated.signal}`);
+      // A memory kill names the limit it hit: the reader then knows the size
+      // the run had and can start one at a larger tier.
+      const memoryLimit =
+        terminated.reason === "OOMKilled"
+          ? containerMemoryLimit(pod, status.name)
+          : null;
+      if (memoryLimit) exit.push(`memory limit ${memoryLimit}`);
       details.push(
         `${kind} ${diagnosticText(status.name)}: ${diagnosticText(terminated.reason) || "Terminated"} (${exit.join(", ")})`,
       );
@@ -73,6 +80,17 @@ export function describeAgentRuntimePodFailure(
   return summary.length > 4096
     ? `${summary.slice(0, 4096 - TRUNCATED.length - 1)}\n${TRUNCATED}`
     : summary;
+}
+
+function containerMemoryLimit(
+  pod: V1Pod,
+  containerName: string | undefined,
+): string | null {
+  const container = [
+    ...(pod.spec?.initContainers ?? []),
+    ...(pod.spec?.containers ?? []),
+  ].find((candidate) => candidate.name === containerName);
+  return diagnosticText(container?.resources?.limits?.memory) || null;
 }
 
 function diagnosticText(value: string | undefined): string {

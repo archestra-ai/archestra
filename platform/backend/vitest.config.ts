@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
+import { detectResourceEnvelope } from "../vitest.resources";
 import { vitestLogPolicy } from "../vitest.shared";
 import { calculateVitestResourceLimits } from "./src/test/vitest-resource-limits";
 
@@ -12,13 +12,16 @@ const isCI = process.env.CI === "true";
  * Fork workers each load the backend graph and a PGlite database. CI keeps the
  * throughput-oriented sizing used by its isolated shards. Local runs reserve
  * most CPU and memory for the developer's other work instead of treating an
- * interactive machine like a dedicated runner.
+ * interactive machine like a dedicated runner. Inside a container the sizing
+ * starts from the container's limit, not the machine's memory: see
+ * ../vitest.resources.ts.
  */
+const { availableParallelism, totalMemoryBytes } = detectResourceEnvelope();
 const { maxWorkers: MAX_WORKERS, maxOldSpaceMb: MAX_OLD_SPACE_MB } =
   calculateVitestResourceLimits({
     isCI,
-    availableParallelism: os.availableParallelism(),
-    totalMemoryBytes: os.totalmem(),
+    availableParallelism,
+    totalMemoryBytes,
   });
 
 /**

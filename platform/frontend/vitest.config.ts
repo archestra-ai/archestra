@@ -2,10 +2,25 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
+import {
+  detectResourceEnvelope,
+  frontendVitestResourceLimits,
+} from "../vitest.resources";
 import { vitestLogPolicy } from "../vitest.shared";
 
 const isCI = process.env.CI === "true";
 const testFiles = partitionTestFiles();
+// Half the cores locally, and no more forks than the memory holds at about
+// 2 GiB each (a 62 GB workstation gets 15 of 32 cores instead of 16). CI runs
+// on a dedicated high-RAM runner where the uncapped default is fine, so there
+// it keeps the 8 GiB heap ceiling and Vitest's own worker count; a container
+// with a memory limit is sized for the container either way. Override on a
+// big local machine with `--maxWorkers=<n|%>`.
+const envelope = detectResourceEnvelope();
+const { maxWorkers, maxOldSpaceMb } =
+  isCI && !envelope.constrained
+    ? { maxWorkers: undefined, maxOldSpaceMb: 8192 }
+    : frontendVitestResourceLimits(envelope);
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
@@ -57,15 +72,16 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest-setup.ts"],
     testTimeout: 10_000,
-    // JSDOM-heavy frontend tests need a larger worker heap on Node 24.
+    // JSDOM-heavy frontend tests need a larger worker heap on Node 24; inside
+    // a container the heap ceiling is each fork's share of the container's
+    // memory, because the kernel kills the container before V8 would give up.
     pool: "forks",
-    execArgv: ["--max-old-space-size=8192"],
-    // Each fork is a separate process, so worker count multiplies memory. Cap
-    // to half the cores locally so this suite doesn't exhaust RAM when it runs
-    // alongside the shared/type-check/lint tasks under `turbo test`. CI runs on
-    // a dedicated high-RAM runner where the uncapped default is fine, so it's
-    // left alone. Override on a big local machine with `--maxWorkers=<n|%>`.
-    ...(isCI ? {} : { maxWorkers: "50%" }),
+    execArgv: [`--max-old-space-size=${maxOldSpaceMb}`],
+    // Each fork is a separate process, so worker count multiplies memory. The
+    // cap keeps this suite from exhausting RAM when it runs alongside the
+    // shared/type-check/lint tasks under `turbo test`, and from passing the
+    // limit of an Agent Runtime pod.
+    ...(maxWorkers === undefined ? {} : { maxWorkers }),
     // Caps concurrent `test.concurrent` cases within a single file (plain
     // sequential test() is unaffected). Kept as a low guardrail so a future
     // concurrent suite can't pile jsdom work into one worker; worker count is

@@ -106,6 +106,67 @@ describe("Model Router auto model", () => {
 
   for (const { ingress, path } of ENDPOINTS) {
     describe(`${ingress} ingress`, () => {
+      test("scores the opening request with its system instructions and tools", async ({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      }) => {
+        const org = await setupOrganization({
+          makeOrganization,
+          makeSecret,
+          makeLlmProviderApiKey,
+        });
+        await publishPlan(org);
+        let state: Record<string, string> = {};
+        server.use(
+          http.post(JEV, async ({ request }) => {
+            state = (
+              (await request.json()) as { state: Record<string, string> }
+            ).state;
+            return HttpResponse.json(SMART_ANSWERS);
+          }),
+        );
+        const tool = {
+          name: "read_file",
+          description: "Read a repository file.",
+          parameters: { type: "object", properties: {} },
+        };
+        const response = await send(org, {
+          ingress,
+          path,
+          session: "context-session",
+          messages: [
+            {
+              role: "developer",
+              content: "Review database migrations safely.",
+            },
+            { role: "user", content: PROMPT },
+          ],
+          extra:
+            ingress === "chat"
+              ? { tools: [{ type: "function", function: tool }] }
+              : {
+                  instructions: "Use evidence from the repository.",
+                  tools: [{ type: "function", ...tool }],
+                },
+        });
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(upstreamModels).toEqual([org.trio[2].modelId]);
+        expect(state.prompt).toBe(PROMPT);
+        expect(state.system_prompt).toContain(
+          "Review database migrations safely.",
+        );
+        if (ingress === "responses")
+          expect(state.system_prompt).toContain(
+            "Use evidence from the repository.",
+          );
+        expect(state.tools).toBe(
+          "Available tools: 1\nread_file: Read a repository file.",
+        );
+        expect(state.tools).not.toContain("parameters");
+      });
+
       test("routes a planned session to the chosen tier and records its usage", async ({
         makeOrganization,
         makeSecret,
@@ -944,6 +1005,7 @@ describe("Model Router auto model", () => {
         /** The key the call names; the organization's shared key by default. */
         callKeyId?: string;
         stream?: boolean;
+        extra?: Record<string, unknown>;
       },
     ) {
       const app = createApp();
@@ -968,6 +1030,7 @@ describe("Model Router auto model", () => {
           model: params.model ?? org.trio[1].modelId,
           messages: [{ role: "user", content: PROMPT }],
           ...(params.stream ? { stream: true } : {}),
+          ...params.extra,
         },
       });
     }
@@ -1002,7 +1065,35 @@ describe("Model Router auto model", () => {
         agentType: "agent",
       });
 
-      const first = await sendPlatformCall(org, { userId, agentId: agent.id });
+      let state: Record<string, string> = {};
+      server.use(
+        http.post(JEV, async ({ request }) => {
+          jevCalls += 1;
+          state = ((await request.json()) as { state: Record<string, string> })
+            .state;
+          return HttpResponse.json(SMART_ANSWERS);
+        }),
+      );
+      const first = await sendPlatformCall(org, {
+        userId,
+        agentId: agent.id,
+        extra: {
+          messages: [
+            { role: "system", content: "Review migration locking." },
+            { role: "user", content: PROMPT },
+          ],
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: "inspect_schema",
+                description: "Read table metadata.",
+                parameters: { type: "object", properties: {} },
+              },
+            },
+          ],
+        },
+      });
       const replay = await sendPlatformCall(org, { userId, agentId: agent.id });
 
       expect(first.statusCode, first.body).toBe(200);
@@ -1012,6 +1103,11 @@ describe("Model Router auto model", () => {
         org.trio[2].modelId,
       ]);
       expect(jevCalls).toBe(1);
+      expect(state).toMatchObject({
+        prompt: PROMPT,
+        system_prompt: "Review migration locking.",
+        tools: "Available tools: 1\ninspect_schema: Read table metadata.",
+      });
       const [decision] = await decisions(org.organizationId);
       expect(decision).toMatchObject({ tierIndex: 2, modelId: org.trio[2].id });
       expect(await usage(decision.id)).toHaveLength(2);

@@ -27,7 +27,8 @@ post-run signals ┘   (later: calibration, learning)
 ### Inputs
 
 1. **Pre-run signals.** What we know about a session before its first model call. Today this
-   is one scorer reading of the opening user message: `tier_needed`, a distribution over the
+   is one scorer reading of the opening user message, with bounded excerpts of the request's
+   system instructions and tool names/descriptions: `tier_needed`, a distribution over the
    weakest adequate tier, and `p_long`, the chance the session crosses the long-context
    threshold. The session's `source` (client) comes from request metadata. The backend stores each signal source's reading under its id and version in
    `routing_decisions.features.signals`, and `routerFeatures` flattens them into

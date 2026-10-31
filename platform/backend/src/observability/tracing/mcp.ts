@@ -36,6 +36,7 @@ import {
   setUserAttributes,
   truncateContent,
 } from "./attributes";
+import { sessionContext } from "./session";
 
 const { captureContent } = config.observability.otel;
 
@@ -85,64 +86,66 @@ export async function startActiveMcpSpan<T>(params: {
     resolveLogContentMode() === "full";
 
   // Inject session ID into context so it's available to the pino mixin for log correlation
-  let ctx = context.active();
+  let ctx = sessionContext(context.active(), params.sessionId);
   if (params.sessionId) {
     ctx = ctx.setValue(SESSION_ID_KEY, params.sessionId);
   }
 
-  return tracer.startActiveSpan(
-    `execute_tool ${params.toolName}`,
-    {
-      attributes: {
-        [ATTR_ROUTE_CATEGORY]: RouteCategory.MCP_GATEWAY,
-        [ATTR_GENAI_OPERATION_NAME]: "execute_tool",
-        [ATTR_MCP_SERVER_NAME]: params.mcpServerName,
-        [ATTR_GENAI_TOOL_NAME]: params.toolName,
-        [ATTR_GENAI_TOOL_TYPE]: "function",
-        [ATTR_GENAI_AGENT_ID]: params.agent.id,
-        [ATTR_GENAI_AGENT_NAME]: params.agent.name,
+  return context.with(ctx, () =>
+    tracer.startActiveSpan(
+      `execute_tool ${params.toolName}`,
+      {
+        attributes: {
+          [ATTR_ROUTE_CATEGORY]: RouteCategory.MCP_GATEWAY,
+          [ATTR_GENAI_OPERATION_NAME]: "execute_tool",
+          [ATTR_MCP_SERVER_NAME]: params.mcpServerName,
+          [ATTR_GENAI_TOOL_NAME]: params.toolName,
+          [ATTR_GENAI_TOOL_TYPE]: "function",
+          [ATTR_GENAI_AGENT_ID]: params.agent.id,
+          [ATTR_GENAI_AGENT_NAME]: params.agent.name,
+        },
       },
-    },
-    ctx,
-    async (span) => {
-      setAgentAttributes(span, params.agent);
-      setTeamAttributes(span, params.teams, "agent");
-      setTeamAttributes(span, params.userTeams, "user");
-      setSessionId(span, params.sessionId);
+      ctx,
+      async (span) => {
+        setAgentAttributes(span, params.agent);
+        setTeamAttributes(span, params.teams, "agent");
+        setTeamAttributes(span, params.userTeams, "user");
+        setSessionId(span, params.sessionId);
 
-      if (params.agentType) {
-        span.setAttribute(ATTR_ARCHESTRA_AGENT_TYPE, params.agentType);
-      }
-      if (params.toolCallId) {
-        span.setAttribute(ATTR_GENAI_TOOL_CALL_ID, params.toolCallId);
-      }
+        if (params.agentType) {
+          span.setAttribute(ATTR_ARCHESTRA_AGENT_TYPE, params.agentType);
+        }
+        if (params.toolCallId) {
+          span.setAttribute(ATTR_GENAI_TOOL_CALL_ID, params.toolCallId);
+        }
 
-      setUserAttributes(span, params.user);
+        setUserAttributes(span, params.user);
 
-      if (recordContent && params.toolArgs) {
-        span.addEvent(EVENT_GENAI_CONTENT_INPUT, {
-          [ATTR_GENAI_TOOL_CALL_ARGUMENTS]: truncateContent(params.toolArgs),
-        });
-      }
-
-      try {
-        const result = await params.callback(span);
-        span.setStatus({ code: SpanStatusCode.OK });
-
-        if (recordContent) {
-          span.addEvent(EVENT_GENAI_CONTENT_OUTPUT, {
-            [ATTR_GENAI_TOOL_CALL_RESULT]: truncateContent(result),
+        if (recordContent && params.toolArgs) {
+          span.addEvent(EVENT_GENAI_CONTENT_INPUT, {
+            [ATTR_GENAI_TOOL_CALL_ARGUMENTS]: truncateContent(params.toolArgs),
           });
         }
 
-        return result;
-      } catch (error) {
-        setSpanError(span, error);
-        throw error;
-      } finally {
-        span.end();
-      }
-    },
+        try {
+          const result = await params.callback(span);
+          span.setStatus({ code: SpanStatusCode.OK });
+
+          if (recordContent) {
+            span.addEvent(EVENT_GENAI_CONTENT_OUTPUT, {
+              [ATTR_GENAI_TOOL_CALL_RESULT]: truncateContent(result),
+            });
+          }
+
+          return result;
+        } catch (error) {
+          setSpanError(span, error);
+          throw error;
+        } finally {
+          span.end();
+        }
+      },
+    ),
   );
 }
 
@@ -165,7 +168,7 @@ export function recordBlockedToolSpans(params: {
 }): void {
   const tracer = trace.getTracer("archestra");
 
-  let ctx = context.active();
+  let ctx = sessionContext(context.active(), params.sessionId);
   if (params.sessionId) {
     ctx = ctx.setValue(SESSION_ID_KEY, params.sessionId);
   }
@@ -173,22 +176,24 @@ export function recordBlockedToolSpans(params: {
   for (const toolName of params.toolCallNames) {
     const mcpServerName = parseFullToolName(toolName).serverName ?? "unknown";
 
-    const span = tracer.startSpan(
-      `execute_tool ${toolName}`,
-      {
-        attributes: {
-          [ATTR_ROUTE_CATEGORY]: RouteCategory.MCP_GATEWAY,
-          [ATTR_GENAI_OPERATION_NAME]: "execute_tool",
-          [ATTR_MCP_SERVER_NAME]: mcpServerName,
-          [ATTR_GENAI_TOOL_NAME]: toolName,
-          [ATTR_GENAI_TOOL_TYPE]: "function",
-          [ATTR_GENAI_AGENT_ID]: params.agent.id,
-          [ATTR_GENAI_AGENT_NAME]: params.agent.name,
-          [ATTR_MCP_BLOCKED]: true,
-          [ATTR_MCP_BLOCKED_REASON]: truncateContent(params.blockedReason),
+    const span = context.with(ctx, () =>
+      tracer.startSpan(
+        `execute_tool ${toolName}`,
+        {
+          attributes: {
+            [ATTR_ROUTE_CATEGORY]: RouteCategory.MCP_GATEWAY,
+            [ATTR_GENAI_OPERATION_NAME]: "execute_tool",
+            [ATTR_MCP_SERVER_NAME]: mcpServerName,
+            [ATTR_GENAI_TOOL_NAME]: toolName,
+            [ATTR_GENAI_TOOL_TYPE]: "function",
+            [ATTR_GENAI_AGENT_ID]: params.agent.id,
+            [ATTR_GENAI_AGENT_NAME]: params.agent.name,
+            [ATTR_MCP_BLOCKED]: true,
+            [ATTR_MCP_BLOCKED_REASON]: truncateContent(params.blockedReason),
+          },
         },
-      },
-      ctx,
+        ctx,
+      ),
     );
 
     setAgentAttributes(span, params.agent);

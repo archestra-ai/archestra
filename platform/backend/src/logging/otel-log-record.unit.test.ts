@@ -1,4 +1,5 @@
 import { Writable } from "node:stream";
+import { ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import type { AnyValue } from "@opentelemetry/api-logs";
 import { describe, expect, test } from "vitest";
 import { createLogger } from "./create-logger";
@@ -180,3 +181,20 @@ function buildWideNestedObject({
     ]),
   );
 }
+
+test("preserves the captured span when a buffered record is converted later", () => {
+  const record = toOtelLogRecord({
+    time: 1000,
+    level: 30,
+    msg: "completed",
+    trace_id: "11111111111111111111111111111111",
+    span_id: "2222222222222222",
+    trace_flags: "01",
+  });
+  expect(trace.getSpanContext(record.context ?? ROOT_CONTEXT)).toEqual({
+    traceId: "11111111111111111111111111111111",
+    spanId: "2222222222222222",
+    traceFlags: 1,
+  });
+  expect(record.attributes).not.toHaveProperty("trace_id");
+});

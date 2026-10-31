@@ -8,6 +8,7 @@ import { buildMcpGatewayTool, type ChatToolContext } from "./chat-tool-builder";
 import { ToolCallRepeatTracker } from "./tool-call-repeat-tracker";
 
 const native = vi.hoisted(() => ({
+  collectOpenappaMetrics: vi.fn(() => ""),
   initializeOpenappa: vi.fn(() => {
     throw new Error("Chat must not initialize APPA");
   }),

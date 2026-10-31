@@ -19,6 +19,36 @@ import {
   type XaiSubscriptionCredential,
 } from "./xai-subscription-credentials";
 
+/**
+ * Lets a test make the lock helper's transaction fail after its callback
+ * returned, the way a lost connection at commit does, so the retry path of
+ * `withDbTransaction` runs the callback again.
+ */
+const lockFaults = vi.hoisted(() => ({ failAfterRun: 0 }));
+vi.mock("@/models/subscription-credential-lock", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("@/models/subscription-credential-lock")
+    >();
+  const withSubscriptionCredentialLock = (
+    params: Parameters<typeof actual.withSubscriptionCredentialLock>[0],
+  ) =>
+    actual.withSubscriptionCredentialLock({
+      ...params,
+      run: async (transaction) => {
+        const outcome = await params.run(transaction);
+        if (lockFaults.failAfterRun > 0) {
+          lockFaults.failAfterRun -= 1;
+          throw Object.assign(new Error("Connection terminated unexpectedly"), {
+            code: "ECONNRESET",
+          });
+        }
+        return outcome;
+      },
+    });
+  return { ...actual, withSubscriptionCredentialLock };
+});
+
 beforeEach(() => {
   config.llm.xai.baseUrl = "https://api.x.ai/v1";
   config.llm.xai.subscription.baseUrl = "https://cli-chat-proxy.grok.test/v1";
@@ -825,6 +855,91 @@ describe("shared refresh guards", () => {
       // The next caller presents the token for the first time.
       expect(await manager.getAccessToken(params)).toBe("at_1");
       expect(issuer.calls).toEqual(["rt_0"]);
+    },
+  );
+
+  tokenTest(
+    "does not call the issuer again when the transaction is retried after an issuer failure",
+    async ({ subscriptionKey }) => {
+      const issuer = stubSingleUseIssuer();
+      const issuerFetch = globalThis.fetch;
+      let tokenRequests = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string | URL, init?: RequestInit) => {
+          if (String(url).endsWith("/oauth2/token")) {
+            tokenRequests += 1;
+            throw Object.assign(new TypeError("fetch failed"), {
+              cause: Object.assign(new Error("read ECONNRESET"), {
+                code: "ECONNRESET",
+              }),
+            });
+          }
+          return issuerFetch(url, init);
+        }),
+      );
+      // The commit of the (empty) transaction loses its connection, so the
+      // lock helper runs the callback a second time.
+      lockFaults.failAfterRun = 1;
+      try {
+        await expect(
+          new XaiSubscriptionTokenManager().getAccessToken({
+            credential: subscriptionKey.credential,
+            providerApiKeyId: subscriptionKey.id,
+          }),
+        ).rejects.toMatchObject({ statusCode: 502 });
+      } finally {
+        lockFaults.failAfterRun = 0;
+      }
+      expect(tokenRequests).toBe(1);
+      expect(issuer.calls).toEqual([]);
+    },
+  );
+
+  tokenTest(
+    "answers 502 when the issuer's response body is cut off, without presenting the token again",
+    async ({ subscriptionKey }) => {
+      const issuer = stubSingleUseIssuer();
+      const issuerFetch = globalThis.fetch;
+      let cut = false;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string | URL, init?: RequestInit) => {
+          const response = await issuerFetch(url, init);
+          if (cut || !String(url).endsWith("/oauth2/token")) {
+            return response;
+          }
+          cut = true;
+          // The headers arrived, so the issuer has rotated the token; the
+          // body never completes.
+          return new Response(
+            new ReadableStream({
+              pull(controller) {
+                controller.error(new TypeError("terminated"));
+              },
+            }),
+            { status: response.status, headers: response.headers },
+          );
+        }),
+      );
+      const innerFetch = vi.fn();
+      const wrapped = createXaiSubscriptionFetch({
+        credential: subscriptionKey.credential,
+        providerApiKeyId: subscriptionKey.id,
+        innerFetch,
+      });
+      const response = await wrapped(
+        "https://cli-chat-proxy.grok.test/v1/chat/completions",
+        { method: "POST", body: "{}" },
+      );
+      expect(response.status).toBe(502);
+      expect(innerFetch).not.toHaveBeenCalled();
+      // rt_0 was presented once and its rotation is lost; nothing on this
+      // request asks the issuer again.
+      expect(issuer.calls).toEqual(["rt_0"]);
+      expect(await readCredential(subscriptionKey.secretId)).toEqual(
+        subscriptionKey.credential,
+      );
     },
   );
 

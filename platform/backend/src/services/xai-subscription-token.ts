@@ -198,15 +198,17 @@ export class XaiSubscriptionTokenManager {
 
     // The lock helper retries its callback on transient database failures, and
     // a redemption cannot be repeated: the refresh token is spent the moment
-    // xAI answers, whether or not that answer gets persisted. So the one
-    // redemption this call makes is remembered across attempts (a retry
-    // persists it instead of redeeming again), and an issuer failure is carried
-    // out of the transaction rather than thrown through it: the retry wrapper
-    // classifies network errors by shape, not by source, and would otherwise
-    // present the same token a second time after an ambiguous response.
+    // xAI answers, whether or not that answer gets persisted. So the issuer is
+    // called at most once per refresh, whatever the database does: a
+    // successful redemption is remembered across attempts (a retry persists it
+    // instead of redeeming again), a failed one is remembered too (a retry
+    // does not present the token again), and the failure is carried out of the
+    // transaction rather than thrown through it, because the retry wrapper
+    // classifies network errors by shape, not by source.
     let redemption: { refreshToken: string; redeemed: Redemption } | undefined;
-    let issuerError: unknown;
-    let rejectedCredential: XaiSubscriptionCredential | undefined;
+    let issuerFailure:
+      | { error: unknown; rejected: XaiSubscriptionCredential | undefined }
+      | undefined;
     const result = await withSubscriptionCredentialLock({
       provider: "xai",
       providerApiKeyId,
@@ -222,6 +224,12 @@ export class XaiSubscriptionTokenManager {
             digests: [hashToken(stored.refreshToken)],
           };
         }
+        if (issuerFailure) {
+          // An earlier attempt of this callback already failed at the issuer;
+          // this attempt exists because the database failed, so nothing new
+          // is learnt by asking again.
+          return undefined;
+        }
         let redeemed =
           redemption?.refreshToken === stored.refreshToken
             ? redemption.redeemed
@@ -230,14 +238,15 @@ export class XaiSubscriptionTokenManager {
           try {
             redeemed = await redeemWithXai(stored.refreshToken);
           } catch (error) {
-            issuerError = error;
-            if (
-              error instanceof ApiError &&
-              error.internalCode ===
-                ArchestraInternalErrorCode.ProviderAuthRequired
-            ) {
-              rejectedCredential = stored;
-            }
+            issuerFailure = {
+              error,
+              rejected:
+                error instanceof ApiError &&
+                error.internalCode ===
+                  ArchestraInternalErrorCode.ProviderAuthRequired
+                  ? stored
+                  : undefined,
+            };
             return undefined;
           }
           redemption = { refreshToken: stored.refreshToken, redeemed };
@@ -268,22 +277,25 @@ export class XaiSubscriptionTokenManager {
         };
       },
     });
-    if (!result) {
-      if (rejectedCredential) {
-        await this.recordAuthenticationFailure({
-          providerApiKeyId,
-          credential: rejectedCredential,
-        });
+    if (result) {
+      if (result.digests.length > 1) {
+        // The transactional write bypassed this process's secret cache; read
+        // the committed row once so per-request decodes stop carrying the
+        // spent refresh token.
+        await secretManager().getSecret(secretId, { skipCache: true });
       }
-      throw issuerError;
+      return this.rememberSharedToken(providerApiKeyId, cached, result);
     }
-    if (result.digests.length > 1) {
-      // The transactional write bypassed this process's secret cache; read
-      // the committed row once so per-request decodes stop carrying the
-      // spent refresh token.
-      await secretManager().getSecret(secretId, { skipCache: true });
+    if (issuerFailure?.rejected) {
+      await this.recordAuthenticationFailure({
+        providerApiKeyId,
+        credential: issuerFailure.rejected,
+      });
     }
-    return this.rememberSharedToken(providerApiKeyId, cached, result);
+    throw (
+      issuerFailure?.error ??
+      new ApiError(502, "SuperGrok token refresh ended without a credential")
+    );
   }
 
   /** Caches the shared token for the key and returns it. */
@@ -897,8 +909,24 @@ async function redeemWithXai(refreshToken: string): Promise<{
     throw new ApiError(502, "Could not reach the xAI sign-in service");
   }
 
+  let body: string;
+  try {
+    body = await response.text();
+  } catch (error) {
+    // The issuer answered, so the refresh token is spent, but the answer did
+    // not arrive whole and the rotation in it is lost. An outage status keeps
+    // callers from retrying the request against a token that is now revoked.
+    logger.warn(
+      { status: response.status, error },
+      "[XaiSubscription] refresh token redemption response was cut off",
+    );
+    throw new ApiError(
+      502,
+      "The xAI sign-in service returned an incomplete response",
+    );
+  }
+
   if (!response.ok) {
-    const body = await response.text();
     logger.warn(
       { status: response.status, ...xaiOauthErrorLogFields(body) },
       "[XaiSubscription] refresh token redemption failed",
@@ -919,11 +947,19 @@ async function redeemWithXai(refreshToken: string): Promise<{
     );
   }
 
-  const payload = (await response.json()) as {
+  let payload: {
     access_token?: string;
     refresh_token?: string;
     expires_in?: number;
   };
+  try {
+    payload = JSON.parse(body) as typeof payload;
+  } catch {
+    throw new ApiError(
+      502,
+      "xAI token redemption returned an unexpected payload",
+    );
+  }
   if (!payload.access_token) {
     throw new ApiError(
       502,

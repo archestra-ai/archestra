@@ -139,6 +139,41 @@ describe("runtime tiers", () => {
         TIERS,
       ),
     ).toBeNull();
+    // A fixed M agent starting at S cannot scale up to M.
+    const fixedM = { ...DEFAULTS, tier: "M", maxTier: "M" };
+    expect(
+      resolveAgentRunLimits({
+        runtime: fixedM,
+        tiers: TIERS,
+        requested: { tier: "S" },
+      }).tier,
+    ).toBe("S");
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: fixedM,
+        tiers: TIERS,
+        currentTier: "S",
+        requested: { tier: "M" },
+      }),
+    ).toThrow(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). This call is not retriable; calling it again will fail.",
+    );
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: fixedM,
+        tiers: TIERS,
+        currentTier: "S",
+        requested: { minCpu: 4 },
+      }),
+    ).toThrow(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). This call is not retriable; calling it again will fail.",
+    );
+    // The prompt uses the resolved run tier for fixed-tier runs.
+    expect(
+      describeScaleupDisabledPrompt(fixedM, TIERS, "S"),
+    ).toBe(
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
+    );
     // A name the organization has no tier for.
     expect(() =>
       resolveAgentRunLimits({

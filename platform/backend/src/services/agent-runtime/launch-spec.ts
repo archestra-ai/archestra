@@ -450,7 +450,7 @@ export async function buildAgentRunLaunchSpec(params: {
         "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
         "not this runtime's filesystem.",
       describeRuntimeWorkspace(params.runtime),
-      describeScaleupDisabledPrompt(params.runtime, tiers),
+      describeScaleupDisabledPrompt(params.runtime, tiers, params.limits.tier),
     ]
       .filter(Boolean)
       .join("\n\n"),

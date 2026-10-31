@@ -375,6 +375,33 @@ describe("buildAgentRunLaunchSpec", () => {
       "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
     );
 
+    const sRunSpec = await buildAgentRunLaunchSpec({
+      limits: resolveAgentRunLimits({
+        tiers: TIERS,
+        runtime: runtime(setup.agent, "openai_responses"),
+        requested: { tier: "S" },
+      }),
+      runtime: runtime(setup.agent, "openai_responses"),
+      taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Example AI",
+      runMode: "one_shot",
+    });
+    expect(
+      sRunSpec.spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT,
+    ).toContain(
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
+    );
+
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
       'name="release-review"',
     );

@@ -70,7 +70,7 @@ Runtime tiers allocate CPU and memory to agent runtimes so every run receives pr
 
 ![The Runtime tiers table in Settings](/docs/automated_screenshots/agents-runtime-setup_runtime-tiers.webp)
 
-Memory scales automatically with CPU at 2 GiB per requested CPU. The memory limit defaults to twice that request, or 2 GiB per CPU of the CPU limit when you set one. A new organization starts with `S` (2 CPU, 4 GiB), `M` (4 CPU, 8 GiB), and `L` (8 CPU, 16 GiB), with `M` as the default.
+Memory scales automatically with CPU at 2 GiB per requested CPU. The memory limit is twice the memory request, or 2 GiB per CPU of the CPU limit when that is lower. A new organization starts with `S` (2 CPU, 4 GiB), `M` (4 CPU, 8 GiB), and `L` (8 CPU, 16 GiB), with `M` as the default.
 
 Agents do not configure CPU or memory directly. Each agent selects a [**Default tier**](/docs/agents/runtime#limits) for standard runs and an optional **Scaleup tier** for larger workloads. Choose **Fix at &lt;tier&gt;** to disable scaling up. When an agent permits scaling, a run can request any tier up to that scaleup tier.
 

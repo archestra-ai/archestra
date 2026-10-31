@@ -1097,6 +1097,174 @@ describe("LLM proxy plugin lifecycle", () => {
   });
 
   test.for([
+    { transport: "re-emits", rewrites: true },
+    { transport: "cannot re-emit", rewrites: false },
+  ])("plugins rule on the reparsed built-in arguments the client runs (transport $transport)", async ({
+    rewrites,
+  }, { makeAgent, makeMember, makeUser }) => {
+    const agentId = crypto.randomUUID();
+    const modelCalls = [
+      {
+        id: "call-direct",
+        name: "archestra__list_agent_runs",
+        arguments: JSON.stringify({
+          agent_ids: JSON.stringify([agentId]),
+          // A string parameter keeps JSON-looking text even when it fails its format.
+          failed_since: JSON.stringify(["not-a-date"]),
+        }),
+      },
+      {
+        id: "call-wrapped",
+        name: "archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "list_agent_runs",
+          tool_args: JSON.stringify({ agent_ids: JSON.stringify([agentId]) }),
+        }),
+      },
+      {
+        // run_tool's envelope repair unwraps the array before policy.
+        id: "call-wrapped-envelope",
+        name: "archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "list_agent_runs",
+          tool_args: { agent_ids: { value: [agentId] } },
+        }),
+      },
+      {
+        // A stringified envelope is neither reparsed nor unwrapped.
+        id: "call-wrapped-stringified-envelope",
+        name: "archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "list_agent_runs",
+          tool_args: { agent_ids: JSON.stringify({ value: [agentId] }) },
+        }),
+      },
+      {
+        // An object where an array is expected is not reparsed, so an
+        // enveloped array stays as permissive as before.
+        id: "call-envelope",
+        name: "archestra__list_agent_runs",
+        arguments: JSON.stringify({
+          agent_ids: JSON.stringify({ value: [agentId] }),
+        }),
+      },
+    ];
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () =>
+        createOpenAiTestClient({ nonStreamingToolCalls: modelCalls }) as never,
+    );
+    // A transport that cannot re-emit rewritten calls releases them as written.
+    const provider: typeof openaiAdapterFactory = {
+      ...openaiAdapterFactory,
+      createResponseAdapter(response, request) {
+        const adapter = openaiAdapterFactory.createResponseAdapter(
+          response,
+          request,
+        );
+        if (!rewrites)
+          Object.defineProperty(adapter, "withRewrittenToolCalls", {
+            value: undefined,
+          });
+        return adapter;
+      },
+    };
+    app.post("/test/tool-args/:agentId", async (request, reply) =>
+      handleLLMProxy(
+        request.body as Parameters<typeof provider.createRequestAdapter>[0],
+        request,
+        reply,
+        provider,
+      ),
+    );
+    const ruled: Record<string, string> = {};
+    const unregister = registerLlmProxyPlugin({
+      id: `test-policy-${crypto.randomUUID()}`,
+      finalizesToolCalls: true,
+      async onToolCalls({ toolCalls }) {
+        for (const call of toolCalls)
+          ruled[call.id] =
+            typeof call.arguments === "string"
+              ? call.arguments
+              : JSON.stringify(call.arguments);
+        return { decision: "allow", toolCalls };
+      },
+    });
+    const agent = await makeAgent({ agentType: "llm_proxy" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/test/tool-args/${agent.id}`,
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
+          "content-type": "application/json",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "list the runs" }],
+          tools: ["archestra__list_agent_runs", "archestra__run_tool"].map(
+            (name) => ({
+              type: "function",
+              function: {
+                name,
+                parameters: { type: "object", properties: {} },
+              },
+            }),
+          ),
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      const released = Object.fromEntries(
+        (
+          response.json().choices[0].message.tool_calls as Array<{
+            id: string;
+            function: { arguments: string };
+          }>
+        ).map((call) => [call.id, call.function.arguments]),
+      );
+      expect(released).toEqual(
+        rewrites
+          ? ruled
+          : Object.fromEntries(
+              modelCalls.map((call) => [call.id, call.arguments]),
+            ),
+      );
+      expect(
+        Object.fromEntries(
+          Object.entries(ruled).map(([id, args]) => [id, JSON.parse(args)]),
+        ),
+      ).toEqual({
+        "call-direct": {
+          agent_ids: [agentId],
+          failed_since: JSON.stringify(["not-a-date"]),
+        },
+        "call-wrapped": {
+          tool_name: "list_agent_runs",
+          tool_args: JSON.stringify({ agent_ids: [agentId] }),
+        },
+        "call-wrapped-envelope": {
+          tool_name: "list_agent_runs",
+          tool_args: { agent_ids: [agentId] },
+        },
+        "call-wrapped-stringified-envelope": JSON.parse(
+          modelCalls[3].arguments,
+        ),
+        "call-envelope": JSON.parse(modelCalls[4].arguments),
+      });
+    } finally {
+      unregister();
+    }
+  });
+
+  test.for([
     {
       stream: false,
       tool: "read_file",

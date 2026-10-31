@@ -36,6 +36,7 @@ import type {
   CostStatistics,
   InteractionAuthMethod,
   ModelStatistics,
+  ModelUsageRow,
   MyClientUsage,
   MyContextBucketId,
   MyStatistics,
@@ -59,6 +60,169 @@ import AgentTeamModel from "./agent-team";
 import { interactionBelongsToOrganization } from "./log-organization";
 
 class StatisticsModel {
+  static async getModelUsage(params: {
+    model: string;
+    groupBy: "person" | "key" | "agent" | "client";
+    timeframe: StatisticsTimeFrame;
+    organizationId: string;
+    userId?: string;
+    limit: number;
+    offset: number;
+  }): Promise<PaginatedResult<ModelUsageRow>> {
+    const i = schema.interactionsTable;
+    const a = schema.agentsTable;
+    const u = schema.usersTable;
+    const k = schema.virtualApiKeysTable;
+    const p = schema.llmProviderApiKeysTable;
+    const credential = sql<string | null>`CASE
+      WHEN ${i.authMethod} = 'virtual_key' THEN ${i.virtualKeyId}::text
+      WHEN ${i.authMethod} = 'passthrough_virtual_key' THEN ${i.passthroughVirtualKeyId}::text
+      WHEN ${i.authMethod} = 'oauth_client_credentials' THEN ${i.authenticatedAppId}
+      WHEN ${i.authMethod} = 'provider_key' THEN ${i.providerApiKeyId}::text
+      ELSE NULL END`;
+    const identity =
+      params.groupBy === "person"
+        ? sql`${i.userId}`
+        : params.groupBy === "agent"
+          ? sql`${i.profileId}`
+          : params.groupBy === "client"
+            ? sql`${i.externalAgentId}`
+            : sql`COALESCE(${i.authMethod}, 'unknown') || ':' || COALESCE(${credential}, 'unattributed')`;
+    const id = sql<string>`COALESCE(${identity}::text, '__unattributed__')`;
+    const label =
+      params.groupBy === "person"
+        ? sql`${u.name}`
+        : params.groupBy === "agent"
+          ? sql`${a.name}`
+          : params.groupBy === "client"
+            ? sql`${i.externalAgentId}`
+            : sql`COALESCE(${k.name}, ${p.name}, ${i.authenticatedAppName}, ${credential}, ${i.authMethod})`;
+    const scope = and(
+      ...StatisticsModel.timeframeConditions(params.timeframe),
+      interactionBelongsToOrganization(params.organizationId),
+      eq(billedModel, params.model),
+      params.userId ? eq(i.userId, params.userId) : undefined,
+    );
+    const aggregates = {
+      requests: modelRequests,
+      totalTokens: modelReportedTokens,
+      cacheReadTokens: modelCacheRead,
+      cacheWriteTokens: modelCacheWrite,
+      billedCost: modelBilledCost,
+      subscriptionCost: modelSubscriptionCost,
+    };
+    const query = () =>
+      db
+        .select({
+          id,
+          name: sql<string>`COALESCE(MAX(${label}), 'Unattributed')`,
+          ...aggregates,
+        })
+        .from(i)
+        .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
+        .leftJoin(billingModelFacts, sql`true`)
+        .leftJoin(a, eq(a.id, i.profileId))
+        .leftJoin(u, eq(u.id, i.userId))
+        .leftJoin(
+          k,
+          and(
+            eq(sql`${k.id}::text`, credential),
+            eq(k.organizationId, params.organizationId),
+            inArray(i.authMethod, ["virtual_key", "passthrough_virtual_key"]),
+          ),
+        )
+        .leftJoin(
+          p,
+          and(
+            eq(sql`${p.id}::text`, credential),
+            eq(p.organizationId, params.organizationId),
+            eq(i.authMethod, "provider_key"),
+          ),
+        );
+    // Page identities first; only their timelines are materialized.
+    const rows = await query()
+      .where(scope)
+      .groupBy(id)
+      .orderBy(desc(aggregates.billedCost), desc(aggregates.totalTokens), id)
+      .limit(params.limit)
+      .offset(params.offset);
+    const [count] = await db
+      .select({ total: sql<number>`COUNT(DISTINCT ${id})::integer` })
+      .from(i)
+      .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
+      .leftJoin(billingModelFacts, sql`true`)
+      .where(scope);
+    const bucket = sql<string>`to_timestamp(floor(extract(epoch from ${i.createdAt}) / ${sql.raw(String(getStatisticsBucketIntervalMinutes(params.timeframe) * 60))}) * ${sql.raw(String(getStatisticsBucketIntervalMinutes(params.timeframe) * 60))})`;
+    const points = rows.length
+      ? await db
+          .select({ id, timestamp: bucket, ...aggregates })
+          .from(i)
+          .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
+          .leftJoin(billingModelFacts, sql`true`)
+          .where(
+            and(
+              scope,
+              inArray(
+                id,
+                rows.map((row) => row.id),
+              ),
+            ),
+          )
+          .groupBy(id, bucket)
+          .orderBy(bucket)
+      : [];
+    const clientAgentIds =
+      params.groupBy === "client"
+        ? [
+            ...new Set(
+              rows
+                .map((row) => extractUsageClientAgentId(row.id))
+                .filter((id): id is string => id !== null),
+            ),
+          ]
+        : [];
+    const clientAgents = clientAgentIds.length
+      ? await db
+          .select({ id: a.id, name: a.name })
+          .from(a)
+          .where(
+            and(
+              inArray(a.id, clientAgentIds),
+              eq(a.organizationId, params.organizationId),
+            ),
+          )
+      : [];
+    const clientAgentNames = new Map(
+      clientAgents.map((agent) => [agent.id, agent.name]),
+    );
+    const numbers = (row: (typeof rows)[number]) => ({
+      requests: Number(row.requests),
+      totalTokens: Number(row.totalTokens),
+      cacheReadTokens: Number(row.cacheReadTokens),
+      cacheWriteTokens: Number(row.cacheWriteTokens),
+      billedCost: Number(row.billedCost),
+      subscriptionCost: Number(row.subscriptionCost),
+    });
+    return createPaginatedResult(
+      rows.map((row) => ({
+        id: row.id,
+        name:
+          params.groupBy === "client"
+            ? (formatUsageClient(row.name, clientAgentNames) ?? "Not reported")
+            : row.name,
+        ...numbers(row),
+        timeSeries: points
+          .filter((point) => point.id === row.id)
+          .map((point) => ({
+            timestamp: new Date(point.timestamp).toISOString(),
+            ...numbers({ ...point, name: "" }),
+          })),
+      })),
+      Number(count.total),
+      { limit: params.limit, offset: params.offset },
+    );
+  }
+
   static async getProxyCostStatistics(
     params: ProxyCostQuery & {
       timeframe: StatisticsTimeFrame;

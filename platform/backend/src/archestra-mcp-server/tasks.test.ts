@@ -321,7 +321,7 @@ describe("run tools", () => {
     for (const [limits, message] of [
       [
         { tier: "L" },
-        "Tier L (8 CPU, 16 GiB (32 GiB limit)) is above this Agent's scaleup tier M",
+        "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit)). This call is not retriable; calling it again will fail.",
       ],
       [
         { max_duration_hours: 24 },
@@ -336,6 +336,40 @@ describe("run tools", () => {
       expect(result.isError).toBe(true);
       expect((result.content[0] as { text: string }).text).toContain(message);
     }
+
+    const scaleupTarget = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        tier: "S",
+        maxTier: "M",
+        environment: null,
+        credentials: [],
+        ttlHours: 12,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    const aboveScaleupResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: scaleupTarget.id,
+        message: "Review the change",
+        limits: { tier: "L" },
+      },
+      context,
+    );
+    expect(aboveScaleupResult.isError).toBe(true);
+    expect((aboveScaleupResult.content[0] as { text: string }).text).toContain(
+      "Tier L (8 CPU, 16 GiB (32 GiB limit)) is above this Agent's scaleup tier M",
+    );
     expect(sendMessage).not.toHaveBeenCalled();
   });
 

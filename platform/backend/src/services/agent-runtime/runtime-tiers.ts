@@ -205,6 +205,30 @@ export function retargetRuntimeTiersEnv(value: string, tier: string): string {
   );
 }
 
+/**
+ * Prompt instruction when scaling up this Agent's runtime instance is disabled:
+ * the agent is informed that its runtime tier is fixed and it cannot scale up.
+ */
+export function describeScaleupDisabledPrompt(
+  runtime: SizedRuntime,
+  tiers: ResolvedAgentRuntimeTiers,
+): string | null {
+  const currentTierName = agentRuntimeTier(runtime, tiers);
+  const maxTierName = agentRuntimeMaxTier(runtime, tiers);
+  if (
+    agentRuntimeTierRank(tiers.tiers, maxTierName) >
+    agentRuntimeTierRank(tiers.tiers, currentTierName)
+  ) {
+    return null;
+  }
+  const currentTier = tierSize(tiers, currentTierName);
+  return (
+    `Scaling up this agent runtime instance is disabled: the runtime tier is fixed to ` +
+    `${currentTier.name} (${describeAgentRuntimeTier(currentTier)}). ` +
+    `You cannot scale up this instance; do not attempt to start a run at a larger tier.`
+  );
+}
+
 function allowedTiersSentence(
   allowed: readonly AgentRuntimeTierSize[],
 ): string {
@@ -233,6 +257,16 @@ export function resolveAgentRunLimits(params: {
   const allowed = agentRuntimeAllowedTiers(runtime, tiers);
   const maxTier = agentRuntimeMaxTier(runtime, tiers);
   let tier = agentRuntimeTier(runtime, tiers);
+  const isScaleupDisabled =
+    agentRuntimeTierRank(tiers.tiers, maxTier) <=
+    agentRuntimeTierRank(tiers.tiers, tier);
+  const currentTier = tierSize(tiers, tier);
+  const scaleupDisabledError = () =>
+    new ApiError(
+      400,
+      `Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to ${currentTier.name} (${describeAgentRuntimeTier(currentTier)}). This call is not retriable; calling it again will fail.`,
+    );
+
   if (requested.tier !== undefined) {
     const named = findAgentRuntimeTier(tiers.tiers, requested.tier);
     if (!named)
@@ -243,11 +277,15 @@ export function resolveAgentRunLimits(params: {
     if (
       agentRuntimeTierRank(tiers.tiers, named.name) >
       agentRuntimeTierRank(tiers.tiers, maxTier)
-    )
+    ) {
+      if (isScaleupDisabled) {
+        throw scaleupDisabledError();
+      }
       throw new ApiError(
         400,
         `Tier ${named.name} (${describeAgentRuntimeTier(named)}) is above this Agent's scaleup tier ${maxTier}. ${allowedTiersSentence(allowed)}`,
       );
+    }
     tier = named.name;
   }
   if (requested.minCpu !== undefined || requested.minMemoryGib !== undefined) {
@@ -266,18 +304,26 @@ export function resolveAgentRunLimits(params: {
       .join(" and ");
     if (requested.tier !== undefined) {
       const named = tierSize(tiers, tier);
-      if (!fits(named))
+      if (!fits(named)) {
+        if (isScaleupDisabled) {
+          throw scaleupDisabledError();
+        }
         throw new ApiError(
           400,
           `Tier ${named.name} (${describeAgentRuntimeTier(named)}) has less than the ${need} asked for. ${allowedTiersSentence(allowed)}`,
         );
+      }
     } else {
       const smallest = allowed.find(fits);
-      if (!smallest)
+      if (!smallest) {
+        if (isScaleupDisabled) {
+          throw scaleupDisabledError();
+        }
         throw new ApiError(
           400,
           `No tier this Agent's runs may use has ${need}. ${allowedTiersSentence(allowed)}`,
         );
+      }
       tier = smallest.name;
     }
   }

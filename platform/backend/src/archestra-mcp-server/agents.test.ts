@@ -1625,6 +1625,24 @@ describe("agent runtime and model tools", () => {
     expect((incompatible.content[0] as any).text).toContain(
       "Codex runtime requires an OpenAI",
     );
+
+    // Naming the pair is choosing it, and the caller cannot use that key.
+    const reselected = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: {
+        image: "example.test/agent:3",
+        inferenceProtocol: "anthropic",
+      },
+      llmApiKeyId: privateKey.id,
+      modelId: model.id,
+    });
+    expect(reselected.isError).toBe(true);
+    expect((reselected.content[0] as any).text).toContain(
+      "must be linked and available to you",
+    );
+    expect((await AgentModel.findById(agent.id))?.runtime).toMatchObject({
+      image: "example.test/agent:2",
+    });
   });
 
   test("get_agent returns the runtime and pinned model", async ({

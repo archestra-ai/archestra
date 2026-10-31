@@ -20,6 +20,7 @@ export async function initializeObservabilityMetrics(params?: {
     metrics.agentRun.initializeAgentRunMetrics(labelKeys);
   }
 
+  metrics.openappa.initializeOpenappaMetrics();
   metrics.database.initializeDatabaseMetrics();
   metrics.fileStorage.initializeFileStorageMetrics();
   metrics.rag.initializeRagMetrics();

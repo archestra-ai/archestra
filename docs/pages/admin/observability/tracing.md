@@ -54,14 +54,7 @@ By default, Archestra exports only agent spans: LLM calls, MCP tool calls, agent
 
 ## Trace Structure
 
-An agent run is one trace. Its root span groups the LLM calls and tool calls of that turn:
-
-```text
-chat Support Bot                  root span (SpanKind.SERVER)
-├── chat claude-sonnet-4-5        LLM call (SpanKind.CLIENT)
-├── execute_tool github__list_repos
-└── chat claude-sonnet-4-5        follow-up LLM call with the tool result
-```
+A session has one stable trace identity across turns and backend replicas. Each turn, inference request, tool call, and Guardrails hook is a separate span in its waterfall. The original session ID remains available as `gen_ai.conversation.id`; the trace ID is a stable 128-bit identifier derived from it. Calls without a session ID keep independent traces.
 
 The root span's `route.category` tells you how the agent was invoked:
 
@@ -72,15 +65,17 @@ The root span's `route.category` tells you how the agent was invoked:
 | Slack, Microsoft Teams, Telegram | `chatops` |
 | Email | `email` |
 
-Calls from your own applications to the [LLM Proxy](/docs/llm-proxy) (`route.category=llm-proxy`) and the [MCP Gateway](/docs/mcp/gateway) (`route.category=mcp-gateway`) start their own traces.
+Calls from your own applications to the [LLM Proxy](/docs/llm-proxy) (`route.category=llm-proxy`) and the [MCP Gateway](/docs/mcp/gateway) (`route.category=mcp-gateway`) join the trace for their recorded session identity.
 
-To group LLM Proxy calls into one trace, send [`X-Archestra-Session-Id`](/docs/llm-proxy#custom-headers) with your conversation ID. Archestra records it as `gen_ai.conversation.id`. When Guardrails are active, [`X-Appa-Session-ID`](/docs/agents/guardrails/clients#session-headers) takes precedence as the recorded session identity. MCP Gateway spans do not group by `X-Archestra-Session-Id`.
+To group LLM Proxy calls into one trace, send [`X-Archestra-Session-Id`](/docs/llm-proxy#custom-headers) with your conversation ID. Archestra records it as `gen_ai.conversation.id`. When Guardrails are active, [`X-Appa-Session-ID`](/docs/agents/guardrails/clients#session-headers) takes precedence as the recorded session identity. MCP Gateway spans use the Guardrails session identity when one is present.
 
-Archestra also emits:
+## Investigate a Session
 
-- `context_compaction auto` and `context_compaction manual` spans when chat history is compacted.
-- `send_completion` spans when an [Agent Runtime](/docs/agents/runtime) run sends its final reply to ChatOps or email.
-- Spans from the [Code Sandbox](/docs/agents#code-sandbox) under the service name `archestra-sandbox-rs`, nested under the tool call that ran the command.
+Open **Session Investigation** in Grafana and click a session row. **Session Trace** shows the session’s calls and policy checks. **Session Logs**, below it, shows inference, tool, Guardrails, and correlated application events. Select a session by its ID; the trace lookup happens automatically.
+
+The session list includes first and last request times, agent, user, models, credential names, request count, token usage, elapsed time, total inference time, and estimated costs split by billed and subscription-covered usage. Totals come from persisted session summaries and include requests outside the dashboard's selected time range. The selected range determines which recent summaries appear. Both Loki and Tempo are required.
+
+Summaries contain metadata only. Prompts, responses, credential values, and policy text are not included. New summaries and session traces appear as requests run after deployment; older telemetry is not rewritten.
 
 ## LLM Spans
 

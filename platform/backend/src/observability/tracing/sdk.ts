@@ -33,6 +33,9 @@ import sentryClient from "@/observability/sentry";
 import { isNoiseRoute } from "@/observability/utils";
 import { ATTR_ROUTE_CATEGORY } from "./attributes";
 import { getHttpInstrumentationConfig } from "./http-instrumentation";
+import { PipelineSampler, PipelineSpanProcessor } from "./pipeline-sampling";
+import { SessionIdGenerator } from "./session";
+import { SessionOperationLogProcessor } from "./session-logs";
 
 const {
   api: { name, version },
@@ -111,15 +114,21 @@ const otlpProcessor: SpanProcessor =
     : otlpBatchProcessor;
 
 // Create span processors array
-const spanProcessors: SpanProcessor[] = [otlpProcessor];
+const spanProcessors: SpanProcessor[] = [
+  new PipelineSpanProcessor(otlpProcessor, "otlp"),
+  new PipelineSpanProcessor(new SessionOperationLogProcessor(), "otlp"),
+];
 
 // Add Sentry span processor if Sentry is enabled (receives ALL spans, unfiltered)
 if (sentryEnabled) {
-  spanProcessors.push(new SentrySpanProcessor());
+  spanProcessors.push(
+    new PipelineSpanProcessor(new SentrySpanProcessor(), "diagnostics"),
+  );
 }
 
 // Initialize the OpenTelemetry SDK with auto-instrumentations
 const sdk = new NodeSDK({
+  idGenerator: new SessionIdGenerator(),
   resource,
   /**
    * IMPORTANT: We DON'T set `traceExporter` here because we're using custom `spanProcessors`.
@@ -184,7 +193,13 @@ const sdk = new NodeSDK({
   contextManager: sentryEnabled ? new Sentry.SentryContextManager() : undefined,
   sampler:
     sentryEnabled && sentryClient
-      ? new SentrySampler(sentryClient)
+      ? new PipelineSampler(
+          new ParentBasedSampler({
+            root: new TraceIdRatioBasedSampler(tracesSampleRate),
+          }),
+          new SentrySampler(sentryClient),
+          verboseTracing,
+        )
       : new ParentBasedSampler({
           root: new TraceIdRatioBasedSampler(tracesSampleRate),
         }),

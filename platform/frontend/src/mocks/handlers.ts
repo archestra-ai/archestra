@@ -74,6 +74,7 @@ import {
   appStatisticsFor,
   appUsageFor,
   costStatisticsFor,
+  modelUsageFor,
   myStatisticsFor,
   myUsageBreakdownFor,
   proxyCostStatisticsFor,
@@ -952,6 +953,10 @@ export const handlers: HttpHandler[] = [
   // Costs and My Usage: generated from one seeded activity curve so the
   // endpoints reconcile and honour timeframe, groupBy, filters and paging.
   ...statisticsJson("/api/statistics/costs", costStatisticsFor),
+  ...statisticsJson("/api/statistics/model-usage", modelUsageFor),
+  ...statisticsJson("/api/statistics/me/model-usage", (query) =>
+    modelUsageFor(query, true),
+  ),
   ...statisticsJson("/api/statistics/llm-proxy", proxyCostStatisticsFor),
   ...statisticsJson("/api/statistics/users", userStatisticsFor),
   ...statisticsJson("/api/statistics/teams", teamStatisticsFor),

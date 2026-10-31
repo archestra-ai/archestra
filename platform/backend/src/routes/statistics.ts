@@ -32,6 +32,8 @@ import {
   MCP_TOOL_CALL_USAGE_DIMENSIONS,
   McpToolCallUsageResponseSchema,
   ModelStatisticsSchema,
+  ModelUsageQuerySchema,
+  ModelUsageRowSchema,
   MyStatisticsSchema,
   MyUsageBreakdownSchema,
   OverviewStatisticsSchema,
@@ -585,6 +587,52 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
     },
   );
+
+  // Preserve existing OpenAPI schema references when registering these new routes.
+  for (const own of [false, true]) {
+    fastify.get(
+      own ? "/api/statistics/me/model-usage" : "/api/statistics/model-usage",
+      {
+        schema: {
+          operationId: own ? RouteId.GetMyModelUsage : RouteId.GetModelUsage,
+          description:
+            "Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity.",
+          tags: ["Statistics"],
+          querystring: StatisticsQuerySchema.merge(
+            ModelUsageQuerySchema.extend({
+              groupBy: ModelUsageQuerySchema.shape.groupBy.default(
+                own ? "client" : "person",
+              ),
+            }),
+          ).merge(PaginationQuerySchema),
+          response: constructResponseSchema(
+            createPaginatedResponseSchema(ModelUsageRowSchema),
+          ),
+        },
+      },
+      async ({ query, user, organizationId, headers, serviceAccount }) => {
+        if (own && query.groupBy !== "client")
+          throw new ApiError(
+            400,
+            "Personal model usage can be grouped by client.",
+          );
+        const canReadPeople =
+          own ||
+          query.groupBy !== "person" ||
+          (
+            await hasPermission({ member: ["read"] }, headers, serviceAccount, {
+              userId: user.id,
+              organizationId,
+            })
+          ).success;
+        return StatisticsModel.getModelUsage({
+          ...query,
+          organizationId,
+          userId: own || !canReadPeople ? user.id : undefined,
+        });
+      },
+    );
+  }
 };
 
 export default statisticsRoutes;

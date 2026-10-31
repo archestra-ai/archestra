@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "What each built-in role can do, and every permission a custom role can hold"
 order: 2
-lastUpdated: 2026-10-30
+lastUpdated: 2026-10-31
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.

@@ -2,7 +2,7 @@
 title: Access Control
 description: Share resources and assign organization roles
 order: 2
-lastUpdated: 2026-10-29
+lastUpdated: 2026-10-30
 ---
 
 Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
@@ -64,9 +64,13 @@ Resource sharing is an [Enterprise feature](/docs/get-started/pricing-model).
 
 You need **Manage access** on the item to share it. To share every current and future item of a kind, use **Permissions** beside **Create** or **Add** on its list; this requires [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update).
 
-Sharing with everyone, a role, or a team you do not belong to also requires that permission or **Full access** on every item of that kind. You cannot grant access you do not hold.
+Sharing with everyone or a role also requires that permission or **Full access** on every item of that kind. You cannot grant access you do not hold.
 
 Sharing an agent does not share its MCP servers. Share the servers separately so the person can use their tools. MCP registry entries have an extra **Full access + deploy** level for changing deployments and secret sources; see [server permissions](/docs/mcp/servers).
+
+### Share Across Teams
+
+Owners and anyone with **Manage access** on an item can share it with any team in the same organization, including teams they do not belong to. Under **Who can use it**, select **Add access**, choose a team and its access level, then save. No additional role permission is required.
 
 ## Predefined Roles
 

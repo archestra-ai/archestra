@@ -39,7 +39,7 @@ Your admin decides which one Desktop uses. When an admin picks provider keys for
 
 ## Tools, Skills, and Plugins
 
-After Desktop restarts, open **Settings → Connectors**, select **archestra**, and sign in. In each conversation, enable it under **+ → Connectors**. After you download the installer or copy the command, **Connect** lists these steps with a starter prompt for your first conversation. A connected checkmark in Settings confirms the connection, not its selection for your conversation.
+After Desktop restarts, open **Settings → Connectors**, select the gateway's connector, and sign in. It is named **archestra** for your personal gateway, or after the gateway you picked. In each conversation, enable it under **+ → Connectors**. After you download the installer or copy the command, **Connect** lists these steps with a starter prompt for your first conversation. A connected checkmark in Settings confirms the connection, not its selection for your conversation.
 
 Ask Claude to list the gateway's tools to verify availability. When [Guardrails](/docs/agents/guardrails) are enabled, Desktop's **Code** and **Cowork** sessions need this connector enabled to receive remedy plans and approval reviews.
 

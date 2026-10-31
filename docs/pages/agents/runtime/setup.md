@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-31
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -66,7 +66,9 @@ Keep Archestra on Fargate and place runtime containers on EC2 nodes:
 
 ## Runtime Tiers
 
-A tier is the size of a run's container. Define them under **Settings > Agents > Runtime tiers**: each tier has a name, a CPU request (up to 8), and an optional CPU limit (up to 16). Memory follows the CPU: 2 GiB per requested CPU, with a limit of twice that, or 2 GiB per CPU of the CPU limit when that is lower. A new organization starts with `S` (2 CPU), `M` (4 CPU) and `L` (8 CPU), with `M` as the default.
+A tier is the size of a run's container and of its workspace volume. Define them under **Settings > Agents > Runtime tiers**: each tier has a name, a CPU request (up to 8), an optional CPU limit (up to 16), and an optional **Workspace** size in GiB. Memory follows the CPU: 2 GiB per requested CPU, with a limit of twice that, or 2 GiB per CPU of the CPU limit when that is lower. A new organization starts with `S` (2 CPU), `M` (4 CPU) and `L` (8 CPU), with `M` as the default.
+
+The workspace volume holds the run's home directory and, for a [privileged agent](#privileged-containers), its Docker data. A tier that leaves **Workspace** blank gives its runs the deployment's [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Set a larger size on the tier of agents whose runs build container images or run Kubernetes in Docker: such a stack fills a 20 GiB volume in minutes and needs about 60 GiB.
 
 An agent's [**Default tier**](/docs/agents/runtime#limits) sizes its runs, and its **Scaleup tier** is the largest tier a run may ask for; an agent has no CPU or memory settings of its own. Renaming a tier renames it on every agent that uses it. A tier that an agent or a template still uses cannot be deleted.
 

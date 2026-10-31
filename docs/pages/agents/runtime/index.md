@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -113,7 +113,7 @@ Set these under **Limits** on the agent's **Agent Runtime** tab. A field you lea
 | **Default tier** | The tier of the run's container, one of the organization's [runtime tiers](/docs/agents/runtime/setup#runtime-tiers). An agent has no CPU or memory settings of its own. |
 | **Scaleup tier** | The largest tier a run of this agent may ask for. A run whose work needs more CPU or memory starts a run of the same agent at a larger tier and hands its work over. Empty means the same as **Default tier**. |
 
-A caller that starts a run can ask for any tier up to the agent's scaleup tier, and for less than the agent allows otherwise: a shorter idle timeout, a shorter maximum duration or a lower budget. The [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) tool and the [`POST /api/agents/{id}/runs`](/docs/reference/api#/Agents/startAgentRun) endpoint take these as `limits`. A tier is chosen by name, or by size: `min_cpu` and `min_memory_gib` give the smallest allowed tier with that much. A value above the agent's is refused with the allowed tiers and their sizes named. The run shows what it got. Inside a run, `ARCHESTRA_AGENT_RUNTIME_TIERS` lists the tiers the run may move to with their CPU and memory, so an agent decides by the numbers rather than by the names. When the warm pool for a run's tier has no ready container and the next larger tier within the agent's has one, that container serves the run, which then runs one tier up. A run never starts at a smaller tier than it asked for.
+A caller that starts a run can ask for any tier up to the agent's scaleup tier, and for less than the agent allows otherwise: a shorter idle timeout, a shorter maximum duration or a lower budget. The [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) tool and the [`POST /api/agents/{id}/runs`](/docs/reference/api#/Agents/startAgentRun) endpoint take these as `limits`. A tier is chosen by name, or by size: `min_cpu` and `min_memory_gib` give the smallest allowed tier with that much. A value above the agent's is refused with the allowed tiers and their sizes named. The run shows what it got. Inside a run, `ARCHESTRA_AGENT_RUNTIME_TIERS` lists the tiers the run may move to with their CPU, memory and workspace size, so an agent decides by the numbers rather than by the names. When the warm pool for a run's tier has no ready container and the next larger tier within the agent's has one, that container serves the run, which then runs one tier up. A run never starts at a smaller tier than it asked for.
 
 <span id="environments-and-network-egress"></span>
 

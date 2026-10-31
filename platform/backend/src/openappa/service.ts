@@ -31,6 +31,9 @@ import {
   observeOpenappaDispatch,
   setOpenappaEngineMetricsCollector,
 } from "@/observability/metrics/openappa";
+import { getActiveSessionId } from "@/observability/request-context";
+import { traceOpenappaDispatch } from "@/observability/tracing/openappa";
+import { clientSessionId } from "@/openappa/actor";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
@@ -584,28 +587,33 @@ async function dispatchWithPrincipal(params: {
   principal: { principal?: string };
 }) {
   const { session, event, policy, principal } = params;
-  return observeOpenappaDispatch(event.event, () =>
-    withRuntime(
-      session.organization_id,
-      (module, policy) =>
-        withOpenappaContentEncryption(
+  return traceOpenappaDispatch(
+    getActiveSessionId() ?? clientSessionId(session.session_id),
+    event.event,
+    () =>
+      observeOpenappaDispatch(event.event, () =>
+        withRuntime(
           session.organization_id,
-          session.session_id,
-          (encryption) =>
-            module.dispatchHook(
-              JSON.stringify({
-                ...session,
-                ...event,
-                ...principal,
-                // Last, so nothing spread above can override the host's reading.
-                withhold_consult_content: withholdConsultContent(),
-              }),
-              policy,
-              encryption,
+          (module, policy) =>
+            withOpenappaContentEncryption(
+              session.organization_id,
+              session.session_id,
+              (encryption) =>
+                module.dispatchHook(
+                  JSON.stringify({
+                    ...session,
+                    ...event,
+                    ...principal,
+                    // Last, so nothing spread above can override the host's reading.
+                    withhold_consult_content: withholdConsultContent(),
+                  }),
+                  policy,
+                  encryption,
+                ),
             ),
+          policy,
         ),
-      policy,
-    ),
+      ),
   );
 }
 

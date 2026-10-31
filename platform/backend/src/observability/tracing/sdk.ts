@@ -34,6 +34,8 @@ import { isNoiseRoute } from "@/observability/utils";
 import { ATTR_ROUTE_CATEGORY } from "./attributes";
 import { getHttpInstrumentationConfig } from "./http-instrumentation";
 import { infrastructureSpansEnabled } from "./infrastructure-spans";
+import { SessionIdGenerator } from "./session";
+import { SessionOperationLogProcessor } from "./session-logs";
 
 const {
   api: { name, version },
@@ -112,7 +114,10 @@ const otlpProcessor: SpanProcessor =
     : otlpBatchProcessor;
 
 // Create span processors array
-const spanProcessors: SpanProcessor[] = [otlpProcessor];
+const spanProcessors: SpanProcessor[] = [
+  otlpProcessor,
+  new SessionOperationLogProcessor(),
+];
 
 // Add Sentry span processor if Sentry is enabled (receives ALL spans, unfiltered)
 if (sentryEnabled) {
@@ -122,6 +127,7 @@ if (sentryEnabled) {
 // Initialize the OpenTelemetry SDK with auto-instrumentations
 const sdk = new NodeSDK({
   resource,
+  idGenerator: new SessionIdGenerator(),
   /**
    * IMPORTANT: We DON'T set `traceExporter` here because we're using custom `spanProcessors`.
    *

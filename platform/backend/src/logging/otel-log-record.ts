@@ -1,3 +1,4 @@
+import { isSpanContextValid, ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import {
   type AnyValue,
   type LogAttributes,
@@ -27,8 +28,8 @@ export function toOtelLogRecord(record: Record<string, unknown>): LogRecord {
     // Strip fields redundant with OTEL resource attributes
     hostname: _hostname,
     pid: _pid,
-    // Strip trace context fields added by mixin (redundant — the OTEL SDK
-    // captures the active span context automatically via `context.active()`)
+    // Reconstruct the context captured by Pino; a buffered stream may emit
+    // after the originating active span has changed.
     trace_id: _traceId,
     span_id: _spanId,
     trace_flags: _traceFlags,
@@ -42,6 +43,20 @@ export function toOtelLogRecord(record: Record<string, unknown>): LogRecord {
   const pinoLevel = typeof level === "number" ? level : 30;
 
   return {
+    ...(typeof _traceId === "string" &&
+    typeof _spanId === "string" &&
+    isSpanContextValid({ traceId: _traceId, spanId: _spanId, traceFlags: 1 })
+      ? {
+          context: trace.setSpanContext(ROOT_CONTEXT, {
+            traceId: _traceId,
+            spanId: _spanId,
+            traceFlags:
+              typeof _traceFlags === "string"
+                ? Number.parseInt(_traceFlags, 16) || 0
+                : 0,
+          }),
+        }
+      : {}),
     timestamp,
     observedTimestamp: timestamp,
     severityNumber: PINO_TO_OTEL_SEVERITY[pinoLevel] ?? SeverityNumber.INFO,

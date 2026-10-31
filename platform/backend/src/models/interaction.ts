@@ -56,6 +56,7 @@ import {
   withoutInteractionMedia,
 } from "@/log-content";
 import logger from "@/logging";
+import { exportSessionSummary } from "@/observability/session-summary";
 import { parseClaudeMetadataParentSessionId } from "@/routes/proxy/utils/headers/session-id";
 import type {
   CopilotCredentialSource,
@@ -2491,7 +2492,7 @@ class InteractionModel {
       interactionId: string | null;
     }>,
     whereClause: SQL | undefined,
-  ): Promise<SessionSummary[]> {
+  ): Promise<Array<SessionSummary & { totalDurationMs: number | null }>> {
     // Sessionless interactions each form their own group; real sessions group
     // by their shared session id.
     const sessionGroupExpr = sql`COALESCE(${schema.interactionsTable.sessionId}, ${schema.interactionsTable.id}::text)`;
@@ -2531,6 +2532,7 @@ class InteractionModel {
         interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
         requestCount: count(),
         failedOverCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.attemptOutcome} = 'failed_over')`,
+        totalDurationMs: sum(schema.interactionsTable.durationMs),
         totalInputTokens: sum(schema.interactionsTable.inputTokens),
         totalOutputTokens: sum(schema.interactionsTable.outputTokens),
         totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
@@ -2694,6 +2696,8 @@ class InteractionModel {
         interactionId: s.interactionId, // Only set for single interactions (null session)
         requestCount: Number(s.requestCount),
         failedOverCount: Number(s.failedOverCount),
+        totalDurationMs:
+          s.totalDurationMs === null ? null : Number(s.totalDurationMs),
         totalInputTokens: Number(s.totalInputTokens) || 0,
         totalOutputTokens: Number(s.totalOutputTokens) || 0,
         totalCacheReadTokens: Number(s.totalCacheReadTokens) || 0,
@@ -3779,6 +3783,24 @@ class InteractionModel {
       usedAt: interaction.createdAt,
     });
 
+    // Run after the committed write, without delaying inference. Read the same
+    // bounded session aggregation as the UI, so time ranges/truncated log queries
+    // cannot turn a partial set of requests into misleading totals.
+    trackBackgroundWork(
+      InteractionModel.summarizeSessionPage(
+        [
+          {
+            sessionId: insertValues.sessionId ?? null,
+            interactionId: insertValues.sessionId ? null : interaction.id,
+          },
+        ],
+        undefined,
+      )
+        .then((rows) => {
+          for (const row of rows) exportSessionSummary(row);
+        })
+        .catch(() => {}),
+    );
     return interaction;
   }
 }

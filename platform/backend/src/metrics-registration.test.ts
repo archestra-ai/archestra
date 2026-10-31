@@ -4,11 +4,22 @@ import client from "prom-client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 
-vi.mock("@/config", () => ({
-  default: {
-    observability: { metrics: { endpoint: "/metrics", secret: "test-secret" } },
-  },
-}));
+vi.mock("@/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/config")>();
+  return {
+    default: {
+      ...actual.default,
+      observability: {
+        ...actual.default.observability,
+        metrics: {
+          ...actual.default.observability.metrics,
+          endpoint: "/metrics",
+          secret: "test-secret",
+        },
+      },
+    },
+  };
+});
 
 import { registerStandaloneMetricsEndpoint } from "@/metrics-registration";
 import { setOpenappaEngineMetricsCollector } from "@/observability/metrics/openappa";

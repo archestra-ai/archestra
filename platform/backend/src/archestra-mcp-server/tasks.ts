@@ -45,6 +45,7 @@ import {
   pendingFileNotice,
 } from "@/services/agent-runtime/pending-exports";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { agentRunLlmSessionId } from "@/services/agent-runtime/runtime-contract";
 import {
   admitRuntimeSteer,
   classifyRuntimeCaller,
@@ -365,7 +366,7 @@ const ListAgentRunsOutputSchema = z.object({
         .string()
         .nullable()
         .describe(
-          "Verified LLM telemetry session key for /llm/logs/:id; URL-encode it as one path segment. Null when no readable logged session is available. This is not a task ID or runtime handle.",
+          "Verified LLM telemetry session key for /llm/logs/:id (the run's workload name); URL-encode it as one path segment. Null when no readable logged session is available. It is not a task_id: never pass it to the run tools.",
         ),
       title: z.string(),
       prompt: z.string(),
@@ -981,11 +982,9 @@ const registry = defineArchestraTools([
           userHasPermission(actor.id, actor.organizationId, "log", "read"),
           userHasPermission(actor.id, actor.organizationId, "log", "admin"),
         ]);
-        // Maintained runtime clients send the persisted workload name as
-        // X-Archestra-Session-Id. The OpenAPPA key adds a caller scope and is
-        // not the key stored on LLM interactions. Never substitute a task ID
-        // or a workspace row's UUID; continued turns keep this header value.
-        const sessionKeys = rows.map((row) => row.workloadName);
+        // The OpenAPPA key adds a caller scope and is not the key stored on
+        // LLM interactions; continued turns keep the same key.
+        const sessionKeys = rows.map((row) => agentRunLlmSessionId(row));
         const logged = canReadLogs
           ? await InteractionModel.findLoggedSessionIds({
               organizationId: actor.organizationId,

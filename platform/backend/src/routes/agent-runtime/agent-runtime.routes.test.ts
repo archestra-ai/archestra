@@ -776,6 +776,9 @@ describe("Agent Runtime routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    const [ownRun] = response.json().data;
+    // The LLM trace is keyed by the frozen run name the runtime sends.
+    expect(ownRun.llmSessionId).toBe(ownRun.workloadName);
     expect(response.json().data).toEqual([
       expect.objectContaining({
         taskId: ownTask.id,

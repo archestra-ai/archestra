@@ -8,10 +8,13 @@ import { AgentModel } from "@/models";
 import { generateConversationTitle } from "@/services/title-generation";
 import { renderSystemPrompt } from "@/templating";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
+import { agentRunLlmSessionId } from "./runtime-contract";
 
 /** Generate a run title without delaying pod startup. */
 export async function generateAgentRunTitle(params: {
   taskId: string;
+  /** The frozen run name, which keys the run's LLM session. */
+  workloadName: string;
   prompt: string;
   organizationId: string;
   userId?: string;
@@ -48,7 +51,8 @@ export async function generateAgentRunTitle(params: {
       ...titleLlm,
       agentId: titleAgent?.id ?? params.taskId,
       userId: params.userId ?? "system",
-      sessionId: params.taskId,
+      // The title lands in the same logged session as the run's own traffic.
+      sessionId: agentRunLlmSessionId(params),
       systemPrompt,
       firstUserMessage: params.prompt,
       firstAssistantMessage: "",

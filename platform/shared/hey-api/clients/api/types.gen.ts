@@ -25189,6 +25189,10 @@ export type GetMyAgentRunsResponses = {
             hardDeadlineAt: string;
             lastModelActivityAt: string | null;
             sessionId: string;
+            /**
+             * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+             */
+            llmSessionId: string;
             prompt: string;
             agent: {
                 id: string;
@@ -25406,6 +25410,10 @@ export type GetMyAgentRunResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         sessionId: string;
+        /**
+         * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+         */
+        llmSessionId: string;
         prompt: string;
         agent: {
             id: string;
@@ -25547,6 +25555,10 @@ export type UpdateAgentRunResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         sessionId: string;
+        /**
+         * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+         */
+        llmSessionId: string;
         prompt: string;
         agent: {
             id: string;
@@ -112092,6 +112104,10 @@ export type GetProjectRunsResponses = {
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
         sessionId: string;
+        /**
+         * Key of the run's LLM logs (/llm/logs/:id): the session id its runtime sends
+         */
+        llmSessionId: string;
         prompt: string;
         agent: {
             id: string;

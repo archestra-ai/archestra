@@ -195,7 +195,12 @@ it("gives a member who owns the object the list without what they cannot act on"
   const fullOwnerRow = await screen.findByTestId("owner-grant");
   expect(fullOwnerRow).toHaveTextContent("Riley Reviewer");
   expect(fullOwnerRow).toHaveTextContent("User");
-  expect(screen.getByTestId("inherited-access-note")).toBeInTheDocument();
+  // The access every admin holds is stated above the grants, not under them.
+  expect(
+    screen
+      .getByTestId("inherited-access-note")
+      .compareDocumentPosition(fullOwnerRow) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   unmount();
 
@@ -548,14 +553,14 @@ it("shows the owner row and makes another person the owner", async () => {
   policy.ownerId = "owner-1";
   policy.grants = [
     {
-      subject: { type: "user", id: "owner-1" },
-      name: "Sam Owner",
-      actions: ["read", "use", "update", "delete", "manage-permissions"],
-    },
-    {
       subject: { type: "user", id: "user-2" },
       name: "Alex Reader",
       actions: ["read", "use"],
+    },
+    {
+      subject: { type: "user", id: "owner-1" },
+      name: "Sam Owner",
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
     },
   ];
   let transferred: unknown;
@@ -571,8 +576,9 @@ it("shows the owner row and makes another person the owner", async () => {
   const user = userEvent.setup();
   renderEditor();
   const owner = await screen.findByTestId("owner-grant");
-  expect(owner).toHaveTextContent("Sam OwnerUserOwner");
-  expect(owner).toHaveTextContent("Full access");
+  // Pinned first; the kind and "Owner" are the icon's label, not row text.
+  expect(owner).toHaveTextContent("UserOwnerSam OwnerFull access");
+  expect(owner.parentElement?.firstElementChild).toBe(owner);
   // The owner keeps their grant: no level menu and no remove button.
   expect(
     screen.queryByRole("combobox", { name: "Permission for Sam Owner" }),

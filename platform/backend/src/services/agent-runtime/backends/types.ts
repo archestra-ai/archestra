@@ -42,11 +42,12 @@ export type AgentRunLaunchSpec = {
   tier: AgentRuntimeTier | null;
   /**
    * Tiers whose warm pool may serve the run, the requested one first, each
-   * with its size in the run's organization.
+   * with its container size and workspace volume in the run's organization.
    */
   warmTiers: Array<{
     tier: AgentRuntimeTier;
     resources: AgentRuntimeResources;
+    workspaceStorageSize: string;
   }>;
   env: Record<string, string>;
   secretEnv: Record<string, string>;

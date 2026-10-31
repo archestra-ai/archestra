@@ -5,7 +5,10 @@ import { expect, test, vi } from "vitest";
 import config from "@/config";
 import { createK8sClients } from "@/k8s/shared";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
-import { tierResources } from "@/services/agent-runtime/runtime-tiers";
+import {
+  tierResources,
+  workspaceVolumeSentence,
+} from "@/services/agent-runtime/runtime-tiers";
 import { useMswServer } from "@/test/msw";
 import type { KubernetesAgentRunLaunchSpec } from "./manifests";
 import { agentSandboxApi } from "./sandbox-api";
@@ -124,18 +127,36 @@ test("serves a drained or missing tier from the larger tier's ready pool, never 
     M: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
     L: { cpuRequest: "6", memoryRequest: "12Gi", memoryLimit: "24Gi" },
   };
+  // L's volume is larger too: a claim that moves up must carry L's size, or
+  // it looks for a pool that does not exist.
+  const volumes = { M: "20Gi", L: "60Gi" };
   const warmTiers = {
     M: [
-      { tier: "M" as const, resources: sizes.M },
-      { tier: "L" as const, resources: sizes.L },
+      {
+        tier: "M" as const,
+        resources: sizes.M,
+        workspaceStorageSize: volumes.M,
+      },
+      {
+        tier: "L" as const,
+        resources: sizes.L,
+        workspaceStorageSize: volumes.L,
+      },
     ],
-    L: [{ tier: "L" as const, resources: sizes.L }],
+    L: [
+      {
+        tier: "L" as const,
+        resources: sizes.L,
+        workspaceStorageSize: volumes.L,
+      },
+    ],
   };
   const sized = (tier: "M" | "L") => ({
     ...SPEC,
     tier,
     warmTiers: warmTiers[tier],
     resources: sizes[tier],
+    workspaceStorageSize: volumes[tier],
   });
   const poolName = {
     M: warmPoolTemplate(sized("M")).name,
@@ -334,10 +355,15 @@ test("a run served from a larger pool is told the size of the pod it got, and it
     ...SPEC,
     tier: "S" as const,
     resources: sizes.S,
+    workspaceStorageSize: "20Gi",
     warmTiers: [
-      { tier: "S" as const, resources: sizes.S },
-      { tier: "M" as const, resources: sizes.M },
+      { tier: "S" as const, resources: sizes.S, workspaceStorageSize: "20Gi" },
+      { tier: "M" as const, resources: sizes.M, workspaceStorageSize: "60Gi" },
     ],
+    secretEnv: {
+      PRIVATE: "secret-value",
+      ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: `Be brief.\n\nFiles persist. ${workspaceVolumeSentence(20)} Ports: none.`,
+    },
     env: {
       ARCHESTRA_AGENT_RUNTIME_TIER: "S",
       ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",
@@ -351,6 +377,12 @@ test("a run served from a larger pool is told the size of the pod it got, and it
   const served = servedLaunchSpec(spec, "M");
   expect(served.tier).toBe("M");
   expect(served.resources).toEqual(sizes.M);
+  // The pod's volume is M's, and the prompt's sentence about it says so.
+  expect(served.workspaceStorageSize).toBe("60Gi");
+  expect(served.secretEnv).toEqual({
+    PRIVATE: "secret-value",
+    ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: `Be brief.\n\nFiles persist. ${workspaceVolumeSentence(60)} Ports: none.`,
+  });
   expect(served.env).toEqual({
     ARCHESTRA_AGENT_RUNTIME_TIER: "M",
     ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "L",

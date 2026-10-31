@@ -17,6 +17,7 @@ import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
 import {
   AGENT_RUNTIME_CPU_REQUEST_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
+  AGENT_RUNTIME_SYSTEM_PROMPT_ENV,
   AGENT_RUNTIME_TIER_ENV,
   AGENT_RUNTIME_TIERS_ENV,
 } from "@/services/agent-runtime/runtime-contract";
@@ -27,6 +28,8 @@ import {
   resolveRunWorkspaceStorageSize,
   retargetRuntimeTiersEnv,
   warmPoolReplicas,
+  workspaceVolumeGiB,
+  workspaceVolumeSentence,
 } from "@/services/agent-runtime/runtime-tiers";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type { AgentRuntimeTier } from "@/types";
@@ -372,9 +375,12 @@ class AgentWarmPoolManager {
     const namespace = spec.namespace;
     // Each candidate is sized as the run's organization sizes that tier.
     const candidates = spec.warmTiers.length
-      ? spec.warmTiers.map(({ tier, resources }) => ({
+      ? spec.warmTiers.map(({ tier, resources, workspaceStorageSize }) => ({
           tier,
-          sized: tier === spec.tier ? spec : { ...spec, tier, resources },
+          sized:
+            tier === spec.tier
+              ? spec
+              : { ...spec, tier, resources, workspaceStorageSize },
         }))
       : [{ tier: spec.tier, sized: spec }];
     let drained: string | undefined;
@@ -472,12 +478,18 @@ export const agentWarmPoolManager = new AgentWarmPoolManager();
 
 /**
  * The launch spec as the pod that served it is sized: a run claimed from a
- * larger tier's pool runs at that tier, so its size variables must say so.
+ * larger tier's pool runs at that tier, so its size variables, its volume and
+ * what its prompt says about the volume must say so.
  */
 export function servedLaunchSpec<
   T extends Pick<
     KubernetesAgentRunLaunchSpec,
-    "tier" | "resources" | "warmTiers" | "env"
+    | "tier"
+    | "resources"
+    | "warmTiers"
+    | "env"
+    | "secretEnv"
+    | "workspaceStorageSize"
   >,
 >(spec: T, tier: AgentRuntimeTier | null): T {
   const served = spec.warmTiers.find((candidate) => candidate.tier === tier);
@@ -487,6 +499,8 @@ export function servedLaunchSpec<
     ...spec,
     tier,
     resources: served.resources,
+    workspaceStorageSize: served.workspaceStorageSize,
+    secretEnv: retoldWorkspaceVolume(spec, served.workspaceStorageSize),
     env: {
       ...spec.env,
       [AGENT_RUNTIME_TIER_ENV]: tier,
@@ -524,3 +538,30 @@ type Claim = {
     conditions?: Array<{ status: string; reason?: string }>;
   };
 };
+
+/**
+ * The system prompt with the volume sentence retold for the served tier's
+ * size, when it differs from the requested tier's.
+ */
+function retoldWorkspaceVolume(
+  spec: Pick<
+    KubernetesAgentRunLaunchSpec,
+    "secretEnv" | "workspaceStorageSize"
+  >,
+  servedStorageSize: string,
+): Record<string, string> {
+  const prompt = spec.secretEnv[AGENT_RUNTIME_SYSTEM_PROMPT_ENV];
+  if (
+    !prompt ||
+    !spec.workspaceStorageSize ||
+    spec.workspaceStorageSize === servedStorageSize
+  )
+    return spec.secretEnv;
+  return {
+    ...spec.secretEnv,
+    [AGENT_RUNTIME_SYSTEM_PROMPT_ENV]: prompt.replace(
+      workspaceVolumeSentence(workspaceVolumeGiB(spec.workspaceStorageSize)),
+      workspaceVolumeSentence(workspaceVolumeGiB(servedStorageSize)),
+    ),
+  };
+}

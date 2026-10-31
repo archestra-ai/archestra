@@ -321,7 +321,7 @@ describe("run tools", () => {
     for (const [limits, message] of [
       [
         { tier: "L" },
-        "Tier L (8 CPU, 16 GiB (32 GiB limit)) is above this Agent's scaleup tier M",
+        "Tier L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier M",
       ],
       [
         { max_duration_hours: 24 },

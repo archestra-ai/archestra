@@ -147,13 +147,18 @@ export function summarizeAgentRuntimeTier(
 }
 
 /**
- * A tier's size for people: "4 CPU, 8 GiB (16 GiB limit)", with
- * ", 60 GiB workspace" when the tier sizes its runs' volume.
+ * A tier's size for people: "4 CPU, 8 GiB (16 GiB limit), 60 GiB workspace".
+ * The workspace is named when the tier sizes it, or always when the
+ * deployment's default size is given, so a list of tiers reads alike.
  */
-export function describeAgentRuntimeTier(tier: AgentRuntimeTierSize): string {
+export function describeAgentRuntimeTier(
+  tier: AgentRuntimeTierSize,
+  defaultWorkspaceGiB?: number,
+): string {
   const cpu = `${tier.cpuRequest} CPU${tier.cpuLimit !== null ? ` (${tier.cpuLimit} limit)` : ""}`;
+  const workspaceGiB = tier.workspaceGiB ?? defaultWorkspaceGiB ?? null;
   const workspace =
-    tier.workspaceGiB === null ? "" : `, ${tier.workspaceGiB} GiB workspace`;
+    workspaceGiB === null ? "" : `, ${workspaceGiB} GiB workspace`;
   return `${cpu}, ${formatMemory(tier.memoryRequestMiB)} (${formatMemory(tier.memoryLimitMiB)} limit)${workspace}`;
 }
 
@@ -467,8 +472,10 @@ export function parseCpuQuantity(value: unknown): number | null {
  */
 export function agentRuntimeTierProblems(settings: {
   tiers: ReadonlyArray<
-    Pick<AgentRuntimeTierDefinition, "name" | "cpuRequest" | "cpuLimit"> &
-      Partial<Pick<AgentRuntimeTierDefinition, "workspaceGiB">>
+    Pick<
+      AgentRuntimeTierDefinition,
+      "name" | "cpuRequest" | "cpuLimit" | "workspaceGiB"
+    >
   >;
   defaultTier: string;
 }): string[] {
@@ -514,7 +521,6 @@ export function agentRuntimeTierProblems(settings: {
     }
     if (
       tier.workspaceGiB !== null &&
-      tier.workspaceGiB !== undefined &&
       (!Number.isInteger(tier.workspaceGiB) ||
         tier.workspaceGiB < 1 ||
         tier.workspaceGiB > AGENT_RUNTIME_TIER_MAX_WORKSPACE_GIB)

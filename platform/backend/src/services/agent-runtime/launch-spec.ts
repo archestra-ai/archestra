@@ -58,6 +58,7 @@ import {
   AGENT_RUNTIME_MAX_TIER_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   AGENT_RUNTIME_STEER_FIFO,
+  AGENT_RUNTIME_SYSTEM_PROMPT_ENV,
   AGENT_RUNTIME_TIER_ENV,
   AGENT_RUNTIME_TIERS_ENV,
   constructStableRunName,
@@ -71,7 +72,9 @@ import {
   resolveRunWorkspaceStorageSize,
   runtimeTiersEnv,
   tierResources,
+  tierWorkspaceStorageSize,
   warmTierCandidates,
+  workspaceVolumeSentence,
 } from "./runtime-tiers";
 
 /**
@@ -436,7 +439,7 @@ export async function buildAgentRunLaunchSpec(params: {
           OPENAI_API_KEY: virtualKeyValue,
         }
       : {}),
-    ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: [
+    [AGENT_RUNTIME_SYSTEM_PROMPT_ENV]: [
       agent.systemPrompt,
       skillPreview,
       "Skills configured for this Agent are available through its MCP gateway, " +
@@ -494,7 +497,11 @@ export async function buildAgentRunLaunchSpec(params: {
       tier: params.limits.tier,
       warmTiers: params.limits.tier
         ? warmTierCandidates(params.limits.tier, maxTier, tiers).map(
-            (tier) => ({ tier: tier.name, resources: tierResources(tier) }),
+            (tier) => ({
+              tier: tier.name,
+              resources: tierResources(tier),
+              workspaceStorageSize: tierWorkspaceStorageSize(tier),
+            }),
           )
         : [],
       env: nonSecretEnv,
@@ -756,8 +763,7 @@ function describeRuntimeWorkspace(
   const ports = [...new Set(runtime.ports ?? [])];
   return [
     "Files under /home/node persist across this conversation's turns; " +
-      "other paths reset when the container is replaced. " +
-      `The workspace volume is ${workspaceGiB} GiB in all, including any Docker data.`,
+      `other paths reset when the container is replaced. ${workspaceVolumeSentence(workspaceGiB)}`,
     ports.length > 0 &&
       `The user can forward ${ports.length === 1 ? "port" : "ports"} ` +
         `${ports.join(", ")} from this workspace to a browser; serve anything ` +

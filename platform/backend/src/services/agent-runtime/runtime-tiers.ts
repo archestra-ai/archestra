@@ -11,7 +11,7 @@ import {
   sameAgentRuntimeTierName,
   sortAgentRuntimeTiers,
 } from "@archestra/shared";
-import config from "@/config";
+import config, { k8sMemoryQuantityToBytes } from "@/config";
 import OrganizationModel from "@/models/organization";
 import {
   type AgentRunLimits,
@@ -124,8 +124,7 @@ export function resolveRunWorkspaceStorageSize(
   tier: string | null,
   tiers: ResolvedAgentRuntimeTiers,
 ): string {
-  const gib = tierSize(tiers, tier).workspaceGiB;
-  return gib === null ? config.agentRuntime.workspaceStorageSize : `${gib}Gi`;
+  return tierWorkspaceStorageSize(tierSize(tiers, tier));
 }
 
 /** The same size in GiB, for text and for the Pod's tier list. */
@@ -133,43 +132,45 @@ export function resolveRunWorkspaceGiB(
   tier: string | null,
   tiers: ResolvedAgentRuntimeTiers,
 ): number {
-  return tierSize(tiers, tier).workspaceGiB ?? defaultWorkspaceGiB();
+  return tierWorkspaceGiB(tierSize(tiers, tier));
+}
+
+/** A tier's workspace volume as a Kubernetes quantity. */
+export function tierWorkspaceStorageSize(tier: AgentRuntimeTierSize): string {
+  return tier.workspaceGiB === null
+    ? config.agentRuntime.workspaceStorageSize
+    : `${tier.workspaceGiB}Gi`;
 }
 
 /** The deployment's workspace volume size in GiB: what a tier that sets none gives its runs. */
 export function defaultWorkspaceGiB(): number {
-  return quantityGiB(config.agentRuntime.workspaceStorageSize);
+  return workspaceVolumeGiB(config.agentRuntime.workspaceStorageSize);
 }
 
-const QUANTITY_BYTES: Record<string, number> = {
-  "": 1,
-  k: 1000,
-  M: 1000 ** 2,
-  G: 1000 ** 3,
-  T: 1000 ** 4,
-  P: 1000 ** 5,
-  Ki: 1024,
-  Mi: 1024 ** 2,
-  Gi: 1024 ** 3,
-  Ti: 1024 ** 4,
-  Pi: 1024 ** 5,
-};
-
-/** A Kubernetes memory quantity ("20Gi", "500Mi", "1T") in GiB, to two decimals. */
-function quantityGiB(quantity: string): number {
-  const match = /^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|Pi|k|M|G|T|P)?$/.exec(
-    quantity.trim(),
-  );
-  if (!match) return 0;
-  const bytes = Number(match[1]) * (QUANTITY_BYTES[match[2] ?? ""] ?? 0);
+/** A workspace volume quantity ("20Gi", "500Mi") in GiB, to two decimals. */
+export function workspaceVolumeGiB(quantity: string): number {
+  const bytes = k8sMemoryQuantityToBytes(quantity);
+  // The deployment's value is validated at startup and a tier's is whole GiB,
+  // so this names a programming error, not a setting.
+  if (bytes === undefined)
+    throw new Error(`Unreadable workspace volume size ${quantity}`);
   return Math.round((bytes / 1024 ** 3) * 100) / 100;
 }
 
 /**
+ * What a run reads about its volume. A run served from a larger tier's warm
+ * pool is told that tier's size instead; see `servedLaunchSpec`.
+ */
+export function workspaceVolumeSentence(gib: number): string {
+  return `The workspace volume is ${gib} GiB in all, including any Docker data.`;
+}
+
+/**
  * Tiers whose warm pool may serve a run, in order: the requested tier, then
- * the next larger one while it stays within the Agent's scaleup tier. Never a
- * smaller one: a run sized below what it asked for can run out of memory. A
- * run served from the larger pool runs at that size.
+ * the next larger one while it stays within the Agent's scaleup tier and its
+ * workspace volume is no smaller. Never a smaller one: a run sized below what
+ * it asked for can run out of memory or disk. A run served from the larger
+ * pool runs at that size.
  */
 export function warmTierCandidates(
   tier: string,
@@ -180,7 +181,8 @@ export function warmTierCandidates(
   const larger = nextLargerAgentRuntimeTier(tiers.tiers, own.name);
   return larger &&
     agentRuntimeTierRank(tiers.tiers, larger.name) <=
-      agentRuntimeTierRank(tiers.tiers, max)
+      agentRuntimeTierRank(tiers.tiers, max) &&
+    tierWorkspaceGiB(larger) >= tierWorkspaceGiB(own)
     ? [own, larger]
     : [own];
 }
@@ -215,7 +217,7 @@ export function runtimeTiersEnv(
       cpu_limit: tier.cpuLimit,
       memory_gib: gib(tier.memoryRequestMiB),
       memory_limit_gib: gib(tier.memoryLimitMiB),
-      workspace_gib: tier.workspaceGiB ?? defaultWorkspaceGiB(),
+      workspace_gib: tierWorkspaceGiB(tier),
       ...(current !== null &&
       tier.name ===
         tierSize({ tiers: [...allowed], defaultTier: current }, current).name
@@ -227,6 +229,11 @@ export function runtimeTiersEnv(
 
 function gib(mib: number): number {
   return Math.round((mib / 1024) * 100) / 100;
+}
+
+/** A tier's workspace volume in GiB, the deployment's when it sets none. */
+function tierWorkspaceGiB(tier: AgentRuntimeTierSize): number {
+  return tier.workspaceGiB ?? defaultWorkspaceGiB();
 }
 
 /**
@@ -260,7 +267,10 @@ function allowedTiersSentence(
   allowed: readonly AgentRuntimeTierSize[],
 ): string {
   return `Tiers this Agent's runs may use: ${allowed
-    .map((tier) => `${tier.name} (${describeAgentRuntimeTier(tier)})`)
+    .map(
+      (tier) =>
+        `${tier.name} (${describeAgentRuntimeTier(tier, defaultWorkspaceGiB())})`,
+    )
     .join(", ")}.`;
 }
 
@@ -297,7 +307,7 @@ export function resolveAgentRunLimits(params: {
     )
       throw new ApiError(
         400,
-        `Tier ${named.name} (${describeAgentRuntimeTier(named)}) is above this Agent's scaleup tier ${maxTier}. ${allowedTiersSentence(allowed)}`,
+        `Tier ${named.name} (${describeAgentRuntimeTier(named, defaultWorkspaceGiB())}) is above this Agent's scaleup tier ${maxTier}. ${allowedTiersSentence(allowed)}`,
       );
     tier = named.name;
   }
@@ -320,7 +330,7 @@ export function resolveAgentRunLimits(params: {
       if (!fits(named))
         throw new ApiError(
           400,
-          `Tier ${named.name} (${describeAgentRuntimeTier(named)}) has less than the ${need} asked for. ${allowedTiersSentence(allowed)}`,
+          `Tier ${named.name} (${describeAgentRuntimeTier(named, defaultWorkspaceGiB())}) has less than the ${need} asked for. ${allowedTiersSentence(allowed)}`,
         );
     } else {
       const smallest = allowed.find(fits);

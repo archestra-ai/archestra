@@ -2461,6 +2461,10 @@ describe("k8sMemoryQuantityToBytes", () => {
     expect(k8sMemoryQuantityToBytes("4Gi")).toBe(4 * 1024 ** 3);
     expect(k8sMemoryQuantityToBytes("512Mi")).toBe(512 * 1024 ** 2);
     expect(k8sMemoryQuantityToBytes("1536Mi")).toBe(1536 * 1024 ** 2);
+    // Every suffix the validator accepts has a byte count.
+    expect(k8sMemoryQuantityToBytes("2K")).toBe(2000);
+    expect(k8sMemoryQuantityToBytes("1Pi")).toBe(1024 ** 5);
+    expect(k8sMemoryQuantityToBytes("1E")).toBe(1000 ** 6);
     // Decimal suffixes are a different size from their binary namesakes, so
     // treating `G` as `Gi` would compare the ceiling against the wrong number.
     expect(k8sMemoryQuantityToBytes("1G")).toBe(1000 ** 3);

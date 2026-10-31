@@ -217,6 +217,10 @@ describe("sizes and order", () => {
     expect(describeAgentRuntimeTier({ ...tiers[1], workspaceGiB: 60 })).toBe(
       "2 CPU (3 limit), 4 GiB (6 GiB limit), 60 GiB workspace",
     );
+    // With the deployment's default given, every tier names its volume.
+    expect(describeAgentRuntimeTier(tiers[1], 20)).toBe(
+      "2 CPU (3 limit), 4 GiB (6 GiB limit), 20 GiB workspace",
+    );
   });
 
   test("parses CPU quantities", () => {
@@ -303,9 +307,9 @@ describe("agentRuntimeTierProblems", () => {
     expect(
       agentRuntimeTierProblems({
         tiers: [
-          { name: "S", cpuRequest: 2, cpuLimit: 1 },
-          { name: "s", cpuRequest: 9, cpuLimit: null },
-          { name: " ", cpuRequest: 1, cpuLimit: 20 },
+          { name: "S", cpuRequest: 2, cpuLimit: 1, workspaceGiB: null },
+          { name: "s", cpuRequest: 9, cpuLimit: null, workspaceGiB: null },
+          { name: " ", cpuRequest: 1, cpuLimit: 20, workspaceGiB: null },
           { name: "W", cpuRequest: 1, cpuLimit: null, workspaceGiB: 2048 },
         ],
         defaultTier: "M",

@@ -1884,7 +1884,8 @@ export const parseClusterDnsIps = (envValue: string | undefined): string[] => {
 
 /**
  * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
- * undefined when it is not one.
+ * undefined when it is not one. Reads every suffix `isValidK8sMemoryQuantity`
+ * accepts, so a validated setting always has a byte count.
  *
  * @public — exported for testability
  */
@@ -1893,17 +1894,22 @@ export const k8sMemoryQuantityToBytes = (
 ): number | undefined => {
   const match = quantity
     .trim()
-    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|k|M|G|T)?$/);
+    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|Pi|Ei|k|K|M|G|T|P|E)?$/);
   if (!match) return undefined;
   const multipliers: Record<string, number> = {
     Ki: 1024,
     Mi: 1024 ** 2,
     Gi: 1024 ** 3,
     Ti: 1024 ** 4,
+    Pi: 1024 ** 5,
+    Ei: 1024 ** 6,
     k: 1000,
+    K: 1000,
     M: 1000 ** 2,
     G: 1000 ** 3,
     T: 1000 ** 4,
+    P: 1000 ** 5,
+    E: 1000 ** 6,
   };
   // Floored because the only consumers are a cgroup limit and a byte
   // comparison, neither of which takes a fraction.

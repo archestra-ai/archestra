@@ -5,6 +5,7 @@ import {
   agentRuntimeAllowedTiers,
   agentRuntimeMaxTier,
   agentRuntimeTier,
+  defaultWorkspaceGiB,
   resolveAgentRunLimits,
   resolveRunResources,
   resolveRunWorkspaceStorageSize,
@@ -112,7 +113,7 @@ describe("runtime tiers", () => {
         requested: { tier: "M" },
       }),
     ).toThrow(
-      "Tier M (4 CPU, 8 GiB (16 GiB limit)) is above this Agent's scaleup tier S. Tiers this Agent's runs may use: S (2 CPU, 4 GiB (8 GiB limit)).",
+      "Tier M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier S. Tiers this Agent's runs may use: S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace).",
     );
     // A scaleup tier below the Agent's own tier counts as the Agent's tier.
     expect(
@@ -159,7 +160,7 @@ describe("runtime tiers", () => {
         requested: { minCpu: 4 },
       }),
     ).toThrow(
-      "No tier this Agent's runs may use has 4 CPU. Tiers this Agent's runs may use: Small (1 CPU, 2 GiB (4 GiB limit)), Medium (3 CPU, 6 GiB (12 GiB limit)).",
+      "No tier this Agent's runs may use has 4 CPU. Tiers this Agent's runs may use: Small (1 CPU, 2 GiB (4 GiB limit), 20 GiB workspace), Medium (3 CPU, 6 GiB (12 GiB limit), 20 GiB workspace).",
     );
     // A named tier must also have the size asked for.
     expect(() =>
@@ -169,7 +170,7 @@ describe("runtime tiers", () => {
         requested: { tier: "Small", minCpu: 2 },
       }),
     ).toThrow(
-      "Tier Small (1 CPU, 2 GiB (4 GiB limit)) has less than the 2 CPU asked for.",
+      "Tier Small (1 CPU, 2 GiB (4 GiB limit), 20 GiB workspace) has less than the 2 CPU asked for.",
     );
   });
 
@@ -187,6 +188,54 @@ describe("runtime tiers", () => {
       "Large",
       "XL",
     ]);
+    // A larger tier never serves a run whose workspace volume it cannot hold.
+    const volumes = (bigWorkspaceGiB: number | null) =>
+      resolveAgentRuntimeTiers(
+        {
+          tiers: [
+            {
+              name: "Tilt",
+              cpuRequest: 6,
+              cpuLimit: null,
+              warmSpares: 0,
+              workspaceGiB: 60,
+            },
+            {
+              name: "Big",
+              cpuRequest: 8,
+              cpuLimit: null,
+              warmSpares: 0,
+              workspaceGiB: bigWorkspaceGiB,
+            },
+          ],
+          defaultTier: "Tilt",
+        },
+        { defaultWarmSpares: 0 },
+      );
+    expect(names(warmTierCandidates("Tilt", "Big", volumes(null)))).toEqual([
+      "Tilt",
+    ]);
+    expect(names(warmTierCandidates("Tilt", "Big", volumes(60)))).toEqual([
+      "Tilt",
+      "Big",
+    ]);
+  });
+
+  test("the deployment's volume size reads in GiB whatever quantity it was set in", () => {
+    const size = config.agentRuntime.workspaceStorageSize;
+    try {
+      for (const [quantity, gib] of [
+        ["20Gi", 20],
+        ["500Mi", 0.49],
+        ["1T", 931.32],
+        ["64G", 59.6],
+      ] as const) {
+        config.agentRuntime.workspaceStorageSize = quantity;
+        expect(defaultWorkspaceGiB()).toBe(gib);
+      }
+    } finally {
+      config.agentRuntime.workspaceStorageSize = size;
+    }
   });
 
   test("a run's workspace volume is its tier's size, else the deployment's", () => {

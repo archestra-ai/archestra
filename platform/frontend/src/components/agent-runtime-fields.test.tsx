@@ -194,11 +194,11 @@ describe("AgentRuntimeFields", () => {
     expect(
       screen.queryByRole("option", { name: /^S:/ }),
     ).not.toBeInTheDocument();
-    // The default tier is offered as "Fix at", which disables scaling up.
+    // The default tier is offered as "Disable autoscaling", which disables scaling up.
     // Every tier names its workspace: its own size, else the deployment's.
     expect(
       screen.getByRole("option", {
-        name: "Fix at M: 0.75 CPU, 1.5 GiB, 20 GiB workspace",
+        name: "Disable autoscaling",
       }),
     ).toBeInTheDocument();
     await user.click(
@@ -210,7 +210,9 @@ describe("AgentRuntimeFields", () => {
       JSON.parse(screen.getByTestId("config").textContent ?? "{}").maxTier,
     ).toBe("L");
     await user.click(screen.getByLabelText("Scaleup tier"));
-    await user.click(screen.getByRole("option", { name: /^Fix at M:/ }));
+    await user.click(
+      screen.getByRole("option", { name: "Disable autoscaling" }),
+    );
     expect(
       JSON.parse(screen.getByTestId("config").textContent ?? "{}").maxTier,
     ).toBe("M");

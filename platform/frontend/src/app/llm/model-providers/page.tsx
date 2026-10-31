@@ -200,9 +200,11 @@ export default function ApiKeysPage() {
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const createProvider = searchParams.get("create");
-  const linkedCreate = isSupportedProvider(createProvider)
-    ? { provider: createProvider, initialGrants: [] }
-    : undefined;
+  const linkedCreate =
+    isSupportedProvider(createProvider) &&
+    !providerCatalog.isHidden(createProvider)
+      ? { provider: createProvider, initialGrants: [] }
+      : undefined;
   const [subscriptionToConnect, setSubscriptionToConnect] =
     useState<SubscriptionOffer | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);

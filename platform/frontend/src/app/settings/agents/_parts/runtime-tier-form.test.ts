@@ -36,8 +36,10 @@ describe("validateRuntimeTierForm", () => {
         .tier?.workspaceGiB,
     ).toBe(60);
     expect(
-      validateRuntimeTierForm({ ...values, workspaceGiB: " 1.5" }, { otherNames })
-        .errors,
+      validateRuntimeTierForm(
+        { ...values, workspaceGiB: " 1.5" },
+        { otherNames },
+      ).errors,
     ).toEqual({
       workspaceGiB:
         "Enter a whole number from 1 to 1024, or leave it blank for the default",

@@ -94,7 +94,13 @@ export const DEFAULT_AGENT_RUNTIME_TIERS: AgentRuntimeTierSettings = {
       warmSpares: null,
       workspaceGiB: null,
     },
-    { name: "L", cpuRequest: 8, cpuLimit: null, warmSpares: 0, workspaceGiB: null },
+    {
+      name: "L",
+      cpuRequest: 8,
+      cpuLimit: null,
+      warmSpares: 0,
+      workspaceGiB: null,
+    },
   ],
   defaultTier: "M",
 };

@@ -101,9 +101,27 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   await dialog.getByLabel("Workspace (GiB)").fill("60");
   const saved = {
     tiers: [
-      { name: "S", cpuRequest: 2, cpuLimit: null, pooled: true, workspaceGiB: null },
-      { name: "M", cpuRequest: 4, cpuLimit: null, pooled: true, workspaceGiB: null },
-      { name: "L", cpuRequest: 6, cpuLimit: null, pooled: true, workspaceGiB: 60 },
+      {
+        name: "S",
+        cpuRequest: 2,
+        cpuLimit: null,
+        pooled: true,
+        workspaceGiB: null,
+      },
+      {
+        name: "M",
+        cpuRequest: 4,
+        cpuLimit: null,
+        pooled: true,
+        workspaceGiB: null,
+      },
+      {
+        name: "L",
+        cpuRequest: 6,
+        cpuLimit: null,
+        pooled: true,
+        workspaceGiB: 60,
+      },
     ],
     defaultTier: "M",
   };

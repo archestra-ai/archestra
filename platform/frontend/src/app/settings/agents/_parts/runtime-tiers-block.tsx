@@ -99,9 +99,7 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
         row.original.workspaceGiB === null ? (
           <span className="tabular-nums">
             {defaultWorkspaceGiB} GiB
-            <span className="block text-xs text-muted-foreground">
-              default
-            </span>
+            <span className="block text-xs text-muted-foreground">default</span>
           </span>
         ) : (
           <span className="tabular-nums">{row.original.workspaceGiB} GiB</span>

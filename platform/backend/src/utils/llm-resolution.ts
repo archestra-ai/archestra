@@ -52,7 +52,7 @@ interface ResolvedLlmSelection {
  * model (the env/Vertex/config fallback path). `selectedModel` /
  * `selectedProvider` are the dereferenced values for the LLM proxy.
  */
-interface ConversationLlmSelection {
+export interface ConversationLlmSelection {
   modelId: string | null;
   chatApiKeyId: string | null;
   selectedModel: string;

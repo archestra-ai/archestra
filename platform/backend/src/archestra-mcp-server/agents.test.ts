@@ -1556,6 +1556,78 @@ describe("agent runtime and model tools", () => {
     expect((await AgentModel.findById(agent.id))?.runtime).toBeNull();
   });
 
+  test("edit_agent moves the image of an agent whose key the caller cannot use", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const stranger = await makeUser();
+    const privateKey = await makeLlmProviderApiKey(
+      organizationId,
+      await secretId(),
+      { provider: "anthropic", userId: stranger.id },
+    );
+    const model = await linkModel({
+      keyId: privateKey.id,
+      provider: "anthropic",
+      modelId: "runtime-only-edit-test",
+    });
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: mockContext.userId,
+      llmApiKeyId: privateKey.id,
+      modelId: model.id,
+      runtime: {
+        ...buildCustomAgentRuntime({ image: "example.test/agent:1" }),
+        inferenceProtocol: "anthropic",
+      },
+    });
+
+    // Only the runtime changes: the agent keeps its pair, and the new runtime
+    // is checked against that pair, as the agent's runs use it.
+    const moved = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: {
+        image: "example.test/agent:2",
+        inferenceProtocol: "anthropic",
+      },
+    });
+    expect(moved.isError, JSON.stringify(moved.content)).toBe(false);
+    expect(await AgentModel.findById(agent.id)).toMatchObject({
+      llmApiKeyId: privateKey.id,
+      modelId: model.id,
+      runtime: { image: "example.test/agent:2" },
+    });
+
+    const incompatible = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: { template: "codex" },
+    });
+    expect(incompatible.isError).toBe(true);
+    expect((incompatible.content[0] as any).text).toContain(
+      "Codex runtime requires an OpenAI",
+    );
+
+    // Naming the pair is choosing it, and the caller cannot use that key.
+    const reselected = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: {
+        image: "example.test/agent:3",
+        inferenceProtocol: "anthropic",
+      },
+      llmApiKeyId: privateKey.id,
+      modelId: model.id,
+    });
+    expect(reselected.isError).toBe(true);
+    expect((reselected.content[0] as any).text).toContain(
+      "must be linked and available to you",
+    );
+    expect((await AgentModel.findById(agent.id))?.runtime).toMatchObject({
+      image: "example.test/agent:2",
+    });
+  });
+
   test("get_agent returns the runtime and pinned model", async ({
     makeAgent,
   }) => {

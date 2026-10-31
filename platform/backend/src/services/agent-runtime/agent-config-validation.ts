@@ -139,13 +139,21 @@ export async function assertAgentRuntimeModelCompatibility(params: {
   agent: Pick<Agent, "llmApiKeyId" | "modelId">;
   organizationId: string;
   userId: string;
+  /**
+   * Whether this write picks the agent's model or key. A write that only
+   * changes the runtime keeps the pair the agent already has, so the caller
+   * need not be able to use that key themselves; the runtime is still checked
+   * against that pair, as the agent's runs use it.
+   */
+  selectsModel: boolean;
 }): Promise<void> {
   const { runtime } = params;
   if (!runtime) return;
-  await assertAgentModelSelectionAvailable(params);
+  if (params.selectsModel) await assertAgentModelSelectionAvailable(params);
   const result = await getResolvedAgentRuntimeModelCompatibility({
     ...params,
     runtime,
+    asStored: !params.selectsModel,
   });
   if (!result.compatibility.compatible) {
     throw new ApiError(409, result.compatibility.message);

@@ -115,8 +115,9 @@ export function AgentRunChatSession({
   const run = query.data;
   const now = useRuntimeClock(true);
 
-  // The run's LLM requests are logged under its session id, which only the
-  // owner is sent; `log:read` lets them open their own trace.
+  // The trace link opens the run's LLM session (`llmSessionId`). It is shown
+  // to the owner only, and `log:read` lets them open it. `sessionId` stays
+  // the workspace and log-stream identity.
   const { data: canReadLogs } = useHasPermissions({ log: ["read"] });
 
   // The server separately permits managers of the owning service account

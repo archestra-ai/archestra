@@ -145,6 +145,15 @@
     },
     {
       "includes": [
+        "frontend/src/**/*.tsx",
+        "!frontend/src/components/ui/**",
+        "!**/*.test.tsx",
+        "!**/__mocks__/**"
+      ],
+      "plugins": ["./tools/biome-plugins/no-raw-form-control.grit"]
+    },
+    {
+      "includes": [
         "**/*.ts",
         "**/*.tsx",
         "!**/*.ee.ts",

@@ -4,6 +4,7 @@ import type { PopoverContentProps } from "@radix-ui/react-popover";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
+import { ComboboxSearchInput } from "@/components/ui/combobox-search-input";
 import {
   Popover,
   PopoverContent,
@@ -245,7 +246,7 @@ export function SearchableMultiSelect({
           {showSearchIcon && (
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
           )}
-          <input
+          <ComboboxSearchInput
             {...navigation.inputProps}
             onKeyDown={(event) => {
               if (
@@ -270,7 +271,6 @@ export function SearchableMultiSelect({
               setSearchQuery(e.target.value);
               onSearchQueryChange?.(e.target.value);
             }}
-            className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
         <div

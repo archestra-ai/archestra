@@ -642,16 +642,21 @@ export default function ServiceAccountsSettingsPage() {
                 form.setValue("icon", icon, { shouldDirty: true })
               }
               showLogos
-              label={<Label htmlFor="service-account-name">Display name</Label>}
+              label={
+                <>
+                  <Label htmlFor="service-account-name">Display name</Label>
+                  <FieldDescription id="service-account-name-description">
+                    The display name for this service account.
+                  </FieldDescription>
+                </>
+              }
             >
               <Input
                 id="service-account-name"
+                aria-describedby="service-account-name-description"
                 {...form.register("name", { required: true })}
                 placeholder="Automation service account"
               />
-              <FieldDescription>
-                The display name for this service account.
-              </FieldDescription>
             </IdentityFields>
             <div className="space-y-2">
               <Label htmlFor="service-account-role">Roles</Label>

@@ -214,6 +214,11 @@ describe("AgentRuntimeFields", () => {
       "true",
     );
     expect(
+      screen.getByLabelText("Ports to forward"),
+    ).toHaveAccessibleDescription(
+      "Comma-separated, up to 20. Shown in the run's connection details. Use up to 20 port numbers from 1 to 65535.",
+    );
+    expect(
       JSON.parse(screen.getByTestId("config").textContent ?? "{}").ports,
     ).toEqual([3000, 9000]);
     expect(

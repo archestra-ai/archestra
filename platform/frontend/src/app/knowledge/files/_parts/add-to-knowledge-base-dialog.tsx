@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
@@ -93,13 +94,12 @@ export function AddToKnowledgeBaseDialog({
             tabs made a one-field form look like two modes. */}
         {creating ? (
           <div className="space-y-1.5">
-            <input
+            <Input
               id="target-knowledge-base"
               ref={newNameRef}
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
               placeholder="Vendor due diligence"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
             <div className="flex items-center justify-between">
               <p className="text-muted-foreground text-xs">

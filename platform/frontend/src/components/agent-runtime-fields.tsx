@@ -21,6 +21,7 @@ import {
   SettingsSection,
   SettingsSectionGroup,
 } from "@/components/settings-section";
+import { Field, FieldControl } from "@/components/ui/field";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import {
@@ -411,7 +412,7 @@ export function AgentRuntimeProtocolField({
 }: RuntimeSectionProps & {
   constrainToHarness?: boolean;
   hideLabel?: boolean;
-  /** Label above, one short line below: for a field sharing a row. */
+  /** Short help text for a field sharing a row. */
   compact?: boolean;
 }) {
   const config = value;
@@ -422,25 +423,33 @@ export function AgentRuntimeProtocolField({
     constrainToHarness ? value.command : null,
   );
   return (
-    <div className="space-y-2">
-      <Label
-        htmlFor="agent-runtime-inference-protocol"
-        className={hideLabel ? "sr-only" : undefined}
-      >
-        Inference API
-      </Label>
-      {!compact && (
-        <FieldDescription>
-          Choose the API protocol the container&apos;s Agent client expects.
-          Every option stays behind the {appName} LLM proxy.
-        </FieldDescription>
-      )}
-      {!compact && constrainToHarness && allowedProtocols.length === 1 && (
-        <FieldDescription>
-          Claude Code only speaks the Anthropic Messages API, so this cannot be
-          changed.
-        </FieldDescription>
-      )}
+    <Field
+      id="agent-runtime-inference-protocol"
+      label="Inference API"
+      labelClassName={hideLabel ? "sr-only" : undefined}
+      description={
+        compact ? (
+          allowedProtocols.length === 1 && constrainToHarness ? (
+            "Fixed by the client in this image."
+          ) : (
+            `What the client speaks to the ${appName} LLM proxy.`
+          )
+        ) : (
+          <>
+            <span>
+              Choose the API protocol the container&apos;s Agent client expects.
+              Every option stays behind the {appName} LLM proxy.
+            </span>
+            {constrainToHarness && allowedProtocols.length === 1 && (
+              <span className="block">
+                Claude Code only speaks the Anthropic Messages API, so this
+                cannot be changed.
+              </span>
+            )}
+          </>
+        )
+      }
+    >
       <Select
         disabled={allowedProtocols.length === 1}
         value={config.inferenceProtocol}
@@ -448,9 +457,11 @@ export function AgentRuntimeProtocolField({
           inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic",
         ) => update({ inferenceProtocol })}
       >
-        <SelectTrigger id="agent-runtime-inference-protocol" className="w-full">
-          <SelectValue />
-        </SelectTrigger>
+        <FieldControl>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+        </FieldControl>
         <SelectContent>
           {allowedProtocols.map((protocol) => (
             <SelectItem key={protocol} value={protocol}>
@@ -459,14 +470,7 @@ export function AgentRuntimeProtocolField({
           ))}
         </SelectContent>
       </Select>
-      {compact && (
-        <FieldDescription>
-          {allowedProtocols.length === 1 && constrainToHarness
-            ? "Fixed by the client in this image."
-            : `What the client speaks to the ${appName} LLM proxy.`}
-        </FieldDescription>
-      )}
-    </div>
+    </Field>
   );
 }
 
@@ -480,41 +484,35 @@ export function AgentRuntimeSteeringField({
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...config, ...patch });
   return (
-    <div className="space-y-2">
-      <Label
-        htmlFor="agent-runtime-steering"
-        className={hideLabel ? "sr-only" : undefined}
-      >
-        Steering
-      </Label>
-      {!compact && (
-        <FieldDescription>
-          Turn boundary delivers follow-up instructions between Agent turns.
-          Terminal input types directly into an interactive CLI.
-        </FieldDescription>
-      )}
+    <Field
+      id="agent-runtime-steering"
+      label="Steering"
+      labelClassName={hideLabel ? "sr-only" : undefined}
+      description={
+        compact
+          ? config.steerMode === "tmux_keys"
+            ? "Follow-ups are typed into the client's terminal."
+            : "Follow-ups are delivered between turns."
+          : "Turn boundary delivers follow-up instructions between Agent turns. Terminal input types directly into an interactive CLI."
+      }
+    >
       <Select
         value={config.steerMode}
         onValueChange={(steerMode: "pipe" | "tmux_keys") =>
           update({ steerMode })
         }
       >
-        <SelectTrigger id="agent-runtime-steering" className="w-full">
-          <SelectValue />
-        </SelectTrigger>
+        <FieldControl>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+        </FieldControl>
         <SelectContent>
           <SelectItem value="pipe">Turn boundary</SelectItem>
           <SelectItem value="tmux_keys">Terminal input</SelectItem>
         </SelectContent>
       </Select>
-      {compact && (
-        <FieldDescription>
-          {config.steerMode === "tmux_keys"
-            ? "Follow-ups are typed into the client's terminal."
-            : "Follow-ups are delivered between turns."}
-        </FieldDescription>
-      )}
-    </div>
+    </Field>
   );
 }
 
@@ -593,8 +591,11 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
     `${tier.name}: ${summarizeAgentRuntimeTier(tier)}`;
   return (
     <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
-      <div className="space-y-2">
-        <Label htmlFor="agent-runtime-tier">Default tier</Label>
+      <Field
+        id="agent-runtime-tier"
+        label="Default tier"
+        description="The CPU and memory of a run's container. A caller that starts a run can ask for another tier, up to the scaleup tier."
+      >
         <Select
           value={defaultTier ?? ""}
           disabled={!resolved}
@@ -608,9 +609,11 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
             update(rank > scaleupRank ? { tier, maxTier: tier } : { tier });
           }}
         >
-          <SelectTrigger id="agent-runtime-tier" className="w-full">
-            <SelectValue placeholder="Loading tiers…" />
-          </SelectTrigger>
+          <FieldControl>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Loading tiers…" />
+            </SelectTrigger>
+          </FieldControl>
           <SelectContent>
             {tiers.map((tier) => (
               <SelectItem key={tier.name} value={tier.name}>
@@ -619,21 +622,22 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
             ))}
           </SelectContent>
         </Select>
-        <FieldDescription>
-          The CPU and memory of a run's container. A caller that starts a run
-          can ask for another tier, up to the scaleup tier.
-        </FieldDescription>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="agent-runtime-max-tier">Scaleup tier</Label>
+      </Field>
+      <Field
+        id="agent-runtime-max-tier"
+        label="Scaleup tier"
+        description="The largest tier a run may ask for. A run whose work needs more CPU or memory starts a run of this agent at a larger tier and hands its work over."
+      >
         <Select
           value={scaleupTier ?? ""}
           disabled={!resolved}
           onValueChange={(maxTier) => update({ maxTier })}
         >
-          <SelectTrigger id="agent-runtime-max-tier" className="w-full">
-            <SelectValue placeholder="Loading tiers…" />
-          </SelectTrigger>
+          <FieldControl>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Loading tiers…" />
+            </SelectTrigger>
+          </FieldControl>
           <SelectContent>
             {tiers.slice(Math.max(defaultRank, 0)).map((tier) => (
               <SelectItem key={tier.name} value={tier.name}>
@@ -642,12 +646,7 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
             ))}
           </SelectContent>
         </Select>
-        <FieldDescription>
-          The largest tier a run may ask for. A run whose work needs more CPU or
-          memory starts a run of this agent at a larger tier and hands its work
-          over.
-        </FieldDescription>
-      </div>
+      </Field>
     </div>
   );
 }
@@ -703,41 +702,40 @@ function RuntimePortsField({
     );
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor="agent-runtime-ports">Ports to forward</Label>
-      <Input
-        id="agent-runtime-ports"
-        inputMode="numeric"
-        placeholder="3000, 9000"
-        value={draft}
-        aria-invalid={!valid}
-        onChange={(event) => {
-          const next = event.target.value;
-          setDraft(next);
-          const parsed = next.trim()
-            ? next
-                .split(/[\s,]+/)
-                .filter(Boolean)
-                .map(Number)
-            : [];
-          if (
-            parsed.length <= 20 &&
-            parsed.every(
-              (port) => Number.isInteger(port) && port >= 1 && port <= 65_535,
-            )
-          ) {
-            const unique = [...new Set(parsed)];
-            lastEmitted.current = unique.join(", ");
-            onChange(unique);
-          }
-        }}
-      />
-      <FieldDescription>
-        {valid
-          ? "Comma-separated, up to 20. Shown in the run's connection details."
-          : "Use up to 20 port numbers from 1 to 65535."}
-      </FieldDescription>
-    </div>
+    <Field
+      id="agent-runtime-ports"
+      label="Ports to forward"
+      description="Comma-separated, up to 20. Shown in the run's connection details."
+      error={!valid ? "Use up to 20 port numbers from 1 to 65535." : undefined}
+    >
+      <FieldControl>
+        <Input
+          inputMode="numeric"
+          placeholder="3000, 9000"
+          value={draft}
+          onChange={(event) => {
+            const next = event.target.value;
+            setDraft(next);
+            const parsed = next.trim()
+              ? next
+                  .split(/[\s,]+/)
+                  .filter(Boolean)
+                  .map(Number)
+              : [];
+            if (
+              parsed.length <= 20 &&
+              parsed.every(
+                (port) => Number.isInteger(port) && port >= 1 && port <= 65_535,
+              )
+            ) {
+              const unique = [...new Set(parsed)];
+              lastEmitted.current = unique.join(", ");
+              onChange(unique);
+            }
+          }}
+        />
+      </FieldControl>
+    </Field>
   );
 }
 
@@ -848,29 +846,30 @@ function NumberField({
   defaultValue: string | number | undefined;
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor={id}>{label}</Label>
+    <Field id={id} label={label} description={description}>
       <InputGroup>
-        <InputGroupInput
-          id={id}
-          type="number"
-          min={min}
-          max={max}
-          value={value ?? ""}
-          onChange={(event) => {
-            const next = event.currentTarget.valueAsNumber;
-            onChange(
-              Number.isFinite(next) ? Math.min(max, Math.max(min, next)) : null,
-            );
-          }}
-          placeholder={installationDefaultPlaceholder(defaultValue)}
-        />
+        <FieldControl>
+          <InputGroupInput
+            type="number"
+            min={min}
+            max={max}
+            value={value ?? ""}
+            onChange={(event) => {
+              const next = event.currentTarget.valueAsNumber;
+              onChange(
+                Number.isFinite(next)
+                  ? Math.min(max, Math.max(min, next))
+                  : null,
+              );
+            }}
+            placeholder={installationDefaultPlaceholder(defaultValue)}
+          />
+        </FieldControl>
         <InputGroupAddon align="inline-end">
           <InputGroupText>{unit}</InputGroupText>
         </InputGroupAddon>
       </InputGroup>
-      <FieldDescription>{description}</FieldDescription>
-    </div>
+    </Field>
   );
 }
 

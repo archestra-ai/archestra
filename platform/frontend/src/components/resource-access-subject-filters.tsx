@@ -14,6 +14,7 @@ import { PermissionRecipientIdentity } from "@/components/permission-recipient-s
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ComboboxSearchInput } from "@/components/ui/combobox-search-input";
 import {
   Popover,
   PopoverContent,
@@ -262,12 +263,11 @@ function SubjectPicker({
           className="mr-2 size-4 shrink-0 opacity-50"
           aria-hidden="true"
         />
-        <input
+        <ComboboxSearchInput
           aria-label={searchPlaceholder}
           placeholder={`${searchPlaceholder}…`}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
       </div>
       {recipients.isError ? (

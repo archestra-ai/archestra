@@ -121,6 +121,13 @@ export function GithubConfigFields({
       {!hideAuth && (
         <FormItem>
           <FormLabel htmlFor={credentialSelectId}>Credential</FormLabel>
+          <FormDescription>
+            Organization credentials support scheduled syncs.{" "}
+            <SettingsLink href="/settings/credentials" className="underline">
+              Manage credentials
+            </SettingsLink>
+            . {appConfigDescription}
+          </FormDescription>
           <Select
             value={
               credentialId ??
@@ -164,13 +171,7 @@ export function GithubConfigFields({
               </SelectItem>
             </SelectContent>
           </Select>
-          <FormDescription>
-            Organization credentials support scheduled syncs.{" "}
-            <SettingsLink href="/settings/credentials" className="underline">
-              Manage credentials
-            </SettingsLink>
-            . {appConfigDescription}
-          </FormDescription>
+
           {appConfigError && (
             <p className="text-sm text-destructive">{appConfigError}</p>
           )}

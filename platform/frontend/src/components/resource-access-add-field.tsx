@@ -6,6 +6,7 @@ import { Plus, Search } from "lucide-react";
 import { useState } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
+import { ComboboxSearchInput } from "@/components/ui/combobox-search-input";
 import {
   Popover,
   PopoverContent,
@@ -111,13 +112,12 @@ export function ResourceAccessAddField({
             className="mr-2 size-4 shrink-0 opacity-50"
             aria-hidden="true"
           />
-          <input
+          <ComboboxSearchInput
             {...navigation.inputProps}
             aria-label="Search recipients"
             placeholder="Search by name or email…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
         {recipients.isError ? (

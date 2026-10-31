@@ -1161,45 +1161,54 @@ export function McpCatalogForm({
                     />
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <Label>Transport</Label>
                         <FormField
                           control={form.control}
                           name="localConfig.transportType"
                           render={({ field }) => (
                             <FormItem>
+                              <FormLabel>Transport</FormLabel>
+                              <FormDescription>
+                                How the gateway talks to the container.
+                              </FormDescription>
                               <ReinstallHint show={isTransportTypeDirty} />
-                              <FormControl>
-                                <Select
-                                  onValueChange={field.onChange}
-                                  // New servers default to streamable-http
-                                  // explicitly; an unset value on an existing
-                                  // server runs as stdio.
-                                  value={field.value || "stdio"}
-                                >
+
+                              <Select
+                                onValueChange={field.onChange}
+                                // New servers default to streamable-http
+                                // explicitly; an unset value on an existing
+                                // server runs as stdio.
+                                value={field.value || "stdio"}
+                              >
+                                <FormControl>
                                   <SelectTrigger
                                     aria-label="Transport Type"
                                     className="w-full"
                                   >
                                     <SelectValue />
                                   </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="streamable-http">
-                                      Streamable HTTP (default)
-                                    </SelectItem>
-                                    <SelectItem value="stdio">stdio</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </FormControl>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="streamable-http">
+                                    Streamable HTTP (default)
+                                  </SelectItem>
+                                  <SelectItem value="stdio">stdio</SelectItem>
+                                </SelectContent>
+                              </Select>
+
                               <FormMessage />
                             </FormItem>
                           )}
                         />
-                        <FieldDescription>
-                          How the gateway talks to the container.
-                        </FieldDescription>
                       </div>
                       <div className="space-y-2">
                         <Label>Tenancy</Label>
+                        <FieldDescription>
+                          {isTenancyLocked
+                            ? "Fixed once the server is created."
+                            : isMultitenant
+                              ? "One shared deployment; the gateway adds caller identity."
+                              : "A dedicated deployment per installation."}
+                        </FieldDescription>
                         <Select
                           value={isMultitenant ? "multi" : "single"}
                           onValueChange={(value) =>
@@ -1220,13 +1229,6 @@ export function McpCatalogForm({
                             <SelectItem value="multi">Multi-tenant</SelectItem>
                           </SelectContent>
                         </Select>
-                        <FieldDescription>
-                          {isTenancyLocked
-                            ? "Fixed once the server is created."
-                            : isMultitenant
-                              ? "One shared deployment; the gateway adds caller identity."
-                              : "A dedicated deployment per installation."}
-                        </FieldDescription>
                       </div>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -1239,39 +1241,41 @@ export function McpCatalogForm({
                               Image pull policy
                               <ReinstallHint show={isImagePullPolicyDirty} />
                             </FormLabel>
-                            <FormControl>
-                              <Select
-                                onValueChange={field.onChange}
-                                // Unset follows the image: `:latest` and
-                                // untagged images pull on every rollout.
-                                value={
-                                  field.value ||
-                                  getDefaultMcpImagePullPolicy(
-                                    form.watch("localConfig.dockerImage") ||
-                                      mcpServerBaseImage,
-                                  )
-                                }
-                              >
+                            <FormDescription>
+                              Always picks up a new image behind the same tag on
+                              restart. IfNotPresent reuses the node&apos;s copy,
+                              so pods start while the registry is down.
+                            </FormDescription>
+
+                            <Select
+                              onValueChange={field.onChange}
+                              // Unset follows the image: `:latest` and
+                              // untagged images pull on every rollout.
+                              value={
+                                field.value ||
+                                getDefaultMcpImagePullPolicy(
+                                  form.watch("localConfig.dockerImage") ||
+                                    mcpServerBaseImage,
+                                )
+                              }
+                            >
+                              <FormControl>
                                 <SelectTrigger
                                   aria-label="Image pull policy"
                                   className="w-full"
                                 >
                                   <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Always">Always</SelectItem>
-                                  <SelectItem value="IfNotPresent">
-                                    IfNotPresent
-                                  </SelectItem>
-                                  <SelectItem value="Never">Never</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </FormControl>
-                            <FieldDescription>
-                              Always picks up a new image behind the same tag on
-                              restart. IfNotPresent reuses the node&apos;s copy,
-                              so pods start while the registry is down.
-                            </FieldDescription>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="Always">Always</SelectItem>
+                                <SelectItem value="IfNotPresent">
+                                  IfNotPresent
+                                </SelectItem>
+                                <SelectItem value="Never">Never</SelectItem>
+                              </SelectContent>
+                            </Select>
+
                             <FormMessage />
                           </FormItem>
                         )}

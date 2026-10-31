@@ -230,6 +230,7 @@ export function GitSourceEditDialog({
               />
               <div className="space-y-2">
                 <Label htmlFor="git-source-interval">Keep in sync</Label>
+                <FieldDescription>{syncDescription}</FieldDescription>
                 <Select
                   value={interval}
                   onValueChange={(value) =>
@@ -252,7 +253,6 @@ export function GitSourceEditDialog({
                     )}
                   </SelectContent>
                 </Select>
-                <FieldDescription>{syncDescription}</FieldDescription>
               </div>
             </>
           ) : null}

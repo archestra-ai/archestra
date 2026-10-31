@@ -510,6 +510,11 @@ export function EditConnectorDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Authentication</FormLabel>
+                  <FormDescription>
+                    Switch to OAuth when your External Client App is ready.
+                    Saving the migration requires new app credentials and cannot
+                    be reversed.
+                  </FormDescription>
                   <Select
                     value={field.value as string}
                     onValueChange={(value) => {
@@ -553,11 +558,6 @@ export function EditConnectorDialog({
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  <FormDescription>
-                    Switch to OAuth when your External Client App is ready.
-                    Saving the migration requires new app credentials and cannot
-                    be reversed.
-                  </FormDescription>
                 </FormItem>
               )}
             />

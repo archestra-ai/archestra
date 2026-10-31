@@ -673,7 +673,7 @@ describe("gemini model fetchers", () => {
           models: {
             list: vi.fn().mockRejectedValue(denied),
             get: vi.fn(async ({ model }: { model: string }) => {
-              if (model === "gemini-2.5-flash") {
+              if (model === "gemini-3.5-flash") {
                 return { name: `publishers/google/models/${model}` };
               }
               throw new Error("Not found");
@@ -685,7 +685,7 @@ describe("gemini model fetchers", () => {
 
         const models = await fetchGeminiModelsViaVertexAi();
 
-        expect(models.map((model) => model.id)).toEqual(["gemini-2.5-flash"]);
+        expect(models.map((model) => model.id)).toEqual(["gemini-3.5-flash"]);
       });
     });
 

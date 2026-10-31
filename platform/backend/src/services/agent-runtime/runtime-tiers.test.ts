@@ -363,6 +363,26 @@ describe("runtime tiers", () => {
         requested: { minCpu: 5 },
       }),
     ).toMatchObject({ tier: "Big", workspaceGiB: 20 });
+    // Scaleup fixed at Tilt: the disk rule still keeps Small out, and work
+    // that needs more than Tilt meets the fixed-scaleup refusal, not the disk
+    // message: only a larger tier would fit, and that is disabled.
+    const fixedAtTilt = { ...DEFAULTS, tier: "Tilt", maxTier: "Tilt" };
+    expect(
+      resolveAgentRunLimits({
+        runtime: fixedAtTilt,
+        tiers,
+        requested: { minCpu: 2 },
+      }),
+    ).toMatchObject({ tier: "Tilt", workspaceGiB: 60 });
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: fixedAtTilt,
+        tiers,
+        requested: { minCpu: 5 },
+      }),
+    ).toThrow(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to Tilt (4 CPU, 8 GiB (16 GiB limit), 60 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
     // No tier with the CPU and the disk: the refusal says which is missing.
     expect(() =>
       resolveAgentRunLimits({

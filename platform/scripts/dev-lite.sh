@@ -791,9 +791,12 @@ cmd_e2e() {
   # What this stack does not run. Specs tagged @needs-kubernetes or
   # @needs-keycloak skip with that reason instead of failing (see
   # e2e-tests/dependencies.ts). A value set by hand wins, even an empty one.
+  # Kubernetes counts as available when the kubeconfig the backend was
+  # started with exists: `up` writes ARCHESTRA_DEV_LITE_KUBECONFIG, or a path
+  # that does not exist, to .env.
   if [ -z "${E2E_UNAVAILABLE+set}" ]; then
     local unavailable=()
-    [ -n "${ARCHESTRA_DEV_LITE_KUBECONFIG:-}" ] && [ -f "$ARCHESTRA_DEV_LITE_KUBECONFIG" ] || unavailable+=(kubernetes)
+    [ -f "$(env_value ARCHESTRA_ORCHESTRATOR_KUBECONFIG)" ] || unavailable+=(kubernetes)
     keycloak_requested || unavailable+=(keycloak)
     E2E_UNAVAILABLE="$(IFS=,; printf '%s' "${unavailable[*]}")"
   fi

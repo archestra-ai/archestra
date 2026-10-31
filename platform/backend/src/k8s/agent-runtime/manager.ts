@@ -85,6 +85,13 @@ import {
   type KubernetesAgentRunLaunchSpec,
 } from "./manifests";
 import {
+  describeMemoryKill,
+  type MemoryEvents,
+  memoryKillBetween,
+  parseMemoryEvents,
+  READ_MEMORY_EVENTS_COMMAND,
+} from "./memory-kill";
+import {
   AGENT_RUNTIME_LEASE_SCOPE,
   AGENT_RUNTIME_TASK_LABEL,
   AGENT_RUNTIME_WORKSPACE_LABEL,
@@ -1229,6 +1236,11 @@ class AgentRuntimeManager {
     const interval = params.pollIntervalMs ?? AGENT_RUNTIME_COMPLETION_POLL_MS;
 
     let retryDelayMs = interval;
+    // The pod last seen running and its memory kills then: a command that
+    // fails in it afterwards is checked against a later reading, because the
+    // kernel kills the run's processes for memory while the pod stays Running.
+    let runningPod: string | null = null;
+    let memoryEventsAtStart: MemoryEvents | null = null;
     while (!params.abortSignal?.aborted) {
       try {
         const sandbox = await readWorkspaceSandbox({
@@ -1253,6 +1265,13 @@ class AgentRuntimeManager {
         const pod = await this.findPod(params.session);
         if (params.abortSignal?.aborted) break;
         if (pod?.status?.phase === "Running" && pod.metadata?.name) {
+          if (runningPod !== pod.metadata.name) {
+            runningPod = pod.metadata.name;
+            memoryEventsAtStart = await this.readMemoryEvents(
+              params.session,
+              runningPod,
+            );
+          }
           const result = await this.execInPod({
             session: params.session,
             podName: pod.metadata.name,
@@ -1307,6 +1326,19 @@ class AgentRuntimeManager {
         retryDelayMs = interval;
       } catch (error) {
         if (params.abortSignal?.aborted) break;
+        if (runningPod && isAgentRuntimeCommandFailure(error)) {
+          const killed = memoryKillBetween(
+            memoryEventsAtStart,
+            await this.readMemoryEvents(params.session, runningPod),
+          );
+          if (killed) {
+            return {
+              outcome: "failed",
+              reason: describeMemoryKill(killed, AGENT_RUNTIME_CONTAINER_NAME),
+              failure: agentRunFailure("pod.oom_killed"),
+            };
+          }
+        }
         if (!isTransientObservationError(error)) throw error;
         // A failed read says nothing about the worker's outcome. Keep ownership
         // and heartbeats alive until we can observe it again or are canceled.
@@ -1858,6 +1890,25 @@ done`
     });
   }
 
+  /** The container cgroup's memory counters, or null when the pod cannot say. */
+  private async readMemoryEvents(
+    session: AgentRunRecord,
+    podName: string,
+  ): Promise<MemoryEvents | null> {
+    try {
+      return parseMemoryEvents(
+        await this.execInPod({
+          session,
+          podName,
+          command: READ_MEMORY_EVENTS_COMMAND,
+          timeoutMs: MEMORY_EVENTS_READ_TIMEOUT_MS,
+        }),
+      );
+    } catch {
+      return null;
+    }
+  }
+
   private async execInPod(params: {
     session: AgentRunRecord;
     podName: string;
@@ -1995,6 +2046,15 @@ export default new AgentRuntimeManager();
 // ===================== helpers =====================
 
 /** Only used for read-only completion observations, never workload mutations. */
+/** A command the pod ran and that ended in failure, as opposed to one the connection lost. */
+function isAgentRuntimeCommandFailure(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    !(error instanceof AgentRuntimeCommandTransportError) &&
+    error.message === "Command in Agent Runtime pod failed"
+  );
+}
+
 function isTransientObservationError(error: unknown): boolean {
   if (isTransientK8sApiError(error)) return true;
   if (error instanceof AgentRuntimeCommandTransportError) return true;
@@ -2039,6 +2099,8 @@ function pendingTurnSecretName(
  * task does not sit idle before the lifecycle settles it.
  */
 const AGENT_RUNTIME_COMPLETION_POLL_MS = 5_000;
+/** Reading the cgroup's memory counters is a short exec; a pod under memory pressure may be slow to answer. */
+const MEMORY_EVENTS_READ_TIMEOUT_MS = 15_000;
 const AGENT_RUNTIME_INPUT_STAGING_POLL_MS = 500;
 const AGENT_RUNTIME_POD_REMOVAL_TIMEOUT_MS = 5 * 60_000;
 const AGENT_RUNTIME_ATTACH_TIMEOUT_MS = 60_000;

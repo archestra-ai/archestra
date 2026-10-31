@@ -536,6 +536,11 @@ test.for([
 test.for([
   {
     name: "container memory termination",
+    spec: {
+      containers: [
+        { name: "agent-runtime", resources: { limits: { memory: "8Gi" } } },
+      ],
+    },
     status: {
       phase: "Failed",
       containerStatuses: [
@@ -557,6 +562,7 @@ test.for([
       "OOMKilled",
       "exit code 137",
       "signal 9",
+      "memory limit 8Gi",
       "Container exceeded its memory limit",
     ],
     failure: { code: "pod.oom_killed", retriable: false },
@@ -624,6 +630,7 @@ test.for([
     failure: { code: "pod.evicted", retriable: true },
   },
 ])("preserves Kubernetes diagnostics for $name instead of a generic Sandbox summary", async ({
+  spec,
   status,
   details,
   failure,
@@ -645,7 +652,9 @@ test.for([
     ),
     http.get(podsUrl, () =>
       HttpResponse.json({
-        items: [{ metadata: { name: "worker", namespace: "test" }, status }],
+        items: [
+          { metadata: { name: "worker", namespace: "test" }, spec, status },
+        ],
       }),
     ),
   );
@@ -1082,3 +1091,60 @@ function completeExec(output = "0") {
       return socket();
     });
 }
+
+test.for([
+  { name: "a memory kill inside the running pod", killed: true },
+  { name: "a failed command without a memory kill", killed: false },
+])("$name: a turn command that fails is checked against the cgroup's memory counters", async ({
+  killed,
+}, { run }) => {
+  const GIB = 1024 ** 3;
+  let turnReads = 0;
+  let memoryReads = 0;
+  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+    const command = (args[3] as string[]).join(" ");
+    if (command.includes("read-memory-events")) {
+      // The counters when the turn was first seen running, then after the
+      // failed command: the kernel killed the run's tsc, shell and tmux server
+      // while PID 1 and the pod lived on.
+      const kills = memoryReads++ === 0 || !killed ? 0 : 1;
+      args[4]?.write(
+        `low 0\nhigh 0\nmax 1203\noom ${kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills ? 8 * GIB : 2 * GIB}\nmax ${8 * GIB}\n`,
+      );
+      args[8]?.({ status: "Success" });
+    } else if (command.includes("read-turn-result")) {
+      // No result yet on the first poll; the second poll's shell is killed.
+      turnReads++;
+      args[8]?.(
+        turnReads === 1
+          ? { status: "Success" }
+          : {
+              status: "Failure",
+              message: "command terminated with non-zero exit code",
+            },
+      );
+    } else {
+      args[8]?.({ status: "Success" });
+    }
+    return socket();
+  });
+  const completion = manager.waitForCompletion({
+    session: run,
+    pollIntervalMs: 1,
+  });
+  if (killed) {
+    await expect(completion).resolves.toEqual({
+      outcome: "failed",
+      reason:
+        "The run ran out of memory. The agent-runtime container reached its memory limit of 8 GiB (peak usage 8 GiB), and the kernel killed the run's processes. Start the run again at a larger tier.",
+      failure: { code: "pod.oom_killed", retriable: false },
+    });
+  } else {
+    await expect(completion).rejects.toThrow(
+      "Command in Agent Runtime pod failed",
+    );
+  }
+  // One reading when the pod was first seen running, one after the failure.
+  expect(memoryReads).toBe(2);
+  expect(turnReads).toBe(2);
+});

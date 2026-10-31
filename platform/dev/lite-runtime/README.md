@@ -159,8 +159,8 @@ under Settings > Agents > Runtime tiers):
 
 | Tier | Request | Memory limit | Used for |
 | --- | --- | --- | --- |
-| S | 2 CPU, 4 GiB | 8 GiB | reviews, scripts, light edits; the lite stack fits, as measured below |
-| M | 4 CPU, 8 GiB | 16 GiB | the default: a dev stack, tests and builds |
+| S | 2 CPU, 4 GiB | 8 GiB | scripts and light edits; the lite stack fits, as measured below, but not this repository's type check next to it: `tsc` on the backend holds 3 to 7 GB, and the code review agents at S were killed for memory in every review of 2026-10-30 |
+| M | 4 CPU, 8 GiB | 16 GiB | the default: a dev stack, tests, builds and code reviews |
 | L | 8 CPU, 16 GiB | 32 GiB | large builds and test suites, work that ran out of memory at M, and the Tilt Agents' full image (its p90 of 16.8 GiB above fits) |
 
 L keeps no warm spares by default: its runs are rare and an idle spare holds 8

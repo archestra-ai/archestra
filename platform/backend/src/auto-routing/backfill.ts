@@ -31,6 +31,7 @@ import type {
 } from "@/types/auto-routing-api";
 import { firstUserText } from "./first-user-text";
 import { fitReadiness } from "./fit";
+import { scoringContext } from "./scoring-context";
 import { activeSourceVersion, decisionFeatures, preRunSource } from "./signals";
 import { type JevSessionReading, scorerState } from "./signals/jev-session";
 import { SignalSourceError } from "./signals/types";
@@ -544,7 +545,8 @@ async function scoreSession(params: {
   session: RoutingHistorySession;
 }): Promise<ScoreOutcome> {
   const { backfill, lease, scorerVersionId, session } = params;
-  const text = openingText(await findOpening(session));
+  const opening = await findOpening(session);
+  const text = openingText(opening);
   if (text === null) {
     await withDbTransaction(async (tx) => {
       if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return;
@@ -565,7 +567,11 @@ async function scoreSession(params: {
   // short commit that settles the call.
   await RoutingHistoryModel.copyUsage(session);
 
-  const input = { firstUserText: text, client: session.client };
+  const input = {
+    firstUserText: text,
+    client: session.client,
+    ...scoringContext(opening?.request),
+  };
   // Reserved once a call slot is free, so a backfill cancelled meanwhile
   // makes no further calls.
   await scorerCalls.acquire();

@@ -639,15 +639,17 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
           <SelectContent>
             {tiers.slice(Math.max(defaultRank, 0)).map((tier) => (
               <SelectItem key={tier.name} value={tier.name}>
-                {label(tier)}
+                {tier.name === defaultTier
+                  ? `Fix at ${label(tier)}`
+                  : label(tier)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <FieldDescription>
-          The largest tier a run may ask for. A run whose work needs more CPU or
-          memory starts a run of this agent at a larger tier and hands its work
-          over.
+          The largest tier a run may ask for. Choose &quot;Fix at…&quot; to
+          disable scaling up. A run whose work needs more CPU or memory starts a
+          run of this agent at a larger tier and hands its work over.
         </FieldDescription>
       </div>
     </div>

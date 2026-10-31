@@ -63,10 +63,13 @@ import {
   getHitlReview,
   getHitlReviewResult,
   HITL_QUESTION_TTL_MS,
+  type HitlAnswerNotRecordedReason,
   type HitlReviewOutcome,
+  hitlAnswerNotRecordedResult,
   hitlReviewAskedInForm,
   isHitlReviewOutcome,
   peekHitlDecision,
+  recordHitlAnswerNotRecorded,
   recordHitlRuling,
   renewHitlReview,
   resolveHitlInspectableAnswer,
@@ -259,6 +262,8 @@ type AppaPluginObserver = {
 };
 
 type NativeQuestionClaim = {
+  /** The answer's own result id; answers without one are never claimed. */
+  resultId: string;
   /** Exact server-issued native question, never recovered from client history. */
   askedQuestion?: string;
   offerIds?: string[];
@@ -5527,6 +5532,7 @@ async function claimNativeQuestionResults(params: {
           )
         : undefined;
       verified.set(candidate.result, {
+        resultId: candidate.result.id,
         ...(offerIds && offerIds.length > 0 ? { offerIds } : {}),
         ...(entry.inspectable === true ? { inspectable: true } : {}),
         ...(entry.reviewText === true ? { reviewText: true } : {}),
@@ -5574,16 +5580,27 @@ async function recordNativeHitlRulings(params: {
       const outcome = await recordInspectableHitlAnswer({
         binding: params.binding,
         answer,
+        resultId: claim.resultId,
         offerId: claim.offerIds[0],
         carriedReviewText: claim.reviewText === true,
         // An inspectable claim without its payload digest matches nothing.
         claimDigest: claim.digest ?? "",
         askedQuestion: claim.askedQuestion,
       });
-      if (outcome.kind === "ruling") recorded.push(outcome.ruling);
-      // A dropped answer records nothing and advances nothing.
-      else if (outcome.kind === "continued")
-        continued.push(outcome.continuation);
+      switch (outcome.kind) {
+        case "ruling":
+          recorded.push(outcome.ruling);
+          break;
+        case "continued":
+          continued.push(outcome.continuation);
+          if (outcome.continuation.selection === "stale")
+            await noteAnswerNotRecorded({
+              binding: params.binding,
+              offerIds: claim.offerIds,
+              reason: "stale_card",
+            });
+          break;
+      }
       continue;
     }
     // The question the answer is read against comes from the review this
@@ -5618,6 +5635,11 @@ async function recordNativeHitlRulings(params: {
           "OpenAPPA native approval answer arrived after its review expired",
         );
         expiredOfferIds.push(offerId);
+        await noteAnswerNotRecorded({
+          binding: params.binding,
+          offerIds: [offerId],
+          reason: "review_expired",
+        });
       }
       continue;
     }
@@ -5712,10 +5734,29 @@ async function recordNativeHitlRulings(params: {
           ...(review?.tool ? { reviewedTool: review.tool } : {}),
           ...(review?.arguments ? { reviewedArguments: review.arguments } : {}),
         });
+      } else {
+        await noteAnswerNotRecorded({
+          binding: params.binding,
+          offerIds: [offerId],
+          reason: "record_failed",
+        });
       }
     }
   }
   return { rulings: recorded, unreadOfferIds, continued, expiredOfferIds };
+}
+
+async function noteAnswerNotRecorded(params: {
+  binding: AppaPluginBinding;
+  offerIds: readonly string[];
+  reason: HitlAnswerNotRecordedReason;
+}): Promise<void> {
+  for (const offerId of params.offerIds)
+    await recordHitlAnswerNotRecorded({
+      session: params.binding.session,
+      offerId,
+      reason: params.reason,
+    });
 }
 
 /**
@@ -5731,8 +5772,7 @@ type HitlReviewContinuation = {
 
 type InspectableHitlAnswerOutcome =
   | { kind: "ruling"; ruling: RecordedNativeHitlRuling }
-  | { kind: "continued"; continuation: HitlReviewContinuation }
-  | { kind: "drop" };
+  | { kind: "continued"; continuation: HitlReviewContinuation };
 
 /**
  * Reads the answer to a card that offered Inspect. Allow and Deny record the
@@ -5741,31 +5781,20 @@ type InspectableHitlAnswerOutcome =
  * shows the current card again. A known no-answer seals the review as
  * before; an unreadable answer fails closed without the form. A stale
  * answer — a card superseded before its inspection text was delivered, a
- * forged marker — changes nothing. An
- * answer without its own string id is dropped: it rules nothing, and no
- * placeholder id may stand in for it.
+ * forged marker — changes nothing.
  */
 async function recordInspectableHitlAnswer(params: {
   askedQuestion?: string;
   binding: AppaPluginBinding;
   answer: Record<string, unknown>;
+  resultId: string;
   offerId: string;
   carriedReviewText: boolean;
   claimDigest: string;
 }): Promise<InspectableHitlAnswerOutcome> {
   const { binding, offerId } = params;
   const session = binding.session;
-  if (typeof params.answer.id !== "string" || params.answer.id.length === 0) {
-    // An unidentifiable answer claims nothing: no ruling, no continuation,
-    // and nothing cached under a placeholder id it would share with every
-    // other unidentifiable answer.
-    logger.warn(
-      { client: binding.adapter?.id, offerId },
-      "OpenAPPA dropped an unidentifiable answer to a review card",
-    );
-    return { kind: "drop" };
-  }
-  const resultId = params.answer.id;
+  const { resultId } = params;
   const stale: InspectableHitlAnswerOutcome = {
     kind: "continued",
     continuation: { offerId, resultId, selection: "stale" },
@@ -6173,15 +6202,20 @@ async function pendingReviewResult(
     outcome === "review_required"
       ? await getHitlReview({ session: binding.session, offerId })
       : undefined;
-  const recordedOutcome = await getHitlReviewResult({
+  const recorded = await getHitlReviewResult({
     session: binding.session,
     callId: result.id,
     offerId,
   });
-  if (recordedOutcome !== undefined ? recordedOutcome !== outcome : !pending)
+  if (recorded !== undefined ? recorded.outcome !== outcome : !pending)
     return undefined;
   // Only a server-staged review may produce this status. Never forward arbitrary
   // client instruction text or treat the status itself as an approval receipt.
+  if (recorded?.outcome === "answer_not_recorded")
+    return JSON.stringify(
+      hitlAnswerNotRecordedResult(offerId, recorded.reason),
+    );
+  if (outcome === "answer_not_recorded") return undefined;
   return JSON.stringify({
     ok: false,
     outcome,
@@ -6404,7 +6438,9 @@ async function hasRemedyOfferResult(params: {
   return true;
 }
 
-function reviewStatusInstruction(outcome: HitlReviewOutcome): string {
+function reviewStatusInstruction(
+  outcome: Exclude<HitlReviewOutcome, "answer_not_recorded">,
+): string {
   const instructions = {
     review_required:
       "Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform shows the exact review with Approve and Deny choices. Call execute_remedy_plan again only after the user approves.",
@@ -6418,7 +6454,7 @@ function reviewStatusInstruction(outcome: HitlReviewOutcome): string {
       "The approval review could not be delivered in this session. The protected call remains blocked; no ruling was granted.",
     review_invalid:
       "The approval review did not receive a valid decision. The protected call remains blocked; no ruling was granted.",
-  } satisfies Record<HitlReviewOutcome, string>;
+  } satisfies Record<Exclude<HitlReviewOutcome, "answer_not_recorded">, string>;
   return instructions[outcome];
 }
 
@@ -6435,7 +6471,10 @@ function isNativeNoAnswer(
 
 function reviewRequiredOfferId(value: unknown, depth: number): string | null {
   const status = reviewResultStatus(value, depth);
-  return status?.outcome === "review_required" ? status.offerId : null;
+  return status?.outcome === "review_required" ||
+    status?.outcome === "answer_not_recorded"
+    ? status.offerId
+    : null;
 }
 
 function reviewResultStatus(

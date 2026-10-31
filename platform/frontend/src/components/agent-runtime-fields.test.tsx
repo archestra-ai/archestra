@@ -194,11 +194,12 @@ describe("AgentRuntimeFields", () => {
     expect(
       screen.queryByRole("option", { name: /^S:/ }),
     ).not.toBeInTheDocument();
-    // A tier that sets its own workspace names it; the others show CPU and
+    // The default tier is offered as "Fix at", which disables scaling up. A
+    // tier that sets its own workspace names it; the others show CPU and
     // memory only.
     expect(
-      screen.getByRole("option", { name: "M: 0.75 CPU, 1.5 GiB" }),
-    ).toBeVisible();
+      screen.getByRole("option", { name: "Fix at M: 0.75 CPU, 1.5 GiB" }),
+    ).toBeInTheDocument();
     await user.click(
       screen.getByRole("option", {
         name: "L: 8 CPU, 16 GiB, 60 GiB workspace",
@@ -207,6 +208,11 @@ describe("AgentRuntimeFields", () => {
     expect(
       JSON.parse(screen.getByTestId("config").textContent ?? "{}").maxTier,
     ).toBe("L");
+    await user.click(screen.getByLabelText("Scaleup tier"));
+    await user.click(screen.getByRole("option", { name: /^Fix at M:/ }));
+    expect(
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}").maxTier,
+    ).toBe("M");
     expect(screen.getByLabelText("Ports to forward")).toHaveValue("");
     await user.type(screen.getByLabelText("Ports to forward"), "3000, 9000");
     expect(

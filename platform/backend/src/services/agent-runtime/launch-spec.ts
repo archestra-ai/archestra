@@ -67,6 +67,7 @@ import {
 import {
   agentRuntimeAllowedTiers,
   agentRuntimeMaxTier,
+  describeScaleupDisabledPrompt,
   organizationAgentRuntimeTiers,
   type RuntimeSystemPromptParts,
   resolveRunResources,
@@ -455,6 +456,9 @@ export async function buildAgentRunLaunchSpec(params: {
         "not this runtime's filesystem.",
     ],
     runtime: params.runtime,
+    // After the workspace facts: kept as written when the volume sentence
+    // is rebuilt for a served tier.
+    trail: [describeScaleupDisabledPrompt(params.runtime, tiers)],
   });
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
@@ -772,14 +776,16 @@ function virtualKeyVisibility(actor: A2AActor): {
  * platform's notes first, then the workspace facts the platform owns,
  * whatever the image installs: what survives between turns, how large the
  * volume is (added by `runtimeSystemPrompt`), and which ports a user can open
- * from it. The image describes its own tools; see
- * `docker_images/agent/environment.md`.
+ * from it; then the trailing notes, such as a fixed scaleup. The image
+ * describes its own tools; see `docker_images/agent/environment.md`.
  */
 function runtimeSystemPromptParts(params: {
   lead: Array<string | null | undefined>;
   runtime: Pick<ResolvedAgentRuntime, "ports">;
+  trail: Array<string | null | undefined>;
 }): RuntimeSystemPromptParts {
   const ports = [...new Set(params.runtime.ports ?? [])];
+  const trail = params.trail.filter(Boolean);
   return {
     beforeVolume: [
       ...params.lead,
@@ -789,11 +795,11 @@ function runtimeSystemPromptParts(params: {
       .filter(Boolean)
       .join("\n\n"),
     afterVolume:
-      ports.length > 0
+      (ports.length > 0
         ? ` The user can forward ${ports.length === 1 ? "port" : "ports"} ` +
           `${ports.join(", ")} from this workspace to a browser; serve anything ` +
           "they should open there."
-        : "",
+        : "") + trail.map((part) => `\n\n${part}`).join(""),
   };
 }
 

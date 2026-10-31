@@ -66,13 +66,17 @@ Keep Archestra on Fargate and place runtime containers on EC2 nodes:
 
 ## Runtime Tiers
 
-A tier is the size of a run's container and of its workspace volume. Define them under **Settings > Agents > Runtime tiers**: each tier has a name, a CPU request (up to 8), an optional CPU limit (up to 16), and an optional **Workspace** size in GiB. Memory follows the CPU: 2 GiB per requested CPU, with a limit of twice that, or 2 GiB per CPU of the CPU limit when that is lower. A new organization starts with `S` (2 CPU), `M` (4 CPU) and `L` (8 CPU), with `M` as the default.
+Runtime tiers allocate CPU, memory, and workspace storage to agent runtimes so every run receives predictable resources. Configure your organization's tiers under **Settings → Agents → Runtime tiers**.
 
-The workspace volume holds the run's home directory and, for a [privileged agent](#privileged-containers), its Docker data. A tier that leaves **Workspace** blank gives its runs the deployment's [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Set a larger size on the tier of agents whose runs build container images or run Kubernetes in Docker: such a stack fills a 20 GiB volume in minutes and needs about 60 GiB. Each spare of a pooled tier holds a volume of its tier's size.
+![The Runtime tiers table in Settings](/docs/automated_screenshots/agents-runtime-setup_runtime-tiers.webp)
 
-An agent's [**Default tier**](/docs/agents/runtime#limits) sizes its runs, and its **Scaleup tier** is the largest tier a run may ask for; an agent has no CPU or memory settings of its own. Renaming a tier renames it on every agent that uses it. A tier that an agent or a template still uses cannot be deleted.
+Memory scales automatically with CPU at 2 GiB per requested CPU. The memory limit defaults to twice that request, or 2 GiB per CPU of the CPU limit when you set one. A new organization starts with `S` (2 CPU, 4 GiB), `M` (4 CPU, 8 GiB), and `L` (8 CPU, 16 GiB), with `M` as the default.
 
-A pooled tier keeps spare containers ready, so its runs start at once; see [Warm Pools](#warm-pools).
+**Workspace** sets the size of each run's persistent volume in GiB. The volume holds the run's home directory and, for a [privileged agent](#privileged-containers), its Docker data. A blank size uses [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Runs that build container images or run Kubernetes in Docker need about 60 GiB.
+
+Agents do not configure CPU, memory, or storage directly. Each agent selects a [**Default tier**](/docs/agents/runtime#limits) for standard runs and an optional **Scaleup tier** for larger workloads. Choose **Fix at &lt;tier&gt;** to disable scaling up. When an agent permits scaling, a run can request any tier up to that scaleup tier.
+
+**Pooled** tier enables [Warm Pool](#warm-pools) of ready spare agent runtime instances of this tier to eliminate cold starts for new runs. Each spare holds a volume of the tier's workspace size.
 
 ## Warm Pools
 
@@ -82,7 +86,7 @@ After installing the controller extensions above, set [`ARCHESTRA_AGENT_RUNTIME_
 
 Pools go to the Agents with the most recent runs. Agents with no run in the last 7 days get no spare, so idle Agents don't hold cluster capacity.
 
-Each runtime tier is pooled or not, under **Pools** in **Settings > Agents > Runtime tiers**. A pooled tier keeps [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) spares per group; a tier that is not pooled starts every run in a new container. A new organization pools `S` and `M` but not `L`: a large run is rare and an idle spare holds its full size.
+Each runtime tier is pooled or not, under **Pools** in **Settings → Agents → Runtime tiers**. A pooled tier keeps [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) spares per group; a tier that is not pooled starts every run in a new container. A new organization pools `S` and `M` but not `L`: a large run is rare and an idle spare holds its full size.
 
 Assigned containers never return to the pool. Without a spare, a run starts a new container. Setting the size to `0` removes unused spares and preserves assigned runs.
 

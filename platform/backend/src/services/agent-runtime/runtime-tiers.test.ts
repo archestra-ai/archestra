@@ -5,6 +5,7 @@ import {
   agentRuntimeAllowedTiers,
   agentRuntimeMaxTier,
   agentRuntimeTier,
+  describeScaleupDisabledPrompt,
   resolveAgentRunLimits,
   resolveRunResources,
   resolveRunWorkspaceStorageSize,
@@ -113,12 +114,33 @@ describe("runtime tiers", () => {
         requested: { tier: "M" },
       }),
     ).toThrow(
-      "Tier M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier S. Tiers this Agent's runs may use: S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace).",
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
+    );
+    // When scaling up is allowed, requesting above the scaleup tier names the allowed tiers.
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: { ...DEFAULTS, tier: "S", maxTier: "M" },
+        tiers: TIERS,
+        requested: { tier: "L" },
+      }),
+    ).toThrow(
+      "Tier L (8 CPU, 16 GiB (32 GiB limit), 20 GiB workspace) is above this Agent's scaleup tier M. Tiers this Agent's runs may use: S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace), M (4 CPU, 8 GiB (16 GiB limit), 20 GiB workspace).",
     );
     // A scaleup tier below the Agent's own tier counts as the Agent's tier.
     expect(
       agentRuntimeMaxTier({ ...DEFAULTS, tier: "M", maxTier: "S" }, TIERS),
     ).toBe("M");
+    expect(
+      describeScaleupDisabledPrompt({ ...DEFAULTS, tier: "S" }, TIERS),
+    ).toBe(
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit), 20 GiB workspace). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
+    );
+    expect(
+      describeScaleupDisabledPrompt(
+        { ...DEFAULTS, tier: "S", maxTier: "M" },
+        TIERS,
+      ),
+    ).toBeNull();
     // A name the organization has no tier for.
     expect(() =>
       resolveAgentRunLimits({
@@ -161,6 +183,16 @@ describe("runtime tiers", () => {
       }),
     ).toThrow(
       "No tier this Agent's runs may use has 4 CPU. Tiers this Agent's runs may use: Small (1 CPU, 2 GiB (4 GiB limit), 20 GiB workspace), Medium (3 CPU, 6 GiB (12 GiB limit), 20 GiB workspace).",
+    );
+    // When scaling up is disabled, asking for more size than the fixed tier fails with a non-retriable error.
+    expect(() =>
+      resolveAgentRunLimits({
+        runtime: { ...DEFAULTS, tier: "Small", maxTier: "Small" },
+        tiers: CUSTOM,
+        requested: { minCpu: 4 },
+      }),
+    ).toThrow(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to Small (1 CPU, 2 GiB (4 GiB limit), 20 GiB workspace). This call is not retriable; calling it again will fail.",
     );
     // A named tier must also have the size asked for.
     expect(() =>

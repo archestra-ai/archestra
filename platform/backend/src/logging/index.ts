@@ -126,21 +126,21 @@ const STDOUT_FLUSH_INTERVAL_MS = 2_000;
  */
 function injectTraceContext(): Record<string, string> {
   const span = trace.getSpan(otelContext.active());
-  if (!span) return {};
+  const sessionId = getActiveSessionId();
+  const sessionFields: Record<string, string> = sessionId
+    ? { session_id: sessionId }
+    : {};
+  if (!span) return sessionFields;
 
   const spanContext = span.spanContext();
-  if (!isSpanContextValid(spanContext)) return {};
+  if (!isSpanContextValid(spanContext)) return sessionFields;
 
   const result: Record<string, string> = {
+    ...sessionFields,
     trace_id: spanContext.traceId,
     span_id: spanContext.spanId,
     trace_flags: `0${spanContext.traceFlags.toString(16)}`,
   };
-
-  const sessionId = getActiveSessionId();
-  if (sessionId) {
-    result.session_id = sessionId;
-  }
 
   return result;
 }

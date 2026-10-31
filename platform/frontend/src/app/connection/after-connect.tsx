@@ -2,8 +2,10 @@
 
 // What comes after the connect prompt: a status card under the connect band.
 // Copying the prompt starts it waiting; a "connected" broadcast from the
-// approval tab (or "Done?") turns it into the welcome prompt. The "Show the
-// starter prompt" link opens the same prompt any time.
+// approval tab (or "Done?") turns it into the welcome prompt. Claude Desktop
+// has no approval tab: its download (or copied command) shows the welcome
+// prompt at once. The "Show the starter prompt" link opens the same prompt any
+// time.
 
 import { Check, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,7 +18,12 @@ import {
   useCopy,
 } from "./connect-page-parts";
 
-export type AfterConnectPhase = "idle" | "waiting" | "connected" | "starter";
+export type AfterConnectPhase =
+  | "idle"
+  | "waiting"
+  | "finish"
+  | "connected"
+  | "starter";
 
 /** The card's state, and the setup it was entered from. */
 export interface AfterConnectRun {
@@ -35,6 +42,7 @@ export function AfterConnect({
   phase,
   client,
   script,
+  connector = null,
   welcome,
   showLink,
   onPhase,
@@ -42,6 +50,8 @@ export function AfterConnect({
   phase: AfterConnectPhase;
   client: ConnectClient;
   script: boolean;
+  /** The gateway's connector in Claude Desktop; null without tools. */
+  connector?: string | null;
   /** The welcome prompt; null until the page knows its origin. */
   welcome: string | null;
   /** Offer "Show the starter prompt" while idle. */
@@ -105,6 +115,29 @@ export function AfterConnect({
                 <X />
                 Cancel
               </Button>
+            </section>
+          </>
+        )}
+
+        {phase === "finish" && (
+          <>
+            <Stem />
+            <section
+              aria-label="Next steps"
+              className="grid gap-2 rounded-2xl border bg-card px-6 py-5 shadow-sm"
+            >
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-sm font-semibold">
+                  Next, ask {name} what it can do now
+                </h2>
+                {close}
+              </div>
+              <p className="px-1 text-xs text-muted-foreground">
+                {connector
+                  ? `Once ${connector} is connected and turned on in Desktop, paste this into a new conversation.`
+                  : "Once Desktop restarts, paste this into a new conversation."}
+              </p>
+              <WelcomePrompt text={welcome} />
             </section>
           </>
         )}

@@ -272,6 +272,30 @@ export function retargetRuntimeTiersEnv(value: string, tier: string): string {
   );
 }
 
+/**
+ * Prompt instruction when scaling up this Agent's runtime instance is disabled:
+ * the agent is informed that its runtime tier is fixed and it cannot scale up.
+ */
+export function describeScaleupDisabledPrompt(
+  runtime: SizedRuntime,
+  tiers: ResolvedAgentRuntimeTiers,
+): string | null {
+  const currentTierName = agentRuntimeTier(runtime, tiers);
+  const maxTierName = agentRuntimeMaxTier(runtime, tiers);
+  if (
+    agentRuntimeTierRank(tiers.tiers, maxTierName) >
+    agentRuntimeTierRank(tiers.tiers, currentTierName)
+  ) {
+    return null;
+  }
+  const currentTier = tierSize(tiers, currentTierName);
+  return (
+    `Scaling up this agent runtime instance is disabled: the runtime tier is fixed to ` +
+    `${currentTier.name} (${describeTier(currentTier)}). ` +
+    `You cannot scale up this instance; do not attempt to start a run at a larger tier.`
+  );
+}
+
 function allowedTiersSentence(
   allowed: readonly AgentRuntimeTierSize[],
 ): string {
@@ -303,6 +327,16 @@ export function resolveAgentRunLimits(params: {
   const maxTier = agentRuntimeMaxTier(runtime, tiers);
   let tier = agentRuntimeTier(runtime, tiers);
   const defaultWorkspaceGiB = resolveRunWorkspaceGiB(tier, tiers);
+  const isScaleupDisabled =
+    agentRuntimeTierRank(tiers.tiers, maxTier) <=
+    agentRuntimeTierRank(tiers.tiers, tier);
+  const currentTier = tierSize(tiers, tier);
+  const scaleupDisabledError = () =>
+    new ApiError(
+      400,
+      `Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to ${currentTier.name} (${describeTier(currentTier)}). This call is not retriable; calling it again will fail.`,
+    );
+
   if (requested.tier !== undefined) {
     const named = findAgentRuntimeTier(tiers.tiers, requested.tier);
     if (!named)
@@ -313,11 +347,15 @@ export function resolveAgentRunLimits(params: {
     if (
       agentRuntimeTierRank(tiers.tiers, named.name) >
       agentRuntimeTierRank(tiers.tiers, maxTier)
-    )
+    ) {
+      if (isScaleupDisabled) {
+        throw scaleupDisabledError();
+      }
       throw new ApiError(
         400,
         `Tier ${named.name} (${describeTier(named)}) is above this Agent's scaleup tier ${maxTier}. ${allowedTiersSentence(allowed)}`,
       );
+    }
     tier = named.name;
   }
   if (requested.minCpu !== undefined || requested.minMemoryGib !== undefined) {
@@ -336,24 +374,35 @@ export function resolveAgentRunLimits(params: {
       .join(" and ");
     if (requested.tier !== undefined) {
       const named = tierSize(tiers, tier);
-      if (!fits(named))
+      if (!fits(named)) {
+        if (isScaleupDisabled) {
+          throw scaleupDisabledError();
+        }
         throw new ApiError(
           400,
           `Tier ${named.name} (${describeTier(named)}) has less than the ${need} asked for. ${allowedTiersSentence(allowed)}`,
         );
+      }
     } else {
       const hasDisk = (candidate: AgentRuntimeTierSize) =>
         tierWorkspaceGiB(candidate) >= defaultWorkspaceGiB;
       const smallest = allowed.find(
         (candidate) => fits(candidate) && hasDisk(candidate),
       );
-      if (!smallest)
+      if (!smallest) {
+        // With scaleup fixed, the default tier is the largest allowed and
+        // always has its own disk, so nothing qualifies only when the work
+        // needs a larger tier: the fixed-scaleup refusal is the reason.
+        if (isScaleupDisabled) {
+          throw scaleupDisabledError();
+        }
         throw new ApiError(
           400,
           allowed.some(fits)
             ? `No tier this Agent's runs may use has ${need} and a workspace of at least ${defaultWorkspaceGiB} GiB, the size of its default tier. ${allowedTiersSentence(allowed)}`
             : `No tier this Agent's runs may use has ${need}. ${allowedTiersSentence(allowed)}`,
         );
+      }
       tier = smallest.name;
     }
   }

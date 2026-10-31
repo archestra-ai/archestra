@@ -15,179 +15,93 @@
       }
     ]
   },
-  "description": "Session-level agent audit trail \u2014 view recent agent sessions and drill into LLM calls, MCP tool calls, and logs",
+  "description": "Review who used each session, what it cost, and where time went.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": 5,
-  "links": [
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "GenAI Observability",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-genai-observability/archestra-genai-observability"
-    },
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "MCP Monitoring",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-mcp-monitoring/archestra-mcp-monitoring"
-    },
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "Application Metrics",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-application-metrics/archestra-application-metrics"
-    },
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "RAG & Knowledge Base",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/archestra-rag-knowledge-base/archestra-rag-knowledge-base"
-    },
-    {
-      "asDropdown": false,
-      "icon": "doc",
-      "includeVars": false,
-      "keepTime": false,
-      "tags": [],
-      "targetBlank": true,
-      "title": "Documentation",
-      "tooltip": "Archestra Documentation",
-      "type": "link",
-      "url": "https://archestra.ai/docs/administration/observability"
-    }
-  ],
+  "links": [],
   "panels": [
     {
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
+      "id": 90001,
+      "type": "text",
+      "title": "",
+      "transparent": true,
       "gridPos": {
-        "h": 4,
-        "w": 3,
         "x": 0,
-        "y": 0
+        "y": 0,
+        "w": 12,
+        "h": 2
       },
-      "id": 9,
       "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "<div style=\"display: flex; align-items: center; justify-content: center; height: 100%;\"><a href=\"https://archestra.ai\" target=\"_blank\"><img src=\"https://archestra.ai/logo.png\" alt=\"Archestra\" style=\"height: 100%;\" /></a></div>",
-        "mode": "html"
-      },
-      "pluginVersion": "12.3.2",
-      "title": "",
-      "transparent": true,
-      "type": "text"
+        "mode": "html",
+        "content": "<div style=\"display:flex;align-items:center;gap:16px;min-height:48px\"><img alt=\"Archestra\" src=\"data:image/png;base64,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\" width=\"48\" height=\"48\" style=\"flex:0 0 48px;width:48px;height:48px;object-fit:contain;border-radius:6px\" /><div style=\"min-width:0\"><h2 style=\"font-size:14px;line-height:20px;font-weight:600;margin:0\">Session Investigation</h2><p style=\"font-size:12px;line-height:15px;margin:2px 0 0\">Review a session&#x27;s activity, cost, and timing.</p></div></div>"
+      }
     },
     {
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 21,
-        "x": 3,
-        "y": 0
-      },
-      "id": 1,
-      "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "## Agent Session Viewer\n\nSession-level view of agent activity across all invocation channels (Chat UI, A2A, MS Teams, Slack, Email). Filter by **Agent Name**, click a **Session ID** to drill in, then click any **Trace ID** link to load the trace waterfall in the **Trace Viewer** panel below. You can also paste a session ID directly into the **Session ID** variable above.",
-        "mode": "markdown"
-      },
-      "pluginVersion": "12.3.2",
+      "id": 90002,
+      "type": "text",
       "title": "",
       "transparent": true,
-      "type": "text"
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 2
+      },
+      "options": {
+        "mode": "html",
+        "content": "<nav aria-label=\"Observability dashboards\"><table role=\"presentation\" style=\"width:100%;table-layout:fixed;border-collapse:separate;border-spacing:2px\"><tbody><tr><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"LLM Proxy\" href=\"/d/archestra-genai-observability?${__url_time_range}&amp;var-traces_datasource=${traces_datasource}&amp;var-logs_datasource=${logs_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">LLM Proxy</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Costs &amp; Limits\" href=\"/d/archestra-costs-and-limits?${__url_time_range}&amp;var-traces_datasource=${traces_datasource}&amp;var-logs_datasource=${logs_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Costs &amp; Limits</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Agent Runtime\" href=\"/d/archestra-agent-runtime?${__url_time_range}&amp;var-traces_datasource=${traces_datasource}&amp;var-logs_datasource=${logs_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Agent Runtime</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Guardrails &amp; OpenAPPA\" href=\"/d/archestra-guardrails?${__url_time_range}&amp;var-traces_datasource=${traces_datasource}&amp;var-logs_datasource=${logs_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Guardrails</a></td></tr><tr><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"MCP Monitoring\" href=\"/d/archestra-mcp-monitoring?${__url_time_range}&amp;var-traces_datasource=${traces_datasource}&amp;var-logs_datasource=${logs_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">MCP Monitoring</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Knowledge Base Operations\" href=\"/d/archestra-rag-knowledge-base?${__url_time_range}&amp;var-traces_datasource=${traces_datasource}&amp;var-logs_datasource=${logs_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Knowledge Base</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Platform Health\" href=\"/d/archestra-application-metrics?${__url_time_range}&amp;var-traces_datasource=${traces_datasource}&amp;var-logs_datasource=${logs_datasource}\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Platform Health</a></td><td style=\"width:25%;padding:0\"><a target=\"_parent\" title=\"Metrics reference\" href=\"https://archestra.ai/docs/admin/observability/metrics\" style=\"display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">Metrics docs</a></td></tr></tbody></table></nav>"
+      }
     },
     {
-      "collapsed": false,
+      "id": 3,
+      "title": "Recent Agent Sessions",
+      "type": "table",
       "gridPos": {
-        "h": 1,
+        "x": 0,
+        "y": 2,
         "w": 24,
-        "x": 0,
-        "y": 4
+        "h": 12
       },
-      "id": 2,
-      "panels": [],
-      "title": "Recent Sessions",
-      "type": "row"
-    },
-    {
+      "description": "One row per session, with the cost, usage, and identity details shown on the application Logs page. Totals cover the full session. The time range limits which recently updated sessions appear; up to 5,000 updates are searched.",
       "datasource": {
-        "type": "tempo",
-        "uid": "${traces_datasource}"
+        "type": "loki",
+        "uid": "${logs_datasource}"
       },
-      "description": "Recent agent sessions. Click a Session ID to drill into the full audit trail of LLM and MCP requests.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"Archestra\"} | event_name=\"archestra.session.summary\" | json | agent =~ ${agent_name:doublequote}",
+          "queryType": "range",
+          "direction": "backward",
+          "maxLines": 5000
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Last request",
+            "desc": true
+          }
+        ]
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {
             "align": "auto",
             "cellOptions": {
               "type": "auto"
-            },
-            "footer": {
-              "reducers": [
-                "countAll"
-              ]
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
+            }
           }
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "gen_ai.conversation.id"
+              "options": "session_id"
             },
             "properties": [
               {
@@ -198,9 +112,9 @@
                 "id": "links",
                 "value": [
                   {
-                    "targetBlank": false,
-                    "title": "View session detail",
-                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-sessionId=${__value.raw}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}"
+                    "title": "Open session logs and trace",
+                    "url": "/d/archestra-agent-sessions?var-sessionId=${__value.raw:percentencode}&var-traces_datasource=${traces_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}",
+                    "targetBlank": false
                   }
                 ]
               }
@@ -209,149 +123,51 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "span.gen_ai.conversation.id"
+              "options": "first_request (firstNotNull)"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "Session ID"
+                "value": "First request"
               },
               {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "View session detail",
-                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-sessionId=${__value.raw}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}"
-                  }
-                ]
+                "id": "unit",
+                "value": "dateTimeAsIso"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "gen_ai.agent.name"
+              "options": "last_request (firstNotNull)"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "Agent Name"
+                "value": "Last request"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "span.gen_ai.agent.name"
+              "options": "agent (firstNotNull)"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "Agent Name"
+                "value": "Agent"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "gen_ai.provider.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Provider"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.provider.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Provider"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.request.model"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Model"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.request.model"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Model"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "route.category"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Type"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.route.category"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Type"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "archestra.trigger.source"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Trigger"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.archestra.trigger.source"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Trigger"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.archestra.user.email"
+              "options": "user (firstNotNull)"
             },
             "properties": [
               {
@@ -363,1447 +179,458 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "archestra.user.email"
+              "options": "models (firstNotNull)"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "User"
+                "value": "Models"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "rootServiceName"
+              "options": "source (firstNotNull)"
             },
             "properties": [
               {
-                "id": "custom.hideFrom.viz",
-                "value": true
+                "id": "displayName",
+                "value": "Source"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Trace Service"
+              "options": "auth_methods (firstNotNull)"
             },
             "properties": [
               {
-                "id": "custom.hideFrom.viz",
-                "value": true
+                "id": "displayName",
+                "value": "Authentication"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "rootTraceName"
+              "options": "credentials (firstNotNull)"
             },
             "properties": [
               {
-                "id": "custom.hideFrom.viz",
-                "value": true
+                "id": "displayName",
+                "value": "Credentials"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Trace Name"
+              "options": "requests (firstNotNull)"
             },
             "properties": [
               {
-                "id": "custom.hideFrom.viz",
-                "value": true
+                "id": "displayName",
+                "value": "Requests"
+              },
+              {
+                "id": "unit",
+                "value": "short"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "spanID"
+              "options": "request_duration_ms (firstNotNull)"
             },
             "properties": [
               {
-                "id": "custom.hideFrom.viz",
-                "value": true
+                "id": "displayName",
+                "value": "Total request time"
+              },
+              {
+                "id": "unit",
+                "value": "ms"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "traceID"
+              "options": "elapsed_ms (firstNotNull)"
             },
             "properties": [
               {
-                "id": "custom.hideFrom.viz",
-                "value": true
+                "id": "displayName",
+                "value": "Session elapsed"
+              },
+              {
+                "id": "unit",
+                "value": "ms"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "traceIdHidden"
+              "options": "estimated_cost (firstNotNull)"
             },
             "properties": [
               {
-                "id": "custom.hideFrom.viz",
-                "value": true
+                "id": "displayName",
+                "value": "Estimated cost"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Name"
+              "options": "billed_cost (firstNotNull)"
             },
             "properties": [
               {
-                "id": "custom.hideFrom.viz",
-                "value": true
+                "id": "displayName",
+                "value": "Billed cost"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "service.name"
+              "options": "subscription_cost (firstNotNull)"
             },
             "properties": [
               {
-                "id": "custom.hideFrom.viz",
-                "value": true
+                "id": "displayName",
+                "value": "Subscription equivalent"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "input_tokens (firstNotNull)"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Input tokens"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "output_tokens (firstNotNull)"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Output tokens"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cache_read_tokens (firstNotNull)"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cache read tokens"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cache_write_tokens (firstNotNull)"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cache write tokens"
+              },
+              {
+                "id": "unit",
+                "value": "short"
               }
             ]
           }
         ]
       },
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 5
-      },
-      "id": 3,
-      "options": {
-        "cellHeight": "sm",
-        "enablePagination": true,
-        "showHeader": true,
-        "sortBy": [
-          {
-            "displayName": "Start Time",
-            "desc": true
-          }
-        ]
-      },
-      "pluginVersion": "12.3.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "tempo",
-            "uid": "${traces_datasource}"
-          },
-          "limit": 100,
-          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=~\"${sessionId}.*\" && span.gen_ai.conversation.id!=\"\" && span.route.category=~\"chat|a2a|chatops|email|llm-proxy|mcp-gateway\" && span.gen_ai.agent.name=~\"$agent_name\"} | select(span.gen_ai.conversation.id, span.gen_ai.agent.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.route.category, span.archestra.trigger.source, span.archestra.user.email)",
-          "queryType": "traceql",
-          "refId": "A",
-          "tableType": "spans"
-        }
-      ],
-      "title": "Recent Agent Sessions",
       "transformations": [
         {
-          "id": "organize",
+          "id": "extractFields",
           "options": {
-            "excludeByName": {
-              "rootServiceName": true,
-              "rootTraceName": true,
-              "Trace Service": true,
-              "Trace Name": true
-            }
+            "source": "Line",
+            "format": "json",
+            "replace": true
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "last_request",
+                "desc": true
+              },
+              {
+                "field": "requests",
+                "desc": true
+              }
+            ]
           }
         },
         {
           "id": "groupBy",
           "options": {
             "fields": {
-              "span.gen_ai.conversation.id": {
-                "aggregations": [],
-                "operation": "groupby"
-              },
-              "gen_ai.conversation.id": {
-                "aggregations": [],
-                "operation": "groupby"
-              },
-              "span.gen_ai.agent.name": {
+              "first_request": {
+                "operation": "aggregate",
                 "aggregations": [
-                  "first"
-                ],
-                "operation": "aggregate"
+                  "firstNotNull"
+                ]
               },
-              "gen_ai.agent.name": {
+              "last_request": {
+                "operation": "aggregate",
                 "aggregations": [
-                  "first"
-                ],
-                "operation": "aggregate"
+                  "firstNotNull"
+                ]
               },
-              "span.archestra.user.email": {
+              "agent": {
+                "operation": "aggregate",
                 "aggregations": [
-                  "first"
-                ],
-                "operation": "aggregate"
+                  "firstNotNull"
+                ]
               },
-              "archestra.user.email": {
+              "user": {
+                "operation": "aggregate",
                 "aggregations": [
-                  "first"
-                ],
-                "operation": "aggregate"
+                  "firstNotNull"
+                ]
               },
-              "span.archestra.trigger.source": {
+              "models": {
+                "operation": "aggregate",
                 "aggregations": [
-                  "first"
-                ],
-                "operation": "aggregate"
+                  "firstNotNull"
+                ]
               },
-              "archestra.trigger.source": {
+              "source": {
+                "operation": "aggregate",
                 "aggregations": [
-                  "first"
-                ],
-                "operation": "aggregate"
+                  "firstNotNull"
+                ]
               },
-              "Start time": {
+              "auth_methods": {
+                "operation": "aggregate",
                 "aggregations": [
-                  "first"
-                ],
-                "operation": "aggregate"
+                  "firstNotNull"
+                ]
               },
-              "startTimeUnixNano": {
+              "credentials": {
+                "operation": "aggregate",
                 "aggregations": [
-                  "first"
-                ],
-                "operation": "aggregate"
+                  "firstNotNull"
+                ]
+              },
+              "requests": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "firstNotNull"
+                ]
+              },
+              "request_duration_ms": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "firstNotNull"
+                ]
+              },
+              "elapsed_ms": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "firstNotNull"
+                ]
+              },
+              "estimated_cost": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "firstNotNull"
+                ]
+              },
+              "billed_cost": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "firstNotNull"
+                ]
+              },
+              "subscription_cost": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "firstNotNull"
+                ]
+              },
+              "input_tokens": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "firstNotNull"
+                ]
+              },
+              "output_tokens": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "firstNotNull"
+                ]
+              },
+              "cache_read_tokens": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "firstNotNull"
+                ]
+              },
+              "cache_write_tokens": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "firstNotNull"
+                ]
+              },
+              "session_id": {
+                "operation": "groupby",
+                "aggregations": []
               }
             }
           }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "first_request (firstNotNull)": "first_request",
+              "last_request (firstNotNull)": "last_request",
+              "agent (firstNotNull)": "agent",
+              "user (firstNotNull)": "user",
+              "models (firstNotNull)": "models",
+              "source (firstNotNull)": "source",
+              "auth_methods (firstNotNull)": "auth_methods",
+              "credentials (firstNotNull)": "credentials",
+              "requests (firstNotNull)": "requests",
+              "request_duration_ms (firstNotNull)": "request_duration_ms",
+              "elapsed_ms (firstNotNull)": "elapsed_ms",
+              "estimated_cost (firstNotNull)": "estimated_cost",
+              "billed_cost (firstNotNull)": "billed_cost",
+              "subscription_cost (firstNotNull)": "subscription_cost",
+              "input_tokens (firstNotNull)": "input_tokens",
+              "output_tokens (firstNotNull)": "output_tokens",
+              "cache_read_tokens (firstNotNull)": "cache_read_tokens",
+              "cache_write_tokens (firstNotNull)": "cache_write_tokens"
+            },
+            "indexByName": {
+              "session_id": 0,
+              "first_request (firstNotNull)": 1,
+              "last_request (firstNotNull)": 2,
+              "agent (firstNotNull)": 3,
+              "user (firstNotNull)": 4,
+              "models (firstNotNull)": 5,
+              "source (firstNotNull)": 6,
+              "auth_methods (firstNotNull)": 7,
+              "credentials (firstNotNull)": 8,
+              "requests (firstNotNull)": 9,
+              "request_duration_ms (firstNotNull)": 10,
+              "elapsed_ms (firstNotNull)": 11,
+              "estimated_cost (firstNotNull)": 12,
+              "billed_cost (firstNotNull)": 13,
+              "subscription_cost (firstNotNull)": 14,
+              "input_tokens (firstNotNull)": 15,
+              "output_tokens (firstNotNull)": 16,
+              "cache_read_tokens (firstNotNull)": 17,
+              "cache_write_tokens (firstNotNull)": 18
+            }
+          }
         }
-      ],
-      "type": "table"
+      ]
     },
     {
-      "collapsed": false,
+      "id": 10,
+      "title": "Session Trace",
+      "type": "traces",
       "gridPos": {
-        "h": 1,
+        "x": 0,
+        "y": 14,
         "w": 24,
-        "x": 0,
-        "y": 17
+        "h": 24
       },
-      "id": 4,
-      "panels": [],
-      "title": "Session Detail \u2014 $sessionId",
-      "type": "row"
-    },
-    {
+      "description": "Timing and parent-child relationships for this session\u2019s turns, inference requests, tool calls, and Guardrails hooks. A hook includes the policy checks and consults it performs.",
       "datasource": {
         "type": "tempo",
         "uid": "${traces_datasource}"
       },
-      "description": "All LLM and MCP spans for the selected session displayed as a timeline. Each trace represents a full request lifecycle.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "traceIdHidden"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Trace ID"
-              },
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "title": "View trace waterfall",
-                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-traceId=${__value.raw}&var-sessionId=${sessionId}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}",
-                    "targetBlank": false
-                  }
-                ]
-              },
-              {
-                "id": "custom.hidden",
-                "value": false
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "traceID"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Trace Service"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "rootServiceName"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "rootTraceName"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Trace Name"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "spanID"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Name"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "service.name"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.conversation.id"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.conversation.id"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.agent.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Agent"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.agent.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Agent"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.operation.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Operation"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.operation.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Operation"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.provider.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Provider"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.provider.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Provider"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.request.model"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Model"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.request.model"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Model"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.tool.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Tool"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.tool.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Tool"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.mcp.server.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "MCP Server"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "mcp.server.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "MCP Server"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.route.category"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Type"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "route.category"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Type"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.archestra.user.email"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "User"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "archestra.user.email"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "User"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.archestra.cost"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Cost ($)"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "archestra.cost"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Cost ($)"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.usage.input_tokens"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Input Tokens"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.usage.input_tokens"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Input Tokens"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.usage.output_tokens"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Output Tokens"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.usage.output_tokens"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Output Tokens"
-              }
-            ]
-          }
-        ]
-      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "${traceId}",
+          "queryType": "traceId"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Session Logs",
+      "type": "logs",
       "gridPos": {
-        "h": 10,
+        "x": 0,
+        "y": 38,
         "w": 24,
-        "x": 0,
-        "y": 18
+        "h": 18
       },
-      "id": 5,
-      "targets": [
-        {
-          "datasource": {
-            "type": "tempo",
-            "uid": "${traces_datasource}"
-          },
-          "limit": 100,
-          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=~\"chat|a2a|chatops|email|llm-proxy|mcp-gateway\"} | select(span.gen_ai.agent.name, span.gen_ai.operation.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.gen_ai.tool.name, span.mcp.server.name, span.route.category, span.archestra.user.email, span.archestra.cost, span.gen_ai.usage.input_tokens, span.gen_ai.usage.output_tokens)",
-          "queryType": "traceql",
-          "refId": "A",
-          "tableType": "spans"
-        }
-      ],
-      "title": "Session Timeline",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "tempo",
-        "uid": "${traces_datasource}"
-      },
-      "description": "LLM proxy calls within this session \u2014 model, provider, operation, and duration.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.agent.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Agent"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.agent.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Agent"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.provider.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Provider"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.provider.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Provider"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.request.model"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Model"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.request.model"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Model"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.operation.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Operation"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.operation.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Operation"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.archestra.cost"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Cost ($)"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "archestra.cost"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Cost ($)"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.usage.total_tokens"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Total Tokens"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.usage.total_tokens"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Total Tokens"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "traceID"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "View trace waterfall",
-                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-traceId=${__value.raw}&var-sessionId=${sessionId}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "traceIdHidden"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Trace ID"
-              },
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "View trace waterfall",
-                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-traceId=${__value.raw}&var-sessionId=${sessionId}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}"
-                  }
-                ]
-              },
-              {
-                "id": "custom.hidden",
-                "value": false
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "rootServiceName"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Trace Service"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "rootTraceName"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Trace Name"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "spanID"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Name"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.conversation.id"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.conversation.id"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "route.category"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.route.category"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "service.name"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 12,
-        "x": 0,
-        "y": 28
-      },
-      "id": 6,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": true,
-          "enablePagination": true,
-          "fields": "",
-          "reducer": [
-            "count"
-          ],
-          "show": true
-        },
-        "showHeader": true,
-        "sortBy": []
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "tempo",
-            "uid": "${traces_datasource}"
-          },
-          "limit": 100,
-          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=\"llm-proxy\"} | select(span.gen_ai.agent.name, span.gen_ai.provider.name, span.gen_ai.request.model, span.gen_ai.operation.name, span.archestra.cost, span.gen_ai.usage.total_tokens)",
-          "queryType": "traceql",
-          "refId": "A",
-          "tableType": "spans"
-        }
-      ],
-      "title": "LLM Calls",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "tempo",
-        "uid": "${traces_datasource}"
-      },
-      "description": "MCP tool calls within this session \u2014 tool name, MCP server, and duration.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.agent.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Agent"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.agent.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Agent"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.tool.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Tool"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.tool.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Tool"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "mcp.server.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "MCP Server"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.mcp.server.name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "MCP Server"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "traceID"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "View trace waterfall",
-                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-traceId=${__value.raw}&var-sessionId=${sessionId}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "traceIdHidden"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Trace ID"
-              },
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "View trace waterfall",
-                    "url": "/d/archestra-agent-sessions/archestra-agent-sessions?var-traceId=${__value.raw}&var-sessionId=${sessionId}&var-traces_datasource=${traces_datasource}&var-metrics_datasource=${metrics_datasource}&var-logs_datasource=${logs_datasource}&${__url_time_range}"
-                  }
-                ]
-              },
-              {
-                "id": "custom.hidden",
-                "value": false
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "rootServiceName"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Trace Service"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "rootTraceName"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Trace Name"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "spanID"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Name"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "gen_ai.conversation.id"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.gen_ai.conversation.id"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "route.category"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "span.route.category"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "service.name"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 12,
-        "x": 12,
-        "y": 28
-      },
-      "id": 7,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": true,
-          "enablePagination": true,
-          "fields": "",
-          "reducer": [
-            "count"
-          ],
-          "show": true
-        },
-        "showHeader": true,
-        "sortBy": []
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "tempo",
-            "uid": "${traces_datasource}"
-          },
-          "limit": 100,
-          "query": "{resource.service.name=\"Archestra\" && span.gen_ai.conversation.id=\"$sessionId\" && span.route.category=\"mcp-gateway\"} | select(span.gen_ai.agent.name, span.gen_ai.tool.name, span.mcp.server.name)",
-          "queryType": "traceql",
-          "refId": "A",
-          "tableType": "spans"
-        }
-      ],
-      "title": "MCP Tool Calls",
-      "type": "table"
-    },
-    {
+      "description": "Requests, tool calls, policy decisions, and application events for the selected session. Expand an event to inspect its details.",
       "datasource": {
         "type": "loki",
         "uid": "${logs_datasource}"
       },
-      "description": "Application logs containing the selected session ID. Requires Loki datasource to be configured.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 18,
-        "w": 12,
-        "x": 0,
-        "y": 38
-      },
-      "id": 8,
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Ascending",
-        "wrapLogMessage": true
-      },
-      "pluginVersion": "12.3.2",
       "targets": [
         {
-          "datasource": {
-            "type": "loki",
-            "uid": "${logs_datasource}"
-          },
-          "direction": "forward",
-          "expr": "{service_name=\"Archestra\"} | session_id = `$sessionId`",
+          "refId": "A",
+          "expr": "{service_name=\"Archestra\"} | session_id = ${sessionId:doublequote} | event_name != \"archestra.session.summary\"",
+          "direction": "backward",
           "queryType": "range",
-          "refId": "A"
+          "maxLines": 5000
         }
       ],
-      "title": "Session Logs",
-      "type": "logs"
-    },
-    {
-      "datasource": {
-        "type": "tempo",
-        "uid": "${traces_datasource}"
-      },
-      "description": "Trace waterfall for the selected trace. Click a Trace ID link in any table above to load a trace here.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 18,
-        "w": 12,
-        "x": 12,
-        "y": 38
-      },
-      "id": 10,
-      "options": {},
-      "targets": [
-        {
-          "datasource": {
-            "type": "tempo",
-            "uid": "${traces_datasource}"
-          },
-          "query": "${traceId}",
-          "queryType": "traceql",
-          "refId": "A"
-        }
-      ],
-      "title": "Trace Viewer",
-      "type": "traces"
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Ascending",
+        "enableLogDetails": true
+      }
     }
   ],
   "preload": false,
@@ -1817,96 +644,85 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "text": "grafanacloud-archestra-traces",
-          "value": "grafanacloud-traces"
-        },
+        "current": {},
         "includeAll": false,
         "label": "Traces data source",
         "name": "traces_datasource",
         "options": [],
         "query": "tempo",
         "refresh": 1,
-        "regex": "",
         "type": "datasource"
       },
       {
-        "current": {
-          "text": "grafanacloud-archestra-prom",
-          "value": "grafanacloud-prom"
-        },
-        "includeAll": false,
-        "label": "Metrics data source",
-        "name": "metrics_datasource",
-        "options": [],
-        "query": "prometheus",
-        "refresh": 1,
-        "regex": "(?!grafanacloud-usage|grafanacloud-ml-metrics).+",
-        "type": "datasource"
-      },
-      {
-        "current": {
-          "text": "grafanacloud-archestra-logs",
-          "value": "grafanacloud-logs"
-        },
+        "current": {},
         "includeAll": false,
         "label": "Logs data source",
         "name": "logs_datasource",
         "options": [],
         "query": "loki",
         "refresh": 1,
-        "regex": "",
         "type": "datasource"
       },
       {
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${metrics_datasource}"
-        },
-        "definition": "label_values(llm_request_duration_seconds_count, agent_name)",
-        "includeAll": true,
-        "label": "Agent Name",
-        "multi": true,
         "name": "agent_name",
-        "options": [],
-        "query": {
-          "qryType": 1,
-          "query": "label_values(llm_request_duration_seconds_count, agent_name)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        "label": "Agent name regex",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
         },
-        "refresh": 1,
-        "regex": "",
-        "sort": 1,
-        "type": "query"
+        "options": []
       },
       {
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "description": "Enter a session ID to view its full audit trail. Click a Session ID in the table above to auto-populate.",
-        "label": "Session ID",
         "name": "sessionId",
+        "label": "Session ID",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "${logs_datasource}"
+        },
+        "query": {
+          "type": 2,
+          "label": "session_id",
+          "stream": "{service_name=\"Archestra\"} | event_name=\"archestra.session.summary\"",
+          "refId": "SessionLookup"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
         "options": [],
-        "query": "",
-        "type": "textbox"
+        "current": {},
+        "hide": 0,
+        "skipUrlSync": false,
+        "allowCustomValue": true,
+        "description": "Select a session or click its row below."
       },
       {
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "description": "Click a Trace ID link in any table to load the trace waterfall below.",
-        "label": "Trace ID",
         "name": "traceId",
+        "label": "Trace ID",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "${logs_datasource}"
+        },
+        "query": {
+          "type": 2,
+          "label": "session_trace_id",
+          "stream": "{service_name=\"Archestra\"} | event_name=\"archestra.session.summary\" | session_id = ${sessionId:doublequote} | json session_trace_id=\"trace_id\"",
+          "refId": "SessionLookup"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
         "options": [],
-        "query": "",
-        "type": "textbox"
+        "current": {},
+        "hide": 0,
+        "skipUrlSync": false,
+        "allowCustomValue": true,
+        "description": "Filled from the selected session. Enter another trace ID to inspect it directly."
       }
     ]
   },
@@ -1916,7 +732,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Archestra Agent Sessions",
+  "title": "Archestra / Session Investigation",
   "uid": "archestra-agent-sessions",
   "version": 6
 }

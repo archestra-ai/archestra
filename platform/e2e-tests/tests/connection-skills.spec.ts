@@ -74,8 +74,9 @@ test("connection loads skills without treating the proxy as a skill agent", asyn
       "Connect-Claude-Desktop.mcpb",
     );
     await expect(
-      page.getByRole("link", { name: "Download installer" }),
+      page.getByText("Downloaded. Install it within 15 minutes."),
     ).toBeVisible();
+    expect(setupRequests).toHaveLength(1);
     await expect(
       page.getByText("This agent type does not expose skills"),
     ).toHaveCount(0);

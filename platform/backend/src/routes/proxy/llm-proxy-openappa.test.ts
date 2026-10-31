@@ -101,6 +101,7 @@ import kimiCodeProxyRoutes from "./routes/kimi-code";
 import openAiProxyRoutes from "./routes/openai";
 
 const native = vi.hoisted(() => ({
+  collectOpenappaMetrics: vi.fn(() => ""),
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
   loadChildReturns: vi.fn(
@@ -597,7 +598,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     expect(
       await getHitlReviewResult({ session: runtimeSession, callId, offerId }),
-    ).toBe(outcome);
+    ).toEqual({ outcome: outcome });
     expect(
       await getHitlReviewResult({
         session: runtimeSession,

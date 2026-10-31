@@ -26,6 +26,7 @@ import {
   setTeamAttributes,
   setUserAttributes,
 } from "./attributes";
+import { sessionContext } from "./session";
 
 /**
  * Starts an active parent chat span that groups LLM and MCP tool calls within
@@ -63,57 +64,65 @@ export async function startActiveChatSpan<T>(params: {
   const spanName = `chat ${params.agentName}`;
 
   // Inject session ID into context so it's available to the pino mixin for log correlation
-  let ctx = context.active().setValue(CHAT_ROUTE_CATEGORY_KEY, routeCategory);
+  let ctx = sessionContext(context.active(), params.sessionId).setValue(
+    CHAT_ROUTE_CATEGORY_KEY,
+    routeCategory,
+  );
   if (params.sessionId) {
     ctx = ctx.setValue(SESSION_ID_KEY, params.sessionId);
   }
 
-  return tracer.startActiveSpan(
-    spanName,
-    {
-      kind: SpanKind.SERVER,
-      attributes: {
-        [ATTR_ROUTE_CATEGORY]: routeCategory,
-        [ATTR_GENAI_OPERATION_NAME]: "chat",
-        [ATTR_GENAI_AGENT_ID]: params.agentId,
-        [ATTR_GENAI_AGENT_NAME]: params.agentName,
+  return context.with(ctx, () =>
+    tracer.startActiveSpan(
+      spanName,
+      {
+        kind: SpanKind.SERVER,
+        attributes: {
+          [ATTR_ROUTE_CATEGORY]: routeCategory,
+          [ATTR_GENAI_OPERATION_NAME]: "chat",
+          [ATTR_GENAI_AGENT_ID]: params.agentId,
+          [ATTR_GENAI_AGENT_NAME]: params.agentName,
+        },
       },
-    },
-    ctx,
-    async (span) => {
-      setSessionId(span, params.sessionId);
+      ctx,
+      async (span) => {
+        setSessionId(span, params.sessionId);
 
-      if (params.agentType) {
-        span.setAttribute(ATTR_ARCHESTRA_AGENT_TYPE, params.agentType);
-      }
-      if (params.triggerSource) {
-        span.setAttribute(ATTR_ARCHESTRA_TRIGGER_SOURCE, params.triggerSource);
-      }
-
-      setUserAttributes(span, params.user);
-
-      if (params.labels && params.labels.length > 0) {
-        for (const label of params.labels) {
+        if (params.agentType) {
+          span.setAttribute(ATTR_ARCHESTRA_AGENT_TYPE, params.agentType);
+        }
+        if (params.triggerSource) {
           span.setAttribute(
-            `${ATTR_ARCHESTRA_AGENT_LABEL_PREFIX}${label.key}`,
-            label.value,
+            ATTR_ARCHESTRA_TRIGGER_SOURCE,
+            params.triggerSource,
           );
         }
-      }
 
-      setTeamAttributes(span, params.teams, "agent");
-      setTeamAttributes(span, params.userTeams, "user");
+        setUserAttributes(span, params.user);
 
-      try {
-        const result = await params.callback(span);
-        span.setStatus({ code: SpanStatusCode.OK });
-        return result;
-      } catch (error) {
-        setSpanError({ span, error });
-        throw error;
-      } finally {
-        span.end();
-      }
-    },
+        if (params.labels && params.labels.length > 0) {
+          for (const label of params.labels) {
+            span.setAttribute(
+              `${ATTR_ARCHESTRA_AGENT_LABEL_PREFIX}${label.key}`,
+              label.value,
+            );
+          }
+        }
+
+        setTeamAttributes(span, params.teams, "agent");
+        setTeamAttributes(span, params.userTeams, "user");
+
+        try {
+          const result = await params.callback(span);
+          span.setStatus({ code: SpanStatusCode.OK });
+          return result;
+        } catch (error) {
+          setSpanError({ span, error });
+          throw error;
+        } finally {
+          span.end();
+        }
+      },
+    ),
   );
 }

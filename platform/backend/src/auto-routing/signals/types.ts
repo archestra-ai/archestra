@@ -4,6 +4,9 @@ import type { ScorerSpec } from "./spec";
 export interface PreRunInput {
   firstUserText: string;
   client: string | null;
+  systemPrompt?: string;
+  /** Names and descriptions only: never parameter schemas or tool results. */
+  tools?: { name: string; description?: string }[];
 }
 
 export interface SignalSourceContext {

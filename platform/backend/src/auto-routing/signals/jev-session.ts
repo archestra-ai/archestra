@@ -22,9 +22,13 @@ export interface JevSessionReading {
   costUsd: number | null;
 }
 
-// State template v2 (spec.stateTemplateVersion): ported from the router PoC rubric.
+// State template v3: independently bounded task, instructions and tool summaries.
 const PROMPT_HEAD = 3000;
 const PROMPT_TAIL = 1000;
+const SYSTEM_HEAD = 1500;
+const SYSTEM_TAIL = 500;
+const MAX_TOOLS = 20;
+const MAX_TOOLS_CHARS = 2000;
 const SECRET =
   /(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[abp]-[A-Za-z0-9-]{10,}|[Bb][Ee][Aa][Rr][Ee][Rr]\s+[A-Za-z0-9._-]{20,}|[A-Za-z0-9+/=_-]{40,})/g;
 /** Jev's probabilities are rounded; anything further from 1 is a broken answer. */
@@ -186,12 +190,42 @@ function tierDistribution(
 }
 
 function sessionState(input: PreRunInput): Record<string, string> {
-  return { prompt: clip(input.firstUserText.replace(SECRET, "<redacted>")) };
+  const state: Record<string, string> = {
+    prompt: clip(redact(input.firstUserText), {
+      head: PROMPT_HEAD,
+      tail: PROMPT_TAIL,
+    }),
+  };
+  if (input.systemPrompt?.trim()) {
+    state.system_prompt = clip(redact(input.systemPrompt), {
+      head: SYSTEM_HEAD,
+      tail: SYSTEM_TAIL,
+    });
+  }
+  if (input.tools?.length) {
+    const tools = input.tools.slice(0, MAX_TOOLS).map((tool) => {
+      const name = clip(redact(tool.name), { head: 100, tail: 0 });
+      const description = tool.description
+        ? clip(redact(tool.description), { head: 160, tail: 0 })
+        : "";
+      return description ? `${name}: ${description}` : name;
+    });
+    state.tools = `Available tools: ${input.tools.length}\n${clip(tools.join("\n"), { head: MAX_TOOLS_CHARS, tail: 0 })}`;
+    if (input.tools.length > MAX_TOOLS) state.tools += "\n[more tools omitted]";
+  }
+  return state;
 }
 
-function clip(text: string): string {
+function redact(text: string): string {
+  return text.replace(SECRET, "<redacted>");
+}
+
+function clip(
+  text: string,
+  { head, tail }: { head: number; tail: number },
+): string {
   const chars = Array.from(text);
-  if (chars.length <= PROMPT_HEAD + PROMPT_TAIL) return text;
-  const omitted = chars.length - PROMPT_HEAD - PROMPT_TAIL;
-  return `${chars.slice(0, PROMPT_HEAD).join("")}\n…[${omitted} chars omitted]…\n${chars.slice(-PROMPT_TAIL).join("")}`;
+  if (chars.length <= head + tail) return text;
+  const omitted = chars.length - head - tail;
+  return `${chars.slice(0, head).join("")}\n…[${omitted} chars omitted]…\n${tail ? chars.slice(-tail).join("") : ""}`;
 }

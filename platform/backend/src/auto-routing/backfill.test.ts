@@ -277,6 +277,77 @@ describe("auto routing backfill", () => {
     });
   });
 
+  test("re-scores the system and tools stored on the opening request across API shapes", async () => {
+    const states: Record<string, string>[] = [];
+    server.use(
+      http.post(JEV_ENDPOINT, async ({ request }) => {
+        states.push(
+          ((await request.json()) as { state: Record<string, string> }).state,
+        );
+        return HttpResponse.json(ANSWERS);
+      }),
+    );
+    const system = "Review schema changes and locking.";
+    const tool = {
+      name: "inspect_schema",
+      description: "Read table metadata.",
+    };
+    await turn("context-chat", "Review this migration", {
+      request: {
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: "Review this migration" },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              ...tool,
+              parameters: { type: "object", properties: {} },
+            },
+          },
+        ],
+      },
+    });
+    await turn("context-messages", "Review this migration", {
+      type: "anthropic:messages",
+      request: {
+        model: "claude-sonnet-4-5",
+        max_tokens: 100,
+        system: [{ type: "text", text: system }],
+        messages: [{ role: "user", content: "Review this migration" }],
+        tools: [{ ...tool, input_schema: { type: "object", properties: {} } }],
+      },
+    });
+    await turn("context-responses", "Review this migration", {
+      type: "openai:responses",
+      request: {
+        model: "gpt-4o",
+        instructions: system,
+        input: "Review this migration",
+        tools: [
+          {
+            type: "function",
+            ...tool,
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+      },
+    });
+
+    await scanAndScore({});
+
+    expect(states).toHaveLength(3);
+    for (const state of states) {
+      expect(state).toEqual({
+        prompt: "Review this migration",
+        system_prompt: system,
+        tools: "Available tools: 1\ninspect_schema: Read table metadata.",
+      });
+    }
+  });
+
   test("a scan visits only the agents with traffic in its window", async ({
     makeAgent,
   }) => {

@@ -382,8 +382,9 @@ describe("Runtime tiers", () => {
     L: { name: "L", cpuRequest: 8, cpuLimit: null, pooled: false },
   };
 
-  it("lists the tiers smallest first with their memory, pools and default; the header links the docs and has no search or hint text", () => {
+  it("lists the tiers smallest first with their memory, pools and default; the header links the docs and explains pools, with no search or hint text", async () => {
     enableRuntime();
+    const user = userEvent.setup();
     renderPage();
 
     expect(block()).toHaveTextContent(
@@ -414,6 +415,15 @@ describe("Runtime tiers", () => {
     expect(
       within(block()).getByRole("button", { name: "Create tier" }),
     ).toBeVisible();
+    // The Pools header explains itself; nobody opens a dialog to read it.
+    await user.hover(
+      within(block()).getByRole("button", { name: "About pooled tiers" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "About pooled tiers" }),
+    ).toHaveTextContent(
+      "Agent runs start much quicker from pool of runtime instances. Managed automatically. Pooled instances reserve part of cluster's capacity. Learn more",
+    );
   });
 
   it("edits a tier in a dialog: a problem sits under its field, memory follows the CPU, and the whole list is saved", async () => {

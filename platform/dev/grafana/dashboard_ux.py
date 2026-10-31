@@ -12,7 +12,7 @@ HEADERS = {
     "archestra-genai-observability": "Request outcomes and upstream performance. Model and agent filters apply to upstream panels.",
     "archestra-costs-and-limits": "Estimated inference spend and limit enforcement. Cost filters do not apply to limit panels.",
     "archestra-agent-runtime": "Task health, provisioning, and optional Kubernetes resources.",
-    "archestra-guardrails": "Hook decisions and latency. Standalone engine metrics need a separate OTLP pipeline.",
+    "archestra-guardrails": "Hook decisions and latency.",
     "archestra-mcp-monitoring": "Tool calls, latency, and server state. Tool-call filters do not apply to server state.",
     "archestra-application-metrics": "API traffic, process health, background tasks, and database pools.",
     "archestra-rag-knowledge-base": "Document syncs, embeddings, and search. Optional diagnostics appear when those features run.",
@@ -348,8 +348,8 @@ def add_header(d):
     ]
     old_ids = {p["id"] for p in old}
     remaining = [p for p in d["panels"] if p["id"] not in old_ids]
-    min_y = min((p["gridPos"]["y"] for p in remaining), default=3)
-    delta = 3 - min_y
+    min_y = min((p["gridPos"]["y"] for p in remaining), default=2)
+    delta = 2 - min_y
     for p in panels(remaining):
         p["gridPos"]["y"] += delta
     appa = d["uid"] == "archestra-guardrails"
@@ -360,13 +360,18 @@ def add_header(d):
     data = base64.b64encode(asset.read_bytes()).decode()
     title = escape(d["title"].removeprefix("Archestra / "))
     copy = escape(HEADERS[d["uid"]])
+    if appa:
+        copy += (
+            ' <a href="https://archestra.ai/docs/admin/observability/metrics/openappa#collection-setup" '
+            'target="_blank" rel="noopener noreferrer">Set up hook and standalone metrics</a>.'
+        )
     mark = "OpenAPPA" if appa else "Archestra"
     header = {
         "id": 90001,
         "type": "text",
         "title": "",
         "transparent": True,
-        "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
+        "gridPos": {"x": 0, "y": 0, "w": 24, "h": 2},
         "options": {
             "mode": "html",
             "content": (

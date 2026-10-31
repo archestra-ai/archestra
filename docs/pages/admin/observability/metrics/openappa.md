@@ -7,6 +7,46 @@ lastUpdated: 2026-10-31
 
 Track [Guardrails](/docs/agents/guardrails) hook volume, decision outcomes, and hook dispatch latency from Archestra's Prometheus `/metrics` endpoint, or map OTLP metrics from a standalone OpenAPPA daemon.
 
+## Collection Setup
+
+Choose the setup for the runtime you operate. Embedded hooks and standalone daemon instruments use different export paths; configuring traces alone does not collect either set of metrics.
+
+### Archestra Embedded Hooks
+
+1. Scrape every web and worker pod using the endpoints and authentication in [Scraping](/docs/admin/observability/metrics#scraping). No additional OTLP metrics exporter is needed for embedded hooks.
+2. If your collector filters metric names, retain `openappa_hook_dispatches_total` and all `openappa_hook_dispatch_duration_seconds` histogram series (`_bucket`, `_sum`, and `_count`). Keep the `hook` and `decision` labels and the existing pod identity labels.
+3. Exercise a Guardrails-enabled request, then query `sum by (hook, decision) (openappa_hook_dispatches_total)` in Prometheus. Check both the pod endpoint and the remote backend if the series is missing; an idle or older application process may not emit it.
+4. Select that Prometheus source as **Metrics** on the Guardrails & OpenAPPA dashboard. Its embedded hook panels use these scraped series.
+
+### Standalone Daemon OTLP Metrics
+
+Only follow these steps if you run the standalone OpenAPPA daemon. Archestra's embedded runtime does not emit the standalone `appa_*` instruments.
+
+1. Enable an OTLP HTTP receiver and a **metrics** pipeline in your OpenTelemetry Collector. You can reuse the receiver serving traces and logs; add the metrics pipeline alongside those existing pipelines. For example, a Collector Contrib configuration can expose Prometheus samples on port 9464:
+
+   ```yaml
+   receivers:
+     otlp:
+       protocols:
+         http:
+           endpoint: 0.0.0.0:4318
+   exporters:
+     prometheus:
+       endpoint: 0.0.0.0:9464
+   service:
+     pipelines:
+       metrics:
+         receivers: [otlp]
+         exporters: [prometheus]
+   ```
+
+   Restrict receiver and exporter access to your telemetry network and configure authentication for your environment. This example shows the metrics branch; preserve any existing traces and logs pipelines.
+
+2. Configure the standalone daemon with `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318` and restart it. Use the collector address reachable from the daemon. Leave `OTEL_SDK_DISABLED` unset or `false`; configure `OTEL_EXPORTER_OTLP_HEADERS` if your receiver requires authentication. The daemon sends metrics to `/v1/metrics` alongside its traces and logs.
+3. Have Prometheus scrape the collector's `:9464/metrics` endpoint. Alternatively, use a `prometheusremotewrite` exporter in the metrics pipeline to send samples directly to your Prometheus-compatible backend with that backend's credentials.
+4. After an export interval, query `appa_runtime_uptime_seconds` in the destination. Exercise a policy decision and check the corresponding counters below. Keep the daemon's service identity stable; do not add session or request IDs as metric labels.
+5. Select the receiving Prometheus source as **OpenAPPA metrics** on the dashboard and expand its standalone daemon row. This may be the same source used for Archestra metrics.
+
 ## Embedded Hook Metrics
 
 Archestra exposes two metric families on its standard Prometheus scrape endpoint (`:9050/metrics` on web pods and `:9000/metrics` on worker pods; see [Scraping](/docs/admin/observability/metrics#scraping)).

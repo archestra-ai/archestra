@@ -22,6 +22,10 @@ Monitor your instance in your existing stack. For individual requests and conver
 
 <span id="scraping-prometheus-metrics"></span>
 
+## Collect Guardrails Metrics
+
+Include [OpenAPPA collection setup](/docs/admin/observability/metrics/openappa#collection-setup) when connecting your monitoring stack. Embedded hooks are collected with the normal Archestra Prometheus scrape. If you operate a standalone OpenAPPA daemon, also enable an OTLP **metrics** branch in your collector and configure the daemon's exporter; the receiver can be shared with traces and logs.
+
 ## Grafana Dashboards
 
 <span id="grafana-dashboards"></span>
@@ -70,7 +74,7 @@ Each dashboard scopes its optional data sources and aggregates multi-replica met
 - **Optional Kubernetes row on Agent Runtime:** The Kubernetes resource panels require **cAdvisor** and **kube-state-metrics**. Scrape kubelet `/metrics/cadvisor` and the kube-state-metrics endpoint into that source, preserving `cluster`, `namespace`, `pod`, and `container` labels. Verify `kube_pod_status_phase` and `container_memory_working_set_bytes` return runtime pod series before expanding the row. The panels use an independent Kubernetes Prometheus data source variable and **Cluster**, **Namespace**, and **Runtime pod name regex** filters so you can target your runtime pods without editing queries.
 - **Historical limit detail vs. live headroom:** On **Costs & Limits**, [`llm_limit_last_exceeded_timestamp_seconds`](/docs/admin/observability/metrics/limits#llm_limit_last_exceeded_timestamp_seconds), [`llm_limit_last_exceeded_threshold`](/docs/admin/observability/metrics/limits#llm_limit_last_exceeded_threshold), and [`llm_limit_last_exceeded_usage`](/docs/admin/observability/metrics/limits#llm_limit_last_exceeded_usage) report process-local observations from the last 24 hours at the time a check was exhausted, not live budget headroom.
 - **Replica-wide health gauges:** Fleet health reported identically by every replica (such as [`agent_runtime_health_tasks`](/docs/admin/observability/metrics/agent-runtime#agent_runtime_health_tasks), [`agent_runtime_health_age_seconds`](/docs/admin/observability/metrics/agent-runtime#agent_runtime_health_age_seconds)) aggregate with `max` across replicas, never `sum`.
-- **Guardrails and OpenAPPA metrics:** Embedded hook metrics ([`openappa_hook_dispatches_total`](/docs/admin/observability/metrics/openappa#openappa_hook_dispatches_total) and [`openappa_hook_dispatch_duration_seconds`](/docs/admin/observability/metrics/openappa#openappa_hook_dispatch_duration_seconds)) come from Archestra's `/metrics` scrape. Standalone OpenAPPA daemon panels require a separate OTLP metrics pipeline; see [Guardrails and OpenAPPA Metrics](/docs/admin/observability/metrics/openappa#standalone-openappa-daemon-metrics).
+- **Guardrails and OpenAPPA metrics:** Embedded hook metrics ([`openappa_hook_dispatches_total`](/docs/admin/observability/metrics/openappa#openappa_hook_dispatches_total) and [`openappa_hook_dispatch_duration_seconds`](/docs/admin/observability/metrics/openappa#openappa_hook_dispatch_duration_seconds)) come from Archestra's `/metrics` scrape. Standalone OpenAPPA daemon panels use the collector's OTLP metrics branch; see [collection setup](/docs/admin/observability/metrics/openappa#collection-setup).
 
 ## Real User Monitoring (RUM)
 

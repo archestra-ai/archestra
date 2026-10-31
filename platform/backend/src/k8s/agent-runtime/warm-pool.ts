@@ -27,6 +27,7 @@ import {
   resolveRunResources,
   resolveRunWorkspaceStorageSize,
   retargetRuntimeTiersEnv,
+  retargetScaleupDisabledPrompt,
   runtimeSystemPrompt,
   warmPoolReplicas,
 } from "@/services/agent-runtime/runtime-tiers";
@@ -498,20 +499,26 @@ export function servedLaunchSpec<
     (candidate) => candidate.tier === spec.tier,
   );
   const tiersEnv = spec.env[AGENT_RUNTIME_TIERS_ENV];
+  const prompt = spec.secretEnv?.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT;
+  const basePrompt = spec.systemPromptParts
+    ? runtimeSystemPrompt(spec.systemPromptParts, served.workspaceGiB)
+    : prompt;
+  const nextPrompt =
+    basePrompt && tiersEnv && tier
+      ? retargetScaleupDisabledPrompt(basePrompt, tiersEnv, tier)
+      : basePrompt;
   return {
     ...spec,
     tier,
     resources: served.resources,
     workspaceStorageSize: served.workspaceStorageSize,
-    // The prompt is rebuilt from its parts with the served volume; no other
-    // text of it changes.
-    secretEnv: spec.systemPromptParts
+    // The prompt is rebuilt with the served volume and retargeted fixed-tier instruction.
+    secretEnv: spec.secretEnv
       ? {
           ...spec.secretEnv,
-          [AGENT_RUNTIME_SYSTEM_PROMPT_ENV]: runtimeSystemPrompt(
-            spec.systemPromptParts,
-            served.workspaceGiB,
-          ),
+          ...(nextPrompt
+            ? { [AGENT_RUNTIME_SYSTEM_PROMPT_ENV]: nextPrompt }
+            : {}),
         }
       : spec.secretEnv,
     env: {
@@ -534,6 +541,23 @@ export function servedLaunchSpec<
         ? { [AGENT_RUNTIME_MEMORY_LIMIT_ENV]: served.resources.memoryLimit }
         : {}),
     },
+    ...(spec.secretEnv
+      ? {
+          secretEnv: {
+            ...spec.secretEnv,
+            ...(prompt && tiersEnv
+              ? {
+                  ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
+                    retargetScaleupDisabledPrompt(
+                      prompt,
+                      tiersEnv,
+                      served.tier,
+                    ),
+                }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 

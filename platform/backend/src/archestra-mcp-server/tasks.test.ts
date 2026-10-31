@@ -359,6 +359,55 @@ describe("run tools", () => {
       "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). This call is not retriable; calling it again will fail.",
     );
 
+    // Resolving caller tier through runId and persisted runtimeLimits:
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId,
+    });
+    const callerTask = await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: target.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: callerTask.id,
+      agentId: target.id,
+      actorKind: "user",
+      actorId,
+      actorUserId: actorId,
+      workloadName: `test-${callerTask.id.slice(0, 8)}`,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      runtimeLimits: {
+        tier: "S",
+        idleTimeoutMinutes: 60,
+        maxDurationHours: 1,
+        maxCostUsd: null,
+      },
+    });
+    const runIdFromDbCallerContext: ArchestraContext = {
+      ...context,
+      agent: { id: target.id, name: target.name },
+      agentId: target.id,
+      runId: callerTask.id,
+    };
+    const scaleupViaDbLookupResult = await executeArchestraTool(
+      TOOL_START_AGENT_RUN_FULL_NAME,
+      {
+        agent_id: target.id,
+        message: "Scale up from S to M via runId",
+        limits: { tier: "M" },
+      },
+      runIdFromDbCallerContext,
+    );
+    expect(scaleupViaDbLookupResult.isError).toBe(true);
+    expect(
+      (scaleupViaDbLookupResult.content[0] as { text: string }).text,
+    ).toContain(
+      "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). This call is not retriable; calling it again will fail.",
+    );
+
     const scaleupTarget = await makeAgent({
       organizationId,
       authorId: actorId,

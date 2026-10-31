@@ -9,6 +9,7 @@ import {
   resolveAgentRunLimits,
   resolveRunResources,
   resolveRunWorkspaceStorageSize,
+  retargetScaleupDisabledPrompt,
   runtimeSystemPrompt,
   runtimeTiersEnv,
   warmPoolReplicas,
@@ -171,11 +172,37 @@ describe("runtime tiers", () => {
       "Cannot scale up this agent runtime instance: scaling up is disabled and the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). This call is not retriable; calling it again will fail.",
     );
     // The prompt uses the resolved run tier for fixed-tier runs.
-    expect(
-      describeScaleupDisabledPrompt(fixedM, TIERS, "S"),
-    ).toBe(
+    expect(describeScaleupDisabledPrompt(fixedM, TIERS, "S")).toBe(
       "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
     );
+    // When scaling is enabled, an omitted-size request from an L caller uses the Agent's default M.
+    const scalingWorker = { ...DEFAULTS, tier: "M", maxTier: "L" };
+    expect(
+      resolveAgentRunLimits({
+        runtime: scalingWorker,
+        tiers: TIERS,
+        currentTier: "L",
+        requested: {},
+      }).tier,
+    ).toBe("M");
+    expect(
+      resolveAgentRunLimits({
+        runtime: scalingWorker,
+        tiers: TIERS,
+        currentTier: "L",
+        requested: { maxDurationHours: 2 },
+      }).tier,
+    ).toBe("M");
+    // When an administrator reduces the Agent to S, an active M caller requesting without limits gets S.
+    const reducedToS = { ...DEFAULTS, tier: "S", maxTier: "S" };
+    expect(
+      resolveAgentRunLimits({
+        runtime: reducedToS,
+        tiers: TIERS,
+        currentTier: "M",
+        requested: {},
+      }).tier,
+    ).toBe("S");
     // A name the organization has no tier for.
     expect(() =>
       resolveAgentRunLimits({
@@ -184,6 +211,29 @@ describe("runtime tiers", () => {
         requested: { tier: "XL" },
       }),
     ).toThrow("There is no tier named XL.");
+  });
+
+  test("retargets fixed-tier system instruction to served tier", () => {
+    const allowed = TIERS.tiers;
+    const tiersEnv = runtimeTiersEnv(allowed, "S");
+    const originalPrompt =
+      "System prompt header.\n\n" +
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU, 4 GiB (8 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
+      "System prompt footer.";
+    const retargeted = retargetScaleupDisabledPrompt(
+      originalPrompt,
+      tiersEnv,
+      "M",
+    );
+    expect(retargeted).toBe(
+      "System prompt header.\n\n" +
+        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M (4 CPU, 8 GiB (16 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.\n\n" +
+        "System prompt footer.",
+    );
+    // When prompt has no fixed-tier instruction, it is returned unchanged.
+    expect(
+      retargetScaleupDisabledPrompt("Standard prompt", tiersEnv, "M"),
+    ).toBe("Standard prompt");
   });
 
   test("a run may ask by size: the smallest allowed tier with that much CPU and memory", () => {

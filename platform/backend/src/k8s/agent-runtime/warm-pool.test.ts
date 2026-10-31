@@ -433,6 +433,51 @@ test("a run served from a larger pool is told the size of the pod it got, and it
   expect(servedLaunchSpec(SPEC, null)).toBe(SPEC);
 });
 
+test("servedLaunchSpec retargets the fixed-tier system instruction in secretEnv when served by a warm spare", () => {
+  const sizes = {
+    S: {
+      cpuRequest: "2",
+      cpuLimit: "2",
+      memoryRequest: "4Gi",
+      memoryLimit: "8Gi",
+    },
+    M: {
+      cpuRequest: "4",
+      cpuLimit: "4",
+      memoryRequest: "8Gi",
+      memoryLimit: "16Gi",
+    },
+  };
+  const fixedMSpec = {
+    tier: "S",
+    resources: sizes.S,
+    warmTiers: [
+      { tier: "S", resources: sizes.S },
+      { tier: "M", resources: sizes.M },
+    ],
+    env: {
+      ARCHESTRA_AGENT_RUNTIME_TIER: "S",
+      ARCHESTRA_AGENT_RUNTIME_MAX_TIER: "M",
+      ARCHESTRA_AGENT_RUNTIME_TIERS:
+        '[{"name":"S","cpu":2,"cpu_limit":2,"memory_gib":4,"memory_limit_gib":8,"current":true},{"name":"M","cpu":4,"cpu_limit":4,"memory_gib":8,"memory_limit_gib":16}]',
+      ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST: "2",
+      ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT: "8Gi",
+    },
+    secretEnv: {
+      ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
+        "Initial agent instruction.\n\n" +
+        "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to S (2 CPU (2 limit), 4 GiB (8 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
+    },
+  };
+
+  const served = servedLaunchSpec(fixedMSpec, "M");
+  expect(served.tier).toBe("M");
+  expect(served.secretEnv?.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toBe(
+    "Initial agent instruction.\n\n" +
+      "Scaling up this agent runtime instance is disabled: the runtime tier is fixed to M (4 CPU (4 limit), 8 GiB (16 GiB limit)). You cannot scale up this instance; do not attempt to start a run at a larger tier.",
+  );
+});
+
 test("rejects a claim pointing at another workspace's Sandbox", async () => {
   server.use(
     http.get(

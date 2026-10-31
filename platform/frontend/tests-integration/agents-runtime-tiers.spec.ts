@@ -111,6 +111,11 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
     overflow[width] = await container.evaluate(
       (element) => element.scrollWidth - element.clientWidth,
     );
+    // Laptop widths and up show every column; narrower ones drop some.
+    if (width >= 1180) {
+      await expect(rowOf("L")).toContainText("No limit");
+      await expect(rowOf("S")).toContainText("Pooled");
+    }
   }
   expect(
     overflow,

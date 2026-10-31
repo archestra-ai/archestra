@@ -52,6 +52,8 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
       id: "name",
       accessorKey: "name",
       header: "Tier",
+      size: 160,
+      minSize: 120,
       cell: ({ row }) => (
         <span className="flex items-center gap-2">
           <span className="font-medium">{row.original.name}</span>
@@ -65,7 +67,8 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
     {
       id: "cpuRequest",
       accessorKey: "cpuRequest",
-      header: "CPU request",
+      header: "CPU",
+      size: 72,
       cell: ({ row }) => (
         <span className="tabular-nums">{row.original.cpuRequest}</span>
       ),
@@ -74,6 +77,7 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
       id: "cpuLimit",
       accessorFn: (row) => row.cpuLimit ?? Number.POSITIVE_INFINITY,
       header: "CPU limit",
+      size: 96,
       cell: ({ row }) =>
         row.original.cpuLimit === null ? (
           <span className="text-muted-foreground">No limit</span>
@@ -85,6 +89,7 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
       id: "memory",
       accessorKey: "memoryRequestMiB",
       header: "Memory",
+      size: 110,
       cell: ({ row }) => (
         <span className="tabular-nums">
           {formatMemory(row.original.memoryRequestMiB)}
@@ -98,6 +103,7 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
       id: "pools",
       accessorKey: "pooled",
       header: "Pools",
+      size: 76,
       cell: ({ row }) =>
         row.original.pooled ? (
           "Pooled"
@@ -110,6 +116,7 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
           {
             id: "actions",
             header: "Actions",
+            size: 96,
             enableSorting: false,
             enableHiding: false,
             cell: ({ row }) => {
@@ -218,7 +225,8 @@ export function RuntimeTiersBlock({ canEdit }: { canEdit: boolean }) {
           onClearFilters={() => setFilter("")}
           emptyMessage="No tiers"
           filteredEmptyMessage="No tiers match the search"
-          columnDropOrder={["pools", "cpuLimit", "memory"]}
+          flexibleColumnIds={["name"]}
+          columnDropOrder={["memory", "cpuLimit", "pools"]}
         />
       </div>
       {resolved && (

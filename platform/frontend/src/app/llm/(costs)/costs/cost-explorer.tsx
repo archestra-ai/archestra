@@ -3,7 +3,7 @@
 // and the REST call that returns the same data.
 
 import { ArrowRight, ClipboardCopy, Info, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type SetStateAction, useCallback, useMemo } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,6 +45,15 @@ import {
   SummaryTable,
 } from "./cost-explorer-parts";
 import { fmtMetric, KpiTile } from "./cost-overview";
+import { ExplorerToolbar } from "./explorer-toolbar";
+import {
+  decodeCostExplorer,
+  EXPLORER_URL_KEYS,
+  encodeCostExplorer,
+} from "./explorer-url-state";
+import { useModelUsageCube } from "./model-usage.query";
+import { useExplorerUrlState } from "./use-explorer-url-state";
+import { useResponsiveChart } from "./use-responsive-chart";
 
 export default function CostExplorer() {
   const { timeframe, enabled } = useCostsTimeRange();
@@ -53,13 +62,53 @@ export default function CostExplorer() {
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   const canGroup = (group: DimId) =>
     (group !== "app" || canReadApps) && (group !== "skill" || canReadSkills);
-  const [q, setQ] = useState<PivotQuery>(SAVED_VIEWS[0].q);
-  const [focus, setFocus] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<"summary" | "pivot">("summary");
-  const [pivotCols, setPivotCols] = useState<"days" | "split">("days");
+  const [explorer, setExplorer] = useExplorerUrlState({
+    keys: EXPLORER_URL_KEYS,
+    decode: decodeCostExplorer,
+    encode: encodeCostExplorer,
+    timeframe,
+  });
+  const { query, focus, view, pivotCols } = explorer;
+  const setQ = useCallback(
+    (value: SetStateAction<PivotQuery>) => setExplorer("query", value),
+    [setExplorer],
+  );
+  const setFocus = useCallback(
+    (value: SetStateAction<Set<string>>) => setExplorer("focus", value),
+    [setExplorer],
+  );
+  const setView = (value: SetStateAction<"summary" | "pivot">) =>
+    setExplorer("view", value);
+  const setPivotCols = (value: SetStateAction<"days" | "split">) =>
+    setExplorer("pivotCols", value);
 
+  const q = query;
+  const [chart, setChart] = useResponsiveChart(
+    q.chart,
+    explorer.mobileChart,
+    (chart) => setQ((previous) => ({ ...previous, chart })),
+    (chart) => setExplorer("mobileChart", chart),
+  );
   const kpis = useKpis({ timeframe, enabled });
-  const cube = usePivotCube(q, timeframe, enabled);
+  const allModelsCube = usePivotCube(q, timeframe, enabled && !q.model);
+  const modelCube = useModelUsageCube({
+    model: q.model,
+    group: q.group === "key" || q.group === "agent" ? q.group : "person",
+    metric: q.metric,
+    timeframe,
+  });
+  const cube = q.model ? modelCube : allModelsCube;
+  const drilldown = (model: string) => {
+    setQ((previous) => ({
+      ...previous,
+      model,
+      group: "person",
+      split: "none",
+    }));
+    setFocus(new Set());
+    setView("summary");
+  };
+
   const statistics = useCostStatistics({
     timeframe,
     enabled: enabled && (q.metric === "billed" || q.metric === "subscription"),
@@ -78,7 +127,9 @@ export default function CostExplorer() {
 
   const metric = METRICS[q.metric];
   const dim = DIMS[q.group];
-  const splits = splitOptions(q.metric, q.group);
+  const splits = (q.model ? [] : splitOptions(q.metric, q.group)).filter(
+    (d) => d !== "method" && canGroup(d) && d !== q.group,
+  );
   const hasSplit = q.split !== "none";
   const activeView = SAVED_VIEWS.find(
     (v) =>
@@ -93,7 +144,7 @@ export default function CostExplorer() {
   const attributionNote =
     q.group === "app" && ["billed", "requests", "tokens"].includes(q.metric)
       ? "Inference attributed to app sessions. This does not mean every app itself runs a model."
-      : q.group === "key"
+      : q.group === "key" && !q.model
         ? "Key names and recorded IDs are shown in full. Calls without an individual key ID cannot be distinguished further."
         : null;
 
@@ -123,6 +174,96 @@ export default function CostExplorer() {
     .filter((r) => focus.has(r.key))
     .map((r) => r.label);
   const pivotBySplit = hasSplit && pivotCols === "split";
+
+  const queryControls = (
+    <>
+      {/* A saved view is a preset of the controls beside it; changing
+              any of them makes the view custom. */}
+      <QueryChip
+        label="View"
+        className="max-sm:grow"
+        value={activeView?.id ?? CUSTOM_VIEW}
+        options={[
+          ...SAVED_VIEWS.filter(
+            (v) =>
+              canGroup(v.q.group) &&
+              (!q.model || ["person", "key", "agent"].includes(v.q.group)),
+          ).map((v) => ({
+            id: v.id,
+            label: v.label,
+          })),
+          ...(activeView
+            ? []
+            : [{ id: CUSTOM_VIEW, label: "Custom", disabled: true }]),
+        ]}
+        onChange={(id) => {
+          const view = SAVED_VIEWS.find((v) => v.id === id);
+          if (!view) return;
+          setQ({ ...view.q, model: q.model });
+          setFocus(new Set());
+        }}
+      />
+      <QueryChip
+        label="Show"
+        className="max-sm:grow"
+        value={q.metric}
+        tone={metric.caution ? "caution" : undefined}
+        options={METRIC_IDS.filter(
+          (m) =>
+            (!q.model ||
+              [
+                "billed",
+                "subscription",
+                "requests",
+                "tokens",
+                "cacheRead",
+                "cacheWrite",
+              ].includes(m)) &&
+            (m !== "appRuns" || canReadApps) &&
+            (m !== "skillActivations" || canReadSkills),
+        ).map((m) => ({
+          id: m,
+          label: METRICS[m].label,
+        }))}
+        onChange={(metric) => update({ metric })}
+      />
+      <QueryChip<DimId>
+        label="by"
+        className="max-sm:grow"
+        value={q.group}
+        options={DIM_IDS.filter(
+          (d) =>
+            d !== "method" &&
+            canGroup(d) &&
+            supports(d, q.metric) &&
+            (!q.model || ["person", "key", "agent"].includes(d)),
+        ).map((d) => ({
+          id: d,
+          label: DIMS[d].label,
+          disabled: !supports(d, q.metric),
+        }))}
+        onChange={(group) => update({ group })}
+      />
+      {splits.length > 0 && (
+        <QueryChip<SplitId>
+          label="split by"
+          className="max-sm:grow"
+          value={q.split}
+          options={[
+            { id: "none", label: "None" },
+            ...splits.map((d) => ({
+              id: d as SplitId,
+              label: DIMS[d].label,
+            })),
+          ]}
+          onChange={(split) => {
+            update({ split });
+            if (split !== "none") setPivotCols("split");
+          }}
+        />
+      )}
+    </>
+  );
 
   return (
     <div className="space-y-4">
@@ -171,92 +312,21 @@ export default function CostExplorer() {
         aria-label="Cost explorer"
         className="overflow-hidden rounded-xl border bg-card"
       >
-        {/* Query bar */}
-        <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
-          {/* A saved view is a preset of the controls beside it; changing
-              any of them makes the view custom. */}
-          <QueryChip
-            label="View"
-            className="max-sm:grow"
-            value={activeView?.id ?? CUSTOM_VIEW}
-            options={[
-              ...SAVED_VIEWS.filter((v) => canGroup(v.q.group)).map((v) => ({
-                id: v.id,
-                label: v.label,
-              })),
-              ...(activeView
-                ? []
-                : [{ id: CUSTOM_VIEW, label: "Custom", disabled: true }]),
-            ]}
-            onChange={(id) => {
-              const view = SAVED_VIEWS.find((v) => v.id === id);
-              if (!view) return;
-              setQ(view.q);
-              setFocus(new Set());
-            }}
-          />
-          <span
-            aria-hidden="true"
-            className="mx-0.5 h-5 w-px bg-border max-sm:hidden"
-          />
-          <QueryChip
-            label="Show"
-            className="max-sm:grow"
-            value={q.metric}
-            tone={metric.caution ? "caution" : undefined}
-            options={METRIC_IDS.filter(
-              (m) =>
-                (m !== "appRuns" || canReadApps) &&
-                (m !== "skillActivations" || canReadSkills),
-            ).map((m) => ({
-              id: m,
-              label: METRICS[m].label,
-            }))}
-            onChange={(metric) => update({ metric })}
-          />
-          <QueryChip<DimId>
-            label="by"
-            className="max-sm:grow"
-            value={q.group}
-            options={DIM_IDS.filter(
-              (d) => d !== "method" && canGroup(d) && supports(d, q.metric),
-            ).map((d) => ({
-              id: d,
-              label: DIMS[d].label,
-              disabled: !supports(d, q.metric),
-            }))}
-            onChange={(group) => update({ group })}
-          />
-          <QueryChip<SplitId>
-            label="split by"
-            className="max-sm:grow"
-            value={q.split}
-            options={[
-              { id: "none", label: "None" },
-              ...DIM_IDS.filter(
-                (d) =>
-                  d !== "method" &&
-                  canGroup(d) &&
-                  d !== q.group &&
-                  splits.includes(d),
-              ).map((d) => ({
-                id: d as SplitId,
-                label: DIMS[d].label,
-                disabled: !splits.includes(d),
-              })),
-            ]}
-            onChange={(split) => {
-              update({ split });
-              if (split !== "none") setPivotCols("split");
-            }}
-          />
-          <div className="ml-auto">
-            <ChartKindToggle
-              value={q.chart}
-              onChange={(chart) => setQ((p) => ({ ...p, chart }))}
-            />
-          </div>
-        </div>
+        <ExplorerToolbar
+          controls={queryControls}
+          summary={`${metric.label} by ${dim.label.toLowerCase()}`}
+          model={q.model}
+          onClearModel={() => {
+            setQ((previous) => ({
+              ...previous,
+              model: undefined,
+              group: "model",
+              split: "none",
+            }));
+            setFocus(new Set());
+          }}
+          chartType={<ChartKindToggle value={chart} onChange={setChart} />}
+        />
 
         {/* Headline */}
         <div className="space-y-4 p-4">
@@ -322,6 +392,7 @@ export default function CostExplorer() {
             caution={metric.caution}
             note={metricNote}
             extra={
+              !q.model &&
               q.metric === "billed" &&
               statistics.data?.costSavings.totalSubscriptionCost ? (
                 <UnstyledButton
@@ -337,7 +408,7 @@ export default function CostExplorer() {
                     <ArrowRight className="ml-1 inline size-3 align-[-2px]" />
                   </span>
                 </UnstyledButton>
-              ) : q.metric === "subscription" && statistics.data ? (
+              ) : !q.model && q.metric === "subscription" && statistics.data ? (
                 <span>
                   Actually billed in this range:{" "}
                   <UnstyledButton
@@ -359,7 +430,7 @@ export default function CostExplorer() {
             />
           )}
           {!cube.error &&
-            q.chart !== "table" &&
+            chart !== "table" &&
             (cube.isLoading ? (
               <Skeleton className="h-[260px] w-full" />
             ) : cube.rows.length === 0 ? (
@@ -368,7 +439,8 @@ export default function CostExplorer() {
               <PivotChart
                 cube={cube}
                 metric={q.metric}
-                kind={q.chart}
+                kind={chart}
+                onDrilldown={q.group === "model" ? drilldown : undefined}
                 split={hasSplit}
                 focus={focus}
               />
@@ -414,9 +486,13 @@ export default function CostExplorer() {
                 </UnstyledButton>
               </span>
             ) : (
-              q.chart !== "table" && (
+              chart !== "table" && (
                 <span className="hidden text-muted-foreground text-xs md:inline">
-                  Click rows to compare them in the chart
+                  {q.group === "model"
+                    ? "Select a model name to explore its people, keys and agents. Click rows to compare."
+                    : q.model
+                      ? "Filtered to the selected model. Summary cards above cover all models."
+                      : "Click rows to compare them in the chart"}
                 </span>
               )
             )}
@@ -452,12 +528,14 @@ export default function CostExplorer() {
               </div>
             ) : view === "summary" ? (
               <SummaryTable
+                timeframe={timeframe}
                 cube={cube}
                 metric={q.metric}
                 dimLabel={q.group === "time" ? "Scope" : dim.label}
                 splitLabel={hasSplit ? DIMS[q.split as DimId].label : null}
                 focus={focus}
                 onToggle={toggleFocus}
+                onDrilldown={q.group === "model" ? drilldown : undefined}
               />
             ) : (
               <PivotTable

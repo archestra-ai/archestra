@@ -566,3 +566,31 @@ export type StatisticsModelTimeSeriesData = z.infer<
 export type StatisticsTimeSeriesData = z.infer<
   typeof StatisticsTimeSeriesDataSchema
 >;
+
+/** A model slice shared by the organization's and caller's explorers. */
+export const ModelUsageQuerySchema = z.object({
+  model: z.string().min(1).max(1024),
+  groupBy: z.enum(["person", "key", "agent", "client"]).default("person"),
+});
+export const ModelUsageRowSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  requests: z.number(),
+  totalTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  billedCost: z.number(),
+  subscriptionCost: z.number(),
+  timeSeries: z.array(
+    z.object({
+      timestamp: z.string(),
+      requests: z.number(),
+      totalTokens: z.number(),
+      cacheReadTokens: z.number(),
+      cacheWriteTokens: z.number(),
+      billedCost: z.number(),
+      subscriptionCost: z.number(),
+    }),
+  ),
+});
+export type ModelUsageRow = z.infer<typeof ModelUsageRowSchema>;

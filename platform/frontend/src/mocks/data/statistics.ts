@@ -29,6 +29,85 @@ type TimePoint = CostStatistics["models"][number]["timeSeries"][number];
 type AuthMethod = ProxyCostStatistics["methods"][number]["authMethod"];
 type Pagination = AppUsage["pagination"];
 
+/** Model drill-down uses the same seeded activity as the main explorers. */
+export function modelUsageFor(
+  query: URLSearchParams,
+  own = false,
+): archestraApiTypes.GetModelUsageResponses["200"] {
+  const timeframe = query.get("timeframe");
+  const model = query.get("model");
+  const org = orgFacts(timeframe);
+  const me = userFacts(timeframe).users[0];
+  const source = (own ? me.models : org.models).find(
+    (row) => row.spec.id === model,
+  );
+  if (!source) return paginate([], query);
+  const group = query.get("groupBy");
+  const groups = own
+    ? CLIENTS.map((row) => ({
+        id: row.label ?? "__unattributed__",
+        name: row.label ?? "Not reported",
+        weight: row.requests,
+      }))
+    : group === "person"
+      ? [
+          ...USERS.map((row) => ({
+            id: row.id,
+            name: row.name,
+            weight: row.weight,
+          })),
+          { id: "__unattributed__", name: "Unattributed", weight: 2 },
+        ]
+      : group === "agent"
+        ? AGENTS.filter((row) => row.llmWeight > 0).map((row) => ({
+            id: row.id,
+            name: row.name,
+            weight: row.llmWeight,
+          }))
+        : proxyFacts(timeframe).slices.map((row, index) => ({
+            id: `${row.authMethod}:${row.credentialId ?? index}`,
+            name: row.credentialName ?? row.authMethod,
+            weight: row.total.requests,
+          }));
+  const weights = groups.map(
+    (row) => row.weight * (0.5 + rand("model-usage", model ?? "", row.id)),
+  );
+  const totalWeight = sum(weights) || 1;
+  const rows = groups
+    .map((row, index) => {
+      const points = source.points.map((point, bucket) =>
+        scaleUsage(
+          point,
+          weights[index] / totalWeight,
+          `model-usage|${row.id}|${bucket}`,
+        ),
+      );
+      const totals = sumUsage(points);
+      const fields = (point: Usage) => ({
+        requests: point.requests,
+        totalTokens: point.inputTokens + point.outputTokens,
+        cacheReadTokens: point.cacheReadTokens,
+        cacheWriteTokens: Math.round(
+          point.inputTokens * 0.18 * (source.spec.avgCache ? 1 : 0),
+        ),
+        billedCost: money(point.billedCost),
+        subscriptionCost: money(point.subscriptionCost),
+      });
+      return {
+        id: row.id,
+        name: row.name,
+        ...fields(totals),
+        timeSeries: org.window.buckets.map((bucket, index) => ({
+          timestamp: iso(bucket.start),
+          ...fields(points[index]),
+        })),
+      };
+    })
+    .filter((row) => row.requests > 0)
+    .sort((a, b) => b.billedCost - a.billedCost);
+  return paginate(rows, query);
+}
+
 // ===== endpoint builders =====
 
 /** `GET /api/statistics/costs` — model leaderboard, cost tiles, people. */

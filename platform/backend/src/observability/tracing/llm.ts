@@ -42,6 +42,7 @@ import {
   setUserAttributes,
   truncateContent,
 } from "./attributes";
+import { sessionContext } from "./session";
 
 const { captureContent } = config.observability.otel;
 
@@ -215,10 +216,15 @@ export async function startActiveLlmSpan<T>(params: {
 
   // Build the context: start from parentContext (if provided) or current context,
   // then inject the session ID so it's available to the pino mixin for log correlation.
-  let ctx = params.parentContext ?? context.active();
+  let ctx = sessionContext(
+    params.parentContext ?? context.active(),
+    params.sessionId,
+  );
   if (params.sessionId) {
     ctx = ctx.setValue(SESSION_ID_KEY, params.sessionId);
   }
 
-  return tracer.startActiveSpan(spanName, spanOptions, ctx, spanCallback);
+  return context.with(ctx, () =>
+    tracer.startActiveSpan(spanName, spanOptions, ctx, spanCallback),
+  );
 }

@@ -29,6 +29,7 @@ export async function initializeObservabilityMetrics(params?: {
   metrics.taskQueue.initializeTaskQueueMetrics();
   metrics.audit.initializeAuditMetrics();
   metrics.limit.initializeLimitMetrics();
+  metrics.openappa.initializeOpenappaMetrics();
   metrics.chat.initializeChatMetrics();
   metrics.agentRuntime.initializeAgentRuntimeMetrics();
   agentRuntimeHealthMetrics.initialize();

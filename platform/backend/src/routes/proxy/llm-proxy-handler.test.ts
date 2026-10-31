@@ -251,7 +251,10 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       status,
     }) => {
       const emit = vi.fn();
-      vi.spyOn(logs, "getLogger").mockReturnValue({ emit } as never);
+      vi.spyOn(logs, "getLogger").mockReturnValue({
+        emit,
+        enabled: () => true,
+      });
       const error = Object.assign(new Error("private provider error detail"), {
         status: 429,
         headers: new Headers(),

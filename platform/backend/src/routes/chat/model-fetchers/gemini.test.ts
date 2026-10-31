@@ -383,17 +383,17 @@ describe("gemini model fetchers", () => {
           };
         }
 
-        if (model === "gemini-2.5-flash") {
+        if (model === "gemini-3.8-flash") {
           return {
-            name: "publishers/google/models/gemini-2.5-flash",
-            displayName: "Gemini 2.5 Flash",
+            name: "publishers/google/models/gemini-3.8-flash",
+            displayName: "Gemini 3.8 Flash",
           };
         }
 
-        if (model === "gemini-2.5-pro") {
+        if (model === "gemini-3.5-flash") {
           return {
-            name: "publishers/google/models/gemini-2.5-pro",
-            displayName: "Gemini 2.5 Pro",
+            name: "publishers/google/models/gemini-3.5-flash",
+            displayName: "Gemini 3.5 Flash",
           };
         }
 
@@ -424,13 +424,13 @@ describe("gemini model fetchers", () => {
           provider: "gemini",
         },
         {
-          id: "gemini-2.5-pro",
-          displayName: "Gemini 2.5 Pro",
+          id: "gemini-3.8-flash",
+          displayName: "Gemini 3.8 Flash",
           provider: "gemini",
         },
         {
-          id: "gemini-2.5-flash",
-          displayName: "Gemini 2.5 Flash",
+          id: "gemini-3.5-flash",
+          displayName: "Gemini 3.5 Flash",
           provider: "gemini",
         },
       ]);
@@ -451,9 +451,10 @@ describe("gemini model fetchers", () => {
         if (
           model === "gemini-embedding-001" ||
           model === "gemini-embedding-2" ||
-          model === "gemini-2.5-pro" ||
-          model === "gemini-2.5-flash" ||
-          model === "gemini-2.5-flash-lite"
+          model === "gemini-3.8-flash" ||
+          model === "gemini-3.5-flash" ||
+          model === "gemini-3.5-flash-lite" ||
+          model === "gemini-3.1-flash-lite"
         ) {
           return {
             name: `publishers/google/models/${model}`,
@@ -490,18 +491,23 @@ describe("gemini model fetchers", () => {
           provider: "gemini",
         },
         {
-          id: "gemini-2.5-pro",
-          displayName: "Gemini 2.5 Pro",
+          id: "gemini-3.8-flash",
+          displayName: "Gemini 3.8 Flash",
           provider: "gemini",
         },
         {
-          id: "gemini-2.5-flash",
-          displayName: "Gemini 2.5 Flash",
+          id: "gemini-3.5-flash",
+          displayName: "Gemini 3.5 Flash",
           provider: "gemini",
         },
         {
-          id: "gemini-2.5-flash-lite",
-          displayName: "Gemini 2.5 Flash Lite",
+          id: "gemini-3.5-flash-lite",
+          displayName: "Gemini 3.5 Flash Lite",
+          provider: "gemini",
+        },
+        {
+          id: "gemini-3.1-flash-lite",
+          displayName: "Gemini 3.1 Flash Lite",
           provider: "gemini",
         },
       ]);

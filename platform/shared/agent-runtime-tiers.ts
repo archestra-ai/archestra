@@ -144,15 +144,21 @@ export function formatMemory(mib: number): string {
   return `${mib} MiB`;
 }
 
-/** A tier's size in a few words: "4 CPU, 8 GiB". */
+/**
+ * A tier's size in a few words: "4 CPU, 8 GiB, 20 GiB workspace". The
+ * workspace is the tier's own size, or the deployment's default when given;
+ * without either it is left out.
+ */
 export function summarizeAgentRuntimeTier(
   tier: Pick<
     AgentRuntimeTierSize,
     "cpuRequest" | "memoryRequestMiB" | "workspaceGiB"
   >,
+  defaultWorkspaceGiB?: number,
 ): string {
+  const workspaceGiB = tier.workspaceGiB ?? defaultWorkspaceGiB ?? null;
   const workspace =
-    tier.workspaceGiB === null ? "" : `, ${tier.workspaceGiB} GiB workspace`;
+    workspaceGiB === null ? "" : `, ${workspaceGiB} GiB workspace`;
   return `${tier.cpuRequest} CPU, ${formatMemory(tier.memoryRequestMiB)}${workspace}`;
 }
 

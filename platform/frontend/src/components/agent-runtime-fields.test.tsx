@@ -194,11 +194,12 @@ describe("AgentRuntimeFields", () => {
     expect(
       screen.queryByRole("option", { name: /^S:/ }),
     ).not.toBeInTheDocument();
-    // The default tier is offered as "Fix at", which disables scaling up. A
-    // tier that sets its own workspace names it; the others show CPU and
-    // memory only.
+    // The default tier is offered as "Fix at", which disables scaling up.
+    // Every tier names its workspace: its own size, else the deployment's.
     expect(
-      screen.getByRole("option", { name: "Fix at M: 0.75 CPU, 1.5 GiB" }),
+      screen.getByRole("option", {
+        name: "Fix at M: 0.75 CPU, 1.5 GiB, 20 GiB workspace",
+      }),
     ).toBeInTheDocument();
     await user.click(
       screen.getByRole("option", {

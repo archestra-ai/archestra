@@ -218,11 +218,16 @@ describe("sizes and order", () => {
     expect(describeAgentRuntimeTier({ ...tiers[1], workspaceGiB: 60 })).toBe(
       "2 CPU (3 limit), 4 GiB (6 GiB limit), 60 GiB workspace",
     );
-    // The short label names the workspace only when the tier sets one.
-    expect(summarizeAgentRuntimeTier(tiers[1])).toBe("2 CPU, 4 GiB");
-    expect(summarizeAgentRuntimeTier({ ...tiers[1], workspaceGiB: 60 })).toBe(
-      "2 CPU, 4 GiB, 60 GiB workspace",
+    // The short label names every tier's effective workspace: its own size,
+    // else the deployment's default.
+    expect(summarizeAgentRuntimeTier(tiers[1], 20)).toBe(
+      "2 CPU, 4 GiB, 20 GiB workspace",
     );
+    expect(
+      summarizeAgentRuntimeTier({ ...tiers[1], workspaceGiB: 60 }, 20),
+    ).toBe("2 CPU, 4 GiB, 60 GiB workspace");
+    // Without a known default it leaves the size out rather than guess.
+    expect(summarizeAgentRuntimeTier(tiers[1])).toBe("2 CPU, 4 GiB");
     // With the deployment's default given, every tier names its volume.
     expect(describeAgentRuntimeTier(tiers[1], 20)).toBe(
       "2 CPU (3 limit), 4 GiB (6 GiB limit), 20 GiB workspace",

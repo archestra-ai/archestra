@@ -580,7 +580,7 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...value, ...patch });
   // The organization's tiers, smallest first, with the memory each gives and
-  // the workspace of a tier that sets its own.
+  // its workspace: its own size, else the deployment's default.
   const { data: resolved } = useAgentRuntimeTiers();
   const tiers = resolved?.tiers ?? [];
   const defaultTier =
@@ -591,7 +591,7 @@ function AgentRuntimeTierFields({ value, onChange }: RuntimeSectionProps) {
   const scaleupTier =
     saved && tiers.indexOf(saved) > defaultRank ? saved.name : defaultTier;
   const label = (tier: (typeof tiers)[number]) =>
-    `${tier.name}: ${summarizeAgentRuntimeTier(tier)}`;
+    `${tier.name}: ${summarizeAgentRuntimeTier(tier, resolved?.defaultWorkspaceGiB)}`;
   return (
     <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
       <div className="space-y-2">

@@ -36,11 +36,31 @@ class SecretModel {
   /**
    * Find a secret by ID
    */
-  static async findById(id: string): Promise<SelectSecret | null> {
-    const [secret] = await db
+  static async findById(
+    id: string,
+    tx?: Transaction,
+  ): Promise<SelectSecret | null> {
+    const [secret] = await (tx ?? db)
       .select()
       .from(schema.secretsTable)
       .where(eq(schema.secretsTable.id, id));
+
+    return decryptSecretRow(secret ?? null);
+  }
+
+  /**
+   * Find a secret by ID inside `tx` and lock its row (SELECT ... FOR UPDATE)
+   * until the transaction ends, so a concurrent writer waits for it.
+   */
+  static async findByIdForUpdate(
+    id: string,
+    tx: Transaction,
+  ): Promise<SelectSecret | null> {
+    const [secret] = await tx
+      .select()
+      .from(schema.secretsTable)
+      .where(eq(schema.secretsTable.id, id))
+      .for("update");
 
     return decryptSecretRow(secret ?? null);
   }

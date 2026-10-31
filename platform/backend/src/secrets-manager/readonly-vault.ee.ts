@@ -7,6 +7,7 @@ import {
   type ISecretManager,
   parseVaultSecretReference,
   SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+  type SecretReadOptions,
   type SecretsConnectivityResult,
   type SecretValue,
   type SelectSecret,
@@ -105,8 +106,19 @@ export default class ReadonlyVaultSecretManager
    * If the secret has isByosVault=true, the secret field contains vault references
    * in "path#key" format that need to be resolved by fetching from Vault.
    */
-  async getSecret(secretId: string): Promise<SelectSecret | null> {
-    const dbRecord = await SecretModel.findById(secretId);
+  async getSecret(
+    secretId: string,
+    options?: SecretReadOptions,
+  ): Promise<SelectSecret | null> {
+    // The metadata row is read through the caller's transaction when one is
+    // given, and locked with `forUpdate`, so a caller serialising on that row
+    // holds it while the references are resolved and needs no second pooled
+    // connection. Nothing is cached here, so `skipCache` is moot.
+    const dbRecord = options?.transaction
+      ? options.forUpdate
+        ? await SecretModel.findByIdForUpdate(secretId, options.transaction)
+        : await SecretModel.findById(secretId, options.transaction)
+      : await SecretModel.findById(secretId);
 
     if (!dbRecord) {
       return null;
@@ -132,7 +144,11 @@ export default class ReadonlyVaultSecretManager
         { secretId },
         "BYOSVaultSecretManager.getSecret: isByosVault=true but no vault references found, fixing corrupted flag",
       );
-      await SecretModel.update(secretId, { isByosVault: false });
+      await SecretModel.update(
+        secretId,
+        { isByosVault: false },
+        options?.transaction,
+      );
       return { ...dbRecord, isByosVault: false };
     }
 

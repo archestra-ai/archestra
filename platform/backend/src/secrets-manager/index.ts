@@ -5,6 +5,7 @@ import logger from "@/logging";
 import {
   ApiError,
   type ISecretManager,
+  type SecretReadOptions,
   type VaultConfig,
   type VaultKvVersion,
 } from "@/types";
@@ -228,8 +229,9 @@ export function assertByosEnabled(): ReadonlyVaultSecretManager {
  */
 export async function getSecretValueForLlmProviderApiKey(
   secretId: string,
+  options?: SecretReadOptions,
 ): Promise<string | undefined> {
-  const secret = await secretManager().getSecret(secretId);
+  const secret = await secretManager().getSecret(secretId, options);
   const data = secret?.secret as Record<string, unknown> | null;
   if (!data) return undefined;
 

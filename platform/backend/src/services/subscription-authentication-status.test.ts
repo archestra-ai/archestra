@@ -6,7 +6,10 @@ import { afterEach, expect, test, vi } from "@/test";
 import { createGithubCopilotFetch } from "./github-copilot-token";
 import { createMicrosoft365CopilotFetch } from "./microsoft-365-copilot-token";
 import { encodeXaiSubscriptionCredential } from "./xai-subscription-credentials";
-import { createXaiSubscriptionFetch } from "./xai-subscription-token";
+import {
+  createXaiSubscriptionFetch,
+  xaiSubscriptionTokenManager,
+} from "./xai-subscription-token";
 
 const originalIssuer = config.llm.xai.subscription.issuer;
 afterEach(() => {
@@ -56,6 +59,32 @@ for (const provider of [
         scope: "personal",
         userId: user.id,
       });
+      if (provider === "xai" && scenario === "reconnected") {
+        // PGlite's single connection cannot interleave a reconnect inside the locked redemption transaction; exercise the delayed failure after reconnect instead.
+        await secretManager().updateSecret(secret.id, {
+          apiKey: encode("replacement-family"),
+        });
+        await LlmProviderApiKeyModel.update(key.id, { secretId: secret.id });
+        await xaiSubscriptionTokenManager.recordAuthenticationFailure({
+          providerApiKeyId: key.id,
+          credential,
+        });
+        expect(
+          (await LlmProviderApiKeyModel.findById(key.id))
+            ?.requiresReauthentication,
+        ).toBe(false);
+        const available = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+          organization.id,
+          user.id,
+          [],
+          provider,
+          { includeSubscriptionInfo: true },
+        );
+        expect(
+          available.find((row) => row.id === key.id)?.requiresReauthentication,
+        ).toBe(false);
+        return;
+      }
       const issuer = `https://auth.${randomUUID()}.test`;
       config.llm.xai.subscription.issuer = issuer;
       let exchanges = 0;

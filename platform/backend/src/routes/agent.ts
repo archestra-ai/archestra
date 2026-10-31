@@ -854,6 +854,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         organizationId,
         userId: user.id,
+        selectsModel: true,
       });
 
       const environmentId = await resolveNewAgentEnvironmentId({
@@ -2321,6 +2322,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           organizationId,
           userId: user.id,
+          // A body that names neither keeps the agent's pair: an image or
+          // limits change does not choose a model.
+          selectsModel:
+            body.modelId !== undefined || body.llmApiKeyId !== undefined,
         });
       }
 

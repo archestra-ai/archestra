@@ -100,9 +100,9 @@ overrides:
   esbuild: '>=0.28.1'
   # CVE-2026-77301 (HIGH, excessive memory allocation) fixed in 0.6.1.
   adm-zip: 0.6.1
-  # CVE-2026-111755 and CVE-2026-111756 (both HIGH) fixed in 1.16.1.
-  # Transitive-only (via axios), so an override lifts every resolution.
-  follow-redirects: '>=1.16.1'
+  # CVE-2026-116689: preserve cross-realm sensitiveHeaders on redirects.
+  # Pin the reviewed security patch while it is inside the 7-day window.
+  follow-redirects: 1.16.2
   mdast-util-to-hast: 13.2.1
   express: 5.2.0
   express-rate-limit: 8.3.1
@@ -317,6 +317,9 @@ minimumReleaseAge: 10080
 # CVE-2026-106445 / CVE-2026-106446: urgent Handlebars security fix.
 # Published 2026-10-05; remove after 2026-10-12 22:38 UTC (7-day window).
 minimumReleaseAgeExclude:
+  # CVE-2026-116689: exact urgent fix published 2026-10-25 21:32:26 UTC.
+  # Remove after 2026-11-01 21:32:26 UTC when the 7-day window clears.
+  - follow-redirects@1.16.2
   - handlebars@4.7.10
   # CVE-2026-111181: exact urgent fix published 2026-10-22 11:39:38 UTC.
   # Remove after 2026-10-29 11:39:38 UTC when the 7-day window clears.

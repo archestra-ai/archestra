@@ -576,12 +576,22 @@ describe("OpenAPPA tool execution", () => {
     expect(read).not.toHaveBeenCalled();
   });
 
-  test("a malformed remedy call is shown the advertised arguments, not the proxy's", async () => {
-    const result = await executeArchestraTool(
-      toolFullName,
-      { offer_id: 7, plan: "Accept restriction" },
-      mockContext,
-    );
+  test.each([
+    {
+      name: "a wrong offer_id type",
+      args: { offer_id: 7, plan: "Accept restriction" },
+    },
+    {
+      name: "no offer_id and nothing to declare",
+      args: { plan: "Accept restriction" },
+    },
+  ])("a malformed remedy call is shown the advertised arguments, not the proxy's: $name", async ({
+    args,
+  }) => {
+    const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
+    const result = await executeArchestraTool(toolFullName, args, mockContext);
+
+    expect(executeSpy).not.toHaveBeenCalled();
 
     expect(result.isError).toBe(true);
     const text = result.content

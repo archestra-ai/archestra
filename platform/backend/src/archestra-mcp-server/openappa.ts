@@ -156,6 +156,27 @@ const RemedyPlanArgumentsSchema = z.object({
   return_schema: z.record(z.string(), z.unknown()).optional(),
 });
 
+// A call that quotes no offer declares a subagent's return, so it names what
+// the return may carry. One that names neither forgot its `offer_id`.
+function quotesOfferOrDeclares(
+  args: z.infer<typeof RemedyPlanArgumentsSchema>,
+) {
+  return (
+    args.offer_id !== undefined ||
+    args.label !== undefined ||
+    args.return_schema !== undefined
+  );
+}
+const OFFER_OR_DECLARATION = {
+  path: ["offer_id"],
+  message:
+    "Pass the offer_id from the ruling. Omit it only to declare a subagent's return, with label.",
+};
+const RemedyPlanCallSchema = RemedyPlanArgumentsSchema.refine(
+  quotesOfferOrDeclares,
+  OFFER_OR_DECLARATION,
+);
+
 // Shared by the chat elicitation bridge and the MRTR input-required signal.
 // Both channels request the same approve/deny ruling form.
 const HITL_RULING_SCHEMA = {
@@ -1089,7 +1110,7 @@ const registry = defineArchestraTools([
     schema: RemedyPlanArgumentsSchema.extend({
       execution: RemedyExecutionSchema.optional(),
       trajectory: CurrentTrajectorySchema.optional(),
-    }),
+    }).refine(quotesOfferOrDeclares, OFFER_OR_DECLARATION),
     // The model writes only these arguments. The proxy stamps the receipt and
     // the current trajectory onto the released call, so the advertised schema
     // leaves them out; it is not strict, so a validating client accepts the stamp.
@@ -1105,13 +1126,12 @@ const registry = defineArchestraTools([
       ) {
         return unknownOfferResult();
       }
-      const submittedSemantic =
-        RemedyPlanArgumentsSchema.parse(submittedArguments);
+      const submittedSemantic = RemedyPlanCallSchema.parse(submittedArguments);
       const originalArguments = execution?.original_arguments;
       let originalSemantic = submittedSemantic;
       if (originalArguments) {
         try {
-          originalSemantic = RemedyPlanArgumentsSchema.parse(
+          originalSemantic = RemedyPlanCallSchema.parse(
             JSON.parse(originalArguments),
           );
         } catch {

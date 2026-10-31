@@ -208,7 +208,8 @@ describe("search_tools", () => {
       const execute = remedyTools.find((tool) =>
         tool.toolName.endsWith("execute_remedy_plan"),
       );
-      expect(execute?.params).toContain("offer_id!:string");
+      // Optional: a call without it declares a subagent's return.
+      expect(execute?.params).toContain("offer_id?:string");
       for (const tool of remedyTools) {
         expect(tool.params).not.toMatch(
           /execution|protected|payload|signature|offers|JWS|RFC 7515/,

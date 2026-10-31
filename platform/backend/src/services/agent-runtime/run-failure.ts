@@ -31,6 +31,8 @@ const AGENT_RUN_FAILURE_CODES = {
   "pod.evicted": { retriable: true },
   /** A container in the pod ran out of memory. */
   "pod.oom_killed": { retriable: false },
+  /** The run filled its workspace volume, which stopped the pod. */
+  "pod.workspace_full": { retriable: false },
   /** The image could not be pulled. */
   "pod.image_pull": { retriable: false },
   /** The pod failed for another reason. */

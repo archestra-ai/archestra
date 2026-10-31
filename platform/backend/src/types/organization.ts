@@ -510,7 +510,13 @@ export const UpdateSkillsSettingsSchema = z.object({
 });
 
 export const UpdateAgentSettingsSchema = z.object({
-  /** Per-tier overrides of the Agent Runtime tiers; null restores every default. */
+  /**
+   * The organization's Agent Runtime tiers: the whole list with the default
+   * tier, as the settings form saves it; null restores the defaults. A tier
+   * saved with `previousName` renames that tier, and the agents that name it
+   * follow. A tier left out is removed, which is refused while an agent or a
+   * template still names it.
+   */
   agentRuntimeTiers: AgentRuntimeTierSettingsSchema.nullable().optional(),
   defaultModelId: z.string().uuid().nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
@@ -737,3 +743,19 @@ function isValidHttpUrl(value: string): boolean {
     return false;
   }
 }
+
+/** One Agent Runtime tier in effect, with the memory its CPU gives it. */
+export const AgentRuntimeTierSizeSchema = z.object({
+  name: z.string(),
+  cpuRequest: z.number(),
+  cpuLimit: z.number().nullable(),
+  warmSpares: z.number().int(),
+  memoryRequestMiB: z.number().int(),
+  memoryLimitMiB: z.number().int(),
+});
+
+/** The organization's Agent Runtime tiers in effect, smallest first. */
+export const AgentRuntimeTiersResponseSchema = z.object({
+  tiers: z.array(AgentRuntimeTierSizeSchema),
+  defaultTier: z.string(),
+});

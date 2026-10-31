@@ -180,3 +180,35 @@ export function makeTeamsList(
 }
 
 export const teamsSeed = makeTeamsList();
+
+/** The default Agent Runtime tiers, as GET /api/organization/agent-runtime-tiers returns them. */
+export const agentRuntimeTiersSeed: archestraApiTypes.GetAgentRuntimeTiersResponses["200"] =
+  {
+    tiers: [
+      {
+        name: "S",
+        cpuRequest: 2,
+        cpuLimit: null,
+        warmSpares: 1,
+        memoryRequestMiB: 4096,
+        memoryLimitMiB: 8192,
+      },
+      {
+        name: "M",
+        cpuRequest: 4,
+        cpuLimit: null,
+        warmSpares: 1,
+        memoryRequestMiB: 8192,
+        memoryLimitMiB: 16384,
+      },
+      {
+        name: "L",
+        cpuRequest: 8,
+        cpuLimit: null,
+        warmSpares: 0,
+        memoryRequestMiB: 16384,
+        memoryLimitMiB: 32768,
+      },
+    ],
+    defaultTier: "M",
+  };

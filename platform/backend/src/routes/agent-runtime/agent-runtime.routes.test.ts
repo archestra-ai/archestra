@@ -618,7 +618,7 @@ describe("Agent Runtime routes", () => {
     });
     expect(refused.statusCode, refused.body).toBe(400);
     expect(refused.json().error.message).toContain(
-      "Tier L is above this Agent's largest tier M",
+      "Tier L (8 CPU, 16 GiB (32 GiB limit)) is above this Agent's scaleup tier M",
     );
     expect(startDetachedAgentTask).not.toHaveBeenCalled();
 

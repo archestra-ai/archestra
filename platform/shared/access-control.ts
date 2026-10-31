@@ -541,6 +541,8 @@ export const requiredEndpointPermissionsMap: Partial<
    * authenticated but no specific permission.
    */
   [RouteId.GetOrganization]: {},
+  // The tiers' names and sizes: the agent form shows them to anyone who may edit an agent.
+  [RouteId.GetAgentRuntimeTiers]: {},
   [RouteId.ListAgentRuntimeTemplates]: {},
   [RouteId.GetAgentRuntimeTemplate]: {}, // Scoped create/update check in the handler.
   [RouteId.GetRuntimeTemplateSettings]: { organizationSettings: ["update"] },

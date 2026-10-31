@@ -1,5 +1,4 @@
 import type {
-  AgentRuntimeTierSettings,
   ContextualRetrievalMode,
   KnowledgeConnectorOverrides,
   MessagingChannelOverrides,
@@ -7,6 +6,7 @@ import type {
   OrganizationCustomFont,
   OrganizationTheme,
   PopularAgentOverrides,
+  StoredAgentRuntimeTierSettings,
   SupportedProvider,
 } from "@archestra/shared";
 import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@archestra/shared";
@@ -482,7 +482,7 @@ const organizationsTable = pgTable("organization", {
    */
   agentRuntimeTiers: jsonb(
     "agent_runtime_tiers",
-  ).$type<AgentRuntimeTierSettings>(),
+  ).$type<StoredAgentRuntimeTierSettings>(),
 
   /**
    * ALLOWLIST regex (JS source, no delimiters/flags) for the implicit "default"

@@ -60,7 +60,10 @@ import {
   runtimeOpenAppaSession,
   stampRuntimeBinding,
 } from "./runtime-identity";
-import { resolveAgentRunLimits } from "./runtime-tiers";
+import {
+  organizationAgentRuntimeTiers,
+  resolveAgentRunLimits,
+} from "./runtime-tiers";
 import { generateAgentRunTitle } from "./title";
 import { agentRunTranscriptStore } from "./transcript-store";
 
@@ -164,7 +167,10 @@ async function startAgentRunSession(params: {
   const limits =
     priorRun?.runtimeLimits ??
     params.limits ??
-    resolveAgentRunLimits({ runtime: params.runtime });
+    resolveAgentRunLimits({
+      runtime: params.runtime,
+      tiers: await organizationAgentRuntimeTiers(params.organizationId),
+    });
   const { spec, virtualApiKeyId, gatewayTokenId } =
     await buildAgentRunLaunchSpec({
       runtime: params.runtime,

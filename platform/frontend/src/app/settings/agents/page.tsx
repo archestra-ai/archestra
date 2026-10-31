@@ -48,6 +48,7 @@ import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
+  useAgentRuntimeTiers,
   useIsGlobalAdmin,
   useOrganization,
   useUpdateAgentSettings,
@@ -99,11 +100,23 @@ export default function AgentSettingsPage() {
   });
   const savedFileUploadsRef = useRef(true);
   const [runtimeTiers, setRuntimeTiers] = useState<RuntimeTierDraft>(() =>
-    runtimeTierDraft(null),
+    runtimeTierDraft(undefined),
   );
-  const savedRuntimeTiersRef = useRef<RuntimeTierDraft>(runtimeTierDraft(null));
+  const savedRuntimeTiersRef = useRef<RuntimeTierDraft>(
+    runtimeTierDraft(undefined),
+  );
   const runtimeBackend = useFeature("agentRuntimeBackend");
   const runtimeEnabled = useFeature("agentRuntime");
+  // The tiers in effect, smallest first; a save refetches them.
+  const { data: resolvedRuntimeTiers } = useAgentRuntimeTiers(
+    runtimeBackend != null,
+  );
+  useEffect(() => {
+    if (!resolvedRuntimeTiers) return;
+    const saved = runtimeTierDraft(resolvedRuntimeTiers);
+    setRuntimeTiers(saved);
+    savedRuntimeTiersRef.current = saved;
+  }, [resolvedRuntimeTiers]);
 
   const {
     data: allModels,
@@ -145,9 +158,6 @@ export default function AgentSettingsPage() {
     setPlaywrightEnabled(organization.playwrightMcpEnabled);
     savedPlaywrightRef.current = organization.playwrightMcpEnabled;
     setFileUploads(savedFileUploads);
-    const savedRuntimeTiers = runtimeTierDraft(organization.agentRuntimeTiers);
-    setRuntimeTiers(savedRuntimeTiers);
-    savedRuntimeTiersRef.current = savedRuntimeTiers;
     savedStateRef.current = state;
     savedFileUploadsRef.current = savedFileUploads;
     initializedRef.current = true;

@@ -42,6 +42,7 @@ import {
 } from "./data/llm-keys";
 import { findMcpToolCall, mcpToolCallsSeed } from "./data/mcp-tool-calls";
 import {
+  agentRuntimeTiersSeed,
   appearanceSettingsSeed,
   organizationDefaultModelSeed,
   organizationSeed,
@@ -686,6 +687,7 @@ export const handlers: HttpHandler[] = [
   }),
   // Agent forms and the chat model menu name the organization default.
   ...getJson("/api/organization/default-model", organizationDefaultModelSeed),
+  ...getJson("/api/organization/agent-runtime-tiers", agentRuntimeTiersSeed),
   ...postJson("/api/agents", makeAgent()),
   ...postJson(
     "/api/agents/:id/clone",

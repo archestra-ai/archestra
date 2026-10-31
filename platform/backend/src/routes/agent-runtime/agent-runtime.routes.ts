@@ -43,7 +43,10 @@ import {
   createAgentRunAccessChecker,
   mayAttachAgentRun,
 } from "@/services/agent-runtime/run-access";
-import { resolveAgentRunLimits } from "@/services/agent-runtime/runtime-tiers";
+import {
+  organizationAgentRuntimeTiers,
+  resolveAgentRunLimits,
+} from "@/services/agent-runtime/runtime-tiers";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
@@ -632,6 +635,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const limits = resolveAgentRunLimits({
         runtime,
         requested: request.body.limits,
+        tiers: await organizationAgentRuntimeTiers(request.organizationId),
       });
       const task = await startDetachedAgentTask({
         actor: {

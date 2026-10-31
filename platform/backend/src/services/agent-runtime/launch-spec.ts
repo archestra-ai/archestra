@@ -59,12 +59,15 @@ import {
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   AGENT_RUNTIME_STEER_FIFO,
   AGENT_RUNTIME_TIER_ENV,
+  AGENT_RUNTIME_TIERS_ENV,
   constructStableRunName,
 } from "./runtime-contract";
 import {
+  agentRuntimeAllowedTiers,
   agentRuntimeMaxTier,
   organizationAgentRuntimeTiers,
   resolveRunResources,
+  runtimeTiersEnv,
   tierResources,
   warmTierCandidates,
 } from "./runtime-tiers";
@@ -302,7 +305,8 @@ export async function buildAgentRunLaunchSpec(params: {
     : null;
   const tiers = await organizationAgentRuntimeTiers(params.organizationId);
   const resources = resolveRunResources(params.limits.tier, tiers);
-  const maxTier = agentRuntimeMaxTier(params.runtime);
+  const maxTier = agentRuntimeMaxTier(params.runtime, tiers);
+  const allowedTiers = agentRuntimeAllowedTiers(params.runtime, tiers);
   const nonSecretEnv: Record<string, string> = {
     // The Agent Runtime run's own environment goes first: the addresses below must win.
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
@@ -343,12 +347,16 @@ export async function buildAgentRunLaunchSpec(params: {
     ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS: String(
       params.limits.idleTimeoutMinutes * 60,
     ),
-    // The run's size, so the agent can tell when its work needs a larger
-    // run of the same Agent (up to the largest tier) and how much it has.
+    // The run's size and the sizes it may move to, so the agent can tell by
+    // the numbers when its work needs a larger run of the same Agent.
     ...(params.limits.tier
       ? { [AGENT_RUNTIME_TIER_ENV]: params.limits.tier }
       : {}),
-    ...(maxTier ? { [AGENT_RUNTIME_MAX_TIER_ENV]: maxTier } : {}),
+    [AGENT_RUNTIME_MAX_TIER_ENV]: maxTier,
+    [AGENT_RUNTIME_TIERS_ENV]: runtimeTiersEnv(
+      allowedTiers,
+      params.limits.tier,
+    ),
     ...(resources.cpuRequest
       ? { [AGENT_RUNTIME_CPU_REQUEST_ENV]: resources.cpuRequest }
       : {}),
@@ -480,10 +488,9 @@ export async function buildAgentRunLaunchSpec(params: {
       resources,
       tier: params.limits.tier,
       warmTiers: params.limits.tier
-        ? warmTierCandidates(
-            params.limits.tier,
-            maxTier ?? params.limits.tier,
-          ).map((tier) => ({ tier, resources: tierResources(tiers[tier]) }))
+        ? warmTierCandidates(params.limits.tier, maxTier, tiers).map(
+            (tier) => ({ tier: tier.name, resources: tierResources(tier) }),
+          )
         : [],
       env: nonSecretEnv,
       secretEnv,
@@ -518,6 +525,7 @@ function runBanner(appName: string): string {
 const RESERVED_RUNTIME_ENV_KEYS = new Set([
   AGENT_RUNTIME_TIER_ENV,
   AGENT_RUNTIME_MAX_TIER_ENV,
+  AGENT_RUNTIME_TIERS_ENV,
   AGENT_RUNTIME_CPU_REQUEST_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   "ANTHROPIC_API_KEY",

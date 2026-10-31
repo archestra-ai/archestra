@@ -1654,7 +1654,9 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `attachments[].contentType` | `string` | Yes |  |
 | `attachments[].contentBase64` | `string` | Yes |  |
 | `limits` | `object` | No | Limits for this run, each at or below the Agent's own (for the tier, its largest tier); a larger value is refused with the maximum named. Omit to take the Agent's defaults. |
-| `limits.tier` | `"S" \| "M" \| "L"` | No | Container size, as the organization sizes them: S (a review, a script, light edits), M (a dev stack and tests; the usual default) or L (large builds and test suites, or work that ran out of memory at M). At or below the Agent's largest tier ($ARCHESTRA_AGENT_RUNTIME_MAX_TIER inside a run). To move work to another size, start a run of the same Agent at that tier and hand over the branch. |
+| `limits.tier` | `string` | No | The name of one of the organization's runtime tiers, at or below this Agent's scaleup tier. Choose by size, not by name: inside a run, $ARCHESTRA_AGENT_RUNTIME_TIERS lists the tiers the run may move to with their CPU and memory; pick the smallest that covers the work. To move work to another tier, start a run of the same Agent at that tier and hand over the branch. A tier above the scaleup tier is refused with the allowed tiers and their sizes named. |
+| `limits.min_cpu` | `number` | No | CPUs the work needs. The run gets the smallest tier this Agent may use with at least this many; refused with the allowed tiers named when none has. Use this when the tier names are unknown. |
+| `limits.min_memory_gib` | `number` | No | GiB of memory the work needs, with the same effect as min_cpu. |
 | `limits.idle_timeout_minutes` | `integer` | No |  |
 | `limits.max_duration_hours` | `integer` | No | Hours until the run and its saved files end. Keep it short for work that nobody continues. |
 | `limits.max_cost_usd` | `integer` | No |  |
@@ -1675,7 +1677,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `run.state_changed_at` | `string` | Yes | ISO 8601 of the last transition. |
 | `run_url` | `string` | Yes | Open the run and its workspace in the browser. |
 | `limits` | `object \| null` | Yes |  |
-| `limits.tier` | `"S" \| "M" \| "L" \| null` | Yes | Container size the run has: S, M or L, as the organization sizes them. |
+| `limits.tier` | `string \| null` | Yes | The name of the runtime tier the run has, as the organization sizes it. |
 | `limits.idle_timeout_minutes` | `number` | Yes |  |
 | `limits.max_duration_hours` | `number` | Yes | The run and its saved files end this many hours after the start. |
 | `limits.max_cost_usd` | `number \| null` | Yes |  |
@@ -1707,7 +1709,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `run.state_changed_at` | `string` | Yes | ISO 8601 of the last transition. |
 | `run_url` | `string \| null` | Yes |  |
 | `limits` | `object \| null` | Yes |  |
-| `limits.tier` | `"S" \| "M" \| "L" \| null` | Yes | Container size the run has: S, M or L, as the organization sizes them. |
+| `limits.tier` | `string \| null` | Yes | The name of the runtime tier the run has, as the organization sizes it. |
 | `limits.idle_timeout_minutes` | `number` | Yes |  |
 | `limits.max_duration_hours` | `number` | Yes | The run and its saved files end this many hours after the start. |
 | `limits.max_cost_usd` | `number \| null` | Yes |  |
@@ -1901,8 +1903,8 @@ Required RBAC permission: [`agent:create`](/docs/reference/permissions#agent:cre
 | `runtime.backend` | `"kubernetes"` | No |  |
 | `runtime.steerMode` | `"pipe" \| "tmux_keys"` | No |  |
 | `runtime.privileged` | `boolean` | No |  |
-| `runtime.tier` | `"S" \| "M" \| "L" \| null` | No |  |
-| `runtime.maxTier` | `"S" \| "M" \| "L" \| null` | No |  |
+| `runtime.tier` | `string \| null` | No |  |
+| `runtime.maxTier` | `string \| null` | No |  |
 | `runtime.ports` | `integer[]` | No |  |
 | `runtime.environment` | `object[] \| null` | No |  |
 | `runtime.credentials` | `object[] \| null` | No |  |
@@ -1967,8 +1969,8 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `runtime.backend` | `"kubernetes"` | Yes |  |
 | `runtime.steerMode` | `"pipe" \| "tmux_keys"` | Yes |  |
 | `runtime.privileged` | `boolean` | Yes |  |
-| `runtime.tier` | `"S" \| "M" \| "L" \| null` | No |  |
-| `runtime.maxTier` | `"S" \| "M" \| "L" \| null` | No |  |
+| `runtime.tier` | `string \| null` | No |  |
+| `runtime.maxTier` | `string \| null` | No |  |
 | `runtime.ports` | `integer[]` | No |  |
 | `runtime.environment` | `object[] \| null` | Yes |  |
 | `runtime.environment[].key` | `string` | Yes |  |

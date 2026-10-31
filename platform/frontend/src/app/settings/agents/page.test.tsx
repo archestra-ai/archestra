@@ -175,6 +175,7 @@ const mutateAsync = vi.fn();
 vi.mock("@/lib/organization.query");
 
 import {
+  useAgentRuntimeTiers,
   useAppearanceSettings,
   useIsGlobalAdmin,
   useOrganization,
@@ -182,7 +183,7 @@ import {
   useUpdateIntegrationSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
-
+import { agentRuntimeTiersSeed } from "@/mocks/data/organization";
 import AgentSettingsPage from "./page";
 
 function renderPage() {
@@ -236,6 +237,9 @@ beforeEach(() => {
     mutateAsync,
     isPending: false,
   } as unknown as ReturnType<typeof useUpdateAgentSettings>);
+  vi.mocked(useAgentRuntimeTiers).mockReturnValue({
+    data: agentRuntimeTiersSeed,
+  } as unknown as ReturnType<typeof useAgentRuntimeTiers>);
   vi.mocked(useUpdateSecuritySettings).mockReturnValue({
     mutateAsync,
     isPending: false,
@@ -356,9 +360,12 @@ describe("Runtime tiers", () => {
       allowPrivileged: false,
       resources: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
     };
+    vi.mocked(useAgentRuntimeTiers).mockReturnValue({
+      data: agentRuntimeTiersSeed,
+    } as unknown as ReturnType<typeof useAgentRuntimeTiers>);
   };
 
-  it("shows the defaults as placeholders and saves only the fields an administrator filled in", async () => {
+  it("lists the tiers smallest first with the memory their CPU gives, and saves renames, new tiers and the default", async () => {
     enableRuntime();
     mutateAsync.mockResolvedValue({});
     const user = userEvent.setup();
@@ -367,76 +374,121 @@ describe("Runtime tiers", () => {
     expect(
       screen.getByRole("heading", { name: "Runtime tiers" }),
     ).toBeVisible();
-    expect(screen.getByLabelText("Tier L CPU request")).toHaveAttribute(
-      "placeholder",
-      "8",
-    );
-    expect(screen.getByLabelText("Tier L Memory limit")).toHaveAttribute(
-      "placeholder",
-      "32Gi",
-    );
-    expect(screen.getByLabelText("Tier L Warm spares")).toHaveAttribute(
-      "placeholder",
-      "0",
-    );
-    expect(screen.getByLabelText("Tier M Warm spares")).toHaveAttribute(
-      "placeholder",
-      "Deployment",
-    );
-    expect(screen.getByLabelText("Tier S CPU limit")).toHaveAttribute(
+    const names = screen
+      .getAllByRole("textbox", { name: /^Tier .* name$/ })
+      .map((input) => (input as HTMLInputElement).value);
+    expect(names).toEqual(["S", "M", "L"]);
+    expect(screen.getByLabelText("Tier L CPU request")).toHaveValue(8);
+    expect(screen.getByLabelText("Tier L CPU limit")).toHaveAttribute(
       "placeholder",
       "No limit",
     );
+    expect(screen.getByLabelText("Tier L ready spares")).toHaveValue(0);
+    expect(screen.getByRole("radio", { name: "Default tier M" })).toBeChecked();
+    const rowOf = (name: string) =>
+      screen.getByLabelText(`Tier ${name} name`).closest("tr") as HTMLElement;
+    expect(rowOf("L")).toHaveTextContent("16 GiB32 GiB limit");
 
-    await user.type(screen.getByLabelText("Tier L CPU request"), "6");
-    await user.type(screen.getByLabelText("Tier L Warm spares"), "1");
+    // Memory follows the CPU as it is typed.
+    const cpu = screen.getByLabelText("Tier L CPU request");
+    await user.clear(cpu);
+    await user.type(cpu, "6");
+    expect(rowOf("L")).toHaveTextContent("12 GiB24 GiB limit");
+    await user.type(screen.getByLabelText("Tier L CPU limit"), "7");
+    expect(rowOf("L")).toHaveTextContent("12 GiB14 GiB limit");
+
+    // Rename S, add a tier, make it the default.
+    const small = screen.getByLabelText("Tier S name");
+    await user.clear(small);
+    await user.type(small, "Small");
+    await user.click(screen.getByRole("button", { name: "Add tier" }));
+    await user.type(screen.getByLabelText("Tier new tier name"), "XL");
+    await user.type(screen.getByLabelText("Tier XL CPU request"), "8");
+    await user.click(screen.getByRole("radio", { name: "Default tier Small" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
-      agentRuntimeTiers: { L: { cpuRequest: "6", warmPoolSize: 1 } },
+      agentRuntimeTiers: {
+        tiers: [
+          {
+            name: "Small",
+            cpuRequest: 2,
+            cpuLimit: null,
+            warmSpares: 1,
+            previousName: "S",
+          },
+          { name: "M", cpuRequest: 4, cpuLimit: null, warmSpares: 1 },
+          { name: "L", cpuRequest: 6, cpuLimit: 7, warmSpares: 0 },
+          { name: "XL", cpuRequest: 8, cpuLimit: null, warmSpares: 0 },
+        ],
+        defaultTier: "Small",
+      },
     });
   });
 
-  it("names an invalid value or a tier out of order and keeps Save disabled", async () => {
+  it("names a value out of range or a missing name and keeps Save disabled", async () => {
     enableRuntime();
     const user = userEvent.setup();
     renderPage();
     const cpu = screen.getByLabelText("Tier L CPU request");
 
-    await user.type(cpu, "4 cores");
+    await user.clear(cpu);
+    await user.type(cpu, "9");
     expect(
       screen.getByRole("alert", { name: "Runtime tier problems" }),
-    ).toHaveTextContent(
-      "Tier L CPU request: enter a CPU amount such as 2 or 500m",
-    );
+    ).toHaveTextContent("Tier L: the CPU request is more than 0 and at most 8");
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
 
     await user.clear(cpu);
-    await user.type(cpu, "1");
+    await user.type(cpu, "4");
+    await user.type(screen.getByLabelText("Tier L CPU limit"), "2");
     expect(
       screen.getByRole("alert", { name: "Runtime tier problems" }),
-    ).toHaveTextContent("Tier L requests less than tier M");
+    ).toHaveTextContent("Tier L: the CPU limit is below the CPU request");
+
+    await user.clear(screen.getByLabelText("Tier L CPU limit"));
+    await user.clear(screen.getByLabelText("Tier M name"));
+    expect(
+      screen.getByRole("alert", { name: "Runtime tier problems" }),
+    ).toHaveTextContent("Name every tier");
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
-  it("shows the saved values and locks the fields for anyone but an administrator", () => {
+  it("removes a tier, moving the default when it was the default, and keeps at least one", async () => {
     enableRuntime();
-    vi.mocked(useOrganization).mockReturnValue({
-      data: {
-        ...mockOrganization,
-        agentRuntimeTiers: { L: { memoryLimit: "24Gi" } },
+    mutateAsync.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "Remove tier M" }));
+    expect(screen.queryByLabelText("Tier M name")).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Default tier S" })).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Remove tier L" }));
+    expect(
+      screen.getByRole("button", { name: "Remove tier S" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutateAsync).toHaveBeenCalledWith({
+      agentRuntimeTiers: {
+        tiers: [{ name: "S", cpuRequest: 2, cpuLimit: null, warmSpares: 1 }],
+        defaultTier: "S",
       },
-    } as unknown as ReturnType<typeof useOrganization>);
+    });
+  });
+
+  it("locks the fields for anyone but an administrator", () => {
+    enableRuntime();
     vi.mocked(useIsGlobalAdmin).mockReturnValue({
       isGlobalAdmin: false,
       isLoading: false,
     });
     renderPage();
 
-    const memoryLimit = screen.getByLabelText("Tier L Memory limit");
-    expect(memoryLimit).toHaveValue("24Gi");
-    expect(memoryLimit).toBeDisabled();
+    expect(screen.getByLabelText("Tier L CPU request")).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Add tier" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText("Only administrators can change the tiers."),
     ).toBeVisible();

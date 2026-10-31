@@ -3,6 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
+import { assertAgentRuntimeTiersExist } from "@/services/agent-runtime/agent-config-validation";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   AgentRuntimeTemplateSchema,
@@ -64,6 +65,12 @@ const agentRuntimeTemplateRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
+      for (const template of body.templates) {
+        await assertAgentRuntimeTiersExist({
+          runtime: template.runtime,
+          organizationId,
+        });
+      }
       return reply.send(
         await AgentRuntimeTemplateModel.saveSettings({
           organizationId,

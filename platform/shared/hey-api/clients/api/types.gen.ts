@@ -16967,8 +16967,8 @@ export type GetAgentCatalogResponses = {
                     backend: 'kubernetes';
                     steerMode: 'pipe' | 'tmux_keys';
                     privileged: boolean;
-                    tier?: 'S' | 'M' | 'L';
-                    maxTier?: 'S' | 'M' | 'L';
+                    tier?: string | null;
+                    maxTier?: string | null;
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -17350,8 +17350,8 @@ export type GetAgentsResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                tier?: 'S' | 'M' | 'L';
-                maxTier?: 'S' | 'M' | 'L';
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -17500,8 +17500,8 @@ export type CreateAgentData = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            tier?: 'S' | 'M' | 'L';
-            maxTier?: 'S' | 'M' | 'L';
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -17762,8 +17762,8 @@ export type CreateAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            tier?: 'S' | 'M' | 'L';
-            maxTier?: 'S' | 'M' | 'L';
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -18152,8 +18152,8 @@ export type GetChatAgentRosterResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            tier?: 'S' | 'M' | 'L';
-            maxTier?: 'S' | 'M' | 'L';
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -18295,8 +18295,8 @@ export type GetChatAgentRosterPageResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                tier?: 'S' | 'M' | 'L';
-                maxTier?: 'S' | 'M' | 'L';
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18459,8 +18459,8 @@ export type GetAgentOptionsResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                tier?: 'S' | 'M' | 'L';
-                maxTier?: 'S' | 'M' | 'L';
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -18641,8 +18641,8 @@ export type GetAgentOptionsPageResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                tier?: 'S' | 'M' | 'L';
-                maxTier?: 'S' | 'M' | 'L';
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -19014,8 +19014,8 @@ export type GetDefaultMcpGatewayResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            tier?: 'S' | 'M' | 'L';
-            maxTier?: 'S' | 'M' | 'L';
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19316,8 +19316,8 @@ export type ImportAgentResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                tier?: 'S' | 'M' | 'L';
-                maxTier?: 'S' | 'M' | 'L';
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -19627,8 +19627,8 @@ export type GetAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            tier?: 'S' | 'M' | 'L';
-            maxTier?: 'S' | 'M' | 'L';
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19759,8 +19759,8 @@ export type UpdateAgentData = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            tier?: 'S' | 'M' | 'L';
-            maxTier?: 'S' | 'M' | 'L';
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -19930,8 +19930,8 @@ export type UpdateAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            tier?: 'S' | 'M' | 'L';
-            maxTier?: 'S' | 'M' | 'L';
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20507,8 +20507,8 @@ export type RestoreAgentVersionResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            tier?: 'S' | 'M' | 'L';
-            maxTier?: 'S' | 'M' | 'L';
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -20747,8 +20747,8 @@ export type CloneAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            tier?: 'S' | 'M' | 'L';
-            maxTier?: 'S' | 'M' | 'L';
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -23226,8 +23226,8 @@ export type RestoreAgentResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
-            tier?: 'S' | 'M' | 'L';
-            maxTier?: 'S' | 'M' | 'L';
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -24885,7 +24885,7 @@ export type GetAgentRunsResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         runtimeLimits: {
-            tier: 'S' | 'M' | 'L';
+            tier: string | null;
             idleTimeoutMinutes: number;
             maxDurationHours: number;
             maxCostUsd: number | null;
@@ -24931,7 +24931,9 @@ export type StartAgentRunData = {
             contentBase64: string;
         }>;
         limits?: {
-            tier?: 'S' | 'M' | 'L';
+            tier?: string;
+            minCpu?: number;
+            minMemoryGib?: number;
             idleTimeoutMinutes?: number;
             maxDurationHours?: number;
             maxCostUsd?: number;
@@ -25026,7 +25028,7 @@ export type StartAgentRunResponses = {
         projectId: string | null;
         createdAt: string;
         limits: {
-            tier: 'S' | 'M' | 'L';
+            tier: string | null;
             idleTimeoutMinutes: number;
             maxDurationHours: number;
             maxCostUsd: number | null;
@@ -25137,7 +25139,7 @@ export type GetMyAgentRunsResponses = {
             backend: 'kubernetes';
             runtimeScope: string;
             runtimeLimits: {
-                tier: 'S' | 'M' | 'L';
+                tier: string | null;
                 idleTimeoutMinutes: number;
                 maxDurationHours: number;
                 maxCostUsd: number | null;
@@ -25369,7 +25371,7 @@ export type GetMyAgentRunResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         runtimeLimits: {
-            tier: 'S' | 'M' | 'L';
+            tier: string | null;
             idleTimeoutMinutes: number;
             maxDurationHours: number;
             maxCostUsd: number | null;
@@ -25526,7 +25528,7 @@ export type UpdateAgentRunResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         runtimeLimits: {
-            tier: 'S' | 'M' | 'L';
+            tier: string | null;
             idleTimeoutMinutes: number;
             maxDurationHours: number;
             maxCostUsd: number | null;
@@ -25662,7 +25664,7 @@ export type ContinueAgentRunResponses = {
         projectId: string | null;
         createdAt: string;
         limits: {
-            tier: 'S' | 'M' | 'L';
+            tier: string | null;
             idleTimeoutMinutes: number;
             maxDurationHours: number;
             maxCostUsd: number | null;
@@ -26157,8 +26159,8 @@ export type GetRuntimeTemplateSettingsResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: false;
-                tier?: 'S' | 'M' | 'L';
-                maxTier?: 'S' | 'M' | 'L';
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -26238,8 +26240,8 @@ export type SaveRuntimeTemplateSettingsData = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: false;
-                tier?: 'S' | 'M' | 'L';
-                maxTier?: 'S' | 'M' | 'L';
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -26391,8 +26393,8 @@ export type SaveRuntimeTemplateSettingsResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: false;
-                tier?: 'S' | 'M' | 'L';
-                maxTier?: 'S' | 'M' | 'L';
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -26550,8 +26552,8 @@ export type GetAgentRuntimeTemplateResponses = {
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: false;
-            tier?: 'S' | 'M' | 'L';
-            maxTier?: 'S' | 'M' | 'L';
+            tier?: string | null;
+            maxTier?: string | null;
             ports?: Array<number>;
             environment: Array<{
                 key: string;
@@ -41788,9 +41790,7 @@ export type GetBootstrapResponses = {
                 allowedCidrs: Array<string>;
             } | null;
             agentRuntimeTiers: {
-                [key: string]: {
-                    [key: string]: unknown;
-                };
+                [key: string]: unknown;
             } | null;
             defaultEnvironmentValidationRegex: string | null;
             defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -41828,7 +41828,6 @@ export type GetBootstrapResponses = {
                     defaultTtlHours: number;
                     defaultIdleTimeoutMinutes: number;
                     allowPrivileged: boolean;
-                    defaultTier: 'S' | 'M' | 'L';
                 };
                 plugins: boolean;
                 sandboxArtifactBytesLimit: number;
@@ -42032,8 +42031,8 @@ export type GetNewChatBootstrapResponses = {
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
-                tier?: 'S' | 'M' | 'L';
-                maxTier?: 'S' | 'M' | 'L';
+                tier?: string | null;
+                maxTier?: string | null;
                 ports?: Array<number>;
                 environment: Array<{
                     key: string;
@@ -42213,8 +42212,8 @@ export type GetNewChatBootstrapResponses = {
                     backend: 'kubernetes';
                     steerMode: 'pipe' | 'tmux_keys';
                     privileged: boolean;
-                    tier?: 'S' | 'M' | 'L';
-                    maxTier?: 'S' | 'M' | 'L';
+                    tier?: string | null;
+                    maxTier?: string | null;
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -42605,8 +42604,8 @@ export type GetConversationBootstrapResponses = {
                     backend: 'kubernetes';
                     steerMode: 'pipe' | 'tmux_keys';
                     privileged: boolean;
-                    tier?: 'S' | 'M' | 'L';
-                    maxTier?: 'S' | 'M' | 'L';
+                    tier?: string | null;
+                    maxTier?: string | null;
                     ports?: Array<number>;
                     environment: Array<{
                         key: string;
@@ -42786,8 +42785,8 @@ export type GetConversationBootstrapResponses = {
                         backend: 'kubernetes';
                         steerMode: 'pipe' | 'tmux_keys';
                         privileged: boolean;
-                        tier?: 'S' | 'M' | 'L';
-                        maxTier?: 'S' | 'M' | 'L';
+                        tier?: string | null;
+                        maxTier?: string | null;
                         ports?: Array<number>;
                         environment: Array<{
                             key: string;
@@ -51553,7 +51552,6 @@ export type GetConfigResponses = {
                 defaultTtlHours: number;
                 defaultIdleTimeoutMinutes: number;
                 allowPrivileged: boolean;
-                defaultTier: 'S' | 'M' | 'L';
             };
             plugins: boolean;
             sandboxArtifactBytesLimit: number;
@@ -121803,9 +121801,7 @@ export type GetOrganizationResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -122262,9 +122258,7 @@ export type UpdateAppearanceSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -122489,9 +122483,7 @@ export type UpdateSecuritySettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -122712,9 +122704,7 @@ export type UpdateMcpSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -122934,9 +122924,7 @@ export type UpdateSkillsSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -122949,30 +122937,111 @@ export type UpdateSkillsSettingsResponses = {
 
 export type UpdateSkillsSettingsResponse = UpdateSkillsSettingsResponses[keyof UpdateSkillsSettingsResponses];
 
+export type GetAgentRuntimeTiersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/agent-runtime-tiers';
+};
+
+export type GetAgentRuntimeTiersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentRuntimeTiersError = GetAgentRuntimeTiersErrors[keyof GetAgentRuntimeTiersErrors];
+
+export type GetAgentRuntimeTiersResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        tiers: Array<{
+            name: string;
+            cpuRequest: number;
+            cpuLimit: number | null;
+            warmSpares: number;
+            memoryRequestMiB: number;
+            memoryLimitMiB: number;
+        }>;
+        defaultTier: string;
+    };
+};
+
+export type GetAgentRuntimeTiersResponse = GetAgentRuntimeTiersResponses[keyof GetAgentRuntimeTiersResponses];
+
 export type UpdateAgentSettingsData = {
     body: {
         agentRuntimeTiers?: {
-            S?: {
-                cpuRequest?: string;
-                cpuLimit?: string | null;
-                memoryRequest?: string;
-                memoryLimit?: string;
-                warmPoolSize?: number | null;
-            };
-            M?: {
-                cpuRequest?: string;
-                cpuLimit?: string | null;
-                memoryRequest?: string;
-                memoryLimit?: string;
-                warmPoolSize?: number | null;
-            };
-            L?: {
-                cpuRequest?: string;
-                cpuLimit?: string | null;
-                memoryRequest?: string;
-                memoryLimit?: string;
-                warmPoolSize?: number | null;
-            };
+            tiers: Array<{
+                name: string;
+                cpuRequest: number;
+                cpuLimit: number | null;
+                warmSpares: number;
+                previousName?: string;
+            }>;
+            defaultTier: string;
         } | null;
         defaultModelId?: string | null;
         defaultLlmApiKeyId?: string | null;
@@ -123182,9 +123251,7 @@ export type UpdateAgentSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -123427,9 +123494,7 @@ export type UpdateConnectionSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -123697,9 +123762,7 @@ export type UpdateIntegrationSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -123929,9 +123992,7 @@ export type UpdateDefaultEnvironmentResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -124156,9 +124217,7 @@ export type UpdateAuthSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -124385,9 +124444,7 @@ export type UpdateKnowledgeSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -124604,9 +124661,7 @@ export type DropEmbeddingConfigResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -125185,9 +125240,7 @@ export type CompleteOnboardingResponses = {
             allowedCidrs: Array<string>;
         } | null;
         agentRuntimeTiers: {
-            [key: string]: {
-                [key: string]: unknown;
-            };
+            [key: string]: unknown;
         } | null;
         defaultEnvironmentValidationRegex: string | null;
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
@@ -130607,7 +130660,7 @@ export type GetProjectRunsResponses = {
         backend: 'kubernetes';
         runtimeScope: string;
         runtimeLimits: {
-            tier: 'S' | 'M' | 'L';
+            tier: string | null;
             idleTimeoutMinutes: number;
             maxDurationHours: number;
             maxCostUsd: number | null;

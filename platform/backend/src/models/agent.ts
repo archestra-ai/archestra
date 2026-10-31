@@ -4062,6 +4062,62 @@ class AgentModel {
     return rows.length === 1;
   }
 
+  /** How many of the organization's agents name `name` as their default or scaleup tier. */
+  static async countRuntimeTierReferences(params: {
+    organizationId: string;
+    name: string;
+  }): Promise<number> {
+    const table = schema.agentsTable;
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          sql`(lower(${table.runtime}->>'tier') = lower(${params.name}) or lower(${table.runtime}->>'maxTier') = lower(${params.name}))`,
+        ),
+      );
+    return row?.count ?? 0;
+  }
+
+  /**
+   * Follow tier renames on every agent of the organization that names one of
+   * them. The whole mapping applies to each stored name once, so a save that
+   * renames S to M and M to Medium leaves the former S agents on M.
+   */
+  static async renameRuntimeTiers(params: {
+    organizationId: string;
+    renames: readonly { from: string; to: string }[];
+    tx?: Transaction;
+  }): Promise<void> {
+    if (params.renames.length === 0) return;
+    const table = schema.agentsTable;
+    const from = params.renames.map((rename) => rename.from.toLowerCase());
+    for (const field of ["tier", "maxTier"] as const) {
+      const stored = sql`lower(${table.runtime}->>${field})`;
+      const mapped = sql.join(
+        params.renames.map(
+          (rename) => sql`when ${rename.from.toLowerCase()} then ${rename.to}`,
+        ),
+        sql` `,
+      );
+      await (params.tx ?? db)
+        .update(table)
+        .set({
+          runtime: sql`jsonb_set(${table.runtime}, ${sql.raw(`'{${field}}'`)}, to_jsonb(coalesce((case ${stored} ${mapped} end), ${table.runtime}->>${field})::text))`,
+        })
+        .where(
+          and(
+            eq(table.organizationId, params.organizationId),
+            sql`${stored} in (${sql.join(
+              from.map((name) => sql`${name}`),
+              sql`, `,
+            )})`,
+          ),
+        );
+    }
+  }
+
   static async update(
     id: string,
     {

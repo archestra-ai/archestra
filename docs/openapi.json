@@ -61691,20 +61691,14 @@
                                       "tier": {
                                         "nullable": true,
                                         "type": "string",
-                                        "enum": [
-                                          "S",
-                                          "M",
-                                          "L"
-                                        ]
+                                        "minLength": 1,
+                                        "maxLength": 32
                                       },
                                       "maxTier": {
                                         "nullable": true,
                                         "type": "string",
-                                        "enum": [
-                                          "S",
-                                          "M",
-                                          "L"
-                                        ]
+                                        "minLength": 1,
+                                        "maxLength": 32
                                       },
                                       "ports": {
                                         "maxItems": 20,
@@ -63422,20 +63416,14 @@
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "maxTier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "ports": {
                                 "maxItems": 20,
@@ -64508,20 +64496,14 @@
                       "tier": {
                         "nullable": true,
                         "type": "string",
-                        "enum": [
-                          "S",
-                          "M",
-                          "L"
-                        ]
+                        "minLength": 1,
+                        "maxLength": 32
                       },
                       "maxTier": {
                         "nullable": true,
                         "type": "string",
-                        "enum": [
-                          "S",
-                          "M",
-                          "L"
-                        ]
+                        "minLength": 1,
+                        "maxLength": 32
                       },
                       "ports": {
                         "maxItems": 20,
@@ -65306,20 +65288,14 @@
                         "tier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "maxTier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "ports": {
                           "maxItems": 20,
@@ -66944,20 +66920,14 @@
                           "tier": {
                             "nullable": true,
                             "type": "string",
-                            "enum": [
-                              "S",
-                              "M",
-                              "L"
-                            ]
+                            "minLength": 1,
+                            "maxLength": 32
                           },
                           "maxTier": {
                             "nullable": true,
                             "type": "string",
-                            "enum": [
-                              "S",
-                              "M",
-                              "L"
-                            ]
+                            "minLength": 1,
+                            "maxLength": 32
                           },
                           "ports": {
                             "maxItems": 20,
@@ -67589,20 +67559,14 @@
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "maxTier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "ports": {
                                 "maxItems": 20,
@@ -68272,20 +68236,14 @@
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "maxTier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "ports": {
                                 "maxItems": 20,
@@ -69104,20 +69062,14 @@
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "maxTier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "ports": {
                                 "maxItems": 20,
@@ -70557,20 +70509,14 @@
                         "tier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "maxTier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "ports": {
                           "maxItems": 20,
@@ -71977,20 +71923,14 @@
                             "tier": {
                               "nullable": true,
                               "type": "string",
-                              "enum": [
-                                "S",
-                                "M",
-                                "L"
-                              ]
+                              "minLength": 1,
+                              "maxLength": 32
                             },
                             "maxTier": {
                               "nullable": true,
                               "type": "string",
-                              "enum": [
-                                "S",
-                                "M",
-                                "L"
-                              ]
+                              "minLength": 1,
+                              "maxLength": 32
                             },
                             "ports": {
                               "maxItems": 20,
@@ -73070,20 +73010,14 @@
                         "tier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "maxTier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "ports": {
                           "maxItems": 20,
@@ -74088,20 +74022,14 @@
                       "tier": {
                         "nullable": true,
                         "type": "string",
-                        "enum": [
-                          "S",
-                          "M",
-                          "L"
-                        ]
+                        "minLength": 1,
+                        "maxLength": 32
                       },
                       "maxTier": {
                         "nullable": true,
                         "type": "string",
-                        "enum": [
-                          "S",
-                          "M",
-                          "L"
-                        ]
+                        "minLength": 1,
+                        "maxLength": 32
                       },
                       "ports": {
                         "maxItems": 20,
@@ -74621,20 +74549,14 @@
                         "tier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "maxTier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "ports": {
                           "maxItems": 20,
@@ -77307,20 +77229,14 @@
                         "tier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "maxTier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "ports": {
                           "maxItems": 20,
@@ -78517,20 +78433,14 @@
                         "tier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "maxTier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "ports": {
                           "maxItems": 20,
@@ -86538,20 +86448,14 @@
                         "tier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "maxTier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "ports": {
                           "maxItems": 20,
@@ -92293,11 +92197,8 @@
                           "tier": {
                             "nullable": true,
                             "type": "string",
-                            "enum": [
-                              "S",
-                              "M",
-                              "L"
-                            ]
+                            "minLength": 1,
+                            "maxLength": 32
                           },
                           "idleTimeoutMinutes": {
                             "type": "integer",
@@ -92793,11 +92694,20 @@
                     "properties": {
                       "tier": {
                         "type": "string",
-                        "enum": [
-                          "S",
-                          "M",
-                          "L"
-                        ]
+                        "minLength": 1,
+                        "maxLength": 32
+                      },
+                      "minCpu": {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMinimum": true,
+                        "maximum": 16
+                      },
+                      "minMemoryGib": {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMinimum": true,
+                        "maximum": 256
                       },
                       "idleTimeoutMinutes": {
                         "type": "integer",
@@ -92896,11 +92806,8 @@
                         "tier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "idleTimeoutMinutes": {
                           "type": "integer",
@@ -93326,11 +93233,8 @@
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "idleTimeoutMinutes": {
                                 "type": "integer",
@@ -93921,11 +93825,8 @@
                         "tier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "idleTimeoutMinutes": {
                           "type": "integer",
@@ -94595,11 +94496,8 @@
                         "tier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "idleTimeoutMinutes": {
                           "type": "integer",
@@ -95446,11 +95344,8 @@
                         "tier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "idleTimeoutMinutes": {
                           "type": "integer",
@@ -97117,20 +97012,14 @@
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "maxTier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "ports": {
                                 "maxItems": 20,
@@ -97753,20 +97642,14 @@
                             "tier": {
                               "nullable": true,
                               "type": "string",
-                              "enum": [
-                                "S",
-                                "M",
-                                "L"
-                              ]
+                              "minLength": 1,
+                              "maxLength": 32
                             },
                             "maxTier": {
                               "nullable": true,
                               "type": "string",
-                              "enum": [
-                                "S",
-                                "M",
-                                "L"
-                              ]
+                              "minLength": 1,
+                              "maxLength": 32
                             },
                             "ports": {
                               "maxItems": 20,
@@ -98138,20 +98021,14 @@
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "maxTier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "ports": {
                                 "maxItems": 20,
@@ -98778,20 +98655,14 @@
                         "tier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "maxTier": {
                           "nullable": true,
                           "type": "string",
-                          "enum": [
-                            "S",
-                            "M",
-                            "L"
-                          ]
+                          "minLength": 1,
+                          "maxLength": 32
                         },
                         "ports": {
                           "maxItems": 20,
@@ -155174,10 +155045,7 @@
                         "agentRuntimeTiers": {
                           "nullable": true,
                           "type": "object",
-                          "additionalProperties": {
-                            "type": "object",
-                            "additionalProperties": {}
-                          }
+                          "additionalProperties": {}
                         },
                         "defaultEnvironmentValidationRegex": {
                           "nullable": true,
@@ -155395,14 +155263,6 @@
                                 },
                                 "allowPrivileged": {
                                   "type": "boolean"
-                                },
-                                "defaultTier": {
-                                  "type": "string",
-                                  "enum": [
-                                    "S",
-                                    "M",
-                                    "L"
-                                  ]
                                 }
                               },
                               "required": [
@@ -155410,8 +155270,7 @@
                                 "available",
                                 "defaultTtlHours",
                                 "defaultIdleTimeoutMinutes",
-                                "allowPrivileged",
-                                "defaultTier"
+                                "allowPrivileged"
                               ],
                               "additionalProperties": false
                             },
@@ -156314,20 +156173,14 @@
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "maxTier": {
                                 "nullable": true,
                                 "type": "string",
-                                "enum": [
-                                  "S",
-                                  "M",
-                                  "L"
-                                ]
+                                "minLength": 1,
+                                "maxLength": 32
                               },
                               "ports": {
                                 "maxItems": 20,
@@ -157388,20 +157241,14 @@
                                 "tier": {
                                   "nullable": true,
                                   "type": "string",
-                                  "enum": [
-                                    "S",
-                                    "M",
-                                    "L"
-                                  ]
+                                  "minLength": 1,
+                                  "maxLength": 32
                                 },
                                 "maxTier": {
                                   "nullable": true,
                                   "type": "string",
-                                  "enum": [
-                                    "S",
-                                    "M",
-                                    "L"
-                                  ]
+                                  "minLength": 1,
+                                  "maxLength": 32
                                 },
                                 "ports": {
                                   "maxItems": 20,
@@ -159522,20 +159369,14 @@
                                   "tier": {
                                     "nullable": true,
                                     "type": "string",
-                                    "enum": [
-                                      "S",
-                                      "M",
-                                      "L"
-                                    ]
+                                    "minLength": 1,
+                                    "maxLength": 32
                                   },
                                   "maxTier": {
                                     "nullable": true,
                                     "type": "string",
-                                    "enum": [
-                                      "S",
-                                      "M",
-                                      "L"
-                                    ]
+                                    "minLength": 1,
+                                    "maxLength": 32
                                   },
                                   "ports": {
                                     "maxItems": 20,
@@ -160596,20 +160437,14 @@
                                     "tier": {
                                       "nullable": true,
                                       "type": "string",
-                                      "enum": [
-                                        "S",
-                                        "M",
-                                        "L"
-                                      ]
+                                      "minLength": 1,
+                                      "maxLength": 32
                                     },
                                     "maxTier": {
                                       "nullable": true,
                                       "type": "string",
-                                      "enum": [
-                                        "S",
-                                        "M",
-                                        "L"
-                                      ]
+                                      "minLength": 1,
+                                      "maxLength": 32
                                     },
                                     "ports": {
                                       "maxItems": 20,
@@ -192950,14 +192785,6 @@
                             },
                             "allowPrivileged": {
                               "type": "boolean"
-                            },
-                            "defaultTier": {
-                              "type": "string",
-                              "enum": [
-                                "S",
-                                "M",
-                                "L"
-                              ]
                             }
                           },
                           "required": [
@@ -192965,8 +192792,7 @@
                             "available",
                             "defaultTtlHours",
                             "defaultIdleTimeoutMinutes",
-                            "allowPrivileged",
-                            "defaultTier"
+                            "allowPrivileged"
                           ],
                           "additionalProperties": false
                         },
@@ -476212,10 +476038,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -477908,10 +477731,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -479343,10 +479163,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -480386,10 +480203,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -481426,10 +481240,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -481793,6 +481604,316 @@
         }
       }
     },
+    "/api/organization/agent-runtime-tiers": {
+      "get": {
+        "operationId": "getAgentRuntimeTiers",
+        "tags": [
+          "Organization"
+        ],
+        "description": "The organization's Agent Runtime tiers in effect, smallest first: each tier's name, CPU, the memory its CPU gives it, the spares it keeps ready, and the default tier\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tiers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "cpuRequest": {
+                            "type": "number"
+                          },
+                          "cpuLimit": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "warmSpares": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryRequestMiB": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "memoryLimitMiB": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "cpuRequest",
+                          "cpuLimit",
+                          "warmSpares",
+                          "memoryRequestMiB",
+                          "memoryLimitMiB"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "defaultTier": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tiers",
+                    "defaultTier"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
     "/api/organization/agent-settings": {
       "patch": {
         "operationId": "updateAgentSettings",
@@ -481811,82 +481932,61 @@
                     "nullable": true,
                     "type": "object",
                     "properties": {
-                      "S": {
-                        "type": "object",
-                        "properties": {
-                          "cpuRequest": {
-                            "type": "string"
+                      "tiers": {
+                        "minItems": 1,
+                        "maxItems": 12,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32
+                            },
+                            "cpuRequest": {
+                              "type": "number",
+                              "minimum": 0,
+                              "exclusiveMinimum": true,
+                              "maximum": 8
+                            },
+                            "cpuLimit": {
+                              "nullable": true,
+                              "type": "number",
+                              "minimum": 0,
+                              "exclusiveMinimum": true,
+                              "maximum": 16
+                            },
+                            "warmSpares": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            "previousName": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 32
+                            }
                           },
-                          "cpuLimit": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "memoryRequest": {
-                            "type": "string"
-                          },
-                          "memoryLimit": {
-                            "type": "string"
-                          },
-                          "warmPoolSize": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 10
-                          }
-                        },
-                        "additionalProperties": false
+                          "required": [
+                            "name",
+                            "cpuRequest",
+                            "cpuLimit",
+                            "warmSpares"
+                          ],
+                          "additionalProperties": false
+                        }
                       },
-                      "M": {
-                        "type": "object",
-                        "properties": {
-                          "cpuRequest": {
-                            "type": "string"
-                          },
-                          "cpuLimit": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "memoryRequest": {
-                            "type": "string"
-                          },
-                          "memoryLimit": {
-                            "type": "string"
-                          },
-                          "warmPoolSize": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 10
-                          }
-                        },
-                        "additionalProperties": false
-                      },
-                      "L": {
-                        "type": "object",
-                        "properties": {
-                          "cpuRequest": {
-                            "type": "string"
-                          },
-                          "cpuLimit": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "memoryRequest": {
-                            "type": "string"
-                          },
-                          "memoryLimit": {
-                            "type": "string"
-                          },
-                          "warmPoolSize": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 10
-                          }
-                        },
-                        "additionalProperties": false
+                      "defaultTier": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32
                       }
                     },
+                    "required": [
+                      "tiers",
+                      "defaultTier"
+                    ],
                     "additionalProperties": false
                   },
                   "defaultModelId": {
@@ -482572,10 +482672,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -483744,10 +483841,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -484941,10 +485035,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -486051,10 +486142,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -487105,10 +487193,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -488190,10 +488275,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -489212,10 +489294,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -491438,10 +491517,7 @@
                     "agentRuntimeTiers": {
                       "nullable": true,
                       "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
+                      "additionalProperties": {}
                     },
                     "defaultEnvironmentValidationRegex": {
                       "nullable": true,
@@ -511866,11 +511942,8 @@
                           "tier": {
                             "nullable": true,
                             "type": "string",
-                            "enum": [
-                              "S",
-                              "M",
-                              "L"
-                            ]
+                            "minLength": 1,
+                            "maxLength": 32
                           },
                           "idleTimeoutMinutes": {
                             "type": "integer",

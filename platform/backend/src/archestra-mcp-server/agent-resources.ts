@@ -36,6 +36,7 @@ import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import {
   assertAgentModelSelectionAvailable,
   assertAgentRuntimeModelCompatibility,
+  assertAgentRuntimeTiersExist,
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
@@ -928,6 +929,10 @@ async function resolveRuntimeAndModelForWrite(params: {
     userId: context.userId,
     organizationId: context.organizationId,
     previous: existing?.runtime,
+  });
+  await assertAgentRuntimeTiersExist({
+    runtime,
+    organizationId: context.organizationId,
   });
   await assertCanBindRuntimeCredentials({
     organizationId: context.organizationId,

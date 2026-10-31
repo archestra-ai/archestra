@@ -15,14 +15,14 @@ describe("a Pod the workspace volume stopped", () => {
       exitCode: AGENT_RUNTIME_WORKSPACE_FULL_EXIT_CODE,
       reason: "Error",
       message:
-        "The workspace volume is full (19.5 of 19.5 GiB used), so the run stopped. Start a new run with a larger workspace volume.",
+        "The workspace volume is full (19.5 of 19.5 GiB used), so the run stopped. Ask an administrator for a larger workspace volume, then start a new run.",
     });
     expect(describeAgentRuntimePodFailure(pod, "archestra")).toBe(
       [
         "The Agent Runtime pod failed.",
         "Pod: archestra/agent-run-example",
         "Container agent-runtime: Error (exit code 76)",
-        "The workspace volume is full (19.5 of 19.5 GiB used), so the run stopped. Start a new run with a larger workspace volume.",
+        "The workspace volume is full (19.5 of 19.5 GiB used), so the run stopped. Ask an administrator for a larger workspace volume, then start a new run.",
       ].join("\n"),
     );
     expect(classifyAgentRuntimePodFailure(pod)).toBe("pod.workspace_full");
@@ -31,7 +31,7 @@ describe("a Pod the workspace volume stopped", () => {
   test.each([
     [
       AGENT_RUNTIME_WORKSPACE_FULL_EXIT_CODE,
-      "The workspace volume is full, so the run stopped. Start a new run with a larger workspace volume.",
+      "The workspace volume is full, so the run stopped. Ask an administrator for a larger workspace volume, then start a new run.",
     ],
     [
       AGENT_RUNTIME_WORKSPACE_UNWRITABLE_EXIT_CODE,

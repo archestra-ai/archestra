@@ -80,7 +80,7 @@ const LOW_SPACE_KIB = 64 * 1024;
 /** The full-volume reason; the trap puts the used space between the halves. */
 const FULL_REASON_START = "The workspace volume is full";
 const FULL_REASON_END =
-  ", so the run stopped. Start a new run with a larger workspace volume.";
+  ", so the run stopped. Ask an administrator for a larger workspace volume, then start a new run.";
 const UNWRITABLE_WITH_SPACE_REASON =
   "The workspace volume cannot be written although it has space, so the run stopped. It may be read-only or failing. Ask the cluster operator to check it.";
 const UNWRITABLE_REASON =

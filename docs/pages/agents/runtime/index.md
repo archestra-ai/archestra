@@ -158,7 +158,7 @@ A failed run carries a stable `failure.code`, so a script can retry or stop with
 | `launch.credentials_timeout` | Yes | The run's credentials did not reach the pod in time. |
 | `pod.evicted` | Yes | Kubernetes evicted or preempted the pod. |
 | `pod.oom_killed` | No | The agent ran out of memory. |
-| `pod.workspace_full` | No | The agent filled its workspace volume. Start a new run with a larger volume. |
+| `pod.workspace_full` | No | The agent filled its workspace volume. Ask an administrator for a larger volume. |
 | `pod.image_pull` | No | The image could not be pulled. |
 | `pod.failed` | No | The pod failed for another reason. |
 | `turn.interrupted` | Yes | The pod was replaced while the agent worked. The turn is not repeated. |

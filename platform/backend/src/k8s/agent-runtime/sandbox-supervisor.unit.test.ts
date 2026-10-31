@@ -40,7 +40,7 @@ echo VERIFIED
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("VERIFIED");
     expect(result.stderr).toMatch(
-      /agent-runtime: The workspace volume is full \(\d+ of 2 MiB used\), so the run stopped\. Start a new run with a larger workspace volume\./,
+      /agent-runtime: The workspace volume is full \(\d+ of 2 MiB used\), so the run stopped\. Ask an administrator for a larger workspace volume, then start a new run\./,
     );
   }, 30_000);
 
@@ -477,7 +477,7 @@ function runInContainer(
         `mount -t tmpfs tmpfs /tmp
 mount -t tmpfs -o size=${volume ?? 262144}k${inodes} tmpfs /run
 mkdir -p /var/run/archestra/turns
-export PATH="${IMAGE_BIN}:$PATH"`,
+export PATH="$ARCHESTRA_TEST_IMAGE_BIN:$PATH"`,
       ]
     : [
         "docker",
@@ -500,6 +500,7 @@ export PATH="${IMAGE_BIN}:$PATH"`,
   return spawnSync(command, args, {
     encoding: "utf8",
     timeout: 25_000,
+    env: { ...process.env, ARCHESTRA_TEST_IMAGE_BIN: IMAGE_BIN },
     input: `set -eu
 ${prelude}
 cat > /tmp/supervisor.sh <<'SUPERVISOR'

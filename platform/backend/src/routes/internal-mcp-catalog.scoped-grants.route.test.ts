@@ -356,14 +356,11 @@ describe("catalog object grants", () => {
         (item) => item.name === "context7",
       ),
     ).toBe(false);
-    // Every team is close to everyone, so only one's own teams are offered.
-    const toOtherTeam = await create("context7", [
+    // Creators can share with another team without joining it.
+    const toOtherTeam = await create("context7-other-team", [
       { subject: { type: "team", id: otherTeam.id }, actions: ["read", "use"] },
     ]);
-    expect(toOtherTeam.statusCode, toOtherTeam.body).toBe(403);
-    expect(toOtherTeam.json().error.message).toBe(
-      "Only someone with Full access to every MCP registry entry can share it with a team they are not in.",
-    );
+    expect(toOtherTeam.statusCode, toOtherTeam.body).toBe(200);
     const toTeam = await create("context7", [
       { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
     ]);

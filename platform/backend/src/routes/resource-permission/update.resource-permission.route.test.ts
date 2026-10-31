@@ -94,7 +94,7 @@ describe("resource permission routes", () => {
     expect(published.json().canShareOrganizationWide).toBe(true);
   });
 
-  test("cross-team sharing is opt-in, organization-scoped, and preserves grants after revocation", async ({
+  test("object managers share across teams while viewers and foreign teams remain restricted", async ({
     makeAgent,
     makeCustomRole,
     makeTeam,
@@ -105,7 +105,6 @@ describe("resource permission routes", () => {
     const role = await makeCustomRole(organizationId, {
       permission: {
         agent: ["read", "create"],
-        accessPolicies: ["share-across-teams"],
       },
     });
     const other = await makeUser();
@@ -147,8 +146,7 @@ describe("resource permission routes", () => {
       });
 
     await MemberModel.updateRole(user.id, organizationId, "member");
-    expect((await search("Unrelated")).json()).toEqual([]);
-    expect((await put([own, shared])).statusCode).toBe(403);
+    expect((await put([own, shared])).statusCode).toBe(200);
     await MemberModel.updateRole(user.id, organizationId, role.role);
     expect((await search("Unrelated")).json()).toEqual([
       expect.objectContaining({ subject: shared.subject }),
@@ -177,7 +175,7 @@ describe("resource permission routes", () => {
       ).statusCode,
     ).toBe(400);
 
-    // The permission alone never grants management on someone else's item.
+    // A custom role does not grant management on someone else's item.
     const unshared = await makeAgent({
       organizationId,
       authorId: other.id,
@@ -195,16 +193,53 @@ describe("resource permission routes", () => {
     ).toBe(403);
 
     await MemberModel.updateRole(user.id, organizationId, "member");
-    expect((await search("Unrelated")).json()).toEqual([]);
+    expect((await search("Unrelated")).json()).toEqual([
+      expect.objectContaining({ subject: shared.subject }),
+    ]);
     expect((await put([own, shared])).statusCode).toBe(200);
     expect(
       (await put([own, { ...shared, actions: ["read", "use", "update"] }]))
         .statusCode,
-    ).toBe(403);
+    ).toBe(200);
     expect(
       (await put([own, { ...shared, actions: ["read"] }])).statusCode,
     ).toBe(200);
     expect((await put([own])).statusCode).toBe(200);
+    expect(
+      (
+        await put([
+          own,
+          {
+            subject: { type: "user", id: other.id },
+            actions: own.actions,
+          },
+        ])
+      ).statusCode,
+    ).toBe(200);
+    const originalUser = user;
+    user = other;
+    expect(
+      (
+        await put([
+          own,
+          { subject: { type: "user", id: other.id }, actions: own.actions },
+          shared,
+        ])
+      ).statusCode,
+    ).toBe(200);
+    user = originalUser;
+    expect(
+      (
+        await put([
+          own,
+          { subject: { type: "user", id: other.id }, actions: ["read", "use"] },
+          shared,
+        ])
+      ).statusCode,
+    ).toBe(200);
+    user = other;
+    expect((await put([own, shared])).statusCode).toBe(403);
+    user = originalUser;
   });
 
   test("saves and audits mixed chat recipients and denies changes from a viewer", async ({

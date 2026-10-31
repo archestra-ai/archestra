@@ -147,7 +147,7 @@ describe("making an object org-wide", () => {
     ).rejects.toThrow(expect.objectContaining({ statusCode: 403 }));
   });
 
-  test("a member shares with their own teams and with people, not with other teams or service accounts", async ({
+  test("an object manager shares with unrelated teams and people but still needs service-account authority", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -188,25 +188,12 @@ describe("making an object org-wide", () => {
     await save({ ...context, grants });
     expect((await policyOf(context))?.grants).toEqual(grants);
 
-    // Adding every team would reach close to everyone.
-    await expect(
-      save({
-        ...context,
-        grants: [
-          ...grants,
-          {
-            subject: { type: "team", id: otherTeam.id },
-            actions: ["read", "use"],
-          },
-        ],
-      }),
-    ).rejects.toThrow(
-      expect.objectContaining({
-        statusCode: 403,
-        message:
-          "Sharing with a team you are not in requires Share across teams or Full access to every resource of this kind.",
-      }),
-    );
+    grants.push({
+      subject: { type: "team", id: otherTeam.id },
+      actions: ["read", "use"],
+    });
+    await save({ ...context, grants });
+    expect((await policyOf(context))?.grants).toEqual(grants);
     // A member cannot see service accounts, so cannot pick one either.
     await expect(
       save({
@@ -229,7 +216,7 @@ describe("making an object org-wide", () => {
     expect((await policyOf(context))?.grants).toEqual(grants);
   });
 
-  test("cross-team permission permits creation recipients without widening to everyone or foreign teams", async ({
+  test("custom-role creators share across teams without widening to everyone or foreign teams", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -241,7 +228,6 @@ describe("making an object org-wide", () => {
     const role = await makeCustomRole(org.id, {
       permission: {
         agent: ["read", "create"],
-        accessPolicies: ["share-across-teams"],
       },
     });
     await makeMember(user.id, org.id, { role: role.role });
@@ -507,7 +493,7 @@ describe("making an object org-wide", () => {
     expect(adminTypes.has("role")).toBe(true);
     expect(adminTypes.has("serviceAccount")).toBe(true);
 
-    // A member's picker holds their own teams, and leaves out the admin, whose
+    // A member's picker includes unrelated teams, and leaves out the admin, whose
     // role already has Full access to every entry.
     const memberNames = (
       await ResourcePermissions.searchSubjects({
@@ -531,7 +517,7 @@ describe("making an object org-wide", () => {
           query: "Finance",
         })
       ).length,
-    ).toBe(0);
+    ).toBeGreaterThan(0);
 
     const initialTypes = async (userId: string) =>
       (

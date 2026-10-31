@@ -3580,7 +3580,7 @@ describe("publish_app", () => {
     );
   }
 
-  test("a custom role publishes to an unrelated team only with cross-team sharing", async ({
+  test("a custom-role owner publishes to an unrelated team without extra sharing permissions", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -3594,7 +3594,6 @@ describe("publish_app", () => {
     const role = await makeCustomRole(organizationId, {
       permission: {
         app: ["read", "create"],
-        accessPolicies: ["share-across-teams"],
       },
     });
     await makeMember(user.id, organizationId, { role: role.role });

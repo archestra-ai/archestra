@@ -519,6 +519,5 @@ const actionLabels: Record<Action | "manage-permissions", string> = {
   impersonate: "Impersonate",
   "full-view": "Full view",
   "configure-runtime": "Configure runtime",
-  "share-across-teams": "Share across teams",
   admin: "Admin",
 };

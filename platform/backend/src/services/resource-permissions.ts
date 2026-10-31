@@ -884,16 +884,8 @@ export class ResourcePermissions {
     });
   }
 
-  /**
-   * Refuse a grant to someone the caller may not add. Without the authority
-   * to make an object org-wide ({@link canShareOrganizationWide}), a manager
-   * of this one object cannot add everyone or a role, and shares it only with
-   * teams they are in, unless they hold `accessPolicies:share-across-teams`.
-   * A service account takes the right to see service
-   * accounts. Keeping, lowering, or removing a grant is always allowed, so a
-   * manager can still narrow who reaches the object, and a chat or agent run
-   * is its owner's to share.
-   */
+  /** Object managers can add any team in their organization. Org-wide and
+   * service-account recipients still require their separate authority. */
   private static async assertMayAddRecipients(params: {
     organizationId: string;
     userId: string;
@@ -904,37 +896,14 @@ export class ResourcePermissions {
   }) {
     if (isSessionResource(params.resource)) return;
     const added = addedGrants(params).map((grant) => grant.subject);
-    const widens = added.some(isOrganizationWideSubject);
-    const addsTeam = added.some((subject) => subject.type === "team");
-    if (widens || addsTeam) {
-      // Read once: the org-wide check and the own-teams check share them.
-      const subjects =
-        params.subjects ?? (await ResourcePermissions.getSubjects(params));
-      if (
-        !(await ResourcePermissions.canShareOrganizationWide({
-          ...params,
-          subjects,
-        }))
-      ) {
-        if (widens)
-          throw new ApiError(
-            403,
-            `Only someone with Full access to every ${scopedResourceNouns[params.resource]} can share it with everyone in the organization or with a role.`,
-          );
-        const ownTeams = new Set(subjects.map(subjectKey));
-        if (
-          added.some(
-            (subject) =>
-              subject.type === "team" && !ownTeams.has(subjectKey(subject)),
-          ) &&
-          !(await ResourcePermissions.canShareAcrossTeams(params))
-        )
-          throw new ApiError(
-            403,
-            "Sharing with a team you are not in requires Share across teams or Full access to every resource of this kind.",
-          );
-      }
-    }
+    if (
+      added.some(isOrganizationWideSubject) &&
+      !(await ResourcePermissions.canShareOrganizationWide(params))
+    )
+      throw new ApiError(
+        403,
+        `Only someone with Full access to every ${scopedResourceNouns[params.resource]} can share it with everyone in the organization or with a role.`,
+      );
     if (
       added.some((subject) => subject.type === "serviceAccount") &&
       !(await ResourcePermissions.maySeeServiceAccounts(params))
@@ -943,15 +912,6 @@ export class ResourcePermissions {
         403,
         "Sharing with a service account needs permission to see service accounts.",
       );
-  }
-
-  /** Widens team recipients only; object authority and delegation still apply. */
-  private static async canShareAcrossTeams(params: {
-    organizationId: string;
-    userId: string;
-  }): Promise<boolean> {
-    const permissions = await getPermissionsForUserContext(params);
-    return permissions.accessPolicies?.includes("share-across-teams") ?? false;
   }
 
   private static async maySeeServiceAccounts(params: {
@@ -1085,26 +1045,19 @@ export class ResourcePermissions {
   }) {
     // Offer only recipients the caller may add. Everyone and the roles make
     // an object org-wide, which a manager of this one object alone cannot;
-    // they share it with their own teams, and with people a grant here would
+    // they share it with teams in their organization, and with people a grant here would
     // give something to.
     const subjects = await ResourcePermissions.getSubjects(params);
-    const [organizationWide, seesServiceAccounts, crossTeam, coveredRoles] =
+    const [organizationWide, seesServiceAccounts, coveredRoles] =
       await Promise.all([
         ResourcePermissions.mayAddOrganizationWide({ ...params, subjects }),
         ResourcePermissions.maySeeServiceAccounts(params),
-        ResourcePermissions.canShareAcrossTeams(params),
         ResourcePermissions.rolesWithEveryAction(params),
       ]);
     // Filter before the per-kind limit so already selected or ineligible
     // recipients cannot hide someone on a later page.
     const recipients = await ResourcePermissionSubjectModel.search({
       ...params,
-      teamIds:
-        organizationWide || crossTeam
-          ? undefined
-          : subjects
-              .filter((subject) => subject.type === "team")
-              .map((subject) => subject.id),
       excludedUserRoles: organizationWide ? undefined : [...coveredRoles],
     });
     const excluded = new Set(params.exclude?.map(subjectKey));

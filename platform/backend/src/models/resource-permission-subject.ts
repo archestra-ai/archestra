@@ -172,7 +172,6 @@ export default class ResourcePermissionSubjectModel {
     organizationId: string;
     query: string;
     exclude?: PermissionSubject[];
-    teamIds?: string[];
     excludedUserRoles?: string[];
   }) {
     const excludedIds = (type: PermissionSubject["type"]) =>
@@ -215,9 +214,6 @@ export default class ResourcePermissionSubjectModel {
           and(
             eq(schema.teamsTable.organizationId, params.organizationId),
             notInArray(schema.teamsTable.id, excludedIds("team")),
-            params.teamIds
-              ? inArray(schema.teamsTable.id, params.teamIds)
-              : undefined,
             ilike(schema.teamsTable.name, pattern),
           ),
         )

@@ -12,6 +12,7 @@ import {
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   isSmallModel,
+  lacksOpenAiChatCompletions,
   providerDisplayNames,
   providerSearchTerms,
   requiresOpenAiResponsesApi,
@@ -136,6 +137,22 @@ describe("requiresOpenAiResponsesApi", () => {
     expect(requiresOpenAiResponsesApi("gpt-5.61")).toBe(false);
     expect(requiresOpenAiResponsesApi("gpt-60")).toBe(false);
     expect(requiresOpenAiResponsesApi("gpt-5.3-codexical")).toBe(false);
+  });
+});
+
+describe("lacksOpenAiChatCompletions", () => {
+  test("matches the models OpenAI serves only over Responses", () => {
+    expect(lacksOpenAiChatCompletions("gpt-5.5-pro")).toBe(true);
+    expect(lacksOpenAiChatCompletions("o3-pro")).toBe(true);
+    expect(lacksOpenAiChatCompletions("gpt-5.3-codex")).toBe(true);
+    expect(lacksOpenAiChatCompletions("openai/gpt-5.1-codex-max")).toBe(true);
+  });
+
+  test("leaves out gpt-5.6 and gpt-6, which answer chat completions without tools", () => {
+    expect(lacksOpenAiChatCompletions("gpt-5.6-terra")).toBe(false);
+    expect(lacksOpenAiChatCompletions("gpt-6.1-terra")).toBe(false);
+    expect(lacksOpenAiChatCompletions("gpt-6-astra")).toBe(false);
+    expect(lacksOpenAiChatCompletions("gpt-4o")).toBe(false);
   });
 });
 

@@ -23,12 +23,14 @@ crate-type = ["cdylib"]
 # and the archestra battery's agent-run rules (#716); then explicit
 # no-remedy refusal feedback (#720), a failed subagent reported as stopped
 # (#722), and plaintext receipts that hold U+0000 stored under the plaintext
-# escape (#724).
-# Pin #725's atomic remedy claim fix directly until it lands upstream.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "762ddb43f67f1367c06f74ad538a3a450457cba9" }
+# escape (#724); then v0.38.0 and the remedy's vouch spent at its claim
+# (#725), shorter block feedback (#726), the replay stand-in (#739), a
+# subagent's return declared without review or ahead of its spawn (#763), and
+# the required readers named in reviews and block reasons (#764).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b23aeed0af161b0bedc169fcb43a862b167bc032", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b23aeed0af161b0bedc169fcb43a862b167bc032" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b23aeed0af161b0bedc169fcb43a862b167bc032", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b23aeed0af161b0bedc169fcb43a862b167bc032" }
 opentelemetry = { version = "0.33", default-features = false, features = ["metrics"] }
 opentelemetry_sdk = { version = "0.33", default-features = false, features = ["metrics", "experimental_metrics_custom_reader", "spec_unstable_metrics_views"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }

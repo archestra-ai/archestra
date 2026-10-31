@@ -1014,24 +1014,14 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
   - Default: [`ARCHESTRA_INTERNAL_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_INTERNAL_API_BASE_URL)
   - When neither is set, runs fail to start.
 
-- **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS`** - Default maximum lifetime of a run, in hours.
-  - Default: `72`
+- **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS`** - Default maximum duration of a run, in hours. A run's files are kept for the same time.
+  - Default: `24`
 
 - **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES`** - Default time an idle run waits for the next instruction before it stops, in minutes.
-  - Default: `180`
+  - Default: `60`
   - Custom images must implement the wait, using the `ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS` variable passed to the pod.
 
-- **`ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`** - Default CPU request for a run's pod. Runs have no CPU limit.
-  - Default: `500m`
-  - Values: Kubernetes quantity
-
-- **`ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST`** - Default memory request for a run's pod.
-  - Default: `1Gi`
-  - Values: Kubernetes quantity
-
-- **`ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT`** - Default memory limit for a run's pod.
-  - Default: `4Gi`
-  - Values: Kubernetes quantity
+- **Runtime tiers** - A run's pod gets the CPU and memory of its [runtime tier](/docs/agents/runtime/setup#runtime-tiers). The tiers are stored with the organization, not in environment variables. The pod sees its tier in `ARCHESTRA_AGENT_RUNTIME_TIER`, the agent's scaleup tier in `ARCHESTRA_AGENT_RUNTIME_MAX_TIER`, the tiers it may move to with their sizes as JSON in `ARCHESTRA_AGENT_RUNTIME_TIERS`, and its CPU request and memory limit in `ARCHESTRA_AGENT_RUNTIME_POD_CPU_REQUEST` and `ARCHESTRA_AGENT_RUNTIME_POD_MEMORY_LIMIT`. The former `ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`, `ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST` and `ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT` variables are no longer read.
 
 - **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Size of each run's persistent volume, which holds `/home/node` and, for privileged runs, `/var/lib/docker`.
   - Default: `20Gi`

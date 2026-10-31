@@ -100,7 +100,6 @@ export function buildAgentCatalogRuntime(params: {
     backend: "kubernetes" as const,
     steerMode: "tmux_keys" as const,
     privileged: false,
-    resources: null,
     environment: null,
     credentials: [],
     ...(params.id === "claude-code" && {
@@ -124,7 +123,6 @@ export function buildCustomAgentRuntime(params: { image: string }) {
     backend: "kubernetes" as const,
     steerMode: "pipe" as const,
     privileged: false,
-    resources: null,
     environment: null,
     credentials: null,
     ttlHours: null,

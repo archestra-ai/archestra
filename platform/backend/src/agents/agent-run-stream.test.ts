@@ -273,6 +273,7 @@ describe("probeFirstRenderableEvent", () => {
 
 describe("isRetryableEmptyFinishReason", () => {
   test("does not retry on deterministic terminal reasons", () => {
+    expect(isRetryableEmptyFinishReason("length")).toBe(false);
     expect(isRetryableEmptyFinishReason("content-filter")).toBe(false);
     expect(isRetryableEmptyFinishReason("tool-calls")).toBe(false);
   });
@@ -423,20 +424,19 @@ describe("runAgentStream", () => {
     expect(onEmptyResponseExhausted).toHaveBeenCalledTimes(1);
   });
 
-  test("retries a turn with only empty text to the cap, then throws EmptyModelResponseError", async () => {
-    const model = modelFor(
-      emptyTextLengthChunks(),
-      emptyTextLengthChunks(),
-      emptyTextLengthChunks(),
-    );
+  test("stops after an empty length-capped turn and preserves state before throwing", async () => {
+    const model = modelFor(emptyTextLengthChunks());
+    const onEmptyResponseExhausted = vi.fn(async () => {});
 
     const error = await runAgentStream({
       config: { model, prompt: "hello" },
+      recovery: { onEmptyResponseExhausted },
     }).catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(EmptyModelResponseError);
-    expect(error).toMatchObject({ finishReason: "length", attempts: 3 });
-    expect(model.doStreamCalls).toHaveLength(3);
+    expect(error).toMatchObject({ finishReason: "length", attempts: 1 });
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(onEmptyResponseExhausted).toHaveBeenCalledTimes(1);
   });
 
   test("retries an empty response, then commits the renderable retry", async () => {

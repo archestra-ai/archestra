@@ -1,19 +1,37 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EMPTY_MODEL_TIERS,
   ModelTierPickers,
   type ModelTierSelection,
 } from "@/components/model-tier-pickers";
 import type { LlmModel } from "@/lib/llm-models.query";
+import { llmModelsQueryKey } from "@/lib/llm-models-query-keys";
+import { useOrganization } from "@/lib/organization.query";
 
-const API_KEY_ID = "key-1";
+vi.mock("next/image", () => ({
+  default: ({ alt, src }: { alt: string; src: string }) => (
+    <img alt={alt} src={src} />
+  ),
+}));
+
+vi.mock("@/lib/organization.query");
+
+HTMLElement.prototype.scrollIntoView = vi.fn();
+
+beforeEach(() => {
+  vi.mocked(useOrganization).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useOrganization>);
+});
 
 function model(
   id: string,
   displayName: string,
-  provider: LlmModel["provider"] = "anthropic",
+  provider: LlmModel["provider"],
+  supportsToolCalling: boolean | null = true,
 ): LlmModel {
   return {
     id,
@@ -21,63 +39,75 @@ function model(
     displayName,
     provider,
     isFree: false,
+    capabilities: {
+      contextLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling,
+      supportsReasoningEffort: null,
+      recommendedForAgents: null,
+      pricePerMillionInput: null,
+      pricePerMillionOutput: null,
+      isCustomPrice: false,
+      priceSource: "default",
+      pricePerMillionCacheRead: null,
+      pricePerMillionCacheWrite: null,
+      cachePriceSource: "default",
+      mediaPricing: null,
+    },
   };
 }
 
-const KEY_MODELS = [
-  model("claude-haiku-5-5", "Claude Haiku 5.5"),
-  model("claude-sonnet-5-5", "Claude Sonnet 5.5"),
-  model("claude-opus-5-5", "Claude Opus 5.5"),
-  // Org-wide per-user provider models ride along with every key's catalog.
-  model("gpt-6-luna", "GPT-6 Luna", "github-copilot"),
+const CATALOG = [
+  model("claude-haiku-5-5", "Claude Haiku 5.5", "anthropic"),
+  model("gpt-6-mini", "GPT-6 Mini", "openai"),
+  model("gemini-4-pro", "Gemini 4 Pro", "gemini"),
+  model("text-only", "Text Only", "openai", false),
 ];
 
-function renderPickers(inherited?: ModelTierSelection) {
+function renderPickers(value: ModelTierSelection = EMPTY_MODEL_TIERS) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
-  queryClient.setQueryData(["llm-models", API_KEY_ID], KEY_MODELS);
+  queryClient.setQueryData(llmModelsQueryKey(null), CATALOG);
+  const onChange = vi.fn();
   render(
     <QueryClientProvider client={queryClient}>
-      <ModelTierPickers
-        apiKeyId={API_KEY_ID}
-        provider="anthropic"
-        value={EMPTY_MODEL_TIERS}
-        onChange={() => {}}
-        inherited={inherited}
-      />
+      <ModelTierPickers value={value} onChange={onChange} />
     </QueryClientProvider>,
   );
+  return onChange;
 }
 
-describe("ModelTierPickers unset label", () => {
-  it("names the inherited organization tier when the key serves it", () => {
-    renderPickers({ fast: "db-claude-sonnet-5-5", smart: null });
+describe("ModelTierPickers", () => {
+  it("offers tool-capable models of every provider for a tier", async () => {
+    const user = userEvent.setup();
+    const onChange = renderPickers();
 
+    const [fastPicker] = screen.getAllByRole("combobox");
+    await user.click(fastPicker);
+    screen.getByRole("option", { name: /Claude Haiku 5.5/ });
+    screen.getByRole("option", { name: /Gemini 4 Pro/ });
     expect(
-      screen.getAllByText("Organization default (Claude Sonnet 5.5)").length,
-    ).toBeGreaterThan(0);
-    expect(screen.queryAllByText("Default (Claude Haiku 5.5)")).toHaveLength(0);
-    expect(
-      screen.getAllByText("Default (Claude Opus 5.5)").length,
-    ).toBeGreaterThan(0);
+      screen.queryByRole("option", { name: /Text Only/ }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("option", { name: /GPT-6 Mini/ }));
+    expect(onChange).toHaveBeenCalledWith({
+      fast: "db-gpt-6-mini",
+      smart: null,
+    });
   });
 
-  it("falls back to the provider default when the key lacks the inherited tier", () => {
-    renderPickers({ fast: "db-not-on-this-key", smart: null });
+  it("keeps a saved model without tool calling selectable to clear it", async () => {
+    const user = userEvent.setup();
+    renderPickers({ fast: null, smart: "db-text-only" });
 
-    expect(
-      screen.getAllByText("Default (Claude Haiku 5.5)").length,
-    ).toBeGreaterThan(0);
-    expect(screen.queryAllByText(/^Organization default/)).toHaveLength(0);
-  });
-
-  it("never inherits a model of another provider the catalog carries", () => {
-    renderPickers({ fast: "db-gpt-6-luna", smart: null });
-
-    expect(screen.queryAllByText(/GPT-6 Luna/)).toHaveLength(0);
-    expect(
-      screen.getAllByText("Default (Claude Haiku 5.5)").length,
-    ).toBeGreaterThan(0);
+    const [, smartPicker] = screen.getAllByRole("combobox");
+    await user.click(smartPicker);
+    expect(screen.getByRole("option", { name: /Text Only/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 });

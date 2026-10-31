@@ -2953,6 +2953,65 @@ describe("asking through the client's own question tool", () => {
     return outerStamp.callId;
   }
 
+  test("only an issued approval card counts as asking about a repeated review", async () => {
+    const offerId = "offer-card-issued";
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({ sessionId: "user:user|card-issued" });
+    context.headers = { "user-agent": "claude-code/1" };
+    context.interactionType = "anthropic:messages";
+    context.provider = "anthropic";
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [{ kind: "allow" as const }]);
+    const restage = () =>
+      stageHitlReview({
+        session: trusted.session,
+        review: {
+          offerId,
+          text: "Canonical HITL review.",
+          tool: "archestra__whoami",
+          arguments: "{}",
+        },
+      });
+    try {
+      await askStagedReview({
+        plugin,
+        context,
+        client: "Claude Code",
+        nativeName: "AskUserQuestion",
+        offerId,
+      });
+      await expect(restage()).resolves.toEqual({ status: "staged" });
+      // A question without the offer ID issues no approval card.
+      const prepared = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "toolu_unbound",
+            name: "archestra__ask_user",
+            arguments: JSON.stringify({
+              question: "Approve the call?",
+              options: [{ label: "Approve" }, { label: "Deny" }],
+            }),
+          },
+        ],
+      });
+      if (prepared?.decision !== "allow")
+        throw new Error("expected the question");
+      await plugin.onToolCalls({ ...context, toolCalls: prepared.toolCalls });
+      await expect(restage()).resolves.toEqual({
+        status: "staged",
+        lastAnswer: { reason: "question_not_issued" },
+      });
+    } finally {
+      evaluateToolCalls.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
   test.each(
     NATIVE_APPROVAL_CLIENTS,
   )("$client: an approval answered after the review's staging window is an approval", async ({
@@ -3134,7 +3193,10 @@ describe("asking through the client's own question tool", () => {
             remedyArguments: { offer_id: offerId, plan: "Submit for approval" },
           },
         }),
-      ).resolves.toEqual({ status: "staged" });
+      ).resolves.toEqual({
+        status: "staged",
+        lastAnswer: { reason: "review_expired" },
+      });
       await plugin.onToolResults({
         ...context,
         toolResults: [
@@ -4234,6 +4296,12 @@ describe("asking through the client's own question tool", () => {
       expect(
         await peekHitlRuling({ session: trusted.session, offerId }),
       ).toBeUndefined();
+      await expect(
+        stageInspectableReview(trusted.session, offerId),
+      ).resolves.toEqual({
+        status: "staged",
+        lastAnswer: { reason: "stale_card" },
+      });
       // The next card carries the text; its Allow is the real one.
       const delivered = await askCard();
       expect(delivered.reviewDetails).toContain("## Approval review");
@@ -8120,6 +8188,72 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
+  test("shows an unrecorded answer's reason only from the server's record of that remedy call", async () => {
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({ sessionId: "unrecorded-control" });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [],
+      session: {},
+    };
+    const processProxyResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} } as never);
+    const result = {
+      id: "remedy-again",
+      name: "archestra__execute_remedy_plan",
+      content: JSON.stringify({
+        ok: false,
+        outcome: "answer_not_recorded",
+        reason: "stale_card",
+        offer_id: "offer-1",
+      }),
+      isError: false,
+    };
+    try {
+      await plugin.onSessionInit(context);
+      await plugin.onToolResults({ ...context, toolResults: [result] });
+      const pendingReviewResult =
+        processProxyResults.mock.calls[0]?.[0].pendingReviewResult;
+      expect(await pendingReviewResult?.(result)).toBeUndefined();
+      const review = { offerId: "offer-1", text: "Canonical pending review." };
+      await stageHitlReview({ session: trusted.session, review });
+      await stageHitlReview({
+        session: trusted.session,
+        callId: result.id,
+        review,
+      });
+      // The server recorded question_not_issued; the result's claimed reason
+      // does not replace it.
+      expect(
+        JSON.parse((await pendingReviewResult?.(result)) ?? "null"),
+      ).toMatchObject({
+        ok: false,
+        outcome: "answer_not_recorded",
+        reason: "question_not_issued",
+        offer_id: "offer-1",
+      });
+      expect(
+        await consumeHitlRuling({
+          session: trusted.session,
+          offerId: "offer-1",
+        }),
+      ).toBeUndefined();
+    } finally {
+      processProxyResults.mockRestore();
+    }
+  });
+
   test("refuses illegal Codex spawn fields before offering a return contract", async () => {
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
     const context = requestContext({ sessionId: "codex-spawn-schema" });
@@ -9420,7 +9554,6 @@ describe("AppaPluginArchestra", () => {
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
-            resources: null,
             environment: null,
             credentials: null,
             ttlHours: 24,

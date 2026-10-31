@@ -342,6 +342,22 @@ function Invoke-ArchVersionRefresh {
   }
 }
 
+${
+  ctx.mcp && client.windows.toolPrefixSync
+    ? `# Client config keyed by full tool names follows the tool prefix the instance
+# reports now: white-labeling can change it after connect. Never blocks a launch.
+function Sync-ArchToolPrefix {
+  if ($Script:HealthState -eq 'down') { return }
+  if ($DisconnectedKinds -contains 'mcp') { return }
+  # A gateway the instance reports down is gone: its rules are left for the disconnect prompt.
+  if ($Script:HealthBody -clike '*"mcp":"down"*') { return }
+  if ($Script:HealthBody -cnotmatch '"mcpToolPrefix":"([^"]*)"') { return }
+  $archToolPrefix = $Matches[1]
+${client.windows.toolPrefixSync}
+}`
+    : "function Sync-ArchToolPrefix { }"
+}
+
 function Start-ArchRefreshedGuard {
   $Script:GuardHandedOff = $false
   if (-not (Test-ArchVersionStale)) { return }
@@ -372,6 +388,7 @@ if (-not $Interactive -and -not $ArchDisconnectAll) {
   }
   Start-ArchRefreshedGuard
   if ($Script:GuardHandedOff) { return }
+  Sync-ArchToolPrefix
   Write-ArchUnreachableWarning
   foreach ($r in $ActiveRemotes) {
     if (Test-ArchResourceDown $r) {
@@ -972,6 +989,7 @@ if ($Script:SkipAll) {
 if (-not $ArchDisconnectAll) {
   Start-ArchRefreshedGuard
   if ($Script:GuardHandedOff) { return }
+  Sync-ArchToolPrefix
 }
 $DownRemotes = @()
 foreach ($r in $ActiveRemotes) {

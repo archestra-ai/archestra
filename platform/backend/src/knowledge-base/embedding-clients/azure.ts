@@ -1,4 +1,4 @@
-import { isNomicModel } from "@archestra/shared";
+import { acceptsEmbeddingDimensionsParameter } from "@archestra/shared";
 import OpenAI from "openai";
 import {
   getAzureOpenAiBearerTokenProvider,
@@ -69,7 +69,7 @@ export async function callAzureEmbedding(params: {
     const response = await client.embeddings.create({
       model,
       input: texts,
-      ...(dimensions !== undefined && !isNomicModel(model)
+      ...(dimensions !== undefined && acceptsEmbeddingDimensionsParameter(model)
         ? { dimensions }
         : {}),
     });

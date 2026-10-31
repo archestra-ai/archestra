@@ -33,6 +33,9 @@ export const registerStandaloneMetricsEndpoint = async (params: {
 }): Promise<void> => {
   const { fastify, enableDefaultMetrics } = params;
   addMetricsAuthenticationHook(fastify);
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   fastify.addHook("onSend", async (request, reply, payload) => {
     if (
       request.url.split("?", 1)[0] !== observability.metrics.endpoint ||
@@ -47,6 +50,8 @@ export const registerStandaloneMetricsEndpoint = async (params: {
     const hasEndMarker = /# EOF\s*$/.test(payload);
     return `${payload.replace(/# EOF\s*$/, "").trimEnd()}\n${engine.trimEnd()}\n${hasEndMarker ? "# EOF\n" : ""}`;
   });
+
+  // SPDX-SnippetEnd
 
   await fastify.register(metricsPlugin, {
     endpoint: observability.metrics.endpoint,

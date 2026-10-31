@@ -48,7 +48,6 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
 import {
   availableSubagentTiers,
-  type ModelTrioTiers,
   resolveForkParentSelection,
 } from "@/utils/llm-resolution";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
@@ -936,7 +935,7 @@ async function forkTiers(params: {
   caller: {
     llmApiKeyId: string | null;
     modelId: string | null;
-  } & ModelTrioTiers;
+  };
   organizationId: string;
   userId?: string;
   parentLlm?: ModelSelection;
@@ -949,7 +948,7 @@ async function forkTiers(params: {
     userId,
     parentLlm,
   });
-  return availableSubagentTiers({ parent, agentTrio: caller, organizationId });
+  return availableSubagentTiers({ parent, organizationId, userId });
 }
 
 /** A fork may not fork again, so it is not offered the fork tool. */

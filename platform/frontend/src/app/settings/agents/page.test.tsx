@@ -1,7 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,11 +24,16 @@ let mockRuntimeBackend: {
     memoryLimit: string;
   };
 } | null = null;
+let mockRuntimeEnabled: boolean | undefined;
 const mockAgentSelector = vi.fn(
   ({ value, placeholder }: { value: string; placeholder?: string }) => (
     <div>{value || placeholder}</div>
   ),
 );
+
+vi.mock("@/components/settings/runtime-template-section", () => ({
+  RuntimeTemplateSection: () => <div>Runtime templates</div>,
+}));
 
 vi.mock("next/link", () => ({
   default: ({
@@ -70,16 +75,19 @@ vi.mock("@/components/settings/settings-block", () => ({
     title,
     description,
     control,
+    notice,
     children,
   }: {
     title: React.ReactNode;
     description?: React.ReactNode;
     control: React.ReactNode;
+    notice?: React.ReactNode;
     children?: React.ReactNode;
   }) => (
     <section>
       <h2>{title}</h2>
       {description ? <p>{description}</p> : null}
+      {notice ? <div>{notice}</div> : null}
       <div>{control}</div>
       {children}
     </section>
@@ -87,8 +95,23 @@ vi.mock("@/components/settings/settings-block", () => ({
   SettingsSectionStack: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  SettingsSaveBar: ({ hasChanges }: { hasChanges: boolean }) =>
-    hasChanges ? <div>Unsaved changes</div> : null,
+  SettingsSaveBar: ({
+    hasChanges,
+    disabledSave,
+    onSave,
+  }: {
+    hasChanges: boolean;
+    disabledSave?: boolean;
+    onSave: () => void;
+  }) =>
+    hasChanges ? (
+      <div>
+        Unsaved changes
+        <button type="button" disabled={disabledSave} onClick={onSave}>
+          Save
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("@/components/agent-selector", () => ({
@@ -120,7 +143,11 @@ vi.mock("@/components/ui/select", () => ({
 
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: (feature: string) =>
-    feature === "agentRuntimeBackend" ? mockRuntimeBackend : undefined,
+    feature === "agentRuntimeBackend"
+      ? mockRuntimeBackend
+      : feature === "agentRuntime"
+        ? mockRuntimeEnabled
+        : undefined,
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
@@ -144,18 +171,21 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 }));
 
 const mutateAsync = vi.fn();
+const saveTiers = vi.fn();
 
 vi.mock("@/lib/organization.query");
 
 import {
+  useAgentRuntimeTiers,
   useAppearanceSettings,
   useIsGlobalAdmin,
   useOrganization,
+  useSaveAgentRuntimeTiers,
   useUpdateAgentSettings,
   useUpdateIntegrationSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
-
+import { agentRuntimeTiersSeed } from "@/mocks/data/organization";
 import AgentSettingsPage from "./page";
 
 function renderPage() {
@@ -193,6 +223,7 @@ beforeEach(() => {
     },
   ];
   mockRuntimeBackend = null;
+  mockRuntimeEnabled = undefined;
 
   vi.mocked(useIsGlobalAdmin).mockReturnValue({
     isGlobalAdmin: true,
@@ -208,6 +239,14 @@ beforeEach(() => {
     mutateAsync,
     isPending: false,
   } as unknown as ReturnType<typeof useUpdateAgentSettings>);
+  vi.mocked(useAgentRuntimeTiers).mockReturnValue({
+    data: agentRuntimeTiersSeed,
+    isPending: false,
+  } as unknown as ReturnType<typeof useAgentRuntimeTiers>);
+  vi.mocked(useSaveAgentRuntimeTiers).mockReturnValue({
+    mutateAsync: saveTiers,
+    isPending: false,
+  } as unknown as ReturnType<typeof useSaveAgentRuntimeTiers>);
   vi.mocked(useUpdateSecuritySettings).mockReturnValue({
     mutateAsync,
     isPending: false,
@@ -295,17 +334,6 @@ describe("AgentSettingsPage", () => {
     expect(screen.queryByText("Smart model")).not.toBeInTheDocument();
   });
 
-  it("keeps a saved fast model that is no longer on the key visible", () => {
-    mockOrganization = { ...mockOrganization, defaultFastModelId: "gone" };
-    vi.mocked(useOrganization).mockReturnValue({
-      data: mockOrganization,
-    } as unknown as ReturnType<typeof useOrganization>);
-
-    renderPage();
-
-    expect(screen.getByText("Unavailable model")).toBeInTheDocument();
-  });
-
   it("hides the free-model filter for non-OpenRouter API keys", () => {
     renderPage();
 
@@ -325,5 +353,249 @@ describe("AgentSettingsPage", () => {
     renderPage();
 
     expect(screen.getByText("Free models only")).toBeInTheDocument();
+  });
+});
+
+describe("Runtime tiers", () => {
+  const enableRuntime = () => {
+    mockRuntimeEnabled = true;
+    mockRuntimeBackend = {
+      name: "kubernetes",
+      available: true,
+      defaultTtlHours: 24,
+      defaultIdleTimeoutMinutes: 60,
+      allowPrivileged: false,
+      resources: { cpuRequest: "2", memoryRequest: "4Gi", memoryLimit: "8Gi" },
+    };
+  };
+  const block = () =>
+    screen
+      .getByRole("heading", { name: "Runtime tiers" })
+      .closest("section") as HTMLElement;
+  const rowOf = (name: string) =>
+    within(block())
+      .getByRole("button", { name: `Edit ${name}` })
+      .closest("tr") as HTMLElement;
+  const seedInput = {
+    S: { name: "S", cpuRequest: 2, cpuLimit: null, pooled: true },
+    M: { name: "M", cpuRequest: 4, cpuLimit: null, pooled: true },
+    L: { name: "L", cpuRequest: 8, cpuLimit: null, pooled: false },
+  };
+
+  it("lists the tiers smallest first with their memory, pools and default; the header links the docs and explains pools, with no search or hint text", async () => {
+    enableRuntime();
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(block()).toHaveTextContent(
+      "Runtime tiers control compute and other resources allocation to agent runtimes.",
+    );
+    expect(
+      within(block()).getByRole("link", { name: /Learn more/ }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/docs\/agents\/runtime\/setup#runtime-tiers$/),
+    );
+    expect(within(block()).queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(
+      within(block()).queryByPlaceholderText("Search tiers"),
+    ).not.toBeInTheDocument();
+    const names = within(block())
+      .getAllByRole("button", { name: /^Edit / })
+      .map((button) => button.getAttribute("aria-label")?.slice(5));
+    expect(names).toEqual(["S", "M", "L"]);
+    expect(rowOf("M")).toHaveTextContent("Default");
+    expect(rowOf("S")).not.toHaveTextContent("Default");
+    expect(rowOf("L")).toHaveTextContent("No limit");
+    expect(rowOf("L")).toHaveTextContent("16 GiB32 GiB limit");
+    expect(rowOf("S")).toHaveTextContent("Pooled");
+    expect(rowOf("L")).not.toHaveTextContent("Pooled");
+    expect(block()).not.toHaveTextContent("CPU request up to 8");
+    expect(block()).not.toHaveTextContent("Ready spares");
+    expect(
+      within(block()).getByRole("button", { name: "Create tier" }),
+    ).toBeVisible();
+    // The Pools header explains itself; nobody opens a dialog to read it.
+    await user.hover(
+      within(block()).getByRole("button", { name: "About pooled tiers" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "About pooled tiers" }),
+    ).toHaveTextContent(
+      "Agent runs start much quicker from pool of runtime instances. Managed automatically. Pooled instances reserve part of cluster's capacity. Learn more",
+    );
+  });
+
+  it("edits a tier in a dialog: a problem sits under its field, memory follows the CPU, and the whole list is saved", async () => {
+    enableRuntime();
+    saveTiers.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "Edit L" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit tier" });
+    const cpu = within(dialog).getByLabelText("CPU request");
+    expect(cpu).toHaveValue(8);
+
+    await user.clear(cpu);
+    await user.type(cpu, "9");
+    await user.tab();
+    expect(
+      within(dialog).getByText("Enter a number from 0.1 to 8"),
+    ).toBeVisible();
+    expect(cpu).toHaveAttribute("aria-invalid", "true");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
+    expect(saveTiers).not.toHaveBeenCalled();
+
+    await user.clear(cpu);
+    await user.type(cpu, "6");
+    expect(within(dialog).getByTestId("tier-memory")).toHaveTextContent(
+      "Memory: 12 GiB, 24 GiB limit",
+    );
+    const limit = within(dialog).getByLabelText("CPU limit");
+    await user.type(limit, "2");
+    await user.tab();
+    expect(
+      within(dialog).getByText("The CPU limit is below the CPU request"),
+    ).toBeVisible();
+    await user.clear(limit);
+    await user.type(limit, "7");
+    expect(within(dialog).getByTestId("tier-memory")).toHaveTextContent(
+      "Memory: 12 GiB, 14 GiB limit",
+    );
+    await user.click(within(dialog).getByRole("switch", { name: "Pooled" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
+
+    expect(saveTiers).toHaveBeenCalledWith({
+      tiers: [
+        seedInput.S,
+        seedInput.M,
+        { name: "L", cpuRequest: 6, cpuLimit: 7, pooled: true },
+      ],
+      defaultTier: "M",
+    });
+  });
+
+  it("renames the default tier and keeps it the default; a taken name is refused in the form", async () => {
+    enableRuntime();
+    saveTiers.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "Edit M" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit tier" });
+    const isDefault = within(dialog).getByRole("checkbox", {
+      name: "Default tier",
+    });
+    expect(isDefault).toBeChecked();
+    expect(isDefault).toBeDisabled();
+    const name = within(dialog).getByLabelText("Name");
+    await user.clear(name);
+    await user.type(name, "l");
+    await user.tab();
+    expect(within(dialog).getByText("Another tier is named l")).toBeVisible();
+    await user.clear(name);
+    await user.type(name, "Medium");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
+
+    expect(saveTiers).toHaveBeenCalledWith({
+      tiers: [
+        seedInput.S,
+        { ...seedInput.M, name: "Medium", previousName: "M" },
+        seedInput.L,
+      ],
+      defaultTier: "Medium",
+    });
+  });
+
+  it("creates a tier from the toolbar, as the default when asked", async () => {
+    enableRuntime();
+    saveTiers.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      within(block()).getByRole("button", { name: "Create tier" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Create tier" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create tier" }),
+    );
+    expect(within(dialog).getByText("Enter a name")).toBeVisible();
+    expect(saveTiers).not.toHaveBeenCalled();
+    await user.type(within(dialog).getByLabelText("Name"), "XL");
+    await user.type(within(dialog).getByLabelText("CPU request"), "8");
+    await user.click(
+      within(dialog).getByRole("checkbox", { name: "Default tier" }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create tier" }),
+    );
+
+    expect(saveTiers).toHaveBeenCalledWith({
+      tiers: [
+        seedInput.S,
+        seedInput.M,
+        seedInput.L,
+        { name: "XL", cpuRequest: 8, cpuLimit: null, pooled: true },
+      ],
+      defaultTier: "XL",
+    });
+  });
+
+  it("deletes a tier after a confirmation, never the default, and shows a refusal in the dialog", async () => {
+    enableRuntime();
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(screen.getByRole("button", { name: "Delete M" })).toBeDisabled();
+    saveTiers.mockRejectedValueOnce(
+      new Error(
+        "Tier L is the default or scaleup tier of 1 agent; move them to another tier first",
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Delete L" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete tier L?" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Delete tier" }),
+    );
+    expect(saveTiers).toHaveBeenCalledWith({
+      tiers: [seedInput.S, seedInput.M],
+      defaultTier: "M",
+    });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "Tier L is the default or scaleup tier of 1 agent",
+    );
+
+    saveTiers.mockResolvedValueOnce({});
+    await user.click(
+      within(dialog).getByRole("button", { name: "Delete tier" }),
+    );
+    expect(saveTiers).toHaveBeenCalledTimes(2);
+  });
+
+  it("locks the table for anyone but an administrator", () => {
+    enableRuntime();
+    vi.mocked(useIsGlobalAdmin).mockReturnValue({
+      isGlobalAdmin: false,
+      isLoading: false,
+    });
+    renderPage();
+
+    expect(
+      within(block()).queryByRole("button", { name: "Create tier" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(block()).queryByRole("button", { name: "Edit L" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Only administrators can change the tiers."),
+    ).toBeVisible();
   });
 });

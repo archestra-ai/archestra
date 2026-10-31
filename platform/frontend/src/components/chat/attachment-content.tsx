@@ -75,16 +75,19 @@ export function AttachmentVideo({
 export function AttachmentAudio({
   url,
   conversationId,
+  label = "Generated audio",
 }: {
   url: string;
   conversationId: string | null | undefined;
+  /** The player's accessible name: what the audio is. */
+  label?: string;
 }) {
   const resolved = useAttachmentContentUrl(url, conversationId);
   if (resolved.failed) return <AttachmentUnavailable />;
   if (!resolved.url)
     return <div className="h-12 w-64 animate-pulse rounded-lg bg-muted" />;
   return (
-    <audio src={resolved.url} controls aria-label="Generated audio">
+    <audio src={resolved.url} controls aria-label={label}>
       <track kind="captions" />
     </audio>
   );

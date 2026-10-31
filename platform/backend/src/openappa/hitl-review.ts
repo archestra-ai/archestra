@@ -37,7 +37,59 @@ export type HitlReviewOutcome =
   | "review_unanswered"
   | "review_cancelled"
   | "review_unavailable"
-  | "review_invalid";
+  | "review_invalid"
+  | "answer_not_recorded";
+
+/** Outcomes after which no further question about the review is opened. */
+export type ClosedHitlReviewOutcome = Exclude<
+  HitlReviewOutcome,
+  "review_required" | "answer_not_recorded"
+>;
+
+/** Why the answer to the last approval question ruled nothing. */
+export type HitlAnswerNotRecordedReason =
+  | "question_not_issued"
+  | "stale_card"
+  | "review_expired"
+  | "record_failed";
+
+const HITL_ANSWER_NOT_RECORDED_CAUSES = {
+  question_not_issued:
+    "No approval card was issued for this offer since the last review result: a question tool called directly, or ask_user without this offer ID in remedy_offer_ids, records nothing.",
+  stale_card:
+    "The answer came from an approval card that no longer matched the review.",
+  review_expired: "The answer arrived after the review expired.",
+  record_failed:
+    "The review changed or closed before the answer could be recorded.",
+} as const satisfies Record<HitlAnswerNotRecordedReason, string>;
+
+/** A call's recorded review result; only a dropped answer carries a reason. */
+type HitlReviewResult =
+  | { outcome: Exclude<HitlReviewOutcome, "answer_not_recorded"> }
+  | { outcome: "answer_not_recorded"; reason: HitlAnswerNotRecordedReason };
+
+function isHitlAnswerNotRecordedReason(
+  value: unknown,
+): value is HitlAnswerNotRecordedReason {
+  return (
+    typeof value === "string" &&
+    Object.hasOwn(HITL_ANSWER_NOT_RECORDED_CAUSES, value)
+  );
+}
+
+/** The execute_remedy_plan result for a review whose last answer ruled nothing. */
+export function hitlAnswerNotRecordedResult(
+  offerId: string,
+  reason: HitlAnswerNotRecordedReason,
+) {
+  return {
+    ok: false as const,
+    outcome: "answer_not_recorded" as const,
+    reason,
+    offer_id: offerId,
+    instruction: `${HITL_ANSWER_NOT_RECORDED_CAUSES[reason]} No approval or denial was recorded and the call stays blocked. Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. Call execute_remedy_plan again only after the user approves.`,
+  };
+}
 
 const HITL_REVIEW_OUTCOMES = [
   "review_required",
@@ -46,6 +98,7 @@ const HITL_REVIEW_OUTCOMES = [
   "review_cancelled",
   "review_unavailable",
   "review_invalid",
+  "answer_not_recorded",
 ] as const satisfies readonly HitlReviewOutcome[];
 
 const HITL_CLOSURE_REASONS = [
@@ -74,7 +127,7 @@ function isHitlClosureReason(value: unknown): value is HitlClosureReason {
 /** A stored none without a closure is an old in-flight record, not a denial. */
 export function reviewOutcomeFromClosure(
   closure: HitlClosureReason | undefined,
-): Exclude<HitlReviewOutcome, "review_required"> {
+): ClosedHitlReviewOutcome {
   switch (closure) {
     case "declined":
       return "review_declined";
@@ -90,7 +143,7 @@ export function reviewOutcomeFromClosure(
 }
 
 export function closureFromReviewOutcome(
-  outcome: Exclude<HitlReviewOutcome, "review_required" | "review_invalid">,
+  outcome: Exclude<ClosedHitlReviewOutcome, "review_invalid">,
 ): HitlClosureReason {
   switch (outcome) {
     case "review_declined":
@@ -192,7 +245,7 @@ export async function stageHitlReview(params: {
   callId?: string;
   prepareSummary?: boolean;
 }): Promise<
-  | { status: "staged" }
+  | { status: "staged"; lastAnswer?: { reason: HitlAnswerNotRecordedReason } }
   | { status: "approve" | "deny" }
   | {
       status: "none";
@@ -280,7 +333,15 @@ export async function stageHitlReview(params: {
             HITL_REVIEW_TTL_MS,
           );
         }
-        return { status: "staged" as const };
+        return {
+          status: "staged" as const,
+          ...(await takeUnrecordedAnswer({
+            cache,
+            session: params.session,
+            offerId: params.review.offerId,
+            restaged: true,
+          })),
+        };
       }
       // A changed call re-staged under the same offer replaces the stage, so
       // its inspection digest binds answers to the payload now offered.
@@ -294,7 +355,15 @@ export async function stageHitlReview(params: {
         review,
         HITL_REVIEW_TTL_MS,
       );
-      return { status: "staged" as const };
+      return {
+        status: "staged" as const,
+        ...(await takeUnrecordedAnswer({
+          cache,
+          session: params.session,
+          offerId: params.review.offerId,
+          restaged: false,
+        })),
+      };
     },
   );
   if (staged.status === "staged" && params.callId) {
@@ -302,26 +371,33 @@ export async function stageHitlReview(params: {
       session: params.session,
       callId: params.callId,
       offerId: params.review.offerId,
-      outcome: "review_required",
+      ...(staged.lastAnswer
+        ? {
+            outcome: "answer_not_recorded" as const,
+            reason: staged.lastAnswer.reason,
+          }
+        : { outcome: "review_required" as const }),
     });
   }
   return staged;
 }
 
 /** A history fact only: it neither stages a live review nor grants a ruling. */
-export async function recordHitlReviewResult(params: {
-  session: OpenAppaSession;
-  callId: string;
-  offerId: string;
-  outcome: HitlReviewOutcome;
-}): Promise<void> {
+export async function recordHitlReviewResult(
+  params: {
+    session: OpenAppaSession;
+    callId: string;
+    offerId: string;
+  } & HitlReviewResult,
+): Promise<void> {
+  const { session, ...record } = params;
   await cacheManager.set(
     scopedKey(
       CacheKey.OpenAppaHitlReviewHistory,
-      params.session,
+      session,
       JSON.stringify([params.callId, params.offerId]),
     ),
-    { callId: params.callId, offerId: params.offerId, outcome: params.outcome },
+    record,
     HITL_HISTORY_TTL_MS,
   );
 }
@@ -330,11 +406,12 @@ export async function getHitlReviewResult(params: {
   session: OpenAppaSession;
   callId: string;
   offerId: string;
-}): Promise<HitlReviewOutcome | undefined> {
+}): Promise<HitlReviewResult | undefined> {
   const record = await cacheManager.get<{
     callId: string;
     offerId: string;
     outcome?: HitlReviewOutcome;
+    reason?: unknown;
   }>(
     scopedKey(
       CacheKey.OpenAppaHitlReviewHistory,
@@ -346,7 +423,11 @@ export async function getHitlReviewResult(params: {
   if (record?.callId !== params.callId || record.offerId !== params.offerId)
     return undefined;
   // Previously issued review-required facts did not carry an outcome.
-  return record.outcome ?? "review_required";
+  const outcome = record.outcome ?? "review_required";
+  if (outcome !== "answer_not_recorded") return { outcome };
+  return isHitlAnswerNotRecordedReason(record.reason)
+    ? { outcome, reason: record.reason }
+    : undefined;
 }
 
 export async function getHitlReview(params: {
@@ -789,6 +870,7 @@ export async function recordHitlRuling(params: {
  * review outlives the question by a full review window, so an answer the
  * question still accepts always finds the review it is read against. A review
  * that is not staged, or already ruled or closed, is left as it is.
+ * The question supersedes an earlier answer that ruled nothing.
  */
 export async function renewHitlReview(params: {
   session: OpenAppaSession;
@@ -823,6 +905,12 @@ export async function renewHitlReview(params: {
       await cache.set(
         reviewKey(params.session, params.offerId),
         pending,
+        lifetime,
+      );
+      await cache.delete(notRecordedKey(params.session, params.offerId));
+      await cache.set(
+        cardIssuedKey(params.session, params.offerId),
+        { offerId: params.offerId },
         lifetime,
       );
       return true;
@@ -944,6 +1032,8 @@ export async function clearHitlReview(params: {
         reviewKey(params.session, params.offerId),
         stagePresenceKey(params.session, params.offerId),
         inspectionKey(params.session, params.offerId),
+        notRecordedKey(params.session, params.offerId),
+        cardIssuedKey(params.session, params.offerId),
         ...HITL_RULINGS.map((ruling) =>
           rulingKey(params.session, params.offerId, ruling),
         ),
@@ -1350,6 +1440,75 @@ async function readLockedRulings(
     approve: await read("approve"),
     none: await read("none"),
   };
+}
+
+/**
+ * Notes that an answer to this offer's question ruled nothing. Never a ruling:
+ * it only explains the next review_required, and losing it reverts to that.
+ */
+export async function recordHitlAnswerNotRecorded(params: {
+  session: OpenAppaSession;
+  offerId: string;
+  reason: HitlAnswerNotRecordedReason;
+}): Promise<void> {
+  await cacheManager.withLock(
+    stagePresenceKey(params.session, params.offerId),
+    (cache) =>
+      cache.set(
+        notRecordedKey(params.session, params.offerId),
+        { offerId: params.offerId, reason: params.reason },
+        HITL_REVIEW_TTL_MS,
+      ),
+  );
+}
+
+/** Takes why the answer since the previous stage ruled nothing, if it did. */
+async function takeUnrecordedAnswer(params: {
+  cache: LockedCache;
+  session: OpenAppaSession;
+  offerId: string;
+  restaged: boolean;
+}): Promise<{ lastAnswer?: { reason: HitlAnswerNotRecordedReason } }> {
+  const { cache, session, offerId } = params;
+  const entries = new Map(
+    (
+      await cache.getAndDeleteMany<{
+        offerId?: unknown;
+        reason?: unknown;
+      }>([notRecordedKey(session, offerId), cardIssuedKey(session, offerId)])
+    ).map((entry) => [entry.key, entry.value]),
+  );
+  const fact = entries.get(notRecordedKey(session, offerId));
+  if (fact?.offerId === offerId && isHitlAnswerNotRecordedReason(fact.reason))
+    return { lastAnswer: { reason: fact.reason } };
+  if (
+    params.restaged &&
+    entries.get(cardIssuedKey(session, offerId))?.offerId !== offerId
+  )
+    return { lastAnswer: { reason: "question_not_issued" } };
+  return {};
+}
+
+function notRecordedKey(
+  session: OpenAppaSession,
+  offerId: string,
+): AllowedCacheKey {
+  return scopedKey(
+    CacheKey.OpenAppaHitlRuling,
+    session,
+    `${offerId}:not-recorded`,
+  );
+}
+
+function cardIssuedKey(
+  session: OpenAppaSession,
+  offerId: string,
+): AllowedCacheKey {
+  return scopedKey(
+    CacheKey.OpenAppaHitlRuling,
+    session,
+    `${offerId}:card-issued`,
+  );
 }
 
 function stagePresenceKey(

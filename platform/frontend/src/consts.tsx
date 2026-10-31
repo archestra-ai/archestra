@@ -3,6 +3,8 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 
 export const DEFAULT_TABLE_LIMIT = 10;
 export const DEFAULT_SORT_BY = "createdAt" as const;
+// Agents and MCP gateways surface actual recent activity by default.
+export const DEFAULT_AGENT_SORT_BY = "lastUsedAt" as const;
 export const DEFAULT_SORT_DIRECTION = "desc" as const;
 export const DEFAULT_FILTER_ALL = "all" as const;
 

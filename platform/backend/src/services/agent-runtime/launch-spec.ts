@@ -40,7 +40,11 @@ import type {
   EffectiveNetworkPolicy,
   ResolvedAgentRuntime,
 } from "@/types";
-import { AgentRuntimeCredentialsRequiredError, ApiError } from "@/types";
+import {
+  type AgentRunLimits,
+  AgentRuntimeCredentialsRequiredError,
+  ApiError,
+} from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import type { AgentRunLaunchSpec } from "./backends";
 import { resolveAgentRuntimeCredentials } from "./credentials";
@@ -50,9 +54,23 @@ import {
   preflightAgentRuntimeModelCompatibility,
 } from "./model-compatibility";
 import {
+  AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_MAX_TIER_ENV,
+  AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   AGENT_RUNTIME_STEER_FIFO,
+  AGENT_RUNTIME_TIER_ENV,
+  AGENT_RUNTIME_TIERS_ENV,
   constructStableRunName,
 } from "./runtime-contract";
+import {
+  agentRuntimeAllowedTiers,
+  agentRuntimeMaxTier,
+  organizationAgentRuntimeTiers,
+  resolveRunResources,
+  runtimeTiersEnv,
+  tierResources,
+  warmTierCandidates,
+} from "./runtime-tiers";
 
 /**
  * Everything a runtime backend needs to carry one A2A task, resolved for
@@ -65,6 +83,8 @@ import {
  */
 export async function buildAgentRunLaunchSpec(params: {
   runtime: ResolvedAgentRuntime;
+  /** The run's tier and limits, resolved against the Agent's settings. */
+  limits: AgentRunLimits;
   /** The A2A task this run carries; its id names the workload. */
   taskId: string;
   /** The user-facing Agent run id used by /chat/runs/:id and telemetry. */
@@ -240,13 +260,13 @@ export async function buildAgentRunLaunchSpec(params: {
         requiredSubscriptionKind: isCodexRuntime ? "chatgpt" : null,
       });
   const virtualKeyValue = virtualKey?.value ?? "";
-  if (params.runtime.maxCostUsd && virtualKey) {
+  if (params.limits.maxCostUsd && virtualKey) {
     try {
       await LimitModel.create({
         entityType: "virtual_key",
         entityId: virtualKey.virtualKey.id,
         limitType: "token_cost",
-        limitValue: params.runtime.maxCostUsd,
+        limitValue: params.limits.maxCostUsd,
         model: null,
         cleanupInterval: "1m",
       });
@@ -283,6 +303,10 @@ export async function buildAgentRunLaunchSpec(params: {
   const modelOutputLength = selectedModel
     ? ModelModel.resolveEffectiveOutputLength(selectedModel)
     : null;
+  const tiers = await organizationAgentRuntimeTiers(params.organizationId);
+  const resources = resolveRunResources(params.limits.tier, tiers);
+  const maxTier = agentRuntimeMaxTier(params.runtime, tiers);
+  const allowedTiers = agentRuntimeAllowedTiers(params.runtime, tiers);
   const nonSecretEnv: Record<string, string> = {
     // The Agent Runtime run's own environment goes first: the addresses below must win.
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
@@ -321,9 +345,24 @@ export async function buildAgentRunLaunchSpec(params: {
     // The finish contract: a session that has done its work parks this long
     // for further direction, then exits so the run and task settle.
     ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS: String(
-      (params.runtime.idleTimeoutMinutes ??
-        config.agentRuntime.defaultIdleTimeoutMinutes) * 60,
+      params.limits.idleTimeoutMinutes * 60,
     ),
+    // The run's size and the sizes it may move to, so the agent can tell by
+    // the numbers when its work needs a larger run of the same Agent.
+    ...(params.limits.tier
+      ? { [AGENT_RUNTIME_TIER_ENV]: params.limits.tier }
+      : {}),
+    [AGENT_RUNTIME_MAX_TIER_ENV]: maxTier,
+    [AGENT_RUNTIME_TIERS_ENV]: runtimeTiersEnv(
+      allowedTiers,
+      params.limits.tier,
+    ),
+    ...(resources.cpuRequest
+      ? { [AGENT_RUNTIME_CPU_REQUEST_ENV]: resources.cpuRequest }
+      : {}),
+    ...(resources.memoryLimit
+      ? { [AGENT_RUNTIME_MEMORY_LIMIT_ENV]: resources.memoryLimit }
+      : {}),
     ARCHESTRA_LLM_PROXY_URL: proxyUrl,
     ARCHESTRA_LLM_PROXY_PROTOCOL: params.runtime.inferenceProtocol,
     // Clients that hide tools from the wire (Codex's tool search and code
@@ -355,7 +394,7 @@ export async function buildAgentRunLaunchSpec(params: {
         1,
         Math.ceil((boundWorkspace.expiresAt.getTime() - Date.now()) / 1000),
       )
-    : (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) * 3600;
+    : params.limits.maxDurationHours * 3600;
   let accountToken: Awaited<
     ReturnType<typeof ServiceAccountModel.createToken>
   > | null = null;
@@ -446,20 +485,19 @@ export async function buildAgentRunLaunchSpec(params: {
       image: params.runtime.image,
       command: params.runtime.command ?? null,
       privileged: params.runtime.privileged,
-      resources: params.runtime.resources ?? {
-        cpuRequest: config.agentRuntime.resources.cpuRequest,
-        memoryRequest: config.agentRuntime.resources.memoryRequest,
-        memoryLimit: config.agentRuntime.resources.memoryLimit,
-      },
+      resources,
+      tier: params.limits.tier,
+      warmTiers: params.limits.tier
+        ? warmTierCandidates(params.limits.tier, maxTier, tiers).map(
+            (tier) => ({ tier: tier.name, resources: tierResources(tier) }),
+          )
+        : [],
       env: nonSecretEnv,
       secretEnv,
       ...(Object.keys(credentials.renewableCredentials).length
         ? { renewableCredentials: credentials.renewableCredentials }
         : {}),
-      activeDeadlineSeconds:
-        (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) *
-        60 *
-        60,
+      activeDeadlineSeconds: params.limits.maxDurationHours * 60 * 60,
       workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
       workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
       nodeSelector: config.agentRuntime.nodeSelector,
@@ -485,6 +523,11 @@ function runBanner(appName: string): string {
 }
 
 const RESERVED_RUNTIME_ENV_KEYS = new Set([
+  AGENT_RUNTIME_TIER_ENV,
+  AGENT_RUNTIME_MAX_TIER_ENV,
+  AGENT_RUNTIME_TIERS_ENV,
+  AGENT_RUNTIME_CPU_REQUEST_ENV,
+  AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_BASE_URL",

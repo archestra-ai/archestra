@@ -414,7 +414,8 @@ async function dispatchTool({
     // Envelope repair against the built-in's published input schema, so the
     // handler's strict zod validation sees the repaired args. Delegations
     // (agent-<id>) have no published JSON schema — the lookup returns
-    // undefined and nothing is repaired.
+    // undefined and nothing is repaired. The LLM proxy applies this repair
+    // before policy, so only calls that bypass it still arrive enveloped.
     const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
       toolArgs: args.tool_args ?? {},
       schema: getArchestraToolInputSchema(resolvedName),

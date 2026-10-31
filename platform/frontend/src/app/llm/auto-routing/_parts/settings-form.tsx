@@ -1,12 +1,9 @@
 "use client";
 
 import { Loader2, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
-import {
-  LlmModelSearchableSelect,
-  type LlmModelSelectOption,
-} from "@/components/llm-model-select";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -25,6 +22,7 @@ import {
   useReplanAutoRouting,
   useUpdateAutoRoutingSettings,
 } from "@/lib/auto-routing.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { MAX_BUDGET, MIN_BUDGET } from "./budget-scale";
 import { TIER_NAMES, type TierName } from "./tiers";
@@ -32,9 +30,7 @@ import { TIER_NAMES, type TierName } from "./tiers";
 type FormValues = {
   enabled: boolean;
   budgetUsdPerDay: string;
-} & Record<TierField, string>;
-
-type TierField = `${TierName}ModelId`;
+};
 
 export function AutoRoutingSettingsForm({
   settings,
@@ -51,7 +47,6 @@ export function AutoRoutingSettingsForm({
     if (!form.formState.isDirty) form.reset(toFormValues(settings));
   }, [settings, form]);
 
-  const modelOptions = useTierModelOptions(settings);
   const budget = Number(form.watch("budgetUsdPerDay")) || 0;
   // From the saved budget, so the thumb moves while a new amount is typed.
   const sliderMax = Math.max(
@@ -89,6 +84,9 @@ export function AutoRoutingSettingsForm({
               <FormLabel className="!mt-0">
                 {field.value ? "Enabled" : "Disabled"}
               </FormLabel>
+              <span className="text-sm text-muted-foreground">
+                {`Applies to ${settings.routedAgentCount} ${settings.routedAgentCount === 1 ? "agent" : "agents"} and the chats using the organization default`}
+              </span>
             </FormItem>
           )}
         />
@@ -132,29 +130,7 @@ export function AutoRoutingSettingsForm({
             </FormItem>
           )}
         />
-        <div className="grid gap-3 md:grid-cols-3">
-          {TIER_NAMES.map((tier) => (
-            <FormField
-              key={tier}
-              control={form.control}
-              name={`${tier}ModelId`}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{TIER_LABELS[tier]}</FormLabel>
-                  <LlmModelSearchableSelect
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    options={modelOptions}
-                    placeholder="Select model..."
-                    showPricing
-                    className="w-full"
-                    disabled={disabled}
-                  />
-                </FormItem>
-              )}
-            />
-          ))}
-        </div>
+        <OrganizationTrio tiers={settings.tiers} />
         {canUpdate && (
           <Button
             // Remounted per action so a click never flips its own type.
@@ -201,9 +177,6 @@ function toFormValues(settings: AutoRoutingSettings): FormValues {
   return {
     enabled: settings.enabled,
     budgetUsdPerDay: settings.budgetUsdPerDay?.toString() ?? "",
-    fastModelId: settings.tiers.fast?.id ?? "",
-    normalModelId: settings.tiers.normal?.id ?? "",
-    smartModelId: settings.tiers.smart?.id ?? "",
   };
 }
 
@@ -217,50 +190,50 @@ function changedFields(
     ...(dirty.budgetUsdPerDay && values.budgetUsdPerDay.trim()
       ? { budgetUsdPerDay: Number(values.budgetUsdPerDay) }
       : {}),
-    ...Object.fromEntries(
-      TIER_NAMES.map((tier) => `${tier}ModelId` as const)
-        .filter((name) => dirty[name] && values[name])
-        .map((name) => [name, values[name]]),
-    ),
   };
 }
 
-/**
- * Every tool-capable model the viewer can route to (the API rejects others as
- * tiers), plus saved tiers that are not among them.
- */
-function useTierModelOptions(
-  settings: AutoRoutingSettings,
-): LlmModelSelectOption[] {
+/** The tiers are the organization's default models, edited in Settings → Agents. */
+function OrganizationTrio({ tiers }: { tiers: AutoRoutingSettings["tiers"] }) {
   const { data: models = [] } = useLlmModels();
-  const savedIds = new Set(
-    TIER_NAMES.flatMap((tier) => settings.tiers[tier]?.id ?? []),
+  const catalog = useModelProviderCatalog();
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="text-sm font-medium">Tiers</span>
+        <Link
+          href="/settings/agents"
+          className="text-sm text-primary hover:underline"
+        >
+          Change in Settings → Agents
+        </Link>
+      </div>
+      <dl className="grid gap-3 md:grid-cols-3">
+        {TIER_NAMES.map((tier) => {
+          const model = tiers[tier];
+          return (
+            <div key={tier} className="rounded-md border px-3 py-2">
+              <dt className="text-xs text-muted-foreground">
+                {TIER_LABELS[tier]}
+              </dt>
+              <dd className="text-sm">
+                {model ? (
+                  <span>
+                    {models.find((m) => m.dbId === model.id)?.displayName ??
+                      model.modelId}
+                    <span className="text-muted-foreground">
+                      {" · "}
+                      {catalog.label(model.provider)}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">Not set</span>
+                )}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
   );
-  const candidates = models.filter(
-    (model) =>
-      model.capabilities?.supportsToolCalling !== false ||
-      savedIds.has(model.dbId),
-  );
-  const options: LlmModelSelectOption[] = candidates.map((model) => ({
-    value: model.dbId,
-    model: model.displayName ?? model.id,
-    modelId: model.id,
-    provider: model.provider,
-    pricePerMillionInput: model.capabilities?.pricePerMillionInput,
-    pricePerMillionOutput: model.capabilities?.pricePerMillionOutput,
-    isBest: model.isBest,
-    capabilities: model.capabilities,
-  }));
-  for (const tier of TIER_NAMES) {
-    const saved = settings.tiers[tier];
-    if (saved && !options.some((option) => option.value === saved.id)) {
-      options.push({
-        value: saved.id,
-        model: saved.modelId,
-        modelId: saved.modelId,
-        provider: saved.provider,
-      });
-    }
-  }
-  return options;
 }

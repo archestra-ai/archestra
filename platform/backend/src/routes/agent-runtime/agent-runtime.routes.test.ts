@@ -101,7 +101,6 @@ describe("Agent Runtime routes", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         environment: null,
         credentials: [
           {
@@ -610,6 +609,18 @@ describe("Agent Runtime routes", () => {
       description: null,
     });
     vi.mocked(startDetachedAgentTask).mockResolvedValue(task);
+    // A limit above the Agent's is refused with the maximum named, before
+    // any task exists.
+    const refused = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/runs`,
+      payload: { message: "Start", limits: { tier: "L" } },
+    });
+    expect(refused.statusCode, refused.body).toBe(400);
+    expect(refused.json().error.message).toContain(
+      "Tier L (8 CPU, 16 GiB (32 GiB limit)) is above this Agent's scaleup tier M",
+    );
+    expect(startDetachedAgentTask).not.toHaveBeenCalled();
 
     const response = await app.inject({
       method: "POST",
@@ -617,6 +628,7 @@ describe("Agent Runtime routes", () => {
       payload: {
         message: "Implement the requested change.",
         projectId: project.id,
+        limits: { tier: "S", maxDurationHours: 2 },
         systemParams: expect.objectContaining({
           source: "chat",
           runtimeMode: "interactive",
@@ -639,6 +651,12 @@ describe("Agent Runtime routes", () => {
       prompt: "Implement the requested change.",
       projectId: project.id,
       state: "TASK_STATE_SUBMITTED",
+      limits: {
+        tier: "S",
+        idleTimeoutMinutes: config.agentRuntime.defaultIdleTimeoutMinutes,
+        maxDurationHours: 2,
+        maxCostUsd: null,
+      },
     });
     expect(startDetachedAgentTask).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -649,7 +667,13 @@ describe("Agent Runtime routes", () => {
         },
         agentId: agent.id,
         message: "Implement the requested change.",
-        systemParams: expect.objectContaining({ projectId: project.id }),
+        systemParams: expect.objectContaining({
+          projectId: project.id,
+          runtimeLimits: expect.objectContaining({
+            tier: "S",
+            maxDurationHours: 2,
+          }),
+        }),
         attachments: [
           {
             name: "requirements.txt",
@@ -726,6 +750,8 @@ describe("Agent Runtime routes", () => {
       statusReason: expected.message,
       failure: expected,
     });
+    // The LLM trace is keyed by the frozen run name the runtime sends.
+    expect(detail.json().llmSessionId).toBe(detail.json().workloadName);
     for (const taskId of [legacy.id, running.id]) {
       const other = await app.inject({
         method: "GET",
@@ -842,6 +868,9 @@ describe("Agent Runtime routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    const [ownRun] = response.json().data;
+    // The LLM trace is keyed by the frozen run name the runtime sends.
+    expect(ownRun.llmSessionId).toBe(ownRun.workloadName);
     expect(response.json().data).toEqual([
       expect.objectContaining({
         taskId: ownTask.id,

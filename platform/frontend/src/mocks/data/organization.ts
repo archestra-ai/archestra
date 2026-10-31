@@ -29,6 +29,7 @@ export function makeOrganization(
     playwrightMcpEnabled: true,
     allowChatFileUploads: true,
     allowUnauthenticatedLlmProxyRequests: false,
+    keepMediaInLogs: false,
     allowToolAutoAssignment: true,
     // Configured, so the knowledge section renders its pages rather than the
     // "Configuration is needed" placeholder every route below /knowledge is
@@ -96,6 +97,7 @@ export function makeOrganization(
     defaultEnvironmentNamespace: null,
     defaultEnvironmentDescription: null,
     defaultNetworkPolicy: null,
+    agentRuntimeTiers: null,
     defaultEnvironmentValidationRegex: null,
     defaultEnvironmentTrustedImageRegistries: null,
     ...overrides,
@@ -103,6 +105,10 @@ export function makeOrganization(
 }
 
 export const organizationSeed = makeOrganization();
+
+/** The seeded organization has no default model, so nothing is auto routed. */
+export const organizationDefaultModelSeed: archestraApiTypes.GetOrganizationDefaultModelResponses["200"] =
+  { model: null, autoRouting: { active: false } };
 
 type AppearanceSettings =
   archestraApiTypes.GetAppearanceSettingsResponses["200"];
@@ -174,3 +180,38 @@ export function makeTeamsList(
 }
 
 export const teamsSeed = makeTeamsList();
+
+/** The default Agent Runtime tiers, as GET /api/organization/agent-runtime-tiers returns them. */
+export const agentRuntimeTiersSeed: archestraApiTypes.GetAgentRuntimeTiersResponses["200"] =
+  {
+    tiers: [
+      {
+        name: "S",
+        cpuRequest: 2,
+        cpuLimit: null,
+        warmSpares: 1,
+        pooled: true,
+        memoryRequestMiB: 4096,
+        memoryLimitMiB: 8192,
+      },
+      {
+        name: "M",
+        cpuRequest: 4,
+        cpuLimit: null,
+        warmSpares: 1,
+        pooled: true,
+        memoryRequestMiB: 8192,
+        memoryLimitMiB: 16384,
+      },
+      {
+        name: "L",
+        cpuRequest: 8,
+        cpuLimit: null,
+        warmSpares: 0,
+        pooled: false,
+        memoryRequestMiB: 16384,
+        memoryLimitMiB: 32768,
+      },
+    ],
+    defaultTier: "M",
+  };

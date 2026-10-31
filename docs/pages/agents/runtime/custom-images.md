@@ -3,7 +3,7 @@ title: Custom Images
 description: Run your own coding agent image in Agent Runtime
 order: 3
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,6 +22,19 @@ Run any coding agent in [Agent Runtime](/docs/agents/runtime), not only the buil
 4. Start a run.
 
 Your agent reaches models through the supplied LLM Proxy URL and virtual key, and tools and skills through the supplied MCP Gateway.
+
+## Offer a Shared Template
+
+Give teammates a named starting point, such as Engineering workspace, with your image and runtime defaults.
+
+Requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+
+1. Go to **Settings → Agents → Agent Runtimes** and choose **Add runtime → Create custom runtime…**.
+2. Enter a **Name** and **Description**, and optionally choose a **Display icon**.
+3. Set **Container image**, **Command**, and **Inference API**. Add environment variables or reusable credential bindings if needed.
+4. Click **Add template**, then **Save**. The template appears among the choices when creating an agent.
+
+Drag runtime rows to order the choices, or focus a drag handle and press the arrow keys. Use a runtime’s **… → Remove from list** action to hide it, then **Save**. Choose **Add runtime** to add it back at the end of the list. Built-in configurations cannot be edited; custom templates can be edited from their **…** menu. Existing agents keep their saved configuration when a template changes or disappears.
 
 ## What the Image Needs
 

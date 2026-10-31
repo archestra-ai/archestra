@@ -288,7 +288,7 @@ export async function classifyRuntimeCaller(params: {
   if (!resolved.session.parent_id) {
     return refuse(
       "unparented",
-      `This run was started outside any Guardrails session, so this conversation cannot read its output or send it input; nothing from the run was returned. A person can read the output on the run page: ${config.frontendBaseUrl}/chat/runs/${params.workspaceId}. To get a run's output here, start a new run from this conversation.`,
+      `This run was started outside any Guardrails session, so this conversation cannot read its output or send it input; nothing from the run was returned. A person can read the output on the run page: ${config.frontendBaseUrl}/chat/runs/${params.workspaceId}.`,
     );
   }
   if (resolved.session.parent_id !== params.crossing.source.session_id) {

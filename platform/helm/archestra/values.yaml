@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.5.0-rc.16" # x-release-please-version
+  imageTag: "1.5.0-rc.18" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -543,7 +543,7 @@ archestra:
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
-    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.16" # x-release-please-version
+    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.18" # x-release-please-version
     baseImage: ""
 
     # Resource requests/limits applied to generated MCP server containers
@@ -863,8 +863,8 @@ archestra:
     # Annotations for the ingress resource
     annotations: {}
 
-    # Route the backend's own API prefixes (/v1, /v2) straight to the backend
-    # port on any host that also serves the UI.
+    # Route /v1, /v2 and exact /openapi.json straight to the backend port on
+    # any host that also serves the UI.
     #
     # Neither prefix has a frontend route — the frontend only forwards them to
     # the backend. /v1 is the LLM proxy and the MCP gateway; /v2 is A2A. That is
@@ -876,9 +876,10 @@ archestra:
     # removes that contention.
     #
     # Applies to hosts declared under `hosts:` below. A host that already
-    # declares its own /v1 or /v2 path is left alone, as is one that never
-    # routes to the frontend port (a backend-only hostname). Set to false to
-    # keep everything on whatever `hosts:` says.
+    # declares its own /v1 or /v2 path keeps those gateway routes. An explicit
+    # /openapi.json path is preserved independently; otherwise it is added for
+    # Terraform model-pool preflight. Backend-only hosts are unchanged.
+    # Set to false to keep everything on whatever `hosts:` says.
     #
     # Ignored when `spec:` is used, since that replaces the generated rules.
     routeBackendApisDirectly: true

@@ -28,8 +28,10 @@ import {
   organizationKeys,
   useActiveMemberRole,
   useActiveOrganizationId,
+  useAgentRuntimeTiers,
   useIsGlobalAdmin,
   useOrganization,
+  useUpdateAgentSettings,
   useUpdateAuthSettings,
 } from "@/lib/organization.query";
 
@@ -428,5 +430,66 @@ describe("useUpdateAuthSettings", () => {
     );
     expect(toast.error).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+describe("useUpdateAgentSettings", () => {
+  it("refetches the tiers in effect after a save, so a renamed tier's new name is the form's original name", async () => {
+    const inEffect = (name: string) => ({
+      defaultTier: name,
+      tiers: [
+        {
+          name,
+          cpuRequest: 4,
+          cpuLimit: null,
+          warmSpares: 1,
+          pooled: true,
+          memoryRequestMiB: 8192,
+          memoryLimitMiB: 16384,
+        },
+      ],
+    });
+    const reads: string[] = [];
+    server.use(
+      http.get(`${API_ORIGIN}/api/organization/agent-runtime-tiers`, () => {
+        reads.push("read");
+        return HttpResponse.json(inEffect(reads.length === 1 ? "M" : "Medium"));
+      }),
+      http.patch(`${API_ORIGIN}/api/organization/agent-settings`, () =>
+        HttpResponse.json({ id: "org-1" }),
+      ),
+    );
+    const { result, queryClient } = renderWithClient(() => ({
+      tiers: useAgentRuntimeTiers(),
+      save: useUpdateAgentSettings("saved", "failed"),
+    }));
+    await waitFor(() =>
+      expect(result.current.tiers.data?.defaultTier).toBe("M"),
+    );
+
+    await act(() =>
+      result.current.save.mutateAsync({
+        agentRuntimeTiers: {
+          tiers: [
+            {
+              name: "Medium",
+              cpuRequest: 4,
+              cpuLimit: null,
+              pooled: true,
+              previousName: "M",
+            },
+          ],
+          defaultTier: "Medium",
+        },
+      }),
+    );
+    // The save invalidates the tiers query: the second read brings the new
+    // name, which the settings form then treats as the original name.
+    await waitFor(() =>
+      expect(result.current.tiers.data?.defaultTier).toBe("Medium"),
+    );
+    expect(reads).toHaveLength(2);
+    expect(toast.success).toHaveBeenCalledWith("saved");
+    queryClient.clear();
   });
 });

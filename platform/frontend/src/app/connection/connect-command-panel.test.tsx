@@ -1,6 +1,8 @@
 import { archestraApiClient, type SupportedProvider } from "@archestra/shared";
+import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@archestra/shared/connection-setup";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -16,6 +18,7 @@ import { toast } from "sonner";
 
 vi.mock("next/navigation");
 vi.mock("sonner");
+vi.mock("@/lib/clipboard");
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -51,7 +54,9 @@ const {
   skillsMarketplaceVisibleMock,
 } = vi.hoisted(() => ({
   createSetupMock: vi.fn(),
-  setupHookOptions: {} as { onRefused?: (message: string) => void },
+  setupHookOptions: {} as {
+    onRefused?: (message: string, body: object) => void;
+  },
   skillNamesMock: vi.fn(),
   pluginsMock: vi.fn(),
   skillsMarketplaceVisibleMock: vi.fn(() => true),
@@ -59,7 +64,7 @@ const {
 
 vi.mock("@/lib/connection-setup.query", () => ({
   useCreateConnectionSetup: (options?: {
-    onRefused?: (message: string) => void;
+    onRefused?: (message: string, body: object) => void;
   }) => {
     setupHookOptions.onRefused = options?.onRefused;
     return { mutateAsync: createSetupMock, isPending: false };
@@ -216,6 +221,22 @@ function renderPanel(
   return render(<ConnectCommandPanel {...renderPanelProps(overrides)} />, {
     wrapper: queryWrapper(),
   });
+}
+
+/** The Desktop band's visible command box, not the hidden one that sizes it. */
+function shownCommandBox() {
+  return (
+    Array.from(document.querySelectorAll("pre")).find(
+      (pre) => !pre.closest("[data-sizer]"),
+    ) ?? null
+  );
+}
+
+/** The Desktop band shows a setup command on two lines after a "$" prompt. */
+async function expectShownCommand(command: string) {
+  const quote = command.indexOf(" '");
+  const shown = `$ ${command.slice(0, quote)} \\\n  ${command.slice(quote + 1)}`;
+  await waitFor(() => expect(shownCommandBox()?.textContent).toBe(shown));
 }
 
 /** The panel reads the approval request through React Query; rerenders keep the wrapper. */
@@ -463,12 +484,443 @@ describe("ConnectCommandPanel", () => {
     ).toBeNull();
     expect(screen.queryByText("your Claude subscription")).toBeNull();
     expect(screen.getByText(COMMAND)).not.toBeVisible();
-    await userEvent.click(screen.getByText(/Advanced: terminal setup/));
+    await userEvent.click(
+      screen.getByText(/Terminal setup, for Claude Desktop already/),
+    );
     expect(screen.getByText(COMMAND)).toBeVisible();
     // The Desktop panel sits on a card, so the command must bring its own
     // terminal surface; without one it inherited the card and was unreadable.
     expect(screen.getByText(COMMAND).closest(".bg-terminal")).not.toBeNull();
     expect(createKeyMock).not.toHaveBeenCalled();
+  });
+
+  it("prepares Desktop's terminal command without downloading the installer", async () => {
+    const download = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    const onStarted = vi.fn();
+    availableKeysMock.mockReturnValue({ data: [] });
+    createSetupMock.mockResolvedValue({
+      id: "desktop-setup",
+      command: COMMAND,
+      installerUrl: "https://proxy.example/desktop-installer",
+      expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+      tokenStart: "tok",
+      plugins: [],
+    });
+    renderPanel({
+      client: findClient("claude-desktop"),
+      variant: "download",
+      terminal: true,
+      onStarted,
+    });
+    await expectShownCommand(COMMAND);
+    expect(
+      screen.queryByRole("button", { name: "Download installer" }),
+    ).toBeNull();
+    expect(download).not.toHaveBeenCalled();
+    expect(onStarted).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Copy" }));
+    expect(onStarted).toHaveBeenCalledTimes(1);
+    download.mockRestore();
+  });
+
+  it("makes a new Desktop setup for every download, and keeps it for the terminal command until it expires", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const download = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    availableKeysMock.mockReturnValue({ data: [] });
+    let n = 0;
+    createSetupMock.mockImplementation(async () => {
+      n += 1;
+      return {
+        id: `desktop-setup-${n}`,
+        command: `${COMMAND} # ${n}`,
+        installerUrl: `https://proxy.example/desktop-installer-${n}`,
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+        tokenStart: "tok",
+        plugins: [],
+      };
+    });
+    const props = {
+      client: findClient("claude-desktop"),
+      variant: "download" as const,
+    };
+    const view = renderPanel(props);
+    const toTerminal = () =>
+      view.rerender(
+        <ConnectCommandPanel
+          {...renderPanelProps({ ...props, terminal: true })}
+        />,
+      );
+    const toInstaller = () =>
+      view.rerender(<ConnectCommandPanel {...renderPanelProps(props)} />);
+    // Nothing is prepared until the user asks for it.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(createSetupMock).not.toHaveBeenCalled();
+    const downloadButton = () =>
+      screen.getByRole("button", { name: "Download installer" });
+    await user.click(downloadButton());
+    await waitFor(() => expect(download).toHaveBeenCalledTimes(1));
+    await user.click(downloadButton());
+    await waitFor(() => expect(download).toHaveBeenCalledTimes(2));
+    expect(
+      download.mock.instances.map((link) =>
+        (link as HTMLAnchorElement).getAttribute("href"),
+      ),
+    ).toEqual([
+      "https://proxy.example/desktop-installer-1",
+      "https://proxy.example/desktop-installer-2",
+    ]);
+    download.mockRestore();
+    // A valid setup is kept across switches.
+    toTerminal();
+    await expectShownCommand(`${COMMAND} # 2`);
+    toInstaller();
+    toTerminal();
+    await expectShownCommand(`${COMMAND} # 2`);
+    expect(createSetupMock).toHaveBeenCalledTimes(2);
+    // Once it expires, switching to the command makes a new one.
+    act(() => vi.advanceTimersByTime(CONNECTION_SETUP_TOKEN_TTL_MS));
+    expect(
+      await screen.findByText(
+        "This command expired. Each command works for 15 minutes.",
+      ),
+    ).toBeVisible();
+    toInstaller();
+    toTerminal();
+    await expectShownCommand(`${COMMAND} # 3`);
+    vi.useRealTimers();
+  });
+
+  it("marks a Desktop terminal command expired when the page comes back after the computer slept", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    availableKeysMock.mockReturnValue({ data: [] });
+    createSetupMock.mockResolvedValue({
+      id: "desktop-setup",
+      command: COMMAND,
+      installerUrl: "https://proxy.example/desktop-installer",
+      expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+      tokenStart: "tok",
+      plugins: [],
+    });
+    renderPanel({
+      client: findClient("claude-desktop"),
+      variant: "download",
+      terminal: true,
+    });
+    await expectShownCommand(COMMAND);
+    // The wall clock moves on while the page's timers stay paused.
+    vi.setSystemTime(Date.now() + CONNECTION_SETUP_TOKEN_TTL_MS + 60_000);
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(
+      await screen.findByText(
+        "This command expired. Each command works for 15 minutes.",
+      ),
+    ).toBeVisible();
+    vi.useRealTimers();
+  });
+
+  it("times a Desktop terminal command from the request, so a slow response expires with the server", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    availableKeysMock.mockReturnValue({ data: [] });
+    const delay = 30_000;
+    createSetupMock.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                id: "desktop-setup",
+                command: COMMAND,
+                installerUrl: "https://proxy.example/desktop-installer",
+                expiresAt: new Date(
+                  Date.now() + 15 * 60_000 - delay,
+                ).toISOString(),
+                tokenStart: "tok",
+                plugins: [],
+              }),
+            delay,
+          ),
+        ),
+    );
+    renderPanel({
+      client: findClient("claude-desktop"),
+      variant: "download",
+      terminal: true,
+    });
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));
+    act(() => vi.advanceTimersByTime(delay));
+    await expectShownCommand(COMMAND);
+    // The server made the setup when the request reached it, 30 seconds
+    // before the response arrived.
+    act(() => vi.advanceTimersByTime(CONNECTION_SETUP_TOKEN_TTL_MS - delay));
+    expect(
+      await screen.findByText(
+        "This command expired. Each command works for 15 minutes.",
+      ),
+    ).toBeVisible();
+    vi.useRealTimers();
+  });
+
+  it("keeps each OS's Desktop terminal command when switching the OS back and forth", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    availableKeysMock.mockReturnValue({ data: [] });
+    let n = 0;
+    createSetupMock.mockImplementation(async () => {
+      n += 1;
+      return {
+        id: `desktop-setup-${n}`,
+        command: `${COMMAND} # ${n}`,
+        installerUrl: `https://proxy.example/desktop-installer-${n}`,
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+        tokenStart: "tok",
+        plugins: [],
+      };
+    });
+    const props = {
+      client: findClient("claude-desktop"),
+      variant: "download" as const,
+      terminal: true,
+    };
+    const view = renderPanel({ ...props, platform: "windows" });
+    const toOs = (platform: "windows" | "macos") =>
+      view.rerender(
+        <ConnectCommandPanel {...renderPanelProps({ ...props, platform })} />,
+      );
+    await expectShownCommand(`${COMMAND} # 1`);
+    toOs("macos");
+    await expectShownCommand(`${COMMAND} # 2`);
+    toOs("windows");
+    await expectShownCommand(`${COMMAND} # 1`);
+    toOs("macos");
+    await expectShownCommand(`${COMMAND} # 2`);
+    expect(createSetupMock).toHaveBeenCalledTimes(2);
+    // Once its setup expires, an OS gets a new one.
+    act(() => vi.advanceTimersByTime(CONNECTION_SETUP_TOKEN_TTL_MS));
+    toOs("windows");
+    await expectShownCommand(`${COMMAND} # 3`);
+    vi.useRealTimers();
+  });
+
+  it("keeps the Desktop terminal command across switches when nothing was downloaded", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    let n = 0;
+    createSetupMock.mockImplementation(async () => {
+      n += 1;
+      return {
+        id: `desktop-setup-${n}`,
+        command: `${COMMAND} # ${n}`,
+        installerUrl: `https://proxy.example/desktop-installer-${n}`,
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+        tokenStart: "tok",
+        plugins: [],
+      };
+    });
+    const props = {
+      client: findClient("claude-desktop"),
+      variant: "download" as const,
+    };
+    const view = renderPanel({ ...props, terminal: true });
+    await expectShownCommand(`${COMMAND} # 1`);
+    view.rerender(<ConnectCommandPanel {...renderPanelProps(props)} />);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    view.rerender(
+      <ConnectCommandPanel
+        {...renderPanelProps({ ...props, terminal: true })}
+      />,
+    );
+    await expectShownCommand(`${COMMAND} # 1`);
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("makes no Desktop setup on switching back to the installer for another OS", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    let n = 0;
+    createSetupMock.mockImplementation(async () => {
+      n += 1;
+      return {
+        id: `desktop-setup-${n}`,
+        command: `${COMMAND} # ${n}`,
+        installerUrl: `https://proxy.example/desktop-installer-${n}`,
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+        tokenStart: "tok",
+        plugins: [],
+      };
+    });
+    const props = {
+      client: findClient("claude-desktop"),
+      variant: "download" as const,
+    };
+    // A Windows command from a computer that is not on Windows.
+    const view = renderPanel({ ...props, terminal: true, platform: "windows" });
+    await expectShownCommand(`${COMMAND} # 1`);
+    view.rerender(<ConnectCommandPanel {...renderPanelProps(props)} />);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "Download installer" }),
+    ).toBeEnabled();
+  });
+
+  it("keeps the Desktop terminal command when the page remounts the panel", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    let n = 0;
+    createSetupMock.mockImplementation(async () => {
+      n += 1;
+      return {
+        id: `desktop-setup-${n}`,
+        command: `${COMMAND} # ${n}`,
+        installerUrl: `https://proxy.example/desktop-installer-${n}`,
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+        tokenStart: "tok",
+        plugins: [],
+      };
+    });
+    // The page keeps the cache; another OS's plugins remount the panel.
+    const props = {
+      client: findClient("claude-desktop"),
+      variant: "download" as const,
+      terminal: true,
+      setupCache: {
+        byKey: new Map(),
+        requestedAt: new Map(),
+        pending: new Map(),
+      },
+    };
+    const first = renderPanel(props);
+    await expectShownCommand(`${COMMAND} # 1`);
+    first.unmount();
+    renderPanel(props);
+    await expectShownCommand(`${COMMAND} # 1`);
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for a Desktop setup still on its way when the page remounts the panel", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    let arrive = () => {};
+    createSetupMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          arrive = () =>
+            resolve({
+              id: "desktop-setup",
+              command: COMMAND,
+              installerUrl: "https://proxy.example/desktop-installer",
+              expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+              tokenStart: "tok",
+              plugins: [],
+            });
+        }),
+    );
+    const props = {
+      client: findClient("claude-desktop"),
+      variant: "download" as const,
+      terminal: true,
+      setupCache: {
+        byKey: new Map(),
+        requestedAt: new Map(),
+        pending: new Map(),
+      },
+    };
+    const first = renderPanel(props);
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));
+    first.unmount();
+    renderPanel(props);
+    // Past the 350 ms pause before a request.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 600)));
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+    act(() => arrive());
+    await expectShownCommand(COMMAND);
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels a Desktop download still preparing when switching to the terminal", async () => {
+    const download = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    availableKeysMock.mockReturnValue({ data: [] });
+    let arrive = () => {};
+    createSetupMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          arrive = () =>
+            resolve({
+              id: "desktop-setup",
+              command: COMMAND,
+              installerUrl: "https://proxy.example/desktop-installer",
+              expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+              tokenStart: "tok",
+              plugins: [],
+            });
+        }),
+    );
+    const props = {
+      client: findClient("claude-desktop"),
+      variant: "download" as const,
+    };
+    const view = renderPanel(props);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Download installer" }),
+    );
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));
+    view.rerender(
+      <ConnectCommandPanel
+        {...renderPanelProps({ ...props, terminal: true })}
+      />,
+    );
+    // Past the 350 ms pause before a request: the terminal waits for the
+    // setup already on its way instead of asking for another.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 600)));
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+    act(() => arrive());
+    await expectShownCommand(COMMAND);
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+    view.rerender(<ConnectCommandPanel {...renderPanelProps(props)} />);
+    expect(
+      await screen.findByText("Download an installer for this setup"),
+    ).toBeVisible();
+    expect(download).not.toHaveBeenCalled();
+    download.mockRestore();
+  });
+
+  it("shows an expired Desktop terminal command as expired, with Regenerate", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    availableKeysMock.mockReturnValue({ data: [] });
+    let n = 0;
+    createSetupMock.mockImplementation(async () => {
+      n += 1;
+      return {
+        id: `desktop-setup-${n}`,
+        command: `${COMMAND} # ${n}`,
+        installerUrl: "https://proxy.example/desktop-installer",
+        // The server's clock may be far off; the band times expiry itself.
+        expiresAt: new Date(Date.now() - 60 * 60_000).toISOString(),
+        tokenStart: "tok",
+        plugins: [],
+      };
+    });
+    renderPanel({
+      client: findClient("claude-desktop"),
+      variant: "download",
+      terminal: true,
+    });
+    await expectShownCommand(`${COMMAND} # 1`);
+    act(() => vi.advanceTimersByTime(CONNECTION_SETUP_TOKEN_TTL_MS));
+    expect(
+      await screen.findByText(
+        "This command expired. Each command works for 15 minutes.",
+      ),
+    ).toBeVisible();
+    expect(shownCommandBox()).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Regenerate" }));
+    await expectShownCommand(`${COMMAND} # 2`);
+    vi.useRealTimers();
   });
 
   it("prepares a command after switching from download mode without remounting", async () => {
@@ -508,14 +960,11 @@ describe("ConnectCommandPanel", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Download installer" }),
     );
-    const link = await screen.findByRole("link", {
-      name: "Download installer",
-    });
-    expect(link).toHaveAttribute(
+    await waitFor(() => expect(download).toHaveBeenCalledTimes(1));
+    expect(download.mock.instances[0]).toHaveAttribute(
       "href",
       "https://proxy.example/desktop-installer",
     );
-    expect(download).toHaveBeenCalledTimes(1);
     download.mockRestore();
     expect(createSetupMock).toHaveBeenCalledWith(
       expect.objectContaining({ clientId: "claude-desktop" }),
@@ -2291,9 +2740,10 @@ describe("a setup over a delivery limit on the approval page", () => {
   });
 
   it("shows the backend's reason when it refuses the setup", async () => {
-    createSetupMock.mockImplementationOnce(async () => {
+    createSetupMock.mockImplementationOnce(async (body: object) => {
       setupHookOptions.onRefused?.(
         "Plugin delivery is limited to 1110 MiB of plugin files",
+        body,
       );
       return null;
     });

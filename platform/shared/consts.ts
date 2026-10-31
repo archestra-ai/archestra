@@ -344,8 +344,10 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  *
  * Preview installs already used version 2. Version 3 repairs their PowerShell
  * permission cleanup; reusing version 2 would not prompt those users to reconnect.
+ * Version 10 moves Claude Code allow rules to the tool prefix `/v1/health`
+ * reports, so installed guards pick that up without a reconnect.
  */
-export const STARTUP_GUARD_FORMAT_VERSION = 9;
+export const STARTUP_GUARD_FORMAT_VERSION = 10;
 
 /**
  * The managed instructions a deployment uses until an admin edits them. It
@@ -471,6 +473,15 @@ export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
  * CHAT_API_KEY_ID_HEADER, it is only honored with the in-process proof.
  */
 export const MODEL_POOL_ID_HEADER = "X-Archestra-Model-Pool-Id";
+
+/**
+ * Header marking a chat or agent call that runs on its agent's own selection,
+ * with no pool or explicit subagent tier. When that agent inherits the
+ * organization default and the call names the default model, the proxy routes
+ * the session across the organization's model trio. Like
+ * MODEL_POOL_ID_HEADER, it is only honored with the in-process proof.
+ */
+export const AUTO_ROUTABLE_HEADER = "X-Archestra-Auto-Routable";
 
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 

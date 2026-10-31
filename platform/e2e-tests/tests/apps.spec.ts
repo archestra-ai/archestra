@@ -341,7 +341,9 @@ const buildToolsCallProbeHtml = (toolName: string) => `<!DOCTYPE html>
 </body>
 </html>`;
 
-test("app SDK tools.call unwraps a JSON-as-text tool result", async ({
+test("app SDK tools.call unwraps a JSON-as-text tool result", {
+  tag: "@needs-kubernetes",
+}, async ({
   page,
   request,
   makeApiRequest,

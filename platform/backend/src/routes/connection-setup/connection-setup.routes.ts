@@ -16,6 +16,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import {
+  CONNECTION_SETUP_TOKEN_TTL_MS,
   defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   INSTALLER_CLIENT_LABELS,
@@ -45,7 +46,6 @@ import {
   UserModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import {
   buildSetupCommand,
@@ -291,6 +291,13 @@ const ConnectionHealthResponseSchema = z.object({
    * omits it simply skips the check.
    */
   guardVersion: z.number().int().nonnegative(),
+  /**
+   * The prefix of the gateway's built-in tool names, e.g. `archestra__`.
+   * White-labeling changes it after connect, and the startup guard moves the
+   * client's allow rules for those tools to it. Non-secret: it derives from
+   * the app name the sign-in page already shows.
+   */
+  mcpToolPrefix: z.string(),
 });
 
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -409,7 +416,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Health of the remotes a connected client is wired to, one request for all of them. " +
           "Public: used by the Claude Code startup guard before every launch, from machines with no session. " +
-          "Reports only ok/down per requested remote.",
+          "Reports only ok/down per requested remote, the launch check's format version, and the gateway's tool prefix.",
         tags: ["Connection Setups"],
         querystring: ConnectionHealthQuerySchema,
         response: constructResponseSchema(ConnectionHealthResponseSchema),
@@ -460,6 +467,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         mcp: statusOf(mcpExists),
         llm: statusOf(llmExists),
         guardVersion: STARTUP_GUARD_FORMAT_VERSION,
+        mcpToolPrefix: archestraMcpBranding.toolPrefix,
       };
     },
   );

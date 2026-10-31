@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 //! Pull the embedded runtime's instruments into Archestra's authenticated scrape.
 //! No listener, OTLP exporter, background task, or request identity is involved.
 

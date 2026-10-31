@@ -6,6 +6,7 @@ import type {
   OrganizationCustomFont,
   OrganizationTheme,
   PopularAgentOverrides,
+  StoredAgentRuntimeTierSettings,
   SupportedProvider,
 } from "@archestra/shared";
 import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@archestra/shared";
@@ -105,6 +106,14 @@ const organizationsTable = pgTable("organization", {
     .default(false),
 
   /**
+   * Whether LLM proxy and MCP gateway logs keep the images, audio, video and
+   * files that requests, responses and tool calls carry, so Logs can show and
+   * play them. Off, the default, each row keeps the media's place and type
+   * but not its bytes.
+   */
+  keepMediaInLogs: boolean("keep_media_in_logs").notNull().default(false),
+
+  /**
    * @deprecated No longer consulted. Dynamic tool access is now gated solely
    * by the per-agent `access_all_tools` setting. The column is retained (not
    * dropped) to avoid a backwards-incompatible migration and to keep the
@@ -193,7 +202,11 @@ const organizationsTable = pgTable("organization", {
    */
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
 
-  /** Optional `fast` / `smart` tiers of the default trio, on `defaultLlmApiKeyId`. */
+  /**
+   * Optional `fast` / `smart` tiers of the default trio, on any provider.
+   * With `defaultModelId` as the normal tier, the trio is what forked
+   * subagents pick tiers from and what auto routing routes across.
+   */
   defaultFastModelId: uuid("default_fast_model_id").references(
     () => modelsTable.id,
     { onDelete: "set null" },
@@ -461,6 +474,15 @@ const organizationsTable = pgTable("organization", {
    * environment. NULL falls back to built-in unrestricted behavior.
    */
   defaultNetworkPolicy: jsonb("default_network_policy").$type<NetworkPolicy>(),
+
+  /**
+   * Administrator overrides of the Agent Runtime tiers' CPU, memory and warm
+   * spares, per tier and per field. NULL or an omitted field keeps the code
+   * default (`DEFAULT_AGENT_RUNTIME_TIERS` in @archestra/shared).
+   */
+  agentRuntimeTiers: jsonb(
+    "agent_runtime_tiers",
+  ).$type<StoredAgentRuntimeTierSettings>(),
 
   /**
    * ALLOWLIST regex (JS source, no delimiters/flags) for the implicit "default"

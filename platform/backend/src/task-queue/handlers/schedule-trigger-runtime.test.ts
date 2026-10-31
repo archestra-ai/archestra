@@ -113,7 +113,6 @@ test.for([
       backend: "kubernetes",
       steerMode: "pipe",
       privileged: false,
-      resources: null,
       environment: null,
       credentials: null,
       ttlHours: null,
@@ -187,7 +186,7 @@ test.for([
       runId: run.id,
       runtimeTaskId: taskId,
       phase: "running",
-      maximumDurationSeconds: 72 * 3600,
+      maximumDurationSeconds: config.agentRuntime.defaultTtlHours * 3600,
       deadline: expect.any(String),
     },
   });

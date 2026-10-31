@@ -15,6 +15,7 @@ import {
   memberAuthFile,
   UI_BASE_URL,
 } from "./consts";
+import { skipWithoutDependencies } from "./dependencies";
 
 /** Type for user-specific navigation function */
 type GoToPageFn = (path?: string) => Promise<void>;
@@ -43,6 +44,8 @@ interface TestFixtures {
   goToMemberPage: GoToPageFn;
   /** Navigate basic-user page to a path */
   goToBasicUserPage: GoToPageFn;
+  /** Skips a tagged test whose dependency E2E_UNAVAILABLE names (see dependencies.ts) */
+  skipWithoutDependencies: undefined;
 }
 
 export const goToPage = async (page: Page, path = "") => {
@@ -101,6 +104,7 @@ async function createAuthenticatedPage(
 
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
+  skipWithoutDependencies: [skipWithoutDependencies, { auto: true }],
   // The default context (admin, via storageState in config) gets the same
   // preferences as the contexts created below.
   context: async ({ context }, use) => {

@@ -2,10 +2,11 @@ import {
   hasArchestraTokenPrefix,
   isChatCompletionsOnlyRouterProvider,
   LLM_PROXY_OAUTH_SCOPE,
+  lacksOpenAiChatCompletions,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   providerDisplayNames,
-  providerHasEndpointLocalModels,
   RouteId,
+  requiresResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -17,6 +18,7 @@ import {
   autoModelAvailable,
   resolveAutoModel,
 } from "@/auto-routing/router";
+import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
 import config, { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
@@ -26,7 +28,6 @@ import {
   ModelPoolModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
-  TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
 import AgentTeamModel from "@/models/agent-team";
@@ -35,6 +36,7 @@ import { collectDelegationMarkers } from "@/openappa/delegation";
 import { scrubTranslatedClientWire } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -42,6 +44,7 @@ import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-provid
 import type { GatewayAgent, LLMProvider } from "@/types";
 import {
   ApiError,
+  Azure,
   constructResponseSchema,
   GithubCopilot,
   OpenAi,
@@ -74,21 +77,37 @@ import {
 } from "../adapters";
 import { makeAnthropicOpenaiAdapterFactory } from "../adapters/anthropic-openai";
 import { openaiToAnthropic } from "../adapters/anthropic-openai-translator";
+import { azureEmbeddingsAdapterFactory } from "../adapters/azure";
+import { azureImagesAdapterFactory } from "../adapters/azure-images";
 import { makeBedrockOpenaiAdapterFactory } from "../adapters/bedrock-openai";
 import { openaiToConverse } from "../adapters/bedrock-openai-translator";
 import { makeCohereOpenaiAdapterFactory } from "../adapters/cohere-openai";
 import { openaiToCohere } from "../adapters/cohere-openai-translator";
+import {
+  EmbeddingWireResponseSchema,
+  withEmbeddingEncoding,
+} from "../adapters/embeddings-wire";
+import {
+  geminiImagesAdapterFactory,
+  toGeminiImageRequest,
+} from "../adapters/gemini-images";
 import { makeGeminiOpenaiAdapterFactory } from "../adapters/gemini-openai";
 import {
   decodeSignedToolCallId,
   openaiToGemini,
 } from "../adapters/gemini-openai-translator";
+import { openaiImagesAdapterFactory } from "../adapters/openai-images";
 import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
 import {
   type OpenaiResponsesContext,
   responsesToOpenaiChat,
 } from "../adapters/openai-responses-translator";
 import { MODEL_ROUTER_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import {
+  handleImageEdit,
+  ImageEditMultipartBodySchema,
+  parseImageEditRequest,
+} from "../image-edit-handler";
 import {
   resolveAgent,
   validateVirtualApiKeyToken,
@@ -106,10 +125,10 @@ import {
   type ModelRouterMappedProviderKey,
   type ModelRouterOAuthClientAuth,
   type ModelRouterUserOAuthAuth,
-  modelRequiresResponses,
   modelRouterAuthenticatedUserId,
   nativeResponsesProvider,
   selectModelRouterCredential,
+  userProviderKeyMappings,
 } from "../model-router-access";
 import { assertModelRouterCacheControls } from "../model-router-cache-controls";
 import {
@@ -118,6 +137,17 @@ import {
   type ModelRouterResolution,
   resolveModelRoute,
 } from "../model-router-resolver";
+import { rejectUnsupportedProxyFileReferences } from "../provider-file-handler";
+import { registerMediaMultipartParser } from "../utils/media-multipart";
+import {
+  AudioMultipartBodySchema,
+  type AudioProxyBody,
+  AudioSpeechRequestSchema,
+  handleAudioProxy,
+  parseAudioUploadRequest,
+} from "./audio";
+
+const mediaAuth = new WeakMap<FastifyRequest, ModelRouterAuth>();
 
 const RouterChatRequestSchema = OpenAi.API.ChatCompletionRequestSchema.extend({
   cache_control: CacheControlSchema.optional(),
@@ -139,10 +169,6 @@ type EmbeddingsModelRouterProvider = LLMProvider<
   never,
   OpenAi.Types.ChatCompletionsHeaders
 >;
-
-type ModelRouterUserProviderKey = Awaited<
-  ReturnType<typeof LlmProviderApiKeyModel.getAvailableKeysForUser>
->[number];
 
 type OpenAiWireModelRouterProvider = {
   kind: "openai-wire";
@@ -277,6 +303,149 @@ const ModelListResponseSchema = z.object({
 const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   logger.debug("[ModelRouterProxy] Registering model router routes");
 
+  await registerMediaMultipartParser(fastify);
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${MODEL_ROUTER_PREFIX}${withAgent ? "/:agentId" : ""}/images/edits`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        onRequest: async (request) => {
+          mediaAuth.set(request, await authenticateMediaRequest(request));
+        },
+        schema: {
+          operationId: withAgent
+            ? RouteId.ModelRouterImageEditsWithAgent
+            : RouteId.ModelRouterImageEditsWithDefaultAgent,
+          description:
+            "Edit images through a mapped OpenAI, Azure or Gemini image model using bounded multipart reference images and an optional mask.",
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          headers: OpenAi.API.ChatCompletionsHeadersSchema,
+          consumes: ["multipart/form-data"],
+          body: ImageEditMultipartBodySchema,
+          response: constructResponseSchema(
+            Azure.API.ImageGenerationResponseSchema,
+          ),
+        },
+      },
+      async (request, reply) => {
+        const parsed = await parseImageEditRequest(request);
+        const auth = mediaAuth.get(request);
+        if (!auth)
+          throw new ApiError(401, "Model Router authentication is required.");
+        const resolution = await resolveModelRoute({
+          requestedModel: parsed.body.model,
+          capability: "media",
+          allowedProviders: getMappedProviders(auth),
+          allowedApiKeyIds: getMappedApiKeyIds(auth),
+        });
+        const provider = resolution.provider;
+        if (
+          provider !== "azure" &&
+          provider !== "openai" &&
+          provider !== "gemini"
+        )
+          throw new ApiError(
+            400,
+            `Provider "${provider}" does not support the Model Router image edits endpoint.`,
+          );
+        await applyModelRouterAuthOverride({ request, auth, resolution });
+        parsed.body.model = resolution.modelId;
+        return handleImageEdit({ parsed, provider, request, reply });
+      },
+    );
+  }
+  for (const operation of [
+    "speech",
+    "transcriptions",
+    "translations",
+  ] as const) {
+    for (const withAgent of [false, true]) {
+      fastify.post(
+        `${MODEL_ROUTER_PREFIX}${withAgent ? "/:agentId" : ""}/audio/${operation}`,
+        {
+          bodyLimit: PROXY_BODY_LIMIT,
+          // Authenticate before buffering multipart bytes, including agent access.
+          onRequest: async (request) => {
+            mediaAuth.set(request, await authenticateMediaRequest(request));
+          },
+          schema: {
+            operationId: AUDIO_ROUTE_IDS[operation][withAgent ? 1 : 0],
+            description:
+              "Use mapped Azure or OpenAI credentials for governed native audio responses. Raw audio is excluded from interaction logs.",
+            tags: ["LLM Proxy"],
+            ...(withAgent
+              ? { params: z.object({ agentId: UuidIdSchema }) }
+              : {}),
+            headers: OpenAi.API.ChatCompletionsHeadersSchema,
+            ...(operation === "speech"
+              ? { body: AudioSpeechRequestSchema }
+              : {
+                  consumes: ["multipart/form-data"],
+                  body: AudioMultipartBodySchema,
+                }),
+          },
+        },
+        async (request, reply) => {
+          const body =
+            operation === "speech"
+              ? (request.body as AudioProxyBody)
+              : await parseAudioUploadRequest(request, operation);
+          const auth = mediaAuth.get(request);
+          if (!auth)
+            throw new ApiError(401, "Model Router authentication is required.");
+          const resolution = await resolveModelRoute({
+            requestedModel: body.model,
+            capability: "media",
+            allowedProviders: getMappedProviders(auth),
+            allowedApiKeyIds: getMappedApiKeyIds(auth),
+          });
+          if (
+            resolution.provider !== "azure" &&
+            resolution.provider !== "openai"
+          ) {
+            throw new ApiError(
+              400,
+              `Provider "${resolution.provider}" does not support the Model Router audio endpoint.`,
+            );
+          }
+          await applyModelRouterAuthOverride({ request, auth, resolution });
+          return handleAudioProxy({
+            body: { ...body, model: resolution.modelId },
+            request,
+            reply,
+            provider: resolution.provider,
+            operation,
+          });
+        },
+      );
+    }
+  }
+
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${MODEL_ROUTER_PREFIX}${withAgent ? "/:agentId" : ""}/images/generations`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.ModelRouterImagesWithAgent
+            : RouteId.ModelRouterImagesWithDefaultAgent,
+          description:
+            "Generate images through the OpenAI-compatible Model Router. Unsupported provider parameters and streaming are rejected.",
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          body: Azure.API.ImageGenerationRequestSchema,
+          headers: OpenAi.API.ChatCompletionsHeadersSchema,
+          response: constructResponseSchema(
+            Azure.API.ImageGenerationResponseSchema,
+          ),
+        },
+      },
+      routeImageGeneration,
+    );
+  }
+
   fastify.get(
     `${MODEL_ROUTER_PREFIX}/models`,
     {
@@ -380,7 +549,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["LLM Proxy"],
         body: OpenAi.API.EmbeddingRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+        response: constructResponseSchema(EmbeddingWireResponseSchema),
       },
     },
     async (request, reply) => {
@@ -407,7 +576,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: OpenAi.API.EmbeddingRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+        response: constructResponseSchema(EmbeddingWireResponseSchema),
       },
     },
     async (request, reply) => {
@@ -477,6 +646,87 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default modelRouterProxyRoutes;
+
+const AUDIO_ROUTE_IDS = {
+  speech: [
+    RouteId.ModelRouterAudioSpeechWithDefaultAgent,
+    RouteId.ModelRouterAudioSpeechWithAgent,
+  ],
+  transcriptions: [
+    RouteId.ModelRouterAudioTranscriptionsWithDefaultAgent,
+    RouteId.ModelRouterAudioTranscriptionsWithAgent,
+  ],
+  translations: [
+    RouteId.ModelRouterAudioTranslationsWithDefaultAgent,
+    RouteId.ModelRouterAudioTranslationsWithAgent,
+  ],
+} as const;
+
+async function authenticateMediaRequest(
+  request: FastifyRequest,
+): Promise<ModelRouterAuth> {
+  const auth = await getModelRouterAuth(request);
+  const { agentId } = request.params as { agentId?: string };
+  if (agentId && !UuidIdSchema.safeParse(agentId).success) {
+    throw new ApiError(400, "Invalid LLM proxy id.");
+  }
+  const agent = agentId
+    ? await getModelRouterAgent(agentId)
+    : await getDefaultModelRouterAgent();
+  await ensureModelRouterAgentAccess({ agent, auth });
+  return auth;
+}
+
+async function routeImageGeneration(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const body = request.body as z.infer<
+    typeof Azure.API.ImageGenerationRequestSchema
+  >;
+  const params = request.params as { agentId?: string };
+  const auth = await getModelRouterAuth(request);
+  const agent = params.agentId
+    ? await getModelRouterAgent(params.agentId)
+    : await getDefaultModelRouterAgent();
+  await ensureModelRouterAgentAccess({ agent, auth });
+  const resolution = await resolveModelRoute({
+    requestedModel: body.model,
+    capability: "media",
+    allowedProviders: getMappedProviders(auth),
+    allowedApiKeyIds: getMappedApiKeyIds(auth),
+  });
+  const routedBody = { ...body, model: resolution.modelId };
+  await applyModelRouterAuthOverride({ request, auth, resolution });
+  switch (resolution.provider) {
+    case "azure":
+      return handleLLMProxy(
+        routedBody,
+        request,
+        reply,
+        azureImagesAdapterFactory,
+      );
+    case "openai":
+      return handleLLMProxy(
+        routedBody,
+        request,
+        reply,
+        openaiImagesAdapterFactory,
+      );
+    case "gemini":
+      return handleLLMProxy(
+        toGeminiImageRequest(routedBody),
+        request,
+        reply,
+        geminiImagesAdapterFactory,
+      );
+    default:
+      throw new ApiError(
+        400,
+        `Provider "${resolution.provider}" does not support the Model Router images endpoint.`,
+      );
+  }
+}
 
 async function withRouterTelemetry(params: {
   request: FastifyRequest;
@@ -606,13 +856,16 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   // Preserve native Responses semantics whenever that surface is available.
   // A chat round trip loses reasoning settings, encrypted replay state,
   // assistant phases and tools that are not Chat Completions functions.
-  const nativeResponsesAdapter = getNativeResponsesAdapter(resolution);
+  const selectedKey = await applyModelRouterAuthOverride({
+    request,
+    auth,
+    resolution,
+  });
+  const nativeResponsesAdapter = await getNativeResponsesAdapter({
+    resolution,
+    providerApiKeyId: selectedKey.providerApiKeyId,
+  });
   if (nativeResponsesAdapter) {
-    await applyModelRouterAuthOverride({
-      request,
-      auth,
-      resolution,
-    });
     return handleLLMProxy(
       { ...body, model: resolution.modelId },
       request,
@@ -703,7 +956,12 @@ async function routeEmbedding(request: FastifyRequest, reply: FastifyReply) {
     resolution,
   });
 
-  return handleLLMProxy(routedBody, request, reply, embeddingsProvider);
+  return handleLLMProxy(
+    routedBody,
+    request,
+    reply,
+    withEmbeddingEncoding(embeddingsProvider, body.encoding_format),
+  );
 }
 
 /**
@@ -728,6 +986,9 @@ function getModelRouterEmbeddingsProvider(
   if (provider === "openai") {
     return openAiEmbeddingsAdapterFactory;
   }
+  if (provider === "azure") {
+    return azureEmbeddingsAdapterFactory;
+  }
   // Copilot is an OpenAI-wire chat provider but publishes no embeddings models,
   // and the generic OpenAI-compatible embeddings adapter would send the raw
   // GitHub OAuth token upstream instead of exchanging it for a Copilot bearer.
@@ -748,7 +1009,27 @@ function getModelRouterEmbeddingsProvider(
  * Prefer a provider's native Responses surface whenever one serves the model;
  * other providers keep the chat translation.
  */
-function getNativeResponsesAdapter(resolution: ModelRouterResolution) {
+async function getNativeResponsesAdapter({
+  resolution,
+  providerApiKeyId,
+}: {
+  resolution: ModelRouterResolution;
+  providerApiKeyId: string;
+}) {
+  if (resolution.provider === "azure") {
+    const evidence = await resolveAzureModelCapabilities({
+      providerApiKeyId,
+      modelId: resolution.modelId,
+    });
+    // This is an explicit Responses request. Unknown deployment identities are
+    // sent to that native surface so Azure validates them; aliases never imply
+    // a backing model or permission to translate across APIs.
+    return evidence.status !== "known" ||
+      (evidence.underlyingModelName &&
+        isAzureOpenAiFirstPartyModelName(evidence.underlyingModelName))
+      ? azureResponsesAdapterFactory
+      : null;
+  }
   switch (nativeResponsesProvider(resolution)) {
     case "openai":
       return openAiResponsesAdapterFactory;
@@ -762,15 +1043,22 @@ function getNativeResponsesAdapter(resolution: ModelRouterResolution) {
 }
 
 /**
- * Rejects a Responses-only model on the chat-completions endpoint locally. The
- * request would otherwise reach a provider that answers with its own opaque
- * "model not supported" error, which says nothing about the endpoint being the
- * problem.
+ * Rejects a model the provider has no chat-completions endpoint for locally.
+ * The request would otherwise reach a provider that answers with its own
+ * opaque "model not supported" error, which says nothing about the endpoint
+ * being the problem. A model the provider serves there, even only without
+ * function tools, is forwarded so the router answers as the provider does.
  */
 function assertModelServesChatCompletions(
   resolution: ModelRouterResolution,
 ): void {
-  if (!modelRequiresResponses(resolution)) {
+  if (
+    !requiresResponsesApi(resolution.supportedEndpoints) &&
+    !(
+      resolution.provider === "openai" &&
+      lacksOpenAiChatCompletions(resolution.modelId)
+    )
+  ) {
     return;
   }
   throw new ApiError(
@@ -953,6 +1241,7 @@ async function listModels(params: { auth: ModelRouterAuth }) {
           ? serviceAccountUserId(params.auth.serviceAccountId)
           : undefined,
     includeEmbeddings: true,
+    includeMedia: true,
   });
   // Pools come first: their names are what clients are meant to ask for.
   const pools = (
@@ -995,7 +1284,7 @@ async function listModels(params: { auth: ModelRouterAuth }) {
   };
 }
 
-async function getModelRouterAgent(agentId: string | undefined) {
+export async function getModelRouterAgent(agentId: string | undefined) {
   const agent = await resolveAgent(agentId);
   if (agent.agentType !== "llm_proxy" && agent.agentType !== "agent") {
     throw new ApiError(400, "Model router requires an Agent or LLM Proxy ID.");
@@ -1007,7 +1296,7 @@ async function getDefaultModelRouterAgent() {
   return getModelRouterAgent(undefined);
 }
 
-async function ensureModelRouterAgentAccess(params: {
+export async function ensureModelRouterAgentAccess(params: {
   agent: GatewayAgent;
   auth: ModelRouterAuth;
 }) {
@@ -1057,7 +1346,21 @@ async function ensureModelRouterAgentAccess(params: {
 async function getModelRouterAuth(
   request: FastifyRequest,
 ): Promise<ModelRouterAuth> {
-  const rawAuthHeader = request.raw.headers.authorization;
+  return authenticateModelRouterBearer({
+    authorization: request.raw.headers.authorization,
+    ip: request.ip,
+  });
+}
+
+/**
+ * The Model Router's credential check on its own, for a request that is not
+ * a Fastify request: a WebSocket upgrade carries the same bearer token.
+ */
+export async function authenticateModelRouterBearer(params: {
+  authorization: string | undefined;
+  ip: string;
+}): Promise<ModelRouterAuth> {
+  const rawAuthHeader = params.authorization;
   const tokenMatch = rawAuthHeader?.match(/^Bearer\s+(.+)$/i);
   const bearerToken = tokenMatch?.[1];
   if (!bearerToken) {
@@ -1072,7 +1375,7 @@ async function getModelRouterAuth(
   }
 
   await virtualKeyRateLimiter.check({
-    ip: request.ip,
+    ip: params.ip,
     credential: bearerToken,
   });
   try {
@@ -1111,7 +1414,7 @@ async function getModelRouterAuth(
     if (error instanceof ApiError && error.statusCode === 401) {
       try {
         await virtualKeyRateLimiter.recordFailure({
-          ip: request.ip,
+          ip: params.ip,
           credential: bearerToken,
         });
       } catch (rateLimitError) {
@@ -1130,11 +1433,13 @@ async function getModelRouterAuth(
   }
 }
 
-function getMappedProviders(auth: ModelRouterAuth): Set<SupportedProvider> {
+export function getMappedProviders(
+  auth: ModelRouterAuth,
+): Set<SupportedProvider> {
   return new Set(auth.providerApiKeys.map((mapping) => mapping.provider));
 }
 
-function getMappedApiKeyIds(auth: ModelRouterAuth): string[] {
+export function getMappedApiKeyIds(auth: ModelRouterAuth): string[] {
   return auth.providerApiKeys.map((mapping) => mapping.providerApiKeyId);
 }
 
@@ -1199,7 +1504,8 @@ async function applyModelRouterAuthOverride(params: {
   request: FastifyRequest;
   auth: ModelRouterAuth;
   resolution: ModelRouterResolution;
-}): Promise<void> {
+}): Promise<ModelRouterMappedProviderKey> {
+  rejectUnsupportedProxyFileReferences(params.request.body);
   const credential = await selectModelRouterCredential(params);
   if (credential.kind === "denied") throw credential.error;
   const { mappedApiKey, apiKey } = credential;
@@ -1213,6 +1519,7 @@ async function applyModelRouterAuthOverride(params: {
     chatApiKeyId: mappedApiKey.providerApiKeyId,
     ...modelRouterCaller(params.auth),
   };
+  return mappedApiKey;
 }
 
 function modelRouterCaller(
@@ -1340,44 +1647,19 @@ async function getModelRouterUserOAuthAuth(params: {
     throw new ApiError(401, "OAuth user is no longer available.");
   }
 
-  const userTeamIds = await TeamModel.getUserTeamIds(params.accessToken.userId);
-  const availableKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
-    member.organizationId,
-    params.accessToken.userId,
-    userTeamIds,
-  );
-  if (availableKeys.length === 0) {
+  const providerApiKeys = await userProviderKeyMappings({
+    organizationId: member.organizationId,
+    userId: params.accessToken.userId,
+  });
+  if (providerApiKeys.length === 0) {
     throw new ApiError(
       401,
       "OAuth user has no provider API keys available for Model Router usage.",
     );
   }
-
   const oauthClient = await OAuthClientModel.findByClientId(
     params.accessToken.clientId,
   );
-  // A user reaches every endpoint of a self-hosted provider they can use; for
-  // a credential-style provider only their best-ranked key, as everywhere else.
-  const providerApiKeys: ModelRouterMappedProviderKey[] = [];
-  for (const apiKey of [...availableKeys].sort(
-    compareModelRouterUserProviderKeys,
-  )) {
-    if (
-      !providerHasEndpointLocalModels(apiKey.provider) &&
-      providerApiKeys.some((mapping) => mapping.provider === apiKey.provider)
-    ) {
-      continue;
-    }
-    providerApiKeys.push({
-      provider: apiKey.provider,
-      providerApiKeyId: apiKey.id,
-      providerApiKeyName: apiKey.name,
-      secretId: apiKey.secretId,
-      baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
-      scope: apiKey.scope,
-      userId: apiKey.userId,
-    });
-  }
 
   return {
     authMethod: "oauth_user",
@@ -1392,40 +1674,4 @@ async function getModelRouterUserOAuthAuth(params: {
         }
       : null,
   };
-}
-
-function compareModelRouterUserProviderKeys(
-  left: ModelRouterUserProviderKey,
-  right: ModelRouterUserProviderKey,
-) {
-  if (left.provider !== right.provider) {
-    return left.provider.localeCompare(right.provider);
-  }
-
-  const leftScopePriority = getModelRouterUserProviderKeyScopePriority(left);
-  const rightScopePriority = getModelRouterUserProviderKeyScopePriority(right);
-  if (leftScopePriority !== rightScopePriority) {
-    return leftScopePriority - rightScopePriority;
-  }
-
-  if (left.isPrimary !== right.isPrimary) {
-    return left.isPrimary ? -1 : 1;
-  }
-
-  return left.createdAt.getTime() - right.createdAt.getTime();
-}
-
-function getModelRouterUserProviderKeyScopePriority(
-  apiKey: ModelRouterUserProviderKey,
-) {
-  switch (apiKey.scope) {
-    case "personal":
-      return 0;
-    case "team":
-      return 1;
-    case "org":
-      return 2;
-    default:
-      return 3;
-  }
 }

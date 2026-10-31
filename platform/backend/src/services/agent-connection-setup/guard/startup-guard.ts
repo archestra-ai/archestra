@@ -598,7 +598,9 @@ ${
 sync_tool_prefix() {
   [ "$HEALTH_STATE" = "down" ] && return 0
   already_disconnected mcp && return 0
+  # A gateway the instance reports down is gone: its rules are left for the disconnect prompt.
   case "$HEALTH_BODY" in
+    *'"mcp":"down"'*) return 0 ;;
     *'"mcpToolPrefix":"'*) : ;;
     *) return 0 ;;
   esac

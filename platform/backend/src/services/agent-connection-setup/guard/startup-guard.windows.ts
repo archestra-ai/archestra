@@ -349,6 +349,8 @@ ${
 function Sync-ArchToolPrefix {
   if ($Script:HealthState -eq 'down') { return }
   if ($DisconnectedKinds -contains 'mcp') { return }
+  # A gateway the instance reports down is gone: its rules are left for the disconnect prompt.
+  if ($Script:HealthBody -clike '*"mcp":"down"*') { return }
   if ($Script:HealthBody -cnotmatch '"mcpToolPrefix":"([^"]*)"') { return }
   $archToolPrefix = $Matches[1]
 ${client.windows.toolPrefixSync}

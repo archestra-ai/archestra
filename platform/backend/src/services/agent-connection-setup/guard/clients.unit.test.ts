@@ -1640,6 +1640,67 @@ describe("Claude APPA permission prefix sync at launch", () => {
     expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({ prod_gateway: kept });
   });
 
+  test.each([
+    {
+      name: "a wildcard on the old prefix keeps every rule",
+      guard: "mcp__prod_gateway__archestra__*",
+      allow: OWNED_ALLOW,
+    },
+    {
+      name: "a rule for the whole gateway still covers the new names",
+      guard: "mcp__prod_gateway",
+      allow: BRANDED_ALLOW,
+    },
+  ])("an ask rule in another form: $name", async ({ guard, allow }) => {
+    const guards = { ...UNGUARDED, ask: [guard] };
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
+      files: {
+        [SETTINGS_REL]: claudeSettings(OWNED_ALLOW, guards),
+        [LEDGER_REL]: claudeLedger({ prod_gateway: OWNED_ALLOW }),
+      },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expectOwnedRulesRemoved(files[SETTINGS_REL] ?? "", allow, guards);
+    expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+      prod_gateway: allow,
+    });
+  });
+
+  test("drops stale owned rules when settings are missing, without creating them", async () => {
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcpToolPrefix":"acme__"}'),
+      files: { [LEDGER_REL]: claudeLedger() },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expect(files[SETTINGS_REL]).toBeNull();
+    expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+      other_gateway: OTHER_ALLOW,
+      schemaVersion: 1,
+    });
+  });
+
+  test("writes nothing for a gateway the instance reports down", async () => {
+    const settings = claudeSettings(undefined, UNGUARDED);
+    const ledger = claudeLedger();
+    const { files } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["sync_tool_prefix"],
+      invoke: syncInvoke('{"mcp":"down","mcpToolPrefix":"acme__"}'),
+      files: { [SETTINGS_REL]: settings, [LEDGER_REL]: ledger },
+      readFiles: [SETTINGS_REL, LEDGER_REL],
+    });
+
+    expect(files[SETTINGS_REL]).toBe(settings);
+    expect(files[LEDGER_REL]).toBe(ledger);
+  });
+
   test("an interrupted move owns each rule once", async () => {
     // The first ledger write landed and the settings write did not.
     const { files } = await runGuardSnippet({
@@ -1962,6 +2023,34 @@ describe.skipIf(!powershellBin)(
       expectOwnedRulesRemoved(files[SETTINGS_REL] ?? "", kept, guards);
       expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
         prod_gateway: kept,
+      });
+    });
+
+    test("a wildcard ask rule on the old prefix keeps every rule", async () => {
+      const guards = { ...UNGUARDED, ask: ["mcp__prod_gateway__archestra__*"] };
+      const settings = claudeSettings(OWNED_ALLOW, guards);
+      const ledger = claudeLedger({ prod_gateway: OWNED_ALLOW });
+      const files = await runWindowsPrefixSync({
+        files: { [SETTINGS_REL]: settings, [LEDGER_REL]: ledger },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix: "acme__",
+      });
+
+      expect(files[SETTINGS_REL]).toBe(settings);
+      expect(files[LEDGER_REL]).toBe(ledger);
+    });
+
+    test("drops stale owned rules when settings are missing, without creating them", async () => {
+      const files = await runWindowsPrefixSync({
+        files: { [LEDGER_REL]: claudeLedger() },
+        readFiles: [SETTINGS_REL, LEDGER_REL],
+        toolPrefix: "acme__",
+      });
+
+      expect(files[SETTINGS_REL]).toBeNull();
+      expect(JSON.parse(files[LEDGER_REL] ?? "")).toEqual({
+        other_gateway: OTHER_ALLOW,
+        schemaVersion: 1,
       });
     });
 

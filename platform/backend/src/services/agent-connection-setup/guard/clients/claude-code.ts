@@ -158,6 +158,10 @@ ${CLAUDE_JSON_HELPERS_PY}
 
 NAMES = sorted(${JSON.stringify(CLAUDE_APPA_PERMISSION_TOOL_NAMES)}, key=len, reverse=True)
 
+def covers(rule, name):
+    """Does a Claude Code permission rule match this tool name, exactly or as a trailing wildcard?"""
+    return rule == name or (rule.endswith("*") and name.startswith(rule[:-1]))
+
 def main():
     server = os.environ.get("ARCH_TOOL_SERVER") or ""
     prefix = os.environ.get("ARCH_TOOL_PREFIX") or ""
@@ -183,26 +187,32 @@ def main():
     if not moves:
         return
     settings_status, settings = load_json(settings_path)
-    if settings_status != "ok":
+    # With no allow list, no owned rule is in effect: the stale ones leave the ledger.
+    permissions, allow = None, []
+    if settings_status == "ok":
+        permissions = settings.get("permissions")
+    elif settings_status not in ("missing", "empty"):
         return
-    permissions = settings.get("permissions")
-    if not isinstance(permissions, dict):
-        return
-    allow = string_list(permissions.get("allow"))
-    if allow is None:
-        return
-    # A rule the user asks about or denies under its old name stays there: moved, it would allow
-    # the call that rule no longer matches.
-    for key in ("ask", "deny"):
-        if permissions.get(key) is None:
-            continue
-        guarded = string_list(permissions.get(key))
-        if guarded is None:
+    if permissions is not None:
+        if not isinstance(permissions, dict):
             return
-        for rule in guarded:
-            moves.pop(rule, None)
-    if not moves:
-        return
+        if permissions.get("allow") is not None:
+            allow = string_list(permissions.get("allow"))
+            if allow is None:
+                return
+        guards = []
+        for key in ("ask", "deny"):
+            if permissions.get(key) is None:
+                continue
+            listed = string_list(permissions.get(key))
+            if listed is None:
+                return
+            guards += listed
+        # A rule the user asks about or denies under its old name, and not under the new one,
+        # keeps the old name: moved, it would allow calls the user's rule no longer covers.
+        moves = {old: new for old, new in moves.items() if not any(covers(guard, old) and not covers(guard, new) for guard in guards)}
+        if not moves:
+            return
     kept, added = [], set()
     for rule in allow:
         target = moves.get(rule)
@@ -212,10 +222,10 @@ def main():
             kept.append(target)
             added.add(target)
     new_owned = list(dict.fromkeys(moves.get(rule, rule) for rule in owned if rule not in moves or moves[rule] in added))
-    # Own old and new rules until settings change, so an interrupted write stays recoverable.
-    ledger[server] = list(dict.fromkeys(owned + new_owned))
-    write_json(ledger_path, ledger)
     if kept != allow:
+        # Own old and new rules until settings change, so an interrupted write stays recoverable.
+        ledger[server] = list(dict.fromkeys(owned + new_owned))
+        write_json(ledger_path, ledger)
         permissions["allow"] = kept
         write_json(settings_path, settings)
     if new_owned:
@@ -390,6 +400,10 @@ const CURRENT_PREFIX_RULE_PATTERNS = CLAUDE_APPA_PERMISSION_TOOL_NAMES.map(
  */
 const CLAUDE_APPA_PERMISSION_PREFIX_SYNC_PS = `function Sync-ArchClaudeAppaPermissions {
 ${CLAUDE_JSON_HELPERS_PS}
+  function Test-ArchClaudeCovers([string]$Rule, [string]$Name) {
+    if ($Rule -ceq $Name) { return $true }
+    return $Rule.EndsWith('*', [StringComparison]::Ordinal) -and $Name.StartsWith($Rule.Substring(0, $Rule.Length - 1), [StringComparison]::Ordinal)
+  }
   $ErrorActionPreference = 'Stop'
   try {
     if (-not $env:USERPROFILE) { return }
@@ -421,28 +435,50 @@ ${CLAUDE_JSON_HELPERS_PS}
       }
     }
     if ($moves.Count -eq 0) { return }
-    if (-not (Test-Path -LiteralPath $paths.Settings)) { return }
-    $settingsParsed = ConvertFrom-ArchClaudeJson (Get-Content -Raw -LiteralPath $paths.Settings -Encoding UTF8)
-    if (-not $settingsParsed.Ok -or $settingsParsed.Value -isnot [System.Collections.IDictionary]) { return }
-    $settings = $settingsParsed.Value
-    $permKey = Find-ArchClaudeKey $settings 'permissions'
-    if ($null -eq $permKey -or $settings[$permKey] -isnot [System.Collections.IDictionary]) { return }
-    $permissions = $settings[$permKey]
-    $allowKey = Find-ArchClaudeKey $permissions 'allow'
-    if ($null -eq $allowKey) { return }
-    $allowParsed = ConvertTo-ArchClaudeStringArray $permissions[$allowKey]
-    if (-not $allowParsed.Ok) { return }
-    $allow = $allowParsed.Items
-    # A rule the user asks about or denies under its old name stays there: moved, it would allow
-    # the call that rule no longer matches.
-    foreach ($guardName in @('ask', 'deny')) {
-      $guardKey = Find-ArchClaudeKey $permissions $guardName
-      if ($null -eq $guardKey -or $null -eq $permissions[$guardKey]) { continue }
-      $guardParsed = ConvertTo-ArchClaudeStringArray $permissions[$guardKey]
-      if (-not $guardParsed.Ok) { return }
-      foreach ($guarded in $guardParsed.Items) { [void]$moves.Remove($guarded) }
+    # With no allow list, no owned rule is in effect: the stale ones leave the ledger.
+    $permissions = $null
+    $allow = @()
+    if (Test-Path -LiteralPath $paths.Settings) {
+      $settingsRaw = Get-Content -Raw -LiteralPath $paths.Settings -Encoding UTF8
+      if ($null -ne $settingsRaw -and $settingsRaw.Trim()) {
+        $settingsParsed = ConvertFrom-ArchClaudeJson $settingsRaw
+        if (-not $settingsParsed.Ok -or $settingsParsed.Value -isnot [System.Collections.IDictionary]) { return }
+        $settings = $settingsParsed.Value
+        $permKey = Find-ArchClaudeKey $settings 'permissions'
+        if ($null -ne $permKey -and $null -ne $settings[$permKey]) {
+          if ($settings[$permKey] -isnot [System.Collections.IDictionary]) { return }
+          $permissions = $settings[$permKey]
+        }
+      }
     }
-    if ($moves.Count -eq 0) { return }
+    if ($null -ne $permissions) {
+      $allowKey = Find-ArchClaudeKey $permissions 'allow'
+      if ($null -ne $allowKey -and $null -ne $permissions[$allowKey]) {
+        $allowParsed = ConvertTo-ArchClaudeStringArray $permissions[$allowKey]
+        if (-not $allowParsed.Ok) { return }
+        $allow = $allowParsed.Items
+      }
+      $guards = New-Object System.Collections.Generic.List[string]
+      foreach ($guardName in @('ask', 'deny')) {
+        $guardKey = Find-ArchClaudeKey $permissions $guardName
+        if ($null -eq $guardKey -or $null -eq $permissions[$guardKey]) { continue }
+        $guardParsed = ConvertTo-ArchClaudeStringArray $permissions[$guardKey]
+        if (-not $guardParsed.Ok) { return }
+        foreach ($guard in $guardParsed.Items) { [void]$guards.Add($guard) }
+      }
+      # A rule the user asks about or denies under its old name, and not under the new one,
+      # keeps the old name: moved, it would allow calls the user's rule no longer covers.
+      foreach ($old in @($moves.Keys)) {
+        $new = $moves[$old]
+        foreach ($guard in $guards) {
+          if ((Test-ArchClaudeCovers $guard $old) -and -not (Test-ArchClaudeCovers $guard $new)) {
+            [void]$moves.Remove($old)
+            break
+          }
+        }
+      }
+      if ($moves.Count -eq 0) { return }
+    }
     $kept = New-Object System.Collections.Generic.List[string]
     $added = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
     foreach ($rule in $allow) {
@@ -457,12 +493,12 @@ ${CLAUDE_JSON_HELPERS_PS}
       elseif ($added.Contains($moves[$rule])) { $owns = $moves[$rule] }
       if ($null -ne $owns -and -not $newOwned.Contains($owns)) { [void]$newOwned.Add($owns) }
     }
-    # Own old and new rules until settings change, so an interrupted write stays recoverable.
-    $both = New-Object System.Collections.Generic.List[string]
-    foreach ($rule in @($ownedParsed.Items) + @($newOwned)) { if (-not $both.Contains($rule)) { [void]$both.Add($rule) } }
-    $ledger[$ledgerKey] = ConvertTo-ArchClaudeArray $both
-    Write-ArchClaudeJsonAtomic $paths.Ledger $ledger
     if (($kept -join [char]10) -cne ($allow -join [char]10)) {
+      # Own old and new rules until settings change, so an interrupted write stays recoverable.
+      $both = New-Object System.Collections.Generic.List[string]
+      foreach ($rule in @($ownedParsed.Items) + @($newOwned)) { if (-not $both.Contains($rule)) { [void]$both.Add($rule) } }
+      $ledger[$ledgerKey] = ConvertTo-ArchClaudeArray $both
+      Write-ArchClaudeJsonAtomic $paths.Ledger $ledger
       $permissions[$allowKey] = ConvertTo-ArchClaudeArray $kept
       Write-ArchClaudeJsonAtomic $paths.Settings $settings
     }

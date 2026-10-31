@@ -11,7 +11,20 @@ import {
   type ScopedResource,
   scopedResourceNouns,
 } from "@archestra/shared";
-import { AlertCircle, AlertTriangle, Info, Loader2, X } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  Bot,
+  Building2,
+  Info,
+  Loader2,
+  type LucideIcon,
+  Shield,
+  UserRound,
+  UserStar,
+  Users,
+  X,
+} from "lucide-react";
 import {
   createContext,
   type ReactNode,
@@ -38,6 +51,11 @@ import { TabbedDialogFooterSlot } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useMakeOwner } from "@/components/use-make-owner";
 import { WizardFooter } from "@/components/wizard-footer";
@@ -503,101 +521,148 @@ function PermissionsEditor({
   const pageFooter =
     !embedded && footerContainer === undefined && !dialog && !registerSave;
   const grantList = (
-    <div className="divide-y divide-border/60 overflow-hidden rounded-lg border bg-card text-[13px]">
+    // On desktop, one grid aligns every row: the level column fits its widest
+    // label, so labels line up and the remove button sits right beside them.
+    <div className="divide-y divide-border/60 overflow-hidden rounded-lg border bg-card text-[13px] sm:grid sm:grid-cols-[minmax(0,1fr)_max-content_auto]">
       {fields.length === 0 && (
-        <p className="px-2.5 py-2.5 text-muted-foreground">
+        <p className="col-span-full px-2.5 py-2.5 text-muted-foreground">
           Nobody has access yet.
         </p>
       )}
-      {fields.map((grant, index) => {
+      {pinOwnerFirst(fields, policy.ownerId).map(({ grant, index }) => {
         const isOwner =
           grant.subject.type === "user" && grant.subject.id === policy.ownerId;
         const isViewer =
           grant.subject.type === "user" &&
           grant.subject.id === session?.user.id;
+        const isSelf = memberView && isViewer;
+        const SubjectIcon = subjectIcons[grant.subject.type];
         return (
           <div
             key={grant.id}
             data-testid={isOwner ? "owner-grant" : undefined}
-            className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2.5 py-2 sm:flex sm:gap-2 sm:py-0"
+            className={cn(
+              "grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1 gap-y-1 py-2 pr-1.5 pl-2.5 sm:col-span-full sm:grid-cols-subgrid sm:py-0",
+              // The owner is pinned first and barely tinted, so the one row
+              // nobody can edit reads as the list's anchor, not another grant.
+              isOwner && "bg-muted/40",
+            )}
           >
-            <div
-              className={cn(
-                "flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1",
-                !isOwner && "col-span-2 sm:col-auto",
-              )}
-            >
-              {memberView && isViewer ? (
-                <p className="w-full break-words font-medium sm:w-auto">You</p>
-              ) : (
-                <>
-                  <p className="w-full break-words font-medium sm:w-auto">
-                    {grant.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {subjectLabels[grant.subject.type]}
-                  </p>
-                </>
-              )}
-              {isOwner && <OwnerPill />}
-              {isViewer && !memberView && <YouPill />}
+            <div className="col-span-2 flex min-w-0 flex-1 items-center gap-2 sm:col-span-1">
+              {/* The glyph names the kind, so the row needs no "User" or
+                  "Team" word beside the name. */}
+              {/* The owner's glyph is a starred person in the brand colour
+                  instead of an "Owner" word, named on hover. */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={cn(
+                      "flex shrink-0",
+                      isOwner ? "text-primary" : "text-muted-foreground",
+                    )}
+                  >
+                    {isOwner ? (
+                      <UserStar className="size-3.5" aria-hidden="true" />
+                    ) : (
+                      <SubjectIcon className="size-3.5" aria-hidden="true" />
+                    )}
+                    {!isSelf && (
+                      <span className="sr-only">
+                        {subjectLabels[grant.subject.type]}
+                      </span>
+                    )}
+                    {isOwner && <span className="sr-only">Owner</span>}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {isOwner
+                    ? `Owner · ${subjectLabels[grant.subject.type]}`
+                    : subjectLabels[grant.subject.type]}
+                </TooltipContent>
+              </Tooltip>
+              <span className="min-w-0 break-words sm:truncate">
+                <span className="font-medium">
+                  {isSelf ? "You" : grant.name}
+                </span>
+                {isViewer && !isSelf && (
+                  <span className="text-muted-foreground"> (you)</span>
+                )}
+              </span>
             </div>
             {isOwner ? (
               // The owner always keeps their grant: handing the object on is
               // "Make owner" on another person's row, not an edit of this one.
-              <span className="shrink-0 whitespace-nowrap text-muted-foreground sm:px-2 sm:pr-11">
-                {levelOptions.find(
-                  (option) =>
-                    option.value === presetFor(grant.actions, policy.resource),
-                )?.label ?? actionSummary(grant.actions, policy.resource)}
-              </span>
+              // Same inset as a level trigger, with the remove slot held
+              // open, so "Full access" starts where "Can use" does.
+              <>
+                <span className="whitespace-nowrap border border-transparent px-2 text-muted-foreground">
+                  {levelOptions.find(
+                    (option) =>
+                      option.value ===
+                      presetFor(grant.actions, policy.resource),
+                  )?.label ?? actionSummary(grant.actions, policy.resource)}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="size-11 shrink-0 sm:size-7"
+                />
+              </>
             ) : (
               <>
-                <PermissionLevelSelect
-                  disabled={!canManage || mutation.isPending}
-                  value={presetFor(grant.actions, policy.resource)}
-                  onValueChange={(preset) => {
-                    const choice = Object.entries(presets).find(
-                      ([key]) => key === preset,
-                    )?.[1];
-                    if (choice)
-                      update(index, { ...grant, actions: [...choice.actions] });
-                  }}
-                  options={levelOptionsFor(grant.subject)}
-                  ariaLabel={`Permission for ${grant.name}`}
-                  title={actionDetail(grant.actions, policy.resource)}
-                  valueLabel={
-                    presetFor(grant.actions, policy.resource) === "custom"
-                      ? actionSummary(grant.actions, policy.resource)
-                      : undefined
-                  }
-                  extraOption={
-                    presetFor(grant.actions, policy.resource) === "custom"
-                      ? {
-                          value: "custom",
-                          label: actionSummary(grant.actions, policy.resource),
-                        }
-                      : undefined
-                  }
-                  inline
-                  action={
-                    grant.subject.type === "user" && ownership.available
-                      ? {
-                          label: "Make owner",
-                          description: dirty
-                            ? "Save your changes first."
-                            : "Gets Full access. The current owner keeps Full access.",
-                          disabled: dirty || ownership.isPending,
-                          onSelect: () =>
-                            setPendingOwner({
-                              id: grant.subject.id,
-                              name: grant.name,
-                            }),
-                        }
-                      : undefined
-                  }
-                  className="h-11 min-h-11 text-[13px] sm:h-7 sm:min-h-7"
-                />
+                {/* The trigger hugs its label, chevron right after it. */}
+                <div className="flex">
+                  <PermissionLevelSelect
+                    disabled={!canManage || mutation.isPending}
+                    value={presetFor(grant.actions, policy.resource)}
+                    onValueChange={(preset) => {
+                      const choice = Object.entries(presets).find(
+                        ([key]) => key === preset,
+                      )?.[1];
+                      if (choice)
+                        update(index, {
+                          ...grant,
+                          actions: [...choice.actions],
+                        });
+                    }}
+                    options={levelOptionsFor(grant.subject)}
+                    ariaLabel={`Permission for ${grant.name}`}
+                    title={actionDetail(grant.actions, policy.resource)}
+                    valueLabel={
+                      presetFor(grant.actions, policy.resource) === "custom"
+                        ? actionSummary(grant.actions, policy.resource)
+                        : undefined
+                    }
+                    extraOption={
+                      presetFor(grant.actions, policy.resource) === "custom"
+                        ? {
+                            value: "custom",
+                            label: actionSummary(
+                              grant.actions,
+                              policy.resource,
+                            ),
+                          }
+                        : undefined
+                    }
+                    inline
+                    action={
+                      grant.subject.type === "user" && ownership.available
+                        ? {
+                            label: "Make owner",
+                            description: dirty
+                              ? "Save your changes first."
+                              : "Gets Full access. The current owner keeps Full access.",
+                            disabled: dirty || ownership.isPending,
+                            onSelect: () =>
+                              setPendingOwner({
+                                id: grant.subject.id,
+                                name: grant.name,
+                              }),
+                          }
+                        : undefined
+                    }
+                    className="h-11 min-h-11 max-w-full text-[13px] sm:h-7 sm:min-h-7"
+                  />
+                </div>
                 <Button
                   type="button"
                   size="icon"
@@ -614,12 +679,13 @@ function PermissionsEditor({
           </div>
         );
       })}
-      {addField && <div className="p-1.5">{addField}</div>}
+      {addField && <div className="col-span-full p-1.5">{addField}</div>}
     </div>
   );
+  // The access every admin holds reads as part of the heading, before the
+  // grants it sits on top of, not as a footnote under the box.
   const accessRows = (
     <>
-      {grantList}
       {policy.scope !== "*" && !memberView && (
         <InheritedAccessNote
           resource={policy.resource}
@@ -627,6 +693,7 @@ function PermissionsEditor({
           editable={!!canUpdateGlobal}
         />
       )}
+      {grantList}
     </>
   );
   return (
@@ -908,17 +975,31 @@ function PermissionsEditor({
   );
 }
 
-/** Marks the owner's row in a grant list. */
-function OwnerPill() {
-  return (
-    <span className="self-center rounded-full bg-primary px-1.5 text-[11px] leading-4 font-medium text-primary-foreground">
-      Owner
-    </span>
-  );
+/**
+ * Pins the owner's grant first, keeping each grant's index in the form's
+ * field array so the row's controls still edit the right entry.
+ */
+function pinOwnerFirst<T extends { subject: PermissionSubject }>(
+  grants: T[],
+  ownerId: string | null | undefined,
+) {
+  const isOwner = (grant: T) =>
+    grant.subject.type === "user" && grant.subject.id === ownerId;
+  return grants
+    .map((grant, index) => ({ grant, index }))
+    .sort((a, b) => Number(isOwner(b.grant)) - Number(isOwner(a.grant)));
 }
 
+const subjectIcons: Record<PermissionSubject["type"], LucideIcon> = {
+  user: UserRound,
+  team: Users,
+  serviceAccount: Bot,
+  role: Shield,
+  organization: Building2,
+};
+
 /**
- * Access every object of the type gives anyway, as plain muted text under the
+ * Access every object of the type gives anyway, as plain muted text above the
  * grant list: "Admin and Platform Admin roles have Full access to every agent."
  * When `editable`, it links to the list page's Permissions dialog, where that
  * access is set.

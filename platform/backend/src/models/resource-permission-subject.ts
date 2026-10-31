@@ -4,7 +4,7 @@ import {
   PredefinedRoleNameSchema,
   type ResourceAccessRelation,
 } from "@archestra/shared";
-import { and, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, eq, ilike, inArray, notInArray, or } from "drizzle-orm";
 import { requestScope } from "@/auth/request-scope";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
@@ -164,7 +164,16 @@ export default class ResourcePermissionSubjectModel {
     };
   }
 
-  static async search(params: { organizationId: string; query: string }) {
+  static async search(params: {
+    organizationId: string;
+    query: string;
+    exclude?: PermissionSubject[];
+    excludedUserRoles?: string[];
+  }) {
+    const excludedIds = (type: PermissionSubject["type"]) =>
+      params.exclude
+        ?.filter((subject) => subject.type === type)
+        .map((subject) => subject.id) ?? [];
     const pattern = `%${params.query.replace(/[\\%_]/g, "\\$&")}%`;
     const [users, teams, accounts, roles] = await Promise.all([
       db
@@ -181,6 +190,11 @@ export default class ResourcePermissionSubjectModel {
         .where(
           and(
             eq(schema.membersTable.organizationId, params.organizationId),
+            notInArray(schema.usersTable.id, excludedIds("user")),
+            notInArray(
+              schema.membersTable.role,
+              params.excludedUserRoles ?? [],
+            ),
             or(
               ilike(schema.usersTable.name, pattern),
               ilike(schema.usersTable.email, pattern),
@@ -195,6 +209,7 @@ export default class ResourcePermissionSubjectModel {
         .where(
           and(
             eq(schema.teamsTable.organizationId, params.organizationId),
+            notInArray(schema.teamsTable.id, excludedIds("team")),
             ilike(schema.teamsTable.name, pattern),
           ),
         )
@@ -213,6 +228,10 @@ export default class ResourcePermissionSubjectModel {
               params.organizationId,
             ),
             eq(schema.serviceAccountsTable.disabled, false),
+            notInArray(
+              schema.serviceAccountsTable.id,
+              excludedIds("serviceAccount"),
+            ),
             ilike(schema.serviceAccountsTable.name, pattern),
           ),
         )
@@ -231,6 +250,7 @@ export default class ResourcePermissionSubjectModel {
               params.organizationId,
             ),
             ilike(schema.organizationRolesTable.name, pattern),
+            notInArray(schema.organizationRolesTable.id, excludedIds("role")),
           ),
         )
         .orderBy(schema.organizationRolesTable.name)

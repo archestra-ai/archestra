@@ -3204,7 +3204,13 @@ db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KE
         ),
       ).toContain("Updated skill");
     } finally {
-      await rm(home, { recursive: true, force: true });
+      // Git auto-maintenance may still be writing pack files after fetch exits.
+      await rm(home, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
     }
   });
 

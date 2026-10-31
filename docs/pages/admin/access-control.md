@@ -2,7 +2,7 @@
 title: Access Control
 description: Assign roles and share resources with users, teams, and service accounts
 order: 2
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-30
 ---
 
 Roles control which sections a person can open and which kinds of resources they can create. Resource grants control which individual agents, gateways, skills, apps, models, and credentials they can reach. Configure both when giving someone access.
@@ -49,13 +49,17 @@ To share a resource, add recipients in its permissions, next to its other settin
 
 Sharing with everyone or a role makes a resource Org-wide. That takes **Full access** on every resource of that kind, or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update). By default, Admin and Platform Admin hold it for every kind, and Editor for models and credentials. Without it:
 
-- You share with people and with the teams you belong to, not with everyone, a role, or another team.
+- You share with people and with the teams you belong to. Sharing with another team requires **Share across teams**, described below.
 - You can still lower or remove such a grant.
 - Service accounts appear in the field only with [`serviceAccount:read`](/docs/reference/permissions#serviceAccount:read).
 
 For grants covering every object of a kind, open **Permissions** beside **Create** or **Add** on the resource list. These grants also cover other people's objects. Global policy administration requires [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read) to view or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) to edit. An individual resource requires `manage-permissions` on that resource.
 
 Keep at least one recipient with **Manage access**, either through **Full access** or a custom level. **Save** is disabled if you remove the last recipient who can change this policy.
+
+### Share Across Teams
+
+Owners and anyone with **Manage access** on an item can share it with any team in the same organization, including teams they do not belong to. Under **Who can use it**, select **Add access**, choose a team and its access level, then save. No additional role permission is required.
 
 ### Actions And Scopes
 

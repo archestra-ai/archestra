@@ -128927,6 +128927,10 @@ export type SearchInitialPermissionSubjectsData = {
     };
     query?: {
         query?: string;
+        /**
+         * Exclude already selected recipients, using comma-separated subject keys.
+         */
+        exclude?: Array<string>;
     };
     url: '/api/resource-permissions/{resource}/creation-subjects';
 };
@@ -129124,6 +129128,10 @@ export type SearchResourcePermissionSubjectsData = {
     };
     query?: {
         query?: string;
+        /**
+         * Exclude already selected recipients, using comma-separated subject keys.
+         */
+        exclude?: Array<string>;
     };
     url: '/api/resource-permissions/{resource}/{scope}/subjects';
 };

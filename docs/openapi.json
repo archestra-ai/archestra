@@ -494722,6 +494722,19 @@
           },
           {
             "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "exclude",
+            "required": false,
+            "description": "Exclude already selected recipients, using comma-separated subject keys."
+          },
+          {
+            "schema": {
               "type": "string",
               "enum": [
                 "agent",
@@ -495466,6 +495479,19 @@
             "in": "query",
             "name": "query",
             "required": false
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "exclude",
+            "required": false,
+            "description": "Exclude already selected recipients, using comma-separated subject keys."
           },
           {
             "schema": {

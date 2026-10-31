@@ -3,7 +3,7 @@
 
 import type { PermissionSubject, ScopedResource } from "@archestra/shared";
 import { Plus, Search } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,12 +52,22 @@ export function ResourceAccessAddField({
     resource,
     scope,
     query,
-    enabled: open,
+    enabled: !disabled,
+    exclude: existingSubjects,
   });
   const existing = new Set(existingSubjects.map(subjectKey));
   const available = (recipients.data ?? []).filter(
     (recipient) => !existing.has(subjectKey(recipient.subject)),
   );
+  const exhausted =
+    recipients.isSuccess &&
+    !recipients.isFetching &&
+    !search &&
+    !query &&
+    available.length === 0;
+  useEffect(() => {
+    if (exhausted) setOpen(false);
+  }, [exhausted]);
   const groups = groupPermissionRecipients(available);
   const searching = recipients.isLoading || query !== search;
   const options = searching ? [] : groups.flatMap((group) => group.recipients);
@@ -89,8 +99,8 @@ export function ResourceAccessAddField({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          aria-label="Add access"
-          disabled={disabled}
+          aria-label={exhausted ? "No more recipients to add" : "Add access"}
+          disabled={disabled || exhausted}
           onKeyDown={navigation.onTriggerKeyDown}
           // Dashed while it waits, solid while the picker is open.
           className={cn(
@@ -98,8 +108,10 @@ export function ResourceAccessAddField({
             open ? "border-primary" : "border-dashed",
           )}
         >
-          <Plus className="size-3.5" aria-hidden="true" />
-          <span className="min-w-0 flex-1 text-left">Add access</span>
+          {!exhausted && <Plus className="size-3.5" aria-hidden="true" />}
+          <span className="min-w-0 flex-1 text-left">
+            {exhausted ? "No more recipients to add" : "Add access"}
+          </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent

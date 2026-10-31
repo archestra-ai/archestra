@@ -481,6 +481,7 @@ export class ResourcePermissions {
     userId: string;
     resource: ScopedResource;
     query: string;
+    exclude?: PermissionSubject[];
   }) {
     const permissions = await getPermissionsForUserContext(params);
     if (
@@ -493,7 +494,12 @@ export class ResourcePermissions {
     return ResourcePermissions.findRecipients(params);
   }
 
-  static async searchSubjects(params: PermissionContext & { query: string }) {
+  static async searchSubjects(
+    params: PermissionContext & {
+      query: string;
+      exclude?: PermissionSubject[];
+    },
+  ) {
     const effective = await ResourcePermissions.getEffective(params);
     const canManage =
       params.scope === "*"
@@ -1069,24 +1075,33 @@ export class ResourcePermissions {
     resource: ScopedResource;
     query: string;
     scope?: ResourcePermissionScope;
+    exclude?: PermissionSubject[];
   }) {
     // Offer only recipients the caller may add. Everyone and the roles make
     // an object org-wide, which a manager of this one object alone cannot;
     // they share it with their own teams, and with people a grant here would
     // give something to.
     const subjects = await ResourcePermissions.getSubjects(params);
-    const [organizationWide, seesServiceAccounts, found] = await Promise.all([
-      ResourcePermissions.mayAddOrganizationWide({ ...params, subjects }),
-      ResourcePermissions.maySeeServiceAccounts(params),
-      ResourcePermissionSubjectModel.search(params),
-    ]);
-    const recipients = organizationWide
-      ? found
-      : await ResourcePermissions.withoutOthersCircles({
-          ...params,
-          found,
-          subjects,
-        });
+    const [organizationWide, seesServiceAccounts, crossTeam, coveredRoles] =
+      await Promise.all([
+        ResourcePermissions.mayAddOrganizationWide({ ...params, subjects }),
+        ResourcePermissions.maySeeServiceAccounts(params),
+        ResourcePermissions.canShareAcrossTeams(params),
+        ResourcePermissions.rolesWithEveryAction(params),
+      ]);
+    // Filter before the per-kind limit so already selected or ineligible
+    // recipients cannot hide someone on a later page.
+    const recipients = await ResourcePermissionSubjectModel.search({
+      ...params,
+      teamIds:
+        organizationWide || crossTeam
+          ? undefined
+          : subjects
+              .filter((subject) => subject.type === "team")
+              .map((subject) => subject.id),
+      excludedUserRoles: organizationWide ? undefined : [...coveredRoles],
+    });
+    const excluded = new Set(params.exclude?.map(subjectKey));
     const defaults: { subject: PermissionSubject; name: string }[] = [
       {
         subject: { type: "organization" as const, id: "*" as const },
@@ -1104,49 +1119,12 @@ export class ResourcePermissions {
       .concat(recipients)
       .filter(
         (recipient) =>
+          !excluded.has(subjectKey(recipient.subject)) &&
           (organizationWide || !isOrganizationWideSubject(recipient.subject)) &&
           (seesServiceAccounts || recipient.subject.type !== "serviceAccount"),
       );
   }
 
-  /**
-   * For a manager of one object: limit teams unless cross-team sharing is
-   * permitted, and drop the
-   * people whose role already holds every action on every such object.
-   */
-  private static async withoutOthersCircles<
-    T extends { subject: PermissionSubject },
-  >(params: {
-    organizationId: string;
-    userId: string;
-    resource: ScopedResource;
-    found: T[];
-    /** The caller's subjects, which name their teams. */
-    subjects: PermissionSubject[];
-  }): Promise<T[]> {
-    const userIds = params.found
-      .filter((recipient) => recipient.subject.type === "user")
-      .map((recipient) => recipient.subject.id);
-    const [coveredRoles, members, crossTeam] = await Promise.all([
-      ResourcePermissions.rolesWithEveryAction(params),
-      MemberModel.findByUserIdsInOrganization({
-        organizationId: params.organizationId,
-        userIds,
-      }),
-      ResourcePermissions.canShareAcrossTeams(params),
-    ]);
-    const ownTeams = new Set(params.subjects.map(subjectKey));
-    const covered = new Set(
-      members
-        .filter((member) => coveredRoles.has(member.role))
-        .map((member) => member.id),
-    );
-    return params.found.filter(({ subject }) =>
-      subject.type === "team"
-        ? crossTeam || ownTeams.has(subjectKey(subject))
-        : subject.type !== "user" || !covered.has(subject.id),
-    );
-  }
   private static async describeGrants(params: {
     organizationId: string;
     grants: (ResourcePermissionGrant & {

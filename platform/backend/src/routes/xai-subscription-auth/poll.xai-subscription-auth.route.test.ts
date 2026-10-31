@@ -90,6 +90,7 @@ describe("POST /api/xai-subscription-auth/device/poll", () => {
   });
 
   test("returns the encoded credential once the user has authorized", async () => {
+    const startedAt = Date.now();
     const fetchMock = mockXaiFetch(() =>
       Response.json({
         access_token: "xai-access-token",
@@ -110,7 +111,15 @@ describe("POST /api/xai-subscription-auth/device/poll", () => {
       refreshToken: "xai-refresh-token",
       userId: "x-user-123",
       email: "x@example.com",
+      accessToken: "xai-access-token",
+      accessTokenExpiresAtMs: expect.any(Number),
     });
+    expect(
+      decodeXaiSubscriptionCredential(body.credential)?.accessTokenExpiresAtMs,
+    ).toBeGreaterThanOrEqual(startedAt + 3600 * 1000);
+    expect(
+      decodeXaiSubscriptionCredential(body.credential)?.accessTokenExpiresAtMs,
+    ).toBeLessThanOrEqual(Date.now() + 3600 * 1000);
 
     const tokenCall = fetchMock.mock.calls.find(
       ([url]) => String(url) === TOKEN_ENDPOINT,
@@ -181,6 +190,26 @@ describe("POST /api/xai-subscription-auth/device/poll", () => {
 
     expect(response.statusCode).toBe(502);
     expect(response.json().error.message).toContain("refresh token");
+  });
+
+  test("stores the access token's JWT expiry when expires_in is absent", async () => {
+    const expiresAtSeconds = Math.floor(Date.now() / 1000) + 1800;
+    const accessToken = idToken({ exp: expiresAtSeconds });
+    mockXaiFetch(() =>
+      Response.json({
+        access_token: accessToken,
+        refresh_token: "rt_device_jwt",
+        id_token: idToken({ sub: "test-account" }),
+      }),
+    );
+    const response = await poll(app);
+    expect(response.statusCode).toBe(200);
+    expect(
+      decodeXaiSubscriptionCredential(response.json().credential),
+    ).toMatchObject({
+      accessToken,
+      accessTokenExpiresAtMs: expiresAtSeconds * 1000,
+    });
   });
 
   test("502s when xAI grants no usable account identity", async () => {

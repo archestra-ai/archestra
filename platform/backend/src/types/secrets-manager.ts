@@ -1,4 +1,5 @@
 import type { SecretsManagerType } from "@archestra/shared";
+import type { Transaction } from "@/database";
 import type { SecretValue, SelectSecret } from "./secret";
 
 /**
@@ -8,6 +9,35 @@ import type { SecretValue, SelectSecret } from "./secret";
  */
 export const SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE =
   "secrets_manager_unavailable";
+
+export interface SecretReadOptions {
+  /**
+   * Read the backing store rather than any process-local cache. For callers
+   * that must observe a rotation performed on another replica immediately;
+   * backends that do not cache ignore it.
+   */
+  skipCache?: boolean;
+  /**
+   * Run the database read inside this transaction. A transactional read
+   * neither consults nor populates the process-local cache. Backends that keep
+   * the secret value outside the database ignore it.
+   */
+  transaction?: Transaction;
+  /**
+   * With `transaction`: lock the secret row (SELECT ... FOR UPDATE) until the
+   * transaction ends, so a concurrent writer waits for it.
+   */
+  forUpdate?: boolean;
+}
+
+export interface SecretWriteOptions {
+  /**
+   * Run the database write inside this transaction. The process-local cache
+   * entry is dropped rather than replaced, because the row is not committed
+   * yet; read it back with `skipCache` after the commit.
+   */
+  transaction?: Transaction;
+}
 
 /**
  * SecretManager interface for managing secrets
@@ -48,14 +78,11 @@ export interface ISecretManager {
   /**
    * Retrieve a secret by ID
    * @param secretId - The unique identifier of the secret
-   * @param options.skipCache - Read the backing store rather than any
-   *   process-local cache. For callers that must observe a rotation performed
-   *   on another replica immediately; backends that do not cache ignore it.
    * @returns The secret if found, null otherwise
    */
   getSecret(
     secretId: string,
-    options?: { skipCache?: boolean },
+    options?: SecretReadOptions,
   ): Promise<SelectSecret | null>;
 
   /**
@@ -67,6 +94,7 @@ export interface ISecretManager {
   updateSecret(
     secretId: string,
     secretValue: SecretValue,
+    options?: SecretWriteOptions,
   ): Promise<SelectSecret | null>;
 
   /**

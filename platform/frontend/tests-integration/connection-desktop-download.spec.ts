@@ -63,7 +63,7 @@ test.beforeEach(async ({ mswControl }) => {
   });
 });
 
-test("one click prepares and downloads once; the ready link downloads the same artifact again", async ({
+test("each click prepares a new setup and downloads it once", async ({
   page,
 }, testInfo) => {
   const preparations: string[] = [];
@@ -106,19 +106,20 @@ test("one click prepares and downloads once; the ready link downloads the same a
     rawToken: "test-render-ticket",
   });
 
-  const link = page.getByRole("link", {
-    name: "Download installer",
-    exact: true,
-  });
-  await expect(link).toHaveAttribute("href", installerUrl);
+  await expect(
+    page.getByText("Downloaded. Install it within 15 minutes.", {
+      exact: true,
+    }),
+  ).toBeVisible();
   expect(preparations).toHaveLength(1);
   expect(downloads).toBe(1);
+  // Installing a setup uses it up, so another click prepares a new one.
   const repeatDownload = page.waitForEvent("download");
-  await link.click();
+  await downloadButton.click();
   expect((await repeatDownload).suggestedFilename()).toBe(
     "Connect-Claude-Desktop.mcpb",
   );
-  expect(preparations).toHaveLength(1);
+  expect(preparations).toHaveLength(2);
   expect(downloads).toBe(2);
   await testInfo.attach("installer-downloaded", {
     body: await page.screenshot({
@@ -179,6 +180,8 @@ test("a failed preparation offers one-click retry and disables repeated retry cl
   expect(preparations).toBe(2);
   expect(downloads).toBe(1);
   await expect(
-    page.getByRole("link", { name: "Download installer", exact: true }),
+    page.getByText("Downloaded. Install it within 15 minutes.", {
+      exact: true,
+    }),
   ).toBeVisible();
 });

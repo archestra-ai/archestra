@@ -55,7 +55,7 @@ By default, Archestra exports only agent spans: LLM calls, MCP tool calls, agent
 
 ## Trace Structure
 
-A session has one stable trace identity across turns and backend replicas. Each turn, inference request, tool call, and Guardrails hook is a separate span in its waterfall. The original session ID remains available as `gen_ai.conversation.id`; the trace ID is its stable 128-bit encoding. Calls without a session ID keep independent traces.
+A session has one stable trace identity across turns and backend replicas. Each turn, inference request, tool call, and Guardrails hook is a separate span in its waterfall. The original session ID remains available as `gen_ai.conversation.id`; the trace ID is a stable 128-bit identifier derived from it. Calls without a session ID keep independent traces.
 
 The root span's `route.category` tells you how the agent was invoked:
 
@@ -72,7 +72,7 @@ To group LLM Proxy calls into one trace, send [`X-Archestra-Session-Id`](/docs/l
 
 ## Investigate a Session
 
-Open **Session Investigation** in Grafana and click a session row. **Session Logs** shows inference, tool, Guardrails, and correlated application events on the left; **Session Waterfall** shows the session trace on the right.
+Open **Session Investigation** in Grafana and click a session row. **Session Trace** shows the session’s calls and policy checks. **Session Logs**, below it, shows inference, tool, Guardrails, and correlated application events. Select a session by its ID; the trace lookup happens automatically.
 
 The session list includes first and last request times, agent, user, models, credential names, request count, token usage, elapsed time, total inference time, and estimated costs split by billed and subscription-covered usage. Totals come from persisted session summaries and include requests outside the dashboard's selected time range. The selected range determines which recent summaries appear. Both Loki and Tempo are required.
 

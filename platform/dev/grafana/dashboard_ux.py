@@ -9,14 +9,14 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 DESCRIPTIONS = json.loads((ROOT / "panel-descriptions.json").read_text())
 HEADERS = {
-    "archestra-genai-observability": "Request outcomes, streaming, usage, and upstream latency.",
-    "archestra-costs-and-limits": "Estimated spend, billing coverage, and limit enforcement.",
-    "archestra-agent-runtime": "Agent lifecycle, task health, and Kubernetes resources.",
-    "archestra-guardrails": "Hook decisions, policy checks, external calls, and remedies.",
-    "archestra-mcp-monitoring": "Tool calls, latency, errors, and server state.",
-    "archestra-application-metrics": "API traffic, processes, queues, and database pools.",
-    "archestra-rag-knowledge-base": "Document syncs, embedding, retrieval, and diagnostics.",
-    "archestra-agent-sessions": "Session summaries, correlated operation logs, and waterfall.",
+    "archestra-genai-observability": "Find slow or failing model requests and compare token usage.",
+    "archestra-costs-and-limits": "Compare model spend and see which limits were reached.",
+    "archestra-agent-runtime": "Check running agents, failed tasks, and resource use.",
+    "archestra-guardrails": "Review policy decisions, blocked calls, and enforcement time.",
+    "archestra-mcp-monitoring": "Find slow or failing tool calls and unavailable servers.",
+    "archestra-application-metrics": "Check API errors, queued work, and database pressure.",
+    "archestra-rag-knowledge-base": "Find problems with document syncs, embeddings, and search.",
+    "archestra-agent-sessions": "Review a session's activity, cost, and timing.",
 }
 
 
@@ -66,15 +66,17 @@ def refine_dashboard(d):
                 if "expr" in t:
                     t["expr"] = re.sub(
                         r"(openappa_hook_dispatch[a-z_]*\{)([^}]*)(\})",
-                        lambda m: m[1]
-                        + m[2]
-                        + ("" if "hook=~" in m[2] else ',hook=~"$hook"')
-                        + (
-                            ""
-                            if 'decision=~"$decision"' in m[2]
-                            else ',decision=~"$decision"'
-                        )
-                        + m[3],
+                        lambda m: (
+                            m[1]
+                            + m[2]
+                            + ("" if "hook=~" in m[2] else ',hook=~"$hook"')
+                            + (
+                                ""
+                                if 'decision=~"$decision"' in m[2]
+                                else ',decision=~"$decision"'
+                            )
+                            + m[3]
+                        ),
                         t["expr"],
                     )
     if d["uid"] == "archestra-mcp-monitoring":
@@ -160,9 +162,9 @@ def add_inference_filters(d):
             )
         variable = query_variable(name, label, metric, description)
         if not cost and name == "provider":
-            variable["query"][
-                "query"
-            ] = 'label_values({__name__=~"llm_tokens_total|llm_proxy_request_duration_seconds_count",job=~"$job"}, provider)'
+            variable["query"]["query"] = (
+                'label_values({__name__=~"llm_tokens_total|llm_proxy_request_duration_seconds_count",job=~"$job"}, provider)'
+            )
         variables.append(variable)
     if cost and "cost_group" not in names:
         variables.append(
@@ -300,9 +302,9 @@ def refine_mcp(d):
                 "Current self-hosted MCP server counts by state, deduplicated across scrape replicas. Hibernated servers are intentionally asleep; Waking means a server is starting again. Tool-call filters do not apply."
             )
         elif p["title"] == "MCP Server Deployments":
-            p["targets"][0][
-                "expr"
-            ] = 'max by(server_name,state) (mcp_server_deployment_status{job=~"$job"}) == 1'
+            p["targets"][0]["expr"] = (
+                'max by(server_name,state) (mcp_server_deployment_status{job=~"$job"}) == 1'
+            )
             p["fieldConfig"]["defaults"]["custom"]["cellOptions"] = {"type": "auto"}
             p["fieldConfig"]["overrides"] = [
                 {
@@ -387,19 +389,48 @@ def add_header(d):
     # Native grid panels stack below each other on mobile without clipping a fixed-height iframe.
     source_vars = {v["name"] for v in d.get("templating", {}).get("list", [])}
     links = d.get("links", [])
-    labels = {"Knowledge Base Operations":"Knowledge Base", "Guardrails & OpenAPPA":"Guardrails", "Session Investigation":"Sessions", "Metrics reference":"Metrics docs"}
+    labels = {
+        "Knowledge Base Operations": "Knowledge Base",
+        "Guardrails & OpenAPPA": "Guardrails",
+        "Session Investigation": "Sessions",
+        "Metrics reference": "Metrics docs",
+    }
     tiles = []
     for link in links:
         url = link["url"]
         if url.startswith("/d/"):
             url += "?${__url_time_range}"
-            for variable in ("metrics_datasource", "traces_datasource", "logs_datasource"):
+            for variable in (
+                "metrics_datasource",
+                "traces_datasource",
+                "logs_datasource",
+            ):
                 if variable in source_vars:
                     url += "&var-" + variable + "=${" + variable + "}"
-        tiles.append('<td style="width:25%;padding:0"><a target="_parent" title="' + escape(link["title"], quote=True) + '" href="' + escape(url, quote=True) + '" style="display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escape(labels.get(link["title"], link["title"])) + '</a></td>')
-    rows = ''.join('<tr>' + ''.join(tiles[i:i+4]) + '</tr>' for i in range(0,len(tiles),4))
-    navigation = {"id":90002,"type":"text","title":"","transparent":True,
-        "gridPos":{"x":12,"y":0,"w":12,"h":2},
-        "options":{"mode":"html","content":'<nav aria-label="Observability dashboards"><table role="presentation" style="width:100%;table-layout:fixed;border-collapse:separate;border-spacing:2px"><tbody>' + rows + '</tbody></table></nav>'}}
+        tiles.append(
+            '<td style="width:25%;padding:0"><a target="_parent" title="'
+            + escape(link["title"], quote=True)
+            + '" href="'
+            + escape(url, quote=True)
+            + '" style="display:block;text-align:center;padding:3px 4px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+            + escape(labels.get(link["title"], link["title"]))
+            + "</a></td>"
+        )
+    rows = "".join(
+        "<tr>" + "".join(tiles[i : i + 4]) + "</tr>" for i in range(0, len(tiles), 4)
+    )
+    navigation = {
+        "id": 90002,
+        "type": "text",
+        "title": "",
+        "transparent": True,
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 2},
+        "options": {
+            "mode": "html",
+            "content": '<nav aria-label="Observability dashboards"><table role="presentation" style="width:100%;table-layout:fixed;border-collapse:separate;border-spacing:2px"><tbody>'
+            + rows
+            + "</tbody></table></nav>",
+        },
+    }
     d["links"] = []
     d["panels"] = [header, navigation] + remaining

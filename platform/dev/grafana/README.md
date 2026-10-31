@@ -18,4 +18,20 @@ Shared headers, supported filter dimensions, and MCP state presentation live in 
 
 The Kubernetes row requires kube-state-metrics and cAdvisor and can use an independent source. OpenAPPA hook and engine metrics use the standard Archestra metrics source. Missing exporters must not appear as healthy zero values.
 
-Session Investigation reads cumulative `archestra.session.summary` log snapshots from the same aggregation as the application Logs page. The table selects one latest snapshot per session; never sum snapshots or compute totals from a limited trace search. A session link sets both `sessionId` and `traceId`, opening the correlated logs and waterfall side by side. Operation logs contain metadata only.
+Session Investigation reads cumulative `archestra.session.summary` log snapshots from the same aggregation as the application Logs page. The table selects one latest snapshot per session; never sum snapshots or compute totals from a limited trace search. A session link selects `sessionId`; a Loki detected-field query resolves `traceId` from the matching summary. The trace fills the page width, with session logs below it. Operation logs contain metadata only.
+
+Loki filter variables use Grafana’s `doublequote` format. Its `json` format returns scalar strings without quotes, which makes these LogQL filters invalid. The trace lookup extracts the body’s trace ID into `session_trace_id` so it cannot collide with log metadata. Loki’s Detected field values variable query (type 2) is required; session and trace IDs remain structured metadata, never indexed stream labels.
+
+To check Session Investigation with the actual Grafana 13.3 data transforms and
+Scenes formatters, install test-only dependencies outside the workspace:
+
+```sh
+mkdir -p /tmp/grafana-session-check
+pnpm --dir /tmp/grafana-session-check add --ignore-scripts @grafana/data@13.3.0 @grafana/scenes@9.2.0
+GRAFANA_CHECK_NODE_MODULES=/tmp/grafana-session-check/node_modules node dev/grafana/test-session-dashboard.cjs
+```
+
+This uses synthetic snapshots to check scalar quoting, coherent session totals,
+ordering and the omitted Agent type column. It does not inject logs or metrics
+into any observability stack. Session and Trace ID controls are both visible;
+the trace is filled from the selected session and also accepts direct entry.

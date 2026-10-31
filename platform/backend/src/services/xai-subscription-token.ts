@@ -230,8 +230,8 @@ export class XaiSubscriptionTokenManager {
     // write-back that fails in an external secrets backend (the transaction is
     // still usable) is repeated a few times under the lock first, so a blip
     // there does not release the lock with the successor held only here.
-    // Every other write-back failure, a statement the database rejected
-    // included, is caught on its first attempt and carried out as
+    // Any write-back failure that is not repeated, or still fails after those
+    // attempts, a statement the database rejected included, is carried out as
     // `persistFailure`; the transaction then ends without the write. Only a
     // lost connection reaches the lock helper's whole-callback retry, through
     // the failed commit, and the pending rotation makes that re-run safe.

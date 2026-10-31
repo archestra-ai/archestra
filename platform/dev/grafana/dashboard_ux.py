@@ -348,12 +348,12 @@ def add_header(d):
         p
         for p in d["panels"]
         if p.get("type") == "text"
-        and (p.get("gridPos", {}).get("y") == 0 or p.get("id") in (90000, 90001))
+        and (p.get("gridPos", {}).get("y") == 0 or p.get("id") in (90000, 90001, 90002))
     ]
     old_ids = {p["id"] for p in old}
     remaining = [p for p in d["panels"] if p["id"] not in old_ids]
     min_y = min((p["gridPos"]["y"] for p in remaining), default=2)
-    delta = 2 - min_y
+    delta = 3 - min_y
     for p in panels(remaining):
         p["gridPos"]["y"] += delta
     appa = d["uid"] == "archestra-guardrails"
@@ -370,7 +370,7 @@ def add_header(d):
         "type": "text",
         "title": "",
         "transparent": True,
-        "gridPos": {"x": 0, "y": 0, "w": 24, "h": 2},
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 3},
         "options": {
             "mode": "html",
             "content": (
@@ -384,4 +384,21 @@ def add_header(d):
             ),
         },
     }
-    d["panels"] = [header] + remaining
+    # Native grid panels stack below each other on mobile without clipping a fixed-height iframe.
+    source_vars = {v["name"] for v in d.get("templating", {}).get("list", [])}
+    links = d.get("links", [])
+    labels = {"Knowledge Base Operations":"Knowledge Base", "Guardrails & OpenAPPA":"Guardrails", "Session Investigation":"Sessions", "Metrics reference":"Metrics docs"}
+    tiles = []
+    for link in links:
+        url = link["url"]
+        if url.startswith("/d/"):
+            url += "?${__url_time_range}"
+            for variable in ("metrics_datasource", "traces_datasource", "logs_datasource"):
+                if variable in source_vars:
+                    url += "&var-" + variable + "=${" + variable + "}"
+        tiles.append('<a target="_parent" href="' + escape(url, quote=True) + '" style="display:flex;flex:1 1 22%;width:22%;box-sizing:border-box;align-items:center;justify-content:center;text-align:center;padding:3px 5px;border:1px solid #526078;border-radius:5px;color:inherit;text-decoration:none;font-size:11px;line-height:14px">' + escape(labels.get(link["title"], link["title"])) + '</a>')
+    navigation = {"id":90002,"type":"text","title":"","transparent":True,
+        "gridPos":{"x":12,"y":0,"w":12,"h":3},
+        "options":{"mode":"html","content":'<nav aria-label="Observability dashboards" style="display:flex;flex-wrap:wrap;gap:4px">' + ''.join(tiles) + '</nav>'}}
+    d["links"] = []
+    d["panels"] = [header, navigation] + remaining

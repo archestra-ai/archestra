@@ -243,7 +243,6 @@ def collapse_optional_rows(d):
 
 
 def decorate(d):
-    refine_dashboard(d)
     for variable in d.get("templating", {}).get("list", []):
         if variable.get("type") == "datasource":
             variable["current"] = {}
@@ -270,6 +269,7 @@ def decorate(d):
             "targetBlank": True,
         }
     )
+    refine_dashboard(d)
 
 
 def llm():
@@ -417,7 +417,7 @@ def costs():
     )
     b.panel(
         "Estimated spend by model",
-        increase("llm_cost_total", 'billing_mode="metered"', "model"),
+        "sort_desc(" + increase("llm_cost_total", 'billing_mode="metered"', "model") + ")",
         "currencyUSD",
         kind="bargauge",
         legend="{{model}}",
@@ -438,10 +438,11 @@ def costs():
     )
     b.panel(
         "Estimated spend by selected dimension",
-        increase("llm_cost_total", group="${cost_group:raw}"),
+        "sort_desc(" + increase("llm_cost_total", group="${cost_group:raw}") + ")",
         "currencyUSD",
         kind="bargauge",
         width=24,
+        legend="{{${cost_group:raw}}}",
         description="Estimated list-price inference cost in the selected period, grouped by Cost breakdown after applying the cost filters. Subscription usage is a price equivalent, not an extra token bill.",
     )
     b.row("Limit enforcement")
@@ -891,5 +892,7 @@ if __name__ == "__main__":
     costs()
     runtime()
     guardrails()
+    from session_dashboard import refresh_sessions
+    refresh_sessions()
     refresh_navigation()
     rag_additions()

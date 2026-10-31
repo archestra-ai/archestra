@@ -2,6 +2,7 @@ import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   isDefaultBrandedAppName,
   providerDisplayNames,
+  type ResolvedAgentRuntimeTiers,
   type ResourcePermissionGrant,
   RUN_ID_HEADER,
   resolveClaudeContextVariant,
@@ -69,11 +70,11 @@ import {
   organizationAgentRuntimeTiers,
   type RuntimeSystemPromptParts,
   resolveRunResources,
-  resolveRunWorkspaceGiB,
   resolveRunWorkspaceStorageSize,
   runtimeSystemPrompt,
   runtimeTiersEnv,
   tierResources,
+  tierWorkspaceGiB,
   tierWorkspaceStorageSize,
   warmTierCandidates,
 } from "./runtime-tiers";
@@ -91,6 +92,11 @@ export async function buildAgentRunLaunchSpec(params: {
   runtime: ResolvedAgentRuntime;
   /** The run's tier and limits, resolved against the Agent's settings. */
   limits: AgentRunLimits;
+  /**
+   * The organization's tiers, when the caller read them already: the run's
+   * volume and the size it is told then come from the same read.
+   */
+  tiers?: ResolvedAgentRuntimeTiers;
   /** The A2A task this run carries; its id names the workload. */
   taskId: string;
   /** The user-facing Agent run id used by /chat/runs/:id and telemetry. */
@@ -309,7 +315,9 @@ export async function buildAgentRunLaunchSpec(params: {
   const modelOutputLength = selectedModel
     ? ModelModel.resolveEffectiveOutputLength(selectedModel)
     : null;
-  const tiers = await organizationAgentRuntimeTiers(params.organizationId);
+  const tiers =
+    params.tiers ??
+    (await organizationAgentRuntimeTiers(params.organizationId));
   const resources = resolveRunResources(params.limits.tier, tiers);
   const maxTier = agentRuntimeMaxTier(params.runtime, tiers);
   const allowedTiers = agentRuntimeAllowedTiers(params.runtime, tiers);
@@ -507,7 +515,7 @@ export async function buildAgentRunLaunchSpec(params: {
               tier: tier.name,
               resources: tierResources(tier),
               workspaceStorageSize: tierWorkspaceStorageSize(tier),
-              workspaceGiB: resolveRunWorkspaceGiB(tier.name, tiers),
+              workspaceGiB: tierWorkspaceGiB(tier),
             }),
           )
         : [],

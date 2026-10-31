@@ -92219,8 +92219,7 @@
                           "workspaceGiB": {
                             "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
                             "type": "number",
-                            "minimum": 0,
-                            "exclusiveMinimum": true
+                            "minimum": 0
                           }
                         },
                         "required": [
@@ -92834,8 +92833,7 @@
                         "workspaceGiB": {
                           "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
                           "type": "number",
-                          "minimum": 0,
-                          "exclusiveMinimum": true
+                          "minimum": 0
                         }
                       },
                       "required": [
@@ -93267,8 +93265,7 @@
                               "workspaceGiB": {
                                 "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
                                 "type": "number",
-                                "minimum": 0,
-                                "exclusiveMinimum": true
+                                "minimum": 0
                               }
                             },
                             "required": [
@@ -93865,8 +93862,7 @@
                         "workspaceGiB": {
                           "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
                           "type": "number",
-                          "minimum": 0,
-                          "exclusiveMinimum": true
+                          "minimum": 0
                         }
                       },
                       "required": [
@@ -94542,8 +94538,7 @@
                         "workspaceGiB": {
                           "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
                           "type": "number",
-                          "minimum": 0,
-                          "exclusiveMinimum": true
+                          "minimum": 0
                         }
                       },
                       "required": [
@@ -95396,8 +95391,7 @@
                         "workspaceGiB": {
                           "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
                           "type": "number",
-                          "minimum": 0,
-                          "exclusiveMinimum": true
+                          "minimum": 0
                         }
                       },
                       "required": [
@@ -512022,8 +512016,7 @@
                           "workspaceGiB": {
                             "description": "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",
                             "type": "number",
-                            "minimum": 0,
-                            "exclusiveMinimum": true
+                            "minimum": 0
                           }
                         },
                         "required": [

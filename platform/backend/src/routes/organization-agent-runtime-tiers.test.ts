@@ -185,6 +185,32 @@ describe("Agent Runtime tiers: GET /api/organization/agent-runtime-tiers and PAT
     expect(older.statusCode, older.body).toBe(200);
     expect(await workspaceOf("Kind")).toBe(60);
 
+    // A new tier that takes the name renamed away in the same save is new:
+    // it does not inherit the renamed tier's size.
+    const reused = await patch({
+      agentRuntimeTiers: {
+        tiers: [
+          tier("S", 2),
+          tier("Kind2", 7, { previousName: "Kind" }),
+          tier("Kind", 3),
+        ],
+        defaultTier: "S",
+      },
+    });
+    expect(reused.statusCode, reused.body).toBe(200);
+    expect(await workspaceOf("Kind2")).toBe(60);
+    expect(await workspaceOf("Kind")).toBeNull();
+    expect(
+      (
+        await patch({
+          agentRuntimeTiers: {
+            tiers: [tier("S", 2), tier("Kind", 7, { workspaceGiB: 60 })],
+            defaultTier: "S",
+          },
+        })
+      ).statusCode,
+    ).toBe(200);
+
     // Null is a choice: the deployment's default.
     expect(
       (

@@ -343,6 +343,12 @@ const RunLimitsSchema = z
         "The run and its saved files end this many hours after the start.",
       ),
     max_cost_usd: z.number().nullable(),
+    workspace_gib: z
+      .number()
+      .optional()
+      .describe(
+        "The size of the run's workspace volume in GiB. Absent for a workspace from before sizes were recorded.",
+      ),
   })
   .describe("The tier and limits the run got, within the Agent's own.");
 
@@ -353,6 +359,9 @@ function runLimitsOutput(limits: AgentRunLimits | null) {
         idle_timeout_minutes: limits.idleTimeoutMinutes,
         max_duration_hours: limits.maxDurationHours,
         max_cost_usd: limits.maxCostUsd,
+        ...(limits.workspaceGiB === undefined
+          ? {}
+          : { workspace_gib: limits.workspaceGiB }),
       }
     : null;
 }

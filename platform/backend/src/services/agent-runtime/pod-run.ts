@@ -173,16 +173,18 @@ async function startAgentRunSession(params: {
   const limits = withWorkspaceSize({
     limits: chosen,
     // The volume a run is told about is the one it has: a new run's comes
-    // from its tier now; a continuation's was recorded when its workspace was
-    // created, and a workspace from before sizes were recorded has none.
+    // from the tiers its volume is sized from, read once here; a
+    // continuation's was recorded when its workspace was created, and a
+    // workspace from before sizes were recorded has none.
     workspaceGiB: priorRun
       ? priorRun.runtimeLimits?.workspaceGiB
-      : (chosen.workspaceGiB ?? resolveRunWorkspaceGiB(chosen.tier, tiers)),
+      : resolveRunWorkspaceGiB(chosen.tier, tiers),
   });
   const { spec, virtualApiKeyId, gatewayTokenId } =
     await buildAgentRunLaunchSpec({
       runtime: params.runtime,
       limits,
+      tiers,
       taskId: params.taskId,
       runId,
       agentId: params.agentId,

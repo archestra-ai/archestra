@@ -136,6 +136,11 @@ export function resolveRunWorkspaceGiB(
   return tierWorkspaceGiB(tierSize(tiers, tier));
 }
 
+/** A tier's workspace volume in GiB, the deployment's when it sets none. */
+export function tierWorkspaceGiB(tier: AgentRuntimeTierSize): number {
+  return tier.workspaceGiB ?? config.agentRuntime.workspaceStorageGiB;
+}
+
 /** A tier's workspace volume as a Kubernetes quantity. */
 export function tierWorkspaceStorageSize(tier: AgentRuntimeTierSize): string {
   return tier.workspaceGiB === null
@@ -271,10 +276,7 @@ function allowedTiersSentence(
   allowed: readonly AgentRuntimeTierSize[],
 ): string {
   return `Tiers this Agent's runs may use: ${allowed
-    .map(
-      (tier) =>
-        `${tier.name} (${describeAgentRuntimeTier(tier, config.agentRuntime.workspaceStorageGiB)})`,
-    )
+    .map((tier) => `${tier.name} (${describeTier(tier)})`)
     .join(", ")}.`;
 }
 
@@ -314,7 +316,7 @@ export function resolveAgentRunLimits(params: {
     )
       throw new ApiError(
         400,
-        `Tier ${named.name} (${describeAgentRuntimeTier(named, config.agentRuntime.workspaceStorageGiB)}) is above this Agent's scaleup tier ${maxTier}. ${allowedTiersSentence(allowed)}`,
+        `Tier ${named.name} (${describeTier(named)}) is above this Agent's scaleup tier ${maxTier}. ${allowedTiersSentence(allowed)}`,
       );
     tier = named.name;
   }
@@ -337,7 +339,7 @@ export function resolveAgentRunLimits(params: {
       if (!fits(named))
         throw new ApiError(
           400,
-          `Tier ${named.name} (${describeAgentRuntimeTier(named, config.agentRuntime.workspaceStorageGiB)}) has less than the ${need} asked for. ${allowedTiersSentence(allowed)}`,
+          `Tier ${named.name} (${describeTier(named)}) has less than the ${need} asked for. ${allowedTiersSentence(allowed)}`,
         );
     } else {
       const hasDisk = (candidate: AgentRuntimeTierSize) =>
@@ -396,7 +398,10 @@ export function resolveAgentRunLimits(params: {
 
 // === Internal helpers ===
 
-/** A tier's workspace volume in GiB, the deployment's when it sets none. */
-function tierWorkspaceGiB(tier: AgentRuntimeTierSize): number {
-  return tier.workspaceGiB ?? config.agentRuntime.workspaceStorageGiB;
+/** A tier's size for refusal messages, its workspace always named. */
+function describeTier(tier: AgentRuntimeTierSize): string {
+  return describeAgentRuntimeTier(
+    tier,
+    config.agentRuntime.workspaceStorageGiB,
+  );
 }

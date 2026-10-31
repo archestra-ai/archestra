@@ -1681,6 +1681,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `limits.idle_timeout_minutes` | `number` | Yes |  |
 | `limits.max_duration_hours` | `number` | Yes | The run and its saved files end this many hours after the start. |
 | `limits.max_cost_usd` | `number \| null` | Yes |  |
+| `limits.workspace_gib` | `number` | No | The size of the run's workspace volume in GiB. Absent for a workspace from before sizes were recorded. |
 | `next_step` | `string` | Yes | What to do now. |
 
 #### get_agent_run
@@ -1713,6 +1714,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `limits.idle_timeout_minutes` | `number` | Yes |  |
 | `limits.max_duration_hours` | `number` | Yes | The run and its saved files end this many hours after the start. |
 | `limits.max_cost_usd` | `number \| null` | Yes |  |
+| `limits.workspace_gib` | `number` | No | The size of the run's workspace volume in GiB. Absent for a workspace from before sizes were recorded. |
 | `requests` | `object[]` | Yes | The run's original request and, when different, the current turn's request. Use this context to interpret short follow-ups. |
 | `requests[].text` | `string` | Yes |  |
 | `requests[].truncated` | `boolean` | Yes |  |

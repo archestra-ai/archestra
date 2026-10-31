@@ -38,9 +38,16 @@ export async function prepareAgentRuntimeTierChange(params: {
   const { organizationId, input } = params;
   const next = input ?? defaultTierInput();
   const current = await organizationAgentRuntimeTiers(organizationId);
+  // A name another tier is renamed away from in this save names a new tier,
+  // which has no size to keep.
+  const renamedAwayNames = next.tiers.flatMap((tier) =>
+    tier.previousName && !sameAgentRuntimeTierName(tier.previousName, tier.name)
+      ? [tier.previousName]
+      : [],
+  );
   const settings = {
     tiers: next.tiers
-      .map((tier) => withCurrentWorkspace(tier, current))
+      .map((tier) => withCurrentWorkspace(tier, current, renamedAwayNames))
       .map(agentRuntimeTierDefinitionFromInput),
     defaultTier: next.defaultTier,
   };
@@ -107,18 +114,22 @@ export async function prepareAgentRuntimeTierChange(params: {
 /**
  * A tier saved without a workspace size keeps the size it has: a client that
  * does not know the field must not erase it. The tier is matched by its name
- * before the save, so a rename keeps the size too. Null is a choice: the
- * deployment's default.
+ * before the save, so a rename keeps the size too; a new tier that takes a
+ * name renamed away in the same save starts at the deployment's default.
+ * Null is a choice: the deployment's default.
  */
 function withCurrentWorkspace(
   tier: AgentRuntimeTierDefinitionInput,
   current: ResolvedAgentRuntimeTiers,
+  renamedAwayNames: readonly string[],
 ): AgentRuntimeTierDefinitionInput {
   if (tier.workspaceGiB !== undefined) return tier;
-  const before = findAgentRuntimeTier(
-    current.tiers,
-    tier.previousName ?? tier.name,
-  );
+  const reusesRenamedName =
+    !tier.previousName &&
+    renamedAwayNames.some((name) => sameAgentRuntimeTierName(name, tier.name));
+  const before = reusesRenamedName
+    ? undefined
+    : findAgentRuntimeTier(current.tiers, tier.previousName ?? tier.name);
   return { ...tier, workspaceGiB: before?.workspaceGiB ?? null };
 }
 

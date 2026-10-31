@@ -129,7 +129,7 @@ export const AgentRunLimitsSchema = z.object({
   maxCostUsd: z.number().int().min(1).nullable(),
   workspaceGiB: z
     .number()
-    .positive()
+    .nonnegative()
     .optional()
     .describe(
       "Size of the run's workspace volume in GiB, recorded when the workspace was created. Absent on runs whose workspace predates recorded sizes.",

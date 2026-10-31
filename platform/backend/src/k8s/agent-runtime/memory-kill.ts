@@ -96,7 +96,7 @@ export function describeMemoryKill(
   }
   const limit =
     events.limitBytes !== null
-      ? `stayed under its ${formatGibibytes(events.limitBytes)} limit`
+      ? `did not hit its ${formatGibibytes(events.limitBytes)} limit`
       : "has no memory limit of its own";
   return `The kernel killed the run's processes because the node ran out of memory; the ${container} container ${limit}${peak}. Start the run again.`;
 }

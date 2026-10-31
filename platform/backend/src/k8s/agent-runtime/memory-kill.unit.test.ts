@@ -118,7 +118,7 @@ describe("describeMemoryKill", () => {
         "agent-runtime",
       ),
     ).toBe(
-      "The kernel killed the run's processes because the node ran out of memory; the agent-runtime container stayed under its 8 GiB limit (peak usage 3 GiB). Start the run again.",
+      "The kernel killed the run's processes because the node ran out of memory; the agent-runtime container did not hit its 8 GiB limit (peak usage 3 GiB). Start the run again.",
     );
     expect(
       describeMemoryKill(

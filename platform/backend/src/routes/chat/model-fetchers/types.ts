@@ -50,6 +50,13 @@ export interface FetchedModelCapabilities {
    */
   inputModalities?: ModelInputModality[] | null;
   outputModalities?: ModelOutputModality[] | null;
+  /**
+   * The fetcher classified this model from its id (OpenAI's media, audio
+   * chat and search models), so sync overwrites what an earlier sync stored
+   * instead of keeping it: a realtime model synced as a chat model by an
+   * older build would otherwise stay one.
+   */
+  authoritative?: boolean;
   promptPricePerToken?: string | null;
   completionPricePerToken?: string | null;
   /** Per-token cache-read price (USD), when the provider reports one. */

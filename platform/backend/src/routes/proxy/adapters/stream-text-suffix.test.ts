@@ -673,7 +673,7 @@ describe("stream text suffix seam", () => {
         ]) ?? [];
       const events = released.map(
         (frame) =>
-          JSON.parse(String(frame).replace(/^data: /, "")) as {
+          JSON.parse(String(frame).replace(/^(?:event: .*\n)?data: /, "")) as {
             type: string;
             output_index?: number;
             item_id?: string;

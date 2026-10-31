@@ -549,16 +549,26 @@ class AgentModel {
    * once per request scope. Outside a memoizing request this is a fresh read,
    * so a changed setting applies to the next call.
    */
-  private static findToolAccessFields(
-    id: string,
-  ): Promise<{ environmentId: string | null; accessAllTools: boolean } | null> {
+  private static findToolAccessFields(id: string): Promise<{
+    environmentId: string | null;
+    accessAllTools: boolean;
+    keepMediaInLogs: boolean | null;
+  } | null> {
     return readConfig(`agent-tool-access\0${id}`, async () => {
+      // The organization's media setting rides along so each log write learns
+      // it from the read it already makes; an organization change drops the
+      // cached entry like an agent change does.
       const [result] = await db
         .select({
           environmentId: schema.agentsTable.environmentId,
           accessAllTools: schema.agentsTable.accessAllTools,
+          keepMediaInLogs: schema.organizationsTable.keepMediaInLogs,
         })
         .from(schema.agentsTable)
+        .leftJoin(
+          schema.organizationsTable,
+          eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
+        )
         .where(
           and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)),
         )
@@ -2990,6 +3000,21 @@ class AgentModel {
 
   static async findEnvironmentId(id: string): Promise<string | null> {
     return (await AgentModel.findToolAccessFields(id))?.environmentId ?? null;
+  }
+
+  /**
+   * What a log row written for this agent needs: its environment, and whether
+   * its organization keeps media in logs (null when the agent is not found).
+   */
+  static async findLogSettings(id: string): Promise<{
+    environmentId: string | null;
+    keepMediaInLogs: boolean | null;
+  }> {
+    const fields = await AgentModel.findToolAccessFields(id);
+    return {
+      environmentId: fields?.environmentId ?? null,
+      keepMediaInLogs: fields?.keepMediaInLogs ?? null,
+    };
   }
 
   /**

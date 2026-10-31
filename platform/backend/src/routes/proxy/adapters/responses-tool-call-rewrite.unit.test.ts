@@ -21,7 +21,9 @@ describe("Responses tool-call rewrite", () => {
       toolCalls: [notice],
       firstOutputIndex: 0,
       nextSequenceNumber: () => sequence++,
-    }).map((frame) => JSON.parse(frame.replace(/^data: /, "").trim()));
+    }).map((frame) =>
+      JSON.parse(frame.replace(/^(event: [^\n]*\n)?data: /, "").trim()),
+    );
 
     const done = frames.find(
       (frame) => frame.type === "response.output_item.done",
@@ -84,7 +86,9 @@ describe("Responses tool-call rewrite", () => {
       firstOutputIndex: 0,
       nextSequenceNumber: () => 0,
       namespaceByCallId: new Map([["call_1", "mcp__my_gateway"]]),
-    }).map((frame) => JSON.parse(frame.replace(/^data: /, "").trim()));
+    }).map((frame) =>
+      JSON.parse(frame.replace(/^(event: [^\n]*\n)?data: /, "").trim()),
+    );
 
     expect(output).toEqual([
       expect.objectContaining({

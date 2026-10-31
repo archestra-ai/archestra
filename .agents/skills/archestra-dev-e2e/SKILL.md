@@ -76,7 +76,7 @@ test("installs a local server", { tag: "@needs-kubernetes" }, async ({ request }
 });
 ```
 
-A stack that lacks the dependency names it in `E2E_UNAVAILABLE` (`kubernetes`, `keycloak`), and both fixture bases skip the tagged tests with that reason. CI and the lite harness run both and set nothing; `scripts/dev-lite.sh e2e` sets it from what it runs. A group whose `beforeAll` needs the dependency also calls `skipWhenUnavailable("kubernetes")` from `e2e-tests/dependencies.ts` in its body, so the hook never runs without it.
+A stack that lacks the dependency names it in `E2E_UNAVAILABLE` (`kubernetes`, `keycloak`), and both fixture bases skip the tagged tests with that reason. CI and the lite harness run both and set nothing; `scripts/dev-lite.sh e2e` sets it from what it runs (`up --e2e --keycloak` adds Keycloak). A group whose `beforeAll` needs the dependency also calls `skipWhenUnavailable("kubernetes")` from `e2e-tests/dependencies.ts` in its body, so the hook never runs without it.
 
 ## Fixtures
 

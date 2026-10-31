@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import config, { parseLabelSelector } from "@/config";
+import { AGENT_RUNTIME_DIR } from "@/services/agent-runtime/runtime-contract";
 import {
   buildAgentRuntimePlatformEgressPolicy,
   buildAgentRuntimeSandbox,
@@ -367,6 +368,19 @@ describe("the container bootstrap", () => {
     // has no tmux" never reads as "your agent failed".
     expect(script()).toContain("command -v tmux");
     expect(script()).toContain("exit 78");
+  });
+
+  it("traps PID 1's exit before its first write to the workspace volume", () => {
+    // A full volume ends PID 1 at its first refused write; the trap turns
+    // that into the full-volume status, so it must come before any write.
+    const lines = script().split("\n");
+    expect(lines[0]).toBe("set -eu");
+    const trap = lines.indexOf("trap archestra_workspace_exit EXIT");
+    const firstWrite = lines.findIndex((line) =>
+      line.startsWith(`mkdir -p ${AGENT_RUNTIME_DIR}`),
+    );
+    expect(trap).toBeGreaterThan(0);
+    expect(trap).toBeLessThan(firstWrite);
   });
 
   it("creates the steer FIFO and retains the workspace supervisor", () => {

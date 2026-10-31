@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -142,6 +142,7 @@ What to know:
 
 - **A run does not start:** see [Setup troubleshooting](/docs/agents/runtime/setup#troubleshooting).
 - **A run ends with a pod failure:** open **Failed details** for the Kubernetes pod name, failure reason, and container exit code when available. Share these details with your cluster operator; for example, `OOMKilled` identifies a memory termination and `Evicted` includes Kubernetes' eviction message.
+- **A run ends with exit code 76:** the agent filled its workspace volume, which holds the home directory and, for privileged agents, the Docker data. **Failed details** shows how much of the volume was used. Start a new run after an administrator raises [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Exit code 77 means the volume refuses writes for another reason, such as a read-only or failing volume: ask your cluster operator to check it.
 - **A model call fails with HTTP 500 and `x-should-retry: false`:** the organization's [Guardrails](/docs/agents/guardrails) policy is invalid. An administrator must fix it. Retrying does not help.
 - **A model call fails with HTTP 400 and names `X-Archestra-Runtime-Binding`:** the agent's image does not send the [run headers](/docs/agents/runtime/custom-images#send-the-run-headers). Rebuild it on a current maintained image, then start a new run.
 - **Find a run's traffic:** LLM Proxy Logs and MCP Gateway Logs show the run ID. For health metrics, see [Agent Runtime Health](/docs/admin/observability/metrics#agent-runtime-health).

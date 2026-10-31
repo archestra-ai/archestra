@@ -1,5 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 import type { V1Pod } from "@kubernetes/client-node";
+import { workspaceExitExplanation } from "./workspace-exit";
 
 const TRUNCATED = "… (truncated)";
 
@@ -45,6 +46,12 @@ export function describeAgentRuntimePodFailure(
       );
       const terminationMessage = diagnosticText(terminated.message);
       if (terminationMessage) details.push(terminationMessage);
+      // The runtime writes why its volume stopped the run to the termination
+      // message; this says the same when that write did not happen.
+      else if (kind === "Container") {
+        const workspace = workspaceExitExplanation(terminated.exitCode);
+        if (workspace) details.push(workspace);
+      }
     }
   }
 

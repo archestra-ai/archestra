@@ -261,3 +261,129 @@ test("allocates multi-model billing receipts to only the selected model's compon
     requests: 0,
   });
 });
+
+test("candidate narrowing preserves receipt overrides, fallback rows and deduplicated pagination", async ({
+  makeAgent,
+  makeInteraction,
+  makeUser,
+  makeOrganization,
+}) => {
+  const agent = await makeAgent({ organizationId });
+  const other = await makeUser();
+  const foreign = await makeAgent({
+    organizationId: (await makeOrganization()).id,
+  });
+  const receipt = async (
+    interactionId: string,
+    models: string[],
+    mode: "enforce" | "shadow" = "enforce",
+  ) => {
+    await db.insert(schema.interactionBillingTable).values({
+      interactionId,
+      organizationId,
+      billingMode: "metered",
+      fingerprint: `candidate-${interactionId}`,
+      usage: {
+        version: 1,
+        mode,
+        status: "complete",
+        issues: [],
+        cost: String(models.length),
+        components: models.map((model, index) => ({
+          id: `component-${index}`,
+          model,
+          kind:
+            index === 0 ? ("message" as const) : ("advisor_message" as const),
+          provider: "openai" as const,
+          inputTokens: 10,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cacheWrite1hTokens: 0,
+          prices: {
+            input: "1",
+            output: "1",
+            cacheRead: null,
+            cacheWrite: null,
+            cacheWrite1h: null,
+            source: "test",
+          },
+          cost: "1",
+        })),
+      },
+    });
+  };
+  const both = await makeInteraction(agent.id, {
+    model: "selected",
+    userId: user.id,
+    cost: "9",
+  });
+  await receipt(both.id, ["selected", "selected"]);
+  const advisor = await makeInteraction(agent.id, {
+    model: "different",
+    userId: other.id,
+    cost: "9",
+  });
+  await receipt(advisor.id, ["different", "selected"]);
+  const replaced = await makeInteraction(agent.id, {
+    model: "selected",
+    userId: user.id,
+    cost: "99",
+  });
+  await receipt(replaced.id, ["replacement"]);
+  const shadow = await makeInteraction(agent.id, {
+    model: "selected",
+    cost: "3",
+  });
+  await receipt(shadow.id, ["replacement"], "shadow");
+  const empty = await makeInteraction(agent.id, {
+    model: "selected",
+    cost: "4",
+  });
+  await receipt(empty.id, []);
+  const expired = await makeInteraction(agent.id, {
+    model: "different",
+    cost: "100",
+    createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
+  });
+  await receipt(expired.id, ["selected"]);
+  const outside = await makeInteraction(foreign.id, {
+    model: "different",
+    cost: "100",
+  });
+  await receipt(outside.id, ["selected"]);
+
+  const read = async (offset: number) => {
+    const response = await app.inject({
+      url: `/api/statistics/model-usage?model=selected&groupBy=person&timeframe=24h&limit=1&offset=${offset}`,
+    });
+    expect(response.statusCode).toBe(200);
+    return response.json();
+  };
+  const pages = await Promise.all([read(0), read(1), read(2)]);
+  expect(pages.map((page) => page.pagination)).toMatchObject([
+    { total: 3, hasNext: true },
+    { total: 3, hasNext: true },
+    { total: 3, hasNext: false },
+  ]);
+  const rows = pages.flatMap((page) => page.data);
+  expect(rows.map((row) => [row.id, row.billedCost, row.requests])).toEqual([
+    ["__unattributed__", 7, 2],
+    [user.id, 2, 1],
+    [other.id, 1, 0],
+  ]);
+  for (const row of rows) {
+    expect(
+      row.timeSeries.reduce(
+        (total: number, point: { billedCost: number }) =>
+          total + point.billedCost,
+        0,
+      ),
+    ).toBe(row.billedCost);
+  }
+  const personal = await app.inject({
+    url: "/api/statistics/me/model-usage?model=selected&groupBy=client&timeframe=24h",
+  });
+  expect(personal.statusCode).toBe(200);
+  expect(personal.json().data).toMatchObject([{ billedCost: 2, requests: 1 }]);
+});

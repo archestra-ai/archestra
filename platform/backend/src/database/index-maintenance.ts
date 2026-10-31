@@ -138,6 +138,9 @@ export async function createMcpServerIndexes(
  * Built the same way as {@link createAgentToolsIndexes}: concurrently, so
  * proxy writes to interactions are never blocked.
  *
+ * Also maintain the model/date covering index used by Costs drill-down. Its
+ * definition matches main so upgrades reuse the same index.
+ *
  * Also the partial index behind "the LLM calls sent with these passthrough
  * keys": `interactions (passthrough_virtual_key_id) WHERE
  * passthrough_virtual_key_id IS NOT NULL`. The Connect page attributes a call
@@ -241,9 +244,30 @@ interface MaintainedIndex {
   table: string;
   name: string;
   columns: readonly string[];
+  /** Non-key columns carried in the index for covering reads. */
+  include?: readonly string[];
   /** As pg_get_expr prints it, so an existing index can be compared. */
   predicate: string | null;
 }
+
+// Match main's index definition so later upgrades reuse the concurrent build.
+const MODEL_HISTORY_INDEX: MaintainedIndex = {
+  table: "interactions",
+  name: "interactions_model_created_at_idx",
+  columns: ["model", "created_at", "id"],
+  include: [
+    "type",
+    "input_tokens",
+    "output_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "cache_write_1h_tokens",
+    "cost",
+    "billing_mode",
+    "user_id",
+  ],
+  predicate: null,
+};
 
 const AGENT_TOOLS_INDEXES: readonly MaintainedIndex[] = [
   {
@@ -289,6 +313,7 @@ const INTERACTIONS_INDEXES: readonly MaintainedIndex[] = [
     columns: ["passthrough_virtual_key_id"],
     predicate: "(passthrough_virtual_key_id IS NOT NULL)",
   },
+  MODEL_HISTORY_INDEX,
 ];
 const INTERACTIONS_INDEX_LOCK = "index-maintenance:interactions";
 // The concurrent build and drop wait for every older transaction to finish,
@@ -463,7 +488,10 @@ async function buildMaintainedIndex(params: {
   logger.info({ table: index.table, indexName: index.name }, "Building index");
   await client.query(
     `CREATE INDEX ${concurrently ? "CONCURRENTLY " : ""}"${index.name}" ` +
-      `ON "${index.table}" (${index.columns.map((column) => `"${column}"`).join(", ")})` +
+      `ON "${index.table}" (${quoteColumns(index.columns)})` +
+      (index.include?.length
+        ? ` INCLUDE (${quoteColumns(index.include)})`
+        : "") +
       (index.predicate ? ` WHERE ${index.predicate}` : ""),
   );
   return existing ? "rebuilt_invalid" : "created";
@@ -501,6 +529,7 @@ function hasExpectedDefinition(params: {
   index: MaintainedIndex;
 }): boolean {
   const { existing, index } = params;
+  const allColumns = [...index.columns, ...(index.include ?? [])];
   return (
     existing.relkind === "i" &&
     existing.amname === "btree" &&
@@ -509,11 +538,15 @@ function hasExpectedDefinition(params: {
     existing.indisunique === false &&
     // Both counts: (a) INCLUDE (b) lists the same columns as (a, b).
     existing.indnkeyatts === index.columns.length &&
-    existing.indnatts === index.columns.length &&
+    existing.indnatts === allColumns.length &&
     existing.predicate === index.predicate &&
     Array.isArray(existing.columns) &&
-    existing.columns.join(",") === index.columns.join(",")
+    existing.columns.join(",") === allColumns.join(",")
   );
+}
+
+function quoteColumns(columns: readonly string[]): string {
+  return columns.map((column) => `"${column}"`).join(", ");
 }
 
 const LEGACY_PAYLOAD_TRGM_INDEXES = [

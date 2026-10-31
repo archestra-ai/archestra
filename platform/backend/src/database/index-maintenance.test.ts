@@ -251,6 +251,7 @@ describe("createMcpServerIndexes", () => {
 
 describe("createInteractionsIndexes", () => {
   const name = "interactions_session_preview_missing_idx";
+  const modelHistoryName = "interactions_model_created_at_idx";
   const passthroughName = "interactions_passthrough_virtual_key_id_idx";
   const options = {
     concurrently: false,
@@ -262,11 +263,13 @@ describe("createInteractionsIndexes", () => {
 
   beforeEach(async () => {
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${name}"`));
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${modelHistoryName}"`));
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${passthroughName}"`));
   });
 
   test("creates the missing-preview index, then recognizes it on the next boot", async () => {
     expect(await createInteractionsIndexes(options)).toEqual({
+      [modelHistoryName]: "created",
       [name]: "created",
       [passthroughName]: "created",
     });
@@ -278,6 +281,7 @@ describe("createInteractionsIndexes", () => {
     // A predicate that does not match what PostgreSQL prints back would read
     // as someone else's index here, and the index would never be maintained.
     expect(await createInteractionsIndexes(options)).toEqual({
+      [modelHistoryName]: "already_valid",
       [name]: "already_valid",
       [passthroughName]: "already_valid",
     });
@@ -301,6 +305,33 @@ describe("createInteractionsIndexes", () => {
     );
     expect(await indexOid(passthroughName)).toBe(oid);
     expect(await advisoryLockCount()).toBe(0);
+  });
+  test("builds the model covering index and reuses it on subsequent boots", async () => {
+    expect((await createInteractionsIndexes(options))[modelHistoryName]).toBe(
+      "created",
+    );
+    expect(await indexDefinition(modelHistoryName)).toBe(
+      `CREATE INDEX ${modelHistoryName} ON public.interactions USING btree (model, created_at, id) INCLUDE (type, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cache_write_1h_tokens, cost, billing_mode, user_id)`,
+    );
+    const oid = await indexOid(modelHistoryName);
+    expect((await createInteractionsIndexes(options))[modelHistoryName]).toBe(
+      "already_valid",
+    );
+    expect(await indexOid(modelHistoryName)).toBe(oid);
+    expect(await advisoryLockCount()).toBe(0);
+  });
+
+  test("leaves a mismatched model index untouched rather than dropping it", async () => {
+    await db.execute(
+      sql.raw(
+        `CREATE INDEX "${modelHistoryName}" ON interactions (model, created_at, id)`,
+      ),
+    );
+    const oid = await indexOid(modelHistoryName);
+    expect((await createInteractionsIndexes(options))[modelHistoryName]).toBe(
+      "unexpected_definition",
+    );
+    expect(await indexOid(modelHistoryName)).toBe(oid);
   });
 });
 

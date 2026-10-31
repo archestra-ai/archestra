@@ -22,7 +22,8 @@
 #                              get the defaults back on the next up. With
 #                              --e2e the frontend is a production build, as CI
 #                              serves it; e2e scales the timeouts and workers to
-#                              the CPUs available
+#                              the CPUs available and skips the specs tagged for
+#                              Kubernetes or Keycloak (E2E_UNAVAILABLE)
 #   scripts/dev-lite.sh restart [options]      down, then up again
 #   scripts/dev-lite.sh reload backend|frontend  restart one component; the backend
 #                              is rebuilt first when the watcher is off
@@ -692,7 +693,17 @@ cmd_e2e() {
   elif [ "$cpus" -le 4 ]; then
     export E2E_WORKERS="${E2E_WORKERS:-3}" E2E_TIMEOUT_SCALE="${E2E_TIMEOUT_SCALE:-2}"
   fi
-  log "Playwright on $cpus CPU(s): ${E2E_WORKERS:-3} workers, timeouts x${E2E_TIMEOUT_SCALE:-1}"
+  # What this stack does not run. Specs tagged @needs-kubernetes or
+  # @needs-keycloak skip with that reason instead of failing (see
+  # e2e-tests/dependencies.ts). A value set by hand wins, even an empty one.
+  if [ -z "${E2E_UNAVAILABLE+set}" ]; then
+    local unavailable=()
+    [ -n "${ARCHESTRA_DEV_LITE_KUBECONFIG:-}" ] && [ -f "$ARCHESTRA_DEV_LITE_KUBECONFIG" ] || unavailable+=(kubernetes)
+    unavailable+=(keycloak)
+    E2E_UNAVAILABLE="$(IFS=,; printf '%s' "${unavailable[*]}")"
+  fi
+  export E2E_UNAVAILABLE
+  log "Playwright on $cpus CPU(s): ${E2E_WORKERS:-3} workers, timeouts x${E2E_TIMEOUT_SCALE:-1}; unavailable: ${E2E_UNAVAILABLE:-nothing}"
   cd "$PLATFORM_DIR/e2e-tests"
   export E2E_WIREMOCK_BASE_URL="http://127.0.0.1:$WIREMOCK_PORT"
   export E2E_WIREMOCK_INTERNAL_URL="http://127.0.0.1:$WIREMOCK_PORT"
@@ -702,9 +713,9 @@ cmd_e2e() {
   if [ $# -gt 0 ]; then
     exec pnpm exec playwright test "$@"
   fi
-  # Same projects as scripts/e2e-lite.sh. Without Keycloak, the JWKS-auth specs
-  # for the LLM proxy and the MCP gateway fail; without a Kubernetes cluster,
-  # the MCP server install and orchestrator specs fail.
+  # Same projects as scripts/e2e-lite.sh. The specs that need Keycloak (JWKS
+  # auth for the LLM proxy and the MCP gateway) or a Kubernetes cluster (MCP
+  # server installs, the orchestrator) are tagged and skip, see above.
   exec pnpm exec playwright test --project=chromium --project=api --grep-invert @quickstart
 }
 

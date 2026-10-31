@@ -222,9 +222,13 @@ clone:
 | Standalone frontend server | 160 MB idle, 480 MB after the full suite |
 | Full default `e2e`, 115 tests | 97 passed, 3 skipped, 15 failed, none flaky; 15.4 min; at most 3.5 GiB anonymous memory, no process killed for memory |
 
-All 15 failures need what the lite stack does not run: 9 need Kubernetes (the
-MCP server runtime and the orchestrator) and 6 need Keycloak (JWKS auth for the
-LLM proxy and the MCP gateway).
+All 15 failures needed what the lite stack does not run: 9 need Kubernetes
+(the MCP server runtime and the orchestrator) and 6 need Keycloak (JWKS auth
+for the LLM proxy and the MCP gateway). Those tests now carry the tags
+`@needs-kubernetes` and `@needs-keycloak`, and `e2e` names what the stack lacks
+in `E2E_UNAVAILABLE`, so they report as skipped with that reason instead of
+failing (`e2e-tests/dependencies.ts`). A value set by hand wins; an empty one
+skips nothing.
 
 ## Not covered
 
@@ -235,7 +239,9 @@ LLM proxy and the MCP gateway).
   work. The `p4_shim_reconcile` periodic task logs one warning every 5 minutes.
 - Nested Agent Runtime, the Dagger code runtime, Vault, the Keycloak-backed
   specs (identity providers, JWKS auth), and the `api-k8s`, `hibernation` and
-  `vault-k8s` Playwright projects.
+  `vault-k8s` Playwright projects. Specs in the default `e2e` run that need
+  Kubernetes or Keycloak are tagged and skip (see above); the projects that
+  need them entirely are not run.
 
 ## PGlite was tried and does not fit
 

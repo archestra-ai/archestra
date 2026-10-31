@@ -29,7 +29,9 @@ import { expect, test } from "../api-fixtures";
 test.describe.configure({ mode: "default" });
 
 test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
-  test("should authenticate with external IdP JWT and get model response", async ({
+  test("should authenticate with external IdP JWT and get model response", {
+    tag: "@needs-keycloak",
+  }, async ({
     request,
     createIdentityProvider,
     deleteIdentityProvider,
@@ -98,7 +100,9 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
     }
   });
 
-  test("should reject invalid JWT with 401", async ({
+  test("should reject invalid JWT with 401", {
+    tag: "@needs-keycloak",
+  }, async ({
     request,
     createIdentityProvider,
     deleteIdentityProvider,

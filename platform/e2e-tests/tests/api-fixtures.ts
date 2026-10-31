@@ -19,6 +19,7 @@ import {
   UI_BASE_URL,
   WIREMOCK_BASE_URL,
 } from "../consts";
+import { skipWithoutDependencies } from "../dependencies";
 
 export {
   LLM_MODELS_ROUTE,
@@ -79,6 +80,8 @@ export interface TestFixtures {
   editorRequest: APIRequestContext;
   /** API request context authenticated as member */
   memberRequest: APIRequestContext;
+  /** Skips a tagged test whose dependency E2E_UNAVAILABLE names (see dependencies.ts) */
+  skipWithoutDependencies: undefined;
 }
 
 const makeApiRequest = async ({
@@ -1093,6 +1096,7 @@ const deleteConnector = async (
 
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
+  skipWithoutDependencies: [skipWithoutDependencies, { auto: true }],
   makeApiRequest: async ({}, use) => {
     await use(makeApiRequest);
   },

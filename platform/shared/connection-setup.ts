@@ -60,6 +60,9 @@ export const CONNECTION_SETUP_WINDOW_MS = 10 * 60 * 1000;
  */
 export const CONNECTION_SETUP_MAX_SKILLS = 1111;
 
+/** Setup tokens are render tickets, not credentials — keep them short-lived. */
+export const CONNECTION_SETUP_TOKEN_TTL_MS = 15 * 60 * 1000;
+
 /** Upper bound on plugins delivered by one setup or share link. */
 export const PLUGIN_DELIVERY_MAX_COUNT = 555;
 

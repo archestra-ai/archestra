@@ -16,9 +16,6 @@ const TOKEN_RANDOM_BYTES = 24;
 /** Display prefix length: prefix (14) + 8 random chars for UI distinguishability. */
 const TOKEN_START_LENGTH = 22;
 
-/** Setup tokens are render tickets, not credentials — keep them short-lived. */
-export const CONNECTION_SETUP_TOKEN_TTL_MS = 15 * 60 * 1000;
-
 interface CreateConnectionSetupParams
   extends Omit<InsertConnectionSetup, "tokenHash" | "tokenStart"> {
   skillIds?: string[];

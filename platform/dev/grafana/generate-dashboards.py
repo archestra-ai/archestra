@@ -254,7 +254,8 @@ def decorate(d):
             "title": title,
             "type": "link",
             "url": "/d/" + uid,
-            "includeVars": True,
+            "includeVars": uid != "archestra-agent-sessions"
+            and d["uid"] != "archestra-agent-sessions",
             "keepTime": True,
             "targetBlank": False,
         }

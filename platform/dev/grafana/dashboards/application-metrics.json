@@ -72,7 +72,7 @@
       "title": "Session Investigation",
       "type": "link",
       "url": "/d/archestra-agent-sessions",
-      "includeVars": true,
+      "includeVars": false,
       "keepTime": true,
       "targetBlank": false
     },

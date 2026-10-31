@@ -246,8 +246,11 @@ describe("making an object org-wide", () => {
     });
     await makeMember(user.id, org.id, { role: role.role });
     // More than one picker page: searching must still find a late-sorted team.
-    for (let i = 0; i < 31; i++)
-      await makeTeam(org.id, user.id, { name: `A team ${i}` });
+    const excluded: ResourcePermissionGrant["subject"][] = [];
+    for (let i = 0; i < 31; i++) {
+      const team = await makeTeam(org.id, user.id, { name: `A team ${i}` });
+      excluded.push({ type: "team", id: team.id });
+    }
     const team = await makeTeam(org.id, user.id, { name: "Z collaboration" });
     const foreignOrg = await makeOrganization();
     const foreign = await makeTeam(foreignOrg.id, user.id, {
@@ -271,6 +274,19 @@ describe("making an object org-wide", () => {
           subject.id === foreign.id ||
           subject.type === "role" ||
           subject.type === "organization",
+      ),
+    ).toBe(false);
+    const remaining = await ResourcePermissions.searchInitialSubjects({
+      ...context,
+      query: "",
+      exclude: excluded,
+    });
+    expect(remaining).toContainEqual(
+      expect.objectContaining({ subject: { type: "team", id: team.id } }),
+    );
+    expect(
+      remaining.some(({ subject }) =>
+        excluded.some((entry) => entry.id === subject.id),
       ),
     ).toBe(false);
     const validate = (subject: ResourcePermissionGrant["subject"]) =>

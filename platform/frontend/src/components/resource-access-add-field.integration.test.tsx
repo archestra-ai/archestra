@@ -101,8 +101,8 @@ it("searches on the server and picks a recipient in one step", async () => {
   );
   const onPick = renderField();
   const user = userEvent.setup();
-  // Nothing is looked up until the field opens.
-  expect(queries).toEqual([]);
+  // Availability is checked before the field opens.
+  await waitFor(() => expect(queries).toContain(""));
   await user.click(screen.getByRole("combobox", { name: "Add access" }));
   await screen.findByRole("option", { name: "Engineering team" });
   await user.type(
@@ -170,11 +170,58 @@ it("says so when every recipient already has access", async () => {
     ),
   );
   renderField({ existingSubjects: [{ type: "team", id: "team-example" }] });
-  const user = userEvent.setup();
-  await user.click(screen.getByRole("combobox", { name: "Add access" }));
+  const empty = await screen.findByRole("combobox", {
+    name: "No more recipients to add",
+  });
+  expect(empty).toBeDisabled();
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+});
+
+it("does not treat a failed search as exhausted, and becomes available again after a grant is removed", async () => {
+  const team = {
+    subject: { type: "team" as const, id: "team-example" },
+    name: "Engineering",
+  };
+  server.use(
+    http.get(endpoint, ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).searchParams.get("query") ? [] : [team],
+      ),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const field = (existingSubjects: PermissionSubject[]) => (
+    <QueryClientProvider client={client}>
+      <ResourceAccessAddField
+        resource="agent"
+        scope="00000000-0000-4000-8000-000000000010"
+        existingSubjects={existingSubjects}
+        onPick={vi.fn()}
+      />
+    </QueryClientProvider>
+  );
+  const view = render(field([team.subject]));
   expect(
-    await screen.findByText("No recipients available to add."),
-  ).toBeInTheDocument();
+    await screen.findByRole("combobox", { name: "No more recipients to add" }),
+  ).toBeDisabled();
+  view.rerender(field([]));
+  const trigger = await screen.findByRole("combobox", { name: "Add access" });
+  expect(trigger).toBeEnabled();
+  const user = userEvent.setup();
+  await user.click(trigger);
+  await user.type(
+    screen.getByRole("combobox", { name: "Search recipients" }),
+    "missing",
+  );
+  expect(
+    await screen.findByText("No matching recipients available to add."),
+  ).toBeVisible();
+  await user.clear(screen.getByRole("combobox", { name: "Search recipients" }));
+  expect(
+    await screen.findByRole("option", { name: "Engineering" }),
+  ).toBeVisible();
 });
 
 function renderField({

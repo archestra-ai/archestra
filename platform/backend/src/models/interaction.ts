@@ -55,7 +55,10 @@ import {
   withholdInteractionContent,
 } from "@/log-content";
 import logger from "@/logging";
-import { exportSessionSummary } from "@/observability/session-summary";
+import {
+  exportSessionSummary,
+  shouldExportSessionSummary,
+} from "@/observability/session-summary";
 import type {
   InsertInteraction,
   Interaction,
@@ -749,21 +752,23 @@ class InteractionModel {
     // Run after the committed write, without delaying inference. Read the same
     // bounded session aggregation as the UI, so time ranges/truncated log queries
     // cannot turn a partial set of requests into misleading totals.
-    trackBackgroundWork(
-      InteractionModel.summarizeSessionPage(
-        [
-          {
-            sessionId: insertValues.sessionId ?? null,
-            interactionId: insertValues.sessionId ? null : interaction.id,
-          },
-        ],
-        undefined,
-      )
-        .then((rows) => {
-          for (const row of rows) exportSessionSummary(row);
-        })
-        .catch(() => {}),
-    );
+    if (shouldExportSessionSummary()) {
+      trackBackgroundWork(
+        InteractionModel.summarizeSessionPage(
+          [
+            {
+              sessionId: insertValues.sessionId ?? null,
+              interactionId: insertValues.sessionId ? null : interaction.id,
+            },
+          ],
+          undefined,
+        )
+          .then((rows) => {
+            for (const row of rows) exportSessionSummary(row);
+          })
+          .catch(() => {}),
+      );
+    }
     return interaction;
   }
 

@@ -2,6 +2,14 @@ import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import type { SessionSummary } from "@/types/interaction";
 import { sessionTraceId } from "./tracing/session";
 
+/** Avoid session aggregation queries when no logger will export the summary. */
+export function shouldExportSessionSummary(): boolean {
+  return logs.getLogger("archestra-sessions").enabled({
+    severityNumber: SeverityNumber.INFO,
+    eventName: "archestra.session.summary",
+  });
+}
+
 /** Cumulative, persisted totals from the same aggregation as the app log list. Never sum snapshots. */
 export function exportSessionSummary(
   session: SessionSummary & { totalDurationMs?: number | null },

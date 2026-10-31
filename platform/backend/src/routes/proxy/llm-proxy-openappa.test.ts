@@ -95,6 +95,7 @@ import anthropicProxyRoutes from "./routes/anthropic";
 import openAiProxyRoutes from "./routes/openai";
 
 const native = vi.hoisted(() => ({
+  collectOpenappaMetrics: vi.fn(() => ""),
   initializeOpenappa: vi.fn(),
   dispatchHook: vi.fn(),
   loadChildReturns: vi.fn(

@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-28
+lastUpdated: 2026-10-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -162,6 +162,7 @@ A failed run carries a stable `failure.code`, so a script can retry or stop with
 | `launch.credentials_timeout` | Yes | The run's credentials did not reach the pod in time. |
 | `pod.evicted` | Yes | Kubernetes evicted or preempted the pod. |
 | `pod.oom_killed` | No | The agent ran out of memory. |
+| `pod.workspace_full` | No | The agent filled its workspace volume. Ask an administrator for a larger volume. |
 | `pod.image_pull` | No | The image could not be pulled. |
 | `pod.failed` | No | The pod failed for another reason. |
 | `turn.interrupted` | Yes | The pod was replaced while the agent worked. The turn is not repeated. |
@@ -187,6 +188,7 @@ What to know:
 
 - **A run does not start:** see [Setup troubleshooting](/docs/agents/runtime/setup#troubleshooting).
 - **A run ends with a pod failure:** open **Failed details** for the Kubernetes pod name, failure reason, and container exit code when available. Share these details with your cluster operator; for example, `OOMKilled` identifies a memory termination and `Evicted` includes Kubernetes' eviction message.
+- **A run ends with `pod.workspace_full`:** the agent filled its workspace volume, which holds the home directory and, for privileged agents, the Docker data. **Failed details** shows how much of the volume was used. Start a new run after an administrator raises [`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`](/docs/admin/deployment/configuration#ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE). Exit code 77 means the volume refuses writes for another reason, such as a read-only or failing volume: ask your cluster operator to check it.
 - **A model call fails with a Guardrails error:** the message says what to do, and the status says who.
   - `400`: the conversation holds content [Guardrails](/docs/agents/guardrails) cannot store, such as binary tool output. Rewind past it or start a new conversation.
   - `409`: the conversation cannot continue. Start a new one.

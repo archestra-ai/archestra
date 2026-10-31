@@ -544,6 +544,11 @@ java_major() {
 # distribution's data/ directory, which `reset` removes with the state dir.
 start_keycloak() {
   local dist major
+  # A running Keycloak owns its port: freeing it first would kill it.
+  if session_alive keycloak; then
+    log "keycloak already running"
+    return 0
+  fi
   command -v java >/dev/null 2>&1 || die "--keycloak needs Java 21 (the lite image ships one)"
   major="$(java_major)"
   [ "${major%%.*}" -ge 21 ] 2>/dev/null || die "--keycloak needs Java 21 or newer; found Java ${major:-unknown}"

@@ -61688,25 +61688,6 @@
                                       "privileged": {
                                         "type": "boolean"
                                       },
-                                      "resources": {
-                                        "nullable": true,
-                                        "type": "object",
-                                        "properties": {
-                                          "cpuRequest": {
-                                            "type": "string"
-                                          },
-                                          "memoryRequest": {
-                                            "type": "string"
-                                          },
-                                          "cpuLimit": {
-                                            "type": "string"
-                                          },
-                                          "memoryLimit": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
                                       "tier": {
                                         "nullable": true,
                                         "type": "string",
@@ -61852,7 +61833,6 @@
                                       "backend",
                                       "steerMode",
                                       "privileged",
-                                      "resources",
                                       "environment",
                                       "credentials",
                                       "ttlHours",
@@ -63439,25 +63419,6 @@
                               "privileged": {
                                 "type": "boolean"
                               },
-                              "resources": {
-                                "nullable": true,
-                                "type": "object",
-                                "properties": {
-                                  "cpuRequest": {
-                                    "type": "string"
-                                  },
-                                  "memoryRequest": {
-                                    "type": "string"
-                                  },
-                                  "cpuLimit": {
-                                    "type": "string"
-                                  },
-                                  "memoryLimit": {
-                                    "type": "string"
-                                  }
-                                },
-                                "additionalProperties": false
-                              },
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
@@ -63603,7 +63564,6 @@
                               "backend",
                               "steerMode",
                               "privileged",
-                              "resources",
                               "environment",
                               "credentials",
                               "ttlHours",
@@ -64545,24 +64505,6 @@
                       "privileged": {
                         "type": "boolean"
                       },
-                      "resources": {
-                        "nullable": true,
-                        "type": "object",
-                        "properties": {
-                          "cpuRequest": {
-                            "type": "string"
-                          },
-                          "memoryRequest": {
-                            "type": "string"
-                          },
-                          "cpuLimit": {
-                            "type": "string"
-                          },
-                          "memoryLimit": {
-                            "type": "string"
-                          }
-                        }
-                      },
                       "tier": {
                         "nullable": true,
                         "type": "string",
@@ -64705,7 +64647,6 @@
                       "backend",
                       "steerMode",
                       "privileged",
-                      "resources",
                       "environment",
                       "credentials",
                       "ttlHours",
@@ -65362,25 +65303,6 @@
                         "privileged": {
                           "type": "boolean"
                         },
-                        "resources": {
-                          "nullable": true,
-                          "type": "object",
-                          "properties": {
-                            "cpuRequest": {
-                              "type": "string"
-                            },
-                            "memoryRequest": {
-                              "type": "string"
-                            },
-                            "cpuLimit": {
-                              "type": "string"
-                            },
-                            "memoryLimit": {
-                              "type": "string"
-                            }
-                          },
-                          "additionalProperties": false
-                        },
                         "tier": {
                           "nullable": true,
                           "type": "string",
@@ -65526,7 +65448,6 @@
                         "backend",
                         "steerMode",
                         "privileged",
-                        "resources",
                         "environment",
                         "credentials",
                         "ttlHours",
@@ -67020,25 +66941,6 @@
                           "privileged": {
                             "type": "boolean"
                           },
-                          "resources": {
-                            "nullable": true,
-                            "type": "object",
-                            "properties": {
-                              "cpuRequest": {
-                                "type": "string"
-                              },
-                              "memoryRequest": {
-                                "type": "string"
-                              },
-                              "cpuLimit": {
-                                "type": "string"
-                              },
-                              "memoryLimit": {
-                                "type": "string"
-                              }
-                            },
-                            "additionalProperties": false
-                          },
                           "tier": {
                             "nullable": true,
                             "type": "string",
@@ -67184,7 +67086,6 @@
                           "backend",
                           "steerMode",
                           "privileged",
-                          "resources",
                           "environment",
                           "credentials",
                           "ttlHours",
@@ -67685,25 +67586,6 @@
                               "privileged": {
                                 "type": "boolean"
                               },
-                              "resources": {
-                                "nullable": true,
-                                "type": "object",
-                                "properties": {
-                                  "cpuRequest": {
-                                    "type": "string"
-                                  },
-                                  "memoryRequest": {
-                                    "type": "string"
-                                  },
-                                  "cpuLimit": {
-                                    "type": "string"
-                                  },
-                                  "memoryLimit": {
-                                    "type": "string"
-                                  }
-                                },
-                                "additionalProperties": false
-                              },
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
@@ -67849,7 +67731,6 @@
                               "backend",
                               "steerMode",
                               "privileged",
-                              "resources",
                               "environment",
                               "credentials",
                               "ttlHours",
@@ -68388,25 +68269,6 @@
                               "privileged": {
                                 "type": "boolean"
                               },
-                              "resources": {
-                                "nullable": true,
-                                "type": "object",
-                                "properties": {
-                                  "cpuRequest": {
-                                    "type": "string"
-                                  },
-                                  "memoryRequest": {
-                                    "type": "string"
-                                  },
-                                  "cpuLimit": {
-                                    "type": "string"
-                                  },
-                                  "memoryLimit": {
-                                    "type": "string"
-                                  }
-                                },
-                                "additionalProperties": false
-                              },
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
@@ -68552,7 +68414,6 @@
                               "backend",
                               "steerMode",
                               "privileged",
-                              "resources",
                               "environment",
                               "credentials",
                               "ttlHours",
@@ -69240,25 +69101,6 @@
                               "privileged": {
                                 "type": "boolean"
                               },
-                              "resources": {
-                                "nullable": true,
-                                "type": "object",
-                                "properties": {
-                                  "cpuRequest": {
-                                    "type": "string"
-                                  },
-                                  "memoryRequest": {
-                                    "type": "string"
-                                  },
-                                  "cpuLimit": {
-                                    "type": "string"
-                                  },
-                                  "memoryLimit": {
-                                    "type": "string"
-                                  }
-                                },
-                                "additionalProperties": false
-                              },
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
@@ -69404,7 +69246,6 @@
                               "backend",
                               "steerMode",
                               "privileged",
-                              "resources",
                               "environment",
                               "credentials",
                               "ttlHours",
@@ -70713,25 +70554,6 @@
                         "privileged": {
                           "type": "boolean"
                         },
-                        "resources": {
-                          "nullable": true,
-                          "type": "object",
-                          "properties": {
-                            "cpuRequest": {
-                              "type": "string"
-                            },
-                            "memoryRequest": {
-                              "type": "string"
-                            },
-                            "cpuLimit": {
-                              "type": "string"
-                            },
-                            "memoryLimit": {
-                              "type": "string"
-                            }
-                          },
-                          "additionalProperties": false
-                        },
                         "tier": {
                           "nullable": true,
                           "type": "string",
@@ -70877,7 +70699,6 @@
                         "backend",
                         "steerMode",
                         "privileged",
-                        "resources",
                         "environment",
                         "credentials",
                         "ttlHours",
@@ -72153,25 +71974,6 @@
                             "privileged": {
                               "type": "boolean"
                             },
-                            "resources": {
-                              "nullable": true,
-                              "type": "object",
-                              "properties": {
-                                "cpuRequest": {
-                                  "type": "string"
-                                },
-                                "memoryRequest": {
-                                  "type": "string"
-                                },
-                                "cpuLimit": {
-                                  "type": "string"
-                                },
-                                "memoryLimit": {
-                                  "type": "string"
-                                }
-                              },
-                              "additionalProperties": false
-                            },
                             "tier": {
                               "nullable": true,
                               "type": "string",
@@ -72317,7 +72119,6 @@
                             "backend",
                             "steerMode",
                             "privileged",
-                            "resources",
                             "environment",
                             "credentials",
                             "ttlHours",
@@ -73266,25 +73067,6 @@
                         "privileged": {
                           "type": "boolean"
                         },
-                        "resources": {
-                          "nullable": true,
-                          "type": "object",
-                          "properties": {
-                            "cpuRequest": {
-                              "type": "string"
-                            },
-                            "memoryRequest": {
-                              "type": "string"
-                            },
-                            "cpuLimit": {
-                              "type": "string"
-                            },
-                            "memoryLimit": {
-                              "type": "string"
-                            }
-                          },
-                          "additionalProperties": false
-                        },
                         "tier": {
                           "nullable": true,
                           "type": "string",
@@ -73430,7 +73212,6 @@
                         "backend",
                         "steerMode",
                         "privileged",
-                        "resources",
                         "environment",
                         "credentials",
                         "ttlHours",
@@ -74304,24 +74085,6 @@
                       "privileged": {
                         "type": "boolean"
                       },
-                      "resources": {
-                        "nullable": true,
-                        "type": "object",
-                        "properties": {
-                          "cpuRequest": {
-                            "type": "string"
-                          },
-                          "memoryRequest": {
-                            "type": "string"
-                          },
-                          "cpuLimit": {
-                            "type": "string"
-                          },
-                          "memoryLimit": {
-                            "type": "string"
-                          }
-                        }
-                      },
                       "tier": {
                         "nullable": true,
                         "type": "string",
@@ -74464,7 +74227,6 @@
                       "backend",
                       "steerMode",
                       "privileged",
-                      "resources",
                       "environment",
                       "credentials",
                       "ttlHours",
@@ -74856,25 +74618,6 @@
                         "privileged": {
                           "type": "boolean"
                         },
-                        "resources": {
-                          "nullable": true,
-                          "type": "object",
-                          "properties": {
-                            "cpuRequest": {
-                              "type": "string"
-                            },
-                            "memoryRequest": {
-                              "type": "string"
-                            },
-                            "cpuLimit": {
-                              "type": "string"
-                            },
-                            "memoryLimit": {
-                              "type": "string"
-                            }
-                          },
-                          "additionalProperties": false
-                        },
                         "tier": {
                           "nullable": true,
                           "type": "string",
@@ -75020,7 +74763,6 @@
                         "backend",
                         "steerMode",
                         "privileged",
-                        "resources",
                         "environment",
                         "credentials",
                         "ttlHours",
@@ -77562,25 +77304,6 @@
                         "privileged": {
                           "type": "boolean"
                         },
-                        "resources": {
-                          "nullable": true,
-                          "type": "object",
-                          "properties": {
-                            "cpuRequest": {
-                              "type": "string"
-                            },
-                            "memoryRequest": {
-                              "type": "string"
-                            },
-                            "cpuLimit": {
-                              "type": "string"
-                            },
-                            "memoryLimit": {
-                              "type": "string"
-                            }
-                          },
-                          "additionalProperties": false
-                        },
                         "tier": {
                           "nullable": true,
                           "type": "string",
@@ -77726,7 +77449,6 @@
                         "backend",
                         "steerMode",
                         "privileged",
-                        "resources",
                         "environment",
                         "credentials",
                         "ttlHours",
@@ -78792,25 +78514,6 @@
                         "privileged": {
                           "type": "boolean"
                         },
-                        "resources": {
-                          "nullable": true,
-                          "type": "object",
-                          "properties": {
-                            "cpuRequest": {
-                              "type": "string"
-                            },
-                            "memoryRequest": {
-                              "type": "string"
-                            },
-                            "cpuLimit": {
-                              "type": "string"
-                            },
-                            "memoryLimit": {
-                              "type": "string"
-                            }
-                          },
-                          "additionalProperties": false
-                        },
                         "tier": {
                           "nullable": true,
                           "type": "string",
@@ -78956,7 +78659,6 @@
                         "backend",
                         "steerMode",
                         "privileged",
-                        "resources",
                         "environment",
                         "credentials",
                         "ttlHours",
@@ -86833,25 +86535,6 @@
                         "privileged": {
                           "type": "boolean"
                         },
-                        "resources": {
-                          "nullable": true,
-                          "type": "object",
-                          "properties": {
-                            "cpuRequest": {
-                              "type": "string"
-                            },
-                            "memoryRequest": {
-                              "type": "string"
-                            },
-                            "cpuLimit": {
-                              "type": "string"
-                            },
-                            "memoryLimit": {
-                              "type": "string"
-                            }
-                          },
-                          "additionalProperties": false
-                        },
                         "tier": {
                           "nullable": true,
                           "type": "string",
@@ -86997,7 +86680,6 @@
                         "backend",
                         "steerMode",
                         "privileged",
-                        "resources",
                         "environment",
                         "credentials",
                         "ttlHours",
@@ -97417,25 +97099,6 @@
                                   false
                                 ]
                               },
-                              "resources": {
-                                "nullable": true,
-                                "type": "object",
-                                "properties": {
-                                  "cpuRequest": {
-                                    "type": "string"
-                                  },
-                                  "memoryRequest": {
-                                    "type": "string"
-                                  },
-                                  "cpuLimit": {
-                                    "type": "string"
-                                  },
-                                  "memoryLimit": {
-                                    "type": "string"
-                                  }
-                                },
-                                "additionalProperties": false
-                              },
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
@@ -97584,7 +97247,6 @@
                               "backend",
                               "steerMode",
                               "privileged",
-                              "resources",
                               "environment",
                               "credentials",
                               "ttlHours",
@@ -98073,24 +97735,6 @@
                                 false
                               ]
                             },
-                            "resources": {
-                              "nullable": true,
-                              "type": "object",
-                              "properties": {
-                                "cpuRequest": {
-                                  "type": "string"
-                                },
-                                "memoryRequest": {
-                                  "type": "string"
-                                },
-                                "cpuLimit": {
-                                  "type": "string"
-                                },
-                                "memoryLimit": {
-                                  "type": "string"
-                                }
-                              }
-                            },
                             "tier": {
                               "nullable": true,
                               "type": "string",
@@ -98236,7 +97880,6 @@
                             "backend",
                             "steerMode",
                             "privileged",
-                            "resources",
                             "environment",
                             "credentials",
                             "ttlHours",
@@ -98477,25 +98120,6 @@
                                   false
                                 ]
                               },
-                              "resources": {
-                                "nullable": true,
-                                "type": "object",
-                                "properties": {
-                                  "cpuRequest": {
-                                    "type": "string"
-                                  },
-                                  "memoryRequest": {
-                                    "type": "string"
-                                  },
-                                  "cpuLimit": {
-                                    "type": "string"
-                                  },
-                                  "memoryLimit": {
-                                    "type": "string"
-                                  }
-                                },
-                                "additionalProperties": false
-                              },
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
@@ -98644,7 +98268,6 @@
                               "backend",
                               "steerMode",
                               "privileged",
-                              "resources",
                               "environment",
                               "credentials",
                               "ttlHours",
@@ -99137,25 +98760,6 @@
                             false
                           ]
                         },
-                        "resources": {
-                          "nullable": true,
-                          "type": "object",
-                          "properties": {
-                            "cpuRequest": {
-                              "type": "string"
-                            },
-                            "memoryRequest": {
-                              "type": "string"
-                            },
-                            "cpuLimit": {
-                              "type": "string"
-                            },
-                            "memoryLimit": {
-                              "type": "string"
-                            }
-                          },
-                          "additionalProperties": false
-                        },
                         "tier": {
                           "nullable": true,
                           "type": "string",
@@ -99304,7 +98908,6 @@
                         "backend",
                         "steerMode",
                         "privileged",
-                        "resources",
                         "environment",
                         "credentials",
                         "ttlHours",
@@ -156689,25 +156292,6 @@
                               "privileged": {
                                 "type": "boolean"
                               },
-                              "resources": {
-                                "nullable": true,
-                                "type": "object",
-                                "properties": {
-                                  "cpuRequest": {
-                                    "type": "string"
-                                  },
-                                  "memoryRequest": {
-                                    "type": "string"
-                                  },
-                                  "cpuLimit": {
-                                    "type": "string"
-                                  },
-                                  "memoryLimit": {
-                                    "type": "string"
-                                  }
-                                },
-                                "additionalProperties": false
-                              },
                               "tier": {
                                 "nullable": true,
                                 "type": "string",
@@ -156853,7 +156437,6 @@
                               "backend",
                               "steerMode",
                               "privileged",
-                              "resources",
                               "environment",
                               "credentials",
                               "ttlHours",
@@ -157712,25 +157295,6 @@
                                 "privileged": {
                                   "type": "boolean"
                                 },
-                                "resources": {
-                                  "nullable": true,
-                                  "type": "object",
-                                  "properties": {
-                                    "cpuRequest": {
-                                      "type": "string"
-                                    },
-                                    "memoryRequest": {
-                                      "type": "string"
-                                    },
-                                    "cpuLimit": {
-                                      "type": "string"
-                                    },
-                                    "memoryLimit": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "additionalProperties": false
-                                },
                                 "tier": {
                                   "nullable": true,
                                   "type": "string",
@@ -157876,7 +157440,6 @@
                                 "backend",
                                 "steerMode",
                                 "privileged",
-                                "resources",
                                 "environment",
                                 "credentials",
                                 "ttlHours",
@@ -159795,25 +159358,6 @@
                                   "privileged": {
                                     "type": "boolean"
                                   },
-                                  "resources": {
-                                    "nullable": true,
-                                    "type": "object",
-                                    "properties": {
-                                      "cpuRequest": {
-                                        "type": "string"
-                                      },
-                                      "memoryRequest": {
-                                        "type": "string"
-                                      },
-                                      "cpuLimit": {
-                                        "type": "string"
-                                      },
-                                      "memoryLimit": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "additionalProperties": false
-                                  },
                                   "tier": {
                                     "nullable": true,
                                     "type": "string",
@@ -159959,7 +159503,6 @@
                                   "backend",
                                   "steerMode",
                                   "privileged",
-                                  "resources",
                                   "environment",
                                   "credentials",
                                   "ttlHours",
@@ -160818,25 +160361,6 @@
                                     "privileged": {
                                       "type": "boolean"
                                     },
-                                    "resources": {
-                                      "nullable": true,
-                                      "type": "object",
-                                      "properties": {
-                                        "cpuRequest": {
-                                          "type": "string"
-                                        },
-                                        "memoryRequest": {
-                                          "type": "string"
-                                        },
-                                        "cpuLimit": {
-                                          "type": "string"
-                                        },
-                                        "memoryLimit": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "additionalProperties": false
-                                    },
                                     "tier": {
                                       "nullable": true,
                                       "type": "string",
@@ -160982,7 +160506,6 @@
                                     "backend",
                                     "steerMode",
                                     "privileged",
-                                    "resources",
                                     "environment",
                                     "credentials",
                                     "ttlHours",

@@ -2,7 +2,7 @@
 title: Claude Desktop
 description: Route Claude Desktop's inference and tools through Archestra
 order: 2
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,11 +19,11 @@ MCP sign-in requires HTTPS, including local deployments. Use a trusted local HTT
 
 Connecting the LLM Proxy switches Desktop to third-party inference mode. That mode keeps its own conversation history, so your Claude.ai conversations do not appear there at first. See [Import Conversations](#import-conversations) to bring them over, and [Revert](#revert) before switching. Tools-only setup does not require third-party inference.
 
-Open **Connect** and select **Claude Desktop**. To pick another gateway, model, or platform, click **Change** on its line. The platform defaults to your detected operating system. Finish active Desktop tasks before installing. Click **Prepare installer**, then **Download installer**, and open the `.mcpb` file in normal Claude Desktop. Confirm installation in Desktop’s native dialog. The setup helper opens your browser for sign-in and restart confirmation. You can remove the helper from Desktop’s Extensions settings afterward.
+Open **Connect** and select **Claude Desktop**. To pick another gateway, model, or platform, click **Change** on its line. The platform defaults to your detected operating system. Finish active Desktop tasks before installing, because setup closes Desktop. Click **Prepare installer**, then **Download installer**, and open the `.mcpb` file in normal Claude Desktop. Confirm installation in Desktop’s native dialog. The setup helper opens your browser for sign-in and restart confirmation. You can remove the helper from Desktop’s Extensions settings afterward.
 
-The **Advanced: terminal setup** option requires Python 3.9+ and Claude Code for subscription sign-in. It remains available for existing third-party profiles that cannot install Desktop extensions.
+The **Advanced: terminal setup** option requires Python 3.9+ and Claude Code for subscription sign-in. It remains available for existing third-party profiles that cannot install Desktop extensions. Terminal setup never forces Desktop to quit. On Windows, it asks you to choose **Exit** from the Claude icon in the system tray, and stops without changes if Desktop still runs after two minutes.
 
-The installer checks inference before changing your configuration. It backs up changed files, preserves manually created profiles, and restarts Desktop. Rerunning setup replaces the installer-managed connection, including its gateway, skills, and plugins. Installing from another deployment replaces the previous managed connection. If macOS rejects automatic quitting, the installer waits for you to quit from Desktop’s menu. You do not download or import a profile manually. Keep the download and generated command private; they contain an expiring setup ticket. Installation redeems the ticket once. The installer expires after 15 minutes; click **Regenerate** on **Connect** for a new one.
+The installer checks inference before changing your configuration. It backs up changed files, preserves manually created profiles, and restarts Desktop. Rerunning setup replaces the installer-managed connection, including its gateway, skills, and plugins. Installing from another deployment replaces the previous managed connection. If macOS rejects automatic quitting, the installer waits for you to quit from Desktop’s menu. On Windows, the setup helper also closes Desktop in the system tray, the way Windows closes apps before an update. If Desktop has not quit after about 20 seconds, the setup helper forces it to quit. You do not download or import a profile manually. Keep the download and generated command private; they contain an expiring setup ticket. Installation redeems the ticket once. The installer expires after 15 minutes; click **Regenerate** on **Connect** for a new one.
 
 ## Subscription Inference
 

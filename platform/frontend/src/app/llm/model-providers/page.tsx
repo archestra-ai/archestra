@@ -203,7 +203,8 @@ export default function ApiKeysPage() {
   const createShared = searchParams.get("access") === "organization";
   const linkedCreate = useMemo(
     (): Partial<LlmProviderApiKeyFormValues> | undefined =>
-      isSupportedProvider(createProvider)
+      isSupportedProvider(createProvider) &&
+      !providerCatalog.isHidden(createProvider)
         ? {
             provider: createProvider,
             initialGrants: createShared
@@ -214,7 +215,7 @@ export default function ApiKeysPage() {
               : [],
           }
         : undefined,
-    [createProvider, createShared],
+    [createProvider, createShared, providerCatalog],
   );
   const [subscriptionToConnect, setSubscriptionToConnect] =
     useState<SubscriptionOffer | null>(null);

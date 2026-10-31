@@ -507,6 +507,25 @@ describe("ApiKeysPage", () => {
     );
   });
 
+  it.each([
+    "create=xai",
+    "reconnect=x-premium",
+  ])("does not open a hidden provider from %s", (query) => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { modelProviderOverrides: { xai: { hidden: true } } },
+    } as unknown as ReturnType<typeof useOrganization>);
+    useDataTableQueryParamsMock.mockReturnValue({
+      searchParams: new URLSearchParams(query),
+      updateQueryParams: updateQueryParamsMock,
+    });
+    render(<ApiKeysPage />);
+    expect(screen.queryByTestId("create-dialog")).not.toBeInTheDocument();
+  });
+
   it("still offers subscriptions to a member who cannot read keys", () => {
     // Their key query never runs, so the cards must state the offer rather than
     // sit in a skeleton waiting on a query that will never resolve.

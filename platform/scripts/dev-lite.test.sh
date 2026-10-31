@@ -57,6 +57,24 @@ ALIVE="$ALIVE keycloak"
 KEYCLOAK_ANSWERS=1
 check "ready once the requested Keycloak runs and answers" wait_ready_quietly
 
+# Keycloak answers on the first poll, then exits before the backend is ready
+# on the second: the cached readiness must not hide the exit.
+stale_keycloak() {
+  (
+    POLL=0
+    http_ok() {
+      case "$1" in
+        */ready) POLL=$((POLL + 1)); [ "$POLL" -ge 2 ] ;;
+        *) return 0 ;;
+      esac
+    }
+    session_alive() { if [ "$1" = keycloak ] && [ "$POLL" -ge 2 ]; then return 1; fi; return 0; }
+    ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS=20 wait_ready
+  ) 2>&1
+}
+check "not ready when Keycloak answered, then exited before the backend was ready" fails stale_keycloak
+check "that failure names Keycloak's log too" says "keycloak exited" stale_keycloak
+
 # --- e2e -------------------------------------------------------------------
 ALIVE="backend frontend wiremock a2a"
 check "e2e refuses to run while a requested Keycloak is not running" fails e2e_succeeds

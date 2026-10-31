@@ -599,6 +599,10 @@ http_ok() {
 wait_ready() {
   local deadline=$((SECONDS + ${ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS:-900})) backend_ok=0 frontend_ok=0 e2e_ok=0 keycloak_ok=0
   while (( SECONDS < deadline )); do
+    # A session that exited fails the wait at once, whatever answered before.
+    for name in backend frontend $(e2e_requested && echo "wiremock a2a") $(keycloak_requested && echo keycloak); do
+      session_alive "$name" || { tail -n 40 "$LOG_DIR/$name.log" >&2 2>/dev/null || true; die "$name exited; see $LOG_DIR/$name.log"; }
+    done
     [ "$backend_ok" = 1 ] || { http_ok "http://127.0.0.1:$BACKEND_PORT/ready" && backend_ok=1 && log "backend answers on :$BACKEND_PORT"; }
     # The first page request compiles the app; give it the time it needs.
     [ "$frontend_ok" = 1 ] || { http_ok "http://127.0.0.1:$FRONTEND_PORT/" 180 && frontend_ok=1 && log "frontend answers on :$FRONTEND_PORT"; }
@@ -619,9 +623,6 @@ wait_ready() {
       [ -n "${ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL:-}" ] && echo "browser URL: $ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL"
       return 0
     fi
-    for name in backend frontend $(e2e_requested && echo "wiremock a2a") $(keycloak_requested && echo keycloak); do
-      session_alive "$name" || { tail -n 40 "$LOG_DIR/$name.log" >&2 2>/dev/null || true; die "$name exited; see $LOG_DIR/$name.log"; }
-    done
     # The tsdown watcher outlives a crashed server and only restarts it on the
     # next rebuild, so a startup failure would otherwise wait out the timeout.
     if [ "$backend_ok" = 0 ] && tail -n 200 "$LOG_DIR/backend.log" 2>/dev/null | grep -q "Server process exited with code: [1-9]"; then

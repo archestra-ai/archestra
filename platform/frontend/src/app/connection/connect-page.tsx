@@ -732,7 +732,7 @@ function ConnectArea({
   // A changed OS can remount the panel (its plugins differ); its setups stay.
   const desktopSetups = useRef<DesktopSetupCache>({
     byKey: new Map(),
-    arrivedAt: new Map(),
+    requestedAt: new Map(),
   });
   // The connector Desktop lists for the gateway, by the name setup registers.
   const connector =

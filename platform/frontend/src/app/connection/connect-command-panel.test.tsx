@@ -623,6 +623,48 @@ describe("ConnectCommandPanel", () => {
     vi.useRealTimers();
   });
 
+  it("times a Desktop terminal command from the request, so a slow response expires with the server", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    availableKeysMock.mockReturnValue({ data: [] });
+    const delay = 30_000;
+    createSetupMock.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                id: "desktop-setup",
+                command: COMMAND,
+                installerUrl: "https://proxy.example/desktop-installer",
+                expiresAt: new Date(
+                  Date.now() + 15 * 60_000 - delay,
+                ).toISOString(),
+                tokenStart: "tok",
+                plugins: [],
+              }),
+            delay,
+          ),
+        ),
+    );
+    renderPanel({
+      client: findClient("claude-desktop"),
+      variant: "download",
+      terminal: true,
+    });
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));
+    act(() => vi.advanceTimersByTime(delay));
+    await expectShownCommand(COMMAND);
+    // The server made the setup when the request reached it, 30 seconds
+    // before the response arrived.
+    act(() => vi.advanceTimersByTime(CONNECTION_SETUP_TOKEN_TTL_MS - delay));
+    expect(
+      await screen.findByText(
+        "This command expired. Each command works for 15 minutes.",
+      ),
+    ).toBeVisible();
+    vi.useRealTimers();
+  });
+
   it("keeps each OS's Desktop terminal command when switching the OS back and forth", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     availableKeysMock.mockReturnValue({ data: [] });
@@ -742,7 +784,7 @@ describe("ConnectCommandPanel", () => {
       client: findClient("claude-desktop"),
       variant: "download" as const,
       terminal: true,
-      setupCache: { byKey: new Map(), arrivedAt: new Map() },
+      setupCache: { byKey: new Map(), requestedAt: new Map() },
     };
     const first = renderPanel(props);
     await expectShownCommand(`${COMMAND} # 1`);

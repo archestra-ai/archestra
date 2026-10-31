@@ -226,18 +226,23 @@ interface ConnectCommandPanelProps {
 export interface DesktopSetupCache {
   /** The latest setup for each payload. */
   byKey: Map<string, CreateConnectionSetupResult>;
-  /** When each setup arrived, by setup id. */
-  arrivedAt: Map<string, number>;
+  /** When the band asked for each setup, by setup id. */
+  requestedAt: Map<string, number>;
 }
 
 function newDesktopSetupCache(): DesktopSetupCache {
-  return { byKey: new Map(), arrivedAt: new Map() };
+  return { byKey: new Map(), requestedAt: new Map() };
 }
 
-/** Timed from arrival: this computer's clock may differ from the server's. */
+/**
+ * Timed from the request on this computer's clock, which may differ from the
+ * server's. The server makes the setup after the request starts, so a slow
+ * response never shows a command the server has expired.
+ */
 function setupExpired(cache: DesktopSetupCache, id: string): boolean {
   return (
-    (cache.arrivedAt.get(id) ?? 0) + CONNECTION_SETUP_TOKEN_TTL_MS <= Date.now()
+    (cache.requestedAt.get(id) ?? 0) + CONNECTION_SETUP_TOKEN_TTL_MS <=
+    Date.now()
   );
 }
 
@@ -870,7 +875,7 @@ export function ConnectCommandPanel({
       ? seededSetupId
       : null;
 
-  // Every setup made here, by payload, and when each arrived. A setup works
+  // Every setup made here, by payload, and when each was requested. A setup works
   // for a fixed time from its creation, so switching back to earlier choices
   // (another OS, say) reuses its setup until then.
   const setupCacheRef = useRef(setupCache ?? newDesktopSetupCache());
@@ -882,9 +887,10 @@ export function ConnectCommandPanel({
       setResult(null);
       setFailure(null);
       refusalRef.current = null;
+      const requestedAt = Date.now();
       const created = await createSetup(body);
       if (created) {
-        setupCacheRef.current.arrivedAt.set(created.id, Date.now());
+        setupCacheRef.current.requestedAt.set(created.id, requestedAt);
         setupCacheRef.current.byKey.set(key, created);
       }
       if (latestKeyRef.current !== key) return; // stale response
@@ -975,13 +981,13 @@ export function ConnectCommandPanel({
 
   // A setup works for a fixed time, so the band marks it expired on time
   // instead of offering a command that would fail. The time runs from when
-  // the setup arrives: this computer's clock may differ from the server's.
+  // the band asked for the setup (see setupExpired).
   const [expiredSetupId, setExpiredSetupId] = useState<string | null>(null);
   useEffect(() => {
     if (variant !== "download" || !result) return;
     const id = result.id;
     const expiresAt =
-      (setupCacheRef.current.arrivedAt.get(id) ?? Date.now()) +
+      (setupCacheRef.current.requestedAt.get(id) ?? Date.now()) +
       CONNECTION_SETUP_TOKEN_TTL_MS;
     const expire = () => setExpiredSetupId(id);
     const timer = setTimeout(expire, Math.max(0, expiresAt - Date.now()));

@@ -94,6 +94,119 @@ describe("resource permission routes", () => {
     expect(published.json().canShareOrganizationWide).toBe(true);
   });
 
+  test("cross-team sharing is opt-in, organization-scoped, and preserves grants after revocation", async ({
+    makeAgent,
+    makeCustomRole,
+    makeTeam,
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const role = await makeCustomRole(organizationId, {
+      permission: {
+        agent: ["read", "create"],
+        accessPolicies: ["share-across-teams"],
+      },
+    });
+    const other = await makeUser();
+    await makeMember(other.id, organizationId);
+    const team = await makeTeam(organizationId, other.id, {
+      name: "Unrelated team",
+    });
+    const foreignOrg = await makeOrganization();
+    const foreign = await makeTeam(foreignOrg.id, other.id, {
+      name: "Foreign team",
+    });
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: user.id,
+      access: "personal",
+    });
+    const url = `/api/resource-permissions/agent/${agent.id}`;
+    const own = {
+      subject: { type: "user", id: user.id },
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
+    };
+    const shared = {
+      subject: { type: "team", id: team.id },
+      actions: ["read", "use"],
+    };
+    const put = async (grants: unknown[]) => {
+      const current = await app.inject({ method: "GET", url });
+      return app.inject({
+        method: "PUT",
+        url,
+        payload: { revision: current.json().revision, grants },
+      });
+    };
+    const search = async (query: string) =>
+      app.inject({
+        method: "GET",
+        url: `${url}/subjects?query=${encodeURIComponent(query)}`,
+      });
+
+    await MemberModel.updateRole(user.id, organizationId, "member");
+    expect((await search("Unrelated")).json()).toEqual([]);
+    expect((await put([own, shared])).statusCode).toBe(403);
+    await MemberModel.updateRole(user.id, organizationId, role.role);
+    expect((await search("Unrelated")).json()).toEqual([
+      expect.objectContaining({ subject: shared.subject }),
+    ]);
+    expect((await search("Foreign")).json()).toEqual([]);
+    const saved = await put([own, shared]);
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json().grants).toEqual(
+      expect.arrayContaining([expect.objectContaining(shared)]),
+    );
+    expect(saved.json().canShareOrganizationWide).toBe(false);
+    for (const subject of [
+      { type: "organization", id: "*" },
+      { type: "role", id: "member" },
+    ]) {
+      expect(
+        (await put([own, shared, { subject, actions: ["read"] }])).statusCode,
+      ).toBe(403);
+    }
+    expect(
+      (
+        await put([
+          own,
+          { ...shared, subject: { type: "team", id: foreign.id } },
+        ])
+      ).statusCode,
+    ).toBe(400);
+
+    // The permission alone never grants management on someone else's item.
+    const unshared = await makeAgent({
+      organizationId,
+      authorId: other.id,
+      agentType: "agent",
+      access: "personal",
+    });
+    expect(
+      (
+        await app.inject({
+          method: "PUT",
+          url: `/api/resource-permissions/agent/${unshared.id}`,
+          payload: { revision: 1, grants: [shared] },
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    await MemberModel.updateRole(user.id, organizationId, "member");
+    expect((await search("Unrelated")).json()).toEqual([]);
+    expect((await put([own, shared])).statusCode).toBe(200);
+    expect(
+      (await put([own, { ...shared, actions: ["read", "use", "update"] }]))
+        .statusCode,
+    ).toBe(403);
+    expect(
+      (await put([own, { ...shared, actions: ["read"] }])).statusCode,
+    ).toBe(200);
+    expect((await put([own])).statusCode).toBe(200);
+  });
+
   test("saves and audits mixed chat recipients and denies changes from a viewer", async ({
     makeAgent,
     makeUser,

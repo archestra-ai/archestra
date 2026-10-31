@@ -3580,6 +3580,59 @@ describe("publish_app", () => {
     );
   }
 
+  test("a custom role publishes to an unrelated team only with cross-team sharing", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+    makeCustomRole,
+  }) => {
+    const agent = await makeAgent();
+    const organizationId = agent.organizationId;
+    const user = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: {
+        app: ["read", "create"],
+        accessPolicies: ["share-across-teams"],
+      },
+    });
+    await makeMember(user.id, organizationId, { role: role.role });
+    const team = await makeTeam(organizationId, user.id, {
+      name: "Other team",
+    });
+    const app = await makeApp({
+      organizationId,
+      authorId: user.id,
+      access: "personal",
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: [team.id] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(
+      (
+        await ResourcePermissionPolicyModel.find({
+          organizationId,
+          resource: "app",
+          scope: app.id,
+        })
+      )?.grants,
+    ).toContainEqual({
+      subject: { type: "team", id: team.id },
+      actions: ["read", "use"],
+    });
+    expect(
+      (await publish({ appId: app.id, scope: "org" }, context)).isError,
+    ).toBe(true);
+  });
+
   test("an admin publishes a personal app to the org and gets its run url", async ({
     makeAgent,
     makeUser,

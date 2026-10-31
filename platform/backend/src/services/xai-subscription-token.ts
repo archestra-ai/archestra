@@ -16,7 +16,9 @@
  *   re-reads the secret inside that transaction, adopts an access token another
  *   replica already stored, or redeems once and writes the rotation back before
  *   the lock is released. The write is synchronous: a rotation that is not yet
- *   persisted is one the next replica cannot see.
+ *   persisted is one the next replica cannot see. A rotation whose write-back
+ *   failed stays pending in this process and is persisted by its next refresh;
+ *   the issuer is never asked twice for one stored token.
  * - A caller's copy of the credential is never redeemed. Replicas decode the
  *   secret through a process-local cache, so the copy a request carries can be
  *   older or newer than what this process last saw; only its `userId` is used,
@@ -36,7 +38,7 @@ import logger from "@/logging";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import { withSubscriptionCredentialLock } from "@/models/subscription-credential-lock";
 import { secretManager } from "@/secrets-manager";
-import { ApiError, type SecretReadOptions } from "@/types";
+import { ApiError, type SecretReadOptions, type SelectSecret } from "@/types";
 import { decodeJwtClaims } from "./openai-codex-credentials";
 import { recordSubscriptionAuthenticationFailure } from "./subscription-authentication-status";
 import {
@@ -61,6 +63,9 @@ export class XaiSubscriptionTokenManager {
     maxSize: MAX_CACHED_TOKENS,
   });
   private inFlightRefreshes = new Map<string, InFlightRefresh>();
+  private pendingRotations = new LRUCacheManager<PendingRotation>({
+    maxSize: MAX_CACHED_TOKENS,
+  });
 
   /**
    * Returns a valid xAI access token for a stored SuperGrok credential.
@@ -123,14 +128,19 @@ export class XaiSubscriptionTokenManager {
 
     // One refresh per key per process: later misses wait for the same promise
     // instead of each parking a pooled connection behind the advisory lock.
-    const inFlight = this.inFlightRefreshes.get(providerApiKeyId);
-    if (inFlight?.userId === credential.userId) {
+    for (;;) {
+      const inFlight = this.inFlightRefreshes.get(providerApiKeyId);
+      if (inFlight?.userId !== credential.userId) {
+        break;
+      }
       const accessToken = await inFlight.promise;
       if (accessToken !== staleAccessToken) {
         return accessToken;
       }
       // The shared refresh adopted the very token this caller saw rejected (it
-      // was still the stored one); refresh once more on this caller's terms.
+      // was still the stored one). That flight has left the map by the time
+      // its promise settles; look again, so a newer flight is joined rather
+      // than overlapped, and only then refresh on this caller's terms.
     }
     const flight: InFlightRefresh = {
       userId: credential.userId,
@@ -199,16 +209,18 @@ export class XaiSubscriptionTokenManager {
     // The lock helper retries its callback on transient database failures, and
     // a redemption cannot be repeated: the refresh token is spent the moment
     // xAI answers, whether or not that answer gets persisted. So the issuer is
-    // called at most once per refresh, whatever the database does: a
-    // successful redemption is remembered across attempts (a retry persists it
-    // instead of redeeming again), a failed one is remembered too (a retry
-    // does not present the token again), and the failure is carried out of the
-    // transaction rather than thrown through it, because the retry wrapper
-    // classifies network errors by shape, not by source.
-    let redemption: { refreshToken: string; redeemed: Redemption } | undefined;
+    // called at most once per stored token, whatever the database does: a
+    // successful redemption is kept in `pendingRotations` until its write-back
+    // commits (a retry, or the next refresh, persists it instead of redeeming
+    // again), a failed one is remembered for the rest of this call (a retry
+    // does not present the token again), and neither an issuer failure nor a
+    // write-back failure is thrown through the transaction: the retry wrapper
+    // classifies network errors by shape, not by source, and would hold the
+    // lock through its whole backoff.
     let issuerFailure:
       | { error: unknown; rejected: XaiSubscriptionCredential | undefined }
       | undefined;
+    let persistFailure: unknown;
     const result = await withSubscriptionCredentialLock({
       provider: "xai",
       providerApiKeyId,
@@ -230,11 +242,17 @@ export class XaiSubscriptionTokenManager {
           // is learnt by asking again.
           return undefined;
         }
+        const pending = this.pendingRotations.get(providerApiKeyId);
         let redeemed =
-          redemption?.refreshToken === stored.refreshToken
-            ? redemption.redeemed
+          pending?.refreshToken === stored.refreshToken
+            ? pending.redeemed
             : undefined;
         if (!redeemed) {
+          if (pending) {
+            // The stored credential moved on (a reconnect) while this rotation
+            // waited to be persisted: it descends from a dead family now.
+            this.pendingRotations.delete(providerApiKeyId);
+          }
           try {
             redeemed = await redeemWithXai(stored.refreshToken);
           } catch (error) {
@@ -249,7 +267,11 @@ export class XaiSubscriptionTokenManager {
             };
             return undefined;
           }
-          redemption = { refreshToken: stored.refreshToken, redeemed };
+          this.pendingRotations.set(
+            providerApiKeyId,
+            { refreshToken: stored.refreshToken, redeemed },
+            PENDING_ROTATION_TTL_MS,
+          );
         }
         const updated = {
           ...stored,
@@ -257,16 +279,23 @@ export class XaiSubscriptionTokenManager {
           accessToken: redeemed.accessToken,
           accessTokenExpiresAtMs: redeemed.expiresAtMs,
         };
-        const persisted = await secretManager().updateSecret(
-          secretId,
-          { apiKey: encodeXaiSubscriptionCredential(updated) },
-          { transaction },
-        );
+        let persisted: SelectSecret | null;
+        try {
+          persisted = await secretManager().updateSecret(
+            secretId,
+            { apiKey: encodeXaiSubscriptionCredential(updated) },
+            { transaction },
+          );
+        } catch (error) {
+          persistFailure = error;
+          return undefined;
+        }
         if (!persisted) {
-          throw new ApiError(
+          persistFailure = new ApiError(
             502,
             "Could not persist the refreshed SuperGrok credential",
           );
+          return undefined;
         }
         return {
           credential: updated,
@@ -279,6 +308,7 @@ export class XaiSubscriptionTokenManager {
     });
     if (result) {
       if (result.digests.length > 1) {
+        this.pendingRotations.delete(providerApiKeyId);
         // The transactional write bypassed this process's secret cache; read
         // the committed row once so per-request decodes stop carrying the
         // spent refresh token.
@@ -286,16 +316,24 @@ export class XaiSubscriptionTokenManager {
       }
       return this.rememberSharedToken(providerApiKeyId, cached, result);
     }
-    if (issuerFailure?.rejected) {
-      await this.recordAuthenticationFailure({
-        providerApiKeyId,
-        credential: issuerFailure.rejected,
-      });
+    if (issuerFailure) {
+      if (issuerFailure.rejected) {
+        await this.recordAuthenticationFailure({
+          providerApiKeyId,
+          credential: issuerFailure.rejected,
+        });
+      }
+      throw issuerFailure.error;
     }
-    throw (
-      issuerFailure?.error ??
-      new ApiError(502, "SuperGrok token refresh ended without a credential")
+    if (persistFailure instanceof ApiError) {
+      throw persistFailure;
+    }
+    const error = new ApiError(
+      502,
+      "Could not persist the refreshed SuperGrok credential",
     );
+    error.cause = persistFailure;
+    throw error;
   }
 
   /** Caches the shared token for the key and returns it. */
@@ -650,6 +688,13 @@ interface InFlightRefresh {
 
 type Redemption = Awaited<ReturnType<typeof redeemWithXai>>;
 
+/** A redemption this process made whose write-back has not committed yet. */
+interface PendingRotation {
+  /** The stored refresh token it was redeemed from; it applies while that is still the stored one. */
+  refreshToken: string;
+  redeemed: Redemption;
+}
+
 /** What a shared refresh produced: the credential to serve and the refresh-token lineage it spans. */
 interface SharedTokenResult {
   credential: XaiSubscriptionCredential;
@@ -691,6 +736,13 @@ const STORED_ACCESS_TOKEN_MIN_REMAINING_MS = 30 * 1000;
  * it within the same request, so minutes of headroom is plenty.
  */
 const VALIDATION_ROTATION_TTL_MS = 15 * 60 * 1000;
+/**
+ * How long a redeemed rotation that failed to persist is held for the next
+ * refresh to write. Its predecessor is spent, so the successor is the only
+ * live token of the family; a secrets backend that stays down this long has
+ * cost the family anyway.
+ */
+const PENDING_ROTATION_TTL_MS = 60 * 60 * 1000;
 
 /** @public — exported for unit tests; the per-token refresh headroom. */
 export function refreshBufferFor(lifetimeMs: number): number {

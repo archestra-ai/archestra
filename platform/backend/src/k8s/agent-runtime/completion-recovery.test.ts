@@ -1158,7 +1158,7 @@ test.for([
       const kills = memoryReads++ === 0 || !killed ? 0 : 1;
       if (counters) {
         args[4]?.write(
-          `low 0\nhigh 0\nmax 1203\noom ${nodeOom ? 0 : kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills ? 8 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
+          `low 0\nhigh 0\nmax 1203\noom ${nodeOom ? 0 : kills}\noom_kill ${kills}\noom_group_kill 0\npeak ${kills && !nodeOom ? 8 * GIB : nodeOom ? 3 * GIB : 2 * GIB}\nlimit ${8 * GIB}\n`,
         );
       }
       args[8]?.({ status: "Success" });
@@ -1221,7 +1221,7 @@ test.for([
     await expect(completion).resolves.toEqual({
       outcome: "failed",
       reason:
-        "The kernel killed the run's processes because the node ran out of memory; the agent-runtime container stayed under its 8 GiB limit (peak usage 8 GiB). Start the run again.",
+        "The kernel killed the run's processes because the node ran out of memory; the agent-runtime container did not hit its 8 GiB limit (peak usage 3 GiB). Start the run again.",
     });
   } else if (killed) {
     await expect(completion).resolves.toEqual({

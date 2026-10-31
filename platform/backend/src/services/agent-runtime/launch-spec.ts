@@ -65,6 +65,7 @@ import {
 import {
   agentRuntimeAllowedTiers,
   agentRuntimeMaxTier,
+  describeScaleupDisabledPrompt,
   organizationAgentRuntimeTiers,
   resolveRunResources,
   runtimeTiersEnv,
@@ -449,6 +450,7 @@ export async function buildAgentRunLaunchSpec(params: {
         "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
         "not this runtime's filesystem.",
       describeRuntimeWorkspace(params.runtime),
+      describeScaleupDisabledPrompt(params.runtime, tiers),
     ]
       .filter(Boolean)
       .join("\n\n"),

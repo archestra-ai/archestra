@@ -189,10 +189,18 @@ describe("AgentRuntimeFields", () => {
     expect(
       screen.queryByRole("option", { name: /^S:/ }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /^Fix at M:/ }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("option", { name: /^L:/ }));
     expect(
       JSON.parse(screen.getByTestId("config").textContent ?? "{}").maxTier,
     ).toBe("L");
+    await user.click(screen.getByLabelText("Scaleup tier"));
+    await user.click(screen.getByRole("option", { name: /^Fix at M:/ }));
+    expect(
+      JSON.parse(screen.getByTestId("config").textContent ?? "{}").maxTier,
+    ).toBe("M");
     expect(screen.getByLabelText("Ports to forward")).toHaveValue("");
     await user.type(screen.getByLabelText("Ports to forward"), "3000, 9000");
     expect(

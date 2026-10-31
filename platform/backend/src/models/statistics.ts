@@ -95,6 +95,31 @@ class StatisticsModel {
           : params.groupBy === "client"
             ? sql`${i.externalAgentId}`
             : sql`COALESCE(${k.name}, ${i.authenticatedAppName}, ${credential}, ${i.authMethod})`;
+    // The receipt-derived model cannot use interactions' model/date index.
+    // First collect indexed log matches plus receipt component matches (advisor
+    // models may differ from the log model). UNION deduplicates those paths;
+    // the final billedModel predicate below remains authoritative.
+    const candidates = db
+      .select({ id: i.id })
+      .from(i)
+      .where(
+        and(
+          ...StatisticsModel.timeframeConditions(params.timeframe),
+          eq(i.model, params.model),
+        ),
+      )
+      .union(
+        db
+          .select({ id: schema.interactionBillingTable.interactionId })
+          .from(schema.interactionBillingTable)
+          .where(
+            and(
+              sql`${schema.interactionBillingTable.usage}->>'mode' = 'enforce'`,
+              sql`${schema.interactionBillingTable.usage}->'components' @> ${JSON.stringify([{ model: params.model }])}::jsonb`,
+            ),
+          ),
+      )
+      .as("model_candidates");
     const scope = and(
       ...StatisticsModel.timeframeConditions(params.timeframe),
       interactionBelongsToOrganization(params.organizationId),
@@ -109,26 +134,34 @@ class StatisticsModel {
       billedCost: modelBilledCost,
       subscriptionCost: modelSubscriptionCost,
     };
-    const query = () =>
-      db
+    const query = () => {
+      const query = db
         .select({
           id,
           name: sql<string>`COALESCE(MAX(${label}), 'Unattributed')`,
           ...aggregates,
         })
         .from(i)
+        .innerJoin(candidates, eq(candidates.id, i.id))
         .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
         .leftJoin(billingModelFacts, sql`true`)
-        .leftJoin(a, eq(a.id, i.profileId))
-        .leftJoin(u, eq(u.id, i.userId))
-        .leftJoin(
-          k,
-          and(
-            eq(sql`${k.id}::text`, credential),
-            eq(k.organizationId, params.organizationId),
-            inArray(i.authMethod, ["virtual_key", "passthrough_virtual_key"]),
-          ),
-        );
+        .$dynamic();
+      // Only the selected dimension needs label joins. Credential casts stop
+      // PostgreSQL eliminating unused key joins, adding work to every match.
+      if (params.groupBy === "person")
+        return query.leftJoin(u, eq(u.id, i.userId));
+      if (params.groupBy === "agent")
+        return query.leftJoin(a, eq(a.id, i.profileId));
+      if (params.groupBy === "client") return query;
+      return query.leftJoin(
+        k,
+        and(
+          eq(sql`${k.id}::text`, credential),
+          eq(k.organizationId, params.organizationId),
+          inArray(i.authMethod, ["virtual_key", "passthrough_virtual_key"]),
+        ),
+      );
+    };
     // Page identities first; only their timelines are materialized.
     const rows = await query()
       .where(scope)
@@ -139,6 +172,7 @@ class StatisticsModel {
     const [count] = await db
       .select({ total: sql<number>`COUNT(DISTINCT ${id})::integer` })
       .from(i)
+      .innerJoin(candidates, eq(candidates.id, i.id))
       .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
       .leftJoin(billingModelFacts, sql`true`)
       .where(scope);
@@ -147,6 +181,7 @@ class StatisticsModel {
       ? await db
           .select({ id, timestamp: bucket, ...aggregates })
           .from(i)
+          .innerJoin(candidates, eq(candidates.id, i.id))
           .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
           .leftJoin(billingModelFacts, sql`true`)
           .where(

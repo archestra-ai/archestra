@@ -1,4 +1,5 @@
 import { WIREMOCK_INTERNAL_URL } from "../consts";
+import { skipWhenUnavailable } from "../dependencies";
 import {
   ensureInternalDevTestServerCatalogItem,
   findInstalledServer,
@@ -122,7 +123,11 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
     });
   });
 
-  test.describe("Local MCP Server - internal-dev-test-server", () => {
+  test.describe("Local MCP Server - internal-dev-test-server", {
+    tag: "@needs-kubernetes",
+  }, () => {
+    // The installation happens in beforeAll: skip the group before it runs.
+    skipWhenUnavailable("kubernetes");
     // Run tests serially on the same worker to share beforeAll setup (MCP server installation)
     // Also extend timeout since MCP server installation can take a while
     test.describe.configure({ mode: "serial", timeout: 60_000 });
@@ -227,7 +232,10 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
     });
   });
 
-  test.describe("Local MCP Server - Docker Image", () => {
+  test.describe("Local MCP Server - Docker Image", {
+    tag: "@needs-kubernetes",
+  }, () => {
+    skipWhenUnavailable("kubernetes");
     // Extend timeout for this describe block since Docker image pull and MCP server installation can take a while
     test.describe.configure({ timeout: 60_000 });
 

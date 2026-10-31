@@ -31,7 +31,9 @@ import { expect, test } from "./api-fixtures";
 const WIREMOCK_MCP_URL = `${WIREMOCK_INTERNAL_URL}/mcp/jwks-cred-priority-e2e`;
 const STATIC_TOKEN = "static-test-token-for-cred-priority-e2e";
 
-test.describe("MCP Gateway - JWKS Credential Resolution Priority", () => {
+test.describe("MCP Gateway - JWKS Credential Resolution Priority", {
+  tag: "@needs-keycloak",
+}, () => {
   test("should prefer upstream server credentials over JWT propagation", async ({
     request,
     createAgent,

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import LimitModel from "@/models/limit";
 import { ApiError } from "@/types";
 import { OPENAI_HANDLED_ENDPOINT_SUFFIXES } from "../common";
+import type { PassthroughIdentity } from "../passthrough-log";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
 const TEST_UUID = "44f56e01-7167-42c1-88ee-64b566fbc34d";
@@ -117,7 +118,7 @@ describe("createProxyPreHandler", () => {
     authenticate?: (params: {
       request: FastifyRequest;
       agentId?: string;
-    }) => Promise<void>;
+    }) => Promise<PassthroughIdentity | undefined>;
   }) {
     const {
       apiPrefix,
@@ -181,6 +182,7 @@ describe("createProxyPreHandler", () => {
         providerName: "OpenAI",
         authenticate: async ({ agentId }) => {
           seen.push(agentId);
+          return undefined;
         },
       });
 
@@ -206,6 +208,7 @@ describe("createProxyPreHandler", () => {
           seenKeys.push(
             request.headers["x-archestra-virtual-key"] as string | undefined,
           );
+          return undefined;
         },
       });
 

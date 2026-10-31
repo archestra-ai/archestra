@@ -53,6 +53,7 @@ function model(
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
       cachePriceSource: "default",
+      mediaPricing: null,
     },
   };
 }

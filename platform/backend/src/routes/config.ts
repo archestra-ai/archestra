@@ -30,10 +30,9 @@ import { OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
-import { DEFAULT_AGENT_RUNTIME_TIER } from "@/services/agent-runtime/runtime-tiers";
 import { devFeedbackService } from "@/services/dev-feedback";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
-import { AgentRuntimeTierSchema, EmailProviderTypeSchema } from "@/types";
+import { EmailProviderTypeSchema } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
 export const publicConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -119,8 +118,6 @@ export const ConfigResponseSchema = z.strictObject({
       defaultTtlHours: z.number(),
       defaultIdleTimeoutMinutes: z.number(),
       allowPrivileged: z.boolean(),
-      /** The tier a run gets when its Agent names none. */
-      defaultTier: AgentRuntimeTierSchema,
     }),
     plugins: z.boolean(),
     // Max size of a file the sandbox can stage. The chat composer caps
@@ -240,7 +237,6 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
         defaultIdleTimeoutMinutes:
           config.agentRuntime.defaultIdleTimeoutMinutes,
         allowPrivileged: config.agentRuntime.allowPrivileged,
-        defaultTier: DEFAULT_AGENT_RUNTIME_TIER,
       },
       plugins: true,
       sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,

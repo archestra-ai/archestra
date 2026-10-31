@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0-rc.18](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.17...platform-v1.5.0-rc.18) (2026-10-30)
+
+
+### Bug Fixes
+
+* **chat:** discover gateway output limits and avoid futile retries ([#9943](https://github.com/archestra-ai/archestra/issues/9943)) ([aa4611c](https://github.com/archestra-ai/archestra/commit/aa4611c604de7d98800cca4f6433a58dbc043283))
+
 ## [1.5.0-rc.17](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.16...platform-v1.5.0-rc.17) (2026-10-30)
 
 

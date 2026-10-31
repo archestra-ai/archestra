@@ -8,9 +8,10 @@ starts in half the time of the full stack and idles at a tenth of its CPU (see
 
 It is not a replacement for the full image. It covers the common cases: a
 preview of a branch, manual QA, code review with a running app, unit tests, and
-the Playwright lite projects. Work that needs Kubernetes stays on the full
-image: MCP server installs (the orchestrator), nested Agent Runtime, the Dagger
-code runtime, Vault, and the Keycloak-backed identity-provider specs.
+the Playwright lite projects (with `--keycloak`, the identity-provider and JWKS
+specs too). Work that needs Kubernetes stays on the full image: MCP server
+installs (the orchestrator), nested Agent Runtime, the Dagger code runtime and
+Vault.
 
 Lite is the default: a Lobster Agent runs this kind of image, unprivileged, at
 every tier, by default M (4 CPU, 8 GiB, 16 GiB limit). A run whose work needs a
@@ -38,8 +39,9 @@ This image adds:
   `store-dir` says). A task's `pnpm install` hard-links from it: 178 MB of
   `node_modules` on disk instead of a 2.4 GB download.
 - The frontend's pinned Playwright Chromium next to the shared browser.
-- A headless JRE and the WireMock standalone jar, the LLM provider stub the
-  Playwright suite uses.
+- A Java 21 runtime (the Temurin JRE) and the WireMock standalone jar, the LLM
+  provider stub the Playwright suite uses. Keycloak is not in the image:
+  `up --keycloak` downloads the pinned release into the state dir on first use.
 - `archestra-dev-lite`, a wrapper that runs `platform/scripts/dev-lite.sh` in
   the task checkout. The repository owns the stack commands; the image only
   warms caches.
@@ -57,9 +59,10 @@ In a checkout inside the runtime:
 ```bash
 archestra-dev-lite up            # PostgreSQL, migrations, backend :9000, frontend :3000
 archestra-dev-lite status        # processes with RSS, cgroup memory, disk, URLs
-archestra-dev-lite logs backend  # or db, migrate, frontend, wiremock, a2a
+archestra-dev-lite logs backend  # or db, migrate, frontend, wiremock, a2a, keycloak
 archestra-dev-lite up --e2e      # also WireMock :9092 and the A2A fixture :9191; frontend as a production build
-archestra-dev-lite e2e           # Playwright chromium + api projects against this stack
+archestra-dev-lite up --e2e --keycloak   # also Keycloak :30081 with the e2e realm
+archestra-dev-lite e2e           # Playwright chromium + api projects against this stack; identity-providers too with Keycloak
 archestra-dev-lite restart       # down, then up
 archestra-dev-lite down          # stop; data and caches stay
 ```
@@ -222,9 +225,40 @@ clone:
 | Standalone frontend server | 160 MB idle, 480 MB after the full suite |
 | Full default `e2e`, 115 tests | 97 passed, 3 skipped, 15 failed, none flaky; 15.4 min; at most 3.5 GiB anonymous memory, no process killed for memory |
 
-All 15 failures need what the lite stack does not run: 9 need Kubernetes (the
-MCP server runtime and the orchestrator) and 6 need Keycloak (JWKS auth for the
-LLM proxy and the MCP gateway).
+All 15 failures needed what the lite stack does not run: 9 need Kubernetes
+(the MCP server runtime and the orchestrator) and 6 need Keycloak (JWKS auth
+for the LLM proxy and the MCP gateway). Those tests now carry the tags
+`@needs-kubernetes` and `@needs-keycloak`, and `e2e` names what the stack lacks
+in `E2E_UNAVAILABLE`, so they report as skipped with that reason instead of
+failing (`e2e-tests/dependencies.ts`). A value set by hand wins; an empty one
+skips nothing.
+
+### Keycloak
+
+`up --e2e --keycloak` runs Keycloak as a plain process on `127.0.0.1:30081`
+with the e2e realm (`helm/e2e-tests/files/archestra-realm.json`: the
+`archestra-oidc` client and the test users), configured as the Docker lite
+harness configures its container: the browser-facing issuer is
+`http://localhost:30081`, backchannel URLs follow the request, the realm's
+features are on. The backend gets `http://localhost:30081` among its trusted
+origins, so `up --keycloak` restarts a running backend once. `e2e` then runs
+the `identity-providers` project as well, stops naming `keycloak` in
+`E2E_UNAVAILABLE`, and points the backend-side Keycloak URL
+(`E2E_KEYCLOAK_BACKEND_URL`) at the loopback. The request is recorded in the
+state dir until `down`: a Keycloak that exits afterwards fails `up`, `wait` and
+`e2e` with a pointer to its log instead of quietly dropping the coverage
+(`scripts/dev-lite.test.sh` covers this).
+
+The distribution is the stock release pinned in `dev-lite.sh` (version and
+SHA-256), about 170 MB, downloaded into `~/.archestra-dev-lite/keycloak` the
+first time; `ARCHESTRA_DEV_LITE_KEYCLOAK_DIST` points at an unpacked
+distribution instead. CI runs a custom build for the ID-JAG receiver
+(`helm/e2e-tests/keycloak-pr46048`); no lite spec needs it. Keycloak needs
+Java 21, which the lite image ships. The realm is imported on the first start
+and then lives in Keycloak's dev-mode database under the distribution's
+`data/` directory; `reset` removes it with the state dir. The heap is capped at
+1 GiB (`JAVA_OPTS_KC_HEAP`), as Keycloak would otherwise size it from 70% of
+the Pod's memory.
 
 ## Not covered
 
@@ -233,9 +267,10 @@ LLM proxy and the MCP gateway).
   exist, so the backend logs "MCP Server Runtime is disabled" once at startup
   and `/ready` reports `sandbox: disabled`. Remote (HTTP) MCP servers still
   work. The `p4_shim_reconcile` periodic task logs one warning every 5 minutes.
-- Nested Agent Runtime, the Dagger code runtime, Vault, the Keycloak-backed
-  specs (identity providers, JWKS auth), and the `api-k8s`, `hibernation` and
-  `vault-k8s` Playwright projects.
+- Nested Agent Runtime, the Dagger code runtime, Vault, and the `api-k8s`,
+  `hibernation` and `vault-k8s` Playwright projects. Specs in the default `e2e`
+  run that need Kubernetes are tagged and skip (see above); so are the
+  Keycloak-backed ones unless the stack was started with `--keycloak`.
 
 ## PGlite was tried and does not fit
 

@@ -90,7 +90,7 @@ test('run_command is labeled by the host endpoint with the rendered prompt and t
   });
   // The answered audience would narrow the session, so the call waits on an offer to accept it.
   assert.equal(decision.decision, 'deny_call', JSON.stringify(decision));
-  assert.match(decision.feedback, /allowed readers would narrow/);
+  assert.match(decision.feedback, /would narrow this session's audience: public -> self/);
   assert.equal(decision.offers.length, 1);
 
   assert.equal(requests.length, 1);

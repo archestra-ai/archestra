@@ -361,8 +361,6 @@ function runControlsSummary(value: AgentRuntimeConfig): string {
   if (value.idleTimeoutMinutes !== null)
     parts.push(`${value.idleTimeoutMinutes} min idle`);
   if (value.ttlHours !== null) parts.push(`${value.ttlHours} hr maximum`);
-  if (value.resources && Object.values(value.resources).some(Boolean))
-    parts.push("Custom resources");
   if (value.privileged) parts.push("Privileged mode");
   if (!parts.length) parts.push("Installation defaults");
   parts.push(

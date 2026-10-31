@@ -1,5 +1,6 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  resolveAgentRuntimeTiers,
   type SupportedProvider,
   TOOL_LOAD_SKILL_FULL_NAME,
 } from "@archestra/shared";
@@ -39,6 +40,9 @@ import {
 } from "@/types";
 import { preflightAgentRuntimeCredentials } from "./credentials";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
+
+/** The default tiers, as an organization without settings has them. */
+const TIERS = resolveAgentRuntimeTiers(null, { defaultWarmSpares: 0 });
 
 describe("buildAgentRunLaunchSpec", () => {
   let previousPlatformBaseUrl: string;
@@ -87,6 +91,7 @@ describe("buildAgentRunLaunchSpec", () => {
       buildAgentRunLaunchSpec({
         runtime: { ...runtime(setup.agent, "openai_chat"), ttlHours: 1 },
         limits: resolveAgentRunLimits({
+          tiers: TIERS,
           runtime: { ...runtime(setup.agent, "openai_chat"), ttlHours: 1 },
         }),
         taskId: crypto.randomUUID(),
@@ -162,6 +167,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const launch = () =>
       buildAgentRunLaunchSpec({
         limits: resolveAgentRunLimits({
+          tiers: TIERS,
           runtime: runtime(setup.agent, "openai_responses"),
         }),
         runtime: {
@@ -224,7 +230,7 @@ describe("buildAgentRunLaunchSpec", () => {
       maxTier: "L" as const,
     };
     const { spec } = await buildAgentRunLaunchSpec({
-      limits: resolveAgentRunLimits({ runtime: sized }),
+      limits: resolveAgentRunLimits({ runtime: sized, tiers: TIERS }),
       runtime: {
         ...sized,
         // Reserved: the Agent cannot claim another size.
@@ -298,6 +304,7 @@ describe("buildAgentRunLaunchSpec", () => {
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       limits: resolveAgentRunLimits({
+        tiers: TIERS,
         runtime: runtime(setup.agent, "openai_responses"),
       }),
       runtime: {
@@ -427,6 +434,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: runtime(agent, "openai_responses"),
       limits: resolveAgentRunLimits({
+        tiers: TIERS,
         runtime: runtime(agent, "openai_responses"),
       }),
       taskId: crypto.randomUUID(),
@@ -477,6 +485,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: runtime(setup.agent, "openai_responses"),
       limits: resolveAgentRunLimits({
+        tiers: TIERS,
         runtime: runtime(setup.agent, "openai_responses"),
       }),
       taskId: crypto.randomUUID(),
@@ -532,6 +541,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const { spec } = await buildAgentRunLaunchSpec({
       runtime: runtime(setup.agent, "anthropic"),
       limits: resolveAgentRunLimits({
+        tiers: TIERS,
         runtime: runtime(setup.agent, "anthropic"),
       }),
       taskId: crypto.randomUUID(),
@@ -581,6 +591,7 @@ describe("buildAgentRunLaunchSpec", () => {
       buildAgentRunLaunchSpec({
         runtime: runtime(setup.agent, "anthropic"),
         limits: resolveAgentRunLimits({
+          tiers: TIERS,
           runtime: runtime(setup.agent, "anthropic"),
         }),
         taskId: crypto.randomUUID(),
@@ -623,6 +634,7 @@ describe("buildAgentRunLaunchSpec", () => {
       buildAgentRunLaunchSpec({
         runtime: runtime(setup.agent, "openai_chat"),
         limits: resolveAgentRunLimits({
+          tiers: TIERS,
           runtime: runtime(setup.agent, "openai_chat"),
         }),
         taskId: crypto.randomUUID(),
@@ -681,7 +693,10 @@ describe("buildAgentRunLaunchSpec", () => {
 
     const { spec } = await buildAgentRunLaunchSpec({
       runtime: configuredRuntime,
-      limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
+      limits: resolveAgentRunLimits({
+        runtime: configuredRuntime,
+        tiers: TIERS,
+      }),
       taskId: crypto.randomUUID(),
       runId: crypto.randomUUID(),
       agentId: setup.agent.id,
@@ -762,7 +777,10 @@ describe("buildAgentRunLaunchSpec", () => {
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: configuredRuntime,
-      limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
+      limits: resolveAgentRunLimits({
+        runtime: configuredRuntime,
+        tiers: TIERS,
+      }),
       taskId,
       runId,
       agentId: setup.agent.id,
@@ -880,7 +898,10 @@ describe("buildAgentRunLaunchSpec", () => {
     const taskId = crypto.randomUUID();
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: configuredRuntime,
-      limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
+      limits: resolveAgentRunLimits({
+        runtime: configuredRuntime,
+        tiers: TIERS,
+      }),
       taskId,
       runId: crypto.randomUUID(),
       agentId: setup.agent.id,
@@ -982,7 +1003,10 @@ describe("buildAgentRunLaunchSpec", () => {
     const taskId = crypto.randomUUID();
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: configuredRuntime,
-      limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
+      limits: resolveAgentRunLimits({
+        runtime: configuredRuntime,
+        tiers: TIERS,
+      }),
       taskId,
       runId: crypto.randomUUID(),
       agentId: setup.agent.id,
@@ -1051,7 +1075,10 @@ describe("buildAgentRunLaunchSpec", () => {
     await expect(
       buildAgentRunLaunchSpec({
         runtime: configuredRuntime,
-        limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
+        limits: resolveAgentRunLimits({
+          runtime: configuredRuntime,
+          tiers: TIERS,
+        }),
         taskId: crypto.randomUUID(),
         runId: crypto.randomUUID(),
         agentId: setup.agent.id,
@@ -1191,7 +1218,10 @@ describe("buildAgentRunLaunchSpec", () => {
 
       const launch = buildAgentRunLaunchSpec({
         runtime: configuredRuntime,
-        limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
+        limits: resolveAgentRunLimits({
+          runtime: configuredRuntime,
+          tiers: TIERS,
+        }),
         taskId: crypto.randomUUID(),
         runId: crypto.randomUUID(),
         agentId: setup.agent.id,
@@ -1257,7 +1287,10 @@ describe("buildAgentRunLaunchSpec", () => {
     await expect(
       buildAgentRunLaunchSpec({
         runtime: configuredRuntime,
-        limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
+        limits: resolveAgentRunLimits({
+          runtime: configuredRuntime,
+          tiers: TIERS,
+        }),
         taskId: crypto.randomUUID(),
         runId: crypto.randomUUID(),
         agentId: setup.agent.id,
@@ -1316,7 +1349,10 @@ describe("buildAgentRunLaunchSpec", () => {
     await expect(
       buildAgentRunLaunchSpec({
         runtime: configuredRuntime,
-        limits: resolveAgentRunLimits({ runtime: configuredRuntime }),
+        limits: resolveAgentRunLimits({
+          runtime: configuredRuntime,
+          tiers: TIERS,
+        }),
         taskId: crypto.randomUUID(),
         runId: crypto.randomUUID(),
         agentId: setup.agent.id,
@@ -1417,7 +1453,6 @@ function runtime(
     backend: "kubernetes",
     steerMode: "pipe",
     privileged: false,
-    resources: null,
     environment: null,
     credentials: null,
     ttlHours: null,

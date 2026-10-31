@@ -101,7 +101,6 @@ describe("Agent Runtime routes", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         environment: null,
         credentials: [
           {
@@ -619,7 +618,7 @@ describe("Agent Runtime routes", () => {
     });
     expect(refused.statusCode, refused.body).toBe(400);
     expect(refused.json().error.message).toContain(
-      "Tier L is above this Agent's largest tier M",
+      "Tier L (8 CPU, 16 GiB (32 GiB limit)) is above this Agent's scaleup tier M",
     );
     expect(startDetachedAgentTask).not.toHaveBeenCalled();
 
@@ -751,6 +750,8 @@ describe("Agent Runtime routes", () => {
       statusReason: expected.message,
       failure: expected,
     });
+    // The LLM trace is keyed by the frozen run name the runtime sends.
+    expect(detail.json().llmSessionId).toBe(detail.json().workloadName);
     for (const taskId of [legacy.id, running.id]) {
       const other = await app.inject({
         method: "GET",
@@ -867,6 +868,9 @@ describe("Agent Runtime routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    const [ownRun] = response.json().data;
+    // The LLM trace is keyed by the frozen run name the runtime sends.
+    expect(ownRun.llmSessionId).toBe(ownRun.workloadName);
     expect(response.json().data).toEqual([
       expect.objectContaining({
         taskId: ownTask.id,

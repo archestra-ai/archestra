@@ -123,7 +123,6 @@ describe("run tools", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         environment: null,
         credentials: [
           {
@@ -310,7 +309,6 @@ describe("run tools", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         tier: "M",
         environment: null,
         credentials: [],
@@ -321,7 +319,10 @@ describe("run tools", () => {
     });
     const sendMessage = vi.spyOn(A2AManager.prototype, "sendMessage");
     for (const [limits, message] of [
-      [{ tier: "L" }, "Tier L is above this Agent's largest tier M"],
+      [
+        { tier: "L" },
+        "Tier L (8 CPU, 16 GiB (32 GiB limit)) is above this Agent's scaleup tier M",
+      ],
       [
         { max_duration_hours: 24 },
         "maximum duration of 24 hours is above this Agent's 12",
@@ -354,7 +355,6 @@ describe("run tools", () => {
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         tier: "M",
         maxTier: "L",
         environment: null,

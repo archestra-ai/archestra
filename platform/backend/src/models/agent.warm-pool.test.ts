@@ -20,7 +20,6 @@ test("warm pool candidates are the Agents run recently, most recent first", asyn
     backend: "kubernetes" as const,
     steerMode: "pipe" as const,
     privileged: false,
-    resources: null,
     environment: null,
     credentials: null,
     ttlHours: 24,

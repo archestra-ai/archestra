@@ -5,6 +5,7 @@ import {
   type MessagingChannelId,
   providerDisplayNames,
   type ResourceVisibilityScope,
+  subscriptionKindForProvider,
   TOOL_POST_AGENT_RUN_MESSAGE_SHORT_NAME,
   toPlaceholderTitle,
 } from "@archestra/shared";
@@ -3295,10 +3296,26 @@ export class ChatOpsManager {
 
     // A per-user provider the user hasn't linked yet → a friendly prompt
     // with a link to connect (chatops can't render the interactive flow).
-    if (error instanceof LlmProviderAuthRequiredError) {
+    const providerAuth =
+      error instanceof LlmProviderAuthRequiredError
+        ? error
+        : error instanceof ProviderError
+          ? error.chatErrorResponse.authAction
+          : undefined;
+    if (providerAuth) {
+      const { provider: authProvider, providerLabel } = providerAuth;
+      const subscriptionKind = subscriptionKindForProvider(authProvider);
+      const setupPath = subscriptionKind
+        ? `/llm/model-providers?reconnect=${encodeURIComponent(subscriptionKind)}`
+        : `/llm/model-providers?create=${encodeURIComponent(authProvider)}`;
       await provider.sendReply({
         originalMessage: message,
-        text: `This agent uses ${error.providerLabel}, which is per-user. Connect your own ${error.providerLabel} account, then try again: ${config.frontendBaseUrl}/settings`,
+        text: [
+          error instanceof ProviderError
+            ? error.chatErrorResponse.message
+            : `This agent uses ${providerLabel}, which is per-user. Connect your own ${providerLabel} account, then try again.`,
+          `[${error instanceof ProviderError ? "Reconnect account" : "Connect account"}](${config.frontendBaseUrl}${setupPath})`,
+        ].join("\n\n"),
         footer: footer(),
         conversationReference: message.metadata?.conversationReference,
       });
@@ -3333,13 +3350,24 @@ export class ChatOpsManager {
     // x-api-key"). Users rarely realize the bot resolves its model/key the
     // same way in-app chat does, so name the key that was used and where to
     // fix it instead of leaving only the provider's cryptic one-liner.
-    if (isLlmProviderAuthError(errMsg)) {
+    if (
+      isLlmProviderAuthError(errMsg) ||
+      (error instanceof ProviderError &&
+        error.chatErrorResponse.code === ChatErrorCode.Authentication)
+    ) {
       const usedLlm = llmContext
         ? await this.describeLlmUsedForRun({
             ...llmContext,
             agentId: isSubagentError ? error.subagentId : llmContext.agentId,
           })
         : null;
+      const rejectedProvider =
+        error instanceof ProviderError
+          ? error.chatErrorResponse.originalError?.provider
+          : undefined;
+      const setupPath = rejectedProvider
+        ? `/llm/model-providers?create=${encodeURIComponent(rejectedProvider)}`
+        : "/llm/model-providers";
       await provider.sendReply({
         originalMessage: message,
         text: [
@@ -3348,7 +3376,7 @@ export class ChatOpsManager {
           usedLlm ??
             "Check the API key configured for this agent (or your organization's LLM settings).",
           "",
-          `Update the key or configure a different one, then try again: ${config.frontendBaseUrl}/llm/model-providers`,
+          `Update the key or configure a different one, then try again. [Configure provider](${config.frontendBaseUrl}${setupPath})`,
         ].join("\n"),
         footer: footer(sourcedErrorDetail),
         conversationReference: message.metadata?.conversationReference,

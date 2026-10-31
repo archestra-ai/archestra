@@ -132,7 +132,6 @@ test.for([
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
-        resources: null,
         environment: null,
         credentials: null,
         ttlHours: null,

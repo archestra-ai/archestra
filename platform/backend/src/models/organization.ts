@@ -9,7 +9,7 @@ import {
   type SupportedProvider,
   TimeInMs,
 } from "@archestra/shared";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
@@ -648,6 +648,42 @@ class OrganizationModel {
   }
 
   /**
+   * Whether the organization's logs keep the media their rows carry. Read
+   * straight from the row on each log write, like the proxy's credential
+   * setting, so a change applies to the very next row on every replica. The
+   * organization is found from whichever owner the row names (agent, app,
+   * knowledge connector or environment), in one query. Media is kept only
+   * when that organization turned it on; a row that names none keeps none.
+   */
+  static async keepsMediaInLogs(owner: {
+    organizationId?: string | null;
+    agentId?: string | null;
+    appId?: string | null;
+    connectorId?: string | null;
+    environmentId?: string | null;
+  }): Promise<boolean> {
+    const { agentsTable, appsTable, environmentsTable } = schema;
+    const connectors = schema.knowledgeBaseConnectorsTable;
+    const organizationId = sql`coalesce(
+      ${owner.organizationId ?? null}::text,
+      (select ${agentsTable.organizationId} from ${agentsTable}
+        where ${agentsTable.id} = ${owner.agentId ?? null}::uuid),
+      (select ${appsTable.organizationId} from ${appsTable}
+        where ${appsTable.id} = ${owner.appId ?? null}::uuid),
+      (select ${connectors.organizationId} from ${connectors}
+        where ${connectors.id} = ${owner.connectorId ?? null}::uuid),
+      (select ${environmentsTable.organizationId} from ${environmentsTable}
+        where ${environmentsTable.id} = ${owner.environmentId ?? null}::uuid)
+    )`;
+    const [row] = await db
+      .select({ keep: schema.organizationsTable.keepMediaInLogs })
+      .from(schema.organizationsTable)
+      .where(sql`${schema.organizationsTable.id} = ${organizationId}`)
+      .limit(1);
+    return row?.keep ?? false;
+  }
+
+  /**
    * Cached per-request read of the org's auth-enforcement policies
    * (require-2FA, session max age). Same cache key as the other org
    * settings, so any OrganizationModel.patch invalidates it.
@@ -910,6 +946,7 @@ class OrganizationModel {
       allowChatFileUploads: org.allowChatFileUploads,
       allowUnauthenticatedLlmProxyRequests:
         org.allowUnauthenticatedLlmProxyRequests,
+      keepMediaInLogs: org.keepMediaInLogs,
       allowToolAutoAssignment: org.allowToolAutoAssignment,
       embeddingModel: org.embeddingModel ?? null,
       kbContextualRetrievalMode: org.kbContextualRetrievalMode ?? null,

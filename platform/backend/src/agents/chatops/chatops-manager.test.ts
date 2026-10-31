@@ -21,7 +21,13 @@ vi.mock("./channel-activation", async (importOriginal) => {
   };
 });
 
-import { ChatErrorCode, ChatErrorMessages } from "@archestra/shared";
+import {
+  ChatErrorCode,
+  ChatErrorMessages,
+  SUBSCRIPTION_CREDENTIAL_KINDS,
+  SUBSCRIPTION_CREDENTIALS,
+  SupportedProvidersSchema,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
@@ -653,13 +659,163 @@ describe("ChatOpsManager security validation", () => {
     );
     expect(sendReplySpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: expect.stringContaining("/settings"),
+        text: expect.stringContaining(
+          "/llm/model-providers?reconnect=github-copilot",
+        ),
       }),
     );
     // Even the connect-prompt reply carries the agent footer.
     expect(sendReplySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         footer: `🤖 ${agent.name}`,
+      }),
+    );
+  });
+
+  test.for(
+    SUBSCRIPTION_CREDENTIAL_KINDS,
+  )("expired %s sign-in links to its reconnect dialog", async (kind, {
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const definition = SUBSCRIPTION_CREDENTIALS[kind];
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockRejectedValue(
+      new ProviderError({
+        code: ChatErrorCode.ProviderAuthRequired,
+        message: "Account sign-in expired. Reconnect to continue.",
+        isRetryable: false,
+        authAction: {
+          provider: definition.provider,
+          providerLabel: definition.label,
+        },
+      }),
+    );
+
+    const user = await makeUser({ email: "copilot@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "copilot@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage(),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(false);
+    // The reply names the provider and links the user to connect their account.
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("Account sign-in expired."),
+      }),
+    );
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining(`/llm/model-providers?reconnect=${kind}`),
+      }),
+    );
+    // Even the connect-prompt reply carries the agent footer.
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        footer: `🤖 ${agent.name}`,
+      }),
+    );
+  });
+
+  test.for(
+    SupportedProvidersSchema.options,
+  )("rejected %s key links to its setup dialog", async (providerId, {
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockRejectedValue(
+      new ProviderError({
+        code: ChatErrorCode.Authentication,
+        message: "Provider credential rejected.",
+        isRetryable: false,
+        originalError: { provider: providerId },
+      }),
+    );
+
+    const user = await makeUser({ email: "copilot@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "copilot@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage(),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(false);
+    // The reply names the provider and links the user to connect their account.
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("LLM provider rejected the API key"),
+      }),
+    );
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining(
+          `/llm/model-providers?create=${providerId}`,
+        ),
+      }),
+    );
+    // Even the connect-prompt reply carries the agent footer.
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        footer: expect.stringContaining(`🤖 ${agent.name}`),
       }),
     );
   });

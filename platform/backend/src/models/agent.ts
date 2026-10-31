@@ -549,16 +549,26 @@ class AgentModel {
    * once per request scope. Outside a memoizing request this is a fresh read,
    * so a changed setting applies to the next call.
    */
-  private static findToolAccessFields(
-    id: string,
-  ): Promise<{ environmentId: string | null; accessAllTools: boolean } | null> {
+  private static findToolAccessFields(id: string): Promise<{
+    environmentId: string | null;
+    accessAllTools: boolean;
+    keepMediaInLogs: boolean | null;
+  } | null> {
     return readConfig(`agent-tool-access\0${id}`, async () => {
+      // The organization's media setting rides along so each log write learns
+      // it from the read it already makes; an organization change drops the
+      // cached entry like an agent change does.
       const [result] = await db
         .select({
           environmentId: schema.agentsTable.environmentId,
           accessAllTools: schema.agentsTable.accessAllTools,
+          keepMediaInLogs: schema.organizationsTable.keepMediaInLogs,
         })
         .from(schema.agentsTable)
+        .leftJoin(
+          schema.organizationsTable,
+          eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
+        )
         .where(
           and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)),
         )
@@ -2993,6 +3003,21 @@ class AgentModel {
   }
 
   /**
+   * What a log row written for this agent needs: its environment, and whether
+   * its organization keeps media in logs (null when the agent is not found).
+   */
+  static async findLogSettings(id: string): Promise<{
+    environmentId: string | null;
+    keepMediaInLogs: boolean | null;
+  }> {
+    const fields = await AgentModel.findToolAccessFields(id);
+    return {
+      environmentId: fields?.environmentId ?? null,
+      keepMediaInLogs: fields?.keepMediaInLogs ?? null,
+    };
+  }
+
+  /**
    * The two fields that decide whether a caller missing an MCP connection is
    * warned, blocked, or left alone. Kept narrow so the chat turn's pre-flight
    * check costs one indexed row read.
@@ -4035,6 +4060,62 @@ class AgentModel {
       )
       .returning({ id: schema.agentsTable.id });
     return rows.length === 1;
+  }
+
+  /** How many of the organization's agents name `name` as their default or scaleup tier. */
+  static async countRuntimeTierReferences(params: {
+    organizationId: string;
+    name: string;
+  }): Promise<number> {
+    const table = schema.agentsTable;
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          sql`(lower(${table.runtime}->>'tier') = lower(${params.name}) or lower(${table.runtime}->>'maxTier') = lower(${params.name}))`,
+        ),
+      );
+    return row?.count ?? 0;
+  }
+
+  /**
+   * Follow tier renames on every agent of the organization that names one of
+   * them. The whole mapping applies to each stored name once, so a save that
+   * renames S to M and M to Medium leaves the former S agents on M.
+   */
+  static async renameRuntimeTiers(params: {
+    organizationId: string;
+    renames: readonly { from: string; to: string }[];
+    tx?: Transaction;
+  }): Promise<void> {
+    if (params.renames.length === 0) return;
+    const table = schema.agentsTable;
+    const from = params.renames.map((rename) => rename.from.toLowerCase());
+    for (const field of ["tier", "maxTier"] as const) {
+      const stored = sql`lower(${table.runtime}->>${field})`;
+      const mapped = sql.join(
+        params.renames.map(
+          (rename) => sql`when ${rename.from.toLowerCase()} then ${rename.to}`,
+        ),
+        sql` `,
+      );
+      await (params.tx ?? db)
+        .update(table)
+        .set({
+          runtime: sql`jsonb_set(${table.runtime}, ${sql.raw(`'{${field}}'`)}, to_jsonb(coalesce((case ${stored} ${mapped} end), ${table.runtime}->>${field})::text))`,
+        })
+        .where(
+          and(
+            eq(table.organizationId, params.organizationId),
+            sql`${stored} in (${sql.join(
+              from.map((name) => sql`${name}`),
+              sql`, `,
+            )})`,
+          ),
+        );
+    }
   }
 
   static async update(
@@ -5501,7 +5582,6 @@ class AgentModel {
             backend: row.runtime.backend,
             steerMode: row.runtime.steerMode,
             privileged: row.runtime.privileged,
-            resources: row.runtime.resources,
             tier: row.runtime.tier ?? null,
             maxTier: row.runtime.maxTier ?? null,
             environmentKeys: (row.runtime.environment ?? [])

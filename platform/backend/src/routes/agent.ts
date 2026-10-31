@@ -72,6 +72,7 @@ import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
 import { transferAgentOwnership } from "@/services/agent-ownership";
 import {
   assertAgentRuntimeModelCompatibility,
+  assertAgentRuntimeTiersExist,
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
@@ -794,6 +795,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
+      await assertAgentRuntimeTiersExist({
+        runtime: body.runtime,
+        organizationId,
+      });
       await assertCanBindRuntimeCredentials({
         organizationId,
         userId: user.id,
@@ -854,6 +859,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         organizationId,
         userId: user.id,
+        selectsModel: true,
       });
 
       const environmentId = await resolveNewAgentEnvironmentId({
@@ -2185,6 +2191,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         previous: existingAgent.runtime,
       });
+      await assertAgentRuntimeTiersExist({
+        runtime: body.runtime,
+        organizationId,
+      });
       await assertCanBindRuntimeCredentials({
         organizationId,
         userId: user.id,
@@ -2321,6 +2331,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           organizationId,
           userId: user.id,
+          // A body that names neither keeps the agent's pair: an image or
+          // limits change does not choose a model.
+          selectsModel:
+            body.modelId !== undefined || body.llmApiKeyId !== undefined,
         });
       }
 

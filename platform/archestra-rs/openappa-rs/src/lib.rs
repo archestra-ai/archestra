@@ -2862,12 +2862,16 @@ impl State {
             }
             // Before the runtime spends the offer. A missing row is empty
             // presentation, not an error, so an old call still redeems.
-            let recorded = recorded_call_presentation(
-                pg,
-                &input.organization_id,
-                &input.session_id,
-                &offer_id,
-            )?;
+            let recorded = match offer_id.as_deref() {
+                Some(offer_id) => recorded_call_presentation(
+                    pg,
+                    &input.organization_id,
+                    &input.session_id,
+                    offer_id,
+                )?,
+                // A return declared ahead of its spawn names no offer, so no call presented one.
+                None => Default::default(),
+            };
             let outcome = self
                 .runtime
                 .execute_embedded_remedy_with_options(&actor, args, presentation_options(&input))
@@ -2885,7 +2889,7 @@ impl State {
                 outcome,
                 &RemedyAct {
                     owner: &owner,
-                    offer_id: &offer_id,
+                    offer_id: offer_id.as_deref().unwrap_or_default(),
                     ruling: input.ruling,
                 },
             )?;
@@ -3644,7 +3648,9 @@ fn render_human_denial(presentation: &RemedyPresentation, act: &RemedyAct) -> Op
 fn unknown_control_reason(reason: &RemedyRefusal) -> Option<&'static str> {
     match reason {
         RemedyRefusal::Unvouched | RemedyRefusal::UnknownOffer => Some("unknown_control_call"),
-        RemedyRefusal::InvalidOfferId(_)
+        // Its text says how to declare at the spawn's block instead.
+        RemedyRefusal::UnvouchedDeclaration
+        | RemedyRefusal::InvalidOfferId(_)
         | RemedyRefusal::ActorMismatch
         | RemedyRefusal::AlreadyExecuting
         | RemedyRefusal::Runtime { .. } => None,

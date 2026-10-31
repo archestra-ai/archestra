@@ -19,6 +19,7 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import logger from "@/logging";
 import { resolveBedrockAwsPrices } from "@/services/bedrock-aws-pricing";
+import { mediaPricingFor } from "@/services/media-pricing";
 import type {
   CreateModel,
   Model,
@@ -705,6 +706,59 @@ class ModelModel {
   }
 
   /**
+   * Overwrite the modalities and tool support of rows a catalog sync already
+   * wrote. These are the classification columns {@link ModelModel.bulkUpsert}
+   * keeps once set; a model the fetcher classified from its id needs them
+   * replaced, but none of the administrator's overrides (custom prices and
+   * limits) that only {@link ModelModel.bulkUpsertFull} resets. An entry with no
+   * stored row for its provider and model id is skipped, not inserted.
+   */
+  static async applyAuthoritativeCapabilities(
+    rows: Pick<
+      CreateModel,
+      | "provider"
+      | "modelId"
+      | "inputModalities"
+      | "outputModalities"
+      | "supportsToolCalling"
+    >[],
+  ): Promise<void> {
+    if (rows.length === 0) return;
+
+    const BATCH_SIZE = 50;
+    await withDbTransaction(async (tx) => {
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const values = sql.join(
+          rows
+            .slice(i, i + BATCH_SIZE)
+            .map(
+              (row) =>
+                sql`(${row.provider}::text, ${row.modelId}::text, ${jsonbOrNull(row.inputModalities)}::jsonb, ${jsonbOrNull(row.outputModalities)}::jsonb, ${row.supportsToolCalling ?? null}::boolean)`,
+            ),
+          sql`, `,
+        );
+        await tx
+          .update(schema.modelsTable)
+          .set({
+            inputModalities: sql`fresh.input_modalities`,
+            outputModalities: sql`fresh.output_modalities`,
+            supportsToolCalling: sql`fresh.supports_tool_calling`,
+            updatedAt: sql`NOW()`,
+          })
+          .from(
+            sql`(VALUES ${values}) AS fresh(provider, model_id, input_modalities, output_modalities, supports_tool_calling)`,
+          )
+          .where(
+            and(
+              eq(schema.modelsTable.provider, sql`fresh.provider`),
+              eq(schema.modelsTable.modelId, sql`fresh.model_id`),
+            ),
+          );
+      }
+    });
+  }
+
+  /**
    * Delete model by provider and model ID
    */
   static async delete(
@@ -1309,6 +1363,7 @@ class ModelModel {
         pricePerMillionCacheRead: null,
         pricePerMillionCacheWrite: null,
         cachePriceSource: null,
+        mediaPricing: null,
       };
     }
 
@@ -1343,6 +1398,7 @@ class ModelModel {
       pricePerMillionCacheRead: pricing.pricePerMillionCacheRead,
       pricePerMillionCacheWrite: pricing.pricePerMillionCacheWrite,
       cachePriceSource: pricing.cacheSource,
+      mediaPricing: mediaPricingFor(model.provider, model.modelId),
     };
   }
 
@@ -1499,3 +1555,9 @@ class ModelModel {
 }
 
 export default ModelModel;
+
+// A JSON-encoded `null` would be stored as the jsonb value `null` rather than
+// SQL NULL, which is what every other write leaves for an unknown modality.
+function jsonbOrNull(value: unknown[] | null | undefined): string | null {
+  return value == null ? null : JSON.stringify(value);
+}

@@ -62,7 +62,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
+import { DEFAULT_AGENT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useAllMatchingProfiles,
   useBulkDeleteProfiles,
@@ -165,7 +165,7 @@ function McpGateways() {
     setEscalatedFor(null);
   }, []);
 
-  const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
+  const sortBy = sortByFromUrl || DEFAULT_AGENT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
   const scopedCapabilities = useScopedCapabilities();
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });

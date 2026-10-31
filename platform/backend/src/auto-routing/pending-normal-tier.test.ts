@@ -18,7 +18,6 @@ const CODEX_RUNTIME: NonNullable<InsertAgent["runtime"]> = {
   backend: "kubernetes",
   steerMode: "pipe",
   privileged: false,
-  resources: null,
   environment: null,
   credentials: null,
   ttlHours: null,

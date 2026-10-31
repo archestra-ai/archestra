@@ -1,5 +1,4 @@
 import type {
-  AgentRuntimeTierSettings,
   ContextualRetrievalMode,
   KnowledgeConnectorOverrides,
   MessagingChannelOverrides,
@@ -7,6 +6,7 @@ import type {
   OrganizationCustomFont,
   OrganizationTheme,
   PopularAgentOverrides,
+  StoredAgentRuntimeTierSettings,
   SupportedProvider,
 } from "@archestra/shared";
 import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@archestra/shared";
@@ -104,6 +104,14 @@ const organizationsTable = pgTable("organization", {
   )
     .notNull()
     .default(false),
+
+  /**
+   * Whether LLM proxy and MCP gateway logs keep the images, audio, video and
+   * files that requests, responses and tool calls carry, so Logs can show and
+   * play them. Off, the default, each row keeps the media's place and type
+   * but not its bytes.
+   */
+  keepMediaInLogs: boolean("keep_media_in_logs").notNull().default(false),
 
   /**
    * @deprecated No longer consulted. Dynamic tool access is now gated solely
@@ -474,7 +482,7 @@ const organizationsTable = pgTable("organization", {
    */
   agentRuntimeTiers: jsonb(
     "agent_runtime_tiers",
-  ).$type<AgentRuntimeTierSettings>(),
+  ).$type<StoredAgentRuntimeTierSettings>(),
 
   /**
    * ALLOWLIST regex (JS source, no delimiters/flags) for the implicit "default"

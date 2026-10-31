@@ -18,7 +18,10 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
-import { makeOrganization } from "@/mocks/data/organization";
+import {
+  agentRuntimeTiersSeed,
+  makeOrganization,
+} from "@/mocks/data/organization";
 import {
   AgentCatalog,
   getAgentCatalogTemplates,
@@ -50,6 +53,9 @@ const server = setupServer(
   ),
   http.get("http://localhost:9000/api/organization", () =>
     HttpResponse.json(makeOrganization()),
+  ),
+  http.get("http://localhost:9000/api/organization/agent-runtime-tiers", () =>
+    HttpResponse.json(agentRuntimeTiersSeed),
   ),
   http.get("http://localhost:9000/api/credentials", () =>
     HttpResponse.json([]),
@@ -337,9 +343,8 @@ describe("AgentRuntimePicker", () => {
       screen.getByRole("option", { name: "Anthropic Messages" }),
     );
     await user.click(screen.getByRole("button", { name: /^Limits/ }));
-    await user.click(
-      screen.getByRole("button", { name: /Resources and access/ }),
-    );
+    // Tiers and access are in view with the limits: nothing folds away.
+    expect(screen.getByLabelText("Default tier")).toBeVisible();
     expect(screen.getByLabelText("Privileged mode")).toBeVisible();
     fireEvent.change(screen.getByLabelText("Metered LLM budget"), {
       target: { value: "25" },

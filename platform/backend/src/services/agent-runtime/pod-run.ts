@@ -60,7 +60,10 @@ import {
   runtimeOpenAppaSession,
   stampRuntimeBinding,
 } from "./runtime-identity";
-import { resolveAgentRunLimits } from "./runtime-tiers";
+import {
+  organizationAgentRuntimeTiers,
+  resolveAgentRunLimits,
+} from "./runtime-tiers";
 import { generateAgentRunTitle } from "./title";
 import { agentRunTranscriptStore } from "./transcript-store";
 
@@ -164,7 +167,10 @@ async function startAgentRunSession(params: {
   const limits =
     priorRun?.runtimeLimits ??
     params.limits ??
-    resolveAgentRunLimits({ runtime: params.runtime });
+    resolveAgentRunLimits({
+      runtime: params.runtime,
+      tiers: await organizationAgentRuntimeTiers(params.organizationId),
+    });
   const { spec, virtualApiKeyId, gatewayTokenId } =
     await buildAgentRunLaunchSpec({
       runtime: params.runtime,
@@ -203,6 +209,8 @@ async function startAgentRunSession(params: {
       Math.ceil((workspace.expiresAt.getTime() - Date.now()) / 1000),
     );
   }
+  // The image sends this value as X-Archestra-Session-Id; it is the key of
+  // the run's LLM session (see agentRunLlmSessionId).
   spec.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID = spec.frozenName;
 
   // The row lands before the workload: it is what teardown reads to find the
@@ -237,6 +245,7 @@ async function startAgentRunSession(params: {
     trackBackgroundWork(
       generateAgentRunTitle({
         taskId: params.taskId,
+        workloadName: spec.frozenName,
         prompt: params.task ?? "Run",
         organizationId: params.organizationId,
         userId: params.titleUserId,

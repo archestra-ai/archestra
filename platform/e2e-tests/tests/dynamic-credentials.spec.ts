@@ -18,7 +18,9 @@ import {
   waitForMcpServerToolsDiscovered,
 } from "../utils";
 
-test("Verify tool calling using dynamic credentials", async ({
+test("Verify tool calling using dynamic credentials", {
+  tag: "@needs-kubernetes",
+}, async ({
   request,
   adminPage,
   editorPage,

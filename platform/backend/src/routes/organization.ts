@@ -2,7 +2,6 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   AUTO_PROVISIONED_INVITATION_STATUS,
-  agentRuntimeTierProblems,
   CursorQuerySchema,
   createCursorPaginatedResponseSchema,
   getArchestraMcpServerName,
@@ -10,7 +9,6 @@ import {
   providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   RouteId,
-  resolveAgentRuntimeTiers,
 } from "@archestra/shared";
 import {
   INSTALLER_CLIENT_KEY_PROVIDERS,
@@ -27,7 +25,7 @@ import { getPermissionsForUserContext, isGlobalAdmin } from "@/auth/utils";
 import { describeOrganizationDefaultModel } from "@/auto-routing/organization-default";
 import { writeOrganizationTrio } from "@/auto-routing/settings";
 import config from "@/config";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
 import {
   enterpriseTier,
@@ -60,12 +58,15 @@ import {
 import AgentRuntimeTemplateModel from "@/models/agent-runtime-template";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { assertRuntimeAgentsSupportOrganizationDefault } from "@/services/agent-runtime/model-compatibility";
+import { prepareAgentRuntimeTierChange } from "@/services/agent-runtime/runtime-tier-settings";
+import { organizationAgentRuntimeTiers } from "@/services/agent-runtime/runtime-tiers";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { removeMemberTarget } from "@/services/member-removal";
 import { reconcileManagedPlaywrightSetting } from "@/services/playwright-runtime";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
+  AgentRuntimeTiersResponseSchema,
   ApiError,
   AppearanceSettingsSchema,
   CompleteOnboardingSchema,
@@ -331,6 +332,22 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/organization/agent-runtime-tiers",
+    {
+      schema: {
+        operationId: RouteId.GetAgentRuntimeTiers,
+        description:
+          "The organization's Agent Runtime tiers in effect, smallest first: each tier's name, CPU, the memory its CPU gives it, the spares it keeps ready, and the default tier",
+        tags: ["Organization"],
+        response: constructResponseSchema(AgentRuntimeTiersResponseSchema),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      return reply.send(await organizationAgentRuntimeTiers(organizationId));
+    },
+  );
+
   fastify.patch(
     "/api/organization/agent-settings",
     {
@@ -344,6 +361,10 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body, user }, reply) => {
+      // Tier changes are checked here and written with the patch below, in
+      // its transaction: renamed tiers are followed by the agents that name
+      // them, and a tier still in use cannot go.
+      let writeTierChanges: ((tx: Transaction) => Promise<void>) | null = null;
       if (body.agentRuntimeTiers !== undefined) {
         // Tier sizes reserve cluster capacity, so like the built-in browser
         // they need a built-in administrator role.
@@ -353,10 +374,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Only administrators can change the Agent Runtime tiers",
           );
         }
-        const problems = agentRuntimeTierProblems(
-          resolveAgentRuntimeTiers(body.agentRuntimeTiers),
-        );
-        if (problems.length) throw new ApiError(400, problems.join("; "));
+        // A reset (null) restores the defaults under the same check: a
+        // custom tier still in use cannot vanish from under its agents.
+        const prepared = await prepareAgentRuntimeTierChange({
+          organizationId,
+          input: body.agentRuntimeTiers,
+        });
+        body.agentRuntimeTiers = prepared.settings;
+        writeTierChanges = prepared.write;
       }
       // The default model and its API key are a pair: persist both or neither.
       const currentOrg =
@@ -439,21 +464,28 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           smartModelId: body.defaultSmartModelId,
         }),
       };
+      const write = async (tx: Transaction) => {
+        await writeTierChanges?.(tx);
+        return OrganizationModel.patchInTransaction({
+          id: organizationId,
+          data: body,
+          tx,
+        });
+      };
       const organization =
         Object.keys(trioPatch).length > 0
           ? await writeOrganizationTrio({
               organizationId,
               patch: trioPatch,
-              write: (tx) =>
-                OrganizationModel.patchInTransaction({
-                  id: organizationId,
-                  data: body,
-                  tx,
-                }),
+              write,
             }).finally(() =>
               OrganizationModel.invalidateSettingsCaches(organizationId),
             )
-          : await OrganizationModel.patch(organizationId, body);
+          : writeTierChanges
+            ? await withDbTransaction(write).finally(() =>
+                OrganizationModel.invalidateSettingsCaches(organizationId),
+              )
+            : await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");

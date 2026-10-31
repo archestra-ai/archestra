@@ -462,7 +462,7 @@ describe("azureResponsesAdapterFactory", () => {
       model: "gpt-4.1",
       status: "completed",
     });
-    expect(adapter.formatEndSSE()).toBe("data: [DONE]\n\n");
+    expect(adapter.formatEndSSE()).toBe("");
   });
 
   test("accumulates streamed function call arguments across delta events", () => {
@@ -596,7 +596,7 @@ describe("azureResponsesAdapterFactory", () => {
       },
     } as never);
     const completion = JSON.parse(
-      String(completed.sseData).replace(/^data: /, ""),
+      String(completed.sseData).replace(/^(?:event: .*\n)?data: /, ""),
     ) as { response: { output: unknown[] } };
 
     expect(JSON.stringify(completion.response.output)).toContain(prefix);

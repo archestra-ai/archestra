@@ -18,10 +18,13 @@ import {
   AGENT_RUNTIME_CPU_REQUEST_ENV,
   AGENT_RUNTIME_MEMORY_LIMIT_ENV,
   AGENT_RUNTIME_TIER_ENV,
+  AGENT_RUNTIME_TIERS_ENV,
 } from "@/services/agent-runtime/runtime-contract";
 import {
   agentRuntimeTier,
+  agentRuntimeTierDefaults,
   resolveRunResources,
+  retargetRuntimeTiersEnv,
   warmPoolReplicas,
 } from "@/services/agent-runtime/runtime-tiers";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
@@ -163,8 +166,11 @@ class AgentWarmPoolManager {
         const namespace =
           agent.namespace ?? agent.defaultNamespace ?? clients.namespace;
         namespaces.add(namespace);
-        const tiers = resolveAgentRuntimeTiers(agent.agentRuntimeTiers);
-        const tier = agentRuntimeTier(runtime);
+        const tiers = resolveAgentRuntimeTiers(
+          agent.agentRuntimeTiers,
+          agentRuntimeTierDefaults(),
+        );
+        const tier = agentRuntimeTier(runtime, tiers);
         const replicas = warmPoolReplicas(tiers, tier);
         // A tier without spares takes no pool slot from the other Agents.
         if (
@@ -183,7 +189,7 @@ class AgentWarmPoolManager {
           namespace,
           image: runtime.image,
           privileged: runtime.privileged,
-          resources: resolveRunResources(runtime, tier, tiers),
+          resources: resolveRunResources(tier, tiers),
           tier,
           warmTiers: [],
           workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
@@ -475,6 +481,7 @@ export function servedLaunchSpec<
 >(spec: T, tier: AgentRuntimeTier | null): T {
   const served = spec.warmTiers.find((candidate) => candidate.tier === tier);
   if (!served || tier === spec.tier) return spec;
+  const tiersEnv = spec.env[AGENT_RUNTIME_TIERS_ENV];
   return {
     ...spec,
     tier,
@@ -482,6 +489,15 @@ export function servedLaunchSpec<
     env: {
       ...spec.env,
       [AGENT_RUNTIME_TIER_ENV]: tier,
+      // The list the run reads to decide on a larger run marks the size it got.
+      ...(tiersEnv
+        ? {
+            [AGENT_RUNTIME_TIERS_ENV]: retargetRuntimeTiersEnv(
+              tiersEnv,
+              served.tier,
+            ),
+          }
+        : {}),
       ...(served.resources.cpuRequest
         ? { [AGENT_RUNTIME_CPU_REQUEST_ENV]: served.resources.cpuRequest }
         : {}),

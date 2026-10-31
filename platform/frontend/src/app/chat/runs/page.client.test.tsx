@@ -238,14 +238,19 @@ describe("AgentRunChatSession", () => {
 
   it("links the owner to the run's LLM trace when they may read logs", async () => {
     const user = userEvent.setup();
-    queryState.value.data = run({ sessionId: "workspace-1" });
+    // The trace is keyed by the session id the runtime sends, not by the
+    // run's own session (workspace) id.
+    queryState.value.data = run({
+      sessionId: "workspace-1",
+      llmSessionId: "agent-run-codex-task1234",
+    });
 
     render(<AgentRunChatSession taskId="task-1" />);
     await user.click(screen.getByRole("button", { name: "More run actions" }));
 
     expect(
       screen.getByRole("menuitem", { name: "View trace" }),
-    ).toHaveAttribute("href", "/llm/logs/workspace-1");
+    ).toHaveAttribute("href", "/llm/logs/agent-run-codex-task1234");
   });
 
   it("leaves the trace out without log:read", async () => {
@@ -253,7 +258,10 @@ describe("AgentRunChatSession", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);
-    queryState.value.data = run({ sessionId: "workspace-1" });
+    queryState.value.data = run({
+      sessionId: "workspace-1",
+      llmSessionId: "agent-run-codex-task1234",
+    });
 
     render(<AgentRunChatSession taskId="task-1" />);
     await user.click(screen.getByRole("button", { name: "More run actions" }));
@@ -434,6 +442,7 @@ function run(overrides: Record<string, unknown>) {
     taskId: "task-1",
     title: "Nightly dependency audit",
     workloadName: "agent-task-1",
+    llmSessionId: "agent-task-1",
     prompt: "Implement the small feature",
     state: "TASK_STATE_SUBMITTED",
     statusReason: null,

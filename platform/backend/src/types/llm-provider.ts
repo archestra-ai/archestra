@@ -539,6 +539,14 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    * which is needed for saving the interaction to the database.
    */
   toProviderResponse(): TResponse;
+
+  /**
+   * The response as its log row stores it, when that holds more than plugins
+   * should receive: the audio a speech or audio-chat stream returned, kept up
+   * to a size limit so the Logs page can play it. Defaults to
+   * `toProviderResponse()`.
+   */
+  toLoggedResponse?(): TResponse;
 }
 
 // =============================================================================
@@ -576,6 +584,18 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
 
   /** This operation cannot provide authoritative usage/pricing for enforced accounting. */
   readonly unavailableUsageAccounting?: boolean;
+  /**
+   * For a media operation: whether its response will carry what the
+   * provider's published media tariff prices, so its cost is authoritative.
+   */
+  mediaTariffCovers?(request: TRequest): boolean;
+  /**
+   * The request as its log row keeps it, when that differs from what the
+   * provider and plugins receive: an image edit adds its uploaded images, so
+   * the Logs page can show what was edited. Typed loosely so an adapter that
+   * spreads another provider's factory does not inherit its request type.
+   */
+  toLoggedRequest?(request: unknown): unknown;
   /** Propagate downstream disconnection to upstream work. */
   readonly cancelOnDisconnect?: boolean;
   /** End failed binary streams by closing the transport, never injecting SSE bytes. */
@@ -742,8 +762,10 @@ export interface UsageView {
   inputTokensEstimated?: boolean;
   /** True for locally synthesized output metrics; excluded from token quotas. */
   outputTokensEstimated?: boolean;
-  /** USD the provider reports it billed for this response (OpenRouter's `usage.cost`). When present it is the recorded cost instead of a token-price estimate. */
+  /** USD the provider reports it billed for this response (OpenRouter's `usage.cost`), or the cost of a media operation priced from the provider's published media tariff (see `mediaTariff`). When present it is the recorded cost instead of a token-price estimate. */
   providerReportedCost?: number;
+  /** The cost is a media operation's, priced per image token, character or second from the provider's published tariff (`services/media-pricing`), which per-token chat prices cannot express. */
+  mediaTariff?: boolean;
 }
 
 /**

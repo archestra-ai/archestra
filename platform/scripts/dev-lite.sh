@@ -8,21 +8,24 @@
 # still needs the Tilt stack (scripts/dev-stack.sh, or a full image).
 #
 # Usage (from platform/):
-#   scripts/dev-lite.sh up [--e2e] [--mock-data]
+#   scripts/dev-lite.sh up [--e2e] [--keycloak] [--mock-data]
 #                              start PostgreSQL, migrate, start the backend
-#                              and frontend, wait until they answer
+#                              and frontend, wait until they answer. --keycloak
+#                              adds Keycloak with the e2e realm, for the
+#                              identity-provider and JWKS specs
 #   scripts/dev-lite.sh start [same options]   start without waiting
 #   scripts/dev-lite.sh wait                   wait until backend and frontend answer
 #   scripts/dev-lite.sh status                 processes, memory, disk, URLs
 #   scripts/dev-lite.sh logs <component> [n]   tail a component log (db, migrate,
-#                              backend, frontend, wiremock, a2a)
+#                              backend, frontend, wiremock, a2a, keycloak)
 #   scripts/dev-lite.sh e2e [playwright args]  run the Playwright lite projects
 #                              against this stack (needs --e2e). --e2e rewrites
 #                              platform/.env for the suite; delete the file to
 #                              get the defaults back on the next up. With
 #                              --e2e the frontend is a production build, as CI
 #                              serves it; e2e scales the timeouts and workers to
-#                              the CPUs available
+#                              the CPUs available and skips the specs tagged for
+#                              Kubernetes or Keycloak (E2E_UNAVAILABLE)
 #   scripts/dev-lite.sh restart [options]      down, then up again
 #   scripts/dev-lite.sh reload backend|frontend  restart one component; the backend
 #                              is rebuilt first when the watcher is off
@@ -42,6 +45,9 @@
 #       PostgreSQL port (5432)
 #   ARCHESTRA_DEV_LITE_WIREMOCK_JAR
 #       WireMock standalone jar for --e2e
+#   ARCHESTRA_DEV_LITE_KEYCLOAK_DIST
+#       an unpacked Keycloak distribution for --keycloak (default: the pinned
+#       release, downloaded into the state dir on first use; needs Java 21)
 #   ARCHESTRA_DEV_LITE_BACKEND_LOG_LEVEL
 #       backend log level (info; Tilt uses debug)
 #   ARCHESTRA_DEV_BACKEND_WATCH
@@ -75,6 +81,10 @@ STANDALONE_DIR="$PLATFORM_DIR/frontend/.next/standalone/frontend"
 # Which frontend is running, dev or e2e: recorded when it starts, so reload and
 # up --e2e keep or change it on purpose.
 FRONTEND_MODE_FILE="$STATE_DIR/frontend-mode"
+# Whether Keycloak is part of this stack: written by `up --keycloak` once it
+# starts, removed by `down`. Readiness and `e2e` fail when a requested Keycloak
+# is not running, instead of treating it as never asked for.
+KEYCLOAK_REQUESTED_FILE="$STATE_DIR/keycloak-requested"
 PGDATA="$STATE_DIR/postgres"
 DB_PORT="${ARCHESTRA_DEV_LITE_DB_PORT:-5432}"
 DB_USER=archestra
@@ -84,6 +94,12 @@ BACKEND_PORT=9000
 FRONTEND_PORT="${ARCHESTRA_FRONTEND_PORT:-3000}"
 WIREMOCK_PORT=9092
 A2A_PORT=9191
+KEYCLOAK_PORT=30081
+# Keycloak's management interface would otherwise take the backend's :9000.
+KEYCLOAK_MANAGEMENT_PORT=30091
+KEYCLOAK_VERSION=26.8.1
+KEYCLOAK_SHA256=4e2740b181faa2ea623a1c2ecf00855935311e546046e2f857615a47ed24cbe8
+KEYCLOAK_REALM_FILE="$PLATFORM_DIR/helm/e2e-tests/files/archestra-realm.json"
 TMUX_SOCKET=archestra-dev-lite
 CRATES=(app-runtime-rs image-rs openappa-rs router-rs sandbox-rs)
 
@@ -140,7 +156,7 @@ unset_env_key() {
 }
 
 ensure_env() {
-  local e2e="$1" email
+  local e2e="$1" keycloak="$2" email origins=()
   # A worktree bootstrap links .env to the main checkout's file; this stack
   # must not rewrite that one.
   if [ -L "$ENV_FILE" ]; then
@@ -167,10 +183,17 @@ ensure_env() {
   if [ "$e2e" = 1 ]; then
     apply_e2e_env
   fi
+  # Origins the auth server trusts besides the frontend's own: the tunnel's
+  # browser-facing origin, and Keycloak's for the sign-in redirect back.
   if [ -n "${ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL:-}" ]; then
     set_env_kv ARCHESTRA_FRONTEND_URL "$ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL"
-    set_env_kv ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS \
-      "$ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL,http://localhost:$FRONTEND_PORT,http://127.0.0.1:$FRONTEND_PORT"
+    origins+=("$ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL" "http://localhost:$FRONTEND_PORT" "http://127.0.0.1:$FRONTEND_PORT")
+  fi
+  if [ "$keycloak" = 1 ]; then
+    origins+=("http://localhost:$KEYCLOAK_PORT" "http://127.0.0.1:$KEYCLOAK_PORT")
+  fi
+  if [ ${#origins[@]} -gt 0 ]; then
+    set_env_kv ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS "$(IFS=,; printf '%s' "${origins[*]}")"
   fi
   if [ -n "${ARCHESTRA_DEV_LITE_PUBLIC_API_URL:-}" ]; then
     set_env_kv ARCHESTRA_API_BASE_URL "$ARCHESTRA_DEV_LITE_PUBLIC_API_URL"
@@ -483,6 +506,74 @@ start_e2e_deps() {
     "exec env A2A_FIXTURE_HOST=127.0.0.1 A2A_FIXTURE_PORT=$A2A_PORT node e2e-tests/fixtures/a2a-test-agent/server.mjs"
 }
 
+# --- Keycloak (optional) ---------------------------------------------------
+
+# The Keycloak distribution for --keycloak: ARCHESTRA_DEV_LITE_KEYCLOAK_DIST, or
+# the pinned release downloaded into the state dir on first use. A stock
+# release does: no lite spec needs the ID-JAG receiver that CI's custom image
+# adds (helm/e2e-tests/keycloak-pr46048).
+keycloak_dist() {
+  local dist="${ARCHESTRA_DEV_LITE_KEYCLOAK_DIST:-}" archive
+  if [ -n "$dist" ]; then
+    [ -x "$dist/bin/kc.sh" ] || die "ARCHESTRA_DEV_LITE_KEYCLOAK_DIST has no bin/kc.sh: $dist"
+    printf '%s' "$dist"
+    return 0
+  fi
+  dist="$STATE_DIR/keycloak/keycloak-$KEYCLOAK_VERSION"
+  if [ ! -x "$dist/bin/kc.sh" ]; then
+    archive="$STATE_DIR/keycloak/keycloak-$KEYCLOAK_VERSION.tar.gz"
+    mkdir -p "$STATE_DIR/keycloak"
+    log "downloading Keycloak $KEYCLOAK_VERSION (about 170 MB) into $STATE_DIR/keycloak" >&2
+    curl -fsSL --retry 3 -o "$archive.part" \
+      "https://github.com/keycloak/keycloak/releases/download/$KEYCLOAK_VERSION/keycloak-$KEYCLOAK_VERSION.tar.gz" \
+      || die "Keycloak download failed"
+    echo "$KEYCLOAK_SHA256  $archive.part" | sha256sum -c --quiet - \
+      || die "the Keycloak download does not match the pinned checksum"
+    rm -rf "$dist"
+    tar -xzf "$archive.part" -C "$STATE_DIR/keycloak" || die "the Keycloak archive did not unpack"
+    rm -f "$archive.part"
+  fi
+  printf '%s' "$dist"
+}
+
+java_major() {
+  java -XshowSettings:properties -version 2>&1 | awk -F'= ' '/java.specification.version/ { print $2; exit }'
+}
+
+# Keycloak as a plain process, configured as the e2e harness configures its
+# container (scripts/e2e-lite.sh): admin/admin, the realm's features, the
+# browser-facing issuer http://localhost:30081 and request-derived backchannel
+# URLs, so the backend's 127.0.0.1 calls match the realm. The realm is
+# imported once; it then lives in the dev-mode database under the
+# distribution's data/ directory, which `reset` removes with the state dir.
+start_keycloak() {
+  local dist major
+  # A running Keycloak owns its port: freeing it first would kill it.
+  if session_alive keycloak; then
+    log "keycloak already running"
+    return 0
+  fi
+  command -v java >/dev/null 2>&1 || die "--keycloak needs Java 21 (the lite image ships one)"
+  major="$(java_major)"
+  [ "${major%%.*}" -ge 21 ] 2>/dev/null || die "--keycloak needs Java 21 or newer; found Java ${major:-unknown}"
+  dist="$(keycloak_dist)"
+  mkdir -p "$dist/data/import"
+  cp -f "$KEYCLOAK_REALM_FILE" "$dist/data/import/archestra-realm.json"
+  free_ports "$KEYCLOAK_PORT" "$KEYCLOAK_MANAGEMENT_PORT"
+  touch "$KEYCLOAK_REQUESTED_FILE"
+  # Keycloak would otherwise size its heap from 70% of the Pod's memory.
+  start_session keycloak "$dist" \
+    "exec env KC_BOOTSTRAP_ADMIN_USERNAME=admin KC_BOOTSTRAP_ADMIN_PASSWORD=admin KC_HTTP_HOST=127.0.0.1 KC_HTTP_PORT=$KEYCLOAK_PORT KC_HTTP_MANAGEMENT_PORT=$KEYCLOAK_MANAGEMENT_PORT KC_FEATURES=token-exchange:v1,admin-fine-grained-authz:v1,jwt-authorization-grant:v1,identity-assertion-jwt:v1 KC_HOSTNAME=http://localhost:$KEYCLOAK_PORT KC_HOSTNAME_STRICT=false KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true JAVA_OPTS_KC_HEAP='-Xms128m -Xmx1g' bin/kc.sh start-dev --import-realm"
+}
+
+keycloak_requested() {
+  [ -f "$KEYCLOAK_REQUESTED_FILE" ]
+}
+
+keycloak_ready() {
+  http_ok "http://127.0.0.1:$KEYCLOAK_PORT/realms/archestra/.well-known/openid-configuration"
+}
+
 # The frontend the stack last started: dev, or e2e for the production build.
 frontend_mode() {
   cat "$FRONTEND_MODE_FILE" 2>/dev/null || echo dev
@@ -505,9 +596,19 @@ http_ok() {
   curl -fsS -m "${2:-3}" -o /dev/null "$1" 2>/dev/null
 }
 
+# Every session this stack started must still be alive: the first one that
+# exited fails the wait with the tail of its log, whatever answered before.
+require_sessions_alive() {
+  local name
+  for name in backend frontend $(e2e_requested && echo "wiremock a2a") $(keycloak_requested && echo keycloak); do
+    session_alive "$name" || { tail -n 40 "$LOG_DIR/$name.log" >&2 2>/dev/null || true; die "$name exited; see $LOG_DIR/$name.log"; }
+  done
+}
+
 wait_ready() {
-  local deadline=$((SECONDS + ${ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS:-900})) backend_ok=0 frontend_ok=0 e2e_ok=0
+  local deadline=$((SECONDS + ${ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS:-900})) backend_ok=0 frontend_ok=0 e2e_ok=0 keycloak_ok=0
   while (( SECONDS < deadline )); do
+    require_sessions_alive
     [ "$backend_ok" = 1 ] || { http_ok "http://127.0.0.1:$BACKEND_PORT/ready" && backend_ok=1 && log "backend answers on :$BACKEND_PORT"; }
     # The first page request compiles the app; give it the time it needs.
     [ "$frontend_ok" = 1 ] || { http_ok "http://127.0.0.1:$FRONTEND_PORT/" 180 && frontend_ok=1 && log "frontend answers on :$FRONTEND_PORT"; }
@@ -516,14 +617,20 @@ wait_ready() {
     else
       e2e_ok=1
     fi
-    if [ "$backend_ok" = 1 ] && [ "$frontend_ok" = 1 ] && [ "$e2e_ok" = 1 ]; then
+    if keycloak_requested; then
+      # Ready once the realm is imported, which the first start does. A
+      # requested Keycloak that is not running fails the check below.
+      [ "$keycloak_ok" = 1 ] || { session_alive keycloak && keycloak_ready && keycloak_ok=1 && log "Keycloak on :$KEYCLOAK_PORT, realm archestra"; }
+    else
+      keycloak_ok=1
+    fi
+    if [ "$backend_ok" = 1 ] && [ "$frontend_ok" = 1 ] && [ "$e2e_ok" = 1 ] && [ "$keycloak_ok" = 1 ]; then
+      # Answers are cached from earlier polls; the processes are checked now.
+      require_sessions_alive
       echo "dev stack ready: frontend :$FRONTEND_PORT, backend :$BACKEND_PORT"
       [ -n "${ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL:-}" ] && echo "browser URL: $ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL"
       return 0
     fi
-    for name in backend frontend $(e2e_requested && echo "wiremock a2a"); do
-      session_alive "$name" || { tail -n 40 "$LOG_DIR/$name.log" >&2 2>/dev/null || true; die "$name exited; see $LOG_DIR/$name.log"; }
-    done
     # The tsdown watcher outlives a crashed server and only restarts it on the
     # next rebuild, so a startup failure would otherwise wait out the timeout.
     if [ "$backend_ok" = 0 ] && tail -n 200 "$LOG_DIR/backend.log" 2>/dev/null | grep -q "Server process exited with code: [1-9]"; then
@@ -542,11 +649,12 @@ wait_ready() {
 # --- commands --------------------------------------------------------------
 
 cmd_start() {
-  local wait="$1" e2e=0 mock_data=0 name
+  local wait="$1" e2e=0 keycloak=0 mock_data=0 name
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
       --e2e) e2e=1; shift ;;
+      --keycloak) keycloak=1; shift ;;
       --mock-data) mock_data=1; shift ;;
       -h|--help) usage 0 ;;
       *) echo "unknown argument: $1" >&2; usage 1 ;;
@@ -557,6 +665,7 @@ cmd_start() {
   # An Agent Runtime starts the stack on every turn: leave a running one alone.
   if session_alive backend && session_alive frontend && db_ready \
     && { [ "$e2e" = 0 ] || { e2e_enabled && [ "$(frontend_mode)" = e2e ]; }; } \
+    && { [ "$keycloak" = 0 ] || session_alive keycloak; } \
     && [ "$mock_data" = 0 ]; then
     log "stack already running; logs in $LOG_DIR"
     [ "$wait" = 1 ] && wait_ready
@@ -573,7 +682,14 @@ cmd_start() {
     log "restarting the frontend as a production build for e2e"
     stop_session frontend
   fi
-  ensure_env "$e2e"
+  # The backend reads its trusted origins at startup: restart a running one
+  # when Keycloak's origin is not among them yet.
+  if [ "$keycloak" = 1 ] && session_alive backend \
+    && [[ "$(env_value ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS)" != *"http://localhost:$KEYCLOAK_PORT"* ]]; then
+    log "restarting the backend with Keycloak among the trusted origins"
+    stop_session backend
+  fi
+  ensure_env "$e2e" "$keycloak"
   install_dependencies
   ensure_native_addons
   start_postgres
@@ -587,6 +703,7 @@ cmd_start() {
   start_backend
   start_frontend "$e2e"
   [ "$e2e" = 1 ] && start_e2e_deps
+  [ "$keycloak" = 1 ] && start_keycloak
   log "started; logs in $LOG_DIR"
   if [ "$wait" = 1 ]; then
     wait_ready
@@ -602,19 +719,20 @@ cmd_status() {
   else
     printf '%-10s %-8s %-8s %s\n' postgres down - -
   fi
-  for name in backend frontend wiremock a2a; do
+  for name in backend frontend wiremock a2a keycloak; do
     if session_alive "$name"; then
       pid="$(session_pid "$name")"
       rss="$(tree_rss_mb "$pid")"
       printf '%-10s %-8s %-8s %s\n' "$name" up "$pid" "$rss"
-    elif [ "$name" = wiremock ] || [ "$name" = a2a ]; then
+    elif [ "$name" = wiremock ] || [ "$name" = a2a ] || { [ "$name" = keycloak ] && ! keycloak_requested; }; then
       :
     else
       printf '%-10s %-8s %-8s %s\n' "$name" down - -
     fi
   done
   echo
-  for url in "http://127.0.0.1:$BACKEND_PORT/ready" "http://127.0.0.1:$FRONTEND_PORT/"; do
+  for url in "http://127.0.0.1:$BACKEND_PORT/ready" "http://127.0.0.1:$FRONTEND_PORT/" \
+    $(keycloak_requested && echo "http://127.0.0.1:$KEYCLOAK_PORT/realms/archestra/.well-known/openid-configuration"); do
     code="$(curl -s -m 5 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || true)"
     printf '%-40s HTTP %s\n' "$url" "${code:-000}"
   done
@@ -641,10 +759,11 @@ cmd_status() {
 
 cmd_down() {
   local name
-  for name in frontend backend wiremock a2a; do
+  for name in frontend backend wiremock a2a keycloak; do
     session_alive "$name" && { log "stopping $name"; stop_session "$name"; }
   done
   tmx kill-server 2>/dev/null || true
+  rm -f "$KEYCLOAK_REQUESTED_FILE"
   if [ -s "$PGDATA/PG_VERSION" ] && pg_ctl -D "$PGDATA" status >/dev/null 2>&1; then
     log "stopping postgres"
     pg_ctl -D "$PGDATA" -m fast -w stop >> "$LOG_DIR/db-ctl.log" 2>&1 || true
@@ -683,6 +802,9 @@ available_cpus() {
 cmd_e2e() {
   e2e_enabled || die "start the stack with --e2e first"
   http_ok "http://127.0.0.1:$BACKEND_PORT/ready" || die "backend is not ready"
+  if keycloak_requested && ! session_alive keycloak; then
+    die "Keycloak was requested but is not running; see $LOG_DIR/keycloak.log, or run 'down' to drop it"
+  fi
   # The browser, the backend, the frontend server and PostgreSQL share these CPUs: fewer
   # workers and longer timeouts on a small Pod. E2E_* set by hand win.
   local cpus
@@ -692,20 +814,38 @@ cmd_e2e() {
   elif [ "$cpus" -le 4 ]; then
     export E2E_WORKERS="${E2E_WORKERS:-3}" E2E_TIMEOUT_SCALE="${E2E_TIMEOUT_SCALE:-2}"
   fi
-  log "Playwright on $cpus CPU(s): ${E2E_WORKERS:-3} workers, timeouts x${E2E_TIMEOUT_SCALE:-1}"
+  # What this stack does not run. Specs tagged @needs-kubernetes or
+  # @needs-keycloak skip with that reason instead of failing (see
+  # e2e-tests/dependencies.ts). A value set by hand wins, even an empty one.
+  # Kubernetes counts as available when the kubeconfig the backend was
+  # started with exists: `up` writes ARCHESTRA_DEV_LITE_KUBECONFIG, or a path
+  # that does not exist, to .env.
+  if [ -z "${E2E_UNAVAILABLE+set}" ]; then
+    local unavailable=()
+    [ -f "$(env_value ARCHESTRA_ORCHESTRATOR_KUBECONFIG)" ] || unavailable+=(kubernetes)
+    keycloak_requested || unavailable+=(keycloak)
+    E2E_UNAVAILABLE="$(IFS=,; printf '%s' "${unavailable[*]}")"
+  fi
+  export E2E_UNAVAILABLE
+  log "Playwright on $cpus CPU(s): ${E2E_WORKERS:-3} workers, timeouts x${E2E_TIMEOUT_SCALE:-1}; unavailable: ${E2E_UNAVAILABLE:-nothing}"
   cd "$PLATFORM_DIR/e2e-tests"
   export E2E_WIREMOCK_BASE_URL="http://127.0.0.1:$WIREMOCK_PORT"
   export E2E_WIREMOCK_INTERNAL_URL="http://127.0.0.1:$WIREMOCK_PORT"
   export E2E_A2A_FIXTURE_BASE_URL="http://127.0.0.1:$A2A_PORT"
   export E2E_UI_BASE_URL="http://localhost:$FRONTEND_PORT"
   export E2E_API_BASE_URL="http://localhost:$BACKEND_PORT"
+  # The backend reaches Keycloak on the loopback; the browser uses localhost.
+  keycloak_requested && export E2E_KEYCLOAK_BACKEND_URL="http://127.0.0.1:$KEYCLOAK_PORT"
   if [ $# -gt 0 ]; then
     exec pnpm exec playwright test "$@"
   fi
-  # Same projects as scripts/e2e-lite.sh. Without Keycloak, the JWKS-auth specs
-  # for the LLM proxy and the MCP gateway fail; without a Kubernetes cluster,
-  # the MCP server install and orchestrator specs fail.
-  exec pnpm exec playwright test --project=chromium --project=api --grep-invert @quickstart
+  # Same projects as scripts/e2e-lite.sh; identity-providers needs Keycloak.
+  # Without Keycloak, the specs that need it (identity providers, JWKS auth for
+  # the LLM proxy and the MCP gateway) are tagged and skip, see above; so are
+  # those that need a Kubernetes cluster (MCP server installs, the orchestrator).
+  local projects=(--project=chromium --project=api)
+  keycloak_requested && projects+=(--project=identity-providers)
+  exec pnpm exec playwright test "${projects[@]}" --grep-invert @quickstart
 }
 
 cmd_restart() {
@@ -734,6 +874,12 @@ cmd_reload() {
   esac
   wait_ready
 }
+
+# Sourced by scripts/dev-lite.test.sh for its functions; run as a command
+# otherwise.
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+  return 0 2>/dev/null
+fi
 
 case "${1:-}" in
   up) shift; cmd_start 1 "$@" ;;

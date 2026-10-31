@@ -13199,6 +13199,32 @@ export const getAppUsage = <ThrowOnError extends boolean = false>(options?: Opti
 export const getSkillUsage = <ThrowOnError extends boolean = false>(options?: Options<GetSkillUsageData, ThrowOnError>) => (options?.client ?? client).get<GetSkillUsageResponses, GetSkillUsageErrors, ThrowOnError>({ url: '/api/statistics/skill-usage', ...options });
 
 /**
+ * Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
+ */
+export const getModelUsage = <ThrowOnError extends boolean = false>(options: Options<GetModelUsageData, ThrowOnError>) => (options.client ?? client).get<GetModelUsageResponses, GetModelUsageErrors, ThrowOnError>({ url: '/api/statistics/model-usage', ...options });
+
+/**
+ * Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * None (no additional RBAC permission required)
+ */
+export const getMyModelUsage = <ThrowOnError extends boolean = false>(options: Options<GetMyModelUsageData, ThrowOnError>) => (options.client ?? client).get<GetMyModelUsageResponses, GetMyModelUsageErrors, ThrowOnError>({ url: '/api/statistics/me/model-usage', ...options });
+
+/**
  * Get all teams in the organization
  *
  * Authentication:
@@ -14166,29 +14192,3 @@ export const ingestRumEvents = <ThrowOnError extends boolean = false>(options: O
         ...options.headers
     }
 });
-
-/**
- * Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity.
- *
- * Authentication:
- *
- * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
- *
- * Authorization:
- *
- * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
- */
-export const getModelUsage = <ThrowOnError extends boolean = false>(options: Options<GetModelUsageData, ThrowOnError>) => (options.client ?? client).get<GetModelUsageResponses, GetModelUsageErrors, ThrowOnError>({ url: '/api/statistics/model-usage', ...options });
-
-/**
- * Break down one model's recorded usage by person, credential, agent or client. Totals and timelines use the same model and timeframe. Unattributed usage remains visible. The personal endpoint always reports only the caller's activity.
- *
- * Authentication:
- *
- * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
- *
- * Authorization:
- *
- * None (no additional RBAC permission required)
- */
-export const getMyModelUsage = <ThrowOnError extends boolean = false>(options: Options<GetMyModelUsageData, ThrowOnError>) => (options.client ?? client).get<GetMyModelUsageResponses, GetMyModelUsageErrors, ThrowOnError>({ url: '/api/statistics/me/model-usage', ...options });

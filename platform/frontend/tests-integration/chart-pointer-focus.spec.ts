@@ -53,15 +53,19 @@ for (const path of ["/llm/costs", "/llm/usage"]) {
     await page.getByRole("button", { name: "Lines", exact: true }).click();
     await expect(page.locator(".recharts-line-curve").first()).toBeVisible();
     const line = page.locator(".recharts-line-curve").first();
+    await chart.scrollIntoViewIfNeeded();
     const point = await line.evaluate((element) => {
       const path = element as SVGPathElement;
       const point = path.getPointAtLength(20);
       const transform = path.getScreenCTM();
       if (!transform) throw new Error("Line is not mounted");
       const screen = point.matrixTransform(transform);
-      return { x: screen.x, y: screen.y };
+      const box = path.closest('[data-slot="chart"]')?.getBoundingClientRect();
+      if (!box) throw new Error("Chart container is not mounted");
+      return { x: screen.x - box.x, y: screen.y - box.y };
     });
-    await page.mouse.move(point.x, point.y);
+    // Target the HTML container so SVG bounding-box quirks cannot offset the pointer.
+    await chart.hover({ position: point });
     const active = page.locator(
       '.recharts-tooltip-wrapper [aria-current="true"]',
     );

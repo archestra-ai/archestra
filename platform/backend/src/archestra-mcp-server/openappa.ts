@@ -144,7 +144,8 @@ import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
 
 const RemedyPlanArgumentsSchema = z.object({
-  offer_id: z.string().min(1),
+  // Omitted to declare, right before a subagent call, what its return may carry.
+  offer_id: z.string().min(1).optional(),
   plan: z.string().optional(),
   label: z
     .object({
@@ -1079,7 +1080,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     title: "Execute OpenAPPA remedy plan",
     description:
-      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. The platform renders the approval card itself and binds it to the offer server-side; the card intentionally omits the offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. An authorized result means the policy permits the plan; a narrower policy can authorize without any human review, so authorization alone is not proof the user approved. When the reviewer did approve, their selection stands over any earlier prediction of their answer. After the plan is authorized, retry the original call with exactly the authorized arguments, never regenerated or corrected ones, or use the admitted output. If the user denies the review, or the review is declined, canceled, unavailable, or unanswered, tell the user that the action stays blocked. A client decline is not a human denial.",
+      'Apply a remedy plan that the organization\'s guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. The platform renders the approval card itself and binds it to the offer server-side; the card intentionally omits the offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. An authorized result means the policy permits the plan; a narrower policy can authorize without any human review, so authorization alone is not proof the user approved. When the reviewer did approve, their selection stands over any earlier prediction of their answer. After the plan is authorized, retry the original call with exactly the authorized arguments, never regenerated or corrected ones, or use the admitted output. If the user denies the review, or the review is declined, canceled, unavailable, or unanswered, tell the user that the action stays blocked. A client decline is not a human denial. To declare what a subagent\'s return may carry, call execute_remedy_plan without offer_id right before the subagent call, for example execute_remedy_plan(label: {trust: "suspicious", audience: ["self"]}); the next subagent call then meets no block for its return.',
     // The proxy alone writes these members. They have no `.describe()` text,
     // so no rendering of the full schema can show the model their prose:
     // - execution: retry identity and history restoration; it does not authorize.
@@ -1154,6 +1155,22 @@ const registry = defineArchestraTools([
         return unknownOfferResult();
       }
       const callId = execution?.call_id ?? context.currentToolCallId;
+      if (remedy.offer_id === undefined) {
+        // A return declared ahead of its spawn: no offer, so no review. The
+        // runtime checks the floor and holds it for the next subagent call.
+        const declared = await executeRemedyByOffer({
+          organizationId: context.organizationId,
+          callerId: spender,
+          sessionId: stamp.session_id,
+          ...(stamp.parent_id ? { parentId: stamp.parent_id } : {}),
+          toolCallId: callId,
+          controlToolName: execution?.tool_name,
+          originalArguments:
+            originalArguments ?? JSON.stringify(submittedSemantic),
+          args: remedy,
+        });
+        return declared.result;
+      }
       if (callId) {
         const previousOutcome = await getHitlReviewResult({
           session: reviewSession,

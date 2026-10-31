@@ -194,7 +194,7 @@ describe("Responses upstream failures", () => {
     makeUser,
   }) => {
     const emit = vi.fn();
-    vi.spyOn(logs, "getLogger").mockReturnValue({ emit } as never);
+    vi.spyOn(logs, "getLogger").mockReturnValue({ emit, enabled: () => true });
     upstreamEvents = [
       ...STREAM_START,
       {

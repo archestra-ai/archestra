@@ -145,12 +145,12 @@ RUN --network=none \
 
 FROM agent-base AS agent-claude-code
 USER root
-RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.308 \
+RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.309 \
  && CLAUDE_PACKAGE_DIR=$(pnpm list --global --json @anthropic-ai/claude-code | jq -r '.[0].dependencies["@anthropic-ai/claude-code"].path') \
  && node "$CLAUDE_PACKAGE_DIR/install.cjs" \
  && claude --version \
  && mkdir -p /home/node/.claude \
- && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.308","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
+ && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.309","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
  && printf '%s\n' '{"skipDangerousModePermissionPrompt":true}' > /home/node/.claude/settings.json \
  && chmod 0600 /home/node/.claude.json /home/node/.claude/settings.json \
  && chown -R 1000:1000 /home/node
@@ -211,8 +211,8 @@ USER root
 # required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    hermes_version=0.22.2 \
- && hermes_commit=d923a5eb487a17c0a68801bba9ef0f56c81040a8 \
+    hermes_version=0.22.5 \
+ && hermes_commit=bf0203a794a07aac3ff764972ab9087baa4e4f4e \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
@@ -299,14 +299,14 @@ ARG TARGETARCH
 ENV GROK_DISABLE_AUTOUPDATER=1
 USER root
 RUN case "$TARGETARCH" in \
-      amd64) grok_arch=x64; checksum=3443e402a2dcaaa1dce0877fa61ee72d3a4a59e309762b0cc6860579b608cf96 ;; \
-      arm64) grok_arch=arm64; checksum=9064136edf4ad7eadb0debc9e54832d05e66692dc0d1e69f36d9baaf1d0217bf ;; \
+      amd64) grok_arch=x64; checksum=b2ff08ca31abc28407286fb03a8ce2502e810ab62471d7f5c2b8bf9bda5153b1 ;; \
+      arm64) grok_arch=arm64; checksum=12e6d37a622c7dbaceab524a90cd69c5aee4f16975dd1a98635f8af07e55357a ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /tmp/grok /opt/grok/bin \
  && cd /tmp/grok \
- && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.69" \
- && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.69.tgz" \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.70" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.70.tgz" \
  && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
  && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
  && chmod 0755 /opt/grok/bin/grok \

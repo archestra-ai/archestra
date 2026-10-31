@@ -596,13 +596,19 @@ http_ok() {
   curl -fsS -m "${2:-3}" -o /dev/null "$1" 2>/dev/null
 }
 
+# Every session this stack started must still be alive: the first one that
+# exited fails the wait with the tail of its log, whatever answered before.
+require_sessions_alive() {
+  local name
+  for name in backend frontend $(e2e_requested && echo "wiremock a2a") $(keycloak_requested && echo keycloak); do
+    session_alive "$name" || { tail -n 40 "$LOG_DIR/$name.log" >&2 2>/dev/null || true; die "$name exited; see $LOG_DIR/$name.log"; }
+  done
+}
+
 wait_ready() {
   local deadline=$((SECONDS + ${ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS:-900})) backend_ok=0 frontend_ok=0 e2e_ok=0 keycloak_ok=0
   while (( SECONDS < deadline )); do
-    # A session that exited fails the wait at once, whatever answered before.
-    for name in backend frontend $(e2e_requested && echo "wiremock a2a") $(keycloak_requested && echo keycloak); do
-      session_alive "$name" || { tail -n 40 "$LOG_DIR/$name.log" >&2 2>/dev/null || true; die "$name exited; see $LOG_DIR/$name.log"; }
-    done
+    require_sessions_alive
     [ "$backend_ok" = 1 ] || { http_ok "http://127.0.0.1:$BACKEND_PORT/ready" && backend_ok=1 && log "backend answers on :$BACKEND_PORT"; }
     # The first page request compiles the app; give it the time it needs.
     [ "$frontend_ok" = 1 ] || { http_ok "http://127.0.0.1:$FRONTEND_PORT/" 180 && frontend_ok=1 && log "frontend answers on :$FRONTEND_PORT"; }
@@ -619,6 +625,8 @@ wait_ready() {
       keycloak_ok=1
     fi
     if [ "$backend_ok" = 1 ] && [ "$frontend_ok" = 1 ] && [ "$e2e_ok" = 1 ] && [ "$keycloak_ok" = 1 ]; then
+      # Answers are cached from earlier polls; the processes are checked now.
+      require_sessions_alive
       echo "dev stack ready: frontend :$FRONTEND_PORT, backend :$BACKEND_PORT"
       [ -n "${ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL:-}" ] && echo "browser URL: $ARCHESTRA_DEV_LITE_PUBLIC_FRONTEND_URL"
       return 0

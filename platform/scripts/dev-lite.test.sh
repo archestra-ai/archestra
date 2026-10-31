@@ -38,7 +38,13 @@ check() {
   if "$@"; then echo "ok   $name"; else echo "FAIL $name"; failures=$((failures + 1)); fi
 }
 fails() { ! "$@"; }
-says() { local text="$1"; shift; "$@" 2>&1 | grep -q "$text"; }
+# Captured first: with pipefail, `grep -q` closing the pipe would fail a pipeline.
+says() {
+  local text="$1" out
+  shift
+  out="$("$@" 2>&1 || true)"
+  grep -q "$text" <<<"$out"
+}
 wait_ready_quietly() { (ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS=2 wait_ready >/dev/null 2>&1); }
 wait_ready_loudly() { (ARCHESTRA_DEV_LITE_TIMEOUT_SECONDS=2 wait_ready) || true; }
 e2e_output() { (PATH="$FAKE_BIN:$PATH" cmd_e2e 2>&1) || true; }

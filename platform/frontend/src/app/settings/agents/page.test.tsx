@@ -419,7 +419,9 @@ describe("Runtime tiers", () => {
     await user.hover(
       within(block()).getByRole("button", { name: "About pooled tiers" }),
     );
-    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+    expect(
+      await screen.findByRole("dialog", { name: "About pooled tiers" }),
+    ).toHaveTextContent(
       "Agent runs start much quicker from pool of runtime instances. Managed automatically. Pooled instances reserve part of cluster's capacity. Learn more",
     );
   });

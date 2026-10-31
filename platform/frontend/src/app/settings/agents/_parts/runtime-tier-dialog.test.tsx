@@ -72,12 +72,14 @@ describe("RuntimeTierDialog", () => {
     await user.hover(
       within(dialog).getByRole("button", { name: "About pooled tiers" }),
     );
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent(
+    const hint = await screen.findByRole("dialog", {
+      name: "About pooled tiers",
+    });
+    expect(hint).toHaveTextContent(
       "Agent runs start much quicker from pool of runtime instances. Managed automatically. Pooled instances reserve part of cluster's capacity. Learn more",
     );
     expect(
-      within(tooltip).getByRole("link", { name: /Learn more/ }),
+      within(hint).getByRole("link", { name: /Learn more/ }),
     ).toHaveAttribute(
       "href",
       expect.stringMatching(/\/docs\/agents\/runtime\/setup#warm-pools$/),

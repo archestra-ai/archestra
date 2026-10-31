@@ -49,7 +49,7 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   await expect(block.getByPlaceholder("Search tiers")).toHaveCount(0);
   // The Pools header explains itself, so nobody opens a form to read it.
   await block.getByRole("button", { name: "About pooled tiers" }).hover();
-  const hint = page.getByRole("tooltip");
+  const hint = page.getByRole("dialog", { name: "About pooled tiers" });
   await expect(hint).toContainText(
     "Agent runs start much quicker from pool of runtime instances. Managed automatically. Pooled instances reserve part of cluster's capacity.",
   );
@@ -102,11 +102,21 @@ test("an administrator edits a runtime tier in its dialog: a bad CPU request is 
   await expect(dialog.getByTestId("tier-memory")).toHaveText(
     "Memory: 12 GiB, 24 GiB limit",
   );
-  // The Pooled switch explains itself on request.
-  await dialog.getByRole("button", { name: "About pooled tiers" }).hover();
-  await expect(page.getByRole("tooltip")).toContainText(
+  // The Pooled switch explains itself on request, from the keyboard too: the
+  // hint's link is in the Tab order and Escape hands focus back to the icon.
+  const about = dialog.getByRole("button", { name: "About pooled tiers" });
+  await about.hover();
+  await expect(hint).toContainText(
     "Agent runs start much quicker from pool of runtime instances.",
   );
+  await about.focus();
+  await page.keyboard.press("Enter");
+  await expect(hint).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(hint.getByRole("link", { name: /Learn more/ })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(hint).toBeHidden();
+  await expect(about).toBeFocused();
   await dialog.getByRole("switch", { name: "Pooled" }).click();
   const saved = {
     tiers: [
